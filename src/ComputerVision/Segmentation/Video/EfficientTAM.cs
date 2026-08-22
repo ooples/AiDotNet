@@ -60,7 +60,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Efficient Track Anything", "https://arxiv.org/abs/2411.18933", Year = 2024, Authors = "Yunyang Xiong, Chong Zhou, Xiaoyu Xiang, Lemeng Wu, Chenchen Zhu, Zechun Liu, Saksham Suri, Balakrishnan Varadarajan, Ramya Akula, Forrest Iandola, Raghuraman Krishnamoorthi, Bilge Soran, Vikas Chandra")]
-public class EfficientTAM<T> : Common.VideoSegmentationBase<T>
+public partial class EfficientTAM<T> : Common.VideoSegmentationBase<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -362,8 +362,7 @@ public class EfficientTAM<T> : Common.VideoSegmentationBase<T>
     /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    { writer.Write(_height); writer.Write(_width); writer.Write(_channels); writer.Write(_numClasses); writer.Write((int)_modelSize); writer.Write(_decoderDim); writer.Write(_dropRate); writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty); writer.Write(_encoderLayerEnd); writer.Write(_embedDim); writer.Write(_numEncoderLayers); writer.Write(_numHeads); writer.Write(_patchSize); }
+
 
     /// <summary>
     /// Reads configuration from a binary stream.
@@ -374,8 +373,7 @@ public class EfficientTAM<T> : Common.VideoSegmentationBase<T>
     /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    { _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble(); _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); }
+
 
     /// <summary>
     /// Creates a new instance with the same configuration but fresh weights.

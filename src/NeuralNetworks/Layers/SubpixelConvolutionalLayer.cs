@@ -263,6 +263,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
     /// during the backward pass (the learning phase).
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -281,6 +282,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
     /// - It helps the layer adjust its parameters more efficiently
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -312,6 +314,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
     /// to make the network perform better next time.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _kernelGradients;
 
     /// <summary>
@@ -330,6 +333,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
     /// - The update step uses these to modify the biases during training
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _biasGradients;
 
     /// <summary>
@@ -351,6 +355,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
     /// small ups and downs, helping it reach the bottom (optimal solution) faster.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _kernelMomentum;
 
     /// <summary>
@@ -372,12 +377,17 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
     /// to smooth out the learning process.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _biasMomentum;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput;
+    [ExternalState]
     private Tensor<T>? _gpuConvOutput;
+    [ExternalState]
     private Tensor<T>? _gpuShuffled;
+    [ExternalState]
     private Tensor<T>? _gpuActivationOutput;
     private bool _gpuAddedBatch;
     private int _gpuBatch;
@@ -388,21 +398,31 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
     #region GPU Weight Storage Fields
 
     // GPU weight tensors for GPU-resident training
+    [ExternalState]
     private Tensor<T>? _gpuKernels;
+    [ExternalState]
     private Tensor<T>? _gpuBiases;
 
     // GPU gradient tensors from BackwardGpu
+    [ExternalState]
     private Tensor<T>? _gpuKernelGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBiasGradient;
 
     // Optimizer state tensors for SGD/NAG/LARS (velocity)
+    [ExternalState]
     private Tensor<T>? _gpuKernelVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBiasVelocity;
 
     // Optimizer state tensors for Adam/AdamW/LAMB (M and V)
+    [ExternalState]
     private Tensor<T>? _gpuKernelM;
+    [ExternalState]
     private Tensor<T>? _gpuKernelV;
+    [ExternalState]
     private Tensor<T>? _gpuBiasM;
+    [ExternalState]
     private Tensor<T>? _gpuBiasV;
 
     #endregion
@@ -1069,6 +1089,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
         _biasGradients = null;
     }
 
+    [Scratch]
     private Vector<T>? _pendingParameters;
 
     #region GPU Parameter Updates

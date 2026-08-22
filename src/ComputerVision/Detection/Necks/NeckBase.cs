@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
@@ -21,7 +21,7 @@ namespace AiDotNet.ComputerVision.Detection.Necks;
 /// - BiFPN (Bidirectional FPN): Weighted bidirectional fusion
 /// </para>
 /// </remarks>
-public abstract class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+public abstract partial class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
     // NumOps and Engine inherited from ModelBase
 
@@ -321,7 +321,7 @@ public abstract class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// concrete necks (FPN, PANet, BiFPN) operate on the full backbone feature pyramid
     /// (a <see cref="List{Tensor}"/> with one tensor per level) and would fail their own
     /// feature-count validation if handed a single tensor. Use
-    /// <see cref="Forward(List{Tensor{T}})"/> directly instead — that is the public API
+    /// <see cref="Forward(List{Tensor{T}})"/> directly instead â€” that is the public API
     /// for running a neck.
     /// </summary>
     /// <exception cref="NotSupportedException">Always.</exception>
@@ -359,12 +359,10 @@ public abstract class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             "Use ReadParameters(BinaryReader) on a fresh instance.");
     }
 
-    /// <summary>
-    /// Concrete necks are responsible for producing a true deep copy of their internal
-    /// Conv2D wrappers and config. Returning <see cref="object.MemberwiseClone"/> here
-    /// would silently share tensor references, so we require an explicit override.
-    /// </summary>
-    public override abstract IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy();
+    // The re-declaration that used to sit here forced every neck to hand-write DeepCopy, on the
+    // reasoning that a memberwise copy would share tensor references. ModelBase does not do a
+    // memberwise copy: it rebuilds the neck from its recorded constructor and then reloads state
+    // through Serialize/Deserialize, so the tensors are new storage and the reason no longer holds.
 
     #endregion
 }

@@ -71,7 +71,7 @@ namespace AiDotNet.Video.ActionRecognition;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Classes,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public class VideoMAE<T> : NeuralNetworkBase<T>
+public partial class VideoMAE<T> : NeuralNetworkBase<T>
 {
     private readonly VideoMAEOptions _options;
 
@@ -919,60 +919,10 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height);
-        writer.Write(_width);
-        writer.Write(_channels);
-        writer.Write(_numFrames);
-        writer.Write(_numClasses);
-        writer.Write(_numFeatures);
-        writer.Write(_maskRatio);
-        writer.Write(_useNativeMode);
-        writer.Write(_onnxModelPath ?? string.Empty);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _height = reader.ReadInt32();
-        _width = reader.ReadInt32();
-        _channels = reader.ReadInt32();
-        _numFrames = reader.ReadInt32();
-        _numClasses = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _maskRatio = reader.ReadDouble();
-        _useNativeMode = reader.ReadBoolean();
-        _onnxModelPath = reader.ReadString();
-        if (string.IsNullOrEmpty(_onnxModelPath)) _onnxModelPath = null;
 
-        // Recreate ONNX session if in ONNX mode
-        if (!_useNativeMode && !string.IsNullOrEmpty(_onnxModelPath))
-        {
-            if (File.Exists(_onnxModelPath))
-            {
-                try { _onnxSession = new InferenceSession(_onnxModelPath); }
-                catch (Exception ex) { throw new InvalidOperationException($"Failed to restore ONNX session: {ex.Message}", ex); }
-            }
-            else
-            {
-                throw new FileNotFoundException($"ONNX model file not found during deserialization: {_onnxModelPath}");
-            }
-        }
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new VideoMAE<T>(Architecture, _optimizer, LossFunction, _numClasses, _numFrames, _numFeatures, _maskRatio);
-        }
-        else
-        {
-            return new VideoMAE<T>(Architecture, _onnxModelPath!, _numClasses, _numFrames);
-        }
-    }
 
     #endregion
 

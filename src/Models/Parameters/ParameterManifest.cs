@@ -84,7 +84,28 @@ public enum ParameterSlotRole
     Scratch,
 
     /// <summary>State owned by an external runtime, such as a loaded ONNX graph.</summary>
-    External
+    External,
+
+    /// <summary>
+    /// Fitted state whose extent comes from the caller's data, so it is restored by name but never
+    /// joins the flat parameter vector.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="LearnedState"/> is sized once at construction, which is what lets it travel in
+    /// the flat vector alongside the weights. A graph layer's adjacency matrix is sized by the
+    /// graph it was handed, so counting it there would make ParameterCount change under a forward
+    /// pass and would bind a checkpoint to the node count it was trained on. Same persistence, but
+    /// deliberately outside the count.
+    /// </para>
+    /// <para>
+    /// APPENDED, not inserted. These members are compared and stored as ordinals in places that do
+    /// not all travel together, so adding one in the middle silently renumbers every later role --
+    /// slotting it after LearnedState turned every [Buffer] into a Frozen slot and made a graph
+    /// model refuse to report its parameters at all.
+    /// </para>
+    /// </remarks>
+    InputSizedState
 }
 
 /// <summary>Declares which mechanism is allowed to change a numeric state slot.</summary>
@@ -408,6 +429,7 @@ public sealed class ParameterLayoutSnapshot
         ParameterCount = unresolved ? null : declaredTotal;
         MaterializedParameterCount = materializedTotal;
         Fingerprint = ComputeFingerprint(immutableSlots);
+        DeclaredLayoutFingerprint = ComputeFingerprint(immutableSlots, includeStorageReadiness: false);
     }
 
     /// <summary>Slots in stable-ID order.</summary>
@@ -453,25 +475,47 @@ public sealed class ParameterLayoutSnapshot
     /// </summary>
     public string Fingerprint { get; }
 
-    private static string ComputeFingerprint(IReadOnlyList<ParameterSlotDescriptor> slots)
+    /// <summary>
+    /// A SHA-256 digest of the durable parameter schema, excluding only the current allocation
+    /// state. A shape-resolved lazy slot and the same materialized slot therefore share this value,
+    /// while identity, role, update policy, persistence, ownership, availability, declared count,
+    /// element type, and shape remain part of the contract.
+    /// </summary>
+    /// <remarks>
+    /// Clone construction is allowed to materialize storage as it restores state. Comparing
+    /// <see cref="Fingerprint"/> at that boundary incorrectly treats this lifecycle transition as
+    /// a schema change. Checkpoint compatibility should continue to use <see cref="Fingerprint"/>
+    /// when exact readiness matters; clone validation uses this declared-layout fingerprint.
+    /// </remarks>
+    public string DeclaredLayoutFingerprint { get; }
+
+    private static string ComputeFingerprint(
+        IReadOnlyList<ParameterSlotDescriptor> slots,
+        bool includeStorageReadiness = true)
     {
         var canonical = new StringBuilder();
-        canonical.Append("parameter-manifest-v").Append(CurrentSchemaVersion).Append('\n');
+        canonical.Append(includeStorageReadiness ? "parameter-manifest-v" : "parameter-layout-v")
+            .Append(CurrentSchemaVersion).Append('\n');
         for (int i = 0; i < slots.Count; i++)
         {
             var slot = slots[i];
             canonical.Append(slot.StableId.Length).Append(':').Append(slot.StableId).Append('|')
-                .Append((int)slot.Role).Append('|')
-                .Append((int)slot.Readiness).Append('|')
+                .Append((int)slot.Role).Append('|');
+            if (includeStorageReadiness)
+                canonical.Append((int)slot.Readiness).Append('|');
+            canonical
                 .Append((int)slot.UpdatePolicy).Append('|')
                 .Append((int)slot.Persistence).Append('|')
                 .Append((int)slot.Ownership).Append('|')
                 .Append((int)slot.Availability).Append('|')
                 .Append(slot.ParameterCount.HasValue ? slot.ParameterCount.Value.ToString(
-                    System.Globalization.CultureInfo.InvariantCulture) : "?").Append('|')
-                .Append(slot.MaterializedParameterCount.ToString(
-                    System.Globalization.CultureInfo.InvariantCulture)).Append('|')
-                .Append(slot.ElementType ?? "?").Append('|');
+                    System.Globalization.CultureInfo.InvariantCulture) : "?").Append('|');
+            if (includeStorageReadiness)
+            {
+                canonical.Append(slot.MaterializedParameterCount.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture)).Append('|');
+            }
+            canonical.Append(slot.ElementType ?? "?").Append('|');
             if (slot.Shape is null)
             {
                 canonical.Append('?');

@@ -29,7 +29,7 @@ namespace AiDotNet.AdversarialRobustness.Safety;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Automated Hate Speech Detection and the Problem of Offensive Language", "https://arxiv.org/abs/1703.04009", Year = 2017, Authors = "Thomas Davidson, Dana Warmsley, Michael Macy, Ingmar Weber")]
-public class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
+public partial class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
 {
     /// <summary>
     /// Timeout for regex operations to prevent ReDoS attacks.

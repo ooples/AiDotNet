@@ -29,6 +29,7 @@ public class MultiquadricInterpolation<T> : I2DInterpolation<T>
     /// <summary>
     /// The z-values (heights) of the known data points.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _z;
 
     /// <summary>

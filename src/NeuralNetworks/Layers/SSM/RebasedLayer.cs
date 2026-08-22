@@ -105,28 +105,48 @@ public partial class RebasedLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastQuery;
+    [Scratch]
     private Tensor<T>? _lastKey;
+    [Scratch]
     private Tensor<T>? _lastValue;
+    [Scratch]
     private Tensor<T>? _lastPhiQ;
+    [Scratch]
     private Tensor<T>? _lastPhiK;
+    [Scratch]
     private Tensor<T>? _lastPhiQNorm;
+    [Scratch]
     private Tensor<T>? _lastPhiKNorm;
+    [Scratch]
     private Tensor<T>? _lastOutputGate;
+    [Scratch]
     private Tensor<T>? _lastOutputGateRaw;
+    [Scratch]
     private Tensor<T>? _lastLinearAttnOutput;
+    [Scratch]
     private Tensor<T>? _lastDenominators;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />
@@ -146,6 +166,9 @@ public partial class RebasedLayer<T> : LayerBase<T>, IShapeContract
     /// Gets the dimension per head.
     /// </summary>
     public int HeadDimension => _headDimension;
+
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
 
     /// <summary>
     /// Creates a new ReBased linear attention layer.
@@ -175,6 +198,7 @@ public partial class RebasedLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

@@ -61,7 +61,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("One Fits All: Power General Time Series Analysis by Pretrained LM", "https://arxiv.org/abs/2302.11939", Year = 2023, Authors = "Tian Zhou, Peisong Niu, Xue Wang, Liang Sun, Rong Jin")]
-public class GPT4TS<T> : TimeSeriesFoundationModelBase<T>
+public partial class GPT4TS<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 
@@ -288,52 +288,10 @@ public class GPT4TS<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new GPT4TS<T>(Architecture, new GPT4TSOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            DropoutRate = _dropout,
-            ModelSize = _modelSize,
-            Task = _task,
-            FreezeBackbone = _freezeBackbone
-        });
-    }
+
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_patchLength);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_dropout);
-        writer.Write((int)_modelSize);
-        writer.Write((int)_task);
-        writer.Write(_freezeBackbone);
-    }
 
-    /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _patchLength = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _modelSize = (FoundationModelSize)reader.ReadInt32();
-        _task = (TimeSeriesFoundationModelTask)reader.ReadInt32();
-        _freezeBackbone = reader.ReadBoolean();
-    }
 
     #endregion
 

@@ -42,6 +42,7 @@ namespace AiDotNet.MetaLearning.Models;
 [PipelineStage(PipelineStage.Training)]
 public partial class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double>>, ICloneable
 {
+    [FittedParameter]
     private Vector<double> _parameters;
     private readonly int _inputDim;
     private readonly double _learningRate;
@@ -117,14 +118,6 @@ public partial class LinearVectorModel : ModelBase<double, Matrix<double>, Vecto
         return model;
     }
 
-    /// <inheritdoc/>
-    public override IFullModel<double, Matrix<double>, Vector<double>> DeepCopy()
-    {
-        var copy = new LinearVectorModel(_inputDim, _learningRate);
-        copy.SetParameters(_parameters);
-        return copy;
-    }
-
     object ICloneable.Clone() => DeepCopy();
 
     /// <inheritdoc/>
@@ -180,16 +173,6 @@ public partial class LinearVectorModel : ModelBase<double, Matrix<double>, Vecto
         {
             _parameters[i] -= learningRate * gradients[i];
         }
-    }
-
-    /// <inheritdoc/>
-    public override byte[] Serialize() => Encoding.UTF8.GetBytes(SerializeParameters());
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
-    {
-        Guard.NotNull(data);
-        DeserializeParameters(Encoding.UTF8.GetString(data));
     }
 
     /// <inheritdoc/>

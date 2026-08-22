@@ -56,7 +56,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("UniverSeg: Universal Medical Image Segmentation", "https://arxiv.org/abs/2304.06131", Year = 2023, Authors = "Butoi et al.")]
-public class UniverSeg<T> : Common.MedicalSegmentationBase<T>
+public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly UniverSegOptions _options;
     public override ModelOptions GetOptions() => _options;
@@ -274,8 +274,7 @@ public class UniverSeg<T> : Common.MedicalSegmentationBase<T>
     /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    { writer.Write(_height); writer.Write(_width); writer.Write(_channels); writer.Write(_numClasses); writer.Write(_decoderDim); writer.Write(_dropRate); writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty); writer.Write(_encoderLayerEnd); writer.Write(_channelDims.Length); foreach (int d in _channelDims) writer.Write(d); writer.Write(_depths.Length); foreach (int d in _depths) writer.Write(d); }
+
 
     /// <summary>
     /// Reads configuration from a binary stream.
@@ -286,8 +285,7 @@ public class UniverSeg<T> : Common.MedicalSegmentationBase<T>
     /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    { _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble(); _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32(); int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32(); int dd = reader.ReadInt32(); for (int i = 0; i < dd; i++) _ = reader.ReadInt32(); }
+
 
     /// <summary>
     /// Creates a new instance with the same configuration but fresh weights.

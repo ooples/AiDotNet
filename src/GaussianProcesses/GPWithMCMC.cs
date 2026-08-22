@@ -30,7 +30,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("MCMC Methods for Gaussian Process Models", "https://doi.org/10.1007/978-3-540-28650-9_6", Year = 2003, Authors = "Mark N. Gibbs")]
-public class GPWithMCMC<T> : GaussianProcessBase<T>
+public partial class GPWithMCMC<T> : GaussianProcessBase<T>
 {
     /// <summary>
     /// The base kernel function.

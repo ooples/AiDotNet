@@ -207,16 +207,6 @@ public partial class PixArtDeltaModel<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-                        return new PixArtDeltaModel<T>(
-            dit: (DiTNoisePredictor<T>)_dit.Clone(), vae: (StandardVAE<T>)_vae.Clone(), conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

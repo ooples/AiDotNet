@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Attention Is All You Need", "https://arxiv.org/abs/1706.03762")]
-    public class TransformerEmbeddingNetwork<T> : TextEmbeddingModelLayoutBase<T>, IEmbeddingModel<T>
+    public partial class TransformerEmbeddingNetwork<T> : TextEmbeddingModelLayoutBase<T>, IEmbeddingModel<T>
     {
         private readonly TransformerEmbeddingOptions _options;
 
@@ -463,23 +463,6 @@ namespace AiDotNet.NeuralNetworks
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
-        /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new TransformerEmbeddingNetwork<T>(
-                Architecture,
-                _tokenizer,
-                _optimizer,
-                _vocabSize,
-                _embeddingDimension,
-                _maxSequenceLength,
-                _numLayers,
-                _numHeads,
-                _feedForwardDim,
-                _poolingStrategy,
-                _lossFunction,
-                Convert.ToDouble(MaxGradNorm));
-        }
 
         /// <summary>
         /// Returns metadata about the transformer network configuration.
@@ -502,28 +485,10 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <inheritdoc/>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            writer.Write(_vocabSize);
-            writer.Write(_embeddingDimension);
-            writer.Write(_maxSequenceLength);
-            writer.Write(_numLayers);
-            writer.Write(_numHeads);
-            writer.Write(_feedForwardDim);
-            writer.Write((int)_poolingStrategy);
-        }
+
 
         /// <inheritdoc/>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            _vocabSize = reader.ReadInt32();
-            _embeddingDimension = reader.ReadInt32();
-            _maxSequenceLength = reader.ReadInt32();
-            _numLayers = reader.ReadInt32();
-            _numHeads = reader.ReadInt32();
-            _feedForwardDim = reader.ReadInt32();
-            _poolingStrategy = (PoolingStrategy)reader.ReadInt32();
-        }
+
 
         #endregion
 

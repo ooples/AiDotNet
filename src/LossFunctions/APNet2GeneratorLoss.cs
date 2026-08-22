@@ -56,7 +56,9 @@ public sealed class APNet2GeneratorLoss<T> : LossFunctionBase<T>
     // Constant bases, built once. They carry no gradient, and rebuilding a [nFft, bins] pair on
     // every training step would cost more than the loss itself.
     private Tensor<T>? _window;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _dftCos;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _dftSin;
     private Tensor<T>? _melTransposed;
 

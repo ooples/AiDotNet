@@ -52,7 +52,7 @@ namespace AiDotNet.Audio.Speaker;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("X-Vectors: Robust DNN Embeddings for Speaker Recognition", "https://doi.org/10.1109/ICASSP.2018.8461375")]
-public class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, ISpeakerEmbeddingExtractor<T>
+public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, ISpeakerEmbeddingExtractor<T>
 {
     #region Execution Mode
 
@@ -589,59 +589,12 @@ public class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, ISpeakerE
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(SampleRate);
-        writer.Write(EmbeddingDimension);
-        writer.Write(MinimumDurationSeconds);
-        writer.Write(_useNativeMode);
-        writer.Write(_hiddenDim);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numHeads);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        SampleRate = reader.ReadInt32();
-        EmbeddingDimension = reader.ReadInt32();
-        _ = reader.ReadDouble(); // MinimumDurationSeconds
-        _ = reader.ReadBoolean(); // useNativeMode
-        _ = reader.ReadInt32(); // hiddenDim
-        _ = reader.ReadInt32(); // numEncoderLayers
-        _ = reader.ReadInt32(); // numHeads
-    }
 
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _modelPath is not null)
-        {
-            return new SpeakerEmbeddingExtractor<T>(
-                Architecture,
-                _modelPath,
-                SampleRate,
-                EmbeddingDimension,
-                MinimumDurationSeconds,
-                _options.OnnxOptions);
-        }
-        else
-        {
-            return new SpeakerEmbeddingExtractor<T>(
-                Architecture,
-                SampleRate,
-                EmbeddingDimension,
-                MinimumDurationSeconds,
-                _hiddenDim,
-                _numEncoderLayers,
-                _numHeads,
-                lossFunction: _lossFunction);
-        }
-    }
 
     #endregion
 

@@ -61,6 +61,7 @@ public partial class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearner
     private readonly int _numChunks;
 
     /// <summary>Hypernetwork weights: W_h (embDim × hiddenDim) + b_h (hiddenDim) + per-chunk W_c (hiddenDim × chunkSize).</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _hyperNetWeights;
 
     /// <inheritdoc/>

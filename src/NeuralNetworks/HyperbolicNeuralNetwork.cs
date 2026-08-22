@@ -50,7 +50,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Hyperbolic Neural Networks", "https://arxiv.org/abs/1805.09112", Year = 2018, Authors = "Octavian-Eugen Ganea, Gary Becigneul, Thomas Hofmann")]
-public class HyperbolicNeuralNetwork<T> : VectorModelLayoutBase<T>
+public partial class HyperbolicNeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly HyperbolicNeuralNetworkOptions _options;
 
@@ -267,54 +267,13 @@ public class HyperbolicNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// <summary>
     /// Serializes hyperbolic neural network-specific data to a binary writer.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(NumOps.ToDouble(_curvature));
-        writer.Write(_optimizer.GetType().FullName ?? "AdamOptimizer");
-        writer.Write(LossFunction.GetType().FullName ?? "MeanSquaredErrorLoss");
-    }
+
 
     /// <summary>
     /// Deserializes hyperbolic neural network-specific data from a binary reader.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when deserialized curvature is not negative.</exception>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        double deserializedCurvature = reader.ReadDouble();
 
-        // Validate the deserialized curvature - must be negative for hyperbolic space
-        if (deserializedCurvature >= 0)
-        {
-            throw new InvalidOperationException(
-                $"Invalid curvature value {deserializedCurvature} in serialized data. " +
-                "Curvature must be negative for hyperbolic space. The serialized data may be corrupted.");
-        }
-
-        _curvature = NumOps.FromDouble(deserializedCurvature);
-
-        // Read type names for forward compatibility and validation
-        string optimizerType = reader.ReadString();
-        string lossFunctionType = reader.ReadString();
-
-        // Note: Optimizer and loss function instances should be provided during construction.
-        // The type names are read for data integrity verification but new instances
-        // need to be created via the constructor or a dedicated factory method.
-        _ = optimizerType;
-        _ = lossFunctionType;
-    }
-
-    /// <summary>
-    /// Creates a new instance of the HyperbolicNeuralNetwork with the same configuration.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new HyperbolicNeuralNetwork<T>(
-            Architecture,
-            NumOps.ToDouble(_curvature),
-            _optimizer,
-            LossFunction,
-            Convert.ToDouble(MaxGradNorm));
-    }
 
     /// <summary>
     /// Indicates whether this network supports training.

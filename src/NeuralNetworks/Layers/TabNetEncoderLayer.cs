@@ -72,7 +72,9 @@ public partial class TabNetEncoderLayer<T> : LayerBase<T>, IShapeContract
     private FeatureTransformerLayer<T>? _initialFeatureTransformer;
     private AttentiveTransformerLayer<T>[]? _attentiveTransformers;
     private FeatureTransformerLayer<T>[]? _stepFeatureTransformers;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _decisionSelector;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _attentionSelector;
 
     /// <summary>

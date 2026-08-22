@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -74,7 +74,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("How Powerful are Graph Neural Networks?", "https://arxiv.org/abs/1810.00826", Year = 2019, Authors = "Keyulu Xu, Weihua Hu, Jure Leskovec, Stefanie Jegelka")]
-public class GraphIsomorphismNetwork<T> : GraphModelLayoutBase<T>
+public partial class GraphIsomorphismNetwork<T> : GraphModelLayoutBase<T>
 {
     private readonly GraphIsomorphismNetworkOptions _options;
 
@@ -1042,45 +1042,12 @@ public class GraphIsomorphismNetwork<T> : GraphModelLayoutBase<T>
     /// <summary>
     /// Serializes network-specific data to a binary writer.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(MlpHiddenDim);
-        writer.Write(NumLayers);
-        writer.Write(InitialEpsilon);
-        writer.Write(LearnEpsilon);
-        writer.Write(IsLoRAEnabled);
-        writer.Write(LoRARank);
-        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
-        SerializationHelper<T>.SerializeInterface(writer, _optimizer);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data from a binary reader.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // MlpHiddenDim
-        _ = reader.ReadInt32(); // NumLayers
-        _ = reader.ReadDouble(); // InitialEpsilon
-        _ = reader.ReadBoolean(); // LearnEpsilon
-        _ = reader.ReadBoolean(); // IsLoRAEnabled
-        _ = reader.ReadInt32(); // LoRARank
-        _ = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader);
-        _ = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader);
-    }
 
-    /// <summary>
-    /// Creates a new instance of this network type.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new GraphIsomorphismNetwork<T>(
-            architecture: Architecture,
-            mlpHiddenDim: MlpHiddenDim,
-            numLayers: NumLayers,
-            learnEpsilon: LearnEpsilon,
-            initialEpsilon: InitialEpsilon);
-    }
 
     #endregion
 }

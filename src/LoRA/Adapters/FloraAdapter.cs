@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
@@ -22,17 +22,22 @@ namespace AiDotNet.LoRA.Adapters;
 /// the memory efficiency of LoRA.
 /// </para>
 /// </remarks>
-public class FloraAdapter<T> : LoRAAdapterBase<T>
+public partial class FloraAdapter<T> : LoRAAdapterBase<T>
 {
     private readonly int _resamplingInterval;
     private readonly int _rank;
     private int _currentStep;
+    [AiDotNet.Attributes.Buffer]
     private Matrix<T>? _compressedMomentum;
+    [AiDotNet.Attributes.Buffer]
     private Matrix<T>? _compressedSecondMoment;
     private readonly Random _random;
     private readonly double _momentumDecay;
     private readonly double _secondMomentDecay;
     private readonly bool _useAdaptiveLearningRate;
+
+    /// <summary>Construction state: the 'seed' the layer was built with.</summary>
+    private readonly int _seed;
 
     public FloraAdapter(
         ILayer<T> baseLayer,
@@ -46,6 +51,7 @@ public class FloraAdapter<T> : LoRAAdapterBase<T>
         int seed = 42)
         : base(baseLayer, rank, alpha, freezeBaseLayer)
     {
+        _seed = seed;
         if (resamplingInterval < 1)
         {
             throw new ArgumentException("Resampling interval must be at least 1", nameof(resamplingInterval));
@@ -200,7 +206,7 @@ public class FloraAdapter<T> : LoRAAdapterBase<T>
 
     private Matrix<T> ComputeTransferMatrix(Matrix<T> oldA, Matrix<T> newA)
     {
-        // Transfer matrix = oldA^T @ newA — vectorized via Engine.TensorMatMul
+        // Transfer matrix = oldA^T @ newA â€” vectorized via Engine.TensorMatMul
         var oldATensor = Tensor<T>.FromMatrix(oldA).Transpose(new[] { 1, 0 });
         var newATensor = Tensor<T>.FromMatrix(newA);
         var resultTensor = Engine.TensorMatMul(oldATensor, newATensor);
@@ -211,10 +217,10 @@ public class FloraAdapter<T> : LoRAAdapterBase<T>
     {
         if (a.Columns != b.Rows)
         {
-            throw new ArgumentException($"Matrix dimensions incompatible for multiplication: ({a.Rows}×{a.Columns}) × ({b.Rows}×{b.Columns})");
+            throw new ArgumentException($"Matrix dimensions incompatible for multiplication: ({a.Rows}Ã—{a.Columns}) Ã— ({b.Rows}Ã—{b.Columns})");
         }
 
-        // a @ b — vectorized via Engine.TensorMatMul
+        // a @ b â€” vectorized via Engine.TensorMatMul
         var aTensor = Tensor<T>.FromMatrix(a);
         var bTensor = Tensor<T>.FromMatrix(b);
         var resultTensor = Engine.TensorMatMul(aTensor, bTensor);

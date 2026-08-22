@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2024,
     Authors = "Peng et al."
 )]
-public class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly VoiceCraftOptions _options;
 
@@ -260,54 +260,9 @@ public class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.MelChannels);
-        writer.Write(_options.HopSize);
-        writer.Write(_options.CodebookSize);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.LLMDim);
-        writer.Write(_options.NumCodebooks);
-        writer.Write(_options.NumEncoderLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.NumLLMLayers);
-        writer.Write(_options.TextEncoderDim);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.MelChannels = reader.ReadInt32();
-        _options.HopSize = reader.ReadInt32();
-        _options.CodebookSize = reader.ReadInt32();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.LLMDim = reader.ReadInt32();
-        _options.NumCodebooks = reader.ReadInt32();
-        _options.NumEncoderLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.NumLLMLayers = reader.ReadInt32();
-        _options.TextEncoderDim = reader.ReadInt32();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new VoiceCraft<T>(Architecture, mp, _options);
-        return new VoiceCraft<T>(Architecture, _options);
-    }
+
 
     private void ThrowIfDisposed()
     {

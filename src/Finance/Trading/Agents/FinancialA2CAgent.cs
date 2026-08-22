@@ -56,7 +56,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
 
     #region Fields
 
-    private readonly FinancialA2CAgentOptions<T> _options;
+    private readonly TradingAgentOptions<T> _options;
     private readonly INeuralNetwork<T> _actor;
     private readonly INeuralNetwork<T> _critic;
     private readonly ReplayBuffer<T> ReplayBuffer;
@@ -96,7 +96,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     {
         Guard.NotNull(actorArchitecture);
         Guard.NotNull(criticArchitecture);
-        _options = options as FinancialA2CAgentOptions<T> ?? new FinancialA2CAgentOptions<T>();
+        _options = options;
         _actorArchitecture = actorArchitecture;
         _criticArchitecture = criticArchitecture;
 
@@ -346,21 +346,6 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
                 { "ParameterCount", ParameterCount }
             }
         };
-    }
-
-    /// <summary>
-    /// Executes Clone for the FinancialA2CAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialA2CAgent model, Clone performs a supporting step in the workflow. It keeps the FinancialA2CAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new FinancialA2CAgent<T>(_actorArchitecture, _criticArchitecture, TradingOptions);
-        clone.SetParameters(GetParameters());
-        return clone;
     }
 
     /// <summary>

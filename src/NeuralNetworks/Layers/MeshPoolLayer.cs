@@ -155,11 +155,13 @@ public partial class MeshPoolLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached gradient for importance weights.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _importanceWeightsGradient;
 
     /// <summary>
     /// Cached input from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -170,11 +172,13 @@ public partial class MeshPoolLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached output from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Cached importance scores from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastImportanceScores;
 
     /// <summary>
@@ -185,6 +189,7 @@ public partial class MeshPoolLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached GPU input for backward pass.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuInput;
 
     /// <summary>
@@ -641,44 +646,6 @@ public partial class MeshPoolLayer<T> : LayerBase<T>, IShapeContract
     #endregion
 
     #region Serialization
-
-    /// <summary>
-    /// Serializes the layer to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer to serialize to.</param>
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-        writer.Write(InputChannels);
-        writer.Write(TargetEdges);
-        writer.Write(_numNeighbors);
-
-        var weightArray = _importanceWeights.ToArray();
-        for (int i = 0; i < weightArray.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(weightArray[i]));
-        }
-    }
-
-    /// <summary>
-    /// Deserializes the layer from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader to deserialize from.</param>
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-        InputChannels = reader.ReadInt32();
-        TargetEdges = reader.ReadInt32();
-        var numNeighbors = reader.ReadInt32();
-
-        _importanceWeights = new Tensor<T>([InputChannels]);
-        var weightArray = new T[InputChannels];
-        for (int i = 0; i < InputChannels; i++)
-        {
-            weightArray[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        _importanceWeights = new Tensor<T>(weightArray, [InputChannels]);
-    }
 
     #endregion
 

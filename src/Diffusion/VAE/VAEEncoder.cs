@@ -187,12 +187,16 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached intermediate values for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
     private Tensor<T>? _inputConvOutput;
     private readonly Tensor<T>?[] _downBlockOutputs;
     private Tensor<T>? _midBlock1Output;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _midBlock2Output;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _normOutOutput;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _siluOutput;
 
     /// <inheritdoc />
@@ -212,6 +216,12 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
     /// Gets the downsampling factor (spatial reduction from input to output).
     /// </summary>
     public int DownsampleFactor => (int)Math.Pow(2, _channelMults.Length - 1);
+
+    /// <summary>Construction state: the 'inputSpatialSize' the layer was built with.</summary>
+    private readonly int _inputSpatialSize;
+
+    /// <summary>Construction state: the 'numResBlocks' the layer was built with.</summary>
+    private readonly int _numResBlocks;
 
     /// <summary>
     /// Initializes a new instance of the VAEEncoder class.
@@ -235,6 +245,8 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
             CalculateInputShape(inputChannels, inputSpatialSize),
             CalculateOutputShape(latentChannels, inputSpatialSize, channelMults?.Length ?? 4))
     {
+        _numResBlocks = numResBlocks;
+        _inputSpatialSize = inputSpatialSize;
         if (inputChannels <= 0)
             throw new ArgumentOutOfRangeException(nameof(inputChannels));
         if (latentChannels <= 0)
@@ -675,85 +687,6 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
         _meanConv.ResetState();
         _logVarConv.ResetState();
         _quantConv.ResetState();
-    }
-
-    /// <summary>
-    /// Saves the encoder's state to a binary writer.
-    /// </summary>
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-
-        writer.Write(_inputChannels);
-        writer.Write(_latentChannels);
-        writer.Write(_baseChannels);
-        writer.Write(_channelMults.Length);
-        foreach (var mult in _channelMults)
-        {
-            writer.Write(mult);
-        }
-        writer.Write(_numGroups);
-        writer.Write(_bottleneckSize);
-
-        _inputConv.Serialize(writer);
-
-        foreach (var block in _downBlocks)
-        {
-            block.Serialize(writer);
-        }
-
-        foreach (var block in _midBlocks)
-        {
-            block.Serialize(writer);
-        }
-
-        _normOut.Serialize(writer);
-        _meanConv.Serialize(writer);
-        _logVarConv.Serialize(writer);
-        _quantConv.Serialize(writer);
-    }
-
-    /// <summary>
-    /// Loads the encoder's state from a binary reader.
-    /// </summary>
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-
-        var inputChannels = reader.ReadInt32();
-        var latentChannels = reader.ReadInt32();
-        var baseChannels = reader.ReadInt32();
-        var numMults = reader.ReadInt32();
-        var channelMults = new int[numMults];
-        for (int i = 0; i < numMults; i++)
-        {
-            channelMults[i] = reader.ReadInt32();
-        }
-        _ = reader.ReadInt32(); // numGroups
-        _ = reader.ReadInt32(); // bottleneckSize
-
-        if (inputChannels != _inputChannels || latentChannels != _latentChannels ||
-            baseChannels != _baseChannels || !channelMults.SequenceEqual(_channelMults))
-        {
-            throw new InvalidOperationException("Architecture mismatch in VAEEncoder deserialization.");
-        }
-
-        _inputConv.Deserialize(reader);
-
-        foreach (var block in _downBlocks)
-        {
-            block.Deserialize(reader);
-        }
-
-        foreach (var block in _midBlocks)
-        {
-            block.Deserialize(reader);
-        }
-
-        _normOut.Deserialize(reader);
-        _meanConv.Deserialize(reader);
-        _logVarConv.Deserialize(reader);
-        _quantConv.Deserialize(reader);
     }
 
     #region IWeightLoadable Implementation

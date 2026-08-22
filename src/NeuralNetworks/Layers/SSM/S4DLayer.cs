@@ -75,19 +75,26 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
 
     // A parameter stored as real/imaginary pairs: [innerDim, stateDim, 2]
     // A = a_real + i * a_imag, initialized with S4D-Lin: A_n = -1/2 + n*i
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _aReal;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _aImag;
 
     // B projection: [modelDim, innerDim * stateDim] (complex, stored as real/imag pairs)
     // In S4D-Lin, B is typically initialized to ones.
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _bReal;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _bImag;
 
     // C projection: [innerDim * stateDim, modelDim] (complex, learned)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _cReal;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _cImag;
 
     // D: [innerDim] (skip connection, real-valued)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _dParam;
 
     // Input projection: [modelDim, innerDim]
@@ -107,29 +114,48 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Delta (discretization step size): [innerDim] (learned, stored as log for positivity)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _logDelta;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastProjectedInput;
+    [Scratch]
     private Tensor<T>? _lastHiddenStatesReal;
+    [Scratch]
     private Tensor<T>? _lastHiddenStatesImag;
+    [Scratch]
     private Tensor<T>? _lastScanOutputReal;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _aRealGradient;
+    [Scratch]
     private Tensor<T>? _aImagGradient;
+    [Scratch]
     private Tensor<T>? _bRealGradient;
+    [Scratch]
     private Tensor<T>? _bImagGradient;
+    [Scratch]
     private Tensor<T>? _cRealGradient;
+    [Scratch]
     private Tensor<T>? _cImagGradient;
+    [Scratch]
     private Tensor<T>? _dParamGradient;
+    [Scratch]
     private Tensor<T>? _inputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _inputProjectionBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
+    [Scratch]
     private Tensor<T>? _logDeltaGradient;
 
     /// <inheritdoc />
@@ -159,6 +185,12 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
     /// Gets the inner dimension used for the SSM computation.
     /// </summary>
     public int InnerDimension => _innerDimension;
+
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
+    /// <summary>Construction state: the 'expandFactor' the layer was built with.</summary>
+    private readonly int _expandFactor;
 
     /// <summary>
     /// Creates a new S4D (Diagonal State Space) layer.
@@ -193,6 +225,8 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _expandFactor = expandFactor;
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (modelDimension <= 0)
@@ -469,7 +503,9 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
     }
 
     // Cached values for kernel-based backward
+    [Scratch]
     private Tensor<T>? _cachedKernel = null;
+    [Scratch]
     private Tensor<T>? _cachedKernelDelta;
 
     private Tensor<T> ComplexRecurrentScan(Tensor<T> x, int batchSize, int seqLen)
@@ -647,7 +683,7 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
         // Both inner accumulations below are O(seqLen^2) per (batch, channel).
         // Hoist the kernel row and the per-(b,d) input / upstream-gradient
         // columns into raw double buffers so the hot loops are pure double
-        // arithmetic — the tensor indexer + NumOps virtual calls would
+        // arithmetic â€” the tensor indexer + NumOps virtual calls would
         // otherwise dominate at paper-scale sequence lengths.
         var kRowB = new double[seqLen];
         var xColB = new double[seqLen];
@@ -998,8 +1034,8 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
                     double gradAi = dt * (dAbR * abar_i + dAbI * abar_r);
 
                     // B_bar contribution: dL/dA += dL/dB_bar * dB_bar/dA
-                    // B_bar = f(A) * B where f(A) = (exp(Δ*A) - 1) / A
-                    // df/dA = [Δ*A_bar*A - (A_bar - 1)] / A²
+                    // B_bar = f(A) * B where f(A) = (exp(Î”*A) - 1) / A
+                    // df/dA = [Î”*A_bar*A - (A_bar - 1)] / AÂ²
                     // dB_bar/dA = df/dA * B
                     // dL/dA += Re(conj(dL/dB_bar) * dB_bar/dA)... but since we track real/imag separately:
                     // dL/dA_real = Re(dL_dBbar_complex * dBbar/dA_complex)
@@ -1011,19 +1047,19 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
                     double aMagSq = ar * ar + ai * ai;
                     if (aMagSq > 1e-12)
                     {
-                        // num = Δ * A_bar * A - (A_bar - 1)  (complex)
+                        // num = Î” * A_bar * A - (A_bar - 1)  (complex)
                         // A_bar * A: (abar_r + i*abar_i) * (ar + i*ai)
                         double abarA_r = abar_r * ar - abar_i * ai;
                         double abarA_i = abar_r * ai + abar_i * ar;
                         double num_r = dt * abarA_r - (abar_r - 1);
                         double num_i = dt * abarA_i - abar_i;
 
-                        // A² = (ar² - ai²) + 2*ar*ai*i
+                        // AÂ² = (arÂ² - aiÂ²) + 2*ar*ai*i
                         double aSq_r = ar * ar - ai * ai;
                         double aSq_i = 2 * ar * ai;
                         double aSqMagSq = aSq_r * aSq_r + aSq_i * aSq_i;
 
-                        // df/dA = num / A² (complex division)
+                        // df/dA = num / AÂ² (complex division)
                         double dfda_r = (num_r * aSq_r + num_i * aSq_i) / aSqMagSq;
                         double dfda_i = (num_i * aSq_r - num_r * aSq_i) / aSqMagSq;
 

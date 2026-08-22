@@ -114,6 +114,7 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
     /// This value is automatically cleared between training batches to save memory.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -141,6 +142,7 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
     /// neurons for each training example.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _dropoutMask;
 
     /// <summary>
@@ -150,6 +152,7 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
     /// This stores the GPU mask needed for GPU-resident backward pass. It is kept separate
     /// from _dropoutMask to support mixed CPU/GPU execution scenarios.
     /// </remarks>
+    [ExternalState]
     private Tensor<T>? _gpuDropoutMask;
 
     /// <summary>

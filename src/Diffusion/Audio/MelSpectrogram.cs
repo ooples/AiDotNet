@@ -101,11 +101,13 @@ public class MelSpectrogram<T>
     /// <summary>
     /// Mel filterbank matrix [nMels, nFreqs].
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _melFilterbank;
 
     /// <summary>
     /// Window tensor for IEngine operations.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _windowTensor;
 
     /// <summary>

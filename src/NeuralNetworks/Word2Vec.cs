@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.Low)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Efficient Estimation of Word Representations in Vector Space", "https://arxiv.org/abs/1301.3781", Year = 2013, Authors = "Tomas Mikolov, Kai Chen, Greg Corrado, Jeffrey Dean")]
-    public class Word2Vec<T> : TextEmbeddingModelLayoutBase<T>, IEmbeddingModel<T>
+    public partial class Word2Vec<T> : TextEmbeddingModelLayoutBase<T>, IEmbeddingModel<T>
     {
         private readonly Word2VecOptions _options;
 
@@ -438,22 +438,6 @@ namespace AiDotNet.NeuralNetworks
             return Task.FromResult(EmbedBatch(texts));
         }
 
-        /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new Word2Vec<T>(
-                Architecture,
-                _tokenizer,
-                null, // Fresh optimizer for new instance
-                _vocabSize,
-                _embeddingDimension,
-                _windowSize,
-                _maxTokens,
-                _type,
-                _lossFunction,
-                Convert.ToDouble(MaxGradNorm));
-        }
-
         /// <summary>
         /// Retrieves detailed metadata about the Word2Vec model.
         /// </summary>
@@ -480,24 +464,10 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <inheritdoc/>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            writer.Write(_vocabSize);
-            writer.Write(_embeddingDimension);
-            writer.Write(_windowSize);
-            writer.Write(_maxTokens);
-            writer.Write((int)_type);
-        }
+
 
         /// <inheritdoc/>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            _vocabSize = reader.ReadInt32();
-            _embeddingDimension = reader.ReadInt32();
-            _windowSize = reader.ReadInt32();
-            _maxTokens = reader.ReadInt32();
-            _type = (Word2VecType)reader.ReadInt32();
-        }
+
 
         #endregion
     }

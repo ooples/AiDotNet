@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Data.Structures;
 using AiDotNet.Enums;
@@ -89,12 +89,20 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
     "https://arxiv.org/abs/1611.07308",
     Year = 2016,
     Authors = "Thomas N. Kipf, Max Welling")]
-public class LinkPredictionModel<T> : GraphModelLayoutBase<T>
+public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
 {
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly LinkPredictionDecoder _decoderType;
-    [Buffer]
+    // [Scratch], matching GraphClassificationModel and NodeClassificationModel, which hold the
+    // identically named field for the identical purpose. As [Buffer] it was nullable with no
+    // initializer, which the generator reads as fit-produced and gives ParameterAvailability.Fit --
+    // so the registry refused to report parameters at all until the model was "fit", and the graph's
+    // own [numNodes, numNodes] width landed in GetParameters() while ParameterCount omitted it.
+    // Neither is true of this member: it caches the adjacency the CALLER supplied, and #1593 made
+    // supplying it the model's contract (the strict PyTorch-Geometric behaviour), so there is
+    // nothing here for a checkpoint to carry.
+    [Scratch]
     private Tensor<T>? _cachedAdjacencyMatrix;
     // Opt-in (EnableImplicitIdentityAdjacency): mirrors the GraphConvolutionalLayer
     // implicitIdentityWhenUnset ctor flag at the model level. Default is strict (throw on a
@@ -753,34 +761,12 @@ public class LinkPredictionModel<T> : GraphModelLayoutBase<T>
     /// <summary>
     /// Serializes network-specific data to a binary writer.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(InputFeatures);
-        writer.Write(EmbeddingDim);
-        writer.Write(HiddenDim);
-        writer.Write(NumLayers);
-        writer.Write(DropoutRate);
-        writer.Write((int)_decoderType);
 
-        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
-        SerializationHelper<T>.SerializeInterface(writer, _optimizer);
-    }
 
     /// <summary>
     /// Deserializes network-specific data from a binary reader.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // InputFeatures
-        _ = reader.ReadInt32(); // EmbeddingDim
-        _ = reader.ReadInt32(); // HiddenDim
-        _ = reader.ReadInt32(); // NumLayers
-        _ = reader.ReadDouble(); // DropoutRate
-        _ = reader.ReadInt32(); // DecoderType
 
-        _ = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader);
-        _ = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader);
-    }
 
     /// <summary>
     /// Creates a new instance of this network type for cloning or deserialization.

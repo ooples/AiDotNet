@@ -43,7 +43,7 @@ namespace AiDotNet.Audio.Generation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("VoiceCraft: Zero-Shot Speech Editing and Text-to-Speech in the Wild", "https://arxiv.org/abs/2403.16973", Year = 2024, Authors = "Puyuan Peng, Po-Yao Huang, Daniel Li, Abdelrahman Mohamed, David Harwath")]
-public class VoiceCraft<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
+public partial class VoiceCraft<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -304,34 +304,9 @@ public class VoiceCraft<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.MaxDurationSeconds);
-        w.Write(_options.HiddenDim); w.Write(_options.NumLayers);
-        w.Write(_options.NumHeads); w.Write(_options.CodebookSize);
-        w.Write(_options.NumQuantizers); w.Write(_options.CodecEmbeddingDim);
-        w.Write(_options.NumMels); w.Write(_options.EditContextSeconds);
-        w.Write(_options.MaskRatio); w.Write(_options.Temperature);
-        w.Write(_options.TopP); w.Write(_options.CodecFrameRate);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.MaxDurationSeconds = r.ReadDouble();
-        _options.HiddenDim = r.ReadInt32(); _options.NumLayers = r.ReadInt32();
-        _options.NumHeads = r.ReadInt32(); _options.CodebookSize = r.ReadInt32();
-        _options.NumQuantizers = r.ReadInt32(); _options.CodecEmbeddingDim = r.ReadInt32();
-        _options.NumMels = r.ReadInt32(); _options.EditContextSeconds = r.ReadDouble();
-        _options.MaskRatio = r.ReadDouble(); _options.Temperature = r.ReadDouble();
-        _options.TopP = r.ReadDouble(); _options.CodecFrameRate = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new VoiceCraft<T>(Architecture, _options);
+
 
     #endregion
 

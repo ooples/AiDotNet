@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -7,7 +7,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Cohere (Command-R) decoder block with a <em>parallel</em> residual: a single LayerNorm feeds both the
-/// attention and the gated-SwiGLU FFN, whose outputs are added together to the residual —
+/// attention and the gated-SwiGLU FFN, whose outputs are added together to the residual â€”
 /// <c>x = x + Attn(norm(x)) + FFN(norm(x))</c>.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -17,7 +17,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </remarks>
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+[LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 16, new AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<double>(2, 4)")]
 // Shape-preserving by CONSTRUCTION, not by coincidence. The last statement of ForwardTraced is
 // "Engine.TensorAdd(Engine.TensorAdd(input, attnOut), ffnOut)" -- a residual add against the untouched
 // input -- and the FFN branch is explicitly restored to the input's shape one line earlier
@@ -36,10 +36,18 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [AutoParameters]
 public partial class CohereDecoderBlock<T> : LayerBase<T>, IShapeContract
 {
+    // Every child reads the block input; only the down-projection reads the expanded width.
+    // Chained sizing walked registration order instead and built the second projection from
+    // the first's output, so a restore met a differently shaped layer than the checkpoint.
+    [SubLayerInput("_hiddenSize")]
     private readonly LayerNormalizationLayer<T> _norm;
+    [SubLayerInput("1, _hiddenSize")]
     private readonly LayerBase<T> _attention;
+    [SubLayerInput("_hiddenSize")]
     private readonly DenseLayer<T> _ffnGate;
+    [SubLayerInput("_hiddenSize")]
     private readonly DenseLayer<T> _ffnUp;
+    [SubLayerInput("_ffnDim")]
     private readonly DenseLayer<T> _ffnDown;
     private readonly int _hiddenSize;
 
@@ -63,6 +71,12 @@ public partial class CohereDecoderBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>The model (input/output) feature dimension.</summary>
     public int HiddenSize => _hiddenSize;
 
+    /// <summary>Construction state: the 'ffnDim' the layer was built with.</summary>
+    private readonly int _ffnDim;
+
+    /// <summary>Construction state: the 'layerNormEpsilon' the layer was built with.</summary>
+    private readonly double _layerNormEpsilon;
+
     /// <summary>Creates a Cohere parallel-residual decoder block.</summary>
     /// <param name="hiddenSize">Input/output feature dimension.</param>
     /// <param name="ffnDim">FFN inner dimension.</param>
@@ -71,6 +85,8 @@ public partial class CohereDecoderBlock<T> : LayerBase<T>, IShapeContract
     public CohereDecoderBlock(int hiddenSize, int ffnDim, LayerBase<T> attention, double layerNormEpsilon = 1e-5)
         : base(new[] { -1, hiddenSize }, new[] { -1, hiddenSize })
     {
+        _layerNormEpsilon = layerNormEpsilon;
+        _ffnDim = ffnDim;
         Guard.NotNull(attention);
         _hiddenSize = hiddenSize;
         _attention = attention;

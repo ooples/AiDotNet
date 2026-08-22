@@ -438,62 +438,9 @@ public partial class APNet2<T> : VocoderBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.MelChannels);
-        writer.Write(_options.HopSize);
-        writer.Write(_options.FftSize);
-        writer.Write(_options.DropoutRate);
-        // The ConvNeXt v2 backbone geometry decides the parameter count, so it has to survive
-        // the round-trip: restoring into a model rebuilt at different widths silently
-        // misaligns every slice of the flat parameter vector.
-        writer.Write(_options.ConvNeXtChannels);
-        writer.Write(_options.ConvNeXtIntermediateChannels);
-        writer.Write(_options.NumConvNeXtBlocks);
-        writer.Write(_options.DepthwiseKernelSize);
-        writer.Write(_options.WindowLength);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.MelChannels = reader.ReadInt32();
-        _options.HopSize = reader.ReadInt32();
-        _options.FftSize = reader.ReadInt32();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.ConvNeXtChannels = reader.ReadInt32();
-        _options.ConvNeXtIntermediateChannels = reader.ReadInt32();
-        _options.NumConvNeXtBlocks = reader.ReadInt32();
-        _options.DepthwiseKernelSize = reader.ReadInt32();
-        _options.WindowLength = reader.ReadInt32();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    
-        RebindBranchLayers();
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new APNet2<T>(Architecture, mp, _options);
 
-        // Carry the objective and the optimizer across explicitly. Rebuilding from architecture and
-        // options alone silently re-derives them, so a model trained under a caller-supplied loss
-        // came back as a clone trained under a different one: the more-data invariant trains the
-        // original for a few steps and its CLONE for more, and the clone's parameters were
-        // bit-identical no matter which objective the original had been given.
-        return new APNet2<T>(Architecture, _options, _optimizer, LossFunction);
-    }
 
     private void ThrowIfDisposed()
     {

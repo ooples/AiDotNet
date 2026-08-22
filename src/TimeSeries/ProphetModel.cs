@@ -101,6 +101,7 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// The per-changepoint rate adjustments <c>delta</c>. Each entry is the change in slope applied from the
     /// corresponding changepoint time onward, giving the trend its piecewise-linear (time-varying) shape.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _delta;
 
     /// <summary>
@@ -131,6 +132,7 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// regular patterns at different time scales (daily, weekly, yearly, etc.).
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _seasonalComponents;
 
     /// <summary>
@@ -147,6 +149,7 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// increase or decrease the values in your data.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _holidayComponents;
 
     /// <summary>
@@ -163,6 +166,7 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// each external factor influences your data.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _regressors;
 
     /// <summary>
@@ -864,94 +868,7 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// This allows us to save our trained model and use it later without having to retrain it.
     /// </para>
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        // Piecewise-linear trend: offset m, base rate k, changepoint rate-adjustments (delta) and their fixed locations.
-        writer.Write(Convert.ToDouble(_m));
-        writer.Write(Convert.ToDouble(_k));
-        writer.Write(_delta.Length);
-        for (int i = 0; i < _delta.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_delta[i]));
-        }
-        writer.Write(_changepointTimes.Length);
-        for (int i = 0; i < _changepointTimes.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_changepointTimes[i]));
-        }
 
-        // Seasonal periods actually used (so prediction indexes the Fourier coefficients identically) + Fourier order.
-        writer.Write(_effectiveSeasonalPeriods.Length);
-        for (int i = 0; i < _effectiveSeasonalPeriods.Length; i++)
-        {
-            writer.Write(_effectiveSeasonalPeriods[i]);
-        }
-        writer.Write(_prophetOptions.FourierOrder);
-
-        // Seasonal Fourier coefficients.
-        writer.Write(_seasonalComponents.Length);
-        for (int i = 0; i < _seasonalComponents.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_seasonalComponents[i]));
-        }
-
-        // Holiday and regressor coefficients.
-        writer.Write(_holidayComponents.Length);
-        for (int i = 0; i < _holidayComponents.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_holidayComponents[i]));
-        }
-        writer.Write(_regressors.Length);
-        for (int i = 0; i < _regressors.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_regressors[i]));
-        }
-
-        // Write options
-        writer.Write(_prophetOptions.SeasonalPeriods.Count);
-        foreach (var period in _prophetOptions.SeasonalPeriods)
-        {
-            writer.Write(period);
-        }
-        writer.Write(_prophetOptions.Holidays.Count);
-        foreach (var holiday in _prophetOptions.Holidays)
-        {
-            writer.Write(holiday.Ticks);
-        }
-        writer.Write(_prophetOptions.RegressorCount);
-
-        // Every remaining scalar option, plus the residual statistics.
-        //
-        // These were not written, so DeserializeCore rebuilt a DEFAULT options object and the fit
-        // survived the round trip while the behaviour around it did not: a model trained with
-        // ApplyTransformation returned untransformed predictions after loading, DetectAnomalies and
-        // GetAnomalyThreshold threw because EnableAnomalyDetection reverted to false (telling the
-        // user to retrain a model that had been trained correctly), and PredictWithIntervals threw
-        // because _residualStdDev reverted to zero.
-        //
-        // Optimizer and TransformPrediction are an interface reference and a delegate. Neither can
-        // be written to a binary stream, so a caller who set them must re-supply them after loading;
-        // that is stated on the deserializing side as well.
-        writer.Write(_prophetOptions.InitialTrendValue);
-        writer.Write(_prophetOptions.InitialChangepointValue);
-        writer.Write(_prophetOptions.ForecastHorizon);
-        writer.Write(_prophetOptions.ChangePointPriorScale);
-        writer.Write(_prophetOptions.SeasonalityPriorScale);
-        writer.Write(_prophetOptions.HolidayPriorScale);
-        writer.Write(_prophetOptions.YearlySeasonality);
-        writer.Write(_prophetOptions.WeeklySeasonality);
-        writer.Write(_prophetOptions.DailySeasonality);
-        writer.Write(_prophetOptions.OptimizeParameters);
-        writer.Write(_prophetOptions.ApplyTransformation);
-        writer.Write(_prophetOptions.EnableAnomalyDetection);
-        writer.Write(_prophetOptions.AnomalyThresholdSigma);
-        writer.Write(_prophetOptions.ComputePredictionIntervals);
-        writer.Write(_prophetOptions.PredictionIntervalWidth);
-
-        writer.Write(Convert.ToDouble(_residualMean));
-        writer.Write(Convert.ToDouble(_residualStdDev));
-        writer.Write(Convert.ToDouble(_anomalyThreshold));
-    }
 
     /// <summary>
     /// Deserializes the core components of the Prophet model.
@@ -967,99 +884,7 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// This allows us to use a trained model without having to retrain it every time we want to use it.
     /// </para>
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        // Piecewise-linear trend.
-        _m = NumOps.FromDouble(reader.ReadDouble());
-        _k = NumOps.FromDouble(reader.ReadDouble());
-        int deltaLength = reader.ReadInt32();
-        _delta = new Vector<T>(deltaLength);
-        for (int i = 0; i < deltaLength; i++)
-        {
-            _delta[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        int changepointLength = reader.ReadInt32();
-        _changepointTimes = new Vector<T>(changepointLength);
-        for (int i = 0; i < changepointLength; i++)
-        {
-            _changepointTimes[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
 
-        // Effective seasonal periods + Fourier order.
-        int effectivePeriodCount = reader.ReadInt32();
-        _effectiveSeasonalPeriods = new double[effectivePeriodCount];
-        for (int i = 0; i < effectivePeriodCount; i++)
-        {
-            _effectiveSeasonalPeriods[i] = reader.ReadDouble();
-        }
-        int fourierOrder = reader.ReadInt32();
-
-        // Seasonal Fourier coefficients.
-        int seasonalLength = reader.ReadInt32();
-        _seasonalComponents = new Vector<T>(seasonalLength);
-        for (int i = 0; i < seasonalLength; i++)
-        {
-            _seasonalComponents[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Holiday and regressor coefficients.
-        int holidayLength = reader.ReadInt32();
-        _holidayComponents = new Vector<T>(holidayLength);
-        for (int i = 0; i < holidayLength; i++)
-        {
-            _holidayComponents[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        int regressorLength = reader.ReadInt32();
-        _regressors = new Vector<T>(regressorLength);
-        for (int i = 0; i < regressorLength; i++)
-        {
-            _regressors[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read options
-        _prophetOptions = new ProphetOptions<T, TInput, TOutput>
-        {
-            FourierOrder = fourierOrder
-        };
-        int seasonalPeriodsCount = reader.ReadInt32();
-        for (int i = 0; i < seasonalPeriodsCount; i++)
-        {
-            _prophetOptions.SeasonalPeriods.Add(reader.ReadInt32());
-        }
-        int holidaysCount = reader.ReadInt32();
-        for (int i = 0; i < holidaysCount; i++)
-        {
-            _prophetOptions.Holidays.Add(new DateTime(reader.ReadInt64()));
-        }
-        _prophetOptions.RegressorCount = reader.ReadInt32();
-
-        // Read back in exactly the order SerializeCore wrote them.
-        //
-        // NOT RESTORED, because they cannot be: Optimizer is an interface reference and
-        // TransformPrediction is a delegate, so both revert to their defaults (null, and identity).
-        // A caller who supplied either must re-supply it on the loaded model; ApplyTransformation is
-        // restored faithfully, so a model saved with a custom transform will apply the IDENTITY
-        // transform until its TransformPrediction is set again.
-        _prophetOptions.InitialTrendValue = reader.ReadDouble();
-        _prophetOptions.InitialChangepointValue = reader.ReadDouble();
-        _prophetOptions.ForecastHorizon = reader.ReadInt32();
-        _prophetOptions.ChangePointPriorScale = reader.ReadDouble();
-        _prophetOptions.SeasonalityPriorScale = reader.ReadDouble();
-        _prophetOptions.HolidayPriorScale = reader.ReadDouble();
-        _prophetOptions.YearlySeasonality = reader.ReadBoolean();
-        _prophetOptions.WeeklySeasonality = reader.ReadBoolean();
-        _prophetOptions.DailySeasonality = reader.ReadBoolean();
-        _prophetOptions.OptimizeParameters = reader.ReadBoolean();
-        _prophetOptions.ApplyTransformation = reader.ReadBoolean();
-        _prophetOptions.EnableAnomalyDetection = reader.ReadBoolean();
-        _prophetOptions.AnomalyThresholdSigma = reader.ReadDouble();
-        _prophetOptions.ComputePredictionIntervals = reader.ReadBoolean();
-        _prophetOptions.PredictionIntervalWidth = reader.ReadDouble();
-
-        _residualMean = NumOps.FromDouble(reader.ReadDouble());
-        _residualStdDev = NumOps.FromDouble(reader.ReadDouble());
-        _anomalyThreshold = NumOps.FromDouble(reader.ReadDouble());
-    }
 
     /// <summary>
     /// Core implementation of the training logic for the Prophet model.

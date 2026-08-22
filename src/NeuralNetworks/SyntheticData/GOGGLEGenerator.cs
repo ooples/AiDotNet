@@ -97,6 +97,7 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     // Tensor so it participates in autodiff alongside the encoder/decoder
     // weights — gradients of the ELBO + sparsity (γ‖A‖₁) + DAG penalty
     // h(A) = tr((A⊙A)^d) - d (Zheng et al. 2018) flow through it.
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _adjacency;
 
     // GNN encoder layers (auxiliary, not user-overridable)
@@ -830,73 +831,10 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     // UpdateParameters restated a fold the base now derives from generated component registration.
     // Removed under AIDN082.
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.LatentDimension);
-        writer.Write(_options.NumGNNLayers);
-        writer.Write(_options.HiddenDimension);
-        writer.Write(_dataWidth);
-        writer.Write(IsFitted);
 
-        // Persist the learned adjacency matrix — it's a registered trainable
-        // tensor (see GetExtraTrainableTensors) so the optimizer updates it
-        // during Train, but it lives outside Layers and would be silently
-        // dropped by Clone/SaveLoad without explicit (de)serialization.
-        bool hasAdj = _adjacency is not null && _adjacency.Length > 0;
-        writer.Write(hasAdj);
-        if (hasAdj)
-        {
-            writer.Write(_adjacency!.Shape[0]);
-            writer.Write(_adjacency.Shape[1]);
-            for (int i = 0; i < _adjacency.Length; i++)
-                writer.Write(Convert.ToDouble(_adjacency[i]));
-        }
-    }
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // LatentDimension
-        _ = reader.ReadInt32(); // NumGNNLayers
-        _ = reader.ReadInt32(); // HiddenDimension
-        _dataWidth = reader.ReadInt32();
-        IsFitted = reader.ReadBoolean();
 
-        bool hasAdj = reader.ReadBoolean();
-        if (hasAdj)
-        {
-            int rows = reader.ReadInt32();
-            int cols = reader.ReadInt32();
-            _adjacency = new Tensor<T>(new[] { rows, cols });
-            for (int i = 0; i < _adjacency.Length; i++)
-                _adjacency[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Reconnect the typed field references (_gnnLayers, _meanHead,
-        // _logvarHead, _decoderOutput) to the layers the base class
-        // deserialized into the Layers collection. RebuildAuxiliaryLayers
-        // wrote them in this stable order: [GNN×N, mean, logvar, decoder
-        // MLP×K, decoderOutput]; we read them back the same way so the
-        // forward pass (which uses the field references, not Layers) sees
-        // the deserialized weights instead of the null / lazy state the
-        // freshly-constructed clone instance has.
-        int numGnn = _options.NumGNNLayers;
-        if (Layers.Count >= numGnn + 3)
-        {
-            _gnnLayers.Clear();
-            for (int i = 0; i < numGnn; i++)
-                if (Layers[i] is FullyConnectedLayer<T> fc) _gnnLayers.Add(fc);
-            if (Layers[numGnn] is FullyConnectedLayer<T> mean) _meanHead = mean;
-            if (Layers[numGnn + 1] is FullyConnectedLayer<T> logVar) _logvarHead = logVar;
-            if (Layers[Layers.Count - 1] is FullyConnectedLayer<T> decOut) _decoderOutput = decOut;
-        }
-    }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new GOGGLEGenerator<T>(Architecture, _options);
-    }
 
     /// <inheritdoc />
     public override Dictionary<string, T> GetFeatureImportance()

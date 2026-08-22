@@ -130,35 +130,62 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastLinearQuery;
+    [Scratch]
     private Tensor<T>? _lastLinearKey;
+    [Scratch]
     private Tensor<T>? _lastLinearValue;
+    [Scratch]
     private Tensor<T>? _lastWindowQuery;
+    [Scratch]
     private Tensor<T>? _lastWindowKey;
+    [Scratch]
     private Tensor<T>? _lastWindowValue;
+    [Scratch]
     private Tensor<T>? _lastLinearFeatureQ;
+    [Scratch]
     private Tensor<T>? _lastLinearFeatureK;
+    [Scratch]
     private Tensor<T>? _lastLinearOutput;
+    [Scratch]
     private Tensor<T>? _lastWindowOutput;
+    [Scratch]
     private Tensor<T>? _lastMixingAlpha;
+    [Scratch]
     private Tensor<T>? _lastMixingAlphaRaw;
+    [Scratch]
     private Tensor<T>? _lastCombinedOutput;
+    [Scratch]
     private Tensor<T>? _lastWindowScores;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _linearQueryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _linearKeyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _linearValueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _windowQueryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _windowKeyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _windowValueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _featureMapScaleGradient;
+    [Scratch]
     private Tensor<T>? _mixingGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _mixingGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />
@@ -188,6 +215,9 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
     /// Gets the feature expansion factor for the Taylor feature map.
     /// </summary>
     public int FeatureExpansion => _featureExpansion;
+
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
 
     /// <summary>
     /// Creates a new BASED layer that combines linear attention with sliding window attention.
@@ -231,6 +261,7 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

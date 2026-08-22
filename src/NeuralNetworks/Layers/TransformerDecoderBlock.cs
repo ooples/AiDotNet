@@ -64,15 +64,25 @@ public partial class TransformerDecoderBlock<T> : LayerBase<T>, IShapeContract
     // hook — its two-input (decoder stream, encoder output) forward contract is
     // satisfied only by MultiHeadAttentionLayer's params-Forward; the layer-level
     // wrappers are single-input by design and would silently break true cross-attention.
+    [SubLayerInput("1, _hiddenSize")]
     private LayerBase<T> _selfAttention;
+    [SubLayerInput("1, _hiddenSize")]
     private readonly LayerNormalizationLayer<T> _norm1;
+    [SubLayerInput("1, _hiddenSize")]
     private readonly MultiHeadAttentionLayer<T> _crossAttention;
+    [SubLayerInput("1, _hiddenSize")]
     private readonly LayerNormalizationLayer<T> _norm2;
+    [SubLayerInput("1, _hiddenSize")]
     private LayerBase<T> _ffnUp;
+    [SubLayerInput("1, _ffnDim")]
     private LayerBase<T> _ffnDown;
+    [SubLayerInput("1, _hiddenSize")]
     private readonly LayerNormalizationLayer<T> _norm3;
+    [SubLayerInput("1, _hiddenSize")]
     private readonly DropoutLayer<T>? _selfDropout;
+    [SubLayerInput("1, _hiddenSize")]
     private readonly DropoutLayer<T>? _crossDropout;
+    [SubLayerInput("1, _hiddenSize")]
     private readonly DropoutLayer<T>? _ffnDropout;
 
     public override bool SupportsTraining => true;

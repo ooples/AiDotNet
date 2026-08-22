@@ -111,6 +111,12 @@ public sealed partial class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionB
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
+    /// <summary>Construction state: the 'rank' the layer was built with.</summary>
+    private readonly int _rank;
+
+    /// <summary>Construction state: the 'totalTimesteps' the layer was built with.</summary>
+    private readonly int _totalTimesteps;
+
     /// <summary>
     /// Wraps <paramref name="inner"/> with a T-LoRA adapter over <paramref name="channels"/> width.
     /// </summary>
@@ -122,12 +128,21 @@ public sealed partial class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionB
     /// r = 64 is larger than the narrow channel counts used by reduced test fixtures.
     /// </param>
     /// <param name="totalTimesteps">The diffusion horizon T, the schedule's denominator.</param>
-    /// <param name="random">RNG for the orthogonal initialization.</param>
+    /// <param name="random">
+    /// RNG for the orthogonal initialization, or <c>null</c> for a fresh one.
+    /// </param>
+    /// <remarks>
+    /// The RNG is construction-time only: it seeds an initialization that a rebuild immediately
+    /// overwrites with the saved weights, so it is not construction state and nothing is gained by
+    /// recording it. Optional so a rebuild can supply its own.
+    /// </remarks>
     public TLoRAAttentionAdapter(
-        ILayer<T> inner, int channels, int rank, int totalTimesteps, Random random)
+        ILayer<T> inner, int channels, int rank, int totalTimesteps, Random? random = null)
         : base(inner?.GetInputShape() ?? throw new ArgumentNullException(nameof(inner)),
                inner.GetOutputShape())
     {
+        _totalTimesteps = totalTimesteps;
+        _rank = rank;
         if (channels <= 0)
             throw new ArgumentOutOfRangeException(nameof(channels), channels, "Channel width must be positive.");
 
@@ -136,7 +151,7 @@ public sealed partial class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionB
         _adapter = new TimestepDependentLora<T>(
             rank: Math.Max(1, Math.Min(rank, channels)),
             inputDim: channels, outputDim: channels,
-            totalTimesteps: totalTimesteps, random: random);
+            totalTimesteps: totalTimesteps, random: random ?? new Random());
     }
 
     /// <summary>

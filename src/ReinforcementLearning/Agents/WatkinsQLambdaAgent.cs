@@ -58,7 +58,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.EligibilityTraces;
     "https://www.cs.rhul.ac.uk/~chrisw/new_thesis.pdf",
     Year = 1989,
     Authors = "Watkins, C. J. C. H.")]
-public class WatkinsQLambdaAgent<T> : ReinforcementLearningAgentBase<T>
+public partial class WatkinsQLambdaAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private WatkinsQLambdaOptions<T> _options;
 

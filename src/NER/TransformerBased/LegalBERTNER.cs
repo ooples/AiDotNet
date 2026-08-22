@@ -94,13 +94,4 @@ public class LegalBERTNER<T> : TransformerNERBase<T>
             "Legal-BERT-NER", "Chalkidis et al., EMNLP 2020 Findings", optimizer)
     {
     }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new TransformerNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new LegalBERTNER<T>(Architecture, p, optionsCopy);
-        return new LegalBERTNER<T>(Architecture, optionsCopy);
-    }
 }

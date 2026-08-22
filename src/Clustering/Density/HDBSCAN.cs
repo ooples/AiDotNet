@@ -61,7 +61,7 @@ namespace AiDotNet.Clustering.Density;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Hierarchical Density Estimates for Data Clustering, Visualization, and Outlier Detection", "https://doi.org/10.1145/2733381", Year = 2015, Authors = "Ricardo J. G. B. Campello, Davoud Moulavi, Arthur Zimek, Jorg Sander")]
-public class HDBSCAN<T> : ClusteringBase<T>
+public partial class HDBSCAN<T> : ClusteringBase<T>
 {
     private readonly HDBSCANOptions<T> _options;
 
@@ -94,25 +94,7 @@ public class HDBSCAN<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new HDBSCAN<T>(new HDBSCANOptions<T>
-        {
-            MinClusterSize = _options.MinClusterSize,
-            MinSamples = _options.MinSamples,
-            ClusterSelection = _options.ClusterSelection,
-            AllowSingleCluster = _options.AllowSingleCluster,
-            ClusterSelectionEpsilon = _options.ClusterSelectionEpsilon,
-            Alpha = _options.Alpha,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override bool SupportsParameterInitialization => false;
-
-    /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()

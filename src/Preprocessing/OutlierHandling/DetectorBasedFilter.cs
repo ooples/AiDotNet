@@ -82,7 +82,9 @@ public class DetectorBasedFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly FilterMode _mode;
 
     // Fitted parameters for replacement modes
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _columnMedians;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _columnMeans;
 
     /// <summary>

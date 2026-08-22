@@ -464,20 +464,6 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance with the same configuration.
-    /// </summary>
-    /// <returns>A new FinBERT instance.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Creates a fresh model with the same architecture
-    /// and options but randomly reinitialized weights.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new FinBERT<T>(Architecture, _options);
-    }
-
-    /// <summary>
     /// Serializes FinBERT-specific data.
     /// </summary>
     /// <param name="writer">The binary writer.</param>
@@ -486,25 +472,7 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
     /// for later loading.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_maxSequenceLength);
-        writer.Write(_vocabularySize);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numAttentionHeads);
-        writer.Write(_intermediateDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numSentimentClasses);
-        writer.Write(_dropoutRate);
 
-        // Serialize vocabulary
-        writer.Write(_vocabulary.Count);
-        foreach (var kvp in _vocabulary)
-        {
-            writer.Write(kvp.Key);
-            writer.Write(kvp.Value);
-        }
-    }
 
     /// <summary>
     /// Deserializes FinBERT-specific data.
@@ -515,27 +483,7 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
     /// from disk.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _maxSequenceLength = reader.ReadInt32();
-        _vocabularySize = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numAttentionHeads = reader.ReadInt32();
-        _intermediateDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numSentimentClasses = reader.ReadInt32();
-        _dropoutRate = reader.ReadDouble();
 
-        // Deserialize vocabulary
-        int vocabCount = reader.ReadInt32();
-        _vocabulary.Clear();
-        for (int i = 0; i < vocabCount; i++)
-        {
-            string key = reader.ReadString();
-            int value = reader.ReadInt32();
-            _vocabulary[key] = value;
-        }
-    }
 
     #endregion
 

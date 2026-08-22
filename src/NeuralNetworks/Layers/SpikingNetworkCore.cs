@@ -191,6 +191,9 @@ public partial class SpikingNetworkCore<T> : LayerBase<T>, IShapeContract
         }
     }
 
+    /// <summary>Construction state: the 'hiddenSize' the layer was built with.</summary>
+    private readonly int _hiddenSize;
+
     /// <summary>
     /// Scalar-hidden-size convenience constructor (single LIF hidden layer). Used
     /// by the generated layer-test harness, which passes scalar constructor args.
@@ -198,6 +201,7 @@ public partial class SpikingNetworkCore<T> : LayerBase<T>, IShapeContract
     public SpikingNetworkCore(int inputSize, int hiddenSize, int outputSize)
         : this(inputSize, [hiddenSize], outputSize, timeSteps: 5)
     {
+        _hiddenSize = hiddenSize;
     }
 
     /// <summary>

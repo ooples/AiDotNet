@@ -246,14 +246,6 @@ public partial class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) => WriteParameters(writer);
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) => ReadParameters(reader);
 
-    /// <inheritdoc />
-    /// <remarks>
-    /// Constructs a fresh CSPDarknet with the same depth, width multiplier, and
-    /// input-channel configuration. All internal layers are freshly allocated.
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new CSPDarknet<T>(_depthOriginal, _widthMultiplier, _inChannels, _activation);
-
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {
         Name = Name,
@@ -350,10 +342,26 @@ public partial class CSPBlock<T> : LayerBase<T>, IShapeContract
     private readonly List<CSPBottleneckBlock<T>> _bottlenecks;
     private readonly IActivationFunction<T> _activation;
 
+    /// <summary>Construction state: the 'inChannels' the layer was built with.</summary>
+    private readonly int _inChannels;
+
+    /// <summary>Construction state: the 'outChannels' the layer was built with.</summary>
+    private readonly int _outChannels;
+
+    /// <summary>Construction state: the 'numBlocks' the layer was built with.</summary>
+    private readonly int _numBlocks;
+
+    /// <summary>Construction state: the 'stride' the layer was built with.</summary>
+    private readonly int _stride;
+
     public CSPBlock(int inChannels, int outChannels, int numBlocks, int stride, IActivationFunction<T> activation)
         : base(new[] { inChannels, -1, -1 }, new[] { outChannels, -1, -1 },
                (IActivationFunction<T>)new IdentityActivation<T>())
     {
+        _stride = stride;
+        _numBlocks = numBlocks;
+        _outChannels = outChannels;
+        _inChannels = inChannels;
         _activation = activation;
         int hiddenChannels = outChannels / 2;
 
@@ -531,10 +539,14 @@ public partial class CSPBottleneckBlock<T> : LayerBase<T>, IShapeContract
     private readonly bool _add;
     private readonly IActivationFunction<T> _activation;
 
+    /// <summary>Construction state: the 'channels' the layer was built with.</summary>
+    private readonly int _channels;
+
     public CSPBottleneckBlock(int channels, IActivationFunction<T> activation, bool add = true)
         : base(new[] { channels, -1, -1 }, new[] { channels, -1, -1 },
                (IActivationFunction<T>)new IdentityActivation<T>())
     {
+        _channels = channels;
         _add = add;
         _activation = activation;
         _cv1 = new ConvolutionalLayer<T>(channels, kernelSize: 3, stride: 1, padding: 1);

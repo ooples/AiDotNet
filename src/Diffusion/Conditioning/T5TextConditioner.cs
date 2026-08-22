@@ -79,9 +79,6 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
             numLayers: GetNumLayers(_variant),
             numHeads: GetNumHeads(_variant));
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new T5TextConditioner<T>(Tokenizer, _variant, Architecture);
-
     /// <summary>
     /// T5 pools by mean over non-pad tokens. With fixed-length padding (the
     /// SD3/FLUX/Imagen convention) the base class's <see cref="TextConditioningBase{T}.MeanPool"/>

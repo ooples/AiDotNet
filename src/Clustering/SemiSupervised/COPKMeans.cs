@@ -55,7 +55,7 @@ namespace AiDotNet.Clustering.SemiSupervised;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Constrained K-means Clustering with Background Knowledge", "https://doi.org/10.1145/944919.944935", Year = 2001, Authors = "Kiri Wagstaff, Claire Cardie, Seth Rogers, Stefan Schroedl")]
-public class COPKMeans<T> : ClusteringBase<T>
+public partial class COPKMeans<T> : ClusteringBase<T>
 {
     private readonly COPKMeansOptions<T> _options;
 
@@ -85,20 +85,6 @@ public class COPKMeans<T> : ClusteringBase<T>
     public int ConstraintViolations { get; private set; }
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new COPKMeans<T>(new COPKMeansOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            MustLink = _options.MustLink,
-            CannotLink = _options.CannotLink,
-            UseTransitiveClosure = _options.UseTransitiveClosure,
-            MaxIterations = _options.MaxIterations,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

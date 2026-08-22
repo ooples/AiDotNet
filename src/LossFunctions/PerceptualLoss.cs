@@ -46,6 +46,7 @@ public class PerceptualLoss<T> : LossFunctionBase<T>
     /// <summary>
     /// The weights for each feature layer.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _layerWeights;
 
     /// <summary>

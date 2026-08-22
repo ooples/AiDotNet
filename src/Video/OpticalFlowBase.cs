@@ -46,7 +46,7 @@ namespace AiDotNet.Video;
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output,
     Note = "A flow field: two channels, dx and dy, at the input resolution.")]
-public abstract class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>, IShapeContract
+public abstract partial class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>, IShapeContract
 {
     /// <summary>
     /// The optical-flow family's law: <c>[Batch, 2, Height, Width]</c>.

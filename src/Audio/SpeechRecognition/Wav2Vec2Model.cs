@@ -853,79 +853,12 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(SampleRate);
-        writer.Write(_maxAudioLengthSeconds);
-        writer.Write(_hiddenDim);
-        writer.Write(_numTransformerLayers);
-        writer.Write(_numHeads);
-        writer.Write(_ffDim);
-        writer.Write(_vocabSize);
-        writer.Write(_language ?? string.Empty);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        SampleRate = reader.ReadInt32();
-        _maxAudioLengthSeconds = reader.ReadInt32();
-        _hiddenDim = reader.ReadInt32();
-        _numTransformerLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _ffDim = reader.ReadInt32();
-        _vocabSize = reader.ReadInt32();
-        _language = reader.ReadString();
 
-        // Reinitialize / re-link layers for native mode. The base deserialize has already populated
-        // Layers with the trained layers; re-link the typed forward-path sub-lists to THEM (the ctor
-        // populated them from fresh random layers, and the forward reads the sub-lists, not Layers —
-        // so without this a cloned/loaded model predicts untrained: #1221 Clone_AfterTraining).
-        if (_useNativeMode)
-        {
-            if (Layers.Count > 0)
-                DistributeLayersToSubLists();
-            else
-                // Layers.Count == 0 (older/empty native payload): rebuild the default native layers.
-                // InitializeLayers() is the ONNX no-op and would leave a native model with no
-                // feature-encoder/transformer/CTC layers at all — a silently broken model.
-                InitializeNativeLayers();
-        }
-    }
-
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new Wav2Vec2Model<T>(
-                Architecture,
-                language: _language,
-                sampleRate: SampleRate,
-                maxAudioLengthSeconds: _maxAudioLengthSeconds,
-                hiddenDim: _hiddenDim,
-                numTransformerLayers: _numTransformerLayers,
-                numHeads: _numHeads,
-                ffDim: _ffDim,
-                vocabulary: _vocabulary);
-        }
-        else
-        {
-            return new Wav2Vec2Model<T>(
-                Architecture,
-                modelPath: _modelPath!,
-                language: _language,
-                sampleRate: SampleRate,
-                maxAudioLengthSeconds: _maxAudioLengthSeconds,
-                vocabulary: _vocabulary);
-        }
-    }
 
     #endregion
 

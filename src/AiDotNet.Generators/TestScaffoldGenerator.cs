@@ -648,6 +648,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // Only the memorization probe is affected; its other probes already pass.
             { "MusicTaggingTransformer", new WarmupIterationOverride(memorization: 12) },
 
+            // Madmom's FP32 audio policy previously stopped MoreData after two AdamW updates,
+            // exactly inside its deterministic initial overshoot (0.679 -> 1.324). Its ordinary
+            // six-update loss-reduction invariant is already green; ten updates keep the fixture
+            // inexpensive while judging the settled trajectory instead of the warm-up transient.
+            {
+                "MadmomBeatTracker",
+                new WarmupIterationOverride(moreDataLong: 10)
+            },
+
             // NaturalSpeech: the same shape, over a LONGER warm-up, and on every repeated-training
             // probe rather than just one. Measured evaluation loss on a fixed pair, from untrained:
             //   0.253 | 0.267, 0.292, 0.294, 0.281, 0.294, 0.301, 0.279, 0.249, 0.207, 0.175, 0.173
@@ -2139,6 +2148,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor UnscaffoldableLayer = new(
+        id: "AIDN046",
+        title: "Layer cannot be scaffolded and produces no generated tests",
+        messageFormat: "'{0}' has no parameterless constructor and declares no "
+                     + "[LayerProperty(TestConstructorArgs = \"...\")], so the scaffold generator "
+                     + "emits NO tests for it at all. Declare TestConstructorArgs, and "
+                     + "TestInputShape alongside it so the generated tests can drive a forward.",
+        category: "AiDotNet.TestCoverage",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "A layer the generator cannot construct was previously skipped in silence, so "
+                   + "it did not fail, appear in the coverage count, or show up anywhere as "
+                   + "missing -- the skip read exactly like coverage. Four layers reached master "
+                   + "that way, and two of them carried real defects: one never built its "
+                   + "convolutions on the single-input path, so a checkpoint held none of its "
+                   + "weights, and one severed its input gradient while its parameter gradients "
+                   + "still looked healthy.");
+
     private static readonly DiagnosticDescriptor AlgorithmCoverageSummary = new(
         id: "AIDN045",
         title: "Non-model algorithm test coverage summary",
@@ -2196,6 +2223,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(combined, static (spc, source) =>
         {
             var ((((((models, tests), activations), losses), layers), algorithms), compilation) = source;
+
+            // This generator owns AiDotNet's repository test census and emits fixtures that
+            // depend on AiDotNetTests-only base classes and xUnit. The generator assembly is also
+            // shipped to PackageReference consumers so production generators (layer state,
+            // registries, schemas, etc.) activate automatically. Do not leak these repository-only
+            // fixtures or coverage diagnostics into arbitrary consumer compilations.
+            string assemblyName = compilation.AssemblyName ?? string.Empty;
+            if (!string.Equals(assemblyName, "AiDotNet", System.StringComparison.Ordinal) &&
+                !string.Equals(assemblyName, "AiDotNetTests", System.StringComparison.Ordinal))
+            {
+                return;
+            }
+
             Execute(spc, models, tests, compilation);
             ExecuteActivationAndLossGeneration(spc, activations, losses, compilation);
             ExecuteLayerGeneration(spc, layers, compilation);
@@ -15375,9 +15415,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     continue;
                 }
 
-                // Skip if no accessible constructor
+                // Skip if no accessible constructor -- but say so. This was a bare continue, and a
+                // silent skip is indistinguishable from coverage: the layer did not fail, was not
+                // counted as untested, and appeared nowhere as missing.
                 if (!layer.HasParameterlessConstructor && string.IsNullOrEmpty(layer.TestConstructorArgs))
+                {
+                    // Reported with whatever location exists, NOT gated on having one. This loop
+                    // runs in the TEST project, where layers arrive from the referenced assembly and
+                    // carry no source location -- so gating on a location silenced the diagnostic
+                    // everywhere it could actually fire, which is how the first version of it
+                    // reported zero. The message names the class, which is enough to find it.
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        UnscaffoldableLayer,
+                        layer.DeclarationLocation ?? Location.None,
+                        layer.ClassName));
                     continue;
+                }
 
                 var testClassName = StripBacktick(layer.ClassName) + "Tests";
                 if (!generatedNames.Add(testClassName))
@@ -15486,6 +15539,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             FullyQualifiedName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
             TypeParameterCount = symbol.TypeParameters.Length,
             HasParameterlessConstructor = hasParameterlessCtor,
+            DeclarationLocation = symbol.Locations.FirstOrDefault(location => location.IsInSource),
             IsTrainable = isTrainable,
             SupportsBackpropagation = supportsBackprop,
             HasTrainingMode = hasTrainingMode,
@@ -15879,6 +15933,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool UsesSurrogateGradient { get; set; }
         public bool ProducesNonFiniteOutput { get; set; }
         public bool TrainsViaCustomLoss { get; set; }
+
+        /// <summary>Where the layer is declared, or null when it came from a referenced assembly.</summary>
+        /// <remarks>
+        /// Gates the AIDN046 report. A layer discovered in a referenced assembly cannot be annotated
+        /// from this compilation, so warning about it would be noise nobody here can act on.
+        /// </remarks>
+        public Location? DeclarationLocation { get; set; }
     }
 
     /// <summary>

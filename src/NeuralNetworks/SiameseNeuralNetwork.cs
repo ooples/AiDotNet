@@ -60,7 +60,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.Medium)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks", "https://arxiv.org/abs/1908.10084", Year = 2019, Authors = "Nils Reimers, Iryna Gurevych")]
-    public class SiameseNeuralNetwork<T> : VectorModelLayoutBase<T>, IEmbeddingModel<T>
+    public partial class SiameseNeuralNetwork<T> : VectorModelLayoutBase<T>, IEmbeddingModel<T>
     {
         private readonly SiameseNeuralNetworkOptions _options;
 
@@ -358,20 +358,6 @@ namespace AiDotNet.NeuralNetworks
             return result.SafeNormalize();
         }
 
-        /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new SiameseNeuralNetwork<T>(
-                Architecture,
-                _tokenizer,
-                null, // Fresh optimizer for new instance
-                _vocabSize,
-                _embeddingDimension,
-                _maxSequenceLength,
-                _lossFunction,
-                Convert.ToDouble(MaxGradNorm));
-        }
-
         /// <summary>
         /// Retrieves metadata about the Siamese dual-encoder model.
         /// </summary>
@@ -392,20 +378,10 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <inheritdoc/>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            writer.Write(_vocabSize);
-            writer.Write(_embeddingDimension);
-            writer.Write(_maxSequenceLength);
-        }
+
 
         /// <inheritdoc/>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            _vocabSize = reader.ReadInt32();
-            _embeddingDimension = reader.ReadInt32();
-            _maxSequenceLength = reader.ReadInt32();
-        }
+
 
         #endregion
     }

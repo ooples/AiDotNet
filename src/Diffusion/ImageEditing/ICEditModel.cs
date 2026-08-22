@@ -109,28 +109,6 @@ public partial class ICEditModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Clone the resolved predictor/VAE via their own Clone(), which correctly handle the DiT/SiT
-        // LazyDense weights (thread the seed + probe-forward materialize + copy). A naive new-predictor +
-        // SetParameters(GetParameters()) misses lazy weights that only resolve on the forward path, so the
-        // clone would re-RNG-initialize and diverge (the #1711 trap Clone_ShouldProduceIdenticalOutput
-        // caught). Passing architecture/options/scheduler keeps the clone structurally identical; the
-        // sub-model Clone()s make a field-by-field copy unnecessary (and dodge the int-bounded flat Vector).
-        return new ICEditModel<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            predictor: (SiTPredictor<T>)_predictor.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            seed: null); // predictor+vae are cloned & passed, so InitializeLayers ignores seed — do not advance the source RNG
-    }
-
-    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

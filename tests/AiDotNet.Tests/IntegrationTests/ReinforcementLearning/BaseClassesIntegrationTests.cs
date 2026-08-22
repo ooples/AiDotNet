@@ -18,7 +18,7 @@ using System.Threading.Tasks;
 namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 
 [Collection("NonParallelIntegration")]
-public class BaseClassesIntegrationTests
+public partial class BaseClassesIntegrationTests
 {
     [Fact(Timeout = 120000)]
     public async Task PolicyBase_ValidateStateAndAction_ThrowsForInvalidInput()
@@ -206,7 +206,7 @@ public class BaseClassesIntegrationTests
         }
     }
 
-    private sealed class TestDeepAgent : DeepReinforcementLearningAgentBase<double>
+    private sealed partial class TestDeepAgent : DeepReinforcementLearningAgentBase<double>
     {
         private readonly INeuralNetwork<double> _network;
 
@@ -274,10 +274,9 @@ public class BaseClassesIntegrationTests
         // same weights -- which is what DeepReinforcementLearningAgentBase_ParameterCount_SumsNetworks
         // is actually asserting.
 
-        public override IFullModel<double, Vector<double>, Vector<double>> Clone()
-        {
-            return new TestDeepAgent(Options);
-        }
+        // Clone is NOT overridden, for the same reason GetParameters is not: the base reproduces it
+        // from the recorded constructor, and a hand-written copy here would be one more place an
+        // Options field could be dropped without any test failing.
 
         public Vector<double> ComputeGradients(
             Vector<double> input,
@@ -309,7 +308,7 @@ public class BaseClassesIntegrationTests
         }
     }
 
-    private sealed class TestBaseAgent : ReinforcementLearningAgentBase<double>
+    private sealed partial class TestBaseAgent : ReinforcementLearningAgentBase<double>
     {
         private Vector<double> _parameters;
         private bool _deserializeCalled;
@@ -375,13 +374,6 @@ public class BaseClassesIntegrationTests
         public override long ParameterCount => _parameters.Length;
 
         public override int FeatureCount => 2;
-
-        public override IFullModel<double, Vector<double>, Vector<double>> Clone()
-        {
-            var clone = new TestBaseAgent(Options);
-            clone.SetParameters(GetParameters());
-            return clone;
-        }
 
         public Vector<double> ComputeGradients(
             Vector<double> input,

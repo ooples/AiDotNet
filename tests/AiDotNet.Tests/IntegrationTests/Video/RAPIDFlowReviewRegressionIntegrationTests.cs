@@ -3,8 +3,6 @@ using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Motion;
-using System.IO;
-using System.Text;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Video;
@@ -30,31 +28,33 @@ public class RAPIDFlowReviewRegressionIntegrationTests
     }
 
     [Fact]
-    public void DeserializeNetworkSpecificData_WithLayerCountMismatch_Throws()
+    public void Deserialize_WithDifferentConstructedLayerCount_RestoresSerializedTopology()
     {
-        var model = CreateModel();
+        var source = CreateModel(numRefinementIterations: 1);
+        var restored = CreateModel(numRefinementIterations: 2);
 
-        var ex = Assert.Throws<InvalidDataException>(() =>
-            model.InvokeDeserializeNetworkSpecificData(numRefinementIterations: 2));
+        restored.Deserialize(source.Serialize());
 
-        Assert.Contains("RAPIDFlow layers", ex.Message);
+        AssertLayerGraphEqual(source, restored);
     }
 
     [Fact]
-    public void DeserializeNetworkSpecificData_WithLayerTypeMismatch_Throws()
+    public void Deserialize_WithAmbiguousConstructedLayerIdentity_ThrowsClearError()
     {
-        var model = CreateModel();
-        model.Layers[0] = model.Layers[^1];
+        var source = CreateModel();
+        var restored = CreateModel();
+        restored.Layers[0] = restored.Layers[^1];
 
-        var ex = Assert.Throws<InvalidDataException>(() =>
-            model.InvokeDeserializeNetworkSpecificData(numRefinementIterations: 1));
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            restored.Deserialize(source.Serialize()));
 
-        Assert.Contains("Layer 0", ex.Message);
+        Assert.Contains("appears 2 times", ex.Message);
+        Assert.Contains("ambiguous", ex.Message);
     }
 
-    private static RAPIDFlowProbe CreateModel()
+    private static RAPIDFlow<double> CreateModel(int numRefinementIterations = 1)
     {
-        return new RAPIDFlowProbe(
+        return new RAPIDFlow<double>(
             new NeuralNetworkArchitecture<double>(
                 inputType: InputType.ThreeDimensional,
                 taskType: NeuralNetworkTaskType.Regression,
@@ -62,29 +62,23 @@ public class RAPIDFlowReviewRegressionIntegrationTests
                 inputWidth: 32,
                 inputDepth: 3,
                 outputSize: 2),
-            numRefinementIterations: 1);
+            numRefinementIterations);
     }
 
-    private sealed class RAPIDFlowProbe : RAPIDFlow<double>
+    private static void AssertLayerGraphEqual(RAPIDFlow<double> expected, RAPIDFlow<double> actual)
     {
-        public RAPIDFlowProbe(
-            NeuralNetworkArchitecture<double> architecture,
-            int numRefinementIterations)
-            : base(architecture, numRefinementIterations)
+        Assert.Equal(expected.Layers.Count, actual.Layers.Count);
+        for (int i = 0; i < expected.Layers.Count; i++)
         {
+            Assert.Equal(expected.Layers[i].GetType(), actual.Layers[i].GetType());
         }
 
-        public void InvokeDeserializeNetworkSpecificData(int numRefinementIterations)
+        var expectedParameters = expected.GetParameters();
+        var actualParameters = actual.GetParameters();
+        Assert.Equal(expectedParameters.Length, actualParameters.Length);
+        for (int i = 0; i < expectedParameters.Length; i++)
         {
-            using var stream = new MemoryStream();
-            using (var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true))
-            {
-                writer.Write(numRefinementIterations);
-            }
-
-            stream.Position = 0;
-            using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: false);
-            DeserializeNetworkSpecificData(reader);
+            Assert.Equal(expectedParameters[i], actualParameters[i], 10);
         }
     }
 }

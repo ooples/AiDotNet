@@ -57,17 +57,27 @@ public partial class VAEDetector<T> : AnomalyDetectorBase<T>
     private readonly double _learningRate;
 
     // Encoder weights
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _encoderW1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _encoderB1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _encoderWMean;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _encoderBMean;
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _encoderWLogVar;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _encoderBLogVar;
 
     // Decoder weights
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _decoderW1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _decoderB1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _decoderW2;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _decoderB2;
 
     // Normalization parameters

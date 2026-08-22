@@ -918,28 +918,6 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         };
     }
 
-    /// <summary>
-    /// Creates a parameter-identical copy of this agent. The naive
-    /// <c>new MuZeroAgent&lt;T&gt;(_options)</c> form only shares the
-    /// configuration — the freshly-constructed copy has its three networks
-    /// (representation, dynamics, prediction) re-initialized with
-    /// independent random weights, so <c>cloned.Predict(state)</c> diverges
-    /// from <c>original.Predict(state)</c> on the very first call. Copy the
-    /// parameter vector across after construction so the clone observes the
-    /// same policy distribution as the source.
-    /// </summary>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        // Deep-copy the options before constructing the clone — _options
-        // contains mutable collections (RepresentationLayers, DynamicsLayers,
-        // PredictionLayers as List<int>) and sharing the same instance
-        // would let post-clone edits on one model silently leak into the
-        // other.
-        var copy = new MuZeroAgent<T>(new MuZeroOptions<T>(_options));
-        copy.SetParameters(GetParameters());
-        return copy;
-    }
-
     public override void SaveModel(string filepath)
     {
         var data = Serialize();

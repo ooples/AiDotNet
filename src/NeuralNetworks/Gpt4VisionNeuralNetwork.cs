@@ -89,7 +89,9 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
 
     // Vision encoder layers (ViT)
     private readonly List<ILayer<T>> _visionEncoderLayers = [];
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visionClsToken;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visionPositionalEmbeddings;
     private ILayer<T>? _visionPatchEmbedding;
     private ILayer<T>? _visionLayerNorm;
@@ -100,6 +102,7 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
 
     // Language Model (Transformer Decoder)
     private readonly List<ILayer<T>> _languageModelLayers = [];
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _textPositionalEmbeddings;
     private ILayer<T>? _tokenEmbedding;
     private ILayer<T>? _lmHead;
@@ -1616,40 +1619,10 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_embeddingDimension);
-        writer.Write(_visionEmbeddingDim);
-        writer.Write(_maxSequenceLength);
-        writer.Write(_contextWindowSize);
-        writer.Write(_imageSize);
-        writer.Write(_hiddenDim);
-        writer.Write(_numVisionLayers);
-        writer.Write(_numLanguageLayers);
-        writer.Write(_numHeads);
-        writer.Write(_patchSize);
-        writer.Write(_vocabularySize);
-        writer.Write(_maxImagesPerRequest);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _embeddingDimension = reader.ReadInt32();
-        _visionEmbeddingDim = reader.ReadInt32();
-        _maxSequenceLength = reader.ReadInt32();
-        _contextWindowSize = reader.ReadInt32();
-        _imageSize = reader.ReadInt32();
-        _hiddenDim = reader.ReadInt32();
-        _numVisionLayers = reader.ReadInt32();
-        _numLanguageLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _patchSize = reader.ReadInt32();
-        _vocabularySize = reader.ReadInt32();
-        _maxImagesPerRequest = reader.ReadInt32();
-        _useNativeMode = reader.ReadBoolean();
-    }
+
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()

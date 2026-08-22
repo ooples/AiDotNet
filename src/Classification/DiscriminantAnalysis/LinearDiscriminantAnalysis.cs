@@ -76,7 +76,7 @@ namespace AiDotNet.Classification.DiscriminantAnalysis;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("The Use of Multiple Measurements in Taxonomic Problems", "https://doi.org/10.1111/j.1469-1809.1936.tb02137.x")]
-public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
+public partial class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>
 {
 
@@ -107,21 +107,25 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     /// <summary>
     /// Class means for each class.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _classMeans = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Pooled within-class covariance matrix (shared by all classes).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _pooledCovariance = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Inverse of the pooled covariance matrix.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _covarianceInverse = new Matrix<T>(0, 0);
 
     /// <summary>
     /// Class priors (prior probabilities).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _classPriors = new Vector<T>(0);
 
     /// <summary>
@@ -538,15 +542,6 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new LinearDiscriminantAnalysis<T>(new DiscriminantAnalysisOptions<T>
-        {
-            RegularizationParam = Options.RegularizationParam
-        });
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = (LinearDiscriminantAnalysis<T>)CreateNewInstance();
@@ -655,70 +650,6 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     {
         // Return a fresh instance — LDA parameters come from training, not direct setting
         return CreateNewInstance();
-    }
-
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        var modelData = new Dictionary<string, object>
-        {
-            { "NumClasses", NumClasses },
-            { "NumFeatures", NumFeatures },
-            { "TaskType", (int)TaskType },
-            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
-            { "RegularizationOptions", Regularization.GetOptions() },
-            { "RegularizationParam", Options.RegularizationParam }
-        };
-
-        SerializeMatrix(modelData, "ClassMeans", _classMeans);
-        SerializeMatrix(modelData, "PooledCovariance", _pooledCovariance);
-        SerializeMatrix(modelData, "CovarianceInverse", _covarianceInverse);
-        SerializeVector(modelData, "ClassPriors", _classPriors);
-
-        var modelMetadata = GetModelMetadata();
-        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        var jsonString = Encoding.UTF8.GetString(modelData);
-        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-
-        if (modelMetadata == null || modelMetadata.ModelData == null)
-            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
-
-        var modelDataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
-        var modelDataObj = JsonConvert.DeserializeObject<JObject>(modelDataString);
-
-        if (modelDataObj == null)
-            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
-
-        NumClasses = modelDataObj["NumClasses"]?.ToObject<int>() ?? 0;
-        NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
-        TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
-
-        var classLabelsToken = modelDataObj["ClassLabels"];
-        if (classLabelsToken is not null)
-        {
-            var classLabelsAsDoubles = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (classLabelsAsDoubles.Length > 0)
-            {
-                ClassLabels = new Vector<T>(classLabelsAsDoubles.Length);
-                for (int i = 0; i < classLabelsAsDoubles.Length; i++)
-                    ClassLabels[i] = NumOps.FromDouble(classLabelsAsDoubles[i]);
-            }
-        }
-
-        _classMeans = DeserializeMatrix(modelDataObj, "ClassMeans")
-            ?? throw new InvalidOperationException("Missing required 'ClassMeans' in serialized model data.");
-        _pooledCovariance = DeserializeMatrix(modelDataObj, "PooledCovariance")
-            ?? throw new InvalidOperationException("Missing required 'PooledCovariance' in serialized model data.");
-        _covarianceInverse = DeserializeMatrix(modelDataObj, "CovarianceInverse")
-            ?? throw new InvalidOperationException("Missing required 'CovarianceInverse' in serialized model data.");
-        _classPriors = DeserializeVector(modelDataObj, "ClassPriors")
-            ?? throw new InvalidOperationException("Missing required 'ClassPriors' in serialized model data.");
     }
 
     private void SerializeMatrix(Dictionary<string, object> data, string name, Matrix<T>? matrix)

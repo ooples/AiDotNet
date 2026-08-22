@@ -50,7 +50,7 @@ namespace AiDotNet.Video.Stabilization;
     "https://arxiv.org/abs/2404.12887",
     Year = 2024,
     Authors = "Yuchen Zhang, Xiu Li")]
-public class ThreeDMF<T> : VideoStabilizationBase<T>
+public partial class ThreeDMF<T> : VideoStabilizationBase<T>
 {
     private readonly ThreeDMFOptions _options;
 
@@ -167,34 +167,10 @@ public class ThreeDMF<T> : VideoStabilizationBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_options.Variant);
-        writer.Write(_options.NumFeatures);
-        writer.Write(_options.NumDepthLayers);
-        writer.Write(_options.NumMotionIters);
-        writer.Write(_options.NumResBlocks);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.DropoutRate);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _options.Variant = (VideoModelVariant)reader.ReadInt32();
-        _options.NumFeatures = reader.ReadInt32();
-        _options.NumDepthLayers = reader.ReadInt32();
-        _options.NumMotionIters = reader.ReadInt32();
-        _options.NumResBlocks = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.DropoutRate = reader.ReadDouble();
-    }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new ThreeDMF<T>(Architecture, _options);
-    }
 
     private void ThrowIfDisposed()
     {

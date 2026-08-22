@@ -64,7 +64,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("RWKV: Reinventing RNNs for the Transformer Era", "https://arxiv.org/abs/2305.13048", Year = 2023, Authors = "Bo Peng, Eric Alcaide, Quentin Anthony, Alon Albalak, Samuel Arcadinho, Stella Biderman, Huanqi Cao, Xin Cheng, Michael Chung, Matteo Grella, Kranthi Kiran GV, Xuzheng He, Haowen Hou, Przemyslaw Kazienko, Jan Kocon, Jiaming Kong, Bartlomiej Koptyra, Hayden Lau, Krishna Sri Ipsit Mantri, Ferdinand Mom, Atsushi Saito, Xiangru Tang, Bolun Wang, Johan S. Wind, Stanislaw Wozniak, Ruichong Zhang, Zhenyuan Zhang, Qihang Zhao, Peng Zhou, Jian Zhu, Rui-Jie Zhu")]
-public class RWKV4LanguageModel<T> : TokenLanguageModelLayoutBase<T>
+public partial class RWKV4LanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly RWKV4Options _options;
     private readonly int _vocabSize;
@@ -210,38 +210,10 @@ public class RWKV4LanguageModel<T> : TokenLanguageModelLayoutBase<T>
     }
 
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_vocabSize);
-        writer.Write(_modelDimension);
-        writer.Write(_numLayers);
-        writer.Write(_maxSeqLength);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int vocabSize = reader.ReadInt32();
-        int modelDimension = reader.ReadInt32();
-        int numLayers = reader.ReadInt32();
-        int maxSeqLength = reader.ReadInt32();
 
-        if (vocabSize != _vocabSize || modelDimension != _modelDimension ||
-            numLayers != _numLayers || maxSeqLength != _maxSeqLength)
-        {
-            throw new InvalidOperationException(
-                $"Deserialized dimensions (vocab={vocabSize}, dim={modelDimension}, layers={numLayers}, seq={maxSeqLength}) " +
-                $"do not match instance (vocab={_vocabSize}, dim={_modelDimension}, layers={_numLayers}, seq={_maxSeqLength}).");
-        }
-    }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new RWKV4LanguageModel<T>(
-            Architecture, _vocabSize, _modelDimension, _numLayers, _maxSeqLength,
-            LossFunction, _options);
-    }
 
     #endregion
 }

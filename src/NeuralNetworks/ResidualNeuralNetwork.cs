@@ -732,13 +732,7 @@ finally
     /// Saving them allows you to recreate the exact same training setup later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write training parameters
-        writer.Write(_epochs);
-        writer.Write(Convert.ToDouble(_learningRate));
-        writer.Write(_batchSize);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data for the Residual Neural Network.
@@ -761,53 +755,5 @@ finally
     /// with the exact same configuration it had when it was saved.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read training parameters
-        _epochs = reader.ReadInt32();
-        _learningRate = NumOps.FromDouble(reader.ReadDouble());
-        _batchSize = reader.ReadInt32();
-    }
 
-    /// <summary>
-    /// Creates a new instance of the residual neural network with the same configuration.
-    /// </summary>
-    /// <returns>
-    /// A new instance of <see cref="ResidualNeuralNetwork{T}"/> with the same configuration as the current instance.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new residual neural network that has the same configuration as the current instance.
-    /// It's used for model persistence, cloning, and transferring the model's configuration to new instances.
-    /// The new instance will have the same architecture, learning rate, epochs, batch size, and loss function
-    /// as the original, but will not share parameter values unless they are explicitly copied after creation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method makes a fresh copy of the current model with the same settings.
-    /// 
-    /// It's like creating a blueprint copy of your network that can be used to:
-    /// - Save your model's settings
-    /// - Create a new identical model
-    /// - Transfer your model's configuration to another system
-    /// 
-    /// This is useful when you want to:
-    /// - Create multiple similar residual neural networks
-    /// - Save a model's configuration for later use
-    /// - Reset a model while keeping its settings
-    /// 
-    /// Note that while the settings are copied, the learned parameters (like the weights for detecting features)
-    /// are not automatically transferred, so the new instance will need training or parameter copying
-    /// to match the performance of the original.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Create a new instance with the cloned architecture and the same parameters
-        return new ResidualNeuralNetwork<T>(
-            Architecture,
-            _epochs,
-            _batchSize,
-            _optimizer,
-            LossFunction
-        );
-    }
 }

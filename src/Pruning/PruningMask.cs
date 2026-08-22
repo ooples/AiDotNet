@@ -28,6 +28,7 @@ namespace AiDotNet.Pruning;
 /// </remarks>
 public class PruningMask<T> : IPruningMask<T>
 {
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Matrix<T> _mask;
     private readonly INumericOperations<T> _numOps;
 

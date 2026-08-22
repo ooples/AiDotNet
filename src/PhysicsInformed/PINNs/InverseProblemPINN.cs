@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -75,7 +75,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
         Direction = TensorLayoutDirection.Input, BatchOptional = true)]
     [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
         Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-    public class InverseProblemPINN<T> : NeuralNetworkBase<T>
+    public partial class InverseProblemPINN<T> : NeuralNetworkBase<T>
     {
         private readonly IInverseProblem<T> _inverseProblem;
         private readonly IBoundaryCondition<T>[] _boundaryConditions;
@@ -89,7 +89,9 @@ namespace AiDotNet.PhysicsInformed.PINNs
         private readonly bool _usesDefaultOptimizer;
 
         // Trainable parameters (the unknowns we're trying to find)
+        [AiDotNet.Attributes.Buffer]
         private Vector<T> _parameters;
+        [AiDotNet.Attributes.Buffer]
         private Vector<T>? _parameterGradients;
 
         // Current PDE with parameters applied
@@ -835,51 +837,10 @@ namespace AiDotNet.PhysicsInformed.PINNs
         }
 
         /// <inheritdoc/>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            writer.Write(_parameters.Length);
-            foreach (var p in _parameters)
-            {
-                writer.Write(NumOps.ToDouble(p));
-            }
-            writer.Write(_numCollocationPoints);
-        }
+
 
         /// <inheritdoc/>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            int numParams = reader.ReadInt32();
-            if (numParams != _parameters.Length)
-            {
-                throw new InvalidOperationException("Serialized parameter count does not match.");
-            }
 
-            for (int i = 0; i < numParams; i++)
-            {
-                _parameters[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-
-            int numPoints = reader.ReadInt32();
-            if (numPoints != _numCollocationPoints)
-            {
-                throw new InvalidOperationException("Serialized collocation point count does not match.");
-            }
-
-            UpdatePDE();
-        }
-
-        /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new InverseProblemPINN<T>(
-                Architecture,
-                _inverseProblem,
-                _boundaryConditions,
-                _initialCondition,
-                _numCollocationPoints,
-                _options,
-                _optimizer);
-        }
 
         /// <inheritdoc/>
         public override bool SupportsTraining => true;

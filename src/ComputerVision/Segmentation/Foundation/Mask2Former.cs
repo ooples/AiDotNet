@@ -62,7 +62,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Masked-attention Mask Transformer for Universal Image Segmentation", "https://arxiv.org/abs/2112.01527", Year = 2022, Authors = "Bowen Cheng, Ishan Misra, Alexander G. Schwing, Alexander Kirillov, Rohit Girdhar")]
-public class Mask2Former<T> : Common.PanopticSegmentationBase<T>
+public partial class Mask2Former<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly Mask2FormerOptions _options;
 
@@ -401,18 +401,7 @@ public class Mask2Former<T> : Common.PanopticSegmentationBase<T>
     /// <b>For Beginners:</b> Saves configuration so the model can be restored later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height); writer.Write(_width); writer.Write(_channels);
-        writer.Write(_numClasses); writer.Write(_numQueries); writer.Write((int)_modelSize);
-        writer.Write(_decoderDim); writer.Write(_dropRate);
-        writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty);
-        writer.Write(_encoderLayerEnd);
-        writer.Write(_channelDims.Length);
-        foreach (int c in _channelDims) writer.Write(c);
-        writer.Write(_depths.Length);
-        foreach (int d in _depths) writer.Write(d);
-    }
+
 
     /// <summary>
     /// Deserializes Mask2Former configuration.
@@ -423,15 +412,7 @@ public class Mask2Former<T> : Common.PanopticSegmentationBase<T>
     /// <b>For Beginners:</b> Reads saved configuration matching the write order.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadDouble();
-        _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32();
-        int cc = reader.ReadInt32(); for (int i = 0; i < cc; i++) _ = reader.ReadInt32();
-        int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32();
-    }
+
 
     /// <summary>
     /// Creates a new Mask2Former with same config but fresh weights.

@@ -137,13 +137,16 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _biasC; // Cell state bias
     private Tensor<T> _biasO; // Output gate bias
 
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
+    [Scratch]
     private Tensor<T>? _lastHiddenState;
+    [Scratch]
     private Tensor<T>? _lastCellState;
     private Dictionary<string, object> _gradients = new Dictionary<string, object>();
     private readonly Dictionary<string, Tensor<T>> _momentums = new Dictionary<string, Tensor<T>>();
@@ -156,6 +159,7 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached GPU input for backward pass.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuInput;
 
     /// <summary>
@@ -212,71 +216,131 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
     #region GPU Weight Storage Fields
 
     // GPU weight tensors for GPU-resident training
+    [ExternalState]
     private Tensor<T>? _gpuWeightsFi;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsIi;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsCi;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsOi;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsFh;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsIh;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsCh;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsOh;
+    [ExternalState]
     private Tensor<T>? _gpuBiasF;
+    [ExternalState]
     private Tensor<T>? _gpuBiasI;
+    [ExternalState]
     private Tensor<T>? _gpuBiasC;
+    [ExternalState]
     private Tensor<T>? _gpuBiasO;
 
     // GPU gradient tensors from BackwardGpu
+    [ExternalState]
     private Tensor<T>? _gpuWeightsFiGradient;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsIiGradient;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsCiGradient;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsOiGradient;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsFhGradient;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsIhGradient;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsChGradient;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsOhGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBiasFGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBiasIGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBiasCGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBiasOGradient;
 
     // Optimizer state tensors for SGD/NAG/LARS (velocity)
+    [ExternalState]
     private Tensor<T>? _gpuWeightsFiVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsIiVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsCiVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsOiVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsFhVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsIhVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsChVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsOhVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBiasFVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBiasIVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBiasCVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBiasOVelocity;
 
     // Optimizer state tensors for Adam/AdamW/LAMB (M and V)
+    [ExternalState]
     private Tensor<T>? _gpuWeightsFiM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsFiV;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsIiM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsIiV;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsCiM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsCiV;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsOiM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsOiV;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsFhM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsFhV;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsIhM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsIhV;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsChM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsChV;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsOhM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsOhV;
+    [ExternalState]
     private Tensor<T>? _gpuBiasFM;
+    [ExternalState]
     private Tensor<T>? _gpuBiasFV;
+    [ExternalState]
     private Tensor<T>? _gpuBiasIM;
+    [ExternalState]
     private Tensor<T>? _gpuBiasIV;
+    [ExternalState]
     private Tensor<T>? _gpuBiasCM;
+    [ExternalState]
     private Tensor<T>? _gpuBiasCV;
+    [ExternalState]
     private Tensor<T>? _gpuBiasOM;
+    [ExternalState]
     private Tensor<T>? _gpuBiasOV;
 
     #endregion

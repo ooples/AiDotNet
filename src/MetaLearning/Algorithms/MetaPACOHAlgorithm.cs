@@ -68,6 +68,7 @@ public partial class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     private Vector<T> _priorMean;
 
     /// <summary>Per-group prior log-variances. Length = NumPriorGroups.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _groupLogVars;
 
     /// <summary>Group assignments: _groupOf[d] = group index for parameter d.</summary>

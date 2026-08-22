@@ -56,7 +56,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2025,
     Authors = "Ranzinger et al."
 )]
-public class RADIOv25<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
+public partial class RADIOv25<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly RADIOv25Options _options;
 
@@ -196,40 +196,9 @@ public class RADIOv25<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.ImageSize);
-        writer.Write(_options.EmbeddingDim);
-        writer.Write(_options.NumLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.AdapterDim);
-        writer.Write(_options.NumSummaryTokens);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.ImageSize = reader.ReadInt32();
-        _options.EmbeddingDim = reader.ReadInt32();
-        _options.NumLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.AdapterDim = reader.ReadInt32();
-        _options.NumSummaryTokens = reader.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new RADIOv25<T>(Architecture, mp, _options);
-        return new RADIOv25<T>(Architecture, _options);
-    }
+
 
     private void ThrowIfDisposed()
     {

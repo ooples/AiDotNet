@@ -429,47 +429,10 @@ public partial class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_hiddenDim);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_vocabSize);
-        writer.Write(MaxSequenceLength);
-        writer.Write(_maxPosition2D);
-        writer.Write(_numClasses);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int hiddenDim = reader.ReadInt32();
-        int numLayers = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-        int vocabSize = reader.ReadInt32();
-        int maxSeqLen = reader.ReadInt32();
-        int maxPos2D = reader.ReadInt32();
-        int numClasses = reader.ReadInt32();
-        bool useNativeMode = reader.ReadBoolean();
 
-        MaxSequenceLength = maxSeqLen;
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new LayoutLM<T>(
-            Architecture,
-            _tokenizer,
-            _numClasses,
-            MaxSequenceLength,
-            _hiddenDim,
-            _numLayers,
-            _numHeads,
-            _vocabSize,
-            _maxPosition2D);
-    }
 
     #endregion
 

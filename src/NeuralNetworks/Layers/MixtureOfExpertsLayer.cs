@@ -58,7 +58,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.MixtureOfExperts)]
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<double>> { new AiDotNet.NeuralNetworks.Layers.ReadoutLayer<double>(4, 8, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>()), new AiDotNet.NeuralNetworks.Layers.ReadoutLayer<double>(4, 8, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>()) }, new AiDotNet.NeuralNetworks.Layers.ReadoutLayer<double>(4, 2, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>()), new[] { 4 }, new[] { 8 }, 1")]
 // Feature-last, with batch optional: OnFirstForward treats the leading axis as batch and everything after
 // it as the per-sample shape it configures the router and experts against, and ForwardTraced restores a
 // rank-1 input to rank 1 before returning. Those two ranks are the ones whose behaviour is coherent, so
@@ -211,6 +211,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// later if you don't remember what was said.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -240,6 +241,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// - Whether experts are being used balanced or if some are overloaded
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastRoutingWeights;
 
     /// <summary>
@@ -261,11 +263,13 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// so you can give appropriate feedback to each person.
     /// </para>
     /// </remarks>
+    [Scratch]
     private List<Tensor<T>>? _lastExpertOutputs;
 
     /// <summary>
     /// Cached combined output before activation from the most recent forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPreActivation;
 
 
@@ -286,6 +290,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// - This is a technical requirement for proper backpropagation through softmax
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastRoutingLogits;
 
     /// <summary>
@@ -412,6 +417,9 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         return metadata;
     }
 
+    /// <summary>Construction state: the 'useLoadBalancing' the layer was built with.</summary>
+    private readonly bool _useLoadBalancing;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="MixtureOfExpertsLayer{T}"/> class.
     /// </summary>
@@ -472,6 +480,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         T? loadBalancingWeight = default)
         : base(inputShape, outputShape, activationFunction ?? new IdentityActivation<T>())
     {
+        _useLoadBalancing = useLoadBalancing;
         if (experts == null || experts.Count == 0)
         {
             throw new ArgumentException("Must have at least one expert.", nameof(experts));

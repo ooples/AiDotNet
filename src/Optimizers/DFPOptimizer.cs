@@ -25,7 +25,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
+public partial class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
     /// Declines to fuse, always.
@@ -57,11 +57,13 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     /// <summary>
     /// The inverse Hessian matrix approximation used in the DFP algorithm.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _inverseHessian;
 
     /// <summary>
     /// The gradient from the previous iteration.
     /// </summary>
+    [Scratch]
     private new Vector<T> _previousGradient;
 
     /// <summary>
@@ -339,6 +341,7 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     /// <summary>
     /// The parameters from the previous iteration for UpdateParameters method.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _previousParameters;
 
     /// <summary>
@@ -443,82 +446,6 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
             "GPU-accelerated DFP is not yet implemented. DFP requires maintaining a dense inverse Hessian " +
             "approximation which is memory-intensive and complex to update on GPU. " +
             "Use CPU-based UpdateParameters or consider using Adam/AdamW for GPU-resident training.");
-    }
-
-    /// <summary>
-    /// Serializes the DFP optimizer to a byte array.
-    /// </summary>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method converts the current state of the optimizer into a series of bytes.
-    /// This is useful for saving the optimizer's state to a file or sending it over a network.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
-
-            // Serialize _inverseHessian
-            byte[] inverseHessianData = _inverseHessian.Serialize();
-            writer.Write(inverseHessianData.Length);
-            writer.Write(inverseHessianData);
-
-            // Serialize _previousGradient
-            byte[] previousGradientData = _previousGradient.Serialize();
-            writer.Write(previousGradientData.Length);
-            writer.Write(previousGradientData);
-
-            // Serialize _adaptiveLearningRate
-            writer.Write(Convert.ToDouble(_adaptiveLearningRate));
-
-            return ms.ToArray();
-        }
-    }
-
-    /// <summary>
-    /// Deserializes the DFP optimizer from a byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized optimizer state.</param>
-    /// <exception cref="InvalidOperationException">Thrown when deserialization of optimizer options fails.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method reconstructs the optimizer's state from a series of bytes.
-    /// It's used to restore a previously saved state of the optimizer, allowing you to continue from where you left off.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<DFPOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-            // Deserialize _inverseHessian
-            int inverseHessianLength = reader.ReadInt32();
-            byte[] inverseHessianData = reader.ReadBytes(inverseHessianLength);
-            _inverseHessian = Matrix<T>.Deserialize(inverseHessianData);
-
-            // Deserialize _previousGradient
-            int previousGradientLength = reader.ReadInt32();
-            byte[] previousGradientData = reader.ReadBytes(previousGradientLength);
-            _previousGradient = Vector<T>.Deserialize(previousGradientData);
-
-            // Deserialize _adaptiveLearningRate
-            _adaptiveLearningRate = NumOps.FromDouble(reader.ReadDouble());
-        }
     }
 
     /// <inheritdoc />

@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Falcon Mamba: The First Competitive Attention-free 7B Language Model", "https://arxiv.org/abs/2410.05355", Year = 2024, Authors = "Jingwei Zuo, Younes Belkada, Paul Music, Rouven Bauer, Komal Kumar Bein, Yago Gimenez")]
-public class FalconMambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
+public partial class FalconMambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly FalconMambaOptions _options;
     private readonly int _vocabSize;
@@ -153,32 +153,9 @@ public class FalconMambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_vocabSize);
-        writer.Write(_modelDimension);
-        writer.Write(_numLayers);
-        writer.Write(_stateDimension);
-        writer.Write(_expandFactor);
-        writer.Write(_maxSeqLength);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new FalconMambaLanguageModel<T>(
-            Architecture, _vocabSize, _modelDimension, _numLayers, _stateDimension,
-            _expandFactor, _maxSeqLength, LossFunction, _options);
-    }
+
 
     #endregion
 }

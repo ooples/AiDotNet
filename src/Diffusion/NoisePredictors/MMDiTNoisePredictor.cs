@@ -86,7 +86,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Scaling Rectified Flow Transformers for High-Resolution Image Synthesis", "https://arxiv.org/abs/2403.03206")]
-public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
+public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 {
     #region Fields
 
@@ -270,8 +270,12 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         // runner just from `new MMDiTNoisePredictor()`.
         _patchEmbed = LazyDense(patchDim, _hiddenSize);
 
-        // Time embedding MLP
-        _timeEmbed1 = LazyDense(_hiddenSize, timeEmbedDim, new SiLUActivation<T>());
+        // The shared sinusoidal embedding contract emits TimeEmbeddingDim features (4*hidden).
+        // Declare that exact input width before the first forward. A hiddenSize-wide declaration was
+        // silently resized on first use, so the generated pre-forward parameter layout described a
+        // 4,096-value matrix while the live model held 16,384 values; clone/serialization then paired
+        // different chunk shapes. DiT uses the same contract and declaration.
+        _timeEmbed1 = LazyDense(TimeEmbeddingDim, timeEmbedDim, new SiLUActivation<T>());
         _timeEmbed2 = LazyDense(timeEmbedDim, timeEmbedDim, new SiLUActivation<T>());
 
         // Context projection: project text embeddings to hidden dim
@@ -1095,23 +1099,6 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override INoisePredictor<T> Clone()
-    {
-        var clone = new MMDiTNoisePredictor<T>(
-            inputChannels: _inputChannels,
-            hiddenSize: _hiddenSize,
-            numJointLayers: _numJointLayers,
-            numSingleLayers: _numSingleLayers,
-            numHeads: _numHeads,
-            patchSize: _patchSize,
-            contextDim: _contextDim,
-            mlpRatio: _mlpRatio);
-
-        ProbeMaterializeAndCopyInto(clone);
-        return clone;
-    }
-
     /// <summary>
     /// Materializes <paramref name="clone"/> through one throwaway probe forward (the same path the
     /// source's weights resolved on) and then copies this predictor's weights into it.
@@ -1187,9 +1174,6 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
                 "Clone has more layers than the source MMDiT predictor; architectures differ.");
         }
     }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
     #endregion
 

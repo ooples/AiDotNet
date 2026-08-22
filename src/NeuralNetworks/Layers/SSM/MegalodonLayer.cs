@@ -94,7 +94,9 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
 
     // CEMA parameters: complex-valued alpha = alpha_real + i * alpha_imag
     // Stored as real/imag pairs: [emaDimension] each
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T> _emaAlphaReal;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T> _emaAlphaImag;
 
     // EMA input projection: [modelDim, emaDimension]
@@ -114,7 +116,9 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _emaOutputBias;
 
     // Timestep normalization: [emaDimension] each
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _tsNormGamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _tsNormBeta;
 
     // Q, K, V projections: [modelDim, modelDim]
@@ -145,37 +149,66 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastEmaInput;
+    [Scratch]
     private Tensor<T>? _lastEmaStatesReal;
+    [Scratch]
     private Tensor<T>? _lastEmaStatesImag;
+    [Scratch]
     private Tensor<T>? _lastEmaOutputNorm;
+    [Scratch]
     private Tensor<T>? _lastEmaOutputPreNorm;
+    [Scratch]
     private Tensor<T>? _lastEmaStdInv;
+    [Scratch]
     private Tensor<T>? _lastQuery;
+    [Scratch]
     private Tensor<T>? _lastKey;
+    [Scratch]
     private Tensor<T>? _lastValue;
+    [Scratch]
     private Tensor<T>? _lastGate;
+    [Scratch]
     private Tensor<T>? _lastGateRaw;
+    [Scratch]
     private Tensor<T>? _lastAttentionOutput;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _emaAlphaRealGradient;
+    [Scratch]
     private Tensor<T>? _emaAlphaImagGradient;
+    [Scratch]
     private Tensor<T>? _emaInputWeightsGradient;
+    [Scratch]
     private Tensor<T>? _emaInputBiasGradient;
+    [Scratch]
     private Tensor<T>? _emaOutputWeightsGradient;
+    [Scratch]
     private Tensor<T>? _emaOutputBiasGradient;
+    [Scratch]
     private Tensor<T>? _tsNormGammaGradient;
+    [Scratch]
     private Tensor<T>? _tsNormBetaGradient;
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _gateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _gateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />
@@ -200,6 +233,9 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
     /// Gets the EMA state dimension (number of complex EMA channels).
     /// </summary>
     public int EmaDimension => _emaDimension;
+
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
 
     /// <summary>
     /// Creates a new Megalodon layer with CEMA, timestep normalization, and gated attention.
@@ -234,6 +270,7 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

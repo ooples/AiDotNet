@@ -49,7 +49,7 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2022,
     Authors = "Huang et al."
 )]
-public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
+public partial class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly ProDiffOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -287,66 +287,9 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.MelChannels);
-        writer.Write(_options.HiddenDim);
-        writer.Write(_options.NumEncoderLayers);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.NumDiffusionSteps);
-        writer.Write(_options.HopSize);
-        writer.Write(_options.MaxTextLength);
-        writer.Write(_options.FftSize);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.MelChannels = reader.ReadInt32();
-        _options.HiddenDim = reader.ReadInt32();
-        _options.NumEncoderLayers = reader.ReadInt32();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.NumDiffusionSteps = reader.ReadInt32();
-        _options.HopSize = reader.ReadInt32();
-        _options.MaxTextLength = reader.ReadInt32();
-        _options.FftSize = reader.ReadInt32();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new ProDiff<T>(Architecture, mp, new ProDiffOptions(_options));
 
-        if (_usesDefaultOptimizer)
-            return new ProDiff<T>(Architecture, new ProDiffOptions(_options));
-
-        // Never share mutable optimizer state between the source and clone.
-        // Preserve the built-in Adam/AdamW settings when possible; arbitrary
-        // injected optimizer implementations fall back to ProDiff's public,
-        // paper-aligned options on the new instance.
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? cloneOptimizer = _optimizer switch
-        {
-            AdamWOptimizer<T, Tensor<T>, Tensor<T>> when _optimizer.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
-                => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, CloneAdamWOptions(options)),
-            AdamOptimizer<T, Tensor<T>, Tensor<T>> when _optimizer.GetOptions() is AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> options
-                => new AdamOptimizer<T, Tensor<T>, Tensor<T>>(null, CloneAdamOptions(options)),
-            _ => null
-        };
-        return new ProDiff<T>(Architecture, new ProDiffOptions(_options), cloneOptimizer);
-    }
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
     {

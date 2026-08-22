@@ -58,7 +58,7 @@ namespace AiDotNet.Clustering.Density;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("DENCLUE: A New Approach for Discovering Density-Based Clusters in Large Spatial Databases", "https://link.springer.com/chapter/10.1007/978-1-4615-5669-5_7", Year = 1998, Authors = "Alexander Hinneburg, Daniel A. Keim")]
-public class Denclue<T> : ClusteringBase<T>
+public partial class Denclue<T> : ClusteringBase<T>
 {
     private readonly DenclueOptions<T> _options;
 
@@ -66,7 +66,9 @@ public class Denclue<T> : ClusteringBase<T>
     public override ModelOptions GetOptions() => _options;
     private T[][]? _attractors;
     private T[]? _attractorDensities;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _featureMeans;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _featureStds;
 
     /// <summary>
@@ -91,20 +93,6 @@ public class Denclue<T> : ClusteringBase<T>
     public T[]? AttractorDensities => _attractorDensities;
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new Denclue<T>(new DenclueOptions<T>
-        {
-            Bandwidth = _options.Bandwidth,
-            MinDensity = _options.MinDensity,
-            ConvergenceThreshold = _options.ConvergenceThreshold,
-            AttractorMergeThreshold = _options.AttractorMergeThreshold,
-            MaxIterations = _options.MaxIterations,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
@@ -452,9 +440,6 @@ public class Denclue<T> : ClusteringBase<T>
 
         return labels;
     }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()

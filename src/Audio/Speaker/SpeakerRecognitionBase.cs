@@ -27,7 +27,7 @@ namespace AiDotNet.Audio.Speaker;
 /// - Similarity computation methods
 /// </para>
 /// </remarks>
-public abstract class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase<T>
+public abstract partial class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase<T>
 {
     /// <summary>
     /// Gets the dimension of output speaker embeddings.

@@ -1,4 +1,5 @@
 using AiDotNet.Models.Options;
+using AiDotNet.Attributes;
 using AiDotNet.Models.Parameters;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -63,7 +64,9 @@ public abstract class TabRBase<T> : IParameterSource<T>
     private readonly LayerNormalizationLayer<T>? _encoderNorm;
 
     // Retrieval index (stores training sample embeddings)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _indexEmbeddings;       // [numTrainSamples, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _indexFeatures;         // [numTrainSamples, numFeatures]
     private int _numIndexedSamples;
 
@@ -78,10 +81,15 @@ public abstract class TabRBase<T> : IParameterSource<T>
     private readonly FullyConnectedLayer<T> _outputProjection;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _queryEmbeddingCache;
+    [Scratch]
     private Tensor<T>? _neighborEmbeddingsCache;
+    [Scratch]
     private Tensor<T>? _attentionWeightsCache;
+    [Scratch]
     private Tensor<T>? _contextCache;
+    [Scratch]
     private Matrix<int>? _neighborIndicesCache;
 
     /// <summary>

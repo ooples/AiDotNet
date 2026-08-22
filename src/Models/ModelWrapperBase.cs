@@ -26,10 +26,53 @@ namespace AiDotNet.Models;
 /// all the common delegation so wrapper classes only implement what's different.
 /// </para>
 /// </remarks>
-public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>,
+public abstract partial class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>,
     IParameterizable<T, TInput, TOutput>, IFeatureAware, IGradientComputable<T, TInput, TOutput>,
     AiDotNet.Models.Parameters.IParameterManifestProvider
 {
+    // --- declared state (ModelStateRegistry) ---
+    // Identical in every model base because these bases are siblings over the same interfaces rather
+    // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.
+
+    /// <summary>State that is not a parameter vector, declared once and persisted by this base.</summary>
+    private readonly AiDotNet.Models.ModelStateRegistry<T> _declaredState = new();
+    private bool _declaredStateRegistered;
+
+    /// <summary>
+    /// Declare state here that the parameter vector does not carry -- a retained training set,
+    /// fitted knots, kernel centres, an ensemble's children. Both halves of the payload are driven
+    /// by the declaration, so they cannot drift.
+    /// </summary>
+    /// <param name="state">The registry to declare into.</param>
+    protected virtual void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+    }
+    /// <summary>Generated state declarations for fields declared across this model's hierarchy.</summary>
+    /// <param name="state">The registry to declare into.</param>
+    /// <remarks>
+    /// Emitted by ModelStateGenerator into the partial model, so a model author declares nothing. The
+    /// hand-written <c>RegisterState</c> beside it exists only for state the classifier genuinely
+    /// cannot place; anything it CAN place belongs here, where it cannot be forgotten.
+    /// </remarks>
+    protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        RegisterGeneratedStateCore(state);
+    }
+
+    /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>
+    protected AiDotNet.Models.ModelStateRegistry<T> DeclaredState
+    {
+        get
+        {
+            if (!_declaredStateRegistered)
+            {
+                _declaredStateRegistered = true;
+                RegisterGeneratedState(_declaredState);
+                RegisterState(_declaredState);
+            }
+            return _declaredState;
+        }
+    }
     /// <summary>
     /// Numeric operations for type T.
     /// </summary>
@@ -214,7 +257,28 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
     // --- ICloneable ---
 
     /// <inheritdoc/>
-    public abstract IFullModel<T, TInput, TOutput> DeepCopy();
+    /// <remarks>
+    /// <para>
+    /// No longer abstract. Configuration is rebuilt from the compile-time clone plan, which records
+    /// the constructor the type was built with; learned state is carried through the model's own
+    /// public Serialize and Deserialize, so a model that persists something extra keeps it. The
+    /// persistence guard is told this is an internal operation because a clone is not a save.
+    /// </para>
+    /// <para>
+    /// A model overrides this only when the generator reports that it cannot rebuild the type --
+    /// a constructor parameter with no member holding its value -- and the build names which one.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            byte[] state = Serialize();
+            var copy = (ModelWrapperBase<T, TInput, TOutput>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
+            copy.Deserialize(state);
+            return copy;
+        }
+    }
 
     /// <inheritdoc/>
     public virtual IFullModel<T, TInput, TOutput> Clone() => DeepCopy();
@@ -232,11 +296,21 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
     // --- IModelSerializer ---
 
     /// <inheritdoc/>
-    public virtual byte[] Serialize() => BaseModel.Serialize();
+    /// <remarks>
+    /// Appends the declared-state trailer that <see cref="Deserialize"/> already strips. Without
+    /// this the two halves disagreed: Extract was called on the way in, Append was never called on
+    /// the way out, so anything a wrapper declared was read back but never written - which is the
+    /// "two places to forget the same field" defect this base exists to remove, in the base itself.
+    /// </remarks>
+    public virtual byte[] Serialize()
+        => AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, BaseModel.Serialize());
 
     /// <inheritdoc/>
     public virtual void Deserialize(byte[] data)
     {
+        // Strips and applies any declared-state trailer, so the body below reads the payload
+        // exactly as it did before this existed.
+        data = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, data);
         Guard.NotNull(data);
         BaseModel.Deserialize(data);
     }

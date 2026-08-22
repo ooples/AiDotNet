@@ -56,11 +56,17 @@ public partial class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
     private readonly double _learningRate;
 
     // Network weights
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _w1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _b1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _w2;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _b2;
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _w3;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _b3;
 
     // Hypersphere center

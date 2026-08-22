@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -127,35 +127,62 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _normBeta;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastXBranch;
+    [Scratch]
     private Tensor<T>? _lastZBranch;
+    [Scratch]
     private Tensor<T>? _lastConvOutput;
+    [Scratch]
     private Tensor<T>? _lastSiluOutput;
+    [Scratch]
     private Tensor<T>? _lastSsdOutput;
+    [Scratch]
     private Tensor<T>? _lastGatedOutput;
+    [Scratch]
     private Tensor<T>? _lastDelta;
+    [Scratch]
     private Tensor<T>? _lastDeltaPreSoftplus;
+    [Scratch]
     private Tensor<T>? _lastB;
+    [Scratch]
     private Tensor<T>? _lastC;
+    [Scratch]
     private Tensor<T>? _lastNormInput;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _inputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _inputProjectionBiasGradient;
+    [Scratch]
     private Tensor<T>? _convWeightsGradient;
+    [Scratch]
     private Tensor<T>? _convBiasGradient;
+    [Scratch]
     private Tensor<T>? _bProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _cProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _aLogGradient;
+    [Scratch]
     private Tensor<T>? _dtProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _dtProjectionBiasGradient;
+    [Scratch]
     private Tensor<T>? _dParamGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
+    [Scratch]
     private Tensor<T>? _normGammaGradient;
+    [Scratch]
     private Tensor<T>? _normBetaGradient;
 
     /// <inheritdoc />
@@ -214,6 +241,12 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public int ChunkSize => _chunkSize;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
+    /// <summary>Construction state: the 'expandFactor' the layer was built with.</summary>
+    private readonly int _expandFactor;
+
     /// <summary>
     /// Creates a new Mamba-2 block with State Space Duality (SSD) computation.
     /// </summary>
@@ -258,6 +291,8 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _expandFactor = expandFactor;
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (modelDimension <= 0)
@@ -349,7 +384,7 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
         _normBeta.Fill(NumOps.Zero);
 
         // Register ALL trainable parameters at construction so the tape training path collects them before
-        // the first UpdateParameters call — otherwise the projection weights (registered only inside
+        // the first UpdateParameters call â€” otherwise the projection weights (registered only inside
         // UpdateParameters previously) are never tape-tracked and every Train step silently no-ops on them.
         RegisterTrainableParameters();
     }
@@ -505,10 +540,10 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
         int batchSize, int seqLen)
     {
         // Tape-aware selective scan. The previous body was a scalar .Data.Span nested loop that wrote a
-        // rented output buffer — it SEVERED the autodiff tape, so under tape training every Mamba2 block
+        // rented output buffer â€” it SEVERED the autodiff tape, so under tape training every Mamba2 block
         // was FROZEN (verified: block activations were byte-identical before/after training; only the
         // output projection learned, and over many iterations it memorized the constant target and
-        // collapsed input-sensitivity — DifferentInputs_AfterTraining L2 ~= 0). Express the recurrence
+        // collapsed input-sensitivity â€” DifferentInputs_AfterTraining L2 ~= 0). Express the recurrence
         //   aBar_t = exp(dt_t * (-exp(A))),  h_t = aBar_t (.) h_{t-1} + (dt_t (.) x_t) (x) B_t,
         //   y_t    = sum_n (C_t (.) h_t) + D (.) x_t
         // through tape-aware Engine ops so gradients flow to every selective projection.
@@ -516,7 +551,7 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
         int sd = _stateDimension;
 
         // Constant [numHeads, headDim] ones to REPEAT a per-head value across its head's channels
-        // (per-head -> per-inner-dim). A plain constant — not a differentiated leaf — so a scalar fill
+        // (per-head -> per-inner-dim). A plain constant â€” not a differentiated leaf â€” so a scalar fill
         // here severs no gradient path.
         var onesHD = new Tensor<T>(new[] { _numHeads, _headDimension });
         var onesHDSpan = onesHD.Data.Span;
@@ -572,13 +607,13 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Chunked semiseparable SSD. Partitions the sequence into chunks of <paramref name="chunkSize"/> and,
     /// for each chunk, computes the intra-chunk contribution with the block-parallel semiseparable matrix
-    /// form (a lower-triangular decay-weighted C·Bᵀ "attention" times the input) while carrying the
+    /// form (a lower-triangular decay-weighted CÂ·Báµ€ "attention" times the input) while carrying the
     /// recurrent state h between chunks via the efficient recurrent form. This is what makes the configured
     /// chunk size actually affect the computation. It is numerically identical to
     /// <see cref="SSDForwardSequential"/> (validated to machine precision by the SSD-equivalence test), and
     /// every op is tape-aware, so gradients still reach every selective projection, <c>_aLog</c> and
-    /// <c>_dParam</c>. Decays are handled in log space (segment sums of dt·(−exp(A)) ≤ 0) so the
-    /// intra-chunk decay matrix exp(cumA_t − cumA_j) stays bounded and never overflows.
+    /// <c>_dParam</c>. Decays are handled in log space (segment sums of dtÂ·(âˆ’exp(A)) â‰¤ 0) so the
+    /// intra-chunk decay matrix exp(cumA_t âˆ’ cumA_j) stays bounded and never overflows.
     /// </summary>
     private Tensor<T> SSDForwardChunked(
         Tensor<T> x, Tensor<T> delta, Tensor<T> b, Tensor<T> c,
@@ -594,7 +629,7 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
         { var s = onesHD.Data.Span; for (int i = 0; i < s.Length; i++) s[i] = NumOps.One; }
 
         // Eb[b, h, c] = 1 when channel c belongs to head h (c / headDim == h), else 0. Multiplying a
-        // [B, L, H] per-head tensor by this via a batched matmul expands it to [B, L, innerDim] — the
+        // [B, L, H] per-head tensor by this via a batched matmul expands it to [B, L, innerDim] â€” the
         // rank-3-safe equivalent of repeat-interleave across head channels.
         var eb = new Tensor<T>(new[] { batchSize, numHeads, innerDim });
         {
@@ -641,13 +676,13 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
             var trilMask = BuildBatchedLowerTriOnes(batchSize * numHeads, ln);          // [B*H, ln, ln] (0/1)
             // Mask in LOG space BEFORE the exp, as the reference Mamba-2 segsum does
             // (masked_fill(~causal, -inf) then exp). cumA decreases monotonically, so on the causal
-            // half decayDiff = cumA_t - cumA_j <= 0 and exp is bounded by 1 — but the discarded upper
+            // half decayDiff = cumA_t - cumA_j <= 0 and exp is bounded by 1 â€” but the discarded upper
             // half holds the same magnitudes with the opposite sign (up to ~+350 at seqLen 512 /
             // chunk 64). exp overflows at ~88 in float32 (~709 in float64), so exponentiating first
             // produced +Infinity there, and Infinity * 0 from the mask is NaN, which then propagated
             // through the matmul below and made the whole forward non-finite at <float>.
             // Zeroing decayDiff first leaves the causal half untouched and turns the upper half into
-            // exp(0) = 1, which the same mask then zeroes — identical result, no overflow.
+            // exp(0) = 1, which the same mask then zeroes â€” identical result, no overflow.
             var decayDiffMasked = Engine.TensorMultiply(decayDiff, trilMask);            // [B*H, ln, ln]
             var lDecay = Engine.TensorMultiply(Engine.TensorExp(decayDiffMasked), trilMask); // [B*H, ln, ln]
 
@@ -703,7 +738,7 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Builds a constant [batch, n, n] lower-triangular ones matrix (1 where column ≤ row, else 0),
+    /// Builds a constant [batch, n, n] lower-triangular ones matrix (1 where column â‰¤ row, else 0),
     /// identical across the batch axis. Used both as the prefix-sum operator and as the causal decay mask.
     /// A plain constant (not a differentiated leaf), so filling it with a scalar loop severs no gradient.
     /// </summary>
@@ -919,7 +954,7 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
     /// Depthwise causal Conv1D forward using explicit per-element computation.
     /// </summary>
     // Tape-aware causal depthwise 1-D convolution over the time axis:
-    //   output[b, t, d] = bias[d] + Σ_k weights[d, k] * input[b, t - k, d]   (t - k >= 0)
+    //   output[b, t, d] = bias[d] + Î£_k weights[d, k] * input[b, t - k, d]   (t - k >= 0)
     // Built entirely from differentiable Engine ops so the gradient flows back to the
     // conv weights/bias AND to the input (the input projection). The previous body was
     // a scalar indexer loop that produced a fresh detached tensor and severed the tape.
@@ -964,7 +999,7 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
         Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
     {
         var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
-        // Zero-initialize rented buffer — it may contain stale data from previous use
+        // Zero-initialize rented buffer â€” it may contain stale data from previous use
         for (int i = 0; i < dInput.Length; i++) dInput[i] = NumOps.Zero;
         _convBiasGradient = new Tensor<T>(new[] { _innerDimension });
         _convWeightsGradient = new Tensor<T>(new[] { _innerDimension, _convKernelSize });

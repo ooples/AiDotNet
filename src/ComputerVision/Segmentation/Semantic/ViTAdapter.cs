@@ -59,7 +59,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Vision Transformer Adapter for Dense Predictions", "https://arxiv.org/abs/2205.08534", Year = 2023, Authors = "Chen et al.")]
-public class ViTAdapter<T> : Common.SemanticSegmentationBase<T>
+public partial class ViTAdapter<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly ViTAdapterOptions _options;
 
@@ -346,18 +346,7 @@ public class ViTAdapter<T> : Common.SemanticSegmentationBase<T>
     /// <b>For Beginners:</b> Saves configuration so the model can be restored later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height); writer.Write(_width); writer.Write(_channels);
-        writer.Write(_numClasses); writer.Write((int)_modelSize);
-        writer.Write(_embedDim); writer.Write(_decoderDim); writer.Write(_dropRate);
-        writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty);
-        writer.Write(_encoderLayerEnd);
-        writer.Write(_depths.Length);
-        foreach (int d in _depths) writer.Write(d);
-        writer.Write(_numHeads.Length);
-        foreach (int h in _numHeads) writer.Write(h);
-    }
+
 
     /// <summary>
     /// Deserializes ViT-Adapter configuration.
@@ -368,16 +357,7 @@ public class ViTAdapter<T> : Common.SemanticSegmentationBase<T>
     /// <b>For Beginners:</b> Reads saved configuration matching the write order.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble();
-        _ = reader.ReadBoolean(); _ = reader.ReadString();
-        _ = reader.ReadInt32();
-        int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32();
-        int hc = reader.ReadInt32(); for (int i = 0; i < hc; i++) _ = reader.ReadInt32();
-    }
+
 
     /// <summary>
     /// Creates a new ViT-Adapter with same config but fresh weights.

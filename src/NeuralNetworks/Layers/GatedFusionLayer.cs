@@ -117,19 +117,16 @@ public partial class GatedFusionLayer<T> : LayerBase<T>, IShapeContract
             Engine.TensorMultiply(inverseGate, languageStream));
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// The base implementation does not recurse into registered sub-layers, so the gate's
-    /// tensors are surfaced explicitly.
-    /// </remarks>
-    public override IReadOnlyList<Tensor<T>> GetTrainableParameters() => _gate.GetTrainableParameters();
-
-    /// <inheritdoc/>
-    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
-        => _gate.SetTrainableParameters(parameters);
-
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> parameters) => _gate.UpdateParameters(parameters);
+    // The gate's tensors used to be surfaced here explicitly, on the stated grounds that "the base
+    // implementation does not recurse into registered sub-layers". That is true of the base
+    // GetTrainableParameters, which returns only this layer's own registrations -- but it is not
+    // true of the walk that ParameterCount, GetParameters and SetParameters are actually built
+    // from, which appends every registered sub-layer that no declaration already covers. Handing
+    // the gate's tensors out as this layer's own therefore entered them TWICE: once as trainable
+    // tensors of the parent, once inside the gate's own component. Count and vector both came from
+    // that single doubled walk, so they agreed with each other and nothing reported it.
+    // UpdateParameters(Vector<T>) went with them: the base routes it to SetParameters, which now
+    // spans the gate through the composed walk rather than through this layer's own list.
 
     /// <inheritdoc/>
     public override void ResetState() => _gate.ResetState();

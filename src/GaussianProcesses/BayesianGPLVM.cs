@@ -76,6 +76,7 @@ public class BayesianGPLVM<T>
     /// and each column is a latent dimension.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _latentMean;
 
     /// <summary>
@@ -87,16 +88,19 @@ public class BayesianGPLVM<T>
     /// is in latent space. Larger values mean more uncertainty.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _latentVariance;
 
     /// <summary>
     /// The inducing points in latent space (M x Q).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _inducingPoints;
 
     /// <summary>
     /// The observed data (N x D).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _observedData;
 
     /// <summary>

@@ -39,7 +39,7 @@ namespace AiDotNet.Classification.Linear;
 /// - Often surprisingly effective
 /// </para>
 /// </remarks>
-public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>,
+public abstract partial class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
 
@@ -395,126 +395,5 @@ public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>,
         metadata.AdditionalInfo["Loss"] = Options.Loss.ToString();
         metadata.AdditionalInfo["Alpha"] = Options.Alpha;
         return metadata;
-    }
-
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        var modelData = new Dictionary<string, object>
-        {
-            { "NumClasses", NumClasses },
-            { "NumFeatures", NumFeatures },
-            { "TaskType", (int)TaskType },
-            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
-            { "RegularizationOptions", Regularization.GetOptions() },
-            { "FitIntercept", Options.FitIntercept },
-            { "LearningRate", Options.LearningRate },
-            { "MaxIterations", Options.MaxIterations },
-            { "Penalty", (int)Options.Penalty },
-            { "Loss", (int)Options.Loss },
-            { "Alpha", Options.Alpha }
-        };
-
-        // Serialize Weights
-        if (Weights is not null)
-        {
-            var weightsArray = new double[Weights.Length];
-            for (int i = 0; i < Weights.Length; i++)
-            {
-                weightsArray[i] = NumOps.ToDouble(Weights[i]);
-            }
-            modelData["Weights"] = weightsArray;
-        }
-
-        // Serialize Intercept
-        modelData["Intercept"] = NumOps.ToDouble(Intercept);
-
-        var modelMetadata = GetModelMetadata();
-        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
-
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        var jsonString = Encoding.UTF8.GetString(modelData);
-        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-
-        if (modelMetadata == null || modelMetadata.ModelData == null)
-        {
-            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
-        }
-
-        var modelDataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
-        var modelDataObj = JsonConvert.DeserializeObject<JObject>(modelDataString);
-
-        if (modelDataObj == null)
-        {
-            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
-        }
-
-        // Deserialize base properties with validation
-        var numClassesToken = modelDataObj["NumClasses"];
-        var numFeaturesToken = modelDataObj["NumFeatures"];
-        if (numClassesToken is null || numFeaturesToken is null)
-        {
-            throw new InvalidOperationException(
-                "Deserialization failed: NumClasses or NumFeatures is missing from serialized data.");
-        }
-        NumClasses = numClassesToken.ToObject<int>();
-        NumFeatures = numFeaturesToken.ToObject<int>();
-        TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
-
-        // Restore options
-        var fitInterceptToken = modelDataObj["FitIntercept"];
-        if (fitInterceptToken is not null)
-            Options.FitIntercept = fitInterceptToken.ToObject<bool>();
-        if (modelDataObj["LearningRate"] is not null)
-            Options.LearningRate = modelDataObj["LearningRate"]?.ToObject<double>() ?? Options.LearningRate;
-        if (modelDataObj["MaxIterations"] is not null)
-            Options.MaxIterations = modelDataObj["MaxIterations"]?.ToObject<int>() ?? Options.MaxIterations;
-        if (modelDataObj["Penalty"] is not null)
-            Options.Penalty = (LinearPenalty)(modelDataObj["Penalty"]?.ToObject<int>() ?? (int)Options.Penalty);
-        if (modelDataObj["Loss"] is not null)
-            Options.Loss = (LinearLoss)(modelDataObj["Loss"]?.ToObject<int>() ?? (int)Options.Loss);
-        if (modelDataObj["Alpha"] is not null)
-            Options.Alpha = modelDataObj["Alpha"]?.ToObject<double>() ?? Options.Alpha;
-
-        var classLabelsToken = modelDataObj["ClassLabels"];
-        if (classLabelsToken is not null)
-        {
-            var classLabelsAsDoubles = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (classLabelsAsDoubles.Length > 0)
-            {
-                ClassLabels = new Vector<T>(classLabelsAsDoubles.Length);
-                for (int i = 0; i < classLabelsAsDoubles.Length; i++)
-                {
-                    ClassLabels[i] = NumOps.FromDouble(classLabelsAsDoubles[i]);
-                }
-            }
-        }
-
-        // Deserialize Weights
-        var weightsToken = modelDataObj["Weights"];
-        if (weightsToken is not null)
-        {
-            var weightsAsDoubles = weightsToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (weightsAsDoubles.Length > 0)
-            {
-                Weights = new Vector<T>(weightsAsDoubles.Length);
-                for (int i = 0; i < weightsAsDoubles.Length; i++)
-                {
-                    Weights[i] = NumOps.FromDouble(weightsAsDoubles[i]);
-                }
-            }
-        }
-
-        // Deserialize Intercept
-        var interceptToken = modelDataObj["Intercept"];
-        if (interceptToken is not null)
-        {
-            Intercept = NumOps.FromDouble(interceptToken.ToObject<double>());
-        }
     }
 }

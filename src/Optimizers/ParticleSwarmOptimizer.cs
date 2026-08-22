@@ -34,7 +34,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public partial class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Random number generator for stochastic components of the algorithm.
@@ -284,59 +284,5 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _psoOptions;
-    }
-
-    /// <summary>
-    /// Serializes the particle swarm optimizer to a byte array for storage or transmission.
-    /// </summary>
-    /// <returns>A byte array containing the serialized optimizer.</returns>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            // Serialize base class data
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            // Serialize ParticleSwarmOptimizationOptions
-            string optionsJson = JsonConvert.SerializeObject(_psoOptions);
-            writer.Write(optionsJson);
-
-            // Serialize current adaptive parameters
-            writer.Write(_currentInertia);
-            writer.Write(_currentCognitiveWeight);
-            writer.Write(_currentSocialWeight);
-
-            return ms.ToArray();
-        }
-    }
-
-    /// <summary>
-    /// Reconstructs the particle swarm optimizer from a serialized byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized optimizer.</param>
-    /// <exception cref="InvalidOperationException">Thrown when the options cannot be deserialized.</exception>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            // Deserialize base class data
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            // Deserialize ParticleSwarmOptimizationOptions
-            string optionsJson = reader.ReadString();
-            _psoOptions = JsonConvert.DeserializeObject<ParticleSwarmOptimizationOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-            // Deserialize current adaptive parameters
-            _currentInertia = reader.ReadDouble();
-            _currentCognitiveWeight = reader.ReadDouble();
-            _currentSocialWeight = reader.ReadDouble();
-        }
     }
 }

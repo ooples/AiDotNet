@@ -79,7 +79,7 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="T">The numeric type</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
-public class ElasticOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput, TOutput>
+public partial class ElasticOptimizer<T, TInput, TOutput> : ShardedOptimizerBase<T, TInput, TOutput>
 {
     private readonly int _minWorkers;
     private readonly int _maxWorkers;

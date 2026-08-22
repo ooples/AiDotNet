@@ -109,12 +109,18 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     // Recomputed only when seqLen changes; positions are fixed so this
     // is pure shape state, NOT a trainable parameter.
     private int _cachedSeqLen = -1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<int>? _bucketIndices;
 
+    [Scratch]
     private Tensor<T>? _qGradient;
+    [Scratch]
     private Tensor<T>? _kGradient;
+    [Scratch]
     private Tensor<T>? _vGradient;
+    [Scratch]
     private Tensor<T>? _oGradient;
+    [Scratch]
     private Tensor<T>? _biasTableGradient;
 
     public override bool SupportsTraining => true;

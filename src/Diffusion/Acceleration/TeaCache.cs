@@ -31,6 +31,7 @@ public class TeaCache<T>
 {
     private readonly double _reuseThreshold;
     private readonly int _maxCacheSize;
+    [Scratch]
     private readonly Dictionary<string, Tensor<T>> _kvCache;
     private readonly Dictionary<string, double> _lastTimestepEmbedding;
     private readonly List<string> _insertionOrder;

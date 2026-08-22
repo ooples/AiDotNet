@@ -250,6 +250,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// This is automatically cleared after each training batch to save memory.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -270,6 +271,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// This is also cleared after each training batch to save memory.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -301,6 +303,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// what the network learned from its mistakes.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _kernelGradients;
 
     /// <summary>
@@ -322,10 +325,13 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// each output channel only has one bias value.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _biasGradients;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput;
+    [ExternalState]
     private Tensor<T>? _gpuOutput;
     private int[]? _gpuOriginalInputShape;
     private bool _gpuAddedBatchDimension;

@@ -48,7 +48,7 @@ namespace AiDotNet.AnomalyDetection.TreeBased;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Isolation-Based Anomaly Detection", "https://doi.org/10.1145/2133360.2133363", Year = 2012, Authors = "Fei Tony Liu, Kai Ming Ting, Zhi-Hua Zhou")]
-public class SCiForest<T> : AnomalyDetectorBase<T>
+public partial class SCiForest<T> : AnomalyDetectorBase<T>
 {
     private readonly int _numTrees;
     private readonly int _maxSamples;
@@ -232,6 +232,7 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
         private readonly int _nFeatures;
         private readonly double _sparsity;
         private readonly Random _random;
+        [AiDotNet.Attributes.TrainableParameter]
         private Vector<T>? _sparseWeights;
         private T _threshold;
         private SCiTree? _left;

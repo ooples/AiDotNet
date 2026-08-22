@@ -60,7 +60,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Segment Anything in High Quality", "https://arxiv.org/abs/2306.01567", Year = 2023, Authors = "Lei Ke, Mingqiao Ye, Martin Danelljan, Yifan Liu, Yu-Wing Tai, Chi-Keung Tang, Fisher Yu")]
-public class SAMHQ<T> : Common.PromptableSegmentationBase<T>
+public partial class SAMHQ<T> : Common.PromptableSegmentationBase<T>
 {
     /// <inheritdoc />
     /// <remarks>Downsamples by 16, not the family's 32 - measured: [1,3,64,64] returns [1,C,4,4].</remarks>
@@ -375,18 +375,7 @@ public class SAMHQ<T> : Common.PromptableSegmentationBase<T>
     /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height); writer.Write(_width); writer.Write(_channels);
-        writer.Write(_numClasses); writer.Write((int)_modelSize);
-        writer.Write(_decoderDim); writer.Write(_dropRate);
-        writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty);
-        writer.Write(_encoderLayerEnd);
-        writer.Write(_channelDims.Length);
-        foreach (int dim in _channelDims) writer.Write(dim);
-        writer.Write(_depths.Length);
-        foreach (int depth in _depths) writer.Write(depth);
-    }
+
 
     /// <summary>
     /// Reads SAM-HQ configuration from a binary stream.
@@ -397,18 +386,7 @@ public class SAMHQ<T> : Common.PromptableSegmentationBase<T>
     /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadDouble();
-        _ = reader.ReadBoolean(); _ = reader.ReadString();
-        _ = reader.ReadInt32();
-        int dimCount = reader.ReadInt32();
-        for (int i = 0; i < dimCount; i++) _ = reader.ReadInt32();
-        int depthCount = reader.ReadInt32();
-        for (int i = 0; i < depthCount; i++) _ = reader.ReadInt32();
-    }
+
 
     /// <summary>
     /// Creates a new SAM-HQ instance with the same configuration but fresh weights.

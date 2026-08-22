@@ -44,6 +44,7 @@ public class SelfSupervisedLearningSession<T>
     private DateTime _startTime;
 
     // Storage for k-NN evaluation
+    [Scratch]
     private Tensor<T>? _cachedTrainingFeatures;
     private int[]? _cachedTrainingLabels;
 

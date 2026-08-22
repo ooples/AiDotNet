@@ -67,7 +67,7 @@ namespace AiDotNet.Audio.AudioLDM;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(string), typeof(Tensor<>))]
 [ResearchPaper("AudioLDM: Text-to-Audio Generation with Latent Diffusion Models", "https://doi.org/10.48550/arXiv.2301.12503", Year = 2023, Authors = "Haohe Liu, Zehua Chen, Yi Yuan, Xinhao Mei, Xubo Liu, Danilo Mandic, Wenwu Wang, Mark D. Plumbley")]
-public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
+public partial class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -1358,45 +1358,12 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write((int)_options.ModelSize);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.NumInferenceSteps);
-        writer.Write(_options.GuidanceScale);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Restore deserialized values to the options (must not discard with _ =)
-        _ = reader.ReadBoolean(); // useNativeMode is readonly, cannot restore
-        _options.ModelSize = (AudioLDMModelSize)reader.ReadInt32();
-        _options.SampleRate = reader.ReadInt32();
-        _options.NumInferenceSteps = reader.ReadInt32();
-        _options.GuidanceScale = reader.ReadDouble();
 
-        // Note: SampleRate property is expression-bodied and returns _options.SampleRate,
-        // so setting _options.SampleRate above is sufficient.
-        // _useNativeMode is readonly and set in constructor, so we can't restore it here.
-        // The CreateNewInstance method should be used for proper cloning.
-    }
-
-    /// <summary>
-    /// Creates a new instance for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new AudioLDMModel<T>(
-            Architecture,
-            _options,
-            _tokenizer,
-            null,
-            _lossFunction);
-    }
 
     #endregion
 

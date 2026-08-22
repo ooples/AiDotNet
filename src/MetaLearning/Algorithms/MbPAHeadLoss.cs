@@ -45,6 +45,7 @@ internal sealed class MbPAHeadLoss<T> : ILossFunction<T>
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _headParameters;
     private readonly int _featureDim;
     private readonly int _outputDim;

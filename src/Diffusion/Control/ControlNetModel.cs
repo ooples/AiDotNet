@@ -619,45 +619,6 @@ public partial class ControlNetModel<T> : LatentDiffusionModelBase<T>
         return Engine.TensorBroadcastAdd(a, b);
     }
 
-
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Clone the ACTUAL baseUNet/VAE (see InstaFlowModel/MultiDiffusionModel): passing only
-        // controlType/conditioner/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved
-        // sub-models, so once the source resolved its lazy layers via a forward pass the trainable-layer
-        // shapes no longer lined up 1:1 and Clone diverged. Cloning the resolved baseUNet/VAE (+ same
-        // architecture/options/scheduler) makes the clone structurally identical.
-        var clone = new ControlNetModel<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            baseUNet: (UNetNoisePredictor<T>)_baseUNet.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            controlType: _controlType,
-            conditioner: _conditioner,
-            seed: null);
-
-        // Create matching encoder cache in clone before setting parameters
-        foreach (var controlType in _encoderCache.Keys.Where(ct => ct != _controlType))
-        {
-            // GetOrCreateEncoder adds to the cache
-            clone.GetOrCreateEncoder(controlType);
-        }
-
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters()); // flat path: inherited GetParameterChunks() omits this model's extra module(s) and is empty on net471
-        clone.ConditioningStrength = _conditioningStrength;
-
-        return clone;
-    }
-
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -885,6 +846,13 @@ public class ControlNetEncoder<T> : IParameterSource<T>
     /// </summary>
     public Vector<T> GetParameters()
     {
+        // ParameterCount describes every shape-resolved convolution, including kernels whose storage
+        // is intentionally lazy. A concrete read must cross the lifecycle boundary before capturing
+        // the vector; otherwise Count and Get disagree and any containing model slices the following
+        // component at the wrong offset (ControlNet++ clone emitted 55,871,135 fewer values).
+        foreach (var block in _downBlocks) block.MaterializeParameters();
+        foreach (var zc in _zeroConvs) zc.MaterializeParameters();
+
         // Single-allocation concat — avoids the List<T> + per-element Add + ToArray
         // triple-copy. Vector<T>.Concatenate pre-sizes one result and vectorized-
         // copies each conv's params in once.
@@ -899,6 +867,14 @@ public class ControlNetEncoder<T> : IParameterSource<T>
     /// </summary>
     public void SetParameters(Vector<T> parameters)
     {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (parameters.Length != ParameterCount)
+        {
+            throw new ArgumentException(
+                $"Expected {ParameterCount} ControlNet encoder parameters, got {parameters.Length}.",
+                nameof(parameters));
+        }
+
         int offset = 0;
 
         foreach (var block in _downBlocks)

@@ -51,7 +51,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Generalized Linear Models", "https://doi.org/10.1007/978-1-4899-3242-6")]
-public class NegativeBinomialRegression<T> : RegressionBase<T>
+public partial class NegativeBinomialRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// The dispersion parameter that accounts for overdispersion in the data.
@@ -410,125 +410,5 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
         var sumSquaredResiduals = pearsonResiduals.Transform(NumOps.Square).Sum();
         var degreesOfFreedom = NumOps.FromDouble(X.Rows - X.Columns);
         _dispersion = NumOps.Divide(sumSquaredResiduals, degreesOfFreedom);
-    }
-
-    /// <summary>
-    /// Serializes the negative binomial regression model to a byte array for storage or transmission.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model data.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method converts the entire negative binomial regression model, including its parameters and configuration,
-    /// into a byte array that can be stored in a file or database, or transmitted over a network. The model can later be
-    /// restored using the Deserialize method.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves the model to a format that can be stored or shared.
-    /// 
-    /// Serialization:
-    /// - Converts all the model's data into a sequence of bytes
-    /// - Preserves the model's coefficients, intercept, dispersion parameter, and options
-    /// - Allows you to save the trained model to a file
-    /// - Lets you load the model later without having to retrain it
-    /// 
-    /// It's like taking a snapshot of the model that you can use later or share with others.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize NegativeBinomialRegression specific data
-        writer.Write(Convert.ToDouble(_dispersion));
-        writer.Write(_options.MaxIterations);
-        writer.Write(Convert.ToDouble(_options.Tolerance));
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the negative binomial regression model from a byte array.
-    /// </summary>
-    /// <param name="modelData">A byte array containing the serialized model data.</param>
-    /// <remarks>
-    /// <para>
-    /// This method restores a negative binomial regression model from a serialized byte array, reconstructing its parameters
-    /// and configuration. This allows a previously trained model to be loaded from storage or after being received over a network.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method rebuilds the model from a saved format.
-    /// 
-    /// Deserialization:
-    /// - Takes a sequence of bytes that represents a model
-    /// - Reconstructs the original model with all its learned parameters
-    /// - Restores the coefficients, intercept, dispersion parameter, and options
-    /// - Allows you to use a previously trained model without retraining
-    /// 
-    /// It's like unpacking a model that was packed up for storage or sharing,
-    /// so you can use it again exactly as it was before.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize NegativeBinomialRegression specific data
-        _dispersion = NumOps.FromDouble(reader.ReadDouble());
-        _options.MaxIterations = reader.ReadInt32();
-        _options.Tolerance = reader.ReadDouble();
-    }
-
-    /// <summary>
-    /// Creates a new instance of the Negative Binomial Regression model with the same configuration.
-    /// </summary>
-    /// <returns>A new instance of the Negative Binomial Regression model.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method creates a deep copy of the current Negative Binomial Regression model, including its options,
-    /// coefficients, intercept, dispersion parameter, and regularization settings. The new instance is completely 
-    /// independent of the original, allowing modifications without affecting the original model.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates an exact copy of your trained model.
-    /// 
-    /// Think of it like making a perfect duplicate:
-    /// - It copies all the configuration settings (like maximum iterations and tolerance)
-    /// - It preserves the coefficients (the importance values for each feature)
-    /// - It maintains the intercept (the starting point or base value)
-    /// - It keeps the dispersion parameter (the "extra randomness adjuster")
-    /// 
-    /// Creating a copy is useful when you want to:
-    /// - Create a backup before further modifying the model
-    /// - Create variations of the same model for different purposes
-    /// - Share the model with others while keeping your original intact
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        var newModel = new NegativeBinomialRegression<T>(_options, Regularization);
-
-        // Copy coefficients if they exist
-        if (Coefficients != null)
-        {
-            newModel.Coefficients = Coefficients.Clone();
-        }
-
-        // Copy the intercept
-        newModel.Intercept = Intercept;
-
-        // Copy the dispersion parameter
-        newModel._dispersion = _dispersion;
-
-        return newModel;
     }
 }

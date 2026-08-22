@@ -58,19 +58,31 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
     private readonly int _inferenceSteps;
 
     // Generator weights
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _genW1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _genB1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _genW2;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _genB2;
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _genW3;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _genB3;
 
     // Discriminator weights
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _discW1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _discB1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _discW2;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _discB2;
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _discW3;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _discB3;
 
     private int _inputDim;

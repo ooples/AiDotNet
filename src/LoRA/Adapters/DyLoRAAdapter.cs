@@ -109,6 +109,7 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Cached input from the last forward pass for gradient computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedInput;
 
     /// <summary>
@@ -119,6 +120,7 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Cached LoRA parameter gradients computed in backward pass.
     /// </summary>
+    [Scratch]
     private Vector<T>? _cachedLoRAGradients;
 
     /// <summary>

@@ -31,7 +31,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Applied Linear Statistical Models", "https://doi.org/10.1080/00401706.1997.10485117")]
-public class PolynomialRegression<T> : RegressionBase<T>
+public partial class PolynomialRegression<T> : RegressionBase<T>
 {
     private readonly PolynomialRegressionOptions<T> _polyOptions;
 
@@ -148,44 +148,5 @@ public class PolynomialRegression<T> : RegressionBase<T>
     {
         var polyInput = CreatePolynomialFeatures(input);
         return base.Predict(polyInput);
-    }
-
-    /// <summary>
-    /// Creates a new instance of the Polynomial Regression model with the same configuration.
-    /// </summary>
-    /// <returns>A new instance of the Polynomial Regression model.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
-    /// <remarks>
-    /// This method creates a deep copy of the current Polynomial Regression model, including its coefficients,
-    /// intercept, and configuration options. The new instance is completely independent of the original,
-    /// allowing modifications without affecting the original model.
-    /// 
-    /// <b>For Beginners:</b> This method creates an exact copy of your trained model.
-    /// 
-    /// Think of it like making a perfect duplicate recipe:
-    /// - It copies all the configuration settings (like the polynomial degree)
-    /// - It preserves the coefficients (the weights for each polynomial term)
-    /// - It maintains the intercept (the starting point of your curve)
-    /// 
-    /// Creating a copy is useful when you want to:
-    /// - Create a backup before further modifying the model
-    /// - Create variations of the same model for different purposes
-    /// - Share the model with others while keeping your original intact
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        // Create a new instance with the same options and regularization
-        var newModel = new PolynomialRegression<T>(_polyOptions, Regularization);
-
-        // Copy coefficients if they exist
-        if (Coefficients != null)
-        {
-            newModel.Coefficients = Coefficients.Clone();
-        }
-
-        // Copy the intercept
-        newModel.Intercept = Intercept;
-
-        return newModel;
     }
 }

@@ -68,6 +68,7 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     /// This matrix is shared across all Tied-LoRA layers and IS trained during fine-tuning.
     /// Unlike VeRA, this matrix is not frozen - it learns the common adaptation pattern.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private static Matrix<T>? _sharedMatrixA;
 
     /// <summary>
@@ -77,16 +78,19 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     /// This matrix is shared across all Tied-LoRA layers and IS trained during fine-tuning.
     /// Unlike VeRA, this matrix is not frozen - it learns the common adaptation pattern.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private static Matrix<T>? _sharedMatrixB;
 
     /// <summary>
     /// Gradients for shared matrix A accumulated from all layers.
     /// </summary>
+    [Scratch]
     private static Matrix<T>? _sharedMatrixAGradient;
 
     /// <summary>
     /// Gradients for shared matrix B accumulated from all layers.
     /// </summary>
+    [Scratch]
     private static Matrix<T>? _sharedMatrixBGradient;
 
     /// <summary>

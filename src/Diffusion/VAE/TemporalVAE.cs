@@ -796,16 +796,6 @@ public partial class TemporalVAE<T> : VAEModelBase<T>
         }
     }
 
-    /// <inheritdoc />
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
-    {
-        foreach (var layer in EnumerateAllLayers())
-        {
-            foreach (var parameter in EnumerateMaterializedParameters(layer))
-                yield return parameter;
-        }
-    }
-
     private IEnumerable<ILayer<T>?> EnumerateAllLayers()
     {
         yield return _inputConv;
@@ -964,12 +954,6 @@ public partial class TemporalVAE<T> : VAEModelBase<T>
         }
 
         source.Data.Span.CopyTo(target.Data.Span);
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
     }
 
     #endregion

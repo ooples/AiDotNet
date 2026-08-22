@@ -54,8 +54,11 @@ public class TabDPTClassifier<T> : TabDPTBase<T>
     private readonly int _numClasses;
     private readonly FullyConnectedLayer<T> _classificationHead;
 
+    [Scratch]
     private Tensor<T>? _backboneOutputCache;
+    [Scratch]
     private Tensor<T>? _logitsCache;
+    [Scratch]
     private Tensor<T>? _probabilitiesCache;
 
     /// <summary>

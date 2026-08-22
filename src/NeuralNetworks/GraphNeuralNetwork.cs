@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
@@ -51,7 +51,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Semi-Supervised Classification with Graph Convolutional Networks", "https://arxiv.org/abs/1609.02907", Year = 2017, Authors = "Thomas N. Kipf, Max Welling")]
-public class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliaryLossLayer<T>
+public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly GraphNeuralNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -1158,19 +1158,7 @@ public class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliaryLossLaye
     /// when loaded later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Serialize activation functions if they exist
-        SerializationHelper<T>.SerializeInterface(writer, _graphConvolutionalScalarActivation);
-        SerializationHelper<T>.SerializeInterface(writer, _activationLayerScalarActivation);
-        SerializationHelper<T>.SerializeInterface(writer, _finalDenseLayerScalarActivation);
-        SerializationHelper<T>.SerializeInterface(writer, _finalActivationLayerScalarActivation);
 
-        SerializationHelper<T>.SerializeInterface(writer, _graphConvolutionalVectorActivation);
-        SerializationHelper<T>.SerializeInterface(writer, _activationLayerVectorActivation);
-        SerializationHelper<T>.SerializeInterface(writer, _finalDenseLayerVectorActivation);
-        SerializationHelper<T>.SerializeInterface(writer, _finalActivationLayerVectorActivation);
-    }
 
     /// <summary>
     /// Deserializes Graph Neural Network-specific data from a binary reader.
@@ -1193,19 +1181,7 @@ public class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliaryLossLaye
     /// as when you saved it.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Deserialize activation functions
-        _graphConvolutionalScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
-        _activationLayerScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
-        _finalDenseLayerScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
-        _finalActivationLayerScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
 
-        _graphConvolutionalVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
-        _activationLayerVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
-        _finalDenseLayerVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
-        _finalActivationLayerVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
-    }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {

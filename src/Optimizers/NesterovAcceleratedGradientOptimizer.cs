@@ -27,7 +27,7 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
+public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
     /// Describes this optimizer for the compiled fused-training kernel.
@@ -76,6 +76,7 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// <summary>
     /// The velocity vector used in the NAG algorithm.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _velocity;
 
     /// <summary>
@@ -551,64 +552,6 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
-    }
-
-    /// <summary>
-    /// Serializes the Nesterov Accelerated Gradient optimizer to a byte array.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method converts the current state of the optimizer, including its options and parameters, into a byte array.
-    /// This allows the optimizer's state to be saved or transmitted.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like taking a snapshot of the entire skiing process, including where the skier is on the slope and what techniques they're using, so you can save it or send it to someone else.
-    /// </para>
-    /// </remarks>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
-
-            return ms.ToArray();
-        }
-    }
-
-    /// <summary>
-    /// Deserializes the Nesterov Accelerated Gradient optimizer from a byte array.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method reconstructs the optimizer's state from a byte array, including its options and parameters.
-    /// It's used to restore a previously saved or transmitted optimizer state.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like using a saved snapshot to set up the skiing process exactly as it was before, placing the skier back where they were on the slope and restoring the techniques they were using.
-    /// </para>
-    /// </remarks>
-    /// <param name="data">The byte array containing the serialized optimizer state.</param>
-    /// <exception cref="InvalidOperationException">Thrown when the optimizer options cannot be deserialized.</exception>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-        }
     }
 
     /// <summary>

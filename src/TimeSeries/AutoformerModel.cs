@@ -107,6 +107,7 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
     private readonly int _movingAvgKernel;
 
     // Input embedding
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _inputProjection;      // [embeddingDim, 1]
     [Buffer]
     private Tensor<T> _positionalEncoding;   // [maxLen, embeddingDim]
@@ -120,12 +121,17 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
 
     // Decoder components
     private readonly List<AutoformerDecoderLayer<T>> _decoderLayers;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _decoderSeasonalInit;  // [forecastHorizon, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _decoderTrendInit;     // [forecastHorizon, embeddingDim]
 
     // Output projections
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _seasonalProjection;   // [1, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _trendProjection;      // [1, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputBias;           // [forecastHorizon]
 
     // Normalization statistics computed during training (zero-mean / unit-variance of the
@@ -594,6 +600,7 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
     // still flows through the softmax weights (gathered R values → q, k) and through the rolled v.
     // Cache for the constant diagonal-sum operator used by the matmul spectrum, keyed by (lq, lk, corrLen, d).
     // Shape [corrLen, lq*lk]; ~110 KB at the default 24x24x512, and it never changes for a given model.
+    [Scratch]
     private readonly ConcurrentDictionary<(int Lq, int Lk, int CorrLen, int D), Tensor<T>> _diagOperatorCache = new();
 
     /// <summary>
@@ -947,128 +954,10 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
     }
 
     /// <inheritdoc/>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        // Write options
-        writer.Write(_options.LookbackWindow);
-        writer.Write(_options.ForecastHorizon);
-        writer.Write(_options.EmbeddingDim);
-        writer.Write(_options.NumEncoderLayers);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.NumAttentionHeads);
-        writer.Write(_options.MovingAverageKernel);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.Epochs);
-        writer.Write(_options.BatchSize);
-        writer.Write(_options.AutoCorrelationFactor);
 
-        // Write tensors
-        WriteTensor(writer, _inputProjection);
-        WriteTensor(writer, _positionalEncoding);
-        WriteTensor(writer, _decoderSeasonalInit);
-        WriteTensor(writer, _decoderTrendInit);
-        WriteTensor(writer, _seasonalProjection);
-        WriteTensor(writer, _trendProjection);
-        WriteTensor(writer, _outputBias);
-
-        // Write encoder layers
-        foreach (var layer in _encoderLayers)
-        {
-            layer.Serialize(writer);
-        }
-
-        // Write decoder layers
-        foreach (var layer in _decoderLayers)
-        {
-            layer.Serialize(writer);
-        }
-
-        writer.Write(_trainingSeries.Length);
-        for (int i = 0; i < _trainingSeries.Length; i++)
-            writer.Write(_numOps.ToDouble(_trainingSeries[i]));
-
-        // Normalization statistics (appended; older files without them fall back to 0/1).
-        writer.Write(_numOps.ToDouble(_normMean));
-        writer.Write(_numOps.ToDouble(_normStd));
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        // Read options (skip, they're set via constructor)
-        _ = reader.ReadInt32(); // LookbackWindow
-        _ = reader.ReadInt32(); // ForecastHorizon
-        _ = reader.ReadInt32(); // EmbeddingDim
-        _ = reader.ReadInt32(); // NumEncoderLayers
-        _ = reader.ReadInt32(); // NumDecoderLayers
-        _ = reader.ReadInt32(); // NumAttentionHeads
-        _ = reader.ReadInt32(); // MovingAverageKernel
-        _ = reader.ReadDouble(); // DropoutRate
-        _ = reader.ReadDouble(); // LearningRate
-        _ = reader.ReadInt32(); // Epochs
-        _ = reader.ReadInt32(); // BatchSize
-        _ = reader.ReadInt32(); // AutoCorrelationFactor
 
-        // Read tensors
-        _inputProjection = ReadTensor(reader);
-        _positionalEncoding = ReadTensor(reader);
-        _positionalEncodingHost = _positionalEncoding.GetCpuData();
-        _decoderSeasonalInit = ReadTensor(reader);
-        _decoderTrendInit = ReadTensor(reader);
-        _seasonalProjection = ReadTensor(reader);
-        _trendProjection = ReadTensor(reader);
-        _outputBias = ReadTensor(reader);
-
-        // Reinitialize layers
-        _encoderLayers.Clear();
-        _decoderLayers.Clear();
-
-        for (int i = 0; i < _options.NumEncoderLayers; i++)
-        {
-            var layer = new AutoformerEncoderLayer<T>(
-                _options.EmbeddingDim,
-                _options.NumAttentionHeads,
-                _options.MovingAverageKernel,
-                _options.AutoCorrelationFactor,
-                _options.DropoutRate,
-                42 + i);
-            layer.Deserialize(reader);
-            _encoderLayers.Add(layer);
-        }
-
-        for (int i = 0; i < _options.NumDecoderLayers; i++)
-        {
-            var layer = new AutoformerDecoderLayer<T>(
-                _options.EmbeddingDim,
-                _options.NumAttentionHeads,
-                _options.MovingAverageKernel,
-                _options.AutoCorrelationFactor,
-                _options.DropoutRate,
-                42 + _options.NumEncoderLayers + i);
-            layer.Deserialize(reader);
-            _decoderLayers.Add(layer);
-        }
-
-        try
-        {
-            int tsLen = reader.ReadInt32();
-            _trainingSeries = new Vector<T>(tsLen);
-            for (int i = 0; i < tsLen; i++)
-                _trainingSeries[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
-        catch (EndOfStreamException)
-        {
-            _trainingSeries = Vector<T>.Empty();
-        }
-
-        // Normalization statistics (present in models serialized after the tape rewrite).
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-        {
-            _normMean = _numOps.FromDouble(reader.ReadDouble());
-            _normStd = _numOps.FromDouble(reader.ReadDouble());
-        }
-    }
 
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
@@ -1163,21 +1052,33 @@ internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBa
     private readonly double _dropoutRate;
 
     // Auto-correlation parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _queryProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _keyProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _valueProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputProj;
 
     // Feed-forward parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ff1Weight;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ff1Bias;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ff2Weight;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ff2Bias;
 
     // Layer normalization parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm1Gamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm1Beta;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm2Gamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm2Beta;
 
     public override bool SupportsTraining => true;
@@ -1185,10 +1086,14 @@ internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBa
     protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Autoformer runs its forward pass at the model level (AutoformerModel.ForwardCore); the layer-level Forward is unused.");
 
+    /// <summary>Construction state: the 'seed' the layer was built with.</summary>
+    private readonly int _seed;
+
     public AutoformerEncoderLayer(int embeddingDim, int numHeads, int movingAvgKernel,
         int autoCorrelationFactor, double dropoutRate, int seed)
         : base(new[] { embeddingDim }, new[] { embeddingDim * 2 })
     {
+        _seed = seed;
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
         _movingAvgKernel = movingAvgKernel;
@@ -1246,38 +1151,6 @@ internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBa
     public Tensor<T> GetLayerNorm1Beta() => _layerNorm1Beta;
     public Tensor<T> GetLayerNorm2Gamma() => _layerNorm2Gamma;
     public Tensor<T> GetLayerNorm2Beta() => _layerNorm2Beta;
-
-    public override void Serialize(BinaryWriter writer)
-    {
-        WriteTensor(writer, _queryProj);
-        WriteTensor(writer, _keyProj);
-        WriteTensor(writer, _valueProj);
-        WriteTensor(writer, _outputProj);
-        WriteTensor(writer, _ff1Weight);
-        WriteTensor(writer, _ff1Bias);
-        WriteTensor(writer, _ff2Weight);
-        WriteTensor(writer, _ff2Bias);
-        WriteTensor(writer, _layerNorm1Gamma);
-        WriteTensor(writer, _layerNorm1Beta);
-        WriteTensor(writer, _layerNorm2Gamma);
-        WriteTensor(writer, _layerNorm2Beta);
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        _queryProj = ReadTensor(reader);
-        _keyProj = ReadTensor(reader);
-        _valueProj = ReadTensor(reader);
-        _outputProj = ReadTensor(reader);
-        _ff1Weight = ReadTensor(reader);
-        _ff1Bias = ReadTensor(reader);
-        _ff2Weight = ReadTensor(reader);
-        _ff2Bias = ReadTensor(reader);
-        _layerNorm1Gamma = ReadTensor(reader);
-        _layerNorm1Beta = ReadTensor(reader);
-        _layerNorm2Gamma = ReadTensor(reader);
-        _layerNorm2Beta = ReadTensor(reader);
-    }
 
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
@@ -1363,29 +1236,46 @@ internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBa
     private readonly double _dropoutRate;
 
     // Self auto-correlation parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _selfQueryProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _selfKeyProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _selfValueProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _selfOutputProj;
 
     // Cross auto-correlation parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _crossQueryProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _crossKeyProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _crossValueProj;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _crossOutputProj;
 
     // Feed-forward parameters
     private Tensor<T> _ff1Weight;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ff1Bias;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ff2Weight;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ff2Bias;
 
     // Layer normalization
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm1Gamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm1Beta;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm2Gamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm2Beta;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm3Gamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm3Beta;
 
     public override bool SupportsTraining => true;
@@ -1393,10 +1283,14 @@ internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBa
     protected override Tensor<T> ForwardTraced(Tensor<T> input) => throw new NotSupportedException(
         "Autoformer runs its forward pass at the model level (AutoformerModel.ForwardCore); the layer-level Forward is unused.");
 
+    /// <summary>Construction state: the 'seed' the layer was built with.</summary>
+    private readonly int _seed;
+
     public AutoformerDecoderLayer(int embeddingDim, int numHeads, int movingAvgKernel,
         int autoCorrelationFactor, double dropoutRate, int seed)
         : base(new int[][] { new[] { embeddingDim }, new[] { embeddingDim }, new[] { embeddingDim } }, new[] { embeddingDim * 2 })
     {
+        _seed = seed;
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
         _movingAvgKernel = movingAvgKernel;
@@ -1469,50 +1363,6 @@ internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBa
     public Tensor<T> GetLayerNorm2Beta() => _layerNorm2Beta;
     public Tensor<T> GetLayerNorm3Gamma() => _layerNorm3Gamma;
     public Tensor<T> GetLayerNorm3Beta() => _layerNorm3Beta;
-
-    public override void Serialize(BinaryWriter writer)
-    {
-        WriteTensor(writer, _selfQueryProj);
-        WriteTensor(writer, _selfKeyProj);
-        WriteTensor(writer, _selfValueProj);
-        WriteTensor(writer, _selfOutputProj);
-        WriteTensor(writer, _crossQueryProj);
-        WriteTensor(writer, _crossKeyProj);
-        WriteTensor(writer, _crossValueProj);
-        WriteTensor(writer, _crossOutputProj);
-        WriteTensor(writer, _ff1Weight);
-        WriteTensor(writer, _ff1Bias);
-        WriteTensor(writer, _ff2Weight);
-        WriteTensor(writer, _ff2Bias);
-        WriteTensor(writer, _layerNorm1Gamma);
-        WriteTensor(writer, _layerNorm1Beta);
-        WriteTensor(writer, _layerNorm2Gamma);
-        WriteTensor(writer, _layerNorm2Beta);
-        WriteTensor(writer, _layerNorm3Gamma);
-        WriteTensor(writer, _layerNorm3Beta);
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        _selfQueryProj = ReadTensor(reader);
-        _selfKeyProj = ReadTensor(reader);
-        _selfValueProj = ReadTensor(reader);
-        _selfOutputProj = ReadTensor(reader);
-        _crossQueryProj = ReadTensor(reader);
-        _crossKeyProj = ReadTensor(reader);
-        _crossValueProj = ReadTensor(reader);
-        _crossOutputProj = ReadTensor(reader);
-        _ff1Weight = ReadTensor(reader);
-        _ff1Bias = ReadTensor(reader);
-        _ff2Weight = ReadTensor(reader);
-        _ff2Bias = ReadTensor(reader);
-        _layerNorm1Gamma = ReadTensor(reader);
-        _layerNorm1Beta = ReadTensor(reader);
-        _layerNorm2Gamma = ReadTensor(reader);
-        _layerNorm2Beta = ReadTensor(reader);
-        _layerNorm3Gamma = ReadTensor(reader);
-        _layerNorm3Beta = ReadTensor(reader);
-    }
 
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {

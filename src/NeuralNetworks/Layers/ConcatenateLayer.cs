@@ -130,9 +130,11 @@ public partial class ConcatenateLayer<T> : LayerBase<T>, IMultiPortShapeContract
 
     private readonly int _axis;
     private Tensor<T>[]? _lastInputs;
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     // GPU-resident cached tensors for GPU training pipeline
+    [Scratch]
     private Tensor<T>? _lastOutputGpu;
     private int[]? _lastInputSizesGpu;
 

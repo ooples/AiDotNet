@@ -51,7 +51,7 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("N-BEATS: Neural Basis Expansion Analysis for Interpretable Time Series Forecasting", "https://doi.org/10.48550/arXiv.1905.10437", Year = 2020, Authors = "Boris N. Oreshkin, Dmitri Carpov, Nicolas Chapados, Yoshua Bengio")]
-public class NBEATSDetector<T> : AnomalyDetectorBase<T>
+public partial class NBEATSDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _numStacks;
     private readonly int _numBlocks;

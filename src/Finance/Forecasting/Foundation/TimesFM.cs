@@ -625,34 +625,6 @@ public partial class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a fresh copy of the TimesFM architecture.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new TimesFMOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            DropoutRate = _dropout,
-            UsePretrainedWeights = _usePretrainedWeights,
-            OutputPatchLength = _outputPatchLength,
-            NumQuantiles = _numQuantiles,
-            QuantileHeadDimension = _quantileHeadDimension
-        };
-
-        return new TimesFM<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Writes TimesFM-specific configuration during serialization.
     /// </summary>
     /// <remarks>
@@ -660,21 +632,7 @@ public partial class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     /// <b>For Beginners:</b> Saves all the configuration needed to reconstruct this model.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_patchLength);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_dropout);
-        writer.Write(_usePretrainedWeights);
-        writer.Write(_outputPatchLength);
-        // TimesFM 2.5 fields
-        writer.Write(_numQuantiles);
-        writer.Write(_quantileHeadDimension);
-    }
+
 
     /// <summary>
     /// Reads TimesFM-specific configuration during deserialization.
@@ -684,21 +642,7 @@ public partial class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     /// <b>For Beginners:</b> Loads the configuration that was saved during serialization.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _patchLength = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _usePretrainedWeights = reader.ReadBoolean();
-        _outputPatchLength = reader.ReadInt32();
-        // TimesFM 2.5 fields
-        _numQuantiles = reader.ReadInt32();
-        _quantileHeadDimension = reader.ReadInt32();
-    }
+
 
     #endregion
 

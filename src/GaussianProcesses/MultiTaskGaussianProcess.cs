@@ -68,6 +68,7 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
     /// <summary>
     /// The task correlation matrix (B matrix in ICM/LMC models).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _taskCovariance;
 
     /// <summary>

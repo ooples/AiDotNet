@@ -92,16 +92,25 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
     private bool _isInitialized;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastQuery;
+    [Scratch]
     private Tensor<T>? _lastContext;
+    [Scratch]
     private Tensor<T>? _lastAttentionScores;
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     // Gradient tensors
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputBiasGradient;
 
     /// <summary>
@@ -110,12 +119,19 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
     private int[]? _originalQueryShape;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuQuery;
+    [ExternalState]
     private Tensor<T>? _gpuContext;
+    [ExternalState]
     private Tensor<T>? _gpuQ;
+    [ExternalState]
     private Tensor<T>? _gpuK;
+    [ExternalState]
     private Tensor<T>? _gpuV;
+    [ExternalState]
     private Tensor<T>? _gpuAttnOutput;
+    [ExternalState]
     private Tensor<T>? _gpuAttnWeights;
     private int _gpuBatch;
     private int _gpuQueryLen;

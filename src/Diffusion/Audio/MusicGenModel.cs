@@ -954,30 +954,6 @@ public partial class MusicGenModel<T> : AudioDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        var clone = new MusicGenModel<T>(
-            architecture: Architecture,
-            unet: (UNetNoisePredictor<T>)_unet.Clone(),
-            musicVAE: (AudioVAE<T>)_musicVAE.Clone(),
-            textConditioner: _textConditioner,
-            modelSize: _modelSize,
-            sampleRate: SampleRate,
-            defaultDurationSeconds: DefaultDurationSeconds);
-
-        clone._melodyEncoder.SetParameters(_melodyEncoder.GetParameters());
-        clone._rhythmEncoder.SetParameters(_rhythmEncoder.GetParameters());
-
-        return clone;
-    }
-
     #endregion
 }
 

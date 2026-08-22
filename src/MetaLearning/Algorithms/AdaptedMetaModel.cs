@@ -43,7 +43,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ResearchPaper("Model-Agnostic Meta-Learning for Fast Adaptation of Deep Networks", "https://arxiv.org/abs/1703.03400")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class AdaptedMetaModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
+public partial class AdaptedMetaModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
 {
 
     /// <inheritdoc />
@@ -54,7 +54,12 @@ public class AdaptedMetaModel<T, TInput, TOutput> : MetaLearningModelBase<T, TIn
             () => _adaptedParams,
             value => _adaptedParams = value));
     }
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _adaptedParams;
+    // Task examples are inputs to adaptation, not optimizer-owned model state. Keeping this
+    // declaration explicit prevents the generated parameter graph from treating an optional
+    // support vector as a shape-deferred weight slot.
+    [ExternalState]
     private readonly Vector<T>? _supportFeatures;
     private readonly double[]? _modulationFactors;
 
@@ -111,15 +116,5 @@ public class AdaptedMetaModel<T, TInput, TOutput> : MetaLearningModelBase<T, TIn
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
         return new AdaptedMetaModel<T, TInput, TOutput>(BaseModel, parameters, _supportFeatures, _modulationFactors);
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        var clonedModel = BaseModel.DeepCopy();
-        var clonedParams = _adaptedParams.Clone();
-        var clonedFeatures = _supportFeatures?.Clone();
-        var clonedModulation = _modulationFactors is not null ? (double[])_modulationFactors.Clone() : null;
-        return new AdaptedMetaModel<T, TInput, TOutput>(clonedModel, clonedParams, clonedFeatures, clonedModulation);
     }
 }

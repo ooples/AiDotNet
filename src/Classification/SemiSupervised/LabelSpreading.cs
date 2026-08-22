@@ -69,7 +69,7 @@ namespace AiDotNet.Classification.SemiSupervised;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Learning with Local and Global Consistency", "https://proceedings.neurips.cc/paper/2003/hash/87682805257e619d49b8e0dfdc14affa-Abstract.html", Year = 2003, Authors = "Dengyong Zhou, Olivier Bousquet, Thomas N. Lal, Jason Weston, Bernhard Scholkopf")]
-public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
+public partial class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
 {
 
     /// <inheritdoc />
@@ -128,21 +128,25 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// <summary>
     /// The symmetrically normalized affinity matrix (Laplacian-style normalization).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _normalizedAffinity = new Matrix<T>(0, 0);
 
     /// <summary>
     /// The combined feature matrix (labeled + unlabeled) after training.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _allFeatures = new Matrix<T>(0, 0);
 
     /// <summary>
     /// The label distribution matrix where each row is a sample and each column is a class.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _labelDistributions = new Matrix<T>(0, 0);
 
     /// <summary>
     /// The initial label distributions (before propagation).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _initialDistributions = new Matrix<T>(0, 0);
 
     /// <summary>
@@ -154,6 +158,14 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     /// Random number generator for tie-breaking.
     /// </summary>
     private readonly Random _random;
+
+    /// <summary>The seed this model was built with, kept so a clone can be built the same way.</summary>
+    /// <remarks>
+    /// The Random built from it cannot be read back, so without this the seed is gone the
+    /// moment the constructor returns and the model cannot be rebuilt from its own state.
+    /// </remarks>
+    private readonly int? _seed;
+
 
     #endregion
 
@@ -213,6 +225,7 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
         // Accept provided alpha as-is - zero is valid (means keep original labels, no spreading)
         _alpha = alpha;
 
+        _seed = seed;
         _random = seed.HasValue
             ? RandomHelper.CreateSeededRandom(seed.Value)
             : RandomHelper.CreateSecureRandom();
@@ -904,205 +917,9 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
 
     #region Serialization
 
-    /// <inheritdoc />
-    public override byte[] Serialize()
-    {
-        var modelMetadata = GetModelMetadata();
-        var modelData = new Dictionary<string, object?>
-        {
-            ["NumClasses"] = NumClasses,
-            ["NumFeatures"] = NumFeatures,
-            ["TaskType"] = (int)TaskType,
-            ["NumLabeled"] = _numLabeled,
-            ["KernelType"] = _kernel.GetType().Name,
-            ["KernelParams"] = ExtractKernelParams(_kernel),
-            ["MaxIterations"] = _maxIterations,
-            ["Tolerance"] = NumOps.ToDouble(_tolerance),
-            ["Alpha"] = NumOps.ToDouble(_alpha)
-        };
-
-        if (ClassLabels is not null)
-        {
-            var labels = new double[ClassLabels.Length];
-            for (int i = 0; i < ClassLabels.Length; i++)
-                labels[i] = NumOps.ToDouble(ClassLabels[i]);
-            modelData["ClassLabels"] = labels;
-        }
-
-        if (_allFeatures is not null)
-        {
-            modelData["AllFeatures_Rows"] = _allFeatures.Rows;
-            modelData["AllFeatures_Cols"] = _allFeatures.Columns;
-            var data = new double[_allFeatures.Rows * _allFeatures.Columns];
-            for (int i = 0; i < _allFeatures.Rows; i++)
-                for (int j = 0; j < _allFeatures.Columns; j++)
-                    data[i * _allFeatures.Columns + j] = NumOps.ToDouble(_allFeatures[i, j]);
-            modelData["AllFeatures"] = data;
-        }
-
-        if (_labelDistributions is not null)
-        {
-            modelData["LabelDist_Rows"] = _labelDistributions.Rows;
-            modelData["LabelDist_Cols"] = _labelDistributions.Columns;
-            var data = new double[_labelDistributions.Rows * _labelDistributions.Columns];
-            for (int i = 0; i < _labelDistributions.Rows; i++)
-                for (int j = 0; j < _labelDistributions.Columns; j++)
-                    data[i * _labelDistributions.Columns + j] = NumOps.ToDouble(_labelDistributions[i, j]);
-            modelData["LabelDistributions"] = data;
-        }
-
-        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
-    }
-
-    /// <inheritdoc />
-    public override void Deserialize(byte[] modelData)
-    {
-        var jsonString = Encoding.UTF8.GetString(modelData);
-        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
-            ?? throw new InvalidOperationException("Failed to deserialize LabelSpreading: invalid metadata.");
-        if (modelMetadata.ModelData is null)
-            throw new InvalidOperationException("Failed to deserialize LabelSpreading: missing model data.");
-
-        var dataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
-            ?? throw new InvalidOperationException("Failed to deserialize LabelSpreading: invalid model payload.");
-
-        NumClasses = jObj["NumClasses"]?.ToObject<int>()
-            ?? throw new InvalidOperationException("Failed to deserialize LabelSpreading: missing NumClasses.");
-        NumFeatures = jObj["NumFeatures"]?.ToObject<int>()
-            ?? throw new InvalidOperationException("Failed to deserialize LabelSpreading: missing NumFeatures.");
-        TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>()
-            ?? throw new InvalidOperationException("Failed to deserialize LabelSpreading: missing TaskType."));
-        _numLabeled = jObj["NumLabeled"]?.ToObject<int>()
-            ?? throw new InvalidOperationException("Failed to deserialize LabelSpreading: missing NumLabeled.");
-        _maxIterations = jObj["MaxIterations"]?.ToObject<int>()
-            ?? throw new InvalidOperationException("Failed to deserialize LabelSpreading: missing MaxIterations.");
-
-        var kernelType = jObj["KernelType"]?.ToObject<string>();
-        var kernelParams = jObj["KernelParams"]?.ToObject<Dictionary<string, double>>();
-        if (kernelType is not null)
-        {
-            _kernel = CreateKernelByName(kernelType, kernelParams) ?? CreateDefaultKernel();
-        }
-
-        _tolerance = NumOps.FromDouble(jObj["Tolerance"]?.ToObject<double>()
-            ?? throw new InvalidOperationException("Failed to deserialize LabelSpreading: missing Tolerance."));
-        _alpha = NumOps.FromDouble(jObj["Alpha"]?.ToObject<double>()
-            ?? throw new InvalidOperationException("Failed to deserialize LabelSpreading: missing Alpha."));
-
-        var labelsToken = jObj["ClassLabels"];
-        if (labelsToken is JArray labelsArr)
-        {
-            if (labelsArr.Count != NumClasses)
-                throw new InvalidOperationException(
-                    $"Failed to deserialize LabelSpreading: ClassLabels length ({labelsArr.Count}) does not match NumClasses ({NumClasses}).");
-
-            ClassLabels = new Vector<T>(labelsArr.Count);
-            for (int i = 0; i < labelsArr.Count; i++)
-                ClassLabels[i] = NumOps.FromDouble(labelsArr[i].Value<double>());
-        }
-
-        int afRows = jObj["AllFeatures_Rows"]?.ToObject<int>() ?? 0;
-        int afCols = jObj["AllFeatures_Cols"]?.ToObject<int>() ?? 0;
-        var afToken = jObj["AllFeatures"];
-        if (afToken is JArray afArr && afRows > 0 && afCols > 0)
-        {
-            if (afArr.Count != afRows * afCols)
-                throw new InvalidOperationException(
-                    $"Failed to deserialize LabelSpreading: AllFeatures array length ({afArr.Count}) does not match {afRows}x{afCols}.");
-
-            _allFeatures = new Matrix<T>(afRows, afCols);
-            for (int i = 0; i < afRows; i++)
-                for (int j = 0; j < afCols; j++)
-                    _allFeatures[i, j] = NumOps.FromDouble(afArr[i * afCols + j].Value<double>());
-
-            // Rebuild normalized affinity from restored features
-            var affinity = BuildAffinityMatrix(_allFeatures);
-            _normalizedAffinity = SymmetricNormalize(affinity);
-        }
-
-        int ldRows = jObj["LabelDist_Rows"]?.ToObject<int>() ?? 0;
-        int ldCols = jObj["LabelDist_Cols"]?.ToObject<int>() ?? 0;
-        var ldToken = jObj["LabelDistributions"];
-        if (ldToken is JArray ldArr && ldRows > 0 && ldCols > 0)
-        {
-            if (ldArr.Count != ldRows * ldCols)
-                throw new InvalidOperationException(
-                    $"Failed to deserialize LabelSpreading: LabelDistributions array length ({ldArr.Count}) does not match {ldRows}x{ldCols}.");
-
-            _labelDistributions = new Matrix<T>(ldRows, ldCols);
-            for (int i = 0; i < ldRows; i++)
-                for (int j = 0; j < ldCols; j++)
-                    _labelDistributions[i, j] = NumOps.FromDouble(ldArr[i * ldCols + j].Value<double>());
-        }
-
-        // Cross-field consistency checks
-        if (_allFeatures is not null && afCols != NumFeatures)
-            throw new InvalidOperationException(
-                $"Failed to deserialize LabelSpreading: AllFeatures columns ({afCols}) does not match NumFeatures ({NumFeatures}).");
-        if (_labelDistributions is not null && ldCols != NumClasses)
-            throw new InvalidOperationException(
-                $"Failed to deserialize LabelSpreading: LabelDistributions columns ({ldCols}) does not match NumClasses ({NumClasses}).");
-        if (_allFeatures is not null && _labelDistributions is not null && _allFeatures.Rows != _labelDistributions.Rows)
-            throw new InvalidOperationException(
-                $"Failed to deserialize LabelSpreading: AllFeatures rows ({_allFeatures.Rows}) does not match LabelDistributions rows ({_labelDistributions.Rows}).");
-        if (_allFeatures is not null && _numLabeled > _allFeatures.Rows)
-            throw new InvalidOperationException(
-                $"Failed to deserialize LabelSpreading: NumLabeled ({_numLabeled}) exceeds AllFeatures rows ({_allFeatures.Rows}).");
-    }
-
     #endregion
 
     #region ICloneable Implementation
-
-    /// <summary>
-    /// Creates a deep copy of this classifier.
-    /// </summary>
-    /// <returns>A new instance with the same parameters and state.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Cloning creates an independent copy that can be modified
-    /// without affecting the original.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new LabelSpreading<T>(
-            _kernel,
-            _maxIterations,
-            _tolerance,
-            _alpha,
-            _random.Next());
-
-        if (_allFeatures is not null)
-        {
-            clone._allFeatures = CloneMatrix(_allFeatures);
-        }
-
-        if (_labelDistributions is not null)
-        {
-            clone._labelDistributions = CloneMatrix(_labelDistributions);
-        }
-
-        if (_initialDistributions is not null)
-        {
-            clone._initialDistributions = CloneMatrix(_initialDistributions);
-        }
-
-        if (_normalizedAffinity is not null)
-        {
-            clone._normalizedAffinity = CloneMatrix(_normalizedAffinity);
-        }
-
-        clone._numLabeled = _numLabeled;
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.ClassLabels = ClassLabels?.Clone();
-        clone.TaskType = TaskType;
-
-        return clone;
-    }
 
     #endregion
 
@@ -1154,21 +971,6 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     private void UnpackParameters(Vector<T> parameters)
     {
         // Non-parametric model - no parameters to set
-    }
-
-    /// <summary>
-    /// Creates a new instance of this classifier with default configuration.
-    /// </summary>
-    /// <returns>A new LabelSpreading instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is used internally for operations like cloning or serialization
-    /// that need to create a fresh instance of the same type.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new LabelSpreading<T>(_kernel, _maxIterations, _tolerance, _alpha, _random.Next());
     }
 
     #endregion

@@ -75,9 +75,13 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
     // tape rejects with "Parameter N is not a view into the provided
     // ParameterBuffer" — the supervised RainbowDQNAgent.Train(state, target)
     // path takes for offline pretraining / BC warm-start.
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _valueWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _valueBias;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _advantageWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _advantageBias;
 
     /// <inheritdoc />
@@ -132,35 +136,7 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override IReadOnlyList<Tensor<T>> GetTrainableParameters() =>
-        new[] { _valueWeights, _valueBias, _advantageWeights, _advantageBias };
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Replaces the field tensor references with the supplied tensors rather
-    /// than copying data into the old ones. ParameterBuffer machinery in
-    /// <see cref="NeuralNetworkBase{T}.GetOrCreateParameterBuffer"/> calls
-    /// this with buffer-backed views; the tape's reference-identity
-    /// alignment check (TapeStepContext.ValidateBufferAlignment) then
-    /// requires Forward() to use those view tensors. Validate per-dim shape
-    /// match first so a same-length but differently-shaped tensor doesn't
-    /// silently scramble the layer's weights.
-    /// </remarks>
-    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
-    {
-        if (parameters.Count != 4)
-            throw new ArgumentException(
-                "Expected exactly 4 parameter tensors (V_w, V_b, A_w, A_b).", nameof(parameters));
-        ValidateShapeMatch(parameters[0], _valueWeights, nameof(_valueWeights));
-        ValidateShapeMatch(parameters[1], _valueBias, nameof(_valueBias));
-        ValidateShapeMatch(parameters[2], _advantageWeights, nameof(_advantageWeights));
-        ValidateShapeMatch(parameters[3], _advantageBias, nameof(_advantageBias));
-        _valueWeights = parameters[0];
-        _valueBias = parameters[1];
-        _advantageWeights = parameters[2];
-        _advantageBias = parameters[3];
-    }
 
     private static void ValidateShapeMatch(Tensor<T> incoming, Tensor<T> existing, string paramName)
     {

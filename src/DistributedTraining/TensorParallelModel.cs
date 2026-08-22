@@ -98,7 +98,7 @@ namespace AiDotNet.DistributedTraining;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ResearchPaper("Megatron-LM: Training Multi-Billion Parameter Language Models", "https://arxiv.org/abs/1909.08053")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
+public partial class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
     private int _tensorParallelSize;
     private List<int> _tensorParallelGroup = new();
@@ -569,11 +569,5 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         {
             Config.CommunicationBackend.Barrier();
         }
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> Clone()
-    {
-        return new TensorParallelModel<T, TInput, TOutput>(WrappedModel.Clone(), Config);
     }
 }

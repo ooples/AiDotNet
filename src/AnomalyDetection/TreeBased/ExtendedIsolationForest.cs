@@ -46,7 +46,7 @@ namespace AiDotNet.AnomalyDetection.TreeBased;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Extended Isolation Forest", "https://doi.org/10.1109/TKDE.2019.2947676", Year = 2019, Authors = "Sahand Hariri, Matias Carrasco Kind, Robert J. Brunner")]
-public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
+public partial class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
 {
     private readonly int _numTrees;
     private readonly int _maxSamples;
@@ -230,6 +230,7 @@ public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
         private readonly int _extensionLevel;
         private readonly Random _random;
         private readonly INumericOperations<T> _numOps;
+        [AiDotNet.Attributes.TrainableParameter]
         private Vector<T>? _normal;
 
         private T _intercept;

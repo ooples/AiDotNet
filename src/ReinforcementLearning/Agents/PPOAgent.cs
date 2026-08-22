@@ -652,14 +652,6 @@ public partial class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new PPOAgent<T>(_ppoOptions);
-        clone.SetParameters(GetParameters());
-        return clone;
-    }
-
-    /// <inheritdoc/>
     public Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,

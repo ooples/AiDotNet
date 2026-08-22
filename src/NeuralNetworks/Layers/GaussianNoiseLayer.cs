@@ -112,7 +112,9 @@ public partial class GaussianNoiseLayer<T> : LayerBase<T>, IShapeContract
     /// containing the specific noise value that was added at that position.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastNoise;
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>

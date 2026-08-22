@@ -63,7 +63,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("Sundial: A Family of Highly Capable Time Series Foundation Models", "https://arxiv.org/abs/2502.00816")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class Sundial<T> : TimeSeriesFoundationModelBase<T>
+public partial class Sundial<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 
@@ -268,57 +268,10 @@ public class Sundial<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var opts = new SundialOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            IntermediateSize = _intermediateSize,
-            DropoutRate = _dropout,
-            ModelSize = _modelSize,
-            NumQuantiles = _numQuantiles
-        };
 
-        if (!_useNativeMode && OnnxModelPath is not null)
-            return new Sundial<T>(Architecture, OnnxModelPath, opts);
-
-        return new Sundial<T>(Architecture, opts);
-    }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_patchLength);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_intermediateSize);
-        writer.Write(_dropout);
-        writer.Write((int)_modelSize);
-        writer.Write(_numQuantiles);
-    }
 
-    /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _patchLength = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _intermediateSize = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _modelSize = (FoundationModelSize)reader.ReadInt32();
-        _numQuantiles = reader.ReadInt32();
-    }
 
     #endregion
 

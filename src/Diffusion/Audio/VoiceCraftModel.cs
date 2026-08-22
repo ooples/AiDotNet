@@ -205,17 +205,6 @@ public partial class VoiceCraftModel<T> : AudioDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-                return new VoiceCraftModel<T>(transformer: (DiTNoisePredictor<T>)_transformer.Clone(),
-            audioVAE: (AudioVAE<T>)_audioVAE.Clone(),
-            conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

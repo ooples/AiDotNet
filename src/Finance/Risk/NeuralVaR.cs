@@ -55,7 +55,7 @@ namespace AiDotNet.Finance.Risk;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Deep Learning for Value-at-Risk", "https://doi.org/10.1016/j.jbankfin.2020.105889")]
-public class NeuralVaR<T> : RiskModelBase<T>
+public partial class NeuralVaR<T> : RiskModelBase<T>
 {
     #region Shared Fields
 
@@ -261,20 +261,6 @@ public class NeuralVaR<T> : RiskModelBase<T>
                 { "ParameterCount", GetParameterCount() }
             }
         };
-    }
-
-    /// <summary>
-    /// Executes CreateNewInstance for the NeuralVaR.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the NeuralVaR model, CreateNewInstance builds and wires up model components. This sets up the NeuralVaR architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new NeuralVaROptions<T> { NumFeatures = NumFeatures, ConfidenceLevel = _confidenceLevel, TimeHorizon = _timeHorizon };
-        return new NeuralVaR<T>(Architecture, options, _optimizer, LossFunction);
     }
 
     #endregion

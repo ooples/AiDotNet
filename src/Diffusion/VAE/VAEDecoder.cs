@@ -185,13 +185,17 @@ public partial class VAEDecoder<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached intermediate values for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
     private Tensor<T>? _postQuantOutput;
     private Tensor<T>? _inputConvOutput;
     private Tensor<T>? _midBlock1Output;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _midBlock2Output;
     private readonly Tensor<T>?[] _upBlockOutputs;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _normOutOutput;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _siluOutput;
 
     /// <inheritdoc />
@@ -590,97 +594,5 @@ public partial class VAEDecoder<T> : LayerBase<T>, IShapeContract
         }
         _normOut.ResetState();
         _outputConv.ResetState();
-    }
-
-    /// <summary>
-    /// Saves the decoder's state to a binary writer.
-    /// </summary>
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-
-        writer.Write(_outputChannels);
-        writer.Write(_latentChannels);
-        writer.Write(_baseChannels);
-        writer.Write(_channelMults.Length);
-        foreach (var mult in _channelMults)
-        {
-            writer.Write(mult);
-        }
-        writer.Write(_numGroups);
-        writer.Write(_bottleneckSize);
-        writer.Write(_outputSpatialSize);
-        writer.Write(_numResBlocks);
-
-        _postQuantConv.Serialize(writer);
-        _inputConv.Serialize(writer);
-
-        foreach (var block in _midBlocks)
-        {
-            block.Serialize(writer);
-        }
-
-        foreach (var block in _upBlocks)
-        {
-            block.Serialize(writer);
-        }
-
-        _normOut.Serialize(writer);
-        _outputConv.Serialize(writer);
-    }
-
-    /// <summary>
-    /// Loads the decoder's state from a binary reader.
-    /// </summary>
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-
-        var outputChannels = reader.ReadInt32();
-        var latentChannels = reader.ReadInt32();
-        var baseChannels = reader.ReadInt32();
-        var numMults = reader.ReadInt32();
-        var channelMults = new int[numMults];
-        for (int i = 0; i < numMults; i++)
-        {
-            channelMults[i] = reader.ReadInt32();
-        }
-        var numGroups = reader.ReadInt32();
-        var bottleneckSize = reader.ReadInt32();
-        var outputSpatialSize = reader.ReadInt32();
-        var numResBlocks = reader.ReadInt32();
-
-        if (outputChannels != _outputChannels || latentChannels != _latentChannels ||
-            baseChannels != _baseChannels || !channelMults.SequenceEqual(_channelMults) ||
-            numGroups != _numGroups || bottleneckSize != _bottleneckSize ||
-            outputSpatialSize != _outputSpatialSize || numResBlocks != _numResBlocks)
-        {
-            throw new InvalidOperationException(
-                "Architecture mismatch in VAEDecoder deserialization. " +
-                $"Expected (outputChannels={_outputChannels}, latentChannels={_latentChannels}, " +
-                $"baseChannels={_baseChannels}, channelMults=[{string.Join(",", _channelMults)}], " +
-                $"numGroups={_numGroups}, bottleneckSize={_bottleneckSize}, " +
-                $"outputSpatialSize={_outputSpatialSize}, numResBlocks={_numResBlocks}); " +
-                $"got (outputChannels={outputChannels}, latentChannels={latentChannels}, " +
-                $"baseChannels={baseChannels}, channelMults=[{string.Join(",", channelMults)}], " +
-                $"numGroups={numGroups}, bottleneckSize={bottleneckSize}, " +
-                $"outputSpatialSize={outputSpatialSize}, numResBlocks={numResBlocks}).");
-        }
-
-        _postQuantConv.Deserialize(reader);
-        _inputConv.Deserialize(reader);
-
-        foreach (var block in _midBlocks)
-        {
-            block.Deserialize(reader);
-        }
-
-        foreach (var block in _upBlocks)
-        {
-            block.Deserialize(reader);
-        }
-
-        _normOut.Deserialize(reader);
-        _outputConv.Deserialize(reader);
     }
 }

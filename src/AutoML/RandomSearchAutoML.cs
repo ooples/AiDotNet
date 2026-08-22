@@ -144,9 +144,4 @@ public class RandomSearchAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLMod
         sampled[ModelTypeKey] = modelType;
         return Task.FromResult(sampled);
     }
-
-    protected override AutoMLModelBase<T, TInput, TOutput> CreateInstanceForCopy()
-    {
-        return new RandomSearchAutoML<T, TInput, TOutput>(Random);
-    }
 }

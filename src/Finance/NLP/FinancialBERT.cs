@@ -178,19 +178,6 @@ public partial class FinancialBERT<T> : FinancialNLPModelBase<T>
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <summary>
-    /// Executes CreateNewInstance for the FinancialBERT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialBERT model, CreateNewInstance builds and wires up model components. This sets up the FinancialBERT architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new FinancialBERT<T>(
-            Architecture, new ModelOptions.FinancialBERTOptions<T>(_options), _optimizer, LossFunction);
-    }
 
     /// <summary>
     /// Executes SerializeModelSpecificData for the FinancialBERT.
@@ -200,10 +187,7 @@ public partial class FinancialBERT<T> : FinancialNLPModelBase<T>
     /// <b>For Beginners:</b> In the FinancialBERT model, SerializeModelSpecificData saves or restores model-specific settings. This lets the FinancialBERT architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeModelSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_dropout);
-    }
+
 
     /// <summary>
     /// Executes DeserializeModelSpecificData for the FinancialBERT.
@@ -213,10 +197,7 @@ public partial class FinancialBERT<T> : FinancialNLPModelBase<T>
     /// <b>For Beginners:</b> In the FinancialBERT model, DeserializeModelSpecificData saves or restores model-specific settings. This lets the FinancialBERT architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeModelSpecificData(BinaryReader reader)
-    {
-        _dropout = reader.ReadDouble();
-    }
+
 
     /// <summary>
     /// Executes ForecastNative for the FinancialBERT.

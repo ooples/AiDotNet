@@ -35,6 +35,7 @@ public class BicubicInterpolation<T> : I2DInterpolation<T>
     /// <b>For Beginners:</b> This is your actual data - the known values at each grid point.
     /// If you're thinking of a landscape, these would be the heights at each measured location.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Matrix<T> _z;
 
     /// <summary>

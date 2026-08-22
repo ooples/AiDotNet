@@ -61,7 +61,7 @@ namespace AiDotNet.OnlineLearning;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Large-Scale Machine Learning with Stochastic Gradient Descent", "https://doi.org/10.1007/978-3-7908-2604-3_16", Year = 2010, Authors = "Léon Bottou")]
-public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
+public partial class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
 {
 
     /// <inheritdoc />
@@ -340,15 +340,6 @@ public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
             InitialLearningRate, LearningRateScheduleType, _l1Penalty, _l2Penalty, _fitIntercept);
         newModel.SetParameters(parameters);
         return newModel;
-    }
-
-    /// <summary>
-    /// Creates a new instance of this type.
-    /// </summary>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new OnlineSGDClassifier<T>(
-            InitialLearningRate, LearningRateScheduleType, _l1Penalty, _l2Penalty, _fitIntercept);
     }
 
     /// <inheritdoc/>

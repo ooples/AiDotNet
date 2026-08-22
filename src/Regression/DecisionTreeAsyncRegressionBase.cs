@@ -26,8 +26,51 @@ namespace AiDotNet.Regression;
 /// questions and answers based on numerical data.
 /// </para>
 /// </remarks>
-public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<T>, IConfigurableModel<T>, IModelShape
+public abstract partial class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<T>, IConfigurableModel<T>, IModelShape
 {
+    // --- declared state (ModelStateRegistry) ---
+    // Identical in every model base because these bases are siblings over the same interfaces rather
+    // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.
+
+    /// <summary>State that is not a parameter vector, declared once and persisted by this base.</summary>
+    private readonly AiDotNet.Models.ModelStateRegistry<T> _declaredState = new();
+    private bool _declaredStateRegistered;
+
+    /// <summary>
+    /// Declare state here that the parameter vector does not carry -- a retained training set,
+    /// fitted knots, kernel centres, an ensemble's children. Both halves of the payload are driven
+    /// by the declaration, so they cannot drift.
+    /// </summary>
+    /// <param name="state">The registry to declare into.</param>
+    protected virtual void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+    }
+    /// <summary>Generated state declarations for fields declared across this model's hierarchy.</summary>
+    /// <param name="state">The registry to declare into.</param>
+    /// <remarks>
+    /// Emitted by ModelStateGenerator into the partial model, so a model author declares nothing. The
+    /// hand-written <c>RegisterState</c> beside it exists only for state the classifier genuinely
+    /// cannot place; anything it CAN place belongs here, where it cannot be forgotten.
+    /// </remarks>
+    protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        RegisterGeneratedStateCore(state);
+    }
+
+    /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>
+    protected AiDotNet.Models.ModelStateRegistry<T> DeclaredState
+    {
+        get
+        {
+            if (!_declaredStateRegistered)
+            {
+                _declaredStateRegistered = true;
+                RegisterGeneratedState(_declaredState);
+                RegisterState(_declaredState);
+            }
+            return _declaredState;
+        }
+    }
     /// <summary>
     /// Gets the numeric operations for the type T.
     /// </summary>
@@ -282,10 +325,8 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
             writer.Write(Convert.ToDouble(importance));
         }
 
-        // Serialize tree structure
-        SerializeNode(writer, Root);
 
-        return ms.ToArray();
+        return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, ms.ToArray());
     }
 
     /// <summary>
@@ -307,6 +348,9 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// </remarks>
     public virtual void Deserialize(byte[] modelData)
     {
+        // Strips and applies any declared-state trailer, so the body below reads the payload
+        // exactly as it did before this existed.
+        modelData = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, modelData);
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         using var ms = new MemoryStream(modelData);
         using var reader = new BinaryReader(ms);
@@ -329,56 +373,9 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
         }
         FeatureImportances = new Vector<T>(importances);
 
-        // Deserialize tree structure
-        Root = DeserializeNode(reader);
     }
 
-    /// <summary>
-    /// Serializes a single node of the decision tree.
-    /// </summary>
-    /// <param name="writer">The BinaryWriter to write the serialized data to.</param>
-    /// <param name="node">The node to serialize.</param>
-    private void SerializeNode(BinaryWriter writer, DecisionTreeNode<T>? node)
-    {
-        if (node == null)
-        {
-            writer.Write(false);
-            return;
-        }
 
-        writer.Write(true);
-        writer.Write(node.FeatureIndex);
-        writer.Write(Convert.ToDouble(node.SplitValue));
-        writer.Write(Convert.ToDouble(node.Prediction));
-        writer.Write(node.IsLeaf);
-
-        SerializeNode(writer, node.Left);
-        SerializeNode(writer, node.Right);
-    }
-
-    /// <summary>
-    /// Deserializes a single node of the decision tree.
-    /// </summary>
-    /// <param name="reader">The BinaryReader to read the serialized data from.</param>
-    /// <returns>The deserialized DecisionTreeNode, or null if the node was not present.</returns>
-    private DecisionTreeNode<T>? DeserializeNode(BinaryReader reader)
-    {
-        bool hasNode = reader.ReadBoolean();
-        if (!hasNode) return null;
-
-        var node = new DecisionTreeNode<T>
-        {
-            FeatureIndex = reader.ReadInt32(),
-            SplitValue = NumOps.FromDouble(reader.ReadDouble()),
-            Prediction = NumOps.FromDouble(reader.ReadDouble()),
-            IsLeaf = reader.ReadBoolean()
-        };
-
-        node.Left = DeserializeNode(reader);
-        node.Right = DeserializeNode(reader);
-
-        return node;
-    }
 
     /// <summary>
     /// Gets the model parameters as a vector representation.
@@ -699,22 +696,18 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// </remarks>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
-        // Create a new instance with the same options
-        var clone = CreateNewInstance();
-
-        // Deep copy the tree structure
-        if (Root != null)
+        // Through the complete declared-state payload, not a base-class list of fields. Many models
+        // on this historical trunk are ensembles or probabilistic regressors rather than one Root;
+        // the former implementation copied only Root and FeatureImportances and forced every model
+        // to repeat the same serialize/new/deserialize override. Generated state now owns those
+        // fitted structures, so the shared base can provide the correct clone once.
+        using (ModelPersistenceGuard.InternalOperation())
         {
-            ((AsyncDecisionTreeRegressionBase<T>)clone).Root = DeepCloneNode(Root);
+            byte[] state = Serialize();
+            var clone = (AsyncDecisionTreeRegressionBase<T>)CreateNewInstance();
+            clone.Deserialize(state);
+            return clone;
         }
-
-        // Copy feature importances
-        if (FeatureImportances.Length > 0)
-        {
-            ((AsyncDecisionTreeRegressionBase<T>)clone).FeatureImportances = new Vector<T>(FeatureImportances);
-        }
-
-        return clone;
     }
 
     /// <summary>
@@ -742,7 +735,18 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// creating ensembles of similar models with different training data.
     /// </para>
     /// </remarks>
-    protected abstract IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance();
+    /// <remarks>
+    /// <para>
+    /// No longer abstract. Every concrete model used to be forced to write this, and 1147 of them
+    /// did -- each one a hand-copied list of constructor arguments that a new option could fall out
+    /// of without anything failing. The clone plan records that constructor at compile time instead,
+    /// so the base can rebuild the type and a model only overrides this when the generator says it
+    /// cannot: a constructor parameter with nothing holding its value, which the build reports by
+    /// name rather than leaving to be discovered by a clone that comes back subtly different.
+    /// </para>
+    /// </remarks>
+    protected virtual IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+        => (IFullModel<T, Matrix<T>, Vector<T>>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
 
     /// <summary>
     /// Counts the total number of nodes in the tree.

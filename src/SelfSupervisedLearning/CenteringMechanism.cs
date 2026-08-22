@@ -39,7 +39,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Emerging Properties in Self-Supervised Vision Transformers", "https://arxiv.org/abs/2104.14294", Year = 2021, Authors = "Mathilde Caron, Hugo Touvron, Ishan Misra, Hervé Jégou, Julien Mairal, Piotr Bojanowski, Armand Joulin")]
-public class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+public partial class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
 
     /// <inheritdoc />

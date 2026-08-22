@@ -50,7 +50,7 @@ namespace AiDotNet.Optimizers;
 /// </example>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the LARS optimizer.
@@ -60,6 +60,7 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// The velocity/momentum buffer for each parameter.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _velocity;
 
     /// <summary>
@@ -75,6 +76,7 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// Previous velocity for reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _previousVelocity;
 
     /// <summary>
@@ -667,60 +669,6 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
-    }
-
-    /// <summary>
-    /// Serializes the optimizer's state into a byte array.
-    /// </summary>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        string optionsJson = JsonConvert.SerializeObject(_options);
-        writer.Write(optionsJson);
-
-        writer.Write(_t);
-        writer.Write(_warmupSteps);
-        writer.Write(_velocity.Length);
-        foreach (var value in _velocity)
-        {
-            writer.Write(Convert.ToDouble(value));
-        }
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the optimizer's state from a byte array.
-    /// </summary>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        string optionsJson = reader.ReadString();
-        _options = JsonConvert.DeserializeObject<LARSOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-            ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-        _t = reader.ReadInt32();
-        _warmupSteps = reader.ReadInt32();
-        int vLength = reader.ReadInt32();
-        _velocity = new Vector<T>(vLength);
-        for (int i = 0; i < vLength; i++)
-        {
-            _velocity[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        InitializeAdaptiveParameters();
     }
 
     /// <summary>

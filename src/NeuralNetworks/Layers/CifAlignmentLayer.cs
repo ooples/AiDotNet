@@ -78,6 +78,22 @@ public partial class CifAlignmentLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _encoderDim;
     private readonly T _threshold;
     private readonly T _tailThreshold;
+    /// <summary>
+    /// The alpha predictor, declaring the width it is fed so a rebuilt layer can size it.
+    /// </summary>
+    /// <remarks>
+    /// DenseLayer is lazy: it allocates on first Forward, so a CifAlignmentLayer rebuilt from saved
+    /// construction state held a predictor with no weights, answered ParameterCount 0 instead of
+    /// <c>_encoderDim + 1</c>, and let SetParameters discard every trained value in it. The generic
+    /// chain walk cannot recover that here -- this layer's own input shape is [-1, -1, encoderDim],
+    /// and a walk seeded from a dynamic axis has nothing to size a child with.
+    /// <para>
+    /// The width is <c>_encoderDim</c> because Forward passes its raw input straight to the
+    /// predictor. (The comment on the constructor describes the paper's 3 x encoderDim context
+    /// window; the implementation collapses it, so the DECLARED width follows the code.)
+    /// </para>
+    /// </remarks>
+    [SubLayerInput("_encoderDim")]
     private readonly DenseLayer<T> _alphaPredictor;
 
     /// <summary>
@@ -389,27 +405,19 @@ public partial class CifAlignmentLayer<T> : LayerBase<T>, IShapeContract
         return windowed;
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Delegates to the alpha predictor. The base implementation returns only tensors registered
-    /// directly on THIS layer and does not recurse into children, so without this override a
-    /// composite layer reports an empty trainable set: <c>GetParameters()</c> returned 49
-    /// elements while <c>GetTrainableParameters()</c> returned none. That mismatch is invisible
-    /// while <see cref="SupportsTraining"/> is false, but once the layer trains it desynchronizes
-    /// the flat parameter vector from the tensor set the tape and <c>ParameterBuffer</c> track,
-    /// which surfaced as "Parameter[0] is NaN after training" in every CIF consumer.
-    /// </remarks>
-    public override IReadOnlyList<Tensor<T>> GetTrainableParameters()
-        => _alphaPredictor.GetTrainableParameters();
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Forwards buffer-backed views straight through to the alpha predictor so the tensors used
-    /// during <see cref="Forward"/> are the same references the ParameterBuffer holds — the
-    /// tape's reference-identity alignment check requires that.
-    /// </remarks>
-    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
-        => _alphaPredictor.SetTrainableParameters(parameters);
+    // GetTrainableParameters / SetTrainableParameters are GENERATED, not written here.
+    //
+    // They used to be hand-written overrides delegating to _alphaPredictor, which fixed the
+    // recursion problem they describe and created a worse one: TrainableParameterGenerator skips
+    // any layer that declares BOTH, so this class produced no generated file at all -- and with it
+    // no DeclaredSubLayerShapes. The [SubLayerInput("_encoderDim")] declaration on _alphaPredictor
+    // was therefore inert, the rebuilt predictor was never sized, and the layer answered
+    // ParameterCount 0 against a trained 66. The override that made the layer work in training was
+    // the same one that stopped it round-tripping.
+    //
+    // The base recursion those remarks were written against now exists: the generated pair folds
+    // GetSubLayers(), so the alpha predictor's tensors are reached without anyone delegating by
+    // hand, and the same declaration sizes it on rebuild.
 
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()

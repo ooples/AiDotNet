@@ -68,15 +68,8 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Video Diffusion Models", "https://arxiv.org/abs/2204.03458")]
-public class VideoUNetPredictor<T> : NoisePredictorBase<T>
+public partial class VideoUNetPredictor<T> : NoisePredictorBase<T>
 {
-
-    /// <inheritdoc />
-    /// <remarks>Lazy weights, same reasoning as UNetNoisePredictor.</remarks>
-    protected override void EnsureParametersReady()
-    {
-        TriggerLazyShapeResolution();
-    }
     /// <summary>
     /// Channel multipliers for each resolution level.
     /// </summary>
@@ -151,6 +144,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// <summary>
     /// Cached input for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -1898,72 +1892,13 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
     #endregion
 
-    #region ICloneable Implementation
-
-    /// <inheritdoc />
-    public override INoisePredictor<T> Clone()
-    {
-        var clone = new VideoUNetPredictor<T>(
-            _inputChannels,
-            _outputChannels,
-            _baseChannels,
-            _channelMultipliers,
-            _numResBlocks,
-            _attentionResolutions,
-            _numTemporalLayers,
-            _contextDim,
-            _numHeads,
-            _supportsImageConditioning,
-            _inputHeight,
-            _inputWidth,
-            _numFrames,
-            _clipTokenLength,
-            LossFunction,
-            seed: null,
-            imageConditionChannels: _imageConditionChannels,
-            concatenateImageCondition: _concatenateImageCondition,
-            numClassEmbeddings: _numClassEmbeddings,
-            architectureProfile: _architectureProfile);
-
-        bool sourceUsedVideo = _lazyShapeResolvedWithVideo;
-        bool sourceUsedTextConditioning = _lazyShapeResolvedWithTextConditioning;
-        bool sourceUsedImageConditioning = _lazyShapeResolvedWithImageConditioning;
-
-        // Resolve the SOURCE's lazy layers so each source layer reports its real
-        // parameter shape below. The source's resolving forward packs its OWN
-        // (correct) weights, so the source stays self-consistent.
-        TriggerLazyShapeResolution();
-
-        // Materialize the clone with the same execution path, then copy values into its existing
-        // tensors. This preserves layer-owned caches and avoids relying on SetParameters to infer
-        // a lazy tensor's shape from a flat length (which is ambiguous for grouped/deconvolutional
-        // kernels and caused output-divergent clones).
-        clone.TriggerLazyShapeResolution(
-            sourceUsedVideo,
-            sourceUsedTextConditioning,
-            sourceUsedImageConditioning);
-        using (var srcEnum = EnumerateLayersInParameterOrder().GetEnumerator())
-        using (var cloneEnum = clone.EnumerateLayersInParameterOrder().GetEnumerator())
-        {
-            while (srcEnum.MoveNext() && cloneEnum.MoveNext())
-            {
-                var srcLayer = srcEnum.Current;
-                var cloneLayer = cloneEnum.Current;
-                if (srcLayer is null || cloneLayer is null)
-                    continue;
-                cloneLayer.SetParameters(srcLayer.GetParameters());
-            }
-        }
-        return clone;
-    }
+    #region Lazy Shape Resolution
 
     /// <summary>
     /// Runs a single dummy forward through the network at the configured
     /// spatial / frame size so every lazy layer (time-embedding MLPs,
     /// temporal + cross attention, and the image-condition projection)
-    /// resolves its weight shapes. Used by <see cref="Clone"/> to make the
-    /// clone's layer parameter counts match the original's before
-    /// <see cref="SetParameters"/> copies weights across. Mirrors
+    /// resolves its weight shapes for the shared parameter lifecycle. Mirrors
     /// UNetNoisePredictor.TriggerLazyShapeResolution.
     /// </summary>
     internal void TriggerLazyShapeResolution(
@@ -2036,12 +1971,6 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         }
 
         _ = PredictNoise(dummy, timestep: 0, conditioning: textConditioning);
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
     }
 
     #endregion

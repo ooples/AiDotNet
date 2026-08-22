@@ -72,7 +72,7 @@ namespace AiDotNet.Video.Understanding;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public class InternVideo2<T> : NeuralNetworkBase<T>
+public partial class InternVideo2<T> : NeuralNetworkBase<T>
 {
     private readonly InternVideo2Options _options;
 
@@ -501,46 +501,10 @@ public class InternVideo2<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Serialization is not supported in ONNX mode.");
 
-        writer.Write(_embedDim);
-        writer.Write(_numHeads);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numFrames);
-        writer.Write(_patchSize);
-        writer.Write(_imageSize);
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
 
-        _ = reader.ReadInt32(); // embedDim
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadInt32(); // numEncoderLayers
-        _ = reader.ReadInt32(); // numFrames
-        _ = reader.ReadInt32(); // patchSize
-        _ = reader.ReadInt32(); // imageSize
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new InternVideo2<T>(
-            Architecture,
-            _optimizer,
-            _lossFunction,
-            _embedDim,
-            _numHeads,
-            _numEncoderLayers,
-            _numFrames,
-            _patchSize);
-    }
 
     #endregion
 }

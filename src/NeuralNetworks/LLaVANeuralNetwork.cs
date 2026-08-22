@@ -88,10 +88,13 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
     // tape-aware vision forward (PrependClsToken / AddPositionalEmbeddings), so gradients reach them and
     // the tape optimizer updates them. Kept as Tensor<T> (not Matrix<T>) precisely so the concat/add ops
     // treat them as tape leaves rather than copying detached values.
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visionClsToken;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visionPositionalEmbeddings;
     private ILayer<T>? _patchEmbedding;
     private ILayer<T>? _textTokenEmbedding;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _textPositionalEmbeddings;
     private ILayer<T>? _outputProjection;
     private ILayer<T>? _groundingHead;
@@ -1276,40 +1279,7 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
     private const int NetworkSpecificPayloadVersion = 1;
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_embeddingDimension);
-        writer.Write(_maxSequenceLength);
-        writer.Write(_imageSize);
-        writer.Write(_visionHiddenDim);
-        writer.Write(_lmHiddenDim);
-        writer.Write(_numVisionLayers);
-        writer.Write(_numLmLayers);
-        writer.Write(_numHeads);
-        writer.Write(_patchSize);
-        writer.Write(_vocabularySize);
-        writer.Write(_numVisualTokens);
-        writer.Write((int)_languageModelBackbone);
-        writer.Write(_visionEncoderType);
-        writer.Write(_useNativeMode);
 
-        // Everything from here on was added after the first shipped payload, which ended at
-        // _useNativeMode. The version marker is what lets the reader tell the two apart -- see
-        // NetworkSpecificPayloadVersion.
-        writer.Write(NetworkSpecificPayloadVersion);
-
-        // Persist the TRAINABLE state that lives OUTSIDE Layers: the CLS token and the vision/text
-        // positional tables. Clone() (all three paths — COW fallback, large layer-by-layer copy, and
-        // the serialize round-trip) transfers this model-level state ONLY through these hooks; the
-        // per-layer parameter copy does not cover it. Without persisting them the clone re-initialises
-        // these tensors from the fixed seed in InitializeWeights and diverges from the trained original
-        // (Clone_AfterTraining). The vision CLS + vision positional tables are also surfaced via
-        // GetExtraTrainableTensors, so the tape optimiser updates them during training — meaning their
-        // post-training values genuinely differ from the seed init and MUST be carried across a clone.
-        WriteTensor(writer, _visionClsToken);
-        WriteTensor(writer, _visionPositionalEmbeddings);
-        WriteTensor(writer, _textPositionalEmbeddings);
-    }
 
     private void WriteTensor(BinaryWriter writer, Tensor<T>? tensor)
     {
@@ -1412,63 +1382,7 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
     }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // embeddingDim
-        _ = reader.ReadInt32(); // maxSeqLen
-        _ = reader.ReadInt32(); // imgSize
-        _ = reader.ReadInt32(); // visionHiddenDim
-        _ = reader.ReadInt32(); // lmHiddenDim
-        _ = reader.ReadInt32(); // numVisionLayers
-        _ = reader.ReadInt32(); // numLmLayers
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadInt32(); // patchSize
-        _ = reader.ReadInt32(); // vocabularySize
-        _ = reader.ReadInt32(); // numVisualTokens
-        _ = reader.ReadInt32(); // languageModelBackbone (enum as int)
-        _ = reader.ReadString(); // visionEncoderType
-        _ = reader.ReadBoolean(); // useNativeMode
 
-        // Re-wire the role sub-lists (_patchEmbedding, _visionEncoderLayers, _projectionLayers, ...) to
-        // the freshly DESERIALIZED layer objects now sitting in Layers. Deserialization runs
-        // ClearLayers() and rebuilds Layers with NEW layer instances (carrying the trained weights),
-        // but the sub-list fields still reference the seed-initialised layers that CreateNewInstance()
-        // wired up. LLaVA's forward path (ExtractVisualFeaturesNative / ProjectToLanguageSpace / ...)
-        // reads those sub-lists directly, so without re-deriving them the clone would run the
-        // random-initialised layers while the trained weights sit unused in Layers — producing output
-        // uncorrelated with the trained original (Clone_AfterTraining). This mirrors the same
-        // distribution InitializeNativeLayers performs at construction.
-        RewireNativeSubLayersFromLayers();
-
-        // A payload written before the out-of-Layers state existed ends here. Detecting that is not a
-        // heuristic: this method is the last read of NeuralNetworkBase.Deserialize, over a seekable
-        // MemoryStream, so an exhausted stream means precisely "nothing more was written".
-        var stream = reader.BaseStream;
-        if (stream.CanSeek && stream.Position >= stream.Length)
-        {
-            System.Diagnostics.Trace.TraceWarning(
-                "AiDotNet.LLaVANeuralNetwork: this model was saved before the CLS token and positional " +
-                "tables were persisted, so they keep their freshly initialized values. Predictions will " +
-                "differ from the model as trained. Re-save the model to carry that state forward.");
-            return;
-        }
-
-        int payloadVersion = reader.ReadInt32();
-        if (payloadVersion != NetworkSpecificPayloadVersion)
-        {
-            throw new InvalidOperationException(
-                $"LLaVANeuralNetwork was saved with network-payload version {payloadVersion}, but this " +
-                $"build reads version {NetworkSpecificPayloadVersion}. Load this model with a matching " +
-                "version of AiDotNet, or re-save it from one.");
-        }
-
-        // Restore the trained out-of-Layers state (CLS token + positional tables) written above,
-        // overwriting the seed-initialised tensors that CreateNewInstance() produced. This is what
-        // makes a clone (and a save/load round-trip) reproduce the trained model's predictions.
-        _visionClsToken = ReadTensor(reader);
-        _visionPositionalEmbeddings = ReadTensor(reader);
-        _textPositionalEmbeddings = ReadTensor(reader);
-    }
 
     /// <summary>
     /// Re-derives the native-mode role sub-lists from the current <c>Layers</c> collection using the
@@ -1518,25 +1432,6 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
 
         _outputProjection = Layers[idx++];
         _groundingHead = Layers[idx++];
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new LLaVANeuralNetwork<T>(
-            Architecture,
-            _imageSize,
-            channels: 3,
-            _patchSize,
-            _vocabularySize,
-            _maxSequenceLength,
-            _embeddingDimension,
-            _visionHiddenDim,
-            _numVisionLayers,
-            _numLmLayers,
-            _numHeads,
-            _languageModelBackbone,
-            _visionEncoderType);
     }
 
     /// <inheritdoc/>

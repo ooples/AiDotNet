@@ -34,7 +34,9 @@ public class CLSToken<T>
     private IEngine Engine => AiDotNetEngine.Current;
     private readonly Random _random;
 
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _clsEmbedding;
+    [Scratch]
     private Tensor<T> _clsGradient;
 
     /// <summary>

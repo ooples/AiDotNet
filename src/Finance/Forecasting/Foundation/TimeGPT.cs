@@ -493,31 +493,6 @@ public partial class TimeGPT<T> : ForecastingModelBase<T>
         };
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the TimeGPT model, CreateNewInstance builds and wires up model components. This sets up the TimeGPT architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new TimeGPTOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            DropoutRate = _dropout,
-            UseConformalPrediction = _useConformalPrediction,
-            ConfidenceLevel = _confidenceLevel,
-            FineTuningSteps = _fineTuningSteps,
-            FineTuningLearningRate = _fineTuningLearningRate
-        };
-
-        return new TimeGPT<T>(Architecture, options, _numFeatures);
-    }
-
     /// <summary>
     /// Writes TimeGPT-specific configuration during serialization.
     /// </summary>
@@ -525,32 +500,7 @@ public partial class TimeGPT<T> : ForecastingModelBase<T>
     /// <para><b>For Beginners:</b> Saves all the configuration needed to reconstruct this model.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_dropout);
-        writer.Write(_useConformalPrediction);
-        writer.Write(_confidenceLevel);
-        writer.Write(_fineTuningSteps);
-        writer.Write(_fineTuningLearningRate);
-        writer.Write(_numFeatures);
 
-        // Save calibration residuals if available
-        int residualCount = _calibrationResiduals?.Count ?? 0;
-        writer.Write(residualCount);
-        if (_calibrationResiduals is not null)
-        {
-            foreach (var residual in _calibrationResiduals)
-            {
-                writer.Write(residual);
-            }
-        }
-    }
 
     /// <summary>
     /// Reads TimeGPT-specific configuration during deserialization.
@@ -559,31 +509,7 @@ public partial class TimeGPT<T> : ForecastingModelBase<T>
     /// <para><b>For Beginners:</b> Loads the configuration that was saved during serialization.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _useConformalPrediction = reader.ReadBoolean();
-        _confidenceLevel = reader.ReadDouble();
-        _fineTuningSteps = reader.ReadInt32();
-        _fineTuningLearningRate = reader.ReadDouble();
-        _numFeatures = reader.ReadInt32();
 
-        int residualCount = reader.ReadInt32();
-        if (residualCount > 0)
-        {
-            _calibrationResiduals = new List<double>(residualCount);
-            for (int i = 0; i < residualCount; i++)
-            {
-                _calibrationResiduals.Add(reader.ReadDouble());
-            }
-        }
-    }
 
     #endregion
 

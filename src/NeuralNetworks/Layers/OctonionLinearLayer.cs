@@ -117,6 +117,7 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>, IShapeContract
     /// Stored input from forward pass for backpropagation.
     /// Shape: [batch, inputFeatures, 8]
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -128,16 +129,19 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>, IShapeContract
     /// Stored pre-activation output for gradient computation.
     /// Shape: [batch, outputFeatures, 8]
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Gradient for weights. Shape: [OutputFeatures, InputFeatures, 8]
     /// </summary>
+    [Scratch]
     private Tensor<T>? _weightsGradient;
 
     /// <summary>
     /// Gradient for biases. Shape: [OutputFeatures, 8]
     /// </summary>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
     /// <summary>

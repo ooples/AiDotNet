@@ -60,7 +60,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 // Citation URL corrected: the arXiv id for this title is 2308.12469, not 2305.02015.
 [ResearchPaper("Diffuse, Attend, and Segment: Unsupervised Zero-Shot Segmentation using Stable Diffusion", "https://arxiv.org/abs/2308.12469", Year = 2023, Authors = "Junjiao Tian, Lavisha Aggarwal, Andrea Colber, Zunzhi You, Eldhose Iype, Haiyang Sheng")]
-public class DiffSeg<T> : Common.SemanticSegmentationBase<T>
+public partial class DiffSeg<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly DiffSegOptions _options;
     public override ModelOptions GetOptions() => _options;
@@ -304,26 +304,9 @@ public class DiffSeg<T> : Common.SemanticSegmentationBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height); writer.Write(_width); writer.Write(_channels);
-        writer.Write(_numClasses); writer.Write(_decoderDim); writer.Write(_dropRate);
-        writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty);
-        writer.Write(_encoderLayerEnd);
-        writer.Write(_channelDims.Length);
-        foreach (int c in _channelDims) writer.Write(c);
-        writer.Write(_depths.Length);
-        foreach (int d in _depths) writer.Write(d);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble();
-        _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32();
-        int cc = reader.ReadInt32(); for (int i = 0; i < cc; i++) _ = reader.ReadInt32();
-        int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32();
-    }
+
+
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {

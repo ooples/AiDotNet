@@ -32,11 +32,13 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
     /// <b>For Beginners:</b> Knots are special points that help define how the curve behaves.
     /// They're like invisible control points that determine where the curve bends.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _knots;
 
     /// <summary>
     /// The calculated coefficients that define the B-spline curve.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _coefficients;
 
     /// <summary>

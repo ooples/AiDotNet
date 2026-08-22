@@ -101,7 +101,7 @@ public partial class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioE
     /// would fail for a reason that has nothing to do with the learned weights. Serialized with the
     /// model so a reload reproduces the same response.
     /// </remarks>
-    [Buffer]
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Tensor<T>? _noiseSignal;
 
     #endregion
@@ -735,40 +735,9 @@ public partial class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioE
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.EncoderMaxChannels);
-        w.Write(_options.NumEncoderBlocks); w.Write(_options.RIRLength);
-        w.Write(_options.LatentDim); w.Write(_options.NumNoiseBands);
-        w.Write(_options.EarlyResponseLength); w.Write(_options.NumDecoderBlocks);
-        w.Write(_options.DereverberationStrength); w.Write(_options.RT60WindowSeconds);
-        w.Write(_options.NoiseFilterOrder);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.EncoderMaxChannels = r.ReadInt32();
-        _options.NumEncoderBlocks = r.ReadInt32(); _options.RIRLength = r.ReadInt32();
-        _options.LatentDim = r.ReadInt32(); _options.NumNoiseBands = r.ReadInt32();
-        _options.EarlyResponseLength = r.ReadInt32(); _options.NumDecoderBlocks = r.ReadInt32();
-        _options.DereverberationStrength = r.ReadDouble(); _options.RT60WindowSeconds = r.ReadDouble();
-        _options.NoiseFilterOrder = r.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
 
-        // The base deserializer has just replaced Layers with the restored instances. Rebind the
-        // per-stage views so FiNSForward consumes those weights and not the constructor's layers.
-        BindLayerViewsFromLayers();
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new RoomImpulseResponse<T>(Architecture, mp, _options);
-        return new RoomImpulseResponse<T>(Architecture, _options);
-    }
 
     #endregion
 

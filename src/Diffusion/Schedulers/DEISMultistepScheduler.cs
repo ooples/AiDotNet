@@ -39,6 +39,7 @@ namespace AiDotNet.Diffusion.Schedulers;
 [PipelineStage(PipelineStage.Training)]
 public sealed class DEISMultistepScheduler<T> : NoiseSchedulerBase<T>
 {
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _sigmas;
     private readonly List<Vector<T>> _modelOutputHistory = [];
     private readonly int _order;

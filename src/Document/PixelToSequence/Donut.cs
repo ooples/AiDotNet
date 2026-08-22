@@ -107,7 +107,9 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
     private int ImageWidth { get; set; }
 
     // Learnable tokens
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _tokenEmbeddings;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _decoderPositionEmbeddings;
 
     // Gradient storage
@@ -1194,35 +1196,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_embedDim);
-        writer.Write(_decoderHiddenDim);
-        writer.Write(_depths.Length);
-        foreach (int depth in _depths) writer.Write(depth);
-        writer.Write(_numHeads.Length);
-        foreach (int heads in _numHeads) writer.Write(heads);
-        writer.Write(_windowSize);
-        writer.Write(_patchSize);
-        writer.Write(_mlpRatio);
-        writer.Write(_numDecoderLayers);
-        writer.Write(_decoderHeads);
-        writer.Write(_vocabSize);
-        writer.Write(_maxGenerationLength);
-        writer.Write(ImageHeight);
-        writer.Write(ImageWidth);
-        writer.Write(_useNativeMode);
-        writer.Write(_onnxEncoderModelPath ?? string.Empty);
-        writer.Write(_onnxDecoderModelPath ?? string.Empty);
 
-        // The token + decoder-position embeddings are network-level trainable tensors
-        // that live OUTSIDE Layers (they are looked up directly in the decoder forward
-        // and trained via the custom gradient path), so the base layer serialization
-        // does not cover them. Persist them here; otherwise they would be re-randomized
-        // on load and break save/load + clone-after-training parity.
-        WriteOptionalTensor(writer, _tokenEmbeddings);
-        WriteOptionalTensor(writer, _decoderPositionEmbeddings);
-    }
 
     private void WriteOptionalTensor(BinaryWriter writer, Tensor<T>? tensor)
     {
@@ -1258,98 +1232,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
     }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int embedDim = reader.ReadInt32();
-        int decoderHiddenDim = reader.ReadInt32();
 
-        int depthsLength = reader.ReadInt32();
-        int[] depths = new int[depthsLength];
-        for (int i = 0; i < depthsLength; i++) depths[i] = reader.ReadInt32();
-
-        int headsLength = reader.ReadInt32();
-        int[] heads = new int[headsLength];
-        for (int i = 0; i < headsLength; i++) heads[i] = reader.ReadInt32();
-
-        int windowSize = reader.ReadInt32();
-        int patchSize = reader.ReadInt32();
-        int mlpRatio = reader.ReadInt32();
-        int numDecoderLayers = reader.ReadInt32();
-        int decoderHeads = reader.ReadInt32();
-        int vocabSize = reader.ReadInt32();
-        int maxGenLength = reader.ReadInt32();
-        int imageHeight = reader.ReadInt32();
-        int imageWidth = reader.ReadInt32();
-        bool useNativeMode = reader.ReadBoolean();
-        string? encoderPath = null;
-        string? decoderPath = null;
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-        {
-            encoderPath = reader.ReadString();
-            if (reader.BaseStream.Position < reader.BaseStream.Length)
-            {
-                decoderPath = reader.ReadString();
-            }
-        }
-
-        _embedDim = embedDim;
-        _decoderHiddenDim = decoderHiddenDim;
-        _depths = depths;
-        _numHeads = heads;
-        _windowSize = windowSize;
-        _patchSize = patchSize;
-        _mlpRatio = mlpRatio;
-        _numDecoderLayers = numDecoderLayers;
-        _decoderHeads = decoderHeads;
-        _vocabSize = vocabSize;
-        _maxGenerationLength = maxGenLength;
-        _useNativeMode = useNativeMode;
-        _onnxEncoderModelPath = string.IsNullOrWhiteSpace(encoderPath) ? null : encoderPath;
-        _onnxDecoderModelPath = string.IsNullOrWhiteSpace(decoderPath) ? null : decoderPath;
-
-        ImageHeight = imageHeight;
-        ImageWidth = imageWidth;
-        ImageSize = Math.Max(imageHeight, imageWidth);
-        MaxSequenceLength = maxGenLength;
-
-        // The native-mode layers (with their trained weights) are already reconstructed
-        // by the base DeserializeInternalUnchecked before this override runs. Do NOT
-        // clear Layers + call InitializeLayers — that would discard the deserialized
-        // weights and re-randomize the model. Instead re-derive the per-group mirror
-        // lists (_patchEmbeddingLayers / _encoderLayers / _decoderEmbeddingLayers /
-        // _decoderLayers / _outputLayers) from the freshly deserialized Layers so the
-        // forward pass routes through the loaded weights.
-        if (_useNativeMode)
-        {
-            RebuildLayerGroupsFromLayers();
-        }
-
-        // Restore the network-level embeddings if they were serialized; fall back to a
-        // fresh initialization for models saved before embedding serialization existed.
-        Tensor<T>? restoredTokenEmbeddings = null;
-        Tensor<T>? restoredPositionEmbeddings = null;
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-        {
-            restoredTokenEmbeddings = ReadOptionalTensor(reader);
-            if (reader.BaseStream.Position < reader.BaseStream.Length)
-                restoredPositionEmbeddings = ReadOptionalTensor(reader);
-        }
-
-        if (restoredTokenEmbeddings is not null && restoredPositionEmbeddings is not null)
-        {
-            _tokenEmbeddings = restoredTokenEmbeddings;
-            _decoderPositionEmbeddings = restoredPositionEmbeddings;
-            // The gradient accumulator is not serialized (it is transient training state);
-            // recreate it to match the restored position-embedding shape.
-            _decoderPositionEmbeddingsGradients = Tensor<T>.CreateDefault(
-                [_maxGenerationLength, _decoderHiddenDim], NumOps.Zero);
-        }
-        else if (Layers.Count > 0)
-        {
-            InitializeEmbeddings();
-        }
-        _nativeLayersInitialized = _useNativeMode && Layers.Count > 0;
-    }
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
@@ -1455,7 +1338,8 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         }
     }
 
-    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+
 
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights

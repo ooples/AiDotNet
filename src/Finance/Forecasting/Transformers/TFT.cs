@@ -530,34 +530,6 @@ public partial class TFT<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <returns>A new TFT model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This creates a fresh copy of the model with the same settings
-    /// but new (randomly initialized) weights. Useful for ensemble training or cross-validation.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new TemporalFusionTransformerOptions<T>
-        {
-            LookbackWindow = _sequenceLength,
-            ForecastHorizon = _predictionHorizon,
-            HiddenSize = _hiddenSize,
-            NumAttentionHeads = _numHeads,
-            NumLayers = _numLayers,
-            DropoutRate = _dropout,
-            QuantileLevels = _quantileLevels,
-            UseVariableSelection = _useVariableSelection,
-            StaticCovariateSize = _staticCovariateSize
-        };
-
-        return new TFT<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Writes TFT-specific configuration during serialization.
     /// </summary>
     /// <param name="writer">Binary writer for output.</param>
@@ -567,20 +539,7 @@ public partial class TFT<T> : ForecastingModelBase<T>
     /// to a file so the model can be loaded later with the same configuration.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_predictionHorizon);
-        writer.Write(_hiddenSize);
-        writer.Write(_numHeads);
-        writer.Write(_numLayers);
-        writer.Write(_dropout);
-        writer.Write(_quantileLevels.Length);
-        foreach (var q in _quantileLevels)
-            writer.Write(q);
-        writer.Write(_useVariableSelection);
-        writer.Write(_staticCovariateSize);
-    }
+
 
     /// <summary>
     /// Reads TFT-specific configuration during deserialization.
@@ -592,26 +551,7 @@ public partial class TFT<T> : ForecastingModelBase<T>
     /// and restores the model configuration.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _predictionHorizon = reader.ReadInt32();
-        _hiddenSize = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        int quantileCount = reader.ReadInt32();
-        _quantileLevels = new double[quantileCount];
-        for (int i = 0; i < quantileCount; i++)
-            _quantileLevels[i] = reader.ReadDouble();
-        _useVariableSelection = reader.ReadBoolean();
-        _staticCovariateSize = reader.ReadInt32();
 
-        // Re-bind cached layer references (variable-selection, LSTM enc/dec,
-        // _grnLayers, attention, output) to the deserialized weight-loaded layers
-        // so a clone runs on the loaded weights, not construction-time random init.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

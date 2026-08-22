@@ -62,7 +62,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Generalized Decoding for Pixel, Image, and Language", "https://arxiv.org/abs/2212.11270", Year = 2023, Authors = "Zou et al.")]
-public class XDecoder<T> : Common.PanopticSegmentationBase<T>
+public partial class XDecoder<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly XDecoderOptions _options;
 
@@ -397,18 +397,7 @@ public class XDecoder<T> : Common.PanopticSegmentationBase<T>
     /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height); writer.Write(_width); writer.Write(_channels);
-        writer.Write(_numClasses); writer.Write(_numQueries); writer.Write((int)_modelSize);
-        writer.Write(_decoderDim); writer.Write(_dropRate);
-        writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty);
-        writer.Write(_encoderLayerEnd); writer.Write(_numStuffClasses);
-        writer.Write(_channelDims.Length);
-        foreach (int dim in _channelDims) writer.Write(dim);
-        writer.Write(_depths.Length);
-        foreach (int depth in _depths) writer.Write(depth);
-    }
+
 
     /// <summary>
     /// Reads X-Decoder configuration from a binary stream.
@@ -419,27 +408,7 @@ public class XDecoder<T> : Common.PanopticSegmentationBase<T>
     /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _height = reader.ReadInt32();
-        _width = reader.ReadInt32();
-        _channels = reader.ReadInt32();
-        _numClasses = reader.ReadInt32();
-        _numQueries = reader.ReadInt32();
-        _modelSize = (XDecoderModelSize)reader.ReadInt32();
-        _decoderDim = reader.ReadInt32();
-        _dropRate = reader.ReadDouble();
-        _useNativeMode = reader.ReadBoolean();
-        _onnxModelPath = reader.ReadString();
-        _encoderLayerEnd = reader.ReadInt32();
-        _numStuffClasses = reader.ReadInt32();
-        int dimCount = reader.ReadInt32();
-        _channelDims = new int[dimCount];
-        for (int i = 0; i < dimCount; i++) _channelDims[i] = reader.ReadInt32();
-        int depthCount = reader.ReadInt32();
-        _depths = new int[depthCount];
-        for (int i = 0; i < depthCount; i++) _depths[i] = reader.ReadInt32();
-    }
+
 
     /// <summary>
     /// Creates a new X-Decoder instance with the same configuration but fresh weights.

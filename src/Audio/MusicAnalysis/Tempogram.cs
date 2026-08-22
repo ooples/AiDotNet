@@ -39,7 +39,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Tempogram Toolbox: MATLAB Implementations for Tempo and Pulse Analysis", "https://doi.org/10.5281/zenodo.1416010")]
-public class Tempogram<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
+public partial class Tempogram<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -294,26 +294,9 @@ public class Tempogram<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.FftSize); w.Write(_options.HopLength);
-        w.Write(_options.OnsetHiddenDim); w.Write(_options.NumOnsetLayers);
-        w.Write(_options.TempoWindowFrames); w.Write(_options.MinBPM);
-        w.Write(_options.MaxBPM); w.Write(_options.NumTempoBins); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.FftSize = r.ReadInt32(); _options.HopLength = r.ReadInt32();
-        _options.OnsetHiddenDim = r.ReadInt32(); _options.NumOnsetLayers = r.ReadInt32();
-        _options.TempoWindowFrames = r.ReadInt32(); _options.MinBPM = r.ReadDouble();
-        _options.MaxBPM = r.ReadDouble(); _options.NumTempoBins = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new Tempogram<T>(Architecture, _options);
+
 
     #endregion
 

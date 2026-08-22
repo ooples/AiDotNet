@@ -104,13 +104,4 @@ public class PubMedBERTNER<T> : TransformerNERBase<T>
             "PubMedBERT-NER", "Gu et al., ACL 2021", optimizer)
     {
     }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new TransformerNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new PubMedBERTNER<T>(Architecture, p, optionsCopy);
-        return new PubMedBERTNER<T>(Architecture, optionsCopy);
-    }
 }

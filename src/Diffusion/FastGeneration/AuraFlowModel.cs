@@ -174,23 +174,6 @@ public partial class AuraFlowModel<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Delegate to the predictor's and VAE's own Clone(), which reconstruct from their
-        // actual config fields (NOT hardcoded foundation-scale constants) and preserve
-        // materialized weights — so a caller-injected variant of any scale round-trips
-        // correctly. Rebuilding at fixed 1536/24 here would size a clone that cannot accept
-        // an injected tiny (or otherwise non-default) predictor's parameter vector.
-        return new AuraFlowModel<T>(
-            dit: (DiTNoisePredictor<T>)_dit.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

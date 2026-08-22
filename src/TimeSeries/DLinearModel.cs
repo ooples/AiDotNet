@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Models.Options;
+using AiDotNet.Models.Options;
+
 using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.TimeSeries;
@@ -199,25 +200,9 @@ public partial class DLinearModel<T> : TimeSeriesModelBase<T>
         return NumOps.FromDouble(IsFiniteValue(pred) ? pred : 0.0);
     }
 
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        writer.Write(_l);
-        writer.Write(_kernel);
-        for (int j = 0; j < _l; j++) { writer.Write(_wSeasonal[j]); }
-        for (int j = 0; j < _l; j++) { writer.Write(_wTrend[j]); }
-        writer.Write(_bSeasonal);
-        writer.Write(_bTrend);
-    }
 
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        reader.ReadInt32(); // _l (fixed by ctor/options)
-        reader.ReadInt32(); // _kernel
-        for (int j = 0; j < _l; j++) { _wSeasonal[j] = reader.ReadDouble(); }
-        for (int j = 0; j < _l; j++) { _wTrend[j] = reader.ReadDouble(); }
-        _bSeasonal = reader.ReadDouble();
-        _bTrend = reader.ReadDouble();
-    }
+
+
 
     public override ModelMetadata<T> GetModelMetadata()
     {

@@ -66,8 +66,9 @@ namespace AiDotNet.DistributedTraining;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ResearchPaper("PyTorch FSDP: Experiences on Scaling Fully Sharded Data Parallel", "https://arxiv.org/abs/2304.11277")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
+public partial class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _computedGradients;
 
     /// <summary>
@@ -335,23 +336,9 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> Clone()
-    {
-        var clonedWrappedModel = WrappedModel.Clone();
-        return new FSDPModel<T, TInput, TOutput>(clonedWrappedModel, Config);
-    }
-
-    /// <inheritdoc/>
     public override Dictionary<string, T> GetFeatureImportance()
     {
         return WrappedModel.GetFeatureImportance();
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        var deepCopiedWrappedModel = WrappedModel.DeepCopy();
-        return new FSDPModel<T, TInput, TOutput>(deepCopiedWrappedModel, Config);
     }
 
     /// <inheritdoc/>

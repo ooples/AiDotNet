@@ -520,32 +520,10 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
     };
 
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_options.Variant);
-        writer.Write(_options.NumPyramidLevels);
-        writer.Write(_options.NumLevelsSkipped);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.DropoutRate);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _options.Variant = (VideoModelVariant)reader.ReadInt32();
-        _options.NumPyramidLevels = reader.ReadInt32();
-        _options.NumLevelsSkipped = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.Validate();
-        EnsurePaperBindings();
-    }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        !_useNativeMode && !string.IsNullOrWhiteSpace(_options.ModelPath)
-            ? new UPRNet<T>(Architecture, _options.ModelPath!, new UPRNetOptions(_options))
-            : new UPRNet<T>(Architecture, new UPRNetOptions(_options));
 
     private void ThrowIfDisposed()
     {

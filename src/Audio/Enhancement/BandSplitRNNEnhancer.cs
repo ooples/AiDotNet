@@ -44,7 +44,7 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Music Source Separation with Band-Split RNN", "https://arxiv.org/abs/2209.15174", Year = 2023, Authors = "Yi Luo, Jianwei Yu")]
-public class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+public partial class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -62,7 +62,7 @@ public class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
     private readonly ShortTimeFourierTransform<T> _stft;
     [Scratch]
     private Tensor<T>? _lastPhase;
-    [Buffer]
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Tensor<T>? _noiseProfile;
     private bool _useNativeMode;
     private bool _disposed;
@@ -274,34 +274,9 @@ public class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.Variant);
-        w.Write(_options.NumBands); w.Write(_options.BandRnnHiddenSize);
-        w.Write(_options.NumRnnLayers); w.Write(_options.FusionDim);
-        w.Write(_options.NumFreqBins); w.Write(_options.FFTSize);
-        w.Write(_options.HopLength); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.Variant = r.ReadString();
-        _options.NumBands = r.ReadInt32(); _options.BandRnnHiddenSize = r.ReadInt32();
-        _options.NumRnnLayers = r.ReadInt32(); _options.FusionDim = r.ReadInt32();
-        _options.NumFreqBins = r.ReadInt32(); _options.FFTSize = r.ReadInt32();
-        _options.HopLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var cloneOptions = new BandSplitRNNEnhancerOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new BandSplitRNNEnhancer<T>(Architecture, mp, cloneOptions);
-        return new BandSplitRNNEnhancer<T>(Architecture, cloneOptions);
-    }
+
 
     #endregion
 

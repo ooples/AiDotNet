@@ -53,7 +53,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2003.05534",
     Year = 2020,
     Authors = "Simon Niklaus, Feng Liu")]
-public class SoftSplat<T> : FrameInterpolationBase<T>
+public partial class SoftSplat<T> : FrameInterpolationBase<T>
 {
     #region Fields
 
@@ -178,41 +178,9 @@ public class SoftSplat<T> : FrameInterpolationBase<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.NumFeatures);
-        w.Write(_options.NumGridNetLevels);
-        w.Write(_options.NumResBlocksPerRow);
-        w.Write(_options.NumFeatureBlocks);
-        w.Write(_options.UseImportanceMetric);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (VideoModelVariant)r.ReadInt32();
-        _options.NumFeatures = r.ReadInt32();
-        _options.NumGridNetLevels = r.ReadInt32();
-        _options.NumResBlocksPerRow = r.ReadInt32();
-        _options.NumFeatureBlocks = r.ReadInt32();
-        _options.UseImportanceMetric = r.ReadBoolean();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (IsOnnxMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new SoftSplat<T>(Architecture, mp, _options);
-        return new SoftSplat<T>(Architecture, _options);
-    }
+
 
     #endregion
 

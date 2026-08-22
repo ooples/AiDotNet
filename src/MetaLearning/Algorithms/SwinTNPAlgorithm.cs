@@ -26,7 +26,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Tung Nguyen, Aditya Grover")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class SwinTNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
+public partial class SwinTNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly SwinTNPOptions<T, TInput, TOutput> _algoOptions;
 

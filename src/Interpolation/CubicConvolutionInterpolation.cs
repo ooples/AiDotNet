@@ -30,6 +30,7 @@ public class CubicConvolutionInterpolation<T> : I2DInterpolation<T>
     /// <summary>
     /// The z-values (heights) at each (x,y) grid point.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Matrix<T> _z;
 
     /// <summary>

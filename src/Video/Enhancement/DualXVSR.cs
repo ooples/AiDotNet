@@ -59,7 +59,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2506.04830",
     Year = 2025,
     Authors = "Shuo Cao, Yihao Liu, Xiaohui Li, Yuanting Gao, Yu Zhou, Chao Dong")]
-public class DualXVSR<T> : VideoSuperResolutionBase<T>
+public partial class DualXVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 
@@ -186,53 +186,9 @@ public class DualXVSR<T> : VideoSuperResolutionBase<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.NumFeatures);
-        w.Write(_options.NumAxialBlocks);
-        w.Write(_options.ScaleFactor);
-        w.Write(_options.NumHeads);
-        w.Write(_options.TemporalWindow);
-        w.Write(_options.DropoutRate);
-        w.Write(_options.LearningRate);
-        w.Write(_options.WeightDecay);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (VideoModelVariant)r.ReadInt32();
-        _options.NumFeatures = r.ReadInt32();
-        _options.NumAxialBlocks = r.ReadInt32();
-        _options.ScaleFactor = r.ReadInt32();
-        _options.NumHeads = r.ReadInt32();
-        _options.TemporalWindow = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble();
-        if (r.BaseStream.Position < r.BaseStream.Length) _options.LearningRate = r.ReadDouble();
-        if (r.BaseStream.Position < r.BaseStream.Length) _options.WeightDecay = r.ReadDouble();
-        ScaleFactor = _options.ScaleFactor;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-        {
-            OnnxModel?.Dispose();
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        }
-        // Native-mode layers (with their trained weights) are already reconstructed by
-        // the base deserializer before this override runs; re-initializing here would
-        // discard them and leave the model randomly initialized.
-        if (_useNativeMode) _optimizer = CreateDefaultOptimizer();
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new DualXVSR<T>(Architecture, mp, new DualXVSROptions(_options));
-        return new DualXVSR<T>(Architecture, new DualXVSROptions(_options));
-    }
+
 
     private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
         => new(this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>

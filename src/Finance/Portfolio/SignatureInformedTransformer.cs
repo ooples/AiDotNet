@@ -59,7 +59,7 @@ namespace AiDotNet.Finance.Portfolio;
     "https://arxiv.org/abs/2510.03129",
     Year = 2025,
     Authors = "Yoontae Hwang, Stefan Zohren")]
-public class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
+public partial class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
 {
     private readonly SignatureInformedTransformerOptions<T> _options;
 

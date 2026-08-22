@@ -106,15 +106,21 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IS
     // same instances exposed by GetTrainableParameters. Fields are mutable
     // because the contiguous ParameterBuffer rebinds them to buffer-backed
     // views through SetTrainableParameters.
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _weightMean = Tensor<T>.Empty();
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _weightLogVar = Tensor<T>.Empty();
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _biasMean = Tensor<T>.Empty();
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _biasLogVar = Tensor<T>.Empty();
 
     // SampleWeights stores epsilon, rather than a detached sampled parameter.
     // Forward applies the reparameterization with Engine operations so both μ
     // and log σ² remain connected to the active gradient tape.
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _sampledWeightEpsilon;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _sampledBiasEpsilon;
     private bool _samplePending;
 
@@ -206,27 +212,8 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IS
     }
 
     /// <inheritdoc/>
-    public override IReadOnlyList<Tensor<T>> GetTrainableParameters() =>
-        new[] { _weightMean, _weightLogVar, _biasMean, _biasLogVar };
 
     /// <inheritdoc/>
-    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
-    {
-        if (parameters.Count != 4)
-            throw new ArgumentException(
-                "Expected exactly 4 posterior tensors (weight mean, weight log variance, bias mean, bias log variance).",
-                nameof(parameters));
-
-        ValidateShapeMatch(parameters[0], _weightMean, nameof(_weightMean));
-        ValidateShapeMatch(parameters[1], _weightLogVar, nameof(_weightLogVar));
-        ValidateShapeMatch(parameters[2], _biasMean, nameof(_biasMean));
-        ValidateShapeMatch(parameters[3], _biasLogVar, nameof(_biasLogVar));
-
-        _weightMean = parameters[0];
-        _weightLogVar = parameters[1];
-        _biasMean = parameters[2];
-        _biasLogVar = parameters[3];
-    }
 
     private static void ValidateShapeMatch(Tensor<T> incoming, Tensor<T> existing, string parameterName)
     {

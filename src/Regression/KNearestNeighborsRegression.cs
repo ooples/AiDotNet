@@ -58,7 +58,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Nearest Neighbor Pattern Classification", "https://doi.org/10.1109/TIT.1967.1053964")]
-public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
+public partial class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the K-Nearest Neighbors algorithm.
@@ -71,11 +71,13 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Matrix containing the feature vectors of the training samples.
     /// </summary>
+    [Buffer]
     private Matrix<T> _xTrain;
 
     /// <summary>
     /// Vector containing the target values of the training samples.
     /// </summary>
+    [Buffer]
     private Vector<T> _yTrain;
 
     /// <summary>
@@ -366,133 +368,6 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     /// Gets the model type of the K-Nearest Neighbors Regression model.
     /// </summary>
     /// <returns>The model type enumeration value.</returns>
-
-    /// <summary>
-    /// Serializes the K-Nearest Neighbors Regression model to a byte array for storage or transmission.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method converts the KNN model into a byte array that can be stored in a file, database,
-    /// or transmitted over a network. The serialized data includes the base class data, the number of
-    /// neighbors (K), and the training data that is used for making predictions.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves your trained model as a sequence of bytes.
-    /// 
-    /// Serialization allows you to:
-    /// - Save your model to a file
-    /// - Store your model in a database
-    /// - Send your model over a network
-    /// - Keep your model for later use without having to retrain it
-    /// 
-    /// The serialized data includes:
-    /// - The value of K (number of neighbors)
-    /// - All the training examples (both features and target values)
-    /// 
-    /// Since KNN stores all training data, the serialized model can be quite large
-    /// compared to other machine learning models.
-    /// 
-    /// Example:
-    /// ```csharp
-    /// // Serialize the model
-    /// byte[] modelData = knn.Serialize();
-    /// 
-    /// // Save to a file
-    /// File.WriteAllBytes("knn.model", modelData);
-    /// ```
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize KNN specific data
-        writer.Write(_options.K);
-
-        // Serialize training data
-        writer.Write(_xTrain.Rows);
-        writer.Write(_xTrain.Columns);
-        for (int i = 0; i < _xTrain.Rows; i++)
-            for (int j = 0; j < _xTrain.Columns; j++)
-                writer.Write(Convert.ToDouble(_xTrain[i, j]));
-
-        writer.Write(_yTrain.Length);
-        for (int i = 0; i < _yTrain.Length; i++)
-            writer.Write(Convert.ToDouble(_yTrain[i]));
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Loads a previously serialized K-Nearest Neighbors Regression model from a byte array.
-    /// </summary>
-    /// <param name="modelData">The byte array containing the serialized model.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reconstructs a KNN model from a byte array that was previously created using the
-    /// Serialize method. It restores the base class data, the number of neighbors (K), and the training
-    /// data that is used for making predictions.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved model from a sequence of bytes.
-    /// 
-    /// Deserialization allows you to:
-    /// - Load a model that was saved earlier
-    /// - Use a model without having to retrain it
-    /// - Share models between different applications
-    /// 
-    /// When you deserialize a model:
-    /// - The value of K is restored
-    /// - All training examples are loaded back into memory
-    /// - The model is ready to make predictions immediately
-    /// 
-    /// Example:
-    /// ```csharp
-    /// // Load from a file
-    /// byte[] modelData = File.ReadAllBytes("knn.model");
-    /// 
-    /// // Deserialize the model
-    /// var knn = new KNearestNeighborsRegression&lt;double&gt;();
-    /// knn.Deserialize(modelData);
-    /// 
-    /// // Now you can use the model for predictions
-    /// var predictions = knn.Predict(newFeatures);
-    /// ```
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize KNN specific data
-        _options.K = reader.ReadInt32();
-
-        // Deserialize training data
-        int rows = reader.ReadInt32();
-        int cols = reader.ReadInt32();
-        _xTrain = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                _xTrain[i, j] = NumOps.FromDouble(reader.ReadDouble());
-
-        int yLength = reader.ReadInt32();
-        _yTrain = new Vector<T>(yLength);
-        for (int i = 0; i < yLength; i++)
-            _yTrain[i] = NumOps.FromDouble(reader.ReadDouble());
-
-        // Note: KNN is a distance-based method - no data transformation is applied
-    }
 
     /// <summary>
     /// Creates a new instance of the KNearestNeighborsRegression with the same configuration as the current instance.

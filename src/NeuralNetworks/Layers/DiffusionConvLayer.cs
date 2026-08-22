@@ -140,41 +140,49 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached weight gradients from backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _weightsGradient;
 
     /// <summary>
     /// Cached bias gradients from backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
     /// Cached input from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Cached pre-activation output from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPreActivation;
 
     /// <summary>
     /// Cached output from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Cached diffused features for backward pass [numVertices, InputChannels * NumTimeScales].
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _diffusedFeatures;
 
     /// <summary>
     /// Laplacian matrix for the current mesh [numVertices, numVertices].
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _laplacian;
 
     /// <summary>
     /// Mass matrix (vertex areas) for the current mesh [numVertices].
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _massMatrix;
 
     /// <summary>
@@ -185,6 +193,7 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Eigenvectors of the Laplacian [numVertices, numEigenvalues].
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _eigenvectors;
 
     /// <summary>
@@ -216,6 +225,7 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached GPU input from the last forward pass.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuInput;
 
     /// <summary>
@@ -226,67 +236,85 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached GPU diffused features for backward pass.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuDiffusedFeatures;
 
     /// <summary>
     /// Cached GPU pre-activation output for backward pass.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuPreActivation;
 
     /// <summary>
     /// Cached GPU activated output for backward pass.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuOutput;
 
     /// <summary>
     /// GPU weight tensor.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuWeights;
 
     /// <summary>
     /// GPU bias tensor.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuBiases;
 
     /// <summary>
     /// GPU diffusion time tensor.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuDiffusionTimes;
 
     /// <summary>
     /// GPU weight gradients.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuWeightsGradient;
 
     /// <summary>
     /// GPU bias gradients.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuBiasesGradient;
 
     /// <summary>
     /// GPU diffusion time gradients.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuDiffusionTimesGradient;
 
     /// <summary>
     /// GPU optimizer state for weights.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuWeightsVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsV;
 
     /// <summary>
     /// GPU optimizer state for biases.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuBiasesVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesM;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesV;
 
     /// <summary>
     /// GPU optimizer state for diffusion times.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuDiffusionTimesVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuDiffusionTimesM;
+    [ExternalState]
     private Tensor<T>? _gpuDiffusionTimesV;
 
     #endregion
@@ -1748,188 +1776,6 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
     #endregion
 
     #region Serialization
-
-    /// <summary>
-    /// Serializes the layer to a binary stream.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Saves all learnable parameters and mesh configuration including:
-    /// - Layer configuration (channels, time scales, eigenvector count)
-    /// - Weights and biases
-    /// - Diffusion time parameters
-    /// - Eigenvalues and eigenvectors (if available)
-    /// - Laplacian and mass matrices (if available)
-    /// </para>
-    /// </remarks>
-    /// <param name="writer">Binary writer to serialize to.</param>
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-        writer.Write(InputChannels);
-        writer.Write(OutputChannels);
-        writer.Write(NumTimeScales);
-        writer.Write(_numEigenvectors);
-
-        // Serialize weights
-        var weightArray = _weights.ToArray();
-        for (int i = 0; i < weightArray.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(weightArray[i]));
-        }
-
-        // Serialize biases
-        var biasArray = _biases.ToArray();
-        for (int i = 0; i < biasArray.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(biasArray[i]));
-        }
-
-        // Serialize diffusion times
-        for (int i = 0; i < DiffusionTimes.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(DiffusionTimes[i]));
-        }
-
-        // Serialize mesh configuration
-        // Flag indicating which mesh data is available
-        byte meshFlags = 0;
-        if (_eigenvalues != null && _eigenvectors != null) meshFlags |= 0x01;
-        if (_laplacian != null) meshFlags |= 0x02;
-        if (_massMatrix != null) meshFlags |= 0x04;
-        writer.Write(meshFlags);
-
-        // Serialize eigenvalues and eigenvectors
-        if (_eigenvalues != null && _eigenvectors != null)
-        {
-            writer.Write(_eigenvalues.Length);
-            for (int i = 0; i < _eigenvalues.Length; i++)
-            {
-                writer.Write(NumOps.ToDouble(_eigenvalues[i]));
-            }
-
-            // Write eigenvector shape and data
-            writer.Write(_eigenvectors.Shape[0]); // numVertices
-            writer.Write(_eigenvectors.Shape[1]); // numEigenvalues
-            var eigenvectorArray = _eigenvectors.ToArray();
-            for (int i = 0; i < eigenvectorArray.Length; i++)
-            {
-                writer.Write(NumOps.ToDouble(eigenvectorArray[i]));
-            }
-        }
-
-        // Serialize Laplacian
-        if (_laplacian != null)
-        {
-            writer.Write(_laplacian.Shape[0]); // numVertices (square matrix)
-            var laplacianArray = _laplacian.ToArray();
-            for (int i = 0; i < laplacianArray.Length; i++)
-            {
-                writer.Write(NumOps.ToDouble(laplacianArray[i]));
-            }
-        }
-
-        // Serialize mass matrix
-        if (_massMatrix != null)
-        {
-            writer.Write(_massMatrix.Length);
-            var massArray = _massMatrix.ToArray();
-            for (int i = 0; i < massArray.Length; i++)
-            {
-                writer.Write(NumOps.ToDouble(massArray[i]));
-            }
-        }
-    }
-
-    /// <summary>
-    /// Deserializes the layer from a binary stream.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Restores all learnable parameters and mesh configuration.
-    /// After deserialization, the layer is ready for inference without
-    /// needing to call SetEigenbasis or SetLaplacian.
-    /// </para>
-    /// </remarks>
-    /// <param name="reader">Binary reader to deserialize from.</param>
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-        InputChannels = reader.ReadInt32();
-        OutputChannels = reader.ReadInt32();
-        NumTimeScales = reader.ReadInt32();
-        int numEigenvectors = reader.ReadInt32();
-
-        int weightSize = InputChannels * NumTimeScales;
-        _weights = new Tensor<T>([OutputChannels, weightSize]);
-        var weightArray = new T[_weights.Length];
-        for (int i = 0; i < weightArray.Length; i++)
-        {
-            weightArray[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        _weights = new Tensor<T>(weightArray, _weights._shape);
-
-        _biases = new Tensor<T>([OutputChannels]);
-        var biasArray = new T[_biases.Length];
-        for (int i = 0; i < biasArray.Length; i++)
-        {
-            biasArray[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        _biases = new Tensor<T>(biasArray, _biases._shape);
-
-        DiffusionTimes = new T[NumTimeScales];
-        for (int i = 0; i < NumTimeScales; i++)
-        {
-            DiffusionTimes[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Deserialize mesh configuration
-        byte meshFlags = reader.ReadByte();
-
-        // Deserialize eigenvalues and eigenvectors
-        if ((meshFlags & 0x01) != 0)
-        {
-            int numEig = reader.ReadInt32();
-            _eigenvalues = new T[numEig];
-            for (int i = 0; i < numEig; i++)
-            {
-                _eigenvalues[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-
-            int numVertices = reader.ReadInt32();
-            int eigCount = reader.ReadInt32();
-            var eigenvectorArray = new T[numVertices * eigCount];
-            for (int i = 0; i < eigenvectorArray.Length; i++)
-            {
-                eigenvectorArray[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-            _eigenvectors = new Tensor<T>(eigenvectorArray, [numVertices, eigCount]);
-        }
-
-        // Deserialize Laplacian
-        if ((meshFlags & 0x02) != 0)
-        {
-            int numVertices = reader.ReadInt32();
-            var laplacianArray = new T[numVertices * numVertices];
-            for (int i = 0; i < laplacianArray.Length; i++)
-            {
-                laplacianArray[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-            _laplacian = new Tensor<T>(laplacianArray, [numVertices, numVertices]);
-        }
-
-        // Deserialize mass matrix
-        if ((meshFlags & 0x04) != 0)
-        {
-            int numVertices = reader.ReadInt32();
-            var massArray = new T[numVertices];
-            for (int i = 0; i < massArray.Length; i++)
-            {
-                massArray[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-            _massMatrix = new Tensor<T>(massArray, [numVertices]);
-        }
-    }
 
     #endregion
 

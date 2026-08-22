@@ -381,31 +381,6 @@ public partial class SDUpscalerModel<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Defer to the sub-models' own Clone implementations — they preserve the
-        // ACTUAL architecture passed at ctor (test fixtures override channel counts
-        // / multipliers / resolutions) rather than hardcoding the SD-Upscaler default
-        // shape. The previous Clone constructed a fresh UNet/VAE with the production
-        // SD-Upscaler dimensions and then SetParameters(_unet.GetParameters()) on top,
-        // which mismatched test-fixture weight buffers and produced silently-different
-        // Predict output (the Clone_ShouldProduceIdenticalOutput regression).
-        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
-        var clonedVae = (StandardVAE<T>)_vae.Clone();
-
-        return new SDUpscalerModel<T>(
-            unet: clonedUnet,
-            vae: clonedVae,
-            conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

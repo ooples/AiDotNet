@@ -62,7 +62,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Genetic Programming: On the Programming of Computers by Means of Natural Selection", "https://doi.org/10.7551/mitpress/3108.001.0001")]
-public class SymbolicRegression<T> : NonLinearRegressionBase<T>
+public partial class SymbolicRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the symbolic regression model.
@@ -371,6 +371,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     public override bool SupportsParameterInitialization => false;
 
     private bool _useOLS;
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _olsCoefficients;
 
 
@@ -400,8 +401,6 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
         }
         return base.Clone();
     }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     public override IEnumerable<int> GetActiveFeatureIndices()
     {

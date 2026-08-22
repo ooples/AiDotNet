@@ -147,8 +147,10 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     }
 
     // GPU-resident cached tensors for GPU training pipeline
+    [Scratch]
     private Tensor<T>? _lastInputGpu;
     private int[]? _lastInputGpuShape;
+    [Scratch]
     private Tensor<int>? _lastIndicesForGpu;
 
     /// <summary>
@@ -174,6 +176,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// will receive gradient updates.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _embeddingGradient;
 
     /// <summary>
@@ -196,6 +199,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// only the embeddings for token IDs 5, 10, and 3 will receive updates during training.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>

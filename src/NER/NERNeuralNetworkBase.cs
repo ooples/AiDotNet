@@ -56,7 +56,7 @@ namespace AiDotNet.NER;
 [TensorLayout(TensorAxis.Time,
     Direction = TensorLayoutDirection.Output,
     Note = "One DECODED label id per token. Not the emission matrix - see OutputAxesFor.")]
-public abstract class NERNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShapeContract
+public abstract partial class NERNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShapeContract
 {
     /// <summary>
     /// The NER family's law: one row of <see cref="NumLabels"/> emission scores per input token.

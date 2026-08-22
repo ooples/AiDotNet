@@ -349,6 +349,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// to improve its performance on future inputs.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -370,6 +371,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// the source language sentence that the decoder is translating.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastEncoderOutput;
 
     /// <summary>
@@ -391,6 +393,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// as they show how each component contributed to the final output.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastSelfAttentionOutput;
 
     /// <summary>
@@ -412,6 +415,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// how it arrived at its final output, so it can learn to improve.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastNormalized1;
 
     /// <summary>
@@ -433,6 +437,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// was deemed relevant for generating the target sequence.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastCrossAttentionOutput;
 
     /// <summary>
@@ -454,6 +459,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// how it arrived at its final output, enabling precise learning.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastNormalized2;
 
     /// <summary>
@@ -475,10 +481,13 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// and output of the complete decoder layer.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastFeedForwardOutput;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuNormalized1;
+    [ExternalState]
     private Tensor<T>? _gpuNormalized2;
 
     /// <summary>

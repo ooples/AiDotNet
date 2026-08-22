@@ -40,6 +40,7 @@ public class PrototypeExplainer<T> : ILocalExplainer<T, PrototypeExplanation<T>>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly Func<Matrix<T>, Vector<T>> _predictFunction;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Matrix<T> _prototypes;
     private readonly Vector<T>? _prototypeLabels;
     private readonly int _numNeighbors;

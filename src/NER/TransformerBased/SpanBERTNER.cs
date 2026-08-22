@@ -88,13 +88,4 @@ public class SpanBERTNER<T> : TransformerNERBase<T>
             "SpanBERT-NER", "Joshi et al., TACL 2020", optimizer)
     {
     }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new TransformerNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new SpanBERTNER<T>(Architecture, p, optionsCopy);
-        return new SpanBERTNER<T>(Architecture, optionsCopy);
-    }
 }

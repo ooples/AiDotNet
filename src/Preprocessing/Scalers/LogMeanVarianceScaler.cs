@@ -29,10 +29,13 @@ namespace AiDotNet.Preprocessing.Scalers;
 public class LogMeanVarianceScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     [JsonProperty]
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _shift;
     [JsonProperty]
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _logMean;
     [JsonProperty]
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _logStdDev;
 
     [JsonProperty]

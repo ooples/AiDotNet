@@ -43,7 +43,7 @@ namespace AiDotNet.Audio.Foundations;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("data2vec 2.0: Highly Efficient Self-Supervised Learning for Vision, Speech and Text", "https://arxiv.org/abs/2212.07525", Year = 2023, Authors = "Alexei Baevski, Arun Babu, Wei-Ning Hsu, Michael Auli")]
-public class Data2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
+public partial class Data2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -285,35 +285,9 @@ public class Data2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.HiddenDim);
-        w.Write(_options.NumLayers); w.Write(_options.NumHeads);
-        w.Write(_options.FeedForwardDim); w.Write(_options.Variant);
-        w.Write(_options.EMADecay); w.Write(_options.MaskProbability);
-        w.Write(_options.MaskSpanLength); w.Write(_options.TopKLayers);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.HiddenDim = r.ReadInt32();
-        _options.NumLayers = r.ReadInt32(); _options.NumHeads = r.ReadInt32();
-        _options.FeedForwardDim = r.ReadInt32(); _options.Variant = r.ReadString();
-        _options.EMADecay = r.ReadDouble(); _options.MaskProbability = r.ReadDouble();
-        _options.MaskSpanLength = r.ReadInt32(); _options.TopKLayers = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new Data2Vec2<T>(Architecture, mp, _options);
-        return new Data2Vec2<T>(Architecture, _options);
-    }
+
 
     #endregion
 

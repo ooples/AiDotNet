@@ -150,14 +150,7 @@ public sealed partial class DiffusionAttentionLayer<T> : LayerBase<T>, IShapeCon
     {
     }
 
-    /// <inheritdoc />
-    public override LayerBase<T> Clone()
-    {
-        var clone = new DiffusionAttentionLayer<T>(
-            _queryDimension, _contextDimension, _headCount, _zeroOutputProjection);
-        if (_queryWeights.Length > 0) clone.SetParameters(GetParameters());
-        return clone;
-    }
+
 
     /// <inheritdoc />
     internal override Dictionary<string, string> GetMetadata()

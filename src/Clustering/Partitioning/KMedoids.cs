@@ -54,7 +54,7 @@ namespace AiDotNet.Clustering.Partitioning;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Finding Groups in Data: An Introduction to Cluster Analysis", "https://doi.org/10.1002/9780470316801", Year = 1990, Authors = "Leonard Kaufman, Peter J. Rousseeuw")]
-public class KMedoids<T> : ClusteringBase<T>
+public partial class KMedoids<T> : ClusteringBase<T>
 {
     private readonly KMedoidsOptions<T> _options;
 
@@ -78,19 +78,6 @@ public class KMedoids<T> : ClusteringBase<T>
     public int[]? MedoidIndices => _medoidIndices;
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new KMedoids<T>(new KMedoidsOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            MaxIterations = _options.MaxIterations,
-            Init = _options.Init,
-            Algorithm = _options.Algorithm,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

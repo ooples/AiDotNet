@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.Low)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Enriching Word Vectors with Subword Information", "https://arxiv.org/abs/1607.04606", Year = 2017, Authors = "Piotr Bojanowski, Edouard Grave, Armand Joulin, Tomas Mikolov")]
-    public class FastText<T> : TextEmbeddingModelLayoutBase<T>, IEmbeddingModel<T>
+    public partial class FastText<T> : TextEmbeddingModelLayoutBase<T>, IEmbeddingModel<T>
     {
         private readonly FastTextOptions _options;
 
@@ -403,21 +403,6 @@ namespace AiDotNet.NeuralNetworks
             return Task.FromResult(EmbedBatch(texts));
         }
 
-        /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new FastText<T>(
-                Architecture,
-                _tokenizer,
-                null,
-                _vocabSize,
-                _bucketSize,
-                _embeddingDimension,
-                _maxTokens,
-                _lossFunction,
-                Convert.ToDouble(MaxGradNorm));
-        }
-
         /// <summary>
         /// Retrieves detailed metadata about the FastText model configuration.
         /// </summary>
@@ -439,36 +424,10 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <inheritdoc/>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            writer.Write(_vocabSize);
-            writer.Write(_bucketSize);
-            writer.Write(_embeddingDimension);
-            writer.Write(_maxTokens);
-        }
+
 
         /// <inheritdoc/>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            int vocabSize = reader.ReadInt32();
-            int bucketSize = reader.ReadInt32();
-            int embeddingDimension = reader.ReadInt32();
-            int maxTokens = reader.ReadInt32();
 
-            if (vocabSize <= 0)
-                throw new InvalidDataException($"Invalid vocab size '{vocabSize}' in FastText serialization.");
-            if (bucketSize <= 0)
-                throw new InvalidDataException($"Invalid bucket size '{bucketSize}' in FastText serialization.");
-            if (embeddingDimension <= 0)
-                throw new InvalidDataException($"Invalid embedding dimension '{embeddingDimension}' in FastText serialization.");
-            if (maxTokens <= 0)
-                throw new InvalidDataException($"Invalid max tokens '{maxTokens}' in FastText serialization.");
-
-            _vocabSize = vocabSize;
-            _bucketSize = bucketSize;
-            _embeddingDimension = embeddingDimension;
-            _maxTokens = maxTokens;
-        }
 
         #endregion
     }

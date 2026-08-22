@@ -35,6 +35,7 @@ public class GlobalSurrogateExplainer<T> : IGlobalExplainer<T, SurrogateExplanat
     private readonly Func<Matrix<T>, Vector<T>> _blackBoxPredictFunction;
     private readonly string[]? _featureNames;
 
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _surrogateCoefficients;
     private T _surrogateIntercept;
     private T _fidelity; // R² of surrogate vs black box

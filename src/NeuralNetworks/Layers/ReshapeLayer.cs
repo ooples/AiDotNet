@@ -156,6 +156,7 @@ public partial class ReshapeLayer<T> : LayerBase<T>, IBatchAwareShapeContract
     /// This cached input is needed during the backward pass to compute the appropriate gradients.
     /// The tensor is null before the first forward pass or after a reset.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>

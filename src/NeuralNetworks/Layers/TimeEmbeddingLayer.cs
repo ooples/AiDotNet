@@ -117,42 +117,53 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached sinusoidal embedding from last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastSinusoidalEmbed;
 
     /// <summary>
     /// Cached intermediate output after first linear + activation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastHidden;
 
     /// <summary>
     /// Cached input timesteps from last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Gradient for first linear layer weights.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _linear1WeightsGradient;
 
     /// <summary>
     /// Gradient for first linear layer biases.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _linear1BiasGradient;
 
     /// <summary>
     /// Gradient for second linear layer weights.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _linear2WeightsGradient;
 
     /// <summary>
     /// Gradient for second linear layer biases.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _linear2BiasGradient;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuTimesteps;
+    [ExternalState]
     private Tensor<T>? _gpuSinusoidalEmbed;
+    [ExternalState]
     private Tensor<T>? _gpuHidden;
+    [ExternalState]
     private Tensor<T>? _gpuPreActivation;
     private int[]? _gpuInputShape;
 

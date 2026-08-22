@@ -53,7 +53,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Robust Statistics", "https://doi.org/10.1002/0471725250")]
-public class RobustRegression<T> : RegressionBase<T>
+public partial class RobustRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// Gets the configuration options used by this robust regression model.
@@ -252,82 +252,6 @@ public class RobustRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
 
-    /// <summary>
-    /// Serializes the robust regression model to a byte array for storage or transmission.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model data.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method converts the model, including its coefficients, intercept, and configuration options, into a 
-    /// byte array. This enables the model to be saved to a file, stored in a database, or transmitted over a network.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves the model to computer memory so you can use it later.
-    /// 
-    /// Think of it like taking a snapshot of the model:
-    /// - It captures all the important values and settings
-    /// - It converts them into a format that can be easily stored
-    /// - The resulting byte array can be saved to a file or database
-    /// 
-    /// This is useful when you want to:
-    /// - Train the model once and use it many times
-    /// - Share the model with others
-    /// - Use the model in a different application
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-        // Serialize RobustRegression specific options
-        writer.Write(_options.TuningConstant);
-        writer.Write(_options.MaxIterations);
-        writer.Write(_options.Tolerance);
-        writer.Write((int)_options.WeightFunction);
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the robust regression model from a byte array.
-    /// </summary>
-    /// <param name="modelData">The byte array containing the serialized model data.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reconstructs the model from a byte array created by the Serialize method. It restores 
-    /// the model's coefficients, intercept, and configuration options, allowing a previously saved model 
-    /// to be loaded and used for predictions.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads a saved model from computer memory.
-    /// 
-    /// Think of it like restoring a model from a snapshot:
-    /// - It takes the byte array created by the Serialize method
-    /// - It reconstructs all the important values and settings
-    /// - The model is then ready to use for making predictions
-    /// 
-    /// This allows you to:
-    /// - Use a previously trained model without retraining it
-    /// - Load models that others have shared with you
-    /// - Use the same model across different applications
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-        // Deserialize RobustRegression specific options
-        _options.TuningConstant = reader.ReadDouble();
-        _options.MaxIterations = reader.ReadInt32();
-        _options.Tolerance = reader.ReadDouble();
-        _options.WeightFunction = (WeightFunction)reader.ReadInt32();
-    }
-
     // GetParameters is NOT overridden here. The override that used to be at this point built a
     // vector of Coefficients.Length + 1, adding the intercept UNCONDITIONALLY, while the count
     // it was paired with -- RegressionBase.ParameterCount -- honours Options.UseIntercept. With
@@ -376,38 +300,5 @@ public class RobustRegression<T> : RegressionBase<T>
         newModel.Intercept = newIntercept;
 
         return newModel;
-    }
-
-    /// <summary>
-    /// Creates a new instance of the robust regression model with the same options.
-    /// </summary>
-    /// <returns>A new instance of the robust regression model with the same configuration but no trained parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the robust regression model with the same configuration
-    /// options and regularization method as the current instance, but without copying the trained
-    /// coefficients or intercept.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model configuration without 
-    /// any learned parameters.
-    /// 
-    /// Think of it like getting a blank template with the same settings, 
-    /// but without any of the values that were learned from training data. The new model has the same:
-    /// - Weight function (how outliers are handled)
-    /// - Tuning constant (how sensitive the model is to outliers)
-    /// - Maximum iterations (how many times it will try to improve)
-    /// - Tolerance (when it decides it's "good enough")
-    /// - Regularization settings (how it prevents overfitting)
-    /// 
-    /// But it doesn't have any of the coefficients or intercept values that were learned from data.
-    /// 
-    /// This is mainly used internally when doing things like cross-validation or 
-    /// creating multiple similar models with different training data.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        // Create a new instance with the same options and regularization
-        return new RobustRegression<T>(_options, Regularization);
     }
 }

@@ -34,6 +34,7 @@ namespace AiDotNet.CurriculumLearning.DifficultyEstimators;
 public class ExpertDefinedDifficultyEstimator<T, TInput, TOutput> : DifficultyEstimatorBase<T, TInput, TOutput>
 {
     private readonly Func<TInput, TOutput, T>? _difficultyFunction;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T>? _precomputedDifficulties;
     private readonly bool _normalize;
 

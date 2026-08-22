@@ -55,7 +55,9 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     private readonly int _hiddenSize;
 
     // Input embedding: scalar value at each timestep -> hiddenSize vector.
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _inputEmbeddingWeight; // [1, hiddenSize]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _inputEmbeddingBias;   // [hiddenSize]
 
     // Sinusoidal positional encoding [maxLen, hiddenSize] (replaces the LSTM scan).
@@ -79,7 +81,9 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     private GatedResidualNetwork<T> _postAttentionGrn;
 
     // Quantile forecast head: pooled hidden -> H-step forecast for each quantile level (quantile-major).
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _forecastWeight; // [hiddenSize, forecastHorizon * numQuantiles]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _forecastBias;   // [forecastHorizon * numQuantiles]
 
     // Training state.

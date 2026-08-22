@@ -160,6 +160,7 @@ public partial class UNetDiscriminator<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached input for backpropagation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     #endregion
@@ -433,6 +434,7 @@ public partial class UNetDiscriminator<T> : LayerBase<T>, IShapeContract
         _convLast.UpdateParameters(learningRate);
     }
 
+    [Scratch]
     private Vector<T>? _pendingParameters;
 
     private static void AddParamsToList(List<T> list, Vector<T> parameters)
@@ -527,9 +529,13 @@ public partial class UNetConvBlock<T> : LayerBase<T>, IShapeContract
     private readonly LeakyReLUActivation<T> _leakyReLU;
     private readonly bool _downsample;
 
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _lastInput;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _conv1Output;      // After LeakyReLU (input to conv2)
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _conv1RawOutput;   // Before LeakyReLU (for backward)
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _conv2RawOutput;   // Before LeakyReLU (for backward)
 
     private readonly int _outChannels;
@@ -640,6 +646,7 @@ public partial class UNetConvBlock<T> : LayerBase<T>, IShapeContract
         _conv2.UpdateParameters(learningRate);
     }
 
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _pendingParameters;
 
     public override void ResetState()
@@ -706,7 +713,9 @@ public partial class UNetUpBlock<T> : LayerBase<T>, IShapeContract
     private readonly LeakyReLUActivation<T> _leakyReLU;
     private readonly int _skipChannels;
 
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastSkip;
     private Tensor<T>? _upsampledInput;
     private Tensor<T>? _concatenated;
@@ -934,6 +943,7 @@ public partial class UNetUpBlock<T> : LayerBase<T>, IShapeContract
         _conv2.UpdateParameters(learningRate);
     }
 
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _pendingParameters;
 
     public override void ResetState()

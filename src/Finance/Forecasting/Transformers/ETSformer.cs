@@ -479,34 +479,6 @@ public partial class ETSformer<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <returns>A new ETSformer instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the ETSformer model, CreateNewInstance builds and wires up model components. This sets up the ETSformer architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new ETSformerOptions<T>
-        {
-            SequenceLength = _sequenceLength,
-            PredictionHorizon = _predictionHorizon,
-            NumFeatures = _numFeatures,
-            ModelDimension = _modelDimension,
-            NumEncoderLayers = _numEncoderLayers,
-            NumDecoderLayers = _numDecoderLayers,
-            NumHeads = _numHeads,
-            Dropout = _dropout,
-            K = _topK,
-            UseInstanceNormalization = _useInstanceNormalization
-        };
-
-        return new ETSformer<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Serializes model-specific data for saving.
     /// </summary>
     /// <param name="writer">Binary writer for output.</param>
@@ -515,19 +487,7 @@ public partial class ETSformer<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the ETSformer model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the ETSformer architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_predictionHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_modelDimension);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numDecoderLayers);
-        writer.Write(_numHeads);
-        writer.Write(_dropout);
-        writer.Write(_topK);
-        writer.Write(_useInstanceNormalization);
-    }
+
 
     /// <summary>
     /// Deserializes model-specific data when loading.
@@ -538,23 +498,7 @@ public partial class ETSformer<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the ETSformer model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the ETSformer architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _predictionHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _modelDimension = reader.ReadInt32();
-        _numEncoderLayers = reader.ReadInt32();
-        _numDecoderLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _topK = reader.ReadInt32();
-        _useInstanceNormalization = reader.ReadBoolean();
 
-        // Re-bind cached layer references to the deserialized (weight-loaded)
-        // layers so a clone runs on the loaded weights, not random init.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

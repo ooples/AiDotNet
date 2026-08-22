@@ -79,6 +79,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>, IShapeContract
     /// - They're like a "report card" for each weight showing what needs improvement
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _weightsGradient;
 
     /// <summary>
@@ -97,6 +98,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>, IShapeContract
     /// - This helps it learn how to adjust its weights correctly
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -120,7 +122,9 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>, IShapeContract
     /// - This helps it understand how to improve for next time
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastPreSquash;
 
     /// <summary>
@@ -142,6 +146,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>, IShapeContract
     /// "vote" for digits like 0, 6, 8, and 9.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastCouplings;
 
     /// <summary>

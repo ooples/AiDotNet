@@ -159,6 +159,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
     private T _lastEntropyLoss;
     private T _lastDiversityLoss;
+    [Scratch]
     private List<Tensor<T>>? _lastHeadOutputs = null;
 
     // Positional encoding support
@@ -212,16 +213,25 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     public IQkvTransform<T>? QkvTransform { get; set; }
 
     // Cached projected Q, K, V for backward pass (4D: [batch, heads, seq, head_dim])
+    [Scratch]
     private Tensor<T>? _lastProjectedQueries = null;
+    [Scratch]
     private Tensor<T>? _lastProjectedKeys = null;
+    [Scratch]
     private Tensor<T>? _lastProjectedValues = null;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput2D;
+    [ExternalState]
     private Tensor<T>? _gpuQ;
+    [ExternalState]
     private Tensor<T>? _gpuK;
+    [ExternalState]
     private Tensor<T>? _gpuV;
+    [ExternalState]
     private Tensor<T>? _gpuContextFlat;
+    [ExternalState]
     private Tensor<T>? _gpuAttentionWeights;
     private int _gpuBatchSize;
     private int _gpuSeqLength;
@@ -281,15 +291,20 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// <summary>
     /// Cached input from the forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
+    [Scratch]
     private Tensor<T>? _lastQueryInput;
+    [Scratch]
     private Tensor<T>? _lastKeyInput;
+    [Scratch]
     private Tensor<T>? _lastValueInput;
 
     /// <summary>
     /// Cached output from the forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -297,46 +312,54 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// activation derivative correctly. GELU and other activations need the
     /// pre-activation input to compute derivatives, not the post-activation output.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPreActivationOutput;
 
     /// <summary>
     /// Cached attention context (pre-projection input) for computing output weights gradient.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastAttentionContext;
 
     /// <summary>
     /// Cached attention scores from the forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastAttentionScores;
 
     /// <summary>
     /// Tensor storing gradients for query weights calculated during backward pass.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </summary>
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
 
     /// <summary>
     /// Tensor storing gradients for key weights calculated during backward pass.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </summary>
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
 
     /// <summary>
     /// Tensor storing gradients for value weights calculated during backward pass.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </summary>
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
 
     /// <summary>
     /// Tensor storing gradients for output weights calculated during backward pass.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </summary>
+    [Scratch]
     private Tensor<T>? _outputWeightsGradient;
 
     /// <summary>
     /// Tensor storing gradients for output bias calculated during backward pass.
     /// Shape: [embeddingDimension]
     /// </summary>
+    [Scratch]
     private Tensor<T>? _outputBiasGradient;
 
     /// <summary>
@@ -1666,10 +1689,15 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     }
 
 
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _queryWeightsVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _keyWeightsVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _valueWeightsVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _outputWeightsVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _outputBiasVelocity;
 
     /// <summary>

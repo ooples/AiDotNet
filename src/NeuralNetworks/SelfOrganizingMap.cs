@@ -44,7 +44,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Self-Organized Formation of Topologically Correct Feature Maps", "https://doi.org/10.1007/BF00337288", Year = 1982, Authors = "Teuvo Kohonen")]
-public class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
+public partial class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
 {
     private readonly SelfOrganizingMapNNOptions _options;
 
@@ -55,6 +55,7 @@ public class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
     /// The neuron codebook: shape [numNeurons, inputDimension]. Row i is the prototype vector of
     /// neuron i (row-major over the [mapHeight, mapWidth] grid, i = y * mapWidth + x).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _weights;
 
     // Cached fixed-shape ones tensors reused by ComputeSquaredDistances / UpdateWeights. Their shapes
@@ -353,39 +354,10 @@ public class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_inputDimension);
-        writer.Write(_mapWidth);
-        writer.Write(_mapHeight);
-        writer.Write(_totalEpochs);
-        writer.Write(_currentEpoch);
 
-        int n = _mapWidth * _mapHeight;
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < _inputDimension; j++)
-                writer.Write(Convert.ToDouble(_weights[i, j]));
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _inputDimension = reader.ReadInt32();
-        _mapWidth = reader.ReadInt32();
-        _mapHeight = reader.ReadInt32();
-        _totalEpochs = reader.ReadInt32();
-        _currentEpoch = reader.ReadInt32();
 
-        int n = _mapWidth * _mapHeight;
-        _weights = new Tensor<T>(new[] { n, _inputDimension });
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < _inputDimension; j++)
-                _weights[i, j] = NumOps.FromDouble(reader.ReadDouble());
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new SelfOrganizingMap<T>(Architecture, _totalEpochs, LossFunction);
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;

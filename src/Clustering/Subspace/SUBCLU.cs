@@ -55,7 +55,7 @@ namespace AiDotNet.Clustering.Subspace;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Density-Connected Subspace Clustering for High-Dimensional Data", "https://doi.org/10.1137/1.9781611972740.23", Year = 2004, Authors = "Karin Kailing, Hans-Peter Kriegel, Peer Kroger")]
-public class SUBCLU<T> : ClusteringBase<T>
+public partial class SUBCLU<T> : ClusteringBase<T>
 {
     private readonly SUBCLUOptions<T> _options;
     private double[]? _normMeans;
@@ -64,6 +64,7 @@ public class SUBCLU<T> : ClusteringBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
     private List<SubspaceClusterInfo>? _subspaceClusterInfos;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _trainingData;
 
     /// <summary>
@@ -89,24 +90,6 @@ public class SUBCLU<T> : ClusteringBase<T>
         }).ToList().AsReadOnly();
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new SUBCLU<T>(new SUBCLUOptions<T>
-        {
-            MaxIterations = _options.MaxIterations,
-            Tolerance = _options.Tolerance,
-            Seed = _options.Seed,
-            Epsilon = _options.Epsilon,
-            MinPoints = _options.MinPoints,
-            MaxSubspaceDimensions = _options.MaxSubspaceDimensions,
-            MinClusterSize = _options.MinClusterSize
-        });
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()

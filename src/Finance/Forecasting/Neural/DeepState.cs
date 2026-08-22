@@ -609,21 +609,7 @@ public partial class DeepState<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> Saves all the configuration needed to reconstruct this model.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_lookbackWindow);
-        writer.Write(_forecastHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_stateDimension);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numRnnLayers);
-        writer.Write(_seasonalPeriods.Length);
-        foreach (var period in _seasonalPeriods)
-            writer.Write(period);
-        writer.Write(_useTrend);
-        writer.Write(_useSeasonality);
-        writer.Write(_dropout);
-    }
+
 
     /// <summary>
     /// Reads DeepState-specific configuration during deserialization.
@@ -633,26 +619,7 @@ public partial class DeepState<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> Loads the configuration that was saved during serialization.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _lookbackWindow = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _stateDimension = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numRnnLayers = reader.ReadInt32();
-        int numPeriods = reader.ReadInt32();
-        _seasonalPeriods = new int[numPeriods];
-        for (int i = 0; i < numPeriods; i++)
-            _seasonalPeriods[i] = reader.ReadInt32();
-        _useTrend = reader.ReadBoolean();
-        _useSeasonality = reader.ReadBoolean();
-        _dropout = reader.ReadDouble();
 
-        // Re-bind cached layer references so a deserialized/cloned model runs on
-        // the restored layers, not the construction-time random ones.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

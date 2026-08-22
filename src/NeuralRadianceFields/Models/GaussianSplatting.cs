@@ -189,7 +189,7 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("3D Gaussian Splatting for Real-Time Radiance Field Rendering", "https://doi.org/10.1145/3592433", Year = 2023, Authors = "Bernhard Kerbl, Georgios Kopanas, Thomas Leimkühler, George Drettakis")]
-public class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>, IRadianceField<T>,
+public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>, IRadianceField<T>,
     IHyperparameterAware<T, Tensor<T>, Tensor<T>>,
     NeuralRadianceFields.Interfaces.IImageTrainable<T>
 {
@@ -243,6 +243,7 @@ public class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBas
         /// and the property below keeps every existing read and write in the renderer working
         /// unchanged.
         /// </remarks>
+        [AiDotNet.Attributes.TrainableParameter]
         private readonly Vector<T> _opacity = new(1);
 
         /// <summary>Opacity in logit space, stored in <see cref="OpacityStorage"/>.</summary>
@@ -476,7 +477,9 @@ public class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBas
     private int _trainingStep;
     private SpatialHashGrid? _spatialIndex;
     private bool _spatialIndexDirty = true;
+    [Scratch]
     private Tensor<T>? _lastQueryPositions;
+    [Scratch]
     private Tensor<T>? _lastQueryDirections;
 
     public override bool SupportsTraining => true;
@@ -2586,123 +2589,9 @@ public class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBas
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useSphericalHarmonics);
-        writer.Write(_shDegree);
-        writer.Write(_trainingStep);
-        writer.Write(EnableDensification);
-        writer.Write(DensificationInterval);
-        writer.Write(PruneOpacityThreshold);
-        writer.Write(SplitGradientThreshold);
-        writer.Write(SplitPositionJitter);
-        writer.Write(SplitScaleFactor);
-        writer.Write(SplitOpacityFactor);
-        writer.Write(SplitOpacityMax);
-        writer.Write(MaxGaussians);
-        writer.Write(PositionLearningRate);
-        writer.Write(ColorLearningRate);
-        writer.Write(OpacityLearningRate);
-        writer.Write(ScaleLearningRate);
-        writer.Write(RotationLearningRate);
-        writer.Write(TileSize);
-        writer.Write(EnableSpatialIndex);
-        writer.Write(SpatialIndexRadius);
-        writer.Write(InitialNeighborSearchScale);
-        writer.Write(InitialScaleMultiplier);
-        writer.Write(DefaultPointSpacing);
-        writer.Write(MinScale);
 
-        int colorDim = _useSphericalHarmonics ? 3 * GetShBasisCount() : 3;
-        writer.Write(colorDim);
-        writer.Write(_gaussians.Count);
 
-        foreach (var gaussian in _gaussians)
-        {
-            for (int i = 0; i < 3; i++)
-            {
-                writer.Write(NumOps.ToDouble(gaussian.Position[i]));
-            }
-            for (int i = 0; i < 4; i++)
-            {
-                writer.Write(NumOps.ToDouble(gaussian.Rotation[i]));
-            }
-            for (int i = 0; i < 3; i++)
-            {
-                writer.Write(NumOps.ToDouble(gaussian.Scale[i]));
-            }
-            writer.Write(NumOps.ToDouble(gaussian.Opacity));
-            for (int i = 0; i < colorDim; i++)
-            {
-                writer.Write(NumOps.ToDouble(gaussian.Color[i]));
-            }
-        }
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        bool useSh = reader.ReadBoolean();
-        int shDegree = reader.ReadInt32();
-        _trainingStep = reader.ReadInt32();
-        EnableDensification = reader.ReadBoolean();
-        DensificationInterval = reader.ReadInt32();
-        PruneOpacityThreshold = reader.ReadDouble();
-        SplitGradientThreshold = reader.ReadDouble();
-        SplitPositionJitter = reader.ReadDouble();
-        SplitScaleFactor = reader.ReadDouble();
-        SplitOpacityFactor = reader.ReadDouble();
-        SplitOpacityMax = reader.ReadDouble();
-        MaxGaussians = reader.ReadInt32();
-        PositionLearningRate = reader.ReadDouble();
-        ColorLearningRate = reader.ReadDouble();
-        OpacityLearningRate = reader.ReadDouble();
-        ScaleLearningRate = reader.ReadDouble();
-        RotationLearningRate = reader.ReadDouble();
-        TileSize = reader.ReadInt32();
-        EnableSpatialIndex = reader.ReadBoolean();
-        SpatialIndexRadius = reader.ReadInt32();
-        InitialNeighborSearchScale = reader.ReadDouble();
-        InitialScaleMultiplier = reader.ReadDouble();
-        DefaultPointSpacing = reader.ReadDouble();
-        MinScale = reader.ReadDouble();
-
-        if (useSh != _useSphericalHarmonics || shDegree != _shDegree)
-        {
-            throw new InvalidOperationException("Serialized GaussianSplatting configuration does not match this instance.");
-        }
-
-        int colorDim = reader.ReadInt32();
-        int gaussianCount = reader.ReadInt32();
-        _gaussians.Clear();
-
-        for (int i = 0; i < gaussianCount; i++)
-        {
-            var gaussian = new Gaussian(colorDim, NumOps);
-
-            for (int d = 0; d < 3; d++)
-            {
-                gaussian.Position[d] = NumOps.FromDouble(reader.ReadDouble());
-            }
-            for (int d = 0; d < 4; d++)
-            {
-                gaussian.Rotation[d] = NumOps.FromDouble(reader.ReadDouble());
-            }
-            for (int d = 0; d < 3; d++)
-            {
-                gaussian.Scale[d] = NumOps.FromDouble(reader.ReadDouble());
-            }
-            gaussian.Opacity = NumOps.FromDouble(reader.ReadDouble());
-            for (int d = 0; d < colorDim; d++)
-            {
-                gaussian.Color[d] = NumOps.FromDouble(reader.ReadDouble());
-            }
-
-            ComputeCovariance(gaussian);
-            _gaussians.Add(gaussian);
-        }
-
-        MarkSpatialIndexDirty();
-    }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {

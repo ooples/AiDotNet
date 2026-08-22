@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SpiralNet++: A Fast and Highly Efficient Mesh Convolution Operator", "https://arxiv.org/abs/1911.05856", Year = 2019, Authors = "Shunwang Gong, Lei Chen, Michael Bronstein, Stefanos Zafeiriou")]
-public class SpiralNet<T> : GraphModelLayoutBase<T>
+public partial class SpiralNet<T> : GraphModelLayoutBase<T>
 {
     /// <summary>
     /// The loss function used to compute training loss.
@@ -612,103 +612,14 @@ public class SpiralNet<T> : GraphModelLayoutBase<T>
     /// </summary>
     /// <param name="writer">Binary writer.</param>
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.NumClasses);
-        writer.Write(_options.InputFeatures);
-        writer.Write(_options.SpiralLength);
-        writer.Write(_options.UseBatchNorm);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.UseGlobalAveragePooling);
 
-        writer.Write(_options.ConvChannels.Length);
-        foreach (var ch in _options.ConvChannels)
-            writer.Write(ch);
-
-        writer.Write(_options.PoolRatios.Length);
-        foreach (var pr in _options.PoolRatios)
-            writer.Write(pr);
-
-        writer.Write(_options.FullyConnectedSizes.Length);
-        foreach (var fc in _options.FullyConnectedSizes)
-            writer.Write(fc);
-
-        // Persist the spiral-index topology so a deserialized / cloned model can
-        // re-propagate it to its (freshly reconstructed) SpiralConvLayers. The
-        // layers' indices are network-owned state, not trainable parameters, so
-        // the flat-parameter clone path doesn't carry them; without this a clone
-        // throws "Spiral indices must be set" on its first forward (#1450).
-        writer.Write(_spiralIndicesPerLevel.Count);
-        foreach (var level in _spiralIndicesPerLevel)
-        {
-            int rows = level.GetLength(0);
-            int cols = level.GetLength(1);
-            writer.Write(rows);
-            writer.Write(cols);
-            for (int r = 0; r < rows; r++)
-                for (int c = 0; c < cols; c++)
-                    writer.Write(level[r, c]);
-        }
-    }
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
     /// <param name="reader">Binary reader.</param>
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _options.NumClasses = reader.ReadInt32();
-        _options.InputFeatures = reader.ReadInt32();
-        _options.SpiralLength = reader.ReadInt32();
-        _options.UseBatchNorm = reader.ReadBoolean();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.UseGlobalAveragePooling = reader.ReadBoolean();
 
-        int convLen = reader.ReadInt32();
-        _options.ConvChannels = new int[convLen];
-        for (int i = 0; i < convLen; i++)
-            _options.ConvChannels[i] = reader.ReadInt32();
-
-        int poolLen = reader.ReadInt32();
-        _options.PoolRatios = new double[poolLen];
-        for (int i = 0; i < poolLen; i++)
-            _options.PoolRatios[i] = reader.ReadDouble();
-
-        int fcLen = reader.ReadInt32();
-        _options.FullyConnectedSizes = new int[fcLen];
-        for (int i = 0; i < fcLen; i++)
-            _options.FullyConnectedSizes[i] = reader.ReadInt32();
-
-        // Restore the spiral-index topology and re-propagate it to the layers
-        // that were reconstructed during layer deserialization (the constructor's
-        // default propagation targeted the pre-deserialize layers, which have
-        // since been replaced). Without this a clone forward throws "Spiral
-        // indices must be set" (#1450).
-        int levelCount = reader.ReadInt32();
-        _spiralIndicesPerLevel.Clear();
-        for (int l = 0; l < levelCount; l++)
-        {
-            int rows = reader.ReadInt32();
-            int cols = reader.ReadInt32();
-            var level = new int[rows, cols];
-            for (int r = 0; r < rows; r++)
-                for (int c = 0; c < cols; c++)
-                    level[r, c] = reader.ReadInt32();
-            _spiralIndicesPerLevel.Add(level);
-        }
-        PropagateSpiralIndicesToLayers();
-    }
-
-    /// <summary>
-    /// Creates a new instance for cloning.
-    /// </summary>
-    /// <returns>New SpiralNet instance.</returns>
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new SpiralNet<T>(_options, _optimizer, _lossFunction);
-    }
 
     /// <summary>
     /// Computes class probabilities for a single mesh using softmax.

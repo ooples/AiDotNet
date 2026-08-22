@@ -41,7 +41,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
     "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
-public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
+public partial class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 {
 
     /// <inheritdoc />
@@ -304,8 +304,6 @@ public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
             }
         }
     }
-
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new LinearQLearningAgent<T>(_options);
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }

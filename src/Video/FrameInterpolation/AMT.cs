@@ -56,7 +56,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2304.09790",
     Year = 2023,
     Authors = "Zhen Li, Zuo-Liang Zhu, Ling-Hao Han, Qibin Hou, Chun-Le Guo, Ming-Ming Cheng")]
-public class AMT<T> : FrameInterpolationBase<T>
+public partial class AMT<T> : FrameInterpolationBase<T>
 {
     #region Fields
 
@@ -180,49 +180,9 @@ public class AMT<T> : FrameInterpolationBase<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.NumFeatures);
-        w.Write(_options.NumFlowFields);
-        w.Write(_options.NumRefinementIters);
-        w.Write(_options.NumCorrelationLevels);
-        w.Write(_options.CorrelationRadius);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (VideoModelVariant)r.ReadInt32();
-        _options.NumFeatures = r.ReadInt32();
-        _options.NumFlowFields = r.ReadInt32();
-        _options.NumRefinementIters = r.ReadInt32();
-        _options.NumCorrelationLevels = r.ReadInt32();
-        _options.CorrelationRadius = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-        {
-            // Release any existing session before replacing it so repeated
-            // deserialize / clone round-trips don't leak native ONNX resources.
-            OnnxModel?.Dispose();
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        }
-        // Native-mode layers (with their trained weights) are already reconstructed by
-        // the base deserializer before this override runs; re-initializing here would
-        // discard them and leave the model randomly initialized.
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new AMT<T>(Architecture, p, _options);
-        return new AMT<T>(Architecture, _options);
-    }
+
 
     #endregion
 

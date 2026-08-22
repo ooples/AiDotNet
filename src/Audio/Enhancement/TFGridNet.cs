@@ -58,7 +58,7 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TF-GridNet: Making Time-Frequency Domain Models Great Again for Monaural Speaker Separation", "https://arxiv.org/abs/2209.03952", Year = 2023, Authors = "Zhong-Qiu Wang, Samuele Cornell, Shukjae Choi, Younglo Lee, Byeong-Yeol Kim, Shinji Watanabe")]
-public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+public partial class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -79,7 +79,7 @@ public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     private readonly ShortTimeFourierTransform<T> _stft;
     [Scratch]
     private Tensor<T>? _lastPhase;
-    [Buffer]
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Tensor<T>? _noiseProfile;
     private bool _useNativeMode;
     private bool _disposed;
@@ -361,33 +361,9 @@ public class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.FftSize); w.Write(_options.HopLength);
-        w.Write(_options.NumFreqBins); w.Write(_options.HiddenDim); w.Write(_options.EmbeddingDim);
-        w.Write(_options.NumBlocks); w.Write(_options.NumAttentionHeads);
-        w.Write(_options.EnhancementStrength); w.Write(_options.DropoutRate); w.Write(_options.NumSources);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.FftSize = r.ReadInt32(); _options.HopLength = r.ReadInt32();
-        _options.NumFreqBins = r.ReadInt32(); _options.HiddenDim = r.ReadInt32(); _options.EmbeddingDim = r.ReadInt32();
-        _options.NumBlocks = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32();
-        _options.EnhancementStrength = r.ReadDouble(); _options.DropoutRate = r.ReadDouble(); _options.NumSources = r.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new TFGridNet<T>(Architecture, mp, _options);
-        return new TFGridNet<T>(Architecture, _options);
-    }
+
 
     #endregion
 

@@ -27,7 +27,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public partial class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the Tabu Search algorithm.
@@ -344,80 +344,5 @@ public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _tabuOptions;
-    }
-
-    /// <summary>
-    /// Serializes the TabuSearchOptimizer to a byte array.
-    /// </summary>
-    /// <returns>A byte array representing the serialized optimizer.</returns>
-    public override byte[] Serialize()
-    {
-        using MemoryStream ms = new MemoryStream();
-        using BinaryWriter writer = new BinaryWriter(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize Tabu Search-specific options
-        string optionsJson = JsonConvert.SerializeObject(_tabuOptions);
-        writer.Write(optionsJson);
-
-        // Serialize the genetic algorithm
-        byte[] geneticAlgorithmData = _geneticAlgorithm.Serialize();
-        writer.Write(geneticAlgorithmData.Length);
-        writer.Write(geneticAlgorithmData);
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the TabuSearchOptimizer from a byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized optimizer data.</param>
-    /// <exception cref="InvalidOperationException">Thrown when deserialization of optimizer options fails.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method reconstructs the TabuSearchOptimizer from a serialized byte array. It performs the following steps:
-    /// 1. Deserializes the base class data.
-    /// 2. Deserializes the Tabu Search-specific options.
-    /// 3. Reinitializes the adaptive parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> Think of this method as "unpacking" the optimizer's saved state:
-    /// 
-    /// - It's like opening a saved file in a game to continue where you left off.
-    /// - The method reads the saved data and sets up the optimizer to match that saved state.
-    /// - It ensures that all the special Tabu Search settings are correctly restored.
-    /// - After unpacking, it prepares the optimizer for use by setting up its internal values.
-    /// 
-    /// This allows you to save the optimizer's state and later restore it exactly as it was.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using MemoryStream ms = new MemoryStream(data);
-        using BinaryReader reader = new BinaryReader(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize Tabu Search-specific options
-        string optionsJson = reader.ReadString();
-        _tabuOptions = JsonConvert.DeserializeObject<TabuSearchOptions<T, TInput, TOutput>>(optionsJson)
-            ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-        // Deserialize the genetic algorithm if available
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-        {
-            int geneticAlgorithmDataLength = reader.ReadInt32();
-            byte[] geneticAlgorithmData = reader.ReadBytes(geneticAlgorithmDataLength);
-            _geneticAlgorithm.Deserialize(geneticAlgorithmData);
-        }
-
-        // Initialize adaptive parameters after deserialization
-        InitializeAdaptiveParameters();
     }
 }

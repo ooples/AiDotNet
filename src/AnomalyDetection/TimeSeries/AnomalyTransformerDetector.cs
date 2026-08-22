@@ -64,18 +64,27 @@ public partial class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
     private readonly double _learningRate;
 
     // Attention weights
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _Wq; // Query projection
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _Wk; // Key projection
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _Wv; // Value projection
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _Wo; // Output projection
 
     // Feed-forward weights
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _W1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _b1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _W2;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _b2;
 
     // Input projection
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _inputProj;
 
     // Prior association (learnable Gaussian kernel)

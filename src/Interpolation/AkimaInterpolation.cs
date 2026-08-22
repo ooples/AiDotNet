@@ -36,6 +36,7 @@ public class AkimaInterpolation<T> : IInterpolation<T>
     /// <remarks>
     /// <b>For Beginners:</b> These are values that help determine the slope of the curve at each point.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _b;
 
     /// <summary>
@@ -44,6 +45,7 @@ public class AkimaInterpolation<T> : IInterpolation<T>
     /// <remarks>
     /// <b>For Beginners:</b> These values help control how the curve bends between points.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _c;
 
     /// <summary>
@@ -52,6 +54,7 @@ public class AkimaInterpolation<T> : IInterpolation<T>
     /// <remarks>
     /// <b>For Beginners:</b> These values help fine-tune the shape of the curve between points.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _d;
 
     /// <summary>

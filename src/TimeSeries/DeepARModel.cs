@@ -763,78 +763,9 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         return _head.PredictNorm(hState[layers - 1], lastNorm);
     }
 
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        writer.Write(_options.HiddenSize);
-        writer.Write(_options.NumLayers);
-        // Persist the head selector so deserialize rebuilds the SAME distribution head regardless of the
-        // options passed to the deserializing constructor.
-        writer.Write(_options.LikelihoodType ?? "Gaussian");
-        writer.Write(_options.StudentTDegreesOfFreedom);
-        writer.Write(_options.CovariateSize); // needed before InitializeModel to size the first LSTM layer
 
-        writer.Write(_lstmLayers.Count);
-        foreach (var lstm in _lstmLayers)
-            lstm.Serialize(writer);
 
-        _head.Serialize(writer);
 
-        writer.Write(Convert.ToDouble(_normMean));
-        writer.Write(Convert.ToDouble(_normStd));
-
-        // Covariate standardization stats (empty for the univariate model).
-        writer.Write(_covMean.Length);
-        for (int c = 0; c < _covMean.Length; c++)
-        {
-            writer.Write(Convert.ToDouble(_covMean[c]));
-            writer.Write(Convert.ToDouble(_covStd[c]));
-        }
-
-        writer.Write(_trainingSeries.Length);
-        for (int i = 0; i < _trainingSeries.Length; i++)
-            writer.Write(NumOps.ToDouble(_trainingSeries[i]));
-    }
-
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        _options.HiddenSize = reader.ReadInt32();
-        _options.NumLayers = reader.ReadInt32();
-        _options.LikelihoodType = reader.ReadString();
-        _options.StudentTDegreesOfFreedom = reader.ReadDouble();
-        _options.CovariateSize = reader.ReadInt32();
-
-        InitializeModel();
-
-        int numLayers = reader.ReadInt32();
-        for (int i = 0; i < numLayers && i < _lstmLayers.Count; i++)
-            _lstmLayers[i].Deserialize(reader);
-
-        _head.Deserialize(reader);
-
-        _normMean = NumOps.FromDouble(reader.ReadDouble());
-        _normStd = NumOps.FromDouble(reader.ReadDouble());
-
-        int covLen = reader.ReadInt32();
-        _covMean = new T[covLen];
-        _covStd = new T[covLen];
-        for (int c = 0; c < covLen; c++)
-        {
-            _covMean[c] = NumOps.FromDouble(reader.ReadDouble());
-            _covStd[c] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        try
-        {
-            int tsLen = reader.ReadInt32();
-            _trainingSeries = new Vector<T>(tsLen);
-            for (int i = 0; i < tsLen; i++)
-                _trainingSeries[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        catch (EndOfStreamException)
-        {
-            _trainingSeries = Vector<T>.Empty();
-        }
-    }
 
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -877,8 +808,6 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         clone._covStd = (T[])_covStd.Clone();
         return clone;
     }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     // ParameterCount restated a fold the base now derives from generated component registration.
     // Removed under AIDN082.
@@ -1029,24 +958,6 @@ internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T
         var hNew = Engine.TensorMultiply(oGate, Engine.Tanh(cNew));
 
         return (hNew, cNew);
-    }
-
-    public override void Serialize(BinaryWriter writer)
-    {
-        writer.Write(_inputSize);
-        writer.Write(_hiddenSize);
-        WriteTensor(writer, _wx);
-        WriteTensor(writer, _wh);
-        WriteTensor(writer, _bias);
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        reader.ReadInt32(); // inputSize
-        reader.ReadInt32(); // hiddenSize
-        ReadTensorInto(reader, _wx);
-        ReadTensorInto(reader, _wh);
-        ReadTensorInto(reader, _bias);
     }
 
     private static void WriteTensor(BinaryWriter writer, Tensor<T> tensor)

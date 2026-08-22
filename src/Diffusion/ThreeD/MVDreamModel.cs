@@ -1142,36 +1142,6 @@ public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Clone the ACTUAL multi-view UNet / image VAE (see InstaFlowModel/MultiDiffusionModel):
-        // passing null rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved sub-models, so once the
-        // source resolved its lazy layers via a forward pass the clone reconstructed a different-valued
-        // (and, after resolution, mismatched) network and diverged. Cloning the resolved sub-models makes
-        // the clone structurally and observationally identical.
-        var clone = new MVDreamModel<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            multiViewUNet: _multiViewUNet.Clone(),
-            imageVAE: (StandardVAE<T>)_imageVAE.Clone(),
-            textConditioner: _textConditioner,
-            imageConditioner: _imageConditioner,
-            config: _config);
-        // The camera-embedding block is rebuilt fresh by the ctor (it is not a ctor param), so copy the
-        // full parameter set across. With the multi-view U-Net and VAE already resolved clones, the two
-        // graphs line up 1:1 and the copy-on-write share also transfers the camera embedding's weights.
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameters(GetParameters());
-        return clone;
-    }
-
     #endregion
 }
 

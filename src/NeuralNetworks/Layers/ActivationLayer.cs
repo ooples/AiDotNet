@@ -43,10 +43,13 @@ public partial class ActivationLayer<T> : LayerBase<T>, IShapeContract
     /// this cached input is used to calculate the gradient of the activation function. The field is nullable
     /// and will be null until Forward() is called at least once.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     // GPU-resident cached tensors for GPU training pipeline
+    [Scratch]
     private Tensor<T>? _lastInputGpu;
+    [Scratch]
     private Tensor<T>? _lastOutputGpu; // Post-activation for sigmoid/tanh backward
 
     /// <summary>

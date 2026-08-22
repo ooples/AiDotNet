@@ -30,7 +30,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
+public partial class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     private StochasticGradientDescentOptimizerOptions<T, TInput, TOutput> _options;
 
@@ -285,79 +285,6 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
-    }
-
-    /// <summary>
-    /// Serializes the current state of the StochasticGradientDescentOptimizer to a byte array.
-    /// </summary>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method saves the current state of the optimizer, including its base class data and
-    /// SGD-specific options, into a byte array.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like taking a snapshot of the hiker's journey:
-    /// 
-    /// - It saves all the current settings and progress
-    /// - This saved data can be used later to continue from where you left off
-    /// - It includes both general hiking info and SGD-specific details
-    /// 
-    /// This is useful for saving progress or sharing the optimizer's current state.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            // Serialize base class data
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            // Serialize SGD-specific options
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
-
-            return ms.ToArray();
-        }
-    }
-
-    /// <summary>
-    /// Deserializes a byte array to restore the state of the StochasticGradientDescentOptimizer.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized optimizer state.</param>
-    /// <exception cref="InvalidOperationException">Thrown when deserialization of optimizer options fails.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method restores the state of the optimizer from a byte array, including its base class data
-    /// and SGD-specific options. It uses a BinaryReader to read the serialized data and reconstruct
-    /// the optimizer's state.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like unpacking the hiker's backpack after a journey:
-    /// 
-    /// - It reads the saved snapshot of the hiker's journey
-    /// - It restores both general hiking info and SGD-specific details
-    /// - If there's a problem reading the SGD-specific details, it reports an error
-    /// 
-    /// This allows you to continue from a previously saved state of the optimizer.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            // Deserialize base class data
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            // Deserialize SGD-specific options
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<StochasticGradientDescentOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-        }
     }
 
     /// <summary>

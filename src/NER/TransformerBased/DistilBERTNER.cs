@@ -100,15 +100,6 @@ public class DistilBERTNER<T> : TransformerNERBase<T>
     {
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new TransformerNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new DistilBERTNER<T>(Architecture, p, optionsCopy);
-        return new DistilBERTNER<T>(Architecture, optionsCopy);
-    }
-
     private static TransformerNEROptions CreateDistilBERTDefaults()
     {
         return new TransformerNEROptions

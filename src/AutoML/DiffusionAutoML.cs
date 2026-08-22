@@ -441,14 +441,6 @@ namespace AiDotNet.AutoML
             return GetDefaultDiffusionSearchSpace();
         }
 
-        /// <summary>
-        /// Creates an instance for deep copy.
-        /// </summary>
-        protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
-        {
-            return new DiffusionAutoML<T>(_seed);
-        }
-
         private Dictionary<string, ParameterRange> GetDefaultDiffusionSearchSpace()
         {
             return new Dictionary<string, ParameterRange>
@@ -938,28 +930,6 @@ namespace AiDotNet.AutoML
             return copy;
         }
 
-        public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
-        {
-            return new DiffusionAutoMLModel<T>(
-                _noisePredictor,
-                _vae,
-                _scheduler,
-                _conditioner,
-                _config,
-                _seed);
-        }
-
-        public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-        {
-            return new DiffusionAutoMLModel<T>(
-                (UNetNoisePredictor<T>)_noisePredictor.DeepCopy(),
-                (StandardVAE<T>)_vae.DeepCopy(),
-                _scheduler,
-                _conditioner,
-                _config,
-                _seed);
-        }
-
         /// <summary>
         /// Returns empty because diffusion models operate on latent space noise, not
         /// named tabular features, so per-feature importance is not meaningful.
@@ -1028,62 +998,6 @@ namespace AiDotNet.AutoML
                 var data = File.ReadAllBytes(filePath);
                 Deserialize(data);
             }
-        }
-
-        public override byte[] Serialize()
-        {
-            Helpers.ModelPersistenceGuard.EnforceBeforeSerialize();
-            // Serialize parameters as doubles for portability across numeric types.
-            // This allows models trained with float to be loaded as double and vice versa.
-            // The format is: [version byte] [parameter count (4 bytes)] [parameters as doubles]
-            var parameters = GetParameters();
-            int headerSize = 1 + sizeof(int); // version + count
-            var data = new byte[headerSize + parameters.Length * sizeof(double)];
-
-            // Version byte (for future format changes)
-            data[0] = 1;
-
-            // Parameter count
-            Buffer.BlockCopy(BitConverter.GetBytes(parameters.Length), 0, data, 1, sizeof(int));
-
-            // Parameters as doubles
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                double value = NumOps.ToDouble(parameters[i]);
-                var bytes = BitConverter.GetBytes(value);
-                Buffer.BlockCopy(bytes, 0, data, headerSize + i * sizeof(double), sizeof(double));
-            }
-
-            return data;
-        }
-
-        public override void Deserialize(byte[] data)
-        {
-            Helpers.ModelPersistenceGuard.EnforceBeforeDeserialize();
-
-            // Check minimum header size
-            int headerSize = 1 + sizeof(int);
-            if (data.Length < headerSize)
-                throw new InvalidDataException("Invalid serialized data: too short for header.");
-
-            // Read version (currently only version 1 supported)
-            byte version = data[0];
-            if (version != 1)
-                throw new InvalidDataException($"Unsupported serialization version: {version}");
-
-            // Read parameter count
-            int paramCount = BitConverter.ToInt32(data, 1);
-            if (data.Length < headerSize + paramCount * sizeof(double))
-                throw new InvalidDataException("Invalid serialized data: truncated parameter data.");
-
-            var parameters = new T[paramCount];
-            for (int i = 0; i < paramCount; i++)
-            {
-                double value = BitConverter.ToDouble(data, headerSize + i * sizeof(double));
-                parameters[i] = NumOps.FromDouble(value);
-            }
-
-            SetParameters(new Vector<T>(parameters));
         }
 
         public override void SaveState(Stream stream)

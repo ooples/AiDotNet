@@ -43,7 +43,7 @@ namespace AiDotNet.MetaLearning;
 /// 5. All shared functionality (metrics, saving, evaluation) is handled automatically
 /// </para>
 /// </remarks>
-public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput, TOutput>, IMetaLearner<T, TInput, TOutput>, IConfigurableModel<T>
+public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput, TOutput>, IMetaLearner<T, TInput, TOutput>, IConfigurableModel<T>
 {
 
     /// <inheritdoc />

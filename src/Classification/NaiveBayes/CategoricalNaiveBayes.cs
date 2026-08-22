@@ -202,16 +202,6 @@ public partial class CategoricalNaiveBayes<T> : NaiveBayesBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new CategoricalNaiveBayes<T>(new NaiveBayesOptions<T>
-        {
-            Alpha = Options.Alpha,
-            FitPriors = Options.FitPriors
-        });
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new CategoricalNaiveBayes<T>(new NaiveBayesOptions<T>
@@ -278,121 +268,6 @@ public partial class CategoricalNaiveBayes<T> : NaiveBayesBase<T>
             metadata.AdditionalInfo["MaxCategoriesPerFeature"] = _numCategories.Max();
         }
         return metadata;
-    }
-
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        var modelData = new Dictionary<string, object>
-        {
-            { "NumClasses", NumClasses },
-            { "NumFeatures", NumFeatures },
-            { "TaskType", (int)TaskType },
-            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
-            { "RegularizationOptions", Regularization.GetOptions() }
-        };
-
-        if (ClassCounts is not null)
-            modelData["ClassCounts"] = ClassCounts;
-
-        if (LogPriors is not null)
-        {
-            var logPriorsArray = new double[LogPriors.Length];
-            for (int i = 0; i < LogPriors.Length; i++)
-                logPriorsArray[i] = NumOps.ToDouble(LogPriors[i]);
-            modelData["LogPriors"] = logPriorsArray;
-        }
-
-        if (_numCategories is not null)
-            modelData["NumCategories"] = _numCategories;
-
-        if (_categoryLogProbs is not null)
-        {
-            modelData["NumCategoryMatrices"] = _categoryLogProbs.Length;
-            for (int c = 0; c < _categoryLogProbs.Length; c++)
-            {
-                SerializeMatrix(modelData, $"CategoryLogProbs_{c}", _categoryLogProbs[c]);
-            }
-        }
-
-        var modelMetadata = GetModelMetadata();
-        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        var jsonString = Encoding.UTF8.GetString(modelData);
-        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-
-        if (modelMetadata == null || modelMetadata.ModelData == null)
-            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
-
-        var modelDataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
-        var modelDataObj = JsonConvert.DeserializeObject<JObject>(modelDataString);
-
-        if (modelDataObj == null)
-            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
-
-        // Clear previous state before deserializing
-        _categoryLogProbs = null;
-        _numCategories = null;
-        ClassLabels = new Vector<T>(0);
-        ClassCounts = null;
-        LogPriors = new Vector<T>(0);
-
-        NumClasses = modelDataObj["NumClasses"]?.ToObject<int>() ?? 0;
-        NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
-        TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
-
-        var classLabelsToken = modelDataObj["ClassLabels"];
-        if (classLabelsToken is not null)
-        {
-            var classLabelsAsDoubles = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (classLabelsAsDoubles.Length > 0)
-            {
-                ClassLabels = new Vector<T>(classLabelsAsDoubles.Length);
-                for (int i = 0; i < classLabelsAsDoubles.Length; i++)
-                    ClassLabels[i] = NumOps.FromDouble(classLabelsAsDoubles[i]);
-            }
-        }
-
-        var classCountsToken = modelDataObj["ClassCounts"];
-        if (classCountsToken is not null)
-            ClassCounts = classCountsToken.ToObject<int[]>();
-
-        var logPriorsToken = modelDataObj["LogPriors"];
-        if (logPriorsToken is not null)
-        {
-            var logPriorsArray = logPriorsToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (logPriorsArray.Length > 0)
-            {
-                LogPriors = new Vector<T>(logPriorsArray.Length);
-                for (int i = 0; i < logPriorsArray.Length; i++)
-                    LogPriors[i] = NumOps.FromDouble(logPriorsArray[i]);
-            }
-        }
-
-        var numCategoriesToken = modelDataObj["NumCategories"];
-        if (numCategoriesToken is not null)
-            _numCategories = numCategoriesToken.ToObject<int[]>();
-
-        int numMatrices = modelDataObj["NumCategoryMatrices"]?.ToObject<int>() ?? 0;
-        if (numMatrices > 0)
-        {
-            _categoryLogProbs = new Matrix<T>[numMatrices];
-            for (int c = 0; c < numMatrices; c++)
-            {
-                var matrix = DeserializeMatrix(modelDataObj, $"CategoryLogProbs_{c}");
-                if (matrix is null)
-                {
-                    throw new InvalidOperationException(
-                        $"Deserialization failed: CategoryLogProbs_{c} is missing or malformed.");
-                }
-                _categoryLogProbs[c] = matrix;
-            }
-        }
     }
 
     private void SerializeMatrix(Dictionary<string, object> data, string name, Matrix<T>? matrix)

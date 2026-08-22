@@ -43,7 +43,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
     "https://doi.org/10.1023/A:1007382027895",
     Year = 1996,
     Authors = "Bradtke, S. J. & Barto, A. G.")]
-public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
+public partial class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
 {
 
     /// <inheritdoc />

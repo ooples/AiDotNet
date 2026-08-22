@@ -54,7 +54,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 [TensorLayout(TensorAxis.Batch, TensorAxis.Classes, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output,
     Note = "Per-class logits over a /32 feature grid; the class axis IS the channel axis of the output.")]
-public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmentationModel<T>, IShapeContract
+public abstract partial class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmentationModel<T>, IShapeContract
 {
     /// <summary>
     /// The output axes for a segmentation model, shared by every model in the family.

@@ -20,7 +20,7 @@ namespace AiDotNet.DistributedTraining.Layers;
 /// </summary>
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
-[LayerProperty(IsTrainable = true, ChangesShape = true)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestConstructorArgs = "new AiDotNet.DistributedTraining.InMemoryCommunicationBackend<double>(0, 1), 4, 8", TestInputShape = "1, 4")]
 // The SHARDING IS INVISIBLE FROM THE OUTSIDE, which is the whole point of the ḡ conjugate operator and
 // the only reason a shape contract is expressible here at all. Each rank consumes its own input slice
 // [batch, localIn] and produces a PARTIAL [batch, outputSize]; the all-reduce sums the partials without
@@ -67,6 +67,9 @@ public sealed partial class RowParallelLinear<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => true;
     public int LocalInputSize => _localInputSize;
 
+    /// <summary>Construction state: the 'inputSize' the layer was built with.</summary>
+    private readonly int _inputSize;
+
     public RowParallelLinear(
         ICommunicationBackend<T> backend,
         int inputSize,
@@ -76,6 +79,7 @@ public sealed partial class RowParallelLinear<T> : LayerBase<T>, IShapeContract
                [outputSize],
                activationFunction ?? new AiDotNet.ActivationFunctions.IdentityActivation<T>())
     {
+        _inputSize = inputSize;
         _backend = backend;
         _g = new ReduceFromTensorParallelRegion<T>(backend);
         _fullInputSize = inputSize;

@@ -57,7 +57,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.SARSA;
     "https://citeseerx.ist.psu.edu/doc/10.1.1.17.2539",
     Year = 1994,
     Authors = "Rummery, G. A. & Niranjan, M.")]
-public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class SARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -76,7 +76,9 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputa
     private Random _random;
 
     // Track last state-action for SARSA update
+    [Scratch]
     private Vector<T>? _lastState;
+    [Scratch]
     private Vector<T>? _lastAction;
 
     /// <summary>

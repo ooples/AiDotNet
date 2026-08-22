@@ -296,45 +296,9 @@ public partial class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguag
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.ImageSize);
-        writer.Write(_options.VisionDim);
-        writer.Write(_options.TextDim);
-        writer.Write(_options.FusionDim);
-        writer.Write(_options.NumVisionLayers);
-        writer.Write(_options.NumTextLayers);
-        writer.Write(_options.NumBridgeLayers);
-        writer.Write(_options.NumHeads);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.ImageSize = reader.ReadInt32();
-        _options.VisionDim = reader.ReadInt32();
-        _options.TextDim = reader.ReadInt32();
-        _options.FusionDim = reader.ReadInt32();
-        _options.NumVisionLayers = reader.ReadInt32();
-        _options.NumTextLayers = reader.ReadInt32();
-        _options.NumBridgeLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var cloneOptions = new BridgeTowerOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new BridgeTower<T>(Architecture, mp, cloneOptions);
-        return new BridgeTower<T>(Architecture, cloneOptions);
-    }
+
 
     private void ThrowIfDisposed()
     {

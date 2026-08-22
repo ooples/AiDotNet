@@ -18,7 +18,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 /// Models extending this base class: SAM, SAM 2, SAM-HQ, SegGPT, SEEM.
 /// </para>
 /// </remarks>
-public abstract class PromptableSegmentationBase<T> : SegmentationModelBase<T>, IPromptableSegmentation<T>
+public abstract partial class PromptableSegmentationBase<T> : SegmentationModelBase<T>, IPromptableSegmentation<T>
 {
     /// <summary>
     /// Cached image embedding from the most recent SetImage call.

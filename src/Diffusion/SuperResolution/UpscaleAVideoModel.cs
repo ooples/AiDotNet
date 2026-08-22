@@ -220,8 +220,10 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     // Explicit positive/negative slots bound memory even when prompt text changes.
     private readonly object _conditioningCacheLock = new();
     private string? _cachedPrompt;
+    [Scratch]
     private Tensor<T>? _cachedPromptConditioning;
     private string? _cachedNegativePrompt;
+    [Scratch]
     private Tensor<T>? _cachedNegativeConditioning;
     // Seed for the deferred (lazy) init path: the constructor only eager-inits when an explicit
     // predictor/VAE is passed, so without capturing the seed the lazy EnsureInitialized() built the
@@ -232,7 +234,9 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     // trainer owns timestep sampling, target-noise construction, autodiff, and optimization; these
     // fields provide the paper-specific low-resolution RGB and text context to its virtual hooks.
     private readonly object _trainingContextLock = new();
+    [Scratch]
     private Tensor<T>? _trainingVideoCondition;
+    [Scratch]
     private Tensor<T>? _trainingTextConditioning;
     private int _trainingNoiseLevel;
 
@@ -1000,42 +1004,6 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     #endregion
 
     #region ICloneable Implementation
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        EnsureInitialized();
-        return new UpscaleAVideoModel<T>(
-            architecture: Architecture,
-            options: new DiffusionModelOptions<T>((DiffusionModelOptions<T>)GetOptions()),
-            scheduler: CloneScheduler(Scheduler),
-            videoUNet: (VideoUNetPredictor<T>)_videoUNet.Clone(),
-            temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
-            conditioner: _conditioner,
-            defaultNumFrames: DefaultNumFrames,
-            defaultFPS: DefaultFPS,
-            seed: _seed);
-    }
-
-    private static INoiseScheduler<T> CloneScheduler(INoiseScheduler<T> scheduler)
-    {
-        object? created = Activator.CreateInstance(scheduler.GetType(), scheduler.Config);
-        if (created is not INoiseScheduler<T> clone)
-            throw new InvalidOperationException(
-                $"Scheduler {scheduler.GetType().Name} must expose a constructor accepting SchedulerConfig<{typeof(T).Name}> to support model cloning.");
-
-        var state = scheduler.GetState().ToDictionary(
-            pair => pair.Key,
-            pair => pair.Value is int[] values ? (object)values.ToArray() : pair.Value);
-        clone.LoadState(state);
-        return clone;
-    }
 
     #endregion
 

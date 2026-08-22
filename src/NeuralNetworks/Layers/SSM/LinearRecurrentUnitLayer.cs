@@ -93,21 +93,28 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>, IShapeContract
 
     // Eigenvalue parameterization: lambda = exp(-exp(nu) + i * exp(theta))
     // nu (log magnitude): [stateDimension]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _nu;
     // theta (phase): [stateDimension]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _theta;
 
     // B input projection (complex): [stateDimension] real and imaginary parts
     // Maps scalar input per dimension to complex state
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _bReal;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _bImag;
 
     // C output projection (complex): [stateDimension] real and imaginary parts
     // Maps complex state back to scalar output per dimension
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _cReal;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _cImag;
 
     // D skip connection: [modelDimension]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _dParam;
 
     // Input projection: [modelDimension, modelDimension]
@@ -127,28 +134,48 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastProjectedInput;
+    [Scratch]
     private Tensor<T>? _lastHiddenStatesReal;
+    [Scratch]
     private Tensor<T>? _lastHiddenStatesImag;
+    [Scratch]
     private Tensor<T>? _lastRecurrenceOutput;
+    [Scratch]
     private Tensor<T>? _lastLambdaReal;
+    [Scratch]
     private Tensor<T>? _lastLambdaImag;
+    [Scratch]
     private Tensor<T>? _lastLambdaMag;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _nuGradient;
+    [Scratch]
     private Tensor<T>? _thetaGradient;
+    [Scratch]
     private Tensor<T>? _bRealGradient;
+    [Scratch]
     private Tensor<T>? _bImagGradient;
+    [Scratch]
     private Tensor<T>? _cRealGradient;
+    [Scratch]
     private Tensor<T>? _cImagGradient;
+    [Scratch]
     private Tensor<T>? _dParamGradient;
+    [Scratch]
     private Tensor<T>? _inputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _inputProjectionBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />
@@ -169,6 +196,9 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     public int StateDimension => _stateDimension;
+
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
 
     /// <summary>
     /// Creates a new Linear Recurrent Unit (LRU) layer.
@@ -200,6 +230,7 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

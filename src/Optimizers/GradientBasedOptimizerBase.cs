@@ -1,5 +1,6 @@
 ﻿using AiDotNet.Helpers;
 using AiDotNet.Caching;
+using AiDotNet.Attributes;
 using AiDotNet.Deployment.Configuration;
 using AiDotNet.Data.Sampling;
 using AiDotNet.Engines;
@@ -41,7 +42,7 @@ namespace AiDotNet.Optimizers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IGradientBasedOptimizer<T, TInput, TOutput>
+public abstract partial class GradientBasedOptimizerBase<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IGradientBasedOptimizer<T, TInput, TOutput>
 {
     /// <summary>
     /// Options specific to gradient-based optimization algorithms.
@@ -88,6 +89,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <summary>
     /// The gradient from the previous optimization step, used for momentum calculations.
     /// </summary>
+    [Scratch]
     protected Vector<T> _previousGradient;
 
     /// <summary>
@@ -99,6 +101,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// training (true DDP), debugging, and visualization.
     /// Returns Vector&lt;T&gt;.Empty() if no gradients have been computed yet.
     /// </remarks>
+    [Scratch]
     protected Vector<T> _lastComputedGradients;
 
     private const string TapeStateExtensionMarker = "AiDotNet.GradientTapeOptimizerState.v1";
@@ -106,6 +109,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     private readonly ConcurrentDictionary<Tensor<T>, int> _tapeParameterIndices =
         new(TensorReferenceComparer<Tensor<T>>.Instance);
 
+    [Scratch]
     private readonly Dictionary<string, Dictionary<int, Tensor<T>>> _pendingTapeTensorStates =
         new(StringComparer.Ordinal);
 

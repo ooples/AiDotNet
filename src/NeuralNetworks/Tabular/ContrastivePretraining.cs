@@ -38,12 +38,16 @@ public class ContrastivePretraining<T>
     private readonly double _temperature;
 
     // Projection head for contrastive learning
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _projectionWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _projectionBias;
     private readonly int _projectionDim;
 
     // Cached values
+    [Scratch]
     private Tensor<T>? _originalEmbeddingsCache;
+    [Scratch]
     private Tensor<T>? _corruptedEmbeddingsCache;
     private int[]? _corruptedIndicesCache;
 

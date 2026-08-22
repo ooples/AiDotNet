@@ -48,23 +48,31 @@ public class FeatureTokenizer<T>
     private readonly bool _useNumericalBias;
 
     // Numerical feature embeddings (linear projection)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _numericalWeights;  // Shape: [numNumerical, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _numericalBias;     // Shape: [numNumerical, embeddingDim]
 
     // Categorical feature embeddings (lookup tables)
     private readonly List<Tensor<T>> _categoricalEmbeddings;  // Each: [cardinality, embeddingDim]
 
     // [CLS] token embedding
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _clsToken;  // Shape: [1, embeddingDim]
 
     // Gradients
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _numericalWeightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _numericalBiasGrad;
     private readonly List<Tensor<T>?> _categoricalEmbeddingsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _clsTokenGrad;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _inputCache;
+    [Scratch]
     private Matrix<int>? _categoricalIndicesCache;
 
     /// <summary>

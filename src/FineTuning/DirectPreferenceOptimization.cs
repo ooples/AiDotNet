@@ -29,7 +29,7 @@ namespace AiDotNet.FineTuning;
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type for the model.</typeparam>
 /// <typeparam name="TOutput">The output data type for the model.</typeparam>
-public class DirectPreferenceOptimization<T, TInput, TOutput> : FineTuningBase<T, TInput, TOutput>
+public partial class DirectPreferenceOptimization<T, TInput, TOutput> : FineTuningBase<T, TInput, TOutput>
 {
     private IFullModel<T, TInput, TOutput>? _referenceModel;
 

@@ -88,31 +88,48 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
     private Tensor<T> _bias;
 
     // The adjacency matrix defining graph structure
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _adjacencyMatrix;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastTransformed;
+    [Scratch]
     private Tensor<T>? _lastAggregated;
+    [Scratch]
     private Tensor<T>? _lastMlpHiddenPreRelu;
+    [Scratch]
     private Tensor<T>? _lastMlpHidden;
+    [Scratch]
     private Tensor<T>? _lastMlpOutput;
+    [Scratch]
     private Tensor<T>? _lastDegrees;
 
     // Gradients - Tensor-based for GPU acceleration
+    [Scratch]
     private Tensor<T>? _preTransformWeightsGradient;
+    [Scratch]
     private Tensor<T>? _preTransformBiasGradient;
+    [Scratch]
     private Tensor<T>? _postAggregationWeights1Gradient;
+    [Scratch]
     private Tensor<T>? _postAggregationWeights2Gradient;
+    [Scratch]
     private Tensor<T>? _postAggregationBias1Gradient;
+    [Scratch]
     private Tensor<T>? _postAggregationBias2Gradient;
+    [Scratch]
     private Tensor<T>? _selfWeightsGradient;
+    [Scratch]
     private Tensor<T>? _biasGradient;
 
     public override bool SupportsTraining => true;

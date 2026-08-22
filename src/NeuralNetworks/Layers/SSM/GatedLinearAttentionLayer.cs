@@ -98,27 +98,43 @@ public partial class GatedLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
 
     // Fixed (non-trainable) unit-gamma / zero-beta for the residual-block output LayerNorm.
     // Allocated once and reused so the hot forward path doesn't re-allocate them per step.
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _residualNormGamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _residualNormBeta;
     private const double ResidualNormEpsilon = 1e-5;
 
     // Cached values
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastQuery;
+    [Scratch]
     private Tensor<T>? _lastKey;
+    [Scratch]
     private Tensor<T>? _lastValue;
+    [Scratch]
     private Tensor<T>? _lastGate;
+    [Scratch]
     private Tensor<T>? _lastAttnOutput; // Pre-output-projection attention output
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _gateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _gateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputBiasGradient;
 
     /// <inheritdoc />
@@ -138,6 +154,9 @@ public partial class GatedLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
     /// Gets the dimension per head.
     /// </summary>
     public int HeadDimension => _headDimension;
+
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
 
     /// <summary>
     /// Creates a new Gated Linear Attention layer.
@@ -164,6 +183,7 @@ public partial class GatedLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

@@ -44,7 +44,7 @@ namespace AiDotNet.Finance.AutoML;
     "https://arxiv.org/abs/1908.00709",
     Year = 2021,
     Authors = "Xin He, Kaiyong Zhao, Xiaowen Chu")]
-public class FinancialAutoML<T> : SupervisedAutoMLModelBase<T, Tensor<T>, Tensor<T>>
+public partial class FinancialAutoML<T> : SupervisedAutoMLModelBase<T, Tensor<T>, Tensor<T>>
 {
     private readonly FinancialAutoMLOptions<T> _options;
     private readonly FinancialSearchSpace _financeSearchSpace;
@@ -250,19 +250,6 @@ public class FinancialAutoML<T> : SupervisedAutoMLModelBase<T, Tensor<T>, Tensor
     protected override Dictionary<string, ParameterRange> GetDefaultSearchSpace(Type modelType)
     {
         return _financeSearchSpace.GetSearchSpace(modelType);
-    }
-
-    /// <summary>
-    /// Creates a new instance for cloning.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> AutoML uses this to make a copy of itself with the same options.
-    /// </para>
-    /// </remarks>
-    protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
-    {
-        return new FinancialAutoML<T>(_options, Random);
     }
 
     /// <summary>

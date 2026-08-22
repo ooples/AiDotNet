@@ -596,35 +596,6 @@ public partial class LSTNet<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This creates a fresh copy of the model with the same
-    /// settings but randomly initialized weights. Useful for techniques like
-    /// ensemble learning.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new LSTNetOptions<T>
-        {
-            LookbackWindow = _lookbackWindow,
-            ForecastHorizon = _forecastHorizon,
-            HiddenRecurrentSize = _hiddenRecurrentSize,
-            HiddenSkipSize = _hiddenSkipSize,
-            ConvolutionFilters = _convolutionFilters,
-            ConvolutionKernelSize = _convolutionKernelSize,
-            SkipPeriod = _skipPeriod,
-            AutoregressiveWindow = _autoregressiveWindow,
-            UseHighway = _useHighway,
-            DropoutRate = _dropout
-        };
-
-        return new LSTNet<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Writes LSTNet-specific configuration during serialization.
     /// </summary>
     /// <remarks>
@@ -633,20 +604,7 @@ public partial class LSTNet<T> : ForecastingModelBase<T>
     /// loaded later. This method saves all the configuration values.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_lookbackWindow);
-        writer.Write(_forecastHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_hiddenRecurrentSize);
-        writer.Write(_hiddenSkipSize);
-        writer.Write(_convolutionFilters);
-        writer.Write(_convolutionKernelSize);
-        writer.Write(_skipPeriod);
-        writer.Write(_autoregressiveWindow);
-        writer.Write(_useHighway);
-        writer.Write(_dropout);
-    }
+
 
     /// <summary>
     /// Reads LSTNet-specific configuration during deserialization.
@@ -656,25 +614,7 @@ public partial class LSTNet<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> This reads back the configuration when loading a saved model.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _lookbackWindow = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _hiddenRecurrentSize = reader.ReadInt32();
-        _hiddenSkipSize = reader.ReadInt32();
-        _convolutionFilters = reader.ReadInt32();
-        _convolutionKernelSize = reader.ReadInt32();
-        _skipPeriod = reader.ReadInt32();
-        _autoregressiveWindow = reader.ReadInt32();
-        _useHighway = reader.ReadBoolean();
-        _dropout = reader.ReadDouble();
 
-        // Re-bind cached layer references to the deserialized (weight-loaded)
-        // layers so a clone runs on the loaded weights, not construction-time
-        // random init (ExtractLayerReferences uses direct assignment, idempotent).
-        ExtractLayerReferences();
-    }
 
     #endregion
 

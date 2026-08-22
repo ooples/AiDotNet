@@ -64,6 +64,7 @@ public partial class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearne
     private const double SpsaLearningRateMultiplier = 0.1;
 
     /// <summary>GRU weights: W_z, W_r, W_h — each (hidDim + inputDim) × hidDim.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _gruWeights;
 
     /// <inheritdoc/>

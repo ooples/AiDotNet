@@ -26,7 +26,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
     Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output)]
-public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeContract
+public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)

@@ -67,9 +67,11 @@ public partial class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     private readonly int _numComponents;
 
     /// <summary>Prompt basis vectors: flat array of K * paramDim values.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _promptBasis;
 
     /// <summary>Meta-learned initial prompt coefficients: length K.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _promptCoeffsInit;
 
     /// <summary>Per-frequency regularization weights (higher for high-freq).</summary>

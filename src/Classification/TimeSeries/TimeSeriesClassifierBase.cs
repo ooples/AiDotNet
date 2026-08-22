@@ -26,7 +26,7 @@ namespace AiDotNet.Classification.TimeSeries;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public abstract class TimeSeriesClassifierBase<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
+public abstract partial class TimeSeriesClassifierBase<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
 {
     /// <summary>
     /// Gets or sets the expected sequence length.

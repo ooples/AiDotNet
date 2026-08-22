@@ -74,7 +74,7 @@ namespace AiDotNet.Classification.Ensemble;
     "https://doi.org/10.1214/aos/1013203451",
     Year = 2001,
     Authors = "Jerome H. Friedman")]
-public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClassifier<T>
+public partial class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClassifier<T>
 {
     /// <summary>
     /// Gets the Gradient Boosting specific options.
@@ -459,24 +459,6 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new GradientBoostingClassifier<T>(new GradientBoostingClassifierOptions<T>
-        {
-            NEstimators = Options.NEstimators,
-            LearningRate = Options.LearningRate,
-            MaxDepth = Options.MaxDepth,
-            MinSamplesSplit = Options.MinSamplesSplit,
-            MinSamplesLeaf = Options.MinSamplesLeaf,
-            Subsample = Options.Subsample,
-            MaxFeatures = Options.MaxFeatures,
-            Loss = Options.Loss,
-            Seed = Options.Seed,
-            MinImpurityDecrease = Options.MinImpurityDecrease
-        });
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new GradientBoostingClassifier<T>(new GradientBoostingClassifierOptions<T>
@@ -548,168 +530,5 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
         metadata.AdditionalInfo["TotalNodes"] = NodeCount;
         metadata.AdditionalInfo["TotalLeaves"] = LeafCount;
         return metadata;
-    }
-
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        var modelData = new Dictionary<string, object>
-        {
-            { "NumClasses", NumClasses },
-            { "NumFeatures", NumFeatures },
-            { "TaskType", (int)TaskType },
-            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
-            { "InitPrediction", NumOps.ToDouble(_initPrediction) }
-        };
-
-        // Serialize regularization configuration
-        if (Regularization is not null)
-        {
-            var regOptions = Regularization.GetOptions();
-            modelData["RegularizationType"] = (int)regOptions.Type;
-            modelData["RegularizationStrength"] = regOptions.Strength;
-            modelData["RegularizationL1Ratio"] = regOptions.L1Ratio;
-        }
-
-        // Serialize FeatureImportances
-        if (FeatureImportances is not null)
-        {
-            var fiArray = new double[FeatureImportances.Length];
-            for (int i = 0; i < FeatureImportances.Length; i++)
-                fiArray[i] = NumOps.ToDouble(FeatureImportances[i]);
-            modelData["FeatureImportances"] = fiArray;
-        }
-
-        // Serialize leaf residual means
-        modelData["LeafResidualMeansCount"] = _leafResidualMeans.Count;
-        for (int i = 0; i < _leafResidualMeans.Count; i++)
-        {
-            var means = _leafResidualMeans[i];
-            var meansDouble = new double[means.Length];
-            for (int j = 0; j < means.Length; j++)
-                meansDouble[j] = NumOps.ToDouble(means[j]);
-            modelData[$"LeafResidualMeans_{i}"] = meansDouble;
-        }
-
-        // Serialize each estimator as base64
-        modelData["EstimatorCount"] = Estimators.Count;
-        for (int i = 0; i < Estimators.Count; i++)
-        {
-            if (Estimators[i] is IFullModel<T, Matrix<T>, Vector<T>> fullModel)
-            {
-                modelData[$"Estimator_{i}"] = Convert.ToBase64String(fullModel.Serialize());
-            }
-        }
-
-        var modelMetadata = GetModelMetadata();
-        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        var jsonString = Encoding.UTF8.GetString(modelData);
-        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-
-        if (modelMetadata == null || modelMetadata.ModelData == null)
-            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
-
-        var modelDataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
-        var modelDataObj = JsonConvert.DeserializeObject<JObject>(modelDataString);
-
-        if (modelDataObj == null)
-            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
-
-        NumClasses = modelDataObj["NumClasses"]?.ToObject<int>() ?? 0;
-        NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
-        TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
-
-        var classLabelsToken = modelDataObj["ClassLabels"];
-        if (classLabelsToken is not null)
-        {
-            var classLabelsAsDoubles = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (classLabelsAsDoubles.Length > 0)
-            {
-                ClassLabels = new Vector<T>(classLabelsAsDoubles.Length);
-                for (int i = 0; i < classLabelsAsDoubles.Length; i++)
-                    ClassLabels[i] = NumOps.FromDouble(classLabelsAsDoubles[i]);
-            }
-        }
-
-        _initPrediction = NumOps.FromDouble(modelDataObj["InitPrediction"]?.ToObject<double>() ?? 0.0);
-
-        // Deserialize FeatureImportances
-        var fiToken = modelDataObj["FeatureImportances"];
-        if (fiToken is not null)
-        {
-            var fiArray = fiToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (fiArray.Length > 0)
-            {
-                FeatureImportances = new Vector<T>(fiArray.Length);
-                for (int i = 0; i < fiArray.Length; i++)
-                    FeatureImportances[i] = NumOps.FromDouble(fiArray[i]);
-            }
-        }
-
-        // Deserialize leaf residual means
-        _leafResidualMeans.Clear();
-        int lrmCount = modelDataObj["LeafResidualMeansCount"]?.ToObject<int>() ?? 0;
-        for (int i = 0; i < lrmCount; i++)
-        {
-            var lrmToken = modelDataObj[$"LeafResidualMeans_{i}"];
-            if (lrmToken is null)
-            {
-                throw new InvalidOperationException(
-                    $"Deserialization failed: LeafResidualMeans_{i} is missing (expected {lrmCount} entries).");
-            }
-            var meansDouble = lrmToken.ToObject<double[]>() ?? Array.Empty<double>();
-            var means = new T[meansDouble.Length];
-            for (int j = 0; j < meansDouble.Length; j++)
-                means[j] = NumOps.FromDouble(meansDouble[j]);
-            _leafResidualMeans.Add(means);
-        }
-
-        // Deserialize estimators
-        int estimatorCount = modelDataObj["EstimatorCount"]?.ToObject<int>() ?? 0;
-        Estimators.Clear();
-        for (int i = 0; i < estimatorCount; i++)
-        {
-            var estToken = modelDataObj[$"Estimator_{i}"]?.ToObject<string>();
-            if (estToken is null)
-            {
-                throw new InvalidOperationException(
-                    $"Deserialization failed: Estimator_{i} is missing (expected {estimatorCount} estimators).");
-            }
-            var estBytes = Convert.FromBase64String(estToken);
-            var tree = new DecisionTreeClassifier<T>();
-            tree.Deserialize(estBytes);
-            Estimators.Add(tree);
-        }
-
-        // Restore regularization configuration
-        var regType = modelDataObj["RegularizationType"]?.ToObject<int>();
-        if (regType.HasValue)
-        {
-            var regOptions = new RegularizationOptions
-            {
-                Type = (RegularizationType)regType.Value,
-                Strength = modelDataObj["RegularizationStrength"]?.ToObject<double>() ?? 0.0,
-                L1Ratio = modelDataObj["RegularizationL1Ratio"]?.ToObject<double>() ?? 0.5
-            };
-
-
-#pragma warning disable CS8601 // Regularization can be null for RegularizationType.None
-            Regularization = (RegularizationType)regType.Value switch
-            {
-
-                RegularizationType.L1 => new L1Regularization<T, Matrix<T>, Vector<T>>(regOptions),
-                RegularizationType.L2 => new L2Regularization<T, Matrix<T>, Vector<T>>(regOptions),
-                RegularizationType.ElasticNet => new ElasticNetRegularization<T, Matrix<T>, Vector<T>>(regOptions),
-                RegularizationType.None => null,
-                _ => null
-            };
-#pragma warning restore CS8601
-        }
     }
 }

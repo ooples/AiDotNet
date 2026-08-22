@@ -29,6 +29,7 @@ internal class DETRDecoder<T>
     private readonly int _numHeads;
     private readonly int _numQueries;
     private readonly List<DecoderLayer<T>> _layers;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _queryEmbed;  // Learnable query embeddings
     private readonly Dense<T> _classHead;
     private readonly Dense<T> _boxHead;

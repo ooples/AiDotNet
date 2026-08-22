@@ -78,6 +78,7 @@ public partial class HopfieldNetwork<T> : VectorModelLayoutBase<T>
     /// These connection strengths are what allow the network to store and recall patterns.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _weights;
 
     /// <summary>
@@ -608,23 +609,7 @@ public partial class HopfieldNetwork<T> : VectorModelLayoutBase<T>
     /// without having to train it again from scratch.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write network size
-        writer.Write(_size);
 
-        // Write weight matrix
-        writer.Write(_weights.Shape[0]);
-        writer.Write(_weights.Shape[1]);
-
-        for (int i = 0; i < _weights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _weights.Shape[1]; j++)
-            {
-                writer.Write(Convert.ToDouble(_weights[i, j]));
-            }
-        }
-    }
 
     /// <summary>
     /// Deserializes Hopfield network-specific data from a binary reader.
@@ -646,27 +631,7 @@ public partial class HopfieldNetwork<T> : VectorModelLayoutBase<T>
     /// having to train it again on the same patterns.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read network size
-        _size = reader.ReadInt32();
 
-        // Read weight matrix dimensions
-        int rows = reader.ReadInt32();
-        int columns = reader.ReadInt32();
-
-        // Initialize weight matrix
-        _weights = new Tensor<T>([rows, columns]);
-
-        // Read weight values
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < columns; j++)
-            {
-                _weights[i, j] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-    }
 
     /// <summary>
     /// Calculates the energy of the current state of the Hopfield network.
@@ -755,34 +720,5 @@ public partial class HopfieldNetwork<T> : VectorModelLayoutBase<T>
         // Theoretical capacity of a Hopfield network is approximately N/(4*ln(N))
         double capacity = _size / (4.0 * Math.Log(_size));
         return (int)Math.Floor(capacity);
-    }
-
-    /// <summary>
-    /// Creates a new instance of the Hopfield Network with the same architecture and configuration.
-    /// </summary>
-    /// <returns>A new Hopfield Network instance with the same architecture and size.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the Hopfield Network with the same architecture and size
-    /// as the current instance. It's used in scenarios where a fresh copy of the model is needed
-    /// while maintaining the same configuration.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a brand new copy of the network with the same setup.
-    /// 
-    /// Think of it like creating a blank version of the network:
-    /// - The new network has the same size (number of neurons)
-    /// - It has the same architecture (configuration)
-    /// - But it starts with no stored patterns - it's a fresh network
-    /// - The weight matrix is initialized to zeros
-    /// 
-    /// This is useful when you want to:
-    /// - Start with a clean network with the same structure
-    /// - Train it on different patterns
-    /// - Compare results between different training approaches
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new HopfieldNetwork<T>(this.Architecture, _size);
     }
 }

@@ -36,12 +36,55 @@ namespace AiDotNet.DistributedTraining;
 /// <typeparam name="T">The numeric type for operations</typeparam>
 /// <typeparam name="TInput">The input type for the model</typeparam>
 /// <typeparam name="TOutput">The output type for the model</typeparam>
-public abstract class ShardedModelBase<T, TInput, TOutput> :
+public abstract partial class ShardedModelBase<T, TInput, TOutput> :
     IShardedModel<T, TInput, TOutput>,
     IParameterizable<T, TInput, TOutput>,
     IGradientComputable<T, TInput, TOutput>,
     IModelShape
 {
+    // --- declared state (ModelStateRegistry) ---
+    // Identical in every model base because these bases are siblings over the same interfaces rather
+    // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.
+
+    /// <summary>State that is not a parameter vector, declared once and persisted by this base.</summary>
+    private readonly AiDotNet.Models.ModelStateRegistry<T> _declaredState = new();
+    private bool _declaredStateRegistered;
+
+    /// <summary>
+    /// Declare state here that the parameter vector does not carry -- a retained training set,
+    /// fitted knots, kernel centres, an ensemble's children. Both halves of the payload are driven
+    /// by the declaration, so they cannot drift.
+    /// </summary>
+    /// <param name="state">The registry to declare into.</param>
+    protected virtual void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+    }
+    /// <summary>Generated state declarations for fields declared across this model's hierarchy.</summary>
+    /// <param name="state">The registry to declare into.</param>
+    /// <remarks>
+    /// Emitted by ModelStateGenerator into the partial model, so a model author declares nothing. The
+    /// hand-written <c>RegisterState</c> beside it exists only for state the classifier genuinely
+    /// cannot place; anything it CAN place belongs here, where it cannot be forgotten.
+    /// </remarks>
+    protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        RegisterGeneratedStateCore(state);
+    }
+
+    /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>
+    protected AiDotNet.Models.ModelStateRegistry<T> DeclaredState
+    {
+        get
+        {
+            if (!_declaredStateRegistered)
+            {
+                _declaredStateRegistered = true;
+                RegisterGeneratedState(_declaredState);
+                RegisterState(_declaredState);
+            }
+            return _declaredState;
+        }
+    }
     /// <summary>
     /// Provides numeric operations for type T.
     /// </summary>
@@ -513,7 +556,28 @@ public abstract class ShardedModelBase<T, TInput, TOutput> :
     }
 
     /// <inheritdoc/>
-    public abstract IFullModel<T, TInput, TOutput> Clone();
+    /// <remarks>
+    /// <para>
+    /// No longer abstract. Configuration is rebuilt from the compile-time clone plan, which records
+    /// the constructor the type was built with; learned state is carried through the model's own
+    /// public Serialize and Deserialize, so a model that persists something extra keeps it. The
+    /// persistence guard is told this is an internal operation because a clone is not a save.
+    /// </para>
+    /// <para>
+    /// A model overrides this only when the generator reports that it cannot rebuild the type --
+    /// a constructor parameter with no member holding its value -- and the build names which one.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, TInput, TOutput> Clone()
+    {
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            byte[] state = Serialize();
+            var copy = (ShardedModelBase<T, TInput, TOutput>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
+            copy.Deserialize(state);
+            return copy;
+        }
+    }
 
     /// <inheritdoc/>
     public virtual IFullModel<T, TInput, TOutput> DeepCopy()

@@ -96,13 +96,4 @@ public class FinBERTNER<T> : TransformerNERBase<T>
             "FinBERT-NER", "Yang et al., IJCAI 2020", optimizer)
     {
     }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new TransformerNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new FinBERTNER<T>(Architecture, p, optionsCopy);
-        return new FinBERTNER<T>(Architecture, optionsCopy);
-    }
 }

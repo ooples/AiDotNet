@@ -127,6 +127,7 @@ public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
 
     private ONNXSentenceTransformer<T>? _baseModel;
     private bool _isFineTuned;
+    [Scratch]
     private Dictionary<string, Vector<T>> _fineTunedEmbeddingsCache;
     private bool _disposed;
 

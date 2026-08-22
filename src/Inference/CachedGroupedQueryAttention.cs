@@ -51,10 +51,15 @@ public partial class CachedGroupedQueryAttention<T> : LayerBase<T>, IShapeContra
     private readonly bool _useCausalMask;
 
     // Projection weights (initialized in constructor, never reassigned)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _queryWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _keyWeights;  // Reduced: [embDim, numKVHeads * headDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _valueWeights; // Reduced: [embDim, numKVHeads * headDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputBias;
 
     // KV-Cache reference
@@ -66,7 +71,9 @@ public partial class CachedGroupedQueryAttention<T> : LayerBase<T>, IShapeContra
     private ALiBiPositionalBiasLayer<T>? _alibiLayer;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <inheritdoc />
@@ -115,6 +122,9 @@ public partial class CachedGroupedQueryAttention<T> : LayerBase<T>, IShapeContra
         set => _layerIndex = value;
     }
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new cached GQA layer.
     /// </summary>
@@ -132,6 +142,7 @@ public partial class CachedGroupedQueryAttention<T> : LayerBase<T>, IShapeContra
             [sequenceLength, embeddingDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         if (embeddingDimension % numHeads != 0)
             throw new ArgumentException($"Embedding dimension ({embeddingDimension}) must be divisible by numHeads ({numHeads}).");
         if (numHeads % numKVHeads != 0)

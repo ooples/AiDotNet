@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Attention Is All You Need", "https://arxiv.org/abs/1706.03762", Year = 2017, Authors = "Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin")]
-public class AttentionNetwork<T> : SequenceModelLayoutBase<T>, IAuxiliaryLossLayer<T>
+public partial class AttentionNetwork<T> : SequenceModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly AttentionNetworkOptions _options;
 
@@ -352,57 +352,9 @@ public class AttentionNetwork<T> : SequenceModelLayoutBase<T>, IAuxiliaryLossLay
         };
     }
 
-    /// <summary>
-    /// Serializes network-specific data for the Attention Network.
-    /// </summary>
-    /// <param name="writer">The BinaryWriter to write the data to.</param>
-    /// <remarks>
-    /// <para>
-    /// This method writes the specific configuration and state of the Attention Network to a binary stream.
-    /// It includes network-specific parameters that are essential for later reconstruction of the network.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves the unique settings of your Attention Network.
-    /// 
-    /// It writes:
-    /// - The sequence length and embedding size
-    /// - The configuration of each layer
-    /// - Any other Attention Network-specific parameters
-    /// 
-    /// Saving these details allows you to recreate the exact same network structure later.
-    /// It's like writing down a detailed recipe so you can make the same dish again in the future.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_embeddingSize);
-    }
 
-    /// <summary>
-    /// Deserializes network-specific data for the Attention Network.
-    /// </summary>
-    /// <param name="reader">The BinaryReader to read the data from.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reads the specific configuration and state of the Attention Network from a binary stream.
-    /// It reconstructs the network-specific parameters to match the state of the network when it was serialized.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads the unique settings of your Attention Network.
-    /// 
-    /// It reads:
-    /// - The sequence length and embedding size
-    /// - The configuration of each layer
-    /// - Any other Attention Network-specific parameters
-    /// 
-    /// Loading these details allows you to recreate the exact same network structure that was previously saved.
-    /// It's like following a detailed recipe to recreate a dish exactly as it was made before.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _embeddingSize = reader.ReadInt32();
-    }
+
+
 
     /// <summary>
     /// Computes the auxiliary loss for the AttentionNetwork, which aggregates attention entropy losses from all attention layers.
@@ -531,31 +483,5 @@ public class AttentionNetwork<T> : SequenceModelLayoutBase<T>, IAuxiliaryLossLay
         }
 
         return diagnostics;
-    }
-
-    /// <summary>
-    /// Creates a new instance of the attention network model.
-    /// </summary>
-    /// <returns>A new instance of the attention network model with the same configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the attention network model with the same configuration as the current instance.
-    /// It is used internally during serialization/deserialization processes to create a fresh instance that can be populated
-    /// with the serialized data.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a copy of the model structure without copying the learned data.
-    /// 
-    /// Think of it like creating a blueprint of the network's architecture:
-    /// - It includes the same structure (layers, connections, sizes)
-    /// - It preserves the configuration settings (sequence length, embedding size)
-    /// - It doesn't copy over any of the learned knowledge (weights, biases)
-    /// 
-    /// This is particularly useful when you want to save or load models, as it provides the framework
-    /// that learned parameters can be loaded into.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new AttentionNetwork<T>(Architecture, _sequenceLength, _embeddingSize, _lossFunction);
     }
 }

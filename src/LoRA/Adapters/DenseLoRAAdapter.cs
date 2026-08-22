@@ -30,7 +30,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// (frozen) reduces trainable parameters from 1,000,000 to just 16,000!
 /// </para>
 /// </remarks>
-public class DenseLoRAAdapter<T> : LoRAAdapterBase<T>
+public partial class DenseLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Initializes a new Dense LoRA adapter wrapping an existing Dense or FullyConnected layer.
@@ -71,6 +71,9 @@ public class DenseLoRAAdapter<T> : LoRAAdapterBase<T>
         // restore supplies authoritative shape information through the base implementation.
     }
 
+    /// <summary>Construction state: the 'inputSize' the layer was built with.</summary>
+    private readonly int _inputSize;
+
     /// <summary>
     /// Initializes a new Dense LoRA adapter wrapping a base layer that is in deferred-shape
     /// state (e.g. a PyTorch-style lazy <see cref="NeuralNetworks.Layers.DenseLayer{T}"/>
@@ -93,6 +96,7 @@ public class DenseLoRAAdapter<T> : LoRAAdapterBase<T>
         bool freezeBaseLayer = true)
         : this(EnsureResolved(baseLayer, inputSize), rank, alpha, freezeBaseLayer)
     {
+        _inputSize = inputSize;
     }
 
     private static ILayer<T> EnsureResolved(NeuralNetworks.Layers.LayerBase<T> baseLayer, int inputSize)

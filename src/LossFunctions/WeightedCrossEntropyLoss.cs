@@ -35,6 +35,7 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
     /// <summary>
     /// The weights to apply to each sample.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _weights;
 
     /// <summary>

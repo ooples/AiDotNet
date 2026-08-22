@@ -25,7 +25,7 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
+public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
     /// Describes this Nadam instance for the fused-compiled training kernel
@@ -55,11 +55,13 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <summary>
     /// The first moment vector (momentum).
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _m;
 
     /// <summary>
     /// The second moment vector (adaptive learning rates).
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _v;
 
     /// <summary>
@@ -70,11 +72,13 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <summary>
     /// Stores the pre-update snapshot of first moment vector for accurate reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _previousM;
 
     /// <summary>
     /// Stores the pre-update snapshot of second moment vector for accurate reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _previousV;
 
     /// <summary>
@@ -638,45 +642,6 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         return _options;
     }
 
-    /// <summary>
-    /// Serializes the optimizer's state into a byte array.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method converts the current state of the optimizer, including its base class state, options, and time step,
-    /// into a byte array. This is useful for saving the optimizer's state or transferring it between systems.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// Think of this as taking a snapshot of your entire smart ball rolling experiment. It captures all the details of your 
-    /// current setup, including the ball's position, speed, and all your rules. This snapshot can be used to recreate 
-    /// the exact same experiment later or share it with others.
-    /// </para>
-    /// </remarks>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
-
-            writer.Write(_t);
-
-            // Serialize state vectors
-            SerializeVector(writer, _m);
-            SerializeVector(writer, _v);
-            SerializeVector(writer, _previousM);
-            SerializeVector(writer, _previousV);
-
-            return ms.ToArray();
-        }
-    }
-
     private void SerializeVector(BinaryWriter writer, Vector<T>? vector)
     {
         bool hasVector = vector is not null;
@@ -705,44 +670,6 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
             return new Vector<T>(data);
         }
         return null;
-    }
-
-    /// <summary>
-    /// Deserializes a byte array to restore the optimizer's state.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method takes a byte array (previously created by Serialize) and uses it to restore the optimizer's state,
-    /// including its base class state, options, and time step.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like using a detailed blueprint to recreate your smart ball rolling experiment exactly as it was at a certain point.
-    /// It allows you to set up the experiment to match a previous state, with all the same rules and conditions.
-    /// </para>
-    /// </remarks>
-    /// <param name="data">The byte array containing the serialized optimizer state.</param>
-    /// <exception cref="InvalidOperationException">Thrown when the optimizer options cannot be deserialized.</exception>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<NadamOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-            _t = reader.ReadInt32();
-
-            // Deserialize state vectors
-            _m = DeserializeVector(reader);
-            _v = DeserializeVector(reader);
-            _previousM = DeserializeVector(reader);
-            _previousV = DeserializeVector(reader);
-        }
     }
 
     /// <summary>

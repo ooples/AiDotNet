@@ -41,7 +41,7 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Analysis of Extreme Values", "https://doi.org/10.1214/aoms/1177729747", Year = 1950, Authors = "Wilfrid J. Dixon")]
-public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
+public partial class DixonQTestDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _alpha;
     [Buffer]

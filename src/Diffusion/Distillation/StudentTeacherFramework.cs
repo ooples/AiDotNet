@@ -39,6 +39,7 @@ public class StudentTeacherFramework<T>
     private readonly IDiffusionModel<T> _student;
     private readonly double _emaDecay;
     private readonly double _temperatureScale;
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _emaParameters;
 
     /// <summary>

@@ -119,22 +119,6 @@ internal abstract class DeepARDistributionHead<T> : NeuralNetworks.Layers.LayerB
 
     public override bool SupportsTraining => true;
     public override void ResetState() { }
-    public override void Serialize(BinaryWriter writer)
-    {
-        writer.Write(Hidden);
-        writer.Write(_params.Count);
-        foreach (var p in _params)
-            WriteTensor(writer, p);
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        reader.ReadInt32(); // hidden
-        int count = reader.ReadInt32();
-        for (int i = 0; i < count && i < _params.Count; i++)
-            ReadTensorInto(reader, _params[i]);
-    }
-
     protected static void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);

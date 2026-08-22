@@ -60,7 +60,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Mask DINO: Towards A Unified Transformer-based Framework for Object Detection and Segmentation", "https://arxiv.org/abs/2206.02777", Year = 2023, Authors = "Feng Li, Hao Zhang, Huaizhe Xu, Shilong Liu, Lei Zhang, Lionel M. Ni, Heung-Yeung Shum")]
-public class MaskDINO<T> : Common.PanopticSegmentationBase<T>
+public partial class MaskDINO<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly MaskDINOOptions _options;
 
@@ -369,18 +369,7 @@ public class MaskDINO<T> : Common.PanopticSegmentationBase<T>
     /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height); writer.Write(_width); writer.Write(_channels);
-        writer.Write(_numClasses); writer.Write(_numQueries); writer.Write((int)_modelSize);
-        writer.Write(_decoderDim); writer.Write(_dropRate);
-        writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty);
-        writer.Write(_encoderLayerEnd);
-        writer.Write(_channelDims.Length);
-        foreach (int dim in _channelDims) writer.Write(dim);
-        writer.Write(_depths.Length);
-        foreach (int depth in _depths) writer.Write(depth);
-    }
+
 
     /// <summary>
     /// Reads Mask DINO configuration from a binary stream.
@@ -391,18 +380,7 @@ public class MaskDINO<T> : Common.PanopticSegmentationBase<T>
     /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadDouble();
-        _ = reader.ReadBoolean(); _ = reader.ReadString();
-        _ = reader.ReadInt32();
-        int dimCount = reader.ReadInt32();
-        for (int i = 0; i < dimCount; i++) _ = reader.ReadInt32();
-        int depthCount = reader.ReadInt32();
-        for (int i = 0; i < depthCount; i++) _ = reader.ReadInt32();
-    }
+
 
     /// <summary>
     /// Creates a new Mask DINO instance with the same configuration but fresh weights.

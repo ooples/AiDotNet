@@ -799,59 +799,10 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.LatentDimension);
-        writer.Write(_options.EncoderDimensions.Length);
-        foreach (var dim in _options.EncoderDimensions)
-        {
-            writer.Write(dim);
-        }
-        writer.Write(_options.DecoderDimensions.Length);
-        foreach (var dim in _options.DecoderDimensions)
-        {
-            writer.Write(dim);
-        }
-        writer.Write(_options.BatchSize);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.LossWeight);
-        writer.Write(_options.VGMModes);
 
-        // Structural layout so a deserialized clone can re-bind its typed layer
-        // references (encoder / mean+logvar heads / decoder) out of the shared
-        // Layers collection and reproduce the identical VAE forward.
-        writer.Write(_dataWidth);
-        writer.Write(IsFitted);
-        writer.Write(_usingCustomLayers);
-        writer.Write(_encoderLayers.Count);
-        writer.Write(_meanLayer is not null);
-        writer.Write(_decoderLayers.Count);
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32();    // LatentDimension
-        int encDims = reader.ReadInt32();
-        for (int i = 0; i < encDims; i++) _ = reader.ReadInt32();
-        int decDims = reader.ReadInt32();
-        for (int i = 0; i < decDims; i++) _ = reader.ReadInt32();
-        _ = reader.ReadInt32();    // BatchSize
-        _ = reader.ReadDouble();   // LearningRate
-        _ = reader.ReadDouble();   // LossWeight
-        _ = reader.ReadInt32();    // VGMModes
 
-        _dataWidth = reader.ReadInt32();
-        IsFitted = reader.ReadBoolean();
-        _usingCustomLayers = reader.ReadBoolean();
-        int encoderCount = reader.ReadInt32();
-        bool hasHeads = reader.ReadBoolean();
-        int decoderCount = reader.ReadInt32();
-
-        // The base deserializer rebuilt Layers; re-bind the typed references the
-        // VAE forward uses (encoder, mean/logvar heads, decoder) from it.
-        ExtractLayerReferences(encoderCount, hasHeads, decoderCount);
-    }
 
     /// <summary>
     /// Re-binds <see cref="_encoderLayers"/>, <see cref="_meanLayer"/>,

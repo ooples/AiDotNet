@@ -339,28 +339,10 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
 
     // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_vocabSize);
-        writer.Write(_seqLength);
-        writer.Write(_specialTokenOffset);
-        writer.Write(IsFitted);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _vocabSize = reader.ReadInt32();
-        _seqLength = reader.ReadInt32();
-        _specialTokenOffset = reader.ReadInt32();
-        IsFitted = reader.ReadBoolean();
-    }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TabLLMGenGenerator<T>(Architecture, _options);
-    }
 
     /// <inheritdoc />
     public override Dictionary<string, T> GetFeatureImportance()

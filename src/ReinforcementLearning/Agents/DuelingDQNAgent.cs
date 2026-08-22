@@ -305,34 +305,6 @@ public partial class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         _targetNetwork.Deserialize(targetNetworkBytes);
     }
 
-    /// <inheritdoc/>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clonedOptions = new DuelingDQNOptions<T>
-        {
-            StateSize = _options.StateSize,
-            ActionSize = _options.ActionSize,
-            LearningRate = LearningRate,
-            DiscountFactor = DiscountFactor,
-            LossFunction = LossFunction,
-            EpsilonStart = _epsilon,
-            EpsilonEnd = _options.EpsilonEnd,
-            EpsilonDecay = _options.EpsilonDecay,
-            BatchSize = _options.BatchSize,
-            ReplayBufferSize = _options.ReplayBufferSize,
-            TargetUpdateFrequency = _options.TargetUpdateFrequency,
-            WarmupSteps = _options.WarmupSteps,
-            SharedLayers = _options.SharedLayers,
-            ValueStreamLayers = _options.ValueStreamLayers,
-            AdvantageStreamLayers = _options.AdvantageStreamLayers,
-            Seed = _options.Seed
-        };
-
-        var clone = new DuelingDQNAgent<T>(clonedOptions);
-        clone.SetParameters(GetParameters());
-        return clone;
-    }
-
 
 
     // Helper methods
@@ -395,14 +367,23 @@ internal class DuelingNetwork<T> : IParameterSource<T>
     private readonly int _stateSize;
     private readonly int _actionSize;
 
+    [Scratch]
     private Vector<T>? _lastSharedOutput;
+    [Scratch]
     private Vector<T>? _lastValueOutput;
+    [Scratch]
     private Vector<T>? _lastAdvantageOutput;
+    [Scratch]
     private readonly List<Vector<T>> _lastSharedInputs = new();
+    [Scratch]
     private readonly List<Vector<T>> _lastSharedOutputs = new();
+    [Scratch]
     private readonly List<Vector<T>> _lastValueInputs = new();
+    [Scratch]
     private readonly List<Vector<T>> _lastValueOutputs = new();
+    [Scratch]
     private readonly List<Vector<T>> _lastAdvantageInputs = new();
+    [Scratch]
     private readonly List<Vector<T>> _lastAdvantageOutputs = new();
 
     public DuelingNetwork(

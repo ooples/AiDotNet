@@ -62,6 +62,7 @@ public partial class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBas
     private readonly int _paramDim;
 
     /// <summary>Learned log-variance for the posterior.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _logVar;
 
     /// <inheritdoc/>

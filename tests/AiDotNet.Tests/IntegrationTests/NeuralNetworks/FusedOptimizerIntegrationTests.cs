@@ -819,9 +819,6 @@ public class FusedOptimizerIntegrationTests
 
         protected override void SerializeNetworkSpecificData(BinaryWriter writer) { }
         protected override void DeserializeNetworkSpecificData(BinaryReader reader) { }
-
-        protected override IFullModel<float, Tensor<float>, Tensor<float>> CreateNewInstance()
-            => new FusedTrainingTestNetwork(Architecture);
     }
 
     internal sealed class FusedTrainingTestNetworkDouble : VectorModelLayoutBase<double>
@@ -872,8 +869,5 @@ public class FusedOptimizerIntegrationTests
 
         protected override void SerializeNetworkSpecificData(BinaryWriter writer) { }
         protected override void DeserializeNetworkSpecificData(BinaryReader reader) { }
-
-        protected override IFullModel<double, Tensor<double>, Tensor<double>> CreateNewInstance()
-            => new FusedTrainingTestNetworkDouble(Architecture);
     }
 }

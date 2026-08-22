@@ -28,7 +28,7 @@ namespace AiDotNet.Models;
 /// only needs to implement its core prediction and training logic.
 /// </para>
 /// </remarks>
-public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>,
+public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>,
     IParameterizable<T, TInput, TOutput>, IFeatureAware, IGradientComputable<T, TInput, TOutput>,
     IParameterManifestProvider, IParameterChunkSource<T>
 {
@@ -103,6 +103,56 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     /// <summary>Generated override chain for fields declared across the model hierarchy.</summary>
     protected virtual void RegisterGeneratedParameterComponents(ParameterComponentRegistry<T> registry)
     {
+    }
+
+    /// <summary>State that is not a flat parameter vector, declared once and persisted by the base.</summary>
+    private readonly ModelStateRegistry<T> _stateRegistry = new();
+    private bool _stateRegistered;
+
+    /// <summary>
+    /// Declare state here that <see cref="GetParameters"/> does not carry -- a retained training set,
+    /// fitted knots, kernel centres, an ensemble's children.
+    /// </summary>
+    /// <param name="state">The registry to declare into.</param>
+    /// <remarks>
+    /// <para>
+    /// Every model whose learned state IS its parameter vector needs nothing here. The rest used to
+    /// hand-write a Serialize/Deserialize pair, because there was nowhere to say "this is state too"
+    /// -- and a hand-written pair is two places to forget the same field.
+    /// </para>
+    /// <para>
+    /// A declaration is a name and an accessor pair. Both halves of the payload are driven by it, so
+    /// they cannot drift; nothing here touches a writer or a reader.
+    /// </para>
+    /// </remarks>
+    protected virtual void RegisterState(ModelStateRegistry<T> state)
+    {
+    }
+    /// <summary>Generated state declarations for fields declared across this model's hierarchy.</summary>
+    /// <param name="state">The registry to declare into.</param>
+    /// <remarks>
+    /// Emitted by ModelStateGenerator into the partial model, so a model author declares nothing. The
+    /// hand-written <c>RegisterState</c> beside it exists only for state the classifier genuinely
+    /// cannot place; anything it CAN place belongs here, where it cannot be forgotten.
+    /// </remarks>
+    protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        RegisterGeneratedStateCore(state);
+    }
+
+    /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>
+    private ModelStateRegistry<T> State
+    {
+        get
+        {
+            if (!_stateRegistered)
+            {
+                _stateRegistered = true;
+                RegisterGeneratedState(_stateRegistry);
+                RegisterState(_stateRegistry);
+            }
+            return _stateRegistry;
+        }
     }
 
     /// <summary>
@@ -279,7 +329,28 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     // --- ICloneable ---
 
     /// <inheritdoc/>
-    public abstract IFullModel<T, TInput, TOutput> DeepCopy();
+    /// <remarks>
+    /// <para>
+    /// No longer abstract. Configuration is rebuilt from the compile-time clone plan, which records
+    /// the constructor the type was built with; learned state is carried through the model's own
+    /// public Serialize and Deserialize, so a model that persists something extra keeps it. The
+    /// persistence guard is told this is an internal operation because a clone is not a save.
+    /// </para>
+    /// <para>
+    /// A model overrides this only when the generator reports that it cannot rebuild the type --
+    /// a constructor parameter with no member holding its value -- and the build names which one.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, TInput, TOutput> DeepCopy()
+    {
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            byte[] state = Serialize();
+            var copy = (ModelBase<T, TInput, TOutput>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
+            copy.Deserialize(state);
+            return copy;
+        }
+    }
 
     /// <inheritdoc/>
     public virtual IFullModel<T, TInput, TOutput> Clone() => DeepCopy();
@@ -315,18 +386,121 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     // --- IModelSerializer ---
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// THIS USED TO THROW, with the message "Override Serialize to provide an implementation", and
+    /// that instruction is the whole reason 368 hand-written Serialize/Deserialize halves exist. A
+    /// base that refuses the job conscripts every author into doing it by hand, and each hand-written
+    /// pair is two places to forget the same field.
+    /// </para>
+    /// <para>
+    /// It does the job now, from what the model has already DECLARED: components registered through
+    /// <see cref="RegisterParameterComponent"/> and
+    /// <see cref="RegisterGeneratedParameterComponents"/> are folded by
+    /// <see cref="GetParameters"/>, so the base can persist all of them without knowing anything
+    /// about a particular model. Configuration is not written here -- a clone gets it from the
+    /// recorded constructor, and a load applies it to a model the caller already constructed.
+    /// </para>
+    /// <para>
+    /// The type token is not decoration. Without it, loading one model's bytes into another whose
+    /// parameter vector happens to be the same length succeeds silently and yields a model that is
+    /// confidently wrong, which is precisely the class of defect this work exists to remove.
+    /// </para>
+    /// </remarks>
     public virtual byte[] Serialize()
     {
-        throw new NotSupportedException(
-            $"Serialization is not supported for {GetType().Name}. Override Serialize to provide an implementation.");
+        // ModelSave is a licensed capability. It used to be enforced only by each model's
+        // hand-written Serialize, so deleting one of those in favour of this base -- which is
+        // exactly what ADN0060 asks for -- silently removed the gate for that model. Enforcing
+        // here means the replacement carries it for every model, and a model that still has its
+        // own override keeps enforcing there. Re-entry is harmless: InternalOperation scopes
+        // suppress the nested call.
+        ModelPersistenceGuard.EnforceBeforeSerialize();
+
+        var parameters = GetParameters();
+
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+
+        writer.Write(ModelSerializationMagic);
+        writer.Write(GetType().FullName ?? GetType().Name);
+        writer.Write(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            writer.Write(Convert.ToDouble(parameters[i]));
+        }
+
+        // Whatever the model declared that the parameter vector does not carry: a retained training
+        // set, fitted knots, kernel centres, an ensemble's children.
+        State.WriteAll(writer);
+
+        writer.Flush();
+        return stream.ToArray();
     }
 
     /// <inheritdoc/>
     public virtual void Deserialize(byte[] data)
     {
-        throw new NotSupportedException(
-            $"Deserialization is not supported for {GetType().Name}. Override Deserialize to provide an implementation.");
+        // Load is not a paid gate, but it is still gated on an Active licence, and for the same
+        // reason as Serialize above: this base is now the replacement for the hand-written halves.
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
+
+        if (data is null) throw new ArgumentNullException(nameof(data));
+
+        using var stream = new MemoryStream(data);
+        using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+
+        int magic = reader.ReadInt32();
+        if (magic != ModelSerializationMagic)
+        {
+            throw new InvalidDataException(
+                $"{GetType().Name}: payload is not an AiDotNet model state block. A checkpoint written "
+                + "by an earlier hand-written Serialize must be regenerated.");
+        }
+
+        string savedType = reader.ReadString();
+        string liveType = GetType().FullName ?? GetType().Name;
+        if (!string.Equals(savedType, liveType, StringComparison.Ordinal))
+        {
+            throw new InvalidDataException(
+                $"State was saved from '{savedType}' and is being loaded into '{liveType}'. Loading it "
+                + "would produce a model that is confidently wrong rather than one that fails.");
+        }
+
+        int count = reader.ReadInt32();
+        var parameters = new Vector<T>(count);
+        for (int i = 0; i < count; i++)
+        {
+            parameters[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        // Restore STRUCTURE before pouring the flat parameter vector into it. A fitted tree can have
+        // one constant in its constructor-created shell and two after its declared node graph is
+        // restored; setting parameters against the shell first rejects a perfectly valid payload.
+        // The vector remains authoritative for learned numeric values because it is applied last.
+        long declaredStatePosition = reader.BaseStream.Position;
+        bool hasDeclaredState = declaredStatePosition < reader.BaseStream.Length;
+        if (hasDeclaredState)
+        {
+            State.ReadBeforeParameters(reader);
+        }
+
+        SetParameters(parameters);
+
+        // A model can deliberately keep a trainable value in wider CLR storage than T (most
+        // commonly double working weights in a float model). The flat vector is still the public
+        // parameter contract, but narrowing it cannot reproduce those exact working values. The
+        // generator declares only those precision shadows for this second phase; ordinary fitted
+        // state is not replayed.
+        if (hasDeclaredState)
+        {
+            reader.BaseStream.Position = declaredStatePosition;
+            State.ReadAfterParameters(reader);
+        }
     }
+
+    /// <summary>Identifies a model state payload written by <see cref="Serialize"/>.</summary>
+    private const int ModelSerializationMagic = unchecked((int)0xA1D00DE1);
 
     /// <inheritdoc/>
     public virtual void SaveModel(string filePath)

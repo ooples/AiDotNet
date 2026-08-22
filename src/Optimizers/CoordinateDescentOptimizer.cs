@@ -25,7 +25,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
+public partial class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
     /// Describes this optimizer for the compiled fused-training kernel.
@@ -79,16 +79,19 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// <summary>
     /// Vector of learning rates for each coordinate (variable) in the optimization problem.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _learningRates;
 
     /// <summary>
     /// Vector of momentum values for each coordinate (variable) in the optimization problem.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _momentums;
 
     /// <summary>
     /// Vector of previous update values for each coordinate (variable) in the optimization problem.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _previousUpdate;
 
     /// <summary>
@@ -372,86 +375,6 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
-    }
-
-    /// <summary>
-    /// Serializes the Coordinate Descent optimizer to a byte array.
-    /// </summary>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method converts the current state of the optimizer into a series of bytes.
-    /// This is useful for saving the optimizer's state to a file or sending it over a network.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
-
-            // Serialize _learningRates
-            byte[] learningRatesData = _learningRates.Serialize();
-            writer.Write(learningRatesData.Length);
-            writer.Write(learningRatesData);
-
-            // Serialize _momentums
-            byte[] momentumsData = _momentums.Serialize();
-            writer.Write(momentumsData.Length);
-            writer.Write(momentumsData);
-
-            // Serialize _previousUpdate
-            byte[] previousUpdateData = _previousUpdate.Serialize();
-            writer.Write(previousUpdateData.Length);
-            writer.Write(previousUpdateData);
-
-            return ms.ToArray();
-        }
-    }
-
-    /// <summary>
-    /// Deserializes the Coordinate Descent optimizer from a byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized optimizer state.</param>
-    /// <exception cref="InvalidOperationException">Thrown when deserialization of optimizer options fails.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method reconstructs the optimizer's state from a series of bytes.
-    /// It's used to restore a previously saved state of the optimizer, allowing you to continue from where you left off.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<CoordinateDescentOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-            // Deserialize _learningRates
-            int learningRatesLength = reader.ReadInt32();
-            byte[] learningRatesData = reader.ReadBytes(learningRatesLength);
-            _learningRates = Vector<T>.Deserialize(learningRatesData);
-
-            // Deserialize _momentums
-            int momentumsLength = reader.ReadInt32();
-            byte[] momentumsData = reader.ReadBytes(momentumsLength);
-            _momentums = Vector<T>.Deserialize(momentumsData);
-
-            // Deserialize _previousUpdate
-            int previousUpdateLength = reader.ReadInt32();
-            byte[] previousUpdateData = reader.ReadBytes(previousUpdateLength);
-            _previousUpdate = Vector<T>.Deserialize(previousUpdateData);
-        }
     }
 
     /// <inheritdoc />

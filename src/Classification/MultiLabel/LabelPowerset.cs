@@ -85,7 +85,7 @@ namespace AiDotNet.Classification.MultiLabel;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 [ResearchPaper("Learning multi-label scene classification", "https://doi.org/10.1016/j.patcog.2004.01.013", Year = 2004, Authors = "Matthew R. Boutell, Jiebo Luo, Xipeng Shen, Christopher M. Brown")]
-public class LabelPowerset<T> : MultiLabelClassifierBase<T>
+public partial class LabelPowerset<T> : MultiLabelClassifierBase<T>
 {
 
     /// <inheritdoc />
@@ -398,90 +398,6 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
 
     #region Serialization
 
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        string? classifierTypeName = null;
-        string? classifierDataStr = null;
-        if (_classifier is not null)
-        {
-            var (typeName, data) = ClassifierRegistry<T>.SerializeClassifier(_classifier);
-            classifierTypeName = typeName;
-            classifierDataStr = data;
-        }
-
-        // Serialize _classToLabels as Dictionary<string, bool[]> (JSON can't use int keys directly)
-        Dictionary<string, bool[]>? classToLabelsStr = null;
-        if (_classToLabels is not null)
-        {
-            classToLabelsStr = new Dictionary<string, bool[]>();
-            foreach (var kvp in _classToLabels)
-            {
-                classToLabelsStr[kvp.Key.ToString()] = kvp.Value;
-            }
-        }
-
-        var modelDict = new Dictionary<string, object?>
-        {
-            { "NumLabels", NumLabels },
-            { "NumFeatures", NumFeatures },
-            { "NumClasses", NumClasses },
-            { "TaskType", (int)TaskType },
-            { "LabelNames", LabelNames },
-            { "NumCombinations", _numCombinations },
-            { "ClassToLabels", classToLabelsStr },
-            { "LabelsToClass", _labelsToClass },
-            { "ClassifierType", classifierTypeName },
-            { "ClassifierData", classifierDataStr }
-        };
-
-        var metadata = GetModelMetadata();
-        metadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelDict));
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(metadata));
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        var jsonString = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
-            ?? throw new InvalidOperationException("Failed to deserialize LabelPowerset: invalid metadata.");
-        if (metadata.ModelData is null)
-            throw new InvalidOperationException("Failed to deserialize LabelPowerset: missing model data.");
-
-        var dataString = Encoding.UTF8.GetString(metadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
-            ?? throw new InvalidOperationException("Failed to deserialize LabelPowerset: invalid model payload.");
-
-        NumLabels = jObj["NumLabels"]?.ToObject<int>() ?? 0;
-        NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
-        NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 2;
-        TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
-        LabelNames = jObj["LabelNames"]?.ToObject<string[]>();
-        _numCombinations = jObj["NumCombinations"]?.ToObject<int>() ?? 0;
-
-        // Deserialize _classToLabels from string-keyed dictionary
-        var classToLabelsStr = jObj["ClassToLabels"]?.ToObject<Dictionary<string, bool[]>>();
-        if (classToLabelsStr is not null)
-        {
-            _classToLabels = new Dictionary<int, bool[]>();
-            foreach (var kvp in classToLabelsStr)
-            {
-                _classToLabels[int.Parse(kvp.Key)] = kvp.Value;
-            }
-        }
-
-        _labelsToClass = jObj["LabelsToClass"]?.ToObject<Dictionary<string, int>>();
-
-        var classifierType = jObj["ClassifierType"]?.ToObject<string>();
-        var classifierDataVal = jObj["ClassifierData"]?.ToObject<string>();
-        if (classifierType is null || classifierDataVal is null)
-            throw new InvalidOperationException(
-                "Failed to deserialize LabelPowerset: classifier type/data is missing.");
-
-        _classifier = ClassifierRegistry<T>.DeserializeClassifier(classifierType, classifierDataVal);
-    }
-
     #endregion
 
     #region Abstract Method Implementations
@@ -558,20 +474,6 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         (_classifier as IGradientComputable<T, Matrix<T>, Vector<T>>)?.ApplyGradients(gradients, learningRate);
-    }
-
-    /// <summary>
-    /// Creates a new instance of this classifier with default configuration.
-    /// </summary>
-    /// <returns>A new LabelPowerset instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is used internally for operations like cloning or serialization.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Matrix<T>> CreateNewInstance()
-    {
-        return new LabelPowerset<T>(_classifierFactory, Options, Regularization);
     }
 
     /// <summary>

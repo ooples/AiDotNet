@@ -148,6 +148,7 @@ public partial class SpatialPoolerLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Gradient of the connections computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _connectionsGradient;
 
     /// <summary>
@@ -183,6 +184,7 @@ public partial class SpatialPoolerLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     private Tensor<T>? LastOutput;
+    [Scratch]
     private Tensor<T>? _lastBinaryOutput;
 
     /// <summary>

@@ -88,6 +88,8 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Fixed effects coefficients.
     /// </summary>
+    [AiDotNet.Attributes.Buffer(
+        Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Vector<T>? _fixedEffects;
 
     /// <summary>
@@ -1022,6 +1024,4 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         }
         return base.Clone();
     }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 }

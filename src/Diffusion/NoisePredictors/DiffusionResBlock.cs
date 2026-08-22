@@ -84,6 +84,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
     private readonly SiLUActivation<T> _silu = new();
 
     // Cache for backward
+    [Scratch]
     private Tensor<T>? _lastInput;
     private Tensor<T>? _preSiLU1;   // norm1 output (before SiLU)
     private Tensor<T>? _preSiLU2;   // norm2 output (before SiLU)
@@ -95,7 +96,9 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
     // tensors per ResBlock at SD 320×64×64 shapes; pooling these eliminates
     // ~40 MB of per-ResBlock allocation churn (≈22 ResBlocks per UNet
     // forward → ~880 MB removed from each Predict's GC pressure).
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _preAllocatedNorm1Out;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _preAllocatedNorm2Out;
 
     private static bool ShapeEquals(int[] a, int[] b)
@@ -502,6 +505,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
     }
 
     // Stores time embed gradient for collection by UNet backward
+    [Scratch]
     private Tensor<T>? _timeEmbedGradient;
 
     /// <summary>

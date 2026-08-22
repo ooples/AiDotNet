@@ -63,7 +63,7 @@ namespace AiDotNet.OnlineLearning;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Online Passive-Aggressive Algorithms", "https://doi.org/10.1162/jmlr.2006.7.19.551", Year = 2006, Authors = "Koby Crammer, Ofer Dekel, Joseph Keshet, Shai Shalev-Shwartz, Yoram Singer")]
-public class OnlinePassiveAggressiveClassifier<T> : OnlineLearningModelBase<T>
+public partial class OnlinePassiveAggressiveClassifier<T> : OnlineLearningModelBase<T>
 {
 
     /// <inheritdoc />
@@ -320,14 +320,6 @@ public class OnlinePassiveAggressiveClassifier<T> : OnlineLearningModelBase<T>
         var newModel = new OnlinePassiveAggressiveClassifier<T>(_c, _paType, _fitIntercept);
         newModel.SetParameters(parameters);
         return newModel;
-    }
-
-    /// <summary>
-    /// Creates a new instance of this type.
-    /// </summary>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new OnlinePassiveAggressiveClassifier<T>(_c, _paType, _fitIntercept);
     }
 
     /// <inheritdoc/>

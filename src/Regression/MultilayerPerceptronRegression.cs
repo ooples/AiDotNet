@@ -55,7 +55,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Learning Internal Representations by Error Propagation", "https://doi.org/10.21236/ADA164453")]
-public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
+public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
     /// The configuration options for the multilayer perceptron.
@@ -269,6 +269,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
         return base.GetActiveFeatureIndices();
     }
     private bool _useOLS;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _olsCoefficients;
 
 
@@ -731,90 +732,6 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
         Train(x, y);
     }
 
-    /// <summary>
-    /// Serializes the neural network model to a byte array for storage or transmission.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model data.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method converts the entire neural network model, including its parameters, weights, biases, and configuration,
-    /// into a byte array that can be stored in a file or database, or transmitted over a network. The model can later be
-    /// restored using the Deserialize method.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves the model to a format that can be stored or shared.
-    /// 
-    /// Serialization:
-    /// - Converts the model into a sequence of bytes
-    /// - Preserves all the important information (weights, biases, architecture, etc.)
-    /// - Allows you to save the trained model to a file
-    /// - Lets you load the model later without having to retrain it
-    /// 
-    /// It's like taking a complete snapshot of the model that you can use later or share with others.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using MemoryStream ms = new();
-        using BinaryWriter writer = new(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize MultilayerPerceptronRegression specific data
-        writer.Write(_options.LayerSizes.Count);
-        foreach (var size in _options.LayerSizes)
-        {
-            writer.Write(size);
-        }
-        writer.Write(_options.MaxEpochs);
-        writer.Write(_options.BatchSize);
-        writer.Write(Convert.ToDouble(_options.LearningRate));
-        writer.Write(Convert.ToDouble(_options.Tolerance));
-        writer.Write(_options.Verbose);
-
-        // Serialize weights and biases
-        writer.Write(_weights.Count);
-        foreach (var weight in _weights)
-        {
-            byte[] weightData = weight.Serialize();
-            writer.Write(weightData.Length);
-            writer.Write(weightData);
-        }
-
-        writer.Write(_biases.Count);
-        foreach (var bias in _biases)
-        {
-            byte[] biasData = bias.Serialize();
-            writer.Write(biasData.Length);
-            writer.Write(biasData);
-        }
-
-        // Serialize optimizer
-        writer.Write((int)OptimizerFactory<T, Matrix<T>, Vector<T>>.GetOptimizerType(_optimizer));
-        byte[] optimizerData = _optimizer.Serialize();
-        writer.Write(optimizerData.Length);
-        writer.Write(optimizerData);
-
-        // Serialize optimizer options
-        string optionsJson = JsonConvert.SerializeObject(_optimizer.GetOptions());
-        writer.Write(optionsJson);
-
-        // OLS state
-        writer.Write(_useOLS);
-        if (_useOLS && _olsCoefficients is not null)
-        {
-            writer.Write(_olsCoefficients.Length);
-            for (int j = 0; j < _olsCoefficients.Length; j++)
-                writer.Write(NumOps.ToDouble(_olsCoefficients[j]));
-            writer.Write(NumOps.ToDouble(_olsIntercept));
-        }
-        else { writer.Write(0); }
-
-        return ms.ToArray();
-    }
-
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = new MultilayerPerceptronRegression<T>(_options, Regularization);
@@ -830,103 +747,6 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
         foreach (var b in _biases)
             clone._biases.Add(new Vector<T>(b));
         return clone;
-    }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
-    /// <summary>
-    /// Deserializes the neural network model from a byte array.
-    /// </summary>
-    /// <param name="data">A byte array containing the serialized model data.</param>
-    /// <exception cref="InvalidOperationException">Thrown when the optimizer options cannot be deserialized.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method restores a neural network model from a serialized byte array, reconstructing its parameters, weights,
-    /// biases, and configuration. This allows a previously trained model to be loaded from storage or after being received
-    /// over a network.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method rebuilds the model from a saved format.
-    /// 
-    /// Deserialization:
-    /// - Takes a sequence of bytes that represents a model
-    /// - Reconstructs the original neural network with all its learned knowledge
-    /// - Restores the weights, biases, layer sizes, and other settings
-    /// - Allows you to use a previously trained model without retraining
-    /// 
-    /// It's like unpacking a complete model that was packed up for storage or sharing,
-    /// so you can use it again exactly as it was when saved, with all its learned patterns intact.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using MemoryStream ms = new(data);
-        using BinaryReader reader = new(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize MultilayerPerceptronRegression specific data
-        int layerCount = reader.ReadInt32();
-        _options.LayerSizes = new List<int>();
-        for (int i = 0; i < layerCount; i++)
-        {
-            _options.LayerSizes.Add(reader.ReadInt32());
-        }
-        _options.MaxEpochs = reader.ReadInt32();
-        _options.BatchSize = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.Tolerance = reader.ReadDouble();
-        _options.Verbose = reader.ReadBoolean();
-
-        // Deserialize weights and biases
-        int weightCount = reader.ReadInt32();
-        _weights.Clear();
-        for (int i = 0; i < weightCount; i++)
-        {
-            int weightDataLength = reader.ReadInt32();
-            byte[] weightData = reader.ReadBytes(weightDataLength);
-            _weights.Add(Matrix<T>.Deserialize(weightData));
-        }
-
-        int biasCount = reader.ReadInt32();
-        _biases.Clear();
-        for (int i = 0; i < biasCount; i++)
-        {
-            int biasDataLength = reader.ReadInt32();
-            byte[] biasData = reader.ReadBytes(biasDataLength);
-            _biases.Add(Vector<T>.Deserialize(biasData));
-        }
-
-        // Deserialize optimizer
-        OptimizerType optimizerType = (OptimizerType)reader.ReadInt32();
-        int optimizerDataLength = reader.ReadInt32();
-        byte[] optimizerData = reader.ReadBytes(optimizerDataLength);
-
-        // Deserialize optimizer options
-        string optionsJson = reader.ReadString();
-        var options = JsonConvert.DeserializeObject<OptimizationAlgorithmOptions<T, Matrix<T>, Vector<T>>>(optionsJson);
-
-        if (options == null)
-        {
-            throw new InvalidOperationException("Failed to deserialize optimizer options.");
-        }
-
-        // Create optimizer using factory
-        _optimizer = OptimizerFactory<T, Matrix<T>, Vector<T>>.CreateOptimizer(optimizerType, options);
-        _optimizer.Deserialize(optimizerData);
-
-        // OLS state
-        _useOLS = reader.ReadBoolean();
-        int olsCount = reader.ReadInt32();
-        if (olsCount > 0)
-        {
-            _olsCoefficients = new Vector<T>(olsCount);
-            for (int j = 0; j < olsCount; j++)
-                _olsCoefficients[j] = NumOps.FromDouble(reader.ReadDouble());
-            _olsIntercept = NumOps.FromDouble(reader.ReadDouble());
-        }
     }
 
     /// <summary>

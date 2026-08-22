@@ -59,7 +59,7 @@ namespace AiDotNet.Optimizers;
 /// </example>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
+public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
     /// Describes this LAMB instance for the fused kernel (Tensors
@@ -90,11 +90,13 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// The first moment vector (moving average of gradients).
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _m;
 
     /// <summary>
     /// The second moment vector (moving average of squared gradients).
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _v;
 
     /// <summary>
@@ -110,11 +112,13 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// Previous first moment for reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _previousM;
 
     /// <summary>
     /// Previous second moment for reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _previousV;
 
     /// <summary>
@@ -829,75 +833,6 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
-    }
-
-    /// <summary>
-    /// Serializes the optimizer's state into a byte array.
-    /// </summary>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        string optionsJson = JsonConvert.SerializeObject(_options);
-        writer.Write(optionsJson);
-
-        writer.Write(_t);
-        writer.Write(_warmupSteps);
-
-        writer.Write(_m.Length);
-        foreach (var value in _m)
-        {
-            writer.Write(Convert.ToDouble(value));
-        }
-
-        writer.Write(_v.Length);
-        foreach (var value in _v)
-        {
-            writer.Write(Convert.ToDouble(value));
-        }
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the optimizer's state from a byte array.
-    /// </summary>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        string optionsJson = reader.ReadString();
-        _options = JsonConvert.DeserializeObject<LAMBOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-            ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-        _t = reader.ReadInt32();
-        _warmupSteps = reader.ReadInt32();
-
-        int mLength = reader.ReadInt32();
-        _m = new Vector<T>(mLength);
-        for (int i = 0; i < mLength; i++)
-        {
-            _m[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        int vLength = reader.ReadInt32();
-        _v = new Vector<T>(vLength);
-        for (int i = 0; i < vLength; i++)
-        {
-            _v[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        InitializeAdaptiveParameters();
     }
 
     /// <summary>

@@ -45,7 +45,7 @@ namespace AiDotNet.Audio.Fingerprinting;
     "https://arxiv.org/abs/1912.10211",
     Year = 2020,
     Authors = "Qiuqiang Kong, Yin Cao, Turab Iqbal, Yuxuan Wang, Wenwu Wang, Mark D. Plumbley")]
-public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
+public partial class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -637,56 +637,10 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         };
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.StftWindowSize);
-        writer.Write(_options.HopLength);
-        writer.Write(_options.NumMelBands);
-        writer.Write(_options.NumClasses);
-        writer.Write(_options.EmbeddingDim);
-        writer.Write(_options.DropoutRate);
-        writer.Write(2); // format version for fields appended after the legacy payload
-        writer.Write(_options.BaseChannels);
-        writer.Write(_options.NumBlocks);
-        writer.Write(_options.MinFrequency);
-        writer.Write(_options.MaxFrequency);
-        writer.Write(_options.HeadDropoutRate);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        bool useNativeMode = reader.ReadBoolean();
-        if (useNativeMode != _useNativeMode)
-            throw new InvalidOperationException(
-                $"Persisted PANNs mode (native={useNativeMode}) does not match this " +
-                $"instance's mode (native={_useNativeMode}). Reconstruct PANNsModel " +
-                $"with the matching constructor before loading this checkpoint.");
-        VerifyEqual(reader.ReadInt32(),  _options.SampleRate,     nameof(_options.SampleRate));
-        VerifyEqual(reader.ReadInt32(),  _options.StftWindowSize, nameof(_options.StftWindowSize));
-        VerifyEqual(reader.ReadInt32(),  _options.HopLength,      nameof(_options.HopLength));
-        VerifyEqual(reader.ReadInt32(),  _options.NumMelBands,    nameof(_options.NumMelBands));
-        VerifyEqual(reader.ReadInt32(),  _options.NumClasses,     nameof(_options.NumClasses));
-        VerifyEqual(reader.ReadInt32(),  _options.EmbeddingDim,   nameof(_options.EmbeddingDim));
-        VerifyEqual(reader.ReadDouble(), _options.DropoutRate,    nameof(_options.DropoutRate));
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-        {
-            int version = reader.ReadInt32();
-            if (version >= 1)
-            {
-                VerifyEqual(reader.ReadInt32(), _options.BaseChannels, nameof(_options.BaseChannels));
-                VerifyEqual(reader.ReadInt32(), _options.NumBlocks, nameof(_options.NumBlocks));
-                if (version >= 2)
-                {
-                    VerifyEqual(reader.ReadDouble(), _options.MinFrequency, nameof(_options.MinFrequency));
-                    VerifyEqual(reader.ReadDouble(), _options.MaxFrequency, nameof(_options.MaxFrequency));
-                    VerifyEqual(reader.ReadDouble(), _options.HeadDropoutRate, nameof(_options.HeadDropoutRate));
-                }
-            }
-        }
-    }
+
 
     private static void VerifyEqual<TValue>(TValue persisted, TValue current, string name)
         where TValue : IEquatable<TValue>

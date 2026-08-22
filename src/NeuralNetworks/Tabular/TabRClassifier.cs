@@ -61,8 +61,11 @@ public class TabRClassifier<T> : TabRBase<T>
     private readonly FullyConnectedLayer<T> _classificationHead;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _backboneOutputCache;
+    [Scratch]
     private Tensor<T>? _logitsCache;
+    [Scratch]
     private Tensor<T>? _probabilitiesCache;
 
     /// <summary>

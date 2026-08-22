@@ -31,6 +31,7 @@ public class HermiteInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The slopes (derivatives) at each data point.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _m;
 
     /// <summary>

@@ -33,9 +33,13 @@ public sealed class FeedforwardPolicyAgent<T> : IPortfolioAgent<T>
     private readonly double _gamma;
     private readonly Random _rng;
 
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _w1;   // [hidden, stateDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _b1;   // [hidden, 1]
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _meanW; // [actionDim, hidden]
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _meanB; // [actionDim, 1]
     private readonly IReadOnlyList<Tensor<T>> _trainable;
     private readonly AdamOptimizer<T, Matrix<T>, Vector<T>> _optimizer;

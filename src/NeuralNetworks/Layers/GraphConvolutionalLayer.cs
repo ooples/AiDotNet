@@ -180,6 +180,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// <summary>
     /// Stores the input tensor from the last forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -190,6 +191,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// <summary>
     /// Stores the output tensor from the last forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -210,11 +212,13 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// This matrix tells the layer which nodes should share information with each other.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _adjacencyMatrix;
 
     /// <summary>
     /// Cached reshaped adjacency matrix (3D) for backward pass.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _adjForBatch;
 
     /// <summary>
@@ -251,11 +255,13 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// <summary>
     /// Stores the gradients for the weights calculated during the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _weightsGradient;
 
     /// <summary>
     /// Stores the gradients for the bias calculated during the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _biasGradient;
 
     /// <summary>
@@ -278,6 +284,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// to have similar properties while still maintaining their unique characteristics.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastNodeFeatures;
 
     /// <summary>
@@ -1214,7 +1221,9 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         return Engine.Reshape(result, [batch, rows, outputCols]);
     }
 
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _weightsVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _biasVelocity;
 
     /// <summary>

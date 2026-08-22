@@ -682,34 +682,9 @@ public partial class NeuralProgramSynthesizer<T> : TokenLanguageModelLayoutBase<
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_architecture.SynthesisType);
-        writer.Write((int)_architecture.TargetLanguage);
-        writer.Write(_architecture.MaxProgramLength);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        var synthesisType = (SynthesisType)reader.ReadInt32();
-        var targetLanguage = (ProgramLanguage)reader.ReadInt32();
-        var maxProgramLength = reader.ReadInt32();
 
-        if (synthesisType != _architecture.SynthesisType ||
-            targetLanguage != _architecture.TargetLanguage ||
-            maxProgramLength != _architecture.MaxProgramLength)
-        {
-            throw new InvalidOperationException(
-                "Serialized NeuralProgramSynthesizer architecture does not match the current instance. " +
-                $"Serialized: SynthesisType={synthesisType}, TargetLanguage={targetLanguage}, MaxProgramLength={maxProgramLength}. " +
-                $"Expected: SynthesisType={_architecture.SynthesisType}, TargetLanguage={_architecture.TargetLanguage}, MaxProgramLength={_architecture.MaxProgramLength}.");
-        }
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new NeuralProgramSynthesizer<T>(_architecture, _codeModel, LossFunction, _optimizer, _executionEngine);
-    }
 
     // Helper methods
     private Tensor<T> EncodeSpecification(ProgramInput<T> input)

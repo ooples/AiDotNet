@@ -149,10 +149,14 @@ public partial class STCConnectorLayer<T> : LayerBase<T>, IShapeContract
     private readonly Conv3DLayer<T> _sampler;
     private readonly RegStageBlock[] _stage2;
     private readonly DenseLayer<T>[] _readout;
+    [Scratch]
     private readonly LayerBase<T>[] _parameterLayers;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <summary>Construction state: the 'dim' the layer was built with.</summary>
+    private readonly int _dim;
 
     /// <summary>
     /// Creates a connector that preserves the input/output feature width.
@@ -171,6 +175,7 @@ public partial class STCConnectorLayer<T> : LayerBase<T>, IShapeContract
         int padding = 1)
         : this(dim, dim, patchesHeight, patchesWidth, kernelSize, stride, padding, stageDepth: 4, mlpDepth: 2)
     {
+        _dim = dim;
     }
 
     /// <summary>
@@ -513,7 +518,9 @@ public partial class STCConnectorLayer<T> : LayerBase<T>, IShapeContract
         private readonly ConvolutionalLayer<T>? _shortcutConv;
         private readonly LayerNormalizationLayer<T>? _shortcutNorm;
         private readonly ActivationLayer<T> _outputActivation;
+        [Scratch]
         private readonly LayerBase<T>[] _parameterLayers;
+        [Scratch]
         private readonly LayerBase<T>[] _allLayers;
 
         public RegStageBlock(int inputChannels, int outputChannels)

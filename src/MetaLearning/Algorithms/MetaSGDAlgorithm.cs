@@ -715,13 +715,18 @@ public class PerParameterOptimizer<T, TInput, TOutput>
     private readonly IEngine _engine;
 
     // Per-parameter learned coefficients (Vector<T> for Engine vectorization)
+    [AiDotNet.Attributes.Scratch]
     private Vector<T> _learningRates;
+    [AiDotNet.Attributes.Scratch]
     private Vector<T> _momentums;
     private Vector<T> _directions;
 
     // Adam-specific parameters
+    [AiDotNet.Attributes.Scratch]
     private Vector<T> _adamBeta1;
+    [AiDotNet.Attributes.Scratch]
     private Vector<T> _adamBeta2;
+    [AiDotNet.Attributes.Scratch]
     private Vector<T> _adamEpsilon;
 
     // Optimizer state

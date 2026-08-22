@@ -24,7 +24,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public partial class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Options specific to the Ant Colony Optimization algorithm.
@@ -415,64 +415,5 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _antColonyOptions;
-    }
-
-    /// <summary>
-    /// Converts the current state of the optimizer into a byte array for storage or transmission.
-    /// </summary>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method takes all the important information about the current state
-    /// of the ant colony optimizer and turns it into a format that can be easily saved or sent to another computer.</para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using MemoryStream ms = new MemoryStream();
-        using BinaryWriter writer = new BinaryWriter(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize AntColonyOptimizerOptions
-        string optionsJson = JsonConvert.SerializeObject(_antColonyOptions);
-        writer.Write(optionsJson);
-
-        // Serialize adaptive parameters
-        writer.Write(Convert.ToDouble(_currentPheromoneEvaporationRate));
-        writer.Write(Convert.ToDouble(_currentPheromoneIntensity));
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Restores the state of the optimizer from a byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized state of the optimizer.</param>
-    /// <exception cref="InvalidOperationException">Thrown when deserialization of optimizer options fails.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method takes a saved state of the ant colony optimizer (in the form of a byte array)
-    /// and uses it to restore the optimizer to that state. It's like loading a saved game, bringing back all the
-    /// important settings and progress that were saved earlier.</para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using MemoryStream ms = new MemoryStream(data);
-        using BinaryReader reader = new BinaryReader(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize AntColonyOptimizerOptions
-        string optionsJson = reader.ReadString();
-        _antColonyOptions = JsonConvert.DeserializeObject<AntColonyOptimizationOptions<T, TInput, TOutput>>(optionsJson)
-            ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-        // Deserialize adaptive parameters
-        _currentPheromoneEvaporationRate = NumOps.FromDouble(reader.ReadDouble());
-        _currentPheromoneIntensity = NumOps.FromDouble(reader.ReadDouble());
     }
 }

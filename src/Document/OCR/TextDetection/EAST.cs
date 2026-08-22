@@ -555,32 +555,10 @@ public partial class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_backboneChannels);
-        writer.Write(_featureChannels);
-        writer.Write(_geometryType);
-        writer.Write(ImageSize);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int backboneChannels = reader.ReadInt32();
-        int featureChannels = reader.ReadInt32();
-        string geometryType = reader.ReadString();
-        int imageSize = reader.ReadInt32();
-        bool useNativeMode = reader.ReadBoolean();
 
-        ImageSize = imageSize;
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new EAST<T>(Architecture, ImageSize, _backboneChannels, _featureChannels, _geometryType);
-    }
 
     #endregion
 
@@ -714,7 +692,8 @@ public partial class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         }
     }
 
-    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+
 
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights

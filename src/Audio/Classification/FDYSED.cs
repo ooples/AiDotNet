@@ -57,7 +57,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Frequency Dynamic Convolution: Frequency-Adaptive Pattern Recognition for Sound Event Detection", "https://arxiv.org/abs/2203.15296", Year = 2022, Authors = "Hyeonuk Nam, Seong-Hu Kim, Byeong-Yun Ko, Yong-Hwa Park")]
-public class FDYSED<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
+public partial class FDYSED<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
 
@@ -309,46 +309,9 @@ public class FDYSED<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.NumMels);
-        w.Write(_options.FftSize); w.Write(_options.HopLength);
-        w.Write(_options.EmbeddingDim); w.Write(_options.NumFrequencyGroups);
-        w.Write(_options.CNNChannels.Length);
-        foreach (int ch in _options.CNNChannels) w.Write(ch);
-        w.Write(_options.RNNHiddenSize); w.Write(_options.NumRNNLayers);
-        w.Write(_options.Threshold); w.Write(_options.DetectionWindowSize);
-        w.Write(_options.WindowOverlap); w.Write(_options.DropoutRate);
-        w.Write(ClassLabels.Count);
-        foreach (var label in ClassLabels) w.Write(label);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.NumMels = r.ReadInt32();
-        _options.FftSize = r.ReadInt32(); _options.HopLength = r.ReadInt32();
-        _options.EmbeddingDim = r.ReadInt32(); _options.NumFrequencyGroups = r.ReadInt32();
-        int nch = r.ReadInt32(); _options.CNNChannels = new int[nch];
-        for (int i = 0; i < nch; i++) _options.CNNChannels[i] = r.ReadInt32();
-        _options.RNNHiddenSize = r.ReadInt32(); _options.NumRNNLayers = r.ReadInt32();
-        _options.Threshold = r.ReadDouble(); _options.DetectionWindowSize = r.ReadDouble();
-        _options.WindowOverlap = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
-        int numLabels = r.ReadInt32(); var labels = new string[numLabels];
-        for (int i = 0; i < numLabels; i++) labels[i] = r.ReadString();
-        ClassLabels = labels;
-        _melSpectrogram = new MelSpectrogram<T>(sampleRate: _options.SampleRate, nMels: _options.NumMels,
-            nFft: _options.FftSize, hopLength: _options.HopLength, fMin: _options.FMin, fMax: _options.FMax, logMel: true);
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new FDYSED<T>(Architecture, mp, _options);
-        return new FDYSED<T>(Architecture, _options);
-    }
+
 
     #endregion
 

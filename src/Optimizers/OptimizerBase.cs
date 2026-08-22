@@ -36,8 +36,51 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 /// <typeparam name="TInput">The type of input data for the model.</typeparam>
 /// <typeparam name="TOutput">The type of output data for the model.</typeparam>
-public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, TOutput>, IModelShape
+public abstract partial class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, TOutput>, IModelShape
 {
+    // --- declared state (ModelStateRegistry) ---
+    // Identical in every model base because these bases are siblings over the same interfaces rather
+    // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.
+
+    /// <summary>State that is not a parameter vector, declared once and persisted by this base.</summary>
+    private readonly AiDotNet.Models.ModelStateRegistry<T> _declaredState = new();
+    private bool _declaredStateRegistered;
+
+    /// <summary>
+    /// Declare state here that the parameter vector does not carry -- a retained training set,
+    /// fitted knots, kernel centres, an ensemble's children. Both halves of the payload are driven
+    /// by the declaration, so they cannot drift.
+    /// </summary>
+    /// <param name="state">The registry to declare into.</param>
+    protected virtual void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+    }
+    /// <summary>Generated state declarations for fields declared across this model's hierarchy.</summary>
+    /// <param name="state">The registry to declare into.</param>
+    /// <remarks>
+    /// Emitted by ModelStateGenerator into the partial model, so a model author declares nothing. The
+    /// hand-written <c>RegisterState</c> beside it exists only for state the classifier genuinely
+    /// cannot place; anything it CAN place belongs here, where it cannot be forgotten.
+    /// </remarks>
+    protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        RegisterGeneratedStateCore(state);
+    }
+
+    /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>
+    protected AiDotNet.Models.ModelStateRegistry<T> DeclaredState
+    {
+        get
+        {
+            if (!_declaredStateRegistered)
+            {
+                _declaredStateRegistered = true;
+                RegisterGeneratedState(_declaredState);
+                RegisterState(_declaredState);
+            }
+            return _declaredState;
+        }
+    }
     /// <summary>
     /// Gets the global execution engine for vector operations.
     /// </summary>
@@ -1969,7 +2012,8 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         SerializeAdditionalData(writer);
         SerializeExtensionData(writer);
 
-        return memoryStream.ToArray();
+        byte[] payload = AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, memoryStream.ToArray());
+        return WrapSerializedPayload(payload);
     }
 
     /// <summary>
@@ -1998,6 +2042,11 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     public virtual void Deserialize(byte[] data)
     {
+        data = UnwrapSerializedPayload(data);
+
+        // Strips and applies any declared-state trailer, so the body below reads the payload
+        // exactly as it did before this existed.
+        data = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, data);
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         using MemoryStream ms = new(data);
         using BinaryReader reader = new(ms);
@@ -2025,6 +2074,25 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         DeserializeAdditionalData(reader);
         DeserializeExtensionData(reader);
     }
+
+    /// <summary>
+    /// Optionally wraps the complete shared optimizer payload in a specialized transport envelope.
+    /// </summary>
+    /// <param name="payload">The complete payload produced by the shared optimizer serializer.</param>
+    /// <returns>The payload to return from <see cref="Serialize"/>.</returns>
+    /// <remarks>
+    /// Most optimizers use the shared payload unchanged. This hook is reserved for formats whose
+    /// external checkpoint layout must remain backward compatible while their ordinary fields and
+    /// declared state continue to be managed by the shared serializer and source generator.
+    /// </remarks>
+    protected virtual byte[] WrapSerializedPayload(byte[] payload) => payload;
+
+    /// <summary>
+    /// Optionally unwraps a specialized transport envelope before shared optimizer deserialization.
+    /// </summary>
+    /// <param name="payload">The bytes supplied to <see cref="Deserialize"/>.</param>
+    /// <returns>The complete shared optimizer payload contained by <paramref name="payload"/>.</returns>
+    protected virtual byte[] UnwrapSerializedPayload(byte[] payload) => payload;
 
     /// <summary>
     /// Serializes additional data specific to derived optimizer classes.

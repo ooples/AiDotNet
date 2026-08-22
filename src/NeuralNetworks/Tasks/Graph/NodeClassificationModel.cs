@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Data.Structures;
 using AiDotNet.Enums;
@@ -82,7 +82,7 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
     "https://arxiv.org/abs/1609.02907",
     Year = 2017,
     Authors = "Thomas N. Kipf, Max Welling")]
-public class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDotNet.Interfaces.IGraphInferenceModel<T>
+public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDotNet.Interfaces.IGraphInferenceModel<T>
 {
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -623,32 +623,12 @@ public class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDotNet.Inte
     /// <summary>
     /// Serializes network-specific data to a binary writer.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(InputFeatures);
-        writer.Write(NumClasses);
-        writer.Write(HiddenDim);
-        writer.Write(NumLayers);
-        writer.Write(DropoutRate);
 
-        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
-        SerializationHelper<T>.SerializeInterface(writer, _optimizer);
-    }
 
     /// <summary>
     /// Deserializes network-specific data from a binary reader.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // InputFeatures
-        _ = reader.ReadInt32(); // NumClasses
-        _ = reader.ReadInt32(); // HiddenDim
-        _ = reader.ReadInt32(); // NumLayers
-        _ = reader.ReadDouble(); // DropoutRate
 
-        _ = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader);
-        _ = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader);
-    }
 
     /// <summary>
     /// Creates a new instance of this network type for cloning or deserialization.

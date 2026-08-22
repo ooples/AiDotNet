@@ -65,7 +65,7 @@ namespace AiDotNet.Classification.DiscriminantAnalysis;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("The Use of Multiple Measurements in Taxonomic Problems", "https://doi.org/10.1111/j.1469-1809.1936.tb02137.x")]
-public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
+public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>
 {
 
@@ -96,6 +96,7 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     /// <summary>
     /// Class means for each class.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _classMeans = new Matrix<T>(0, 0);
 
     /// <summary>
@@ -111,11 +112,13 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     /// <summary>
     /// Log determinant of covariance matrix for each class.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _classLogDets = new Vector<T>(0);
 
     /// <summary>
     /// Class priors (prior probabilities).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _classPriors = new Vector<T>(0);
 
     /// <summary>
@@ -592,15 +595,6 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new QuadraticDiscriminantAnalysis<T>(new DiscriminantAnalysisOptions<T>
-        {
-            RegularizationParam = Options.RegularizationParam
-        });
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = (QuadraticDiscriminantAnalysis<T>)CreateNewInstance();
@@ -725,104 +719,6 @@ public class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         return CreateNewInstance();
-    }
-
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        var modelData = new Dictionary<string, object>
-        {
-            { "NumClasses", NumClasses },
-            { "NumFeatures", NumFeatures },
-            { "TaskType", (int)TaskType },
-            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
-            { "RegularizationOptions", Regularization.GetOptions() },
-            { "RegularizationParam", Options.RegularizationParam }
-        };
-
-        SerializeMatrix(modelData, "ClassMeans", _classMeans);
-        SerializeVector(modelData, "ClassPriors", _classPriors);
-        SerializeVector(modelData, "ClassLogDets", _classLogDets);
-
-        // Serialize per-class covariance matrices and their inverses
-        if (_classCovariances is not null)
-        {
-            modelData["NumCovarianceMatrices"] = _classCovariances.Length;
-            for (int c = 0; c < _classCovariances.Length; c++)
-            {
-                SerializeMatrix(modelData, $"ClassCovariance_{c}", _classCovariances[c]);
-            }
-        }
-
-        if (_classCovarianceInverses is not null)
-        {
-            for (int c = 0; c < _classCovarianceInverses.Length; c++)
-            {
-                SerializeMatrix(modelData, $"ClassCovarianceInverse_{c}", _classCovarianceInverses[c]);
-            }
-        }
-
-        var modelMetadata = GetModelMetadata();
-        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        var jsonString = Encoding.UTF8.GetString(modelData);
-        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-
-        if (modelMetadata == null || modelMetadata.ModelData == null)
-            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
-
-        var modelDataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
-        var modelDataObj = JsonConvert.DeserializeObject<JObject>(modelDataString);
-
-        if (modelDataObj == null)
-            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
-
-        NumClasses = modelDataObj["NumClasses"]?.ToObject<int>() ?? 0;
-        NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
-        TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
-
-        var classLabelsToken = modelDataObj["ClassLabels"];
-        if (classLabelsToken is not null)
-        {
-            var classLabelsAsDoubles = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (classLabelsAsDoubles.Length > 0)
-            {
-                ClassLabels = new Vector<T>(classLabelsAsDoubles.Length);
-                for (int i = 0; i < classLabelsAsDoubles.Length; i++)
-                    ClassLabels[i] = NumOps.FromDouble(classLabelsAsDoubles[i]);
-            }
-        }
-
-        _classMeans = DeserializeMatrix(modelDataObj, "ClassMeans")
-            ?? throw new InvalidOperationException("Missing required 'ClassMeans' in serialized model data.");
-        _classPriors = DeserializeVector(modelDataObj, "ClassPriors")
-            ?? throw new InvalidOperationException("Missing required 'ClassPriors' in serialized model data.");
-        _classLogDets = DeserializeVector(modelDataObj, "ClassLogDets")
-            ?? throw new InvalidOperationException("Missing required 'ClassLogDets' in serialized model data.");
-
-        int numCovMatrices = modelDataObj["NumCovarianceMatrices"]?.ToObject<int>() ?? 0;
-        if (numCovMatrices > 0)
-        {
-            _classCovariances = new Matrix<T>[numCovMatrices];
-            _classCovarianceInverses = new Matrix<T>[numCovMatrices];
-            for (int c = 0; c < numCovMatrices; c++)
-            {
-                var cov = DeserializeMatrix(modelDataObj, $"ClassCovariance_{c}");
-                var covInv = DeserializeMatrix(modelDataObj, $"ClassCovarianceInverse_{c}");
-                if (cov is null || covInv is null)
-                {
-                    throw new InvalidOperationException(
-                        $"Deserialization failed: ClassCovariance or ClassCovarianceInverse for class {c} is missing.");
-                }
-                _classCovariances[c] = cov;
-                _classCovarianceInverses[c] = covInv;
-            }
-        }
     }
 
     private void SerializeMatrix(Dictionary<string, object> data, string name, Matrix<T>? matrix)

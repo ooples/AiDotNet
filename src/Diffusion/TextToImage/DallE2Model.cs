@@ -324,31 +324,6 @@ public partial class DallE2Model<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        var clonedPrior = (UNetNoisePredictor<T>)_priorUnet.Clone();
-        var clonedDecoder = (UNetNoisePredictor<T>)_decoderUnet.Clone();
-        var clonedVae = (StandardVAE<T>)_vae.Clone();
-        var options = GetOptions() is DiffusionModelOptions<T> diffusionOptions
-            ? new DiffusionModelOptions<T>(diffusionOptions)
-            : null;
-
-        return new DallE2Model<T>(
-            architecture: Architecture,
-            options: options,
-            priorUnet: clonedPrior,
-            decoderUnet: clonedDecoder,
-            vae: clonedVae,
-            conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

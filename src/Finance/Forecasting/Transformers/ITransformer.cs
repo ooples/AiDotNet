@@ -649,39 +649,6 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <returns>A new iTransformer instance with identical settings.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a fresh copy of the model with the same architecture
-    /// but newly initialized parameters. Useful for:
-    /// <list type="bullet">
-    /// <item>Creating ensemble models</item>
-    /// <item>Cross-validation (fresh model for each fold)</item>
-    /// <item>Resetting training</item>
-    /// </list>
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new ITransformer<T>(
-                Architecture, _sequenceLength, _predictionHorizon, _numFeatures,
-                _numLayers, _numHeads, _modelDimension, _feedForwardDimension,
-                _useInstanceNormalization, _dropout, _optimizer, _lossFunction);
-        }
-        else
-        {
-            return new ITransformer<T>(
-                Architecture, OnnxModelPath ?? string.Empty,
-                _sequenceLength, _predictionHorizon, _numFeatures,
-                _optimizer, _lossFunction);
-        }
-    }
-
-    /// <summary>
     /// Writes network-specific configuration data during serialization.
     /// </summary>
     /// <param name="writer">The binary writer to write data to.</param>
@@ -692,18 +659,7 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
     /// number of layers, and attention heads.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_predictionHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_modelDimension);
-        writer.Write(_feedForwardDimension);
-        writer.Write(_useInstanceNormalization);
-        writer.Write(_dropout);
-    }
+
 
     /// <summary>
     /// Reads network-specific configuration data during deserialization.
@@ -715,23 +671,7 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
     /// This method reads back the iTransformer-specific settings that were saved.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _predictionHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _modelDimension = reader.ReadInt32();
-        _feedForwardDimension = reader.ReadInt32();
-        _useInstanceNormalization = reader.ReadBoolean();
-        _dropout = reader.ReadDouble();
 
-        // Re-bind cached layer references to the deserialized (weight-loaded)
-        // layers so a clone runs on the trained weights, not construction-time
-        // random init.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

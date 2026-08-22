@@ -63,7 +63,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Generalized Linear Models", "https://doi.org/10.1007/978-1-4899-3242-6")]
-public class InverseGaussianRegression<T> : RegressionBase<T>
+public partial class InverseGaussianRegression<T> : RegressionBase<T>
 {
     private const double MuFloor = 1e-10;
     private const double MuCeiling = 1e10;
@@ -513,110 +513,5 @@ public class InverseGaussianRegression<T> : RegressionBase<T>
         for (int i = 0; i < predictions.Length; i++)
             predictions[i] = NumOps.Add(predictions[i], Intercept);
         return predictions;
-    }
-
-    /// <summary>
-    /// Serializes the model to a byte array.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model data.</returns>
-    /// <remarks>
-    /// <para>
-    /// Serializes the model including options, coefficients, and dispersion parameter.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// Serialization saves the model so you can load it later without retraining.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize InverseGaussianRegression specific options
-        writer.Write(_options.MaxIterations);
-        writer.Write(_options.Tolerance);
-        writer.Write((int)_options.LinkFunction);
-        writer.Write((int)_options.DecompositionType);
-        writer.Write(_options.InitialDispersion);
-        writer.Write(NumOps.ToDouble(_dispersion));
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the model from a byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized model data.</param>
-    /// <remarks>
-    /// <para>
-    /// Reconstructs the model's state from the serialized data.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// Deserialization loads a previously saved model.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize InverseGaussianRegression specific options
-        _options.MaxIterations = reader.ReadInt32();
-        _options.Tolerance = reader.ReadDouble();
-        _options.LinkFunction = (InverseGaussianLinkFunction)reader.ReadInt32();
-        _options.DecompositionType = (MatrixDecompositionType)reader.ReadInt32();
-        _options.InitialDispersion = reader.ReadDouble();
-        _dispersion = NumOps.FromDouble(reader.ReadDouble());
-    }
-
-    /// <summary>
-    /// Creates a new instance of the Inverse Gaussian Regression model with the same configuration.
-    /// </summary>
-    /// <returns>A new instance of the Inverse Gaussian Regression model.</returns>
-    /// <remarks>
-    /// <para>
-    /// Creates a deep copy of the current model, including all options and coefficients.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// This method creates an exact copy of your trained model.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        var newOptions = new InverseGaussianRegressionOptions<T>
-        {
-            MaxIterations = _options.MaxIterations,
-            Tolerance = _options.Tolerance,
-            LinkFunction = _options.LinkFunction,
-            DecompositionType = _options.DecompositionType,
-            InitialDispersion = _options.InitialDispersion
-        };
-
-        var newModel = new InverseGaussianRegression<T>(newOptions, Regularization);
-
-        // Copy coefficients if they exist
-        if (Coefficients != null)
-        {
-            newModel.Coefficients = Coefficients.Clone();
-        }
-
-        // Copy the intercept and dispersion
-        newModel.Intercept = Intercept;
-        newModel._dispersion = _dispersion;
-
-        return newModel;
     }
 }

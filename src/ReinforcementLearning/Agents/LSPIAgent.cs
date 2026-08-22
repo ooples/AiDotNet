@@ -43,7 +43,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
     "https://www.jmlr.org/papers/v4/lagoudakis03a.html",
     Year = 2003,
     Authors = "Lagoudakis, M. G. & Parr, R.")]
-public class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
+public partial class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
 {
 
     /// <inheritdoc />

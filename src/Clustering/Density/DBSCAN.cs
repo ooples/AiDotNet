@@ -60,7 +60,7 @@ namespace AiDotNet.Clustering.Density;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("A Density-Based Algorithm for Discovering Clusters in Large Spatial Databases with Noise", "https://www.aaai.org/Papers/KDD/1996/KDD96-037.pdf", Year = 1996, Authors = "Martin Ester, Hans-Peter Kriegel, Jorg Sander, Xiaowei Xu")]
-public class DBSCAN<T> : ClusteringBase<T>
+public partial class DBSCAN<T> : ClusteringBase<T>
 {
     private readonly DBSCANOptions<T> _options;
 
@@ -72,10 +72,13 @@ public class DBSCAN<T> : ClusteringBase<T>
     private bool[]? _corePointMask;
 
     // Feature normalization state for scale-invariant distance computation
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _featureMeans;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _featureStds;
 
     // Cluster centers in normalized space for Predict comparison
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _normalizedClusterCenters;
 
     /// <summary>
@@ -120,24 +123,6 @@ public class DBSCAN<T> : ClusteringBase<T>
     public bool[]? CorePointMask => _corePointMask;
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new DBSCAN<T>(new DBSCANOptions<T>
-        {
-            Epsilon = _options.Epsilon,
-            MinPoints = _options.MinPoints,
-            Algorithm = _options.Algorithm,
-            LeafSize = _options.LeafSize,
-            P = _options.P,
-            DistanceMetric = _options.DistanceMetric,
-            NumJobs = _options.NumJobs
-        });
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()

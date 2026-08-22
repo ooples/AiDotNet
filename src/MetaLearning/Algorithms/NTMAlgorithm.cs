@@ -112,7 +112,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Alex Graves, Greg Wayne, Ivo Danihelka")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly NTMOptions<T, TInput, TOutput> _ntmOptions;
 
@@ -984,6 +984,7 @@ public class NTMMemory<T>
     private readonly int _width;
     private readonly int? _randomSeed;
     private readonly Random _random;
+    [Scratch]
     private Vector<T>? _lastWriteWeights;  // Track last write weights for sharpness computation
 
     /// <summary>
@@ -1301,6 +1302,7 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
 
     // LSTM gate weights: input, forget, cell, output gates
     // Input weights: [4 * hiddenSize, inputSize]
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T> _weightsInput;
     // Hidden weights: [4 * hiddenSize, hiddenSize]
     private readonly Tensor<T> _weightsHidden;
@@ -1746,6 +1748,7 @@ public class MLPNTMController<T, TInput, TOutput> : INTMController<T>
     private readonly Tensor<T> _outputBiases;      // [outputSize]
 
     // Cached hidden state for projection operations
+    [Scratch]
     private Tensor<T> _lastHiddenState;
 
     /// <summary>

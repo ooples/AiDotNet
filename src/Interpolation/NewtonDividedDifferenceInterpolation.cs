@@ -28,6 +28,7 @@ public class NewtonDividedDifferenceInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The coefficients of the Newton polynomial, calculated from the input data.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _coefficients;
 
     /// <summary>

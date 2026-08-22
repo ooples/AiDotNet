@@ -45,7 +45,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Learning Transferable Visual Models From Natural Language Supervision", "https://arxiv.org/abs/2103.00020", Year = 2021, Authors = "Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, Ilya Sutskever")]
-public class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMultimodalEmbedding<T>, IDisposable
+public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMultimodalEmbedding<T>, IDisposable
 {
     private readonly ClipOptions _options;
 
@@ -206,44 +206,9 @@ public class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMultimodalEmb
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_imageEncoderPath);
-        writer.Write(_textEncoderPath);
-        writer.Write(_embeddingDimension);
-        writer.Write(_maxSequenceLength);
-        writer.Write(_imageSize);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _imageEncoderPath = reader.ReadString();
-        _textEncoderPath = reader.ReadString();
-        _embeddingDimension = reader.ReadInt32();
-        _maxSequenceLength = reader.ReadInt32();
-        _imageSize = reader.ReadInt32();
 
-        // Re-initialize sessions with loaded paths
-        _imageSession.Dispose();
-        _textSession.Dispose();
 
-        var sessionOptions = new SessionOptions();
-        _imageSession = new InferenceSession(_imageEncoderPath, sessionOptions);
-        _textSession = new InferenceSession(_textEncoderPath, sessionOptions);
-    }
-
-    protected override IFullModel<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>> CreateNewInstance()
-    {
-        return new ClipNeuralNetwork<T>(
-            Architecture,
-            _imageEncoderPath,
-            _textEncoderPath,
-            _tokenizer,
-            LossFunction,
-            _embeddingDimension,
-            _maxSequenceLength,
-            _imageSize);
-    }
 
     /// <inheritdoc/>
     public Vector<T> EncodeText(string text)

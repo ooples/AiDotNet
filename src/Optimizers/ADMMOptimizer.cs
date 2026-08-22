@@ -23,7 +23,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public partial class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options specific to the ADMM optimizer.
@@ -43,11 +43,13 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <summary>
     /// The auxiliary variable in ADMM algorithm.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _z;
 
     /// <summary>
     /// The dual variable in ADMM algorithm.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _u;
 
     /// <summary>
@@ -429,65 +431,6 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             "ADMM requires alternating optimization steps and dual variable updates " +
             "which don't map well to single-pass GPU kernels. " +
             "Use CPU-based UpdateParameters or consider using Adam/AdamW for GPU-resident training.");
-    }
-
-    /// <summary>
-    /// Converts the current state of the optimizer into a byte array for storage or transmission.
-    /// </summary>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method saves all the important information about the optimizer's current state.
-    /// It's like taking a snapshot of the optimizer that can be used to recreate its exact state later.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
-
-            writer.Write(_iteration);
-            writer.Write(_z.Serialize());
-            writer.Write(_u.Serialize());
-
-            return ms.ToArray();
-        }
-    }
-
-    /// <summary>
-    /// Restores the optimizer's state from a byte array previously created by the Serialize method.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized optimizer state.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method rebuilds the optimizer's state from a saved snapshot.
-    /// It's like restoring a machine to a previous configuration using a backup.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<ADMMOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-            _iteration = reader.ReadInt32();
-            _z = Vector<T>.Deserialize(reader.ReadBytes(reader.ReadInt32()));
-            _u = Vector<T>.Deserialize(reader.ReadBytes(reader.ReadInt32()));
-
-            _regularization = GetRegularizationFromOptions(_options);
-        }
     }
 
     /// <summary>

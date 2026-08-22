@@ -492,8 +492,11 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                                 var targetClassification =
                                     ParameterMemberSemanticModel.ClassifyWithRegistrations(
                                         targets[0], registrations);
-                                if (targetClassification.Kind is ParameterMemberSemanticModel.Kind.Unclassified
-                                    or ParameterMemberSemanticModel.Kind.Conflicting
+                                bool layerAlias = IsLayerLike(memberType) && IsLayerLike(
+                                    ParameterMemberSemanticModel.GetMemberType(targets[0])!);
+                                if ((targetClassification.Kind is ParameterMemberSemanticModel.Kind.Unclassified
+                                     && !layerAlias)
+                                    || targetClassification.Kind is ParameterMemberSemanticModel.Kind.Conflicting
                                     or ParameterMemberSemanticModel.Kind.Scratch
                                     or ParameterMemberSemanticModel.Kind.Alias
                                     or ParameterMemberSemanticModel.Kind.External)

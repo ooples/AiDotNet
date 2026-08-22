@@ -47,9 +47,52 @@ namespace AiDotNet.TimeSeries;
 /// - Website traffic prediction
 /// </para>
 /// </remarks>
-public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurableModel<T>, IModelShape,
+public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurableModel<T>, IModelShape,
     ITrainingEpochReporter<T>, AiDotNet.Models.Parameters.IParameterManifestProvider
 {
+    // --- declared state (ModelStateRegistry) ---
+    // Identical in every model base because these bases are siblings over the same interfaces rather
+    // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.
+
+    /// <summary>State that is not a parameter vector, declared once and persisted by this base.</summary>
+    private readonly AiDotNet.Models.ModelStateRegistry<T> _declaredState = new();
+    private bool _declaredStateRegistered;
+
+    /// <summary>
+    /// Declare state here that the parameter vector does not carry -- a retained training set,
+    /// fitted knots, kernel centres, an ensemble's children. Both halves of the payload are driven
+    /// by the declaration, so they cannot drift.
+    /// </summary>
+    /// <param name="state">The registry to declare into.</param>
+    protected virtual void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+    }
+    /// <summary>Generated state declarations for fields declared across this model's hierarchy.</summary>
+    /// <param name="state">The registry to declare into.</param>
+    /// <remarks>
+    /// Emitted by ModelStateGenerator into the partial model, so a model author declares nothing. The
+    /// hand-written <c>RegisterState</c> beside it exists only for state the classifier genuinely
+    /// cannot place; anything it CAN place belongs here, where it cannot be forgotten.
+    /// </remarks>
+    protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        RegisterGeneratedStateCore(state);
+    }
+
+    /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>
+    protected AiDotNet.Models.ModelStateRegistry<T> DeclaredState
+    {
+        get
+        {
+            if (!_declaredStateRegistered)
+            {
+                _declaredStateRegistered = true;
+                RegisterGeneratedState(_declaredState);
+                RegisterState(_declaredState);
+            }
+            return _declaredState;
+        }
+    }
     /// <summary>
     /// Replaces the loss this model trains against, for the models that can accept one.
     /// </summary>
@@ -1221,7 +1264,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         // Let derived classes serialize their specific data
         SerializeCore(writer);
 
-        return ms.ToArray();
+        return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, ms.ToArray());
     }
 
     /// <summary>
@@ -1257,6 +1300,10 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// </remarks>
     public virtual void Deserialize(byte[] data)
     {
+        // Strips and applies any declared-state trailer, so the body below reads the payload
+        // exactly as it did before this existed.
+        byte[] envelopedData = data;
+        data = AiDotNet.Models.ModelStateEnvelope.ExtractBeforeParameters(DeclaredState, data);
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null)
         {
@@ -1374,7 +1421,12 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
                     }
                     else
                     {
-                        _parameterRegistry.SetParameters(parameterSnapshot);
+                        // A modern checkpoint names every slot. Use that identity-preserving path
+                        // even when its aggregate layout already matches construction state: a
+                        // model such as Prophet owns several independently resizable fitted fields,
+                        // which is intentionally ambiguous to the legacy positional API but exact
+                        // in the persisted stable-ID manifest.
+                        _parameterRegistry.SetMatchingParameters(parameterSnapshot, checkpointLayout);
                     }
                 }
             }
@@ -1392,6 +1444,13 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
                 else
                     _parameterRegistry.SetMatchingParameters(parameterSnapshot, checkpointLayout);
             }
+
+            // The generator marks only trainable CLR storage whose precision can exceed T for this
+            // phase (for example double[] working weights in a float model). Restore those exact
+            // values after the public flat vector so cloning and persistence remain bit-identical
+            // without any per-model serialization override.
+            _ = AiDotNet.Models.ModelStateEnvelope.ExtractAfterParameters(
+                DeclaredState, envelopedData);
         }
         catch (Exception ex)
         {
@@ -1540,7 +1599,30 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// while each model type handles its specialized data.
     /// </para>
     /// </remarks>
-    protected abstract void SerializeCore(BinaryWriter writer);
+    /// <remarks>
+    /// VIRTUAL, NOT ABSTRACT, AND EMPTY BY DEFAULT. Declared state already round-trips without this
+    /// method: <see cref="Serialize"/> ends with
+    /// <c>ModelStateEnvelope.Append(DeclaredState, ...)</c> and <see cref="Deserialize"/> begins with
+    /// <c>ModelStateEnvelope.Extract(DeclaredState, ...)</c>, so every member the model declares --
+    /// by hand in <c>RegisterState</c> or via the generated <c>RegisterGeneratedState</c> -- is
+    /// written and read by the base.
+    /// <para>
+    /// While this pair was ABSTRACT every time series model was FORCED to hand-write both halves,
+    /// which is the population ADN0060 exists to eliminate and could not report: the analyzer
+    /// deliberately exempts an override of an abstract method, because deleting an override the base
+    /// demands is impossible. The models were not choosing to hand-write serialization; the base was
+    /// requiring it. Most of those bodies now duplicate what the envelope already carries, and a
+    /// duplicate is two places to forget the same field.
+    /// </para>
+    /// <para>
+    /// Override this ONLY for state that genuinely cannot be declared. Prefer declaring it: a
+    /// declared member is carried by name, tolerates reordering, and cannot desynchronise a reader
+    /// from a writer.
+    /// </para>
+    /// </remarks>
+    protected virtual void SerializeCore(BinaryWriter writer)
+    {
+    }
 
     /// <summary>
     /// Deserializes model-specific data from the binary reader.
@@ -1564,7 +1646,15 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// while each model type handles its specialized data.
     /// </para>
     /// </remarks>
-    protected abstract void DeserializeCore(BinaryReader reader);
+    /// <remarks>
+    /// Virtual and empty by default, for the reason given on <see cref="SerializeCore"/>: declared
+    /// state is restored by <c>ModelStateEnvelope.Extract(DeclaredState, ...)</c> before this runs,
+    /// so a model that declares its members needs no body here at all. Override only for state that
+    /// cannot be declared, and keep it in exact lockstep with <see cref="SerializeCore"/>.
+    /// </remarks>
+    protected virtual void DeserializeCore(BinaryReader reader)
+    {
+    }
 
     /// <summary>
     /// Gets metadata about the time series model.

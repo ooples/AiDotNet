@@ -49,7 +49,7 @@ public partial class FinRLAgent<T> : TradingAgentBase<T>
 
     #region Fields
 
-    private readonly FinRLAgentOptions<T> _options;
+    private readonly TradingAgentOptions<T> _options;
     private readonly TradingAgentBase<T> _innerAgent;
     private readonly FinRLAlgorithm _algorithm;
     private readonly NeuralNetworkArchitecture<T> _primaryArchitecture;
@@ -93,7 +93,7 @@ public partial class FinRLAgent<T> : TradingAgentBase<T>
         NeuralNetworkArchitecture<T>? secondaryArchitecture = null)
         : base(options)
     {
-        _options = options as FinRLAgentOptions<T> ?? new FinRLAgentOptions<T>();
+        _options = options;
 
         _algorithm = algorithm;
         Guard.NotNull(primaryArchitecture);
@@ -276,19 +276,6 @@ public partial class FinRLAgent<T> : TradingAgentBase<T>
         innerMetadata.AdditionalInfo["WrapperType"] = "FinRL";
         innerMetadata.AdditionalInfo["Algorithm"] = _algorithm.ToString();
         return innerMetadata;
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinRLAgent model, Clone performs a supporting step in the workflow. It keeps the FinRLAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new FinRLAgent<T>(_primaryArchitecture, TradingOptions, _algorithm, _secondaryArchitecture);
-        clone.SetParameters(GetParameters());
-        return clone;
     }
 
 

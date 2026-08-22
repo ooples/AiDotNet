@@ -711,26 +711,10 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
     // did it less safely: the length guard silently left the remaining layers untouched on a short
     // vector instead of failing. Removed under AIDN082.
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_embDim);
-        writer.Write(_seqLength);
-        writer.Write(IsFitted);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _embDim = reader.ReadInt32();
-        _seqLength = reader.ReadInt32();
-        IsFitted = reader.ReadBoolean();
-    }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new REaLTabFormerGenerator<T>(Architecture, _options);
-    }
 
     /// <inheritdoc />
     public override Dictionary<string, T> GetFeatureImportance()

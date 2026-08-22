@@ -42,7 +42,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// https://arxiv.org/abs/2303.10512
 /// </para>
 /// </remarks>
-public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
+public partial class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Static random number generator for thread-safe initialization.
@@ -81,6 +81,7 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
     /// We keep the high-scoring components and prune the low-scoring ones.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _importanceScores;
 
     /// <summary>

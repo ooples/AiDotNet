@@ -90,16 +90,4 @@ public class FluxDoubleStreamPredictor<T> : MMDiTNoisePredictor<T>
         _fluxSeed = seed;
     }
 
-    /// <inheritdoc />
-    public override INoisePredictor<T> Clone()
-    {
-        var clone = new FluxDoubleStreamPredictor<T>(_variant, _fluxInputChannels, _fluxContextDim, _fluxSeed);
-        // #1711: MMDiT LazyDense weights resolve via the FORWARD path; ProbeMaterializeAndCopyInto
-        // probe-forwards the clone then copies, instead of a naive re-RNG-initializing copy.
-        ProbeMaterializeAndCopyInto(clone);
-        return clone;
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 }

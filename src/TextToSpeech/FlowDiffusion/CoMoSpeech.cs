@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
     Year = 2023,
     Authors = "Ye et al."
 )]
-public class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly CoMoSpeechOptions _options;
 
@@ -218,48 +218,9 @@ public class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.DecoderDim);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.EncoderDim);
-        writer.Write(_options.FlowDim);
-        writer.Write(_options.NumEncoderLayers);
-        writer.Write(_options.NumFlowLayers);
-        writer.Write(_options.NumHeads);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.DecoderDim = reader.ReadInt32();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.EncoderDim = reader.ReadInt32();
-        _options.FlowDim = reader.ReadInt32();
-        _options.NumEncoderLayers = reader.ReadInt32();
-        _options.NumFlowLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new CoMoSpeech<T>(Architecture, mp, _options);
-        return new CoMoSpeech<T>(Architecture, _options);
-    }
+
 
     private void ThrowIfDisposed()
     {

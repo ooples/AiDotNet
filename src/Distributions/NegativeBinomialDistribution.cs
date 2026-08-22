@@ -248,12 +248,6 @@ internal class NegativeBinomialDistribution<T> : DistributionBase<T>
 
 
     /// <inheritdoc/>
-    public override IParametricDistribution<T> Clone()
-    {
-        return new NegativeBinomialDistribution<T>(_r, _prob);
-    }
-
-    /// <inheritdoc/>
     public override T Sample(Random random)
     {
         double r = NumOps.ToDouble(_r);

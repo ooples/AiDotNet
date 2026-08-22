@@ -55,7 +55,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("All are Worth Words: A ViT Backbone for Diffusion Models", "https://arxiv.org/abs/2209.12152")]
-public class UViTNoisePredictor<T> : NoisePredictorBase<T>
+public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
 {
     private readonly int _inputChannels;
     private readonly int _hiddenSize;
@@ -63,6 +63,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
     private readonly int _numHeads;
     private readonly int _patchSize;
     private readonly int _contextDim;
+    private readonly int _latentSpatialSize;
 
     /// <summary>
     /// Maximum number of patches (computed from latent size and patch size).
@@ -89,7 +90,9 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
     private DenseLayer<T> _outputProj;
 
     // Position embeddings
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _posEmbed;
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <inheritdoc />
@@ -153,7 +156,12 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         _numHeads = numHeads;
         _patchSize = patchSize;
         _contextDim = contextDim;
-        _maxPatches = (latentSpatialSize / patchSize) * (latentSpatialSize / patchSize);
+        // Preserve the constructor-level configuration, not only its derived patch count. The
+        // generated clone plan can carry an argument only from state the instance still owns;
+        // retaining the source value lets it reconstruct the same position/attention shapes
+        // without any UViT-specific clone method.
+        _latentSpatialSize = latentSpatialSize;
+        _maxPatches = (_latentSpatialSize / patchSize) * (_latentSpatialSize / patchSize);
 
         _encoderBlocks = [];
         _decoderBlocks = [];
@@ -174,7 +182,10 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         _patchEmbed = LazyDense(patchDim, _hiddenSize);
 
         // Time embedding MLP
-        _timeEmbed1 = LazyDense(_hiddenSize, timeEmbedDim, new SiLUActivation<T>());
+        // NoisePredictorBase emits [1, TimeEmbeddingDim], so the first projection's fan-in is
+        // architecture-known. Declaring hiddenSize here made a fresh clone materialize 32x128 while
+        // the first real forward correctly rebuilt the source as 128x128.
+        _timeEmbed1 = LazyDense(timeEmbedDim, timeEmbedDim, new SiLUActivation<T>());
         _timeEmbed2 = LazyDense(timeEmbedDim, _hiddenSize);
 
         // Encoder blocks
@@ -195,7 +206,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         }
 
         // Final norm and output
-        _finalNorm = new LayerNormalizationLayer<T>();
+        _finalNorm = LazyLayerNorm(_hiddenSize);
         int outPatchDim = _inputChannels * _patchSize * _patchSize;
         _outputProj = LazyDense(_hiddenSize, outPatchDim);
 
@@ -215,9 +226,9 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
     {
         return new UViTBlock
         {
-            Norm1 = new LayerNormalizationLayer<T>(),
+            Norm1 = LazyLayerNorm(_hiddenSize),
             Attention = LazySelfAttention(_maxPatches, _hiddenSize, _numHeads),
-            Norm2 = new LayerNormalizationLayer<T>(),
+            Norm2 = LazyLayerNorm(_hiddenSize),
             MLP1 = LazyDense(_hiddenSize, _hiddenSize * 4, new GELUActivation<T>()),
             MLP2 = LazyDense(_hiddenSize * 4, _hiddenSize)
         };
@@ -550,39 +561,6 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     #endregion
-
-    /// <inheritdoc />
-    public override INoisePredictor<T> Clone()
-    {
-        var clone = new UViTNoisePredictor<T>(
-            inputChannels: _inputChannels,
-            hiddenSize: _hiddenSize,
-            numLayers: _numLayers,
-            numHeads: _numHeads,
-            patchSize: _patchSize,
-            contextDim: _contextDim);
-        // The block attention layers only allocate weights on the first Forward; a fresh clone has
-        // resolved shapes but unallocated weights, so SetParameters/SetParameterChunks would land into
-        // nothing and the clone would re-RNG-init on its first real forward, diverging from the source.
-        // When the source has been materialized, probe-forward the clone through the same path first so
-        // the weights exist, THEN copy. Mirrors MMDiTXNoisePredictor.Clone.
-        if (_patchEmbed.IsInitialized)
-        {
-            int probeSpatial = (int)System.Math.Sqrt(_maxPatches) * _patchSize;
-            var probe = new Tensor<T>(new[] { 1, _inputChannels, probeSpatial, probeSpatial });
-            clone.PredictNoise(probe, timestep: 0, conditioning: null);
-        }
-        // _posEmbed is a random-init Tensor<T> field that is NOT part of Get/SetParameters and is not a
-        // trainable layer, so neither the COW share nor the SetParameters fallback below copies it —
-        // without this the clone keeps its own RNG-drawn positional embedding and diverges from the
-        // source. Copy-on-write share it (O(1) until either side writes).
-        if (_posEmbed is not null) clone._posEmbed = (Tensor<T>)_posEmbed.CloneShared();
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
     protected override Vector<T> GetParameterGradients()
     {

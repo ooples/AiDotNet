@@ -181,12 +181,14 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     /// <summary>
     /// Cached values for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -195,6 +197,7 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     private Dictionary<string, Tensor<T>>? _edgeTypeWeightsGradients;
     private Dictionary<string, Tensor<T>>? _selfLoopWeightsGradients;
     private Dictionary<string, Tensor<T>>? _biasesGradients;
+    [Scratch]
     private Tensor<T>? _basisMatricesGradient;
     private Dictionary<string, Tensor<T>>? _basisCoefficientsGradients;
 

@@ -220,29 +220,6 @@ public partial class BloombergGPT<T> : FinancialNLPModelBase<T>
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <summary>
-    /// Executes CreateNewInstance for the BloombergGPT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the BloombergGPT model, CreateNewInstance builds and wires up model components. This sets up the BloombergGPT architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new ModelOptions.BloombergGPTOptions<T>
-        {
-            MaxSequenceLength = MaxSequenceLength,
-            VocabularySize = VocabularySize,
-            HiddenDimension = HiddenDimension,
-            NumLayers = _options.NumLayers,
-            NumAttentionHeads = _options.NumAttentionHeads,
-            IntermediateDimension = _options.IntermediateDimension,
-            DropoutRate = _options.DropoutRate,
-            TaskType = _options.TaskType
-        };
-        return new BloombergGPT<T>(Architecture, options, _optimizer, LossFunction);
-    }
 
     /// <summary>
     /// Executes SerializeModelSpecificData for the BloombergGPT.
@@ -252,10 +229,7 @@ public partial class BloombergGPT<T> : FinancialNLPModelBase<T>
     /// <b>For Beginners:</b> In the BloombergGPT model, SerializeModelSpecificData saves or restores model-specific settings. This lets the BloombergGPT architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeModelSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_dropout);
-    }
+
 
     /// <summary>
     /// Executes DeserializeModelSpecificData for the BloombergGPT.
@@ -265,10 +239,7 @@ public partial class BloombergGPT<T> : FinancialNLPModelBase<T>
     /// <b>For Beginners:</b> In the BloombergGPT model, DeserializeModelSpecificData saves or restores model-specific settings. This lets the BloombergGPT architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeModelSpecificData(BinaryReader reader)
-    {
-        _dropout = reader.ReadDouble();
-    }
+
 
     /// <summary>
     /// Executes ForecastNative for the BloombergGPT.

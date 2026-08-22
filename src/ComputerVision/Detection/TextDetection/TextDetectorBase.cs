@@ -209,7 +209,7 @@ public enum TextDetectionArchitecture
 /// Base class for text detection models.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
     // NumOps inherited from ModelBase
     protected readonly TextDetectionOptions<T> Options;

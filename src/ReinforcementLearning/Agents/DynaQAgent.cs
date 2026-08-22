@@ -40,7 +40,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
     "https://doi.org/10.1016/B978-1-55860-213-7.50013-X",
     Year = 1991,
     Authors = "Sutton, R. S.")]
-public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
+public partial class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private DynaQOptions<T> _options;
 

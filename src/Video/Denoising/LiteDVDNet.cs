@@ -63,7 +63,7 @@ namespace AiDotNet.Video.Denoising;
     "https://www.mecs-press.org/ijigsp/ijigsp-v17-n3/v17n3-1.html",
     Year = 2025,
     Authors = "Andrii Ilchenko, Sergii Stirenko")]
-public class LiteDVDNet<T> : VideoDenoisingBase<T>
+public partial class LiteDVDNet<T> : VideoDenoisingBase<T>
 {
     private readonly LiteDVDNetOptions _options;
 
@@ -293,36 +293,10 @@ public class LiteDVDNet<T> : VideoDenoisingBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_options.Variant);
-        writer.Write(_options.NumFeatures);
-        writer.Write(_options.InputBlockIntermediateChannels);
-        writer.Write(_options.NumBlocks);
-        writer.Write(_options.TemporalWindowSize);
-        writer.Write(_options.ExpansionFactor);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.DropoutRate);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _options.Variant = (VideoModelVariant)reader.ReadInt32();
-        _options.NumFeatures = reader.ReadInt32();
-        _options.InputBlockIntermediateChannels = reader.ReadInt32();
-        _options.NumBlocks = reader.ReadInt32();
-        _options.TemporalWindowSize = reader.ReadInt32();
-        _options.ExpansionFactor = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.DropoutRate = reader.ReadDouble();
-    }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new LiteDVDNet<T>(Architecture, _options);
-    }
 
     private void ThrowIfDisposed()
     {

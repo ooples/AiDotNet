@@ -61,8 +61,11 @@ public class TabMRegression<T> : TabMBase<T>
     private readonly BatchEnsembleLayer<T> _regressionHead;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _backboneOutputCache;
+    [Scratch]
     private Tensor<T>? _predictionsCache;
+    [Scratch]
     private Tensor<T>? _memberPredictionsCache;
 
     /// <summary>

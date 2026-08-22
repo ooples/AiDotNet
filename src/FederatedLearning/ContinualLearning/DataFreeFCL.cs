@@ -37,6 +37,7 @@ public class DataFreeFCL<T> : Infrastructure.FederatedLearningComponentBase<T>, 
     private readonly int _syntheticSamplesPerClass;
     private readonly int _generationSteps;
     private readonly object _importanceLock = new();
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _accumulatedImportance;
 
     /// <summary>

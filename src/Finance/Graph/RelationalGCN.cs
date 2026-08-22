@@ -689,20 +689,6 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance with the same configuration.
-    /// </summary>
-    /// <returns>A new RelationalGCN instance.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Creates a fresh model with the same architecture
-    /// and options but randomly reinitialized weights.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new RelationalGCN<T>(Architecture, _options, _relationAdjacencies);
-    }
-
-    /// <summary>
     /// Serializes RelationalGCN-specific data.
     /// </summary>
     /// <param name="writer">The binary writer.</param>
@@ -711,56 +697,7 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// (basis matrices, relation coefficients) to disk for later loading.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_numNodes);
-        writer.Write(_numFeatures);
-        writer.Write(_numRelations);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numBases);
-        writer.Write(_numBlocks);
-        writer.Write(_regularization);
-        writer.Write(_dropoutRate);
-        writer.Write(_useBasisDecomposition);
-        writer.Write(_useBlockDecomposition);
-        writer.Write(_useSelfLoop);
-        writer.Write(_aggregation);
-        writer.Write(_numSamples);
 
-        // Serialize basis decomposition if used
-        if (_useBasisDecomposition && _basisMatrices is not null && _relationCoefficients is not null)
-        {
-            writer.Write(true);
-
-            // Write basis matrices
-            for (int b = 0; b < _numBases; b++)
-            {
-                for (int i = 0; i < _hiddenDimension; i++)
-                {
-                    for (int j = 0; j < _hiddenDimension; j++)
-                    {
-                        writer.Write(_basisMatrices[b, i][j]);
-                    }
-                }
-            }
-
-            // Write relation coefficients
-            for (int r = 0; r < _numRelations; r++)
-            {
-                for (int b = 0; b < _numBases; b++)
-                {
-                    writer.Write(_relationCoefficients[r, b]);
-                }
-            }
-        }
-        else
-        {
-            writer.Write(false);
-        }
-    }
 
     /// <summary>
     /// Deserializes RelationalGCN-specific data.
@@ -771,57 +708,7 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// from disk, restoring the model to its saved state.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _numNodes = reader.ReadInt32();
-        int numNodes = _numNodes;
-        _numFeatures = reader.ReadInt32();
-        _numRelations = reader.ReadInt32();
-        int numRelations = _numRelations;
-        _hiddenDimension = reader.ReadInt32();
-        int hiddenDimension = _hiddenDimension;
-        _numLayers = reader.ReadInt32();
-        _numBases = reader.ReadInt32();
-        int numBases = _numBases;
-        _numBlocks = reader.ReadInt32();
-        _regularization = reader.ReadDouble();
-        _dropoutRate = reader.ReadDouble();
-        _useBasisDecomposition = reader.ReadBoolean();
-        bool useBasisDecomposition = _useBasisDecomposition;
-        _useBlockDecomposition = reader.ReadBoolean();
-        _useSelfLoop = reader.ReadBoolean();
-        _aggregation = reader.ReadString();
-        _numSamples = reader.ReadInt32();
 
-        // Deserialize basis decomposition if present
-        bool hasBasis = reader.ReadBoolean();
-        if (hasBasis && useBasisDecomposition)
-        {
-            _basisMatrices = new double[numBases, hiddenDimension][];
-            for (int b = 0; b < numBases; b++)
-            {
-                for (int i = 0; i < hiddenDimension; i++)
-                {
-                    _basisMatrices[b, i] = new double[hiddenDimension];
-                    for (int j = 0; j < hiddenDimension; j++)
-                    {
-                        _basisMatrices[b, i][j] = reader.ReadDouble();
-                    }
-                }
-            }
-
-            _relationCoefficients = new double[numRelations, numBases];
-            for (int r = 0; r < numRelations; r++)
-            {
-                for (int b = 0; b < numBases; b++)
-                {
-                    _relationCoefficients[r, b] = reader.ReadDouble();
-                }
-            }
-        }
-    }
 
     #endregion
 

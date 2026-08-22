@@ -146,37 +146,66 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastQuery;
+    [Scratch]
     private Tensor<T>? _lastKey;
+    [Scratch]
     private Tensor<T>? _lastValue;
+    [Scratch]
     private Tensor<T>? _lastGate;
+    [Scratch]
     private Tensor<T>? _lastGateRaw;
+    [Scratch]
     private Tensor<T>? _lastMoMOutput;
+    [Scratch]
     private Tensor<T>? _lastWriteWeights; // [batch, seqLen, numMemories]
+    [Scratch]
     private Tensor<T>? _lastReadWeights;  // [batch, seqLen, numMemories]
+    [Scratch]
     private Tensor<T>? _lastForgetGates;  // [batch, seqLen, numMemories]
+    [Scratch]
     private Tensor<T>? _lastForgetGatesRaw;
+    [Scratch]
     private Tensor<T>? _lastStates;       // [batch, seqLen+1, numMemories, numHeads, headDim, headDim]
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _queryBiasGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyBiasGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueBiasGradient;
+    [Scratch]
     private Tensor<T>? _writeRouterWeightsGradient;
+    [Scratch]
     private Tensor<T>? _writeRouterBiasGradient;
+    [Scratch]
     private Tensor<T>? _readRouterWeightsGradient;
+    [Scratch]
     private Tensor<T>? _readRouterBiasGradient;
+    [Scratch]
     private Tensor<T>? _gateRouterWeightsGradient;
+    [Scratch]
     private Tensor<T>? _gateRouterBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />
@@ -201,6 +230,9 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>, IShapeContract
     /// Gets the number of memory states.
     /// </summary>
     public int NumMemories => _numMemories;
+
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
 
     /// <summary>
     /// Creates a new Mixture of Memories (MoM) layer.
@@ -234,6 +266,7 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

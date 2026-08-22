@@ -50,7 +50,7 @@ namespace AiDotNet.Video.Denoising;
     "https://arxiv.org/abs/2204.05532",
     Year = 2022,
     Authors = "Junyi Li, Xiaohe Wu, Zhenxing Niu, Wangmeng Zuo")]
-public class FloRNN<T> : VideoDenoisingBase<T>
+public partial class FloRNN<T> : VideoDenoisingBase<T>
 {
     private readonly FloRNNOptions _options;
 
@@ -172,34 +172,10 @@ public class FloRNN<T> : VideoDenoisingBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_options.Variant);
-        writer.Write(_options.NumFeatures);
-        writer.Write(_options.NumRecurrentLayers);
-        writer.Write(_options.HiddenDim);
-        writer.Write(_options.NumFlowScales);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.DropoutRate);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _options.Variant = (VideoModelVariant)reader.ReadInt32();
-        _options.NumFeatures = reader.ReadInt32();
-        _options.NumRecurrentLayers = reader.ReadInt32();
-        _options.HiddenDim = reader.ReadInt32();
-        _options.NumFlowScales = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.DropoutRate = reader.ReadDouble();
-    }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new FloRNN<T>(Architecture, _options);
-    }
 
     private void ThrowIfDisposed()
     {

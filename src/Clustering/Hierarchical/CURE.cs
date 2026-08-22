@@ -58,7 +58,7 @@ namespace AiDotNet.Clustering.Hierarchical;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("CURE: An Efficient Clustering Algorithm for Large Databases", "https://doi.org/10.1145/276304.276312", Year = 1998, Authors = "Sudipto Guha, Rajeev Rastogi, Kyuseok Shim")]
-public class CURE<T> : ClusteringBase<T>
+public partial class CURE<T> : ClusteringBase<T>
 {
     private readonly CUREOptions<T> _options;
 
@@ -88,24 +88,6 @@ public class CURE<T> : ClusteringBase<T>
 
     /// <inheritdoc />
     public override bool SupportsParameterInitialization => false;
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new CURE<T>(new CUREOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            MaxIterations = _options.MaxIterations,
-            Tolerance = _options.Tolerance,
-            Seed = _options.Seed,
-            NumRepresentatives = _options.NumRepresentatives,
-            ShrinkFactor = _options.ShrinkFactor,
-            SampleFraction = _options.SampleFraction,
-            UsePartitioning = _options.UsePartitioning,
-            NumPartitions = _options.NumPartitions,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
@@ -141,9 +123,6 @@ public class CURE<T> : ClusteringBase<T>
 
         return clone;
     }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

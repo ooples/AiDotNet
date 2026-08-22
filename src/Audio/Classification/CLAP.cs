@@ -62,7 +62,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Large-Scale Contrastive Language-Audio Pre-Training with Feature Fusion and Keyword-to-Caption Augmentation", "https://doi.org/10.1109/ICASSP49357.2023.10095969", Year = 2023, Authors = "Yusong Wu, Ke Chen, Tianyu Zhang, Yuchen Hui, Taylor Berg-Kirkpatrick, Shlomo Dubnov")]
-public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
+public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
 
@@ -433,78 +433,10 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     }
 
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.TextEncoderModelPath ?? string.Empty);
-        w.Write(_options.SampleRate);
-        w.Write(_options.NumMels);
-        w.Write(_options.FftSize);
-        w.Write(_options.HopLength);
-        w.Write(_options.AudioEmbeddingDim);
-        w.Write(_options.ProjectionDim);
-        w.Write(_options.NumAudioEncoderLayers);
-        w.Write(_options.NumAudioAttentionHeads);
-        w.Write(_options.Temperature);
-        w.Write(_options.Threshold);
-        w.Write(_options.WindowSize);
-        w.Write(_options.WindowOverlap);
-        w.Write(_options.DropoutRate);
-        w.Write((int)_options.FMin); w.Write((int)_options.FMax);
-        w.Write(ClassLabels.Count);
-        foreach (var l in ClassLabels)
-            w.Write(l);
-        w.Write(_textPrompts.Length);
-        foreach (var p in _textPrompts)
-            w.Write(p);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        string tp = r.ReadString();
-        if (!string.IsNullOrEmpty(tp)) _options.TextEncoderModelPath = tp;
-        _options.SampleRate = r.ReadInt32();
-        _options.NumMels = r.ReadInt32();
-        _options.FftSize = r.ReadInt32();
-        _options.HopLength = r.ReadInt32();
-        _options.AudioEmbeddingDim = r.ReadInt32();
-        _options.ProjectionDim = r.ReadInt32();
-        _options.NumAudioEncoderLayers = r.ReadInt32();
-        _options.NumAudioAttentionHeads = r.ReadInt32();
-        _options.Temperature = r.ReadDouble();
-        _options.Threshold = r.ReadDouble();
-        _options.WindowSize = r.ReadDouble();
-        _options.WindowOverlap = r.ReadDouble();
-        _options.DropoutRate = r.ReadDouble();
-        _options.FMin = r.ReadInt32(); _options.FMax = r.ReadInt32();
-        int n = r.ReadInt32();
-        var labels = new string[n];
-        for (int i = 0; i < n; i++) labels[i] = r.ReadString();
-        ClassLabels = labels;
-        int np = r.ReadInt32();
-        _textPrompts = new string[np];
-        for (int i = 0; i < np; i++) _textPrompts[i] = r.ReadString();
-        _melSpectrogram = new MelSpectrogram<T>(
-            _options.SampleRate, _options.NumMels, _options.FftSize,
-            _options.HopLength, _options.FMin, _options.FMax, logMel: true);
-        if (!_useNativeMode && _options.ModelPath is { } p2 && !string.IsNullOrEmpty(p2))
-            OnnxEncoder = new OnnxModel<T>(p2, _options.OnnxOptions);
-        if (_options.TextEncoderModelPath is { } tp2 && !string.IsNullOrEmpty(tp2))
-            _textEncoder = new OnnxModel<T>(tp2, _options.OnnxOptions);
-    }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new CLAP<T>(Architecture, mp, _options);
-        return new CLAP<T>(Architecture, _options);
-    }
 
     #endregion
 

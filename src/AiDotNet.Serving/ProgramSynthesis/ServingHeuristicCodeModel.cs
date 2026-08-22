@@ -46,29 +46,9 @@ internal sealed class ServingHeuristicCodeModel : CodeModelBase<double>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_architecture.TargetLanguage);
-        writer.Write(_architecture.MaxSequenceLength);
-        writer.Write(_architecture.VocabularySize);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        var targetLanguage = (ProgramLanguage)reader.ReadInt32();
-        var maxSeqLength = reader.ReadInt32();
-        var vocabSize = reader.ReadInt32();
 
-        if (targetLanguage != _architecture.TargetLanguage ||
-            maxSeqLength != _architecture.MaxSequenceLength ||
-            vocabSize != _architecture.VocabularySize)
-        {
-            throw new InvalidOperationException(
-                $"Serialized model architecture does not match this instance. " +
-                $"Serialized: Language={targetLanguage}, MaxSequenceLength={maxSeqLength}, VocabularySize={vocabSize}. " +
-                $"Instance: Language={_architecture.TargetLanguage}, MaxSequenceLength={_architecture.MaxSequenceLength}, VocabularySize={_architecture.VocabularySize}.");
-        }
-    }
+
 
     protected override IFullModel<double, Tensor<double>, Tensor<double>> CreateNewInstance()
     {

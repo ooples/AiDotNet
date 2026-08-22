@@ -55,7 +55,7 @@ namespace AiDotNet.Video.Denoising;
     "https://arxiv.org/abs/2011.15045",
     Year = 2021,
     Authors = "Dev Yashpal Sheth, Sreyas Mohan, Joshua L. Vincent, Ramon Manzorro, Peter A. Crozier, Mitesh M. Khapra, Eero P. Simoncelli, Carlos Fernandez-Granda")]
-public class UDVD<T> : VideoDenoisingBase<T>
+public partial class UDVD<T> : VideoDenoisingBase<T>
 {
     private readonly UDVDOptions _options;
 
@@ -185,37 +185,10 @@ public class UDVD<T> : VideoDenoisingBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_options.Variant);
-        writer.Write(_options.NumFeatures);
-        writer.Write(_options.NumLevels);
-        writer.Write(_options.NumResBlocks);
-        writer.Write(_options.TemporalBufferSize);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.DropoutRate);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _options.Variant = (VideoModelVariant)reader.ReadInt32();
-        _options.NumFeatures = reader.ReadInt32();
-        _options.NumLevels = reader.ReadInt32();
-        _options.NumResBlocks = reader.ReadInt32();
-        _options.TemporalBufferSize = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.DropoutRate = reader.ReadDouble();
-    }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var copiedOptions = new UDVDOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new UDVD<T>(Architecture, p, copiedOptions);
-        return new UDVD<T>(Architecture, copiedOptions);
-    }
 
     private void ThrowIfDisposed()
     {

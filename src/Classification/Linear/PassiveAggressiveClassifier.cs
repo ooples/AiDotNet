@@ -218,20 +218,6 @@ public class PassiveAggressiveClassifier<T> : LinearClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new PassiveAggressiveClassifier<T>(new PassiveAggressiveOptions<T>
-        {
-            C = Options.C,
-            PAType = Options.PAType,
-            MaxIterations = Options.MaxIterations,
-            FitIntercept = Options.FitIntercept,
-            Shuffle = Options.Shuffle,
-            Seed = Options.Seed
-        });
-    }
-
-    /// <inheritdoc/>
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clone = (PassiveAggressiveClassifier<T>)CreateNewInstance();

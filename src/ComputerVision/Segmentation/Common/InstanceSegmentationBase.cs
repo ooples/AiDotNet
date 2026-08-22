@@ -19,7 +19,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 /// Models extending this base class: YOLOv9-Seg, YOLO11-Seg, YOLOv12-Seg, YOLO26-Seg, Mask2Former, MaskDINO.
 /// </para>
 /// </remarks>
-public abstract class InstanceSegmentationBase<T> : SegmentationModelBase<T>, IInstanceSegmentation<T>
+public abstract partial class InstanceSegmentationBase<T> : SegmentationModelBase<T>, IInstanceSegmentation<T>
 {
     // protected and mutable so a derived model can read them and restore them on deserialization -
     // see the note on PanopticSegmentationBase._numStuffClasses for why private/readonly here is what

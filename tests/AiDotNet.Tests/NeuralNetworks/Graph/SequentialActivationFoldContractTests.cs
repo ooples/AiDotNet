@@ -12,7 +12,7 @@ namespace AiDotNet.Tests.NeuralNetworks.Graph;
 /// <summary>
 /// Pins the explicit sequential-topology contract used by named activation collection.
 /// </summary>
-public sealed class SequentialActivationFoldContractTests
+public sealed partial class SequentialActivationFoldContractTests
 {
     [Fact]
     public async Task DirectSequentialModel_UsesLayerFoldWithoutRunningPrediction()
@@ -53,7 +53,7 @@ public sealed class SequentialActivationFoldContractTests
             typeof(FeedForwardNeuralNetwork<double>).BaseType);
     }
 
-    private class DirectSequentialModel : SequentialVectorModelLayoutBase<double>
+    private partial class DirectSequentialModel : SequentialVectorModelLayoutBase<double>
     {
         public DirectSequentialModel()
             : base(new MeanSquaredErrorLoss<double>())

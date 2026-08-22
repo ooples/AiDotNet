@@ -591,17 +591,6 @@ public partial class StandardVAE<T> : VAEModelBase<T>
         if (layer != null) count += (int)layer.ParameterCount;
     }
 
-    /// <inheritdoc />
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
-    {
-        EnsureLayersInitialized();
-        foreach (var layer in EnumerateAllLayers())
-        {
-            foreach (var parameter in EnumerateMaterializedParameters(layer))
-                yield return parameter;
-        }
-    }
-
     private IEnumerable<ILayer<T>?> EnumerateAllLayers()
     {
         yield return _inputConv;
@@ -812,12 +801,6 @@ public partial class StandardVAE<T> : VAEModelBase<T>
         var dummyImage = new Tensor<T>(new[] { 1, _inputChannels, dummySpatial, dummySpatial });
         var dummyLatent = Encode(dummyImage, sampleMode: false);
         _ = Decode(dummyLatent);
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
     }
 
     #endregion

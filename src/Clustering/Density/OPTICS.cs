@@ -53,16 +53,21 @@ namespace AiDotNet.Clustering.Density;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("OPTICS: Ordering Points To Identify the Clustering Structure", "https://doi.org/10.1145/304181.304187", Year = 1999, Authors = "Mihael Ankerst, Markus M. Breunig, Hans-Peter Kriegel, Jorg Sander")]
-public class OPTICS<T> : ClusteringBase<T>
+public partial class OPTICS<T> : ClusteringBase<T>
 {
     private readonly OPTICSOptions<T> _options;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _featureMeans;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _featureStds;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _normalizedClusterCenters;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _reachabilityDistances = new Vector<T>(0);
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _coreDistances = new Vector<T>(0);
     private int[] _ordering = Array.Empty<int>();
     private int[] _predecessor = Array.Empty<int>();
@@ -100,32 +105,12 @@ public class OPTICS<T> : ClusteringBase<T>
     /// <inheritdoc />
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new OPTICS<T>(new OPTICSOptions<T>
-        {
-            MinSamples = _options.MinSamples,
-            MaxEpsilon = _options.MaxEpsilon,
-            ExtractionMethod = _options.ExtractionMethod,
-            Xi = _options.Xi,
-            ClusterEpsilon = _options.ClusterEpsilon,
-            Algorithm = _options.Algorithm,
-            LeafSize = _options.LeafSize,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (OPTICS<T>)CreateNewInstance();
         newInstance.SetParameters(parameters);
         return newInstance;
     }
-
-    /// <inheritdoc />
-    /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()

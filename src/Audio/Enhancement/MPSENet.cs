@@ -41,7 +41,7 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MP-SENet: A Speech Enhancement Model with Parallel Denoising of Magnitude and Phase Spectra", "https://doi.org/10.48550/arXiv.2305.13686", Year = 2023, Authors = "Ye-Xin Lu, Yang Ai, Zhen-Hua Ling")]
-public class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+public partial class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -60,7 +60,7 @@ public class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     private ShortTimeFourierTransform<T> _stft;
     [Scratch]
     private Tensor<T>? _lastPhase;
-    [Buffer]
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Tensor<T>? _noiseProfile;
     private bool _useNativeMode;
     private bool _disposed;
@@ -245,37 +245,9 @@ public class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.Variant);
-        w.Write(_options.HiddenDim); w.Write(_options.NumLayers);
-        w.Write(_options.NumAttentionHeads); w.Write(_options.FeedForwardDim);
-        w.Write(_options.NumFreqBins); w.Write(_options.FFTSize);
-        w.Write(_options.HopLength); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.Variant = r.ReadString();
-        _options.HiddenDim = r.ReadInt32(); _options.NumLayers = r.ReadInt32();
-        _options.NumAttentionHeads = r.ReadInt32(); _options.FeedForwardDim = r.ReadInt32();
-        _options.NumFreqBins = r.ReadInt32(); _options.FFTSize = r.ReadInt32();
-        _options.HopLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
-        base.SampleRate = _options.SampleRate;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-        int nFft = NextPowerOfTwo(_options.FFTSize);
-        _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,
-            windowLength: _options.FFTSize <= nFft ? _options.FFTSize : null);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new MPSENet<T>(Architecture, mp, _options);
-        return new MPSENet<T>(Architecture, _options);
-    }
+
 
     #endregion
 

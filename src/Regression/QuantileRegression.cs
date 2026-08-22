@@ -52,7 +52,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Regression Quantiles", "https://doi.org/10.2307/1913643", Year = 1978, Authors = "Roger Koenker, Gilbert Bassett Jr.")]
-public class QuantileRegression<T> : RegressionBase<T>
+public partial class QuantileRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the quantile regression model.
@@ -260,100 +260,5 @@ public class QuantileRegression<T> : RegressionBase<T>
         metadata.AdditionalInfo["Quantile"] = _options.Quantile;
 
         return metadata;
-    }
-
-    /// <summary>
-    /// Serializes the model to a byte array.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model data.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method serializes both the base class data and the quantile regression specific options,
-    /// including the quantile, learning rate, and maximum iterations.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> Serialization converts the model's internal state into a format that can be saved to disk or
-    /// transmitted over a network. This allows you to save a trained model and load it later without
-    /// having to retrain it. Think of it like saving your progress in a video game.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize QuantileRegression specific data
-        writer.Write(_options.Quantile);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.MaxIterations);
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the model from a byte array.
-    /// </summary>
-    /// <param name="modelData">The byte array containing the serialized model data.</param>
-    /// <remarks>
-    /// <para>
-    /// This method deserializes both the base class data and the quantile regression specific options,
-    /// reconstructing the model's state from the serialized data.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> Deserialization is the opposite of serialization - it takes the saved model data and reconstructs
-    /// the model's internal state. This allows you to load a previously trained model and use it to make
-    /// predictions without having to retrain it. It's like loading a saved game to continue where you left off.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize QuantileRegression specific data
-        _options.Quantile = reader.ReadDouble();
-        _options.LearningRate = reader.ReadDouble();
-        _options.MaxIterations = reader.ReadInt32();
-    }
-
-    /// <summary>
-    /// Creates a new instance of the quantile regression model with the same options.
-    /// </summary>
-    /// <returns>A new instance of the quantile regression model with the same configuration but no trained parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the quantile regression model with the same configuration
-    /// options and regularization method as the current instance, but without copying the trained parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model configuration without 
-    /// any learned parameters.
-    /// 
-    /// Think of it like getting a blank notepad with the same paper quality and size, 
-    /// but without any writing on it yet. The new model has the same:
-    /// - Quantile setting (which part of the distribution you're estimating)
-    /// - Learning rate (how quickly the model adjusts during training)
-    /// - Maximum iterations (how long the model will train)
-    /// - Regularization settings (safeguards against overfitting)
-    /// 
-    /// But it doesn't have any of the coefficient values that were learned from data.
-    /// 
-    /// This is mainly used internally when doing things like cross-validation or 
-    /// creating ensembles of similar models with different training data.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        // Create a new instance with the same options and regularization
-        return new QuantileRegression<T>(_options, Regularization);
     }
 }

@@ -45,7 +45,7 @@ namespace AiDotNet.Finance.Risk;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Machine Learning for Financial Stress Testing", "https://doi.org/10.1016/j.jbankfin.2021.106131")]
-public class NeuralStressTest<T> : RiskModelBase<T>
+public partial class NeuralStressTest<T> : RiskModelBase<T>
 {
     #region Shared Fields
 
@@ -246,29 +246,6 @@ public class NeuralStressTest<T> : RiskModelBase<T>
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <summary>
-    /// Creates a new instance of the NeuralStressTest model with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is used by the framework to clone the model setup
-    /// so it can create a fresh instance with identical settings.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new NeuralStressTestOptions<T>
-        {
-            NumFeatures = _options.NumFeatures,
-            ConfidenceLevel = _options.ConfidenceLevel,
-            TimeHorizon = _options.TimeHorizon,
-            HiddenDimension = _options.HiddenDimension,
-            NumScenarios = _options.NumScenarios,
-            DropoutRate = _options.DropoutRate
-        };
-
-        return new NeuralStressTest<T>(Architecture, options, _optimizer, LossFunction);
-    }
 
     #endregion
 }

@@ -51,7 +51,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Matryoshka Representation Learning", "https://arxiv.org/abs/2205.13147", Year = 2022, Authors = "Aditya Kusupati, Gantavya Bhatt, Aniket Rege, Matthew Wallingford, Aditya Sinha, Vivek Ramanujan, William Howard-Snyder, Kaifeng Chen, Sham Kakade, Prateek Jain, Ali Farhadi")]
-    public class MatryoshkaEmbedding<T> : TransformerEmbeddingNetwork<T>
+    public partial class MatryoshkaEmbedding<T> : TransformerEmbeddingNetwork<T>
     {
         private readonly MatryoshkaEmbeddingOptions _options;
 
@@ -200,25 +200,6 @@ namespace AiDotNet.NeuralNetworks
             return PoolBatchOutput(base.PredictCore(input));
         }
 
-        /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new MatryoshkaEmbedding<T>(
-                Architecture,
-                null,
-                null,
-                _vocabSize,
-                EmbeddingDimension,
-                _nestedDimensions,
-                MaxTokens,
-                _numLayers,
-                _numHeads,
-                _feedForwardDim,
-                PoolingStrategy.ClsToken,
-                LossFunction,
-                Convert.ToDouble(MaxGradNorm));
-        }
-
         /// <summary>
         /// Retrieves metadata about the Matryoshka configuration.
         /// </summary>
@@ -233,35 +214,10 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <inheritdoc/>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            base.SerializeNetworkSpecificData(writer);
-            writer.Write(_vocabSize);
-            writer.Write(_numLayers);
-            writer.Write(_numHeads);
-            writer.Write(_feedForwardDim);
-            writer.Write(_nestedDimensions.Length);
-            foreach (var dim in _nestedDimensions)
-            {
-                writer.Write(dim);
-            }
-        }
+
 
         /// <inheritdoc/>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            base.DeserializeNetworkSpecificData(reader);
-            _vocabSize = reader.ReadInt32();
-            _numLayers = reader.ReadInt32();
-            _numHeads = reader.ReadInt32();
-            _feedForwardDim = reader.ReadInt32();
-            int count = reader.ReadInt32();
-            _nestedDimensions = new int[count];
-            for (int i = 0; i < count; i++)
-            {
-                _nestedDimensions[i] = reader.ReadInt32();
-            }
-        }
+
 
         /// <inheritdoc/>
         public override Vector<T> Embed(string text)

@@ -50,9 +50,19 @@ public partial class ClozeAttentionLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _modelDim;
 
+    // All four projections read this layer's own input, so their width is _modelDim and is known
+    // from construction. Declaring it is what lets ParameterCount see them: a lazily-built child
+    // whose shape is undeclared stays ShapeDeferred and contributes NOTHING to the count, and then
+    // materializes during GetParameters and contributes its full length -- so the two surfaces
+    // disagree by exactly the children's size. ABINet, which holds one of these, reported 195744
+    // against 208224, and the difference was 3 x 4160, three of these projections.
+    [SubLayerInput("_modelDim")]
     private readonly DenseLayer<T> _query;
+    [SubLayerInput("_modelDim")]
     private readonly DenseLayer<T> _key;
+    [SubLayerInput("_modelDim")]
     private readonly DenseLayer<T> _value;
+    [SubLayerInput("_modelDim")]
     private readonly DenseLayer<T> _output;
 
     /// <inheritdoc/>
@@ -124,50 +134,21 @@ public partial class ClozeAttentionLayer<T> : LayerBase<T>, IShapeContract
         return unbatched ? Engine.Reshape(result, [S, D]) : result;
     }
 
-    /// <summary>
-    /// Materializes the lazily-allocated Q/K/V/output projections from the known model width,
-    /// without executing them. Guarded by <c>IsShapeResolved</c>.
-    /// </summary>
-    private void ResolveChildShapes()
-    {
-        if (!_query.IsShapeResolved) _query.ResolveFromShape(new[] { 1, 1, _modelDim });
-        if (!_key.IsShapeResolved) _key.ResolveFromShape(new[] { 1, 1, _modelDim });
-        if (!_value.IsShapeResolved) _value.ResolveFromShape(new[] { 1, 1, _modelDim });
-        if (!_output.IsShapeResolved) _output.ResolveFromShape(new[] { 1, 1, _modelDim });
-    }
+    // ResolveChildShapes lived here: it read _modelDim and resolved the four projections without
+    // executing them, which is exactly what the count needs -- and nothing ever called it. The
+    // [SubLayerInput("_modelDim")] declarations above state the same width to the generator, which
+    // emits DeclaredSubLayerShapes and puts it on the path the base already walks.
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Explicitly includes the projections' tensors: <c>LayerBase</c> does not recurse into
-    /// registered sub-layers, and a composite that omits them reports an empty trainable set
-    /// while still advertising a parameter count, which corrupts training silently.
-    /// </remarks>
-    public override IReadOnlyList<Tensor<T>> GetTrainableParameters()
-    {
-        var result = new List<Tensor<T>>();
-        result.AddRange(_query.GetTrainableParameters());
-        result.AddRange(_key.GetTrainableParameters());
-        result.AddRange(_value.GetTrainableParameters());
-        result.AddRange(_output.GetTrainableParameters());
-        return result;
-    }
-
-    /// <inheritdoc/>
-    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
-    {
-        var targets = new[] { _query, _key, _value, _output };
-        var counts = targets.Select(t => t.GetTrainableParameters().Count).ToArray();
-
-        if (parameters.Count != counts.Sum())
-            throw new ArgumentException($"Expected {counts.Sum()} trainable tensors, got {parameters.Count}.", nameof(parameters));
-
-        int at = 0;
-        for (int t = 0; t < targets.Length; t++)
-        {
-            targets[t].SetTrainableParameters(parameters.Skip(at).Take(counts[t]).ToList());
-            at += counts[t];
-        }
-    }
+    // The four projections' tensors used to be listed here as this layer's own, on the stated
+    // grounds that "LayerBase does not recurse into registered sub-layers". That is true of the base
+    // GetTrainableParameters, which returns only this layer's own registrations, and false of the
+    // walk ParameterCount, GetParameters and SetParameters are built from: it appends every
+    // registered sub-layer that no declaration already covers, and its duplicate check compares
+    // LAYER references, so it cannot tell that a child's tensors already arrived through the
+    // parent's own list. Listing them here entered all eight TWICE. The failure the remark feared --
+    // an empty trainable set beside a non-zero count -- is real, but it is what happens to a
+    // composite that registers no sub-layer at all; these four are registered, so the base reaches
+    // them.
 
     /// <inheritdoc/>
     internal override Dictionary<string, string> GetMetadata()

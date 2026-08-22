@@ -28,7 +28,7 @@ namespace AiDotNet.AnomalyDetection;
 /// - Random Seed: 42 - for reproducibility
 /// </para>
 /// </remarks>
-public abstract class AnomalyDetectorBase<T> : ModelBase<T, Matrix<T>, Vector<T>>, IAnomalyDetector<T>
+public abstract partial class AnomalyDetectorBase<T> : ModelBase<T, Matrix<T>, Vector<T>>, IAnomalyDetector<T>
 {
 
     /// <inheritdoc />

@@ -22,7 +22,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public partial class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// Configuration options specific to the Differential Evolution algorithm.
@@ -282,75 +282,5 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _deOptions;
-    }
-
-    /// <summary>
-    /// Serializes the Differential Evolution optimizer to a byte array.
-    /// </summary>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method converts the current state of the optimizer into a series of bytes.
-    /// This is useful for saving the optimizer's state to a file or sending it over a network. It allows you to
-    /// recreate the exact state of the optimizer later.
-    /// </para>
-    /// <para>The serialization process includes:
-    /// <list type="bullet">
-    /// <item>Base class data (from the parent OptimizerBase class)</item>
-    /// <item>The DifferentialEvolutionOptions</item>
-    /// <item>The current state of the random number generator</item>
-    /// </list>
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using MemoryStream ms = new MemoryStream();
-        using BinaryWriter writer = new BinaryWriter(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize DifferentialEvolutionOptions
-        string optionsJson = JsonConvert.SerializeObject(_deOptions);
-        writer.Write(optionsJson);
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the Differential Evolution optimizer from a byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized optimizer state.</param>
-    /// <exception cref="InvalidOperationException">Thrown when deserialization of optimizer options fails.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method reconstructs the optimizer's state from a series of bytes.
-    /// It's used to restore a previously saved state of the optimizer, allowing you to continue from where you left off.
-    /// </para>
-    /// <para>The deserialization process includes:
-    /// <list type="bullet">
-    /// <item>Restoring base class data (from the parent OptimizerBase class)</item>
-    /// <item>Reconstructing the DifferentialEvolutionOptions</item>
-    /// <item>Resetting the random number generator to its previous state</item>
-    /// <item>Reinitializing adaptive parameters</item>
-    /// </list>
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using MemoryStream ms = new MemoryStream(data);
-        using BinaryReader reader = new BinaryReader(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize DifferentialEvolutionOptions
-        string optionsJson = reader.ReadString();
-        _deOptions = JsonConvert.DeserializeObject<DifferentialEvolutionOptions<T, TInput, TOutput>>(optionsJson)
-            ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-        InitializeAdaptiveParameters();
     }
 }

@@ -212,27 +212,6 @@ public partial class EDiffIModel<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Delegate to _unet.Clone() + _vae.Clone() — same lazy-init fix pattern as
-        // SDXLTurboModel / RealESRGANModel / DDPMModel. The previous "construct
-        // fresh + SetParameters(GetParameters())" dance under-counts the unresolved
-        // source and leaves clone's lazy projections at fresh random init.
-        // Preserve outer configuration (architecture / options / scheduler) so
-        // custom diffusion settings round-trip through Clone (CodeRabbit PR #1562).
-        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
-        var clonedVae = (StandardVAE<T>)_vae.Clone();
-        return new EDiffIModel<T>(
-            architecture: Architecture,
-            options: (DiffusionModelOptions<T>)GetOptions(),
-            scheduler: Scheduler,
-            unet: clonedUnet, vae: clonedVae, conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

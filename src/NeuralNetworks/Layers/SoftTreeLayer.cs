@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -99,11 +99,15 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _leafValues;     // [numLeaves, outputDim]
 
     // Gradients
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _splitWeightsGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _splitBiasesGrad;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _leafValuesGrad;
 
     // Caches for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
     private Tensor<T>? _pathProbabilities;
 
@@ -121,8 +125,13 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
+    [Scratch]
     private Tensor<T>? _cachedRightProbs;
+    [Scratch]
     private Tensor<T>? _cachedSplitLogits;
+
+    /// <summary>Construction state: the 'initScale' the layer was built with.</summary>
+    private readonly double _initScale;
 
     /// <summary>
     /// Initializes a new soft tree layer.
@@ -140,6 +149,7 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
         double initScale = 0.01)
         : base(new[] { inputDim }, new[] { outputDim })
     {
+        _initScale = initScale;
         _inputDim = inputDim;
         _depth = depth;
         _outputDim = outputDim;
@@ -195,7 +205,7 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
     /// <param name="input">
     /// Input tensor whose last dimension is the feature dimension. A rank-2
     /// <c>[batchSize, inputDim]</c> tensor is the canonical shape; a rank-1 <c>[inputDim]</c>
-    /// sample and higher-rank <c>[d0, ..., inputDim]</c> tensors are also accepted — the leading
+    /// sample and higher-rank <c>[d0, ..., inputDim]</c> tensors are also accepted â€” the leading
     /// dimensions are flattened into the batch for the internal matmuls and restored on the output.
     /// </param>
     /// <returns>
@@ -432,36 +442,6 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
         }
 
         return importance;
-    }
-
-    /// <inheritdoc/>
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-
-        writer.Write(_inputDim);
-        writer.Write(_depth);
-        writer.Write(_outputDim);
-        writer.Write(_temperature);
-
-        SerializeTensor(writer, _splitWeights);
-        SerializeTensor(writer, _splitBiases);
-        SerializeTensor(writer, _leafValues);
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-
-        var inputDim = reader.ReadInt32();
-        var depth = reader.ReadInt32();
-        var outputDim = reader.ReadInt32();
-        var temperature = reader.ReadDouble();
-
-        _splitWeights = DeserializeTensor(reader);
-        _splitBiases = DeserializeTensor(reader);
-        _leafValues = DeserializeTensor(reader);
     }
 
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)

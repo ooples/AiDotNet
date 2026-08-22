@@ -1411,77 +1411,12 @@ public partial class NeRF<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>,
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_positionEncodingLevels);
-        writer.Write(_directionEncodingLevels);
-        writer.Write(_hiddenDim);
-        writer.Write(_numLayers);
-        writer.Write(_colorHiddenDim);
-        writer.Write(_colorNumLayers);
-        writer.Write(_useHierarchicalSampling);
-        writer.Write(_renderSamples);
-        writer.Write(_hierarchicalSamples);
-        writer.Write(NumOps.ToDouble(_renderNearBound));
-        writer.Write(NumOps.ToDouble(_renderFarBound));
-        writer.Write(NumOps.ToDouble(_learningRate));
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int positionLevels = reader.ReadInt32();
-        int directionLevels = reader.ReadInt32();
-        int hiddenDim = reader.ReadInt32();
-        int numLayers = reader.ReadInt32();
-        int colorHiddenDim = reader.ReadInt32();
-        int colorNumLayers = reader.ReadInt32();
-        bool useHierarchical = reader.ReadBoolean();
-        int renderSamples = reader.ReadInt32();
-        int hierarchicalSamples = reader.ReadInt32();
-        double renderNear = reader.ReadDouble();
-        double renderFar = reader.ReadDouble();
-        double learningRate = reader.ReadDouble();
 
-        if (positionLevels != _positionEncodingLevels ||
-            directionLevels != _directionEncodingLevels ||
-            hiddenDim != _hiddenDim ||
-            numLayers != _numLayers ||
-            colorHiddenDim != _colorHiddenDim ||
-            colorNumLayers != _colorNumLayers ||
-            useHierarchical != _useHierarchicalSampling ||
-            renderSamples != _renderSamples ||
-            hierarchicalSamples != _hierarchicalSamples ||
-            Math.Abs(renderNear - NumOps.ToDouble(_renderNearBound)) > 1e-8 ||
-            Math.Abs(renderFar - NumOps.ToDouble(_renderFarBound)) > 1e-8 ||
-            Math.Abs(learningRate - NumOps.ToDouble(_learningRate)) > 1e-8)
-        {
-            throw new InvalidOperationException("Serialized NeRF configuration does not match this instance.");
-        }
-    }
-
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new NeRF<T>(
-            positionEncodingLevels: _positionEncodingLevels,
-            directionEncodingLevels: _directionEncodingLevels,
-            hiddenDim: _hiddenDim,
-            numLayers: _numLayers,
-            colorHiddenDim: _colorHiddenDim,
-            colorNumLayers: _colorNumLayers,
-            useHierarchicalSampling: _useHierarchicalSampling,
-            renderSamples: _renderSamples,
-            hierarchicalSamples: _hierarchicalSamples,
-            renderNearBound: NumOps.ToDouble(_renderNearBound),
-            renderFarBound: NumOps.ToDouble(_renderFarBound),
-            learningRate: NumOps.ToDouble(_learningRate),
-            lossFunction: _lossFunction);
-    }
 
     #endregion
 }

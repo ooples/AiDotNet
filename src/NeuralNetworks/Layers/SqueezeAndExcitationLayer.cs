@@ -102,10 +102,15 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     /// Caches the excitation weights from the forward pass for auxiliary loss computation.
     /// Shape: [batchSize, channels]
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastExcitationWeights;
+    [Scratch]
     private Tensor<T>? _lastSqueezed;
+    [Scratch]
     private Tensor<T>? _lastFc1Biased;
+    [Scratch]
     private Tensor<T>? _lastFc1Activated;
+    [Scratch]
     private Tensor<T>? _lastFc2Biased;
 
     /// <summary>
@@ -253,6 +258,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     /// This value is temporarily stored during training and is cleared when moving to a new sample.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -278,6 +284,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     /// This is another piece of temporary memory used during training.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -299,6 +306,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     /// "that weight should be much lower" to get better results next time.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _weights1Gradient;
 
     /// <summary>
@@ -319,6 +327,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     /// These gradients help the network gradually improve its performance over time.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _bias1Gradient;
 
     /// <summary>
@@ -339,6 +348,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     /// The network uses these gradients to gradually improve its "attention mechanism" over time.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _weights2Gradient;
 
     /// <summary>
@@ -359,6 +369,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     /// Along with the other gradients, these help the network improve through training.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _bias2Gradient;
 
     /// <summary>
@@ -501,6 +512,9 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
 
                              // FC2 biases
 
+    /// <summary>Construction state: the 'reductionRatio' the layer was built with.</summary>
+    private readonly int _reductionRatio;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SqueezeAndExcitationLayer{T}"/> class with scalar activation functions.
     /// </summary>
@@ -533,6 +547,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         IInitializationStrategy<T>? initializationStrategy = null)
         : base([[channels]], [channels])
     {
+        _reductionRatio = reductionRatio;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastChannelAttentionLoss = NumOps.Zero;
@@ -582,6 +597,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         IInitializationStrategy<T>? initializationStrategy = null)
         : base([[channels]], [channels])
     {
+        _reductionRatio = reductionRatio;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
         _lastChannelAttentionLoss = NumOps.Zero;

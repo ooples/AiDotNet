@@ -160,6 +160,7 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
     private readonly bool _trackLayerStatistics;
 
     // Consolidated importance across tasks (Ω in the paper)
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _omega;
 
     // Parameters at the start of current task (θ*)
@@ -169,9 +170,11 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
     private Vector<T>? _pathIntegral;
 
     // Previous gradients for computing parameter changes
+    [Scratch]
     private Vector<T>? _lastGradients;
 
     // Previous parameters for delta computation
+    [Scratch]
     private Vector<T>? _lastParameters;
 
     // Whether we're currently tracking a task

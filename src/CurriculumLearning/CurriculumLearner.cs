@@ -64,6 +64,7 @@ public class CurriculumLearner<T, TInput, TOutput> : ICurriculumLearner<T, TInpu
     private bool _isTraining;
     private T _bestValidationLoss;
     private int _epochsWithoutImprovement;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _currentDifficulties;
     private int[]? _sortedIndices;
 

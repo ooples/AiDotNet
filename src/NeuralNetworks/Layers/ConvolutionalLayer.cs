@@ -327,6 +327,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// the first iteration) never touches this cache at all because plan replay
     /// runs traced engine ops directly without invoking <c>layer.Forward()</c>.</para>
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _biasReshaped4D;
 
     /// <summary>
@@ -334,6 +335,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// <see cref="_biasReshaped4D"/> was populated. Optimizers may either rebind the
     /// tensor or update its storage in place, so both signals are required.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _biasReshaped4DSource;
     private int _biasReshaped4DVersion = -1;
 
@@ -353,11 +355,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Gradient of the kernels computed during backpropagation via autodiff.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _kernelsGradient;
 
     /// <summary>
     /// Gradient of the biases computed during backpropagation via autodiff.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
@@ -431,7 +435,9 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _lastOutput;
 
     // GPU-resident cached tensors for GPU training pipeline
+    [Scratch]
     private Tensor<T>? _lastInputGpu;
+    [Scratch]
     private Tensor<T>? _lastOutputGpu;
     private int[]? _gpuInputShape4D;
 
@@ -792,123 +798,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
                 padding: padding
             );
         }
-    }
-
-    /// <summary>
-    /// Saves the layer's configuration and parameters to a binary writer.
-    /// </summary>
-    /// <param name="writer">The binary writer to save to.</param>
-    /// <remarks>
-    /// <para>
-    /// This method saves the layer's configuration (input depth, output depth, kernel size, stride, padding)
-    /// and parameters (kernel weights and biases) to a binary writer. This allows the layer to be saved to
-    /// a file and loaded later.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves all the layer's settings and learned patterns to a file.
-    /// 
-    /// When saving a layer:
-    /// - First, it saves the basic configuration (size, stride, etc.)
-    /// - Then it saves all the learned pattern detectors (kernels)
-    /// - Finally, it saves the bias values
-    /// 
-    /// This allows you to:
-    /// - Save a trained model to use later
-    /// - Share your trained model with others
-    /// - Store multiple versions of your model
-    /// 
-    /// Think of it like taking a snapshot of everything the model has learned.
-    /// </para>
-    /// </remarks>
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-        writer.Write(InputDepth);
-        writer.Write(OutputDepth);
-        writer.Write(KernelSize);
-        writer.Write(Stride);
-        writer.Write(Padding);
-        writer.Write(Groups); // #639: depthwise marker — needed to size the kernel on Deserialize
-
-        // Serialize _kernels — flat span iteration replaces 4-nested indexing loops
-        var kernelSpan = _kernels.Data.Span;
-        for (int i = 0; i < kernelSpan.Length; i++)
-            writer.Write(Convert.ToDouble(kernelSpan[i]));
-
-        // Serialize _biases — flat span iteration
-        var biasSpan = _biases.Data.Span;
-        for (int i = 0; i < biasSpan.Length; i++)
-            writer.Write(Convert.ToDouble(biasSpan[i]));
-    }
-
-    /// <summary>
-    /// Loads the layer's configuration and parameters from a binary reader.
-    /// </summary>
-    /// <param name="reader">The binary reader to load from.</param>
-    /// <remarks>
-    /// <para>
-    /// This method loads the layer's configuration (input depth, output depth, kernel size, stride, padding)
-    /// and parameters (kernel weights and biases) from a binary reader. This allows a previously saved layer
-    /// to be loaded from a file.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved layer from a file.
-    /// 
-    /// When loading a layer:
-    /// - First, it reads the basic configuration
-    /// - Then it recreates all the pattern detectors (kernels)
-    /// - Finally, it loads the bias values
-    /// 
-    /// This allows you to:
-    /// - Continue using a model you trained earlier
-    /// - Use a model someone else trained
-    /// - Compare different versions of your model
-    /// 
-    /// It's like restoring a snapshot of a trained model exactly as it was.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-        InputDepth = reader.ReadInt32();
-        OutputDepth = reader.ReadInt32();
-        KernelSize = reader.ReadInt32();
-        Stride = reader.ReadInt32();
-        Padding = reader.ReadInt32();
-        Groups = reader.ReadInt32(); // #639
-
-        // Deserialize _kernels — flat span iteration replaces 4-nested indexing loops.
-        // #1643: kernels are long-lived trainable weights; pin them so a Deserialize that
-        // happens to run inside an active TensorArena can't have them recycled by Reset()
-        // (RentPinned degrades to a heap Tensor<T> when no arena is active; the loop below
-        // overwrites every element, so the one-time zero-fill is free).
-        // #639: depthwise collapses the kernel in-channel dim to InputDepth/Groups.
-        _kernels = TensorAllocator.RentPinned<T>([OutputDepth, KernelInChannels, KernelSize, KernelSize]);
-        var kernelSpan = _kernels.Data.Span;
-        for (int i = 0; i < kernelSpan.Length; i++)
-            kernelSpan[i] = NumOps.FromDouble(reader.ReadDouble());
-
-        // Deserialize _biases — flat span iteration
-        _biases = new Tensor<T>([OutputDepth]);
-        var biasSpan = _biases.Data.Span;
-        for (int i = 0; i < biasSpan.Length; i++)
-            biasSpan[i] = NumOps.FromDouble(reader.ReadDouble());
-
-        // Reinitialize _lastInput and _lastOutput
-        _lastInput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-        _lastOutput = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-
-        // Re-register the freshly-created tensors as trainable parameters so
-        // optimizers and tape training target these objects (not the stale ones
-        // from a prior EnsureInitialized or constructor call). Without this,
-        // the registered list points at the old tensors while Forward uses the
-        // new ones — gradient updates silently go to dead references.
-        ClearRegisteredParameters();
-        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
-
-        // Mark as initialized so EnsureInitialized() doesn't re-randomize the
-        // just-deserialized weights on the next Forward/GetParameters call.
-        // Also ensures Dispose returns the rented _kernels to TensorAllocator.
-        _isInitialized = true;
     }
 
     /// <summary>
@@ -1707,7 +1596,9 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         };
     }
 
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _kernelsVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _biasesVelocity;
 
     /// <summary>

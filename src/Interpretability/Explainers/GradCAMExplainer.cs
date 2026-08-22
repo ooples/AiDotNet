@@ -1,5 +1,6 @@
 ﻿using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Attributes;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
@@ -42,6 +43,7 @@ public class GradCAMExplainer<T> : ILocalExplainer<T, GradCAMExplanation<T>>
 
     private readonly Func<Tensor<T>, Tensor<T>> _predictFunction;
     private readonly Func<Tensor<T>, int, Tensor<T>>? _featureMapFunction;
+    [Scratch]
     private readonly Func<Tensor<T>, int, int, Tensor<T>>? _gradientFunction;
     private readonly int[] _inputShape;
     private readonly int[] _featureMapShape;

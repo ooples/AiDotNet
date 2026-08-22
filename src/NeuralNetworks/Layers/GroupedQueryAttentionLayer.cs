@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -29,7 +29,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// With GQA (64 Q heads, 8 KV heads):
 /// - 64 Query projections, but only 8 Key and 8 Value projections
 /// - Each K/V head is shared by 8 Query heads (64/8 = 8)
-/// - KV-cache stores only 8 sets → 8x less memory!
+/// - KV-cache stores only 8 sets â†’ 8x less memory!
 ///
 /// Used by Llama 2 70B, Llama 3, Mistral, Gemma 2, and most modern large LLMs.
 /// </para>
@@ -53,8 +53,8 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
 
     // Deferred (lazy) weight allocation (#1671). When true, the projection weights are left
     // zero-sized at construction and materialized (allocated + initialized) on first use. A
-    // foundation-scale stack (e.g. Flag-DiT's 32 layers × 4096 hidden) otherwise eagerly
-    // allocates ~1.3 B weights per model in the constructor — gigabytes and >10 s before a
+    // foundation-scale stack (e.g. Flag-DiT's 32 layers Ã— 4096 hidden) otherwise eagerly
+    // allocates ~1.3 B weights per model in the constructor â€” gigabytes and >10 s before a
     // single forward, which defeats the weight-streaming forward path and the cheap-construction
     // contract the sibling DenseLayer lazy path (NoisePredictorBase.LazyDense) already honors.
     // The weight shapes are fully derivable from the dimension fields above, so ParameterCount is
@@ -65,7 +65,7 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
     // invokes Forward on a shared instance from multiple threads (today CheckpointBlocks and the
     // diffusion sampling loop are sequential, so it never races): the lock-free fast path reads the
     // flag with acquire semantics, and EnsureWeightsMaterialized flips it to false LAST (release)
-    // so any thread seeing false also sees the fully-allocated tensors — never a half-built state.
+    // so any thread seeing false also sees the fully-allocated tensors â€” never a half-built state.
     private volatile bool _weightsDeferred;
     private readonly object _materializeLock = new();
 
@@ -94,8 +94,8 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
     private Tensor<T> _valueBias;
     private readonly bool _useProjectionBias;
 
-    // Attention-logit soft-cap (Gemma-2 attn_logit_softcapping): when > 0, each scaled Q·Kᵀ score is
-    // passed through softcap·tanh(score / softcap) before the softmax. 0 disables it (standard SDPA).
+    // Attention-logit soft-cap (Gemma-2 attn_logit_softcapping): when > 0, each scaled QÂ·Káµ€ score is
+    // passed through softcapÂ·tanh(score / softcap) before the softmax. 0 disables it (standard SDPA).
     private readonly double _attnLogitSoftcap;
 
     // Causal masking: when true, position i attends only to positions <= i (decoder / autoregressive LM).
@@ -112,22 +112,36 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
     private ALiBiPositionalBiasLayer<T>? _alibiLayer;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastProjectedQueries;
+    [Scratch]
     private Tensor<T>? _lastProjectedKeys;
+    [Scratch]
     private Tensor<T>? _lastProjectedValues;
+    [Scratch]
     private Tensor<T>? _lastExpandedKeys;
+    [Scratch]
     private Tensor<T>? _lastExpandedValues;
+    [Scratch]
     private Tensor<T>? _lastAttentionWeights;
+    [Scratch]
     private Tensor<T>? _lastAttentionContext;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputBiasGradient;
 
     /// <inheritdoc />
@@ -156,8 +170,8 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
 
     /// <summary>
     /// Gets the attention-logit soft-cap magnitude (Gemma-2 <c>attn_logit_softcapping</c>);
-    /// 0 when disabled. When positive, each scaled Q·Kᵀ score is passed through
-    /// <c>softcap·tanh(score / softcap)</c> before the softmax.
+    /// 0 when disabled. When positive, each scaled QÂ·Káµ€ score is passed through
+    /// <c>softcapÂ·tanh(score / softcap)</c> before the softmax.
     /// </summary>
     public double AttnLogitSoftcap => _attnLogitSoftcap;
 
@@ -189,6 +203,12 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
     /// </summary>
     public double RoPETheta => _ropeLayer?.Theta ?? 10000.0;
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
+    /// <summary>Construction state: the 'deferAllocation' the layer was built with.</summary>
+    private readonly bool _deferAllocation;
+
     /// <summary>
     /// Creates a new Grouped-Query Attention layer.
     /// </summary>
@@ -214,6 +234,8 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
             [sequenceLength, embeddingDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _deferAllocation = deferAllocation;
+        _sequenceLength = sequenceLength;
         // With an explicit head dimension the projection widths are numHeads*headDim (which may differ
         // from embeddingDimension, e.g. Gemma-style decoders), so embeddingDimension need not be divisible
         // by numHeads. Only the default (headDim = embeddingDimension/numHeads) requires that divisibility.
@@ -337,7 +359,7 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
             _valueBias = new Tensor<T>([_useProjectionBias ? _numKVHeads * _headDimension : 0]);
             InitializeParameters();
             // Flip the flag LAST (volatile release): a concurrent reader either sees true and
-            // blocks on the lock above, or sees false with every tensor allocated + initialized —
+            // blocks on the lock above, or sees false with every tensor allocated + initialized â€”
             // never the in-between state the previous flag-first ordering allowed.
             _weightsDeferred = false;
         }
@@ -346,13 +368,13 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
     /// <summary>
     /// A deferred-allocation layer reports NOT initialized until its weights are materialized. Eager layers
     /// are always initialized. (The <c>[TrainableParameter]</c> source generator owns this layer's
-    /// <c>EnsureInitialized</c> — it has sub-layer fields — so the deferred-weight allocation is driven
+    /// <c>EnsureInitialized</c> â€” it has sub-layer fields â€” so the deferred-weight allocation is driven
     /// through <see cref="EnsureParametersMaterialized"/> instead, which <c>MaterializeParameters()</c> calls.)
     /// </summary>
     public override bool IsInitialized => !_weightsDeferred;
 
     /// <inheritdoc/>
-    /// <remarks>Forces the deferred projection weights to materialize — the hook
+    /// <remarks>Forces the deferred projection weights to materialize â€” the hook
     /// <see cref="LayerBase{T}.MaterializeParameters"/> invokes, so the foundation-scale chunk-streaming
     /// path (#1624) reads real weights rather than zero-length placeholders.</remarks>
     protected override void EnsureParametersMaterialized()
@@ -469,7 +491,7 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
             && _alibiLayer == null
             && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null)
         {
-            // ── Inference fast path ──────────────────────────────────────────────
+            // â”€â”€ Inference fast path â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             // Fused interleaved RoPE + GQA-aware scaled-dot-product attention, both
             // dispatched to the device engine (float-specialized CPU / GPU kernels).
             // This eliminates the two dominant CPU self-time costs on the decoder
@@ -498,7 +520,7 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         }
         else
         {
-            // ── Training / ALiBi path (tape-recorded, manual-backward caches) ─────
+            // â”€â”€ Training / ALiBi path (tape-recorded, manual-backward caches) â”€â”€â”€â”€â”€
             // Apply RoPE to Q and K (before KV head expansion)
             if (_ropeLayer != null)
             {
@@ -549,7 +571,7 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         var output = Engine.TensorMatMul(contextTransposed, _outputWeights);
         var output3D = Engine.Reshape(output, new[] { batchSize, seqLen, _embeddingDimension });
 
-        // Add bias — reshape bias fresh each call so the tape has a live GradFn
+        // Add bias â€” reshape bias fresh each call so the tape has a live GradFn
         // chain from _outputBias on every training step (a cached reshape primed
         // during inference would dead-end backward at the cached handle).
         var biasBroadcast = Engine.Reshape(_outputBias, new[] { 1, 1, _embeddingDimension });
@@ -558,7 +580,7 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
 
         _lastOutput = cacheBwd ? result : null;
 
-        // Reshape back to original rank — via Engine for tape recording.
+        // Reshape back to original rank â€” via Engine for tape recording.
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _embeddingDimension });
 
@@ -627,12 +649,12 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
 
     private Tensor<T> ComputeStandardAttention(Tensor<T> queries, Tensor<T> keys, Tensor<T> values, out Tensor<T> attentionWeightsOut)
     {
-        // Standard scaled dot-product attention: softmax(Q·K^T / sqrt(d_k)) · V.
+        // Standard scaled dot-product attention: softmax(QÂ·K^T / sqrt(d_k)) Â· V.
         // Manual implementation was 6 nested loops doing per-element NumOps
-        // dispatches — O(batch · numHeads · seqLenQ · seqLenKV · headDim) virtual
-        // calls per Q·K^T pass plus the same again for attn·V. Replaced with
-        // Engine.ScaledDotProductAttention which fuses Q·K^T, scale, softmax,
-        // and attn·V into one kernel call (and gives a SIMD/GPU dispatch when
+        // dispatches â€” O(batch Â· numHeads Â· seqLenQ Â· seqLenKV Â· headDim) virtual
+        // calls per QÂ·K^T pass plus the same again for attnÂ·V. Replaced with
+        // Engine.ScaledDotProductAttention which fuses QÂ·K^T, scale, softmax,
+        // and attnÂ·V into one kernel call (and gives a SIMD/GPU dispatch when
         // available).
         int headDim = queries.Shape[3];
         // Causal decoders pass a boolean mask (true = a query may attend to that key, i.e. key <= query),
@@ -796,7 +818,7 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         // can reconstruct the layer without fabricating any dimension. Without
         // SequenceLength + EmbeddingDimension here, the deser path would fall
         // back to inputShape[0]/[1] (correct for rank-2 [seq, dim] payloads)
-        // or to hardcoded 16/64 if the shape is degenerate — issue #1239.
+        // or to hardcoded 16/64 if the shape is degenerate â€” issue #1239.
         var ci = System.Globalization.CultureInfo.InvariantCulture;
         metadata["SequenceLength"] = InputShape[0].ToString();
         metadata["EmbeddingDimension"] = _embeddingDimension.ToString();
@@ -807,7 +829,7 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         metadata["PositionalEncoding"] = PositionalEncoding.ToString();
         // Persist the remaining shape/behaviour-affecting ctor arguments so a deserialized (cloned) layer is
         // functionally identical. Without these a clone silently lost its causal mask, custom head dimension
-        // (Gemma), Q/K/V projection bias (Qwen2), attention logit soft-cap (Gemma-2), and RoPE — producing
+        // (Gemma), Q/K/V projection bias (Qwen2), attention logit soft-cap (Gemma-2), and RoPE â€” producing
         // wrong outputs on the cloned model (e.g. the paged incremental-serving clone of a GGUF decoder).
         metadata["HeadDimension"] = _headDimension.ToString(ci);
         metadata["UseCausalMask"] = _useCausalMask.ToString();

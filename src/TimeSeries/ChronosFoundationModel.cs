@@ -91,6 +91,7 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     private double _binWidth;
 
     // Transformer components - now using Tensor<T>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _tokenEmbeddings;      // [vocabularySize, embeddingDim]
     [Buffer]
     private Tensor<T> _positionalEncoding;   // [maxLen, embeddingDim]
@@ -99,7 +100,9 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     private Tensor<T> _outputBias;           // [vocabularySize]
 
     // Layer normalization for final output
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _finalLayerNormGamma;  // [embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _finalLayerNormBeta;   // [embeddingDim]
 
     // Pre-allocated gradient computation buffers (reused across gradient steps)
@@ -922,36 +925,7 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 
     private const int SerializationVersion = 3;
 
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        writer.Write(SerializationVersion);
 
-        writer.Write(_vocabularySize);
-        writer.Write(_options.EmbeddingDim);
-        writer.Write(_options.ContextLength);
-        writer.Write(_options.ForecastHorizon);
-        writer.Write(_options.NumLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_binMin);
-        writer.Write(_binMax);
-
-        SerializeTensor(writer, _tokenEmbeddings);
-        SerializeTensor(writer, _positionalEncoding);
-
-        writer.Write(_transformerLayers.Count);
-        foreach (var layer in _transformerLayers)
-            layer.Serialize(writer);
-
-        SerializeTensor(writer, _finalLayerNormGamma);
-        SerializeTensor(writer, _finalLayerNormBeta);
-        SerializeTensor(writer, _outputProjection);
-        SerializeTensor(writer, _outputBias);
-
-        // Serialize training series (needed for Predict to work correctly)
-        writer.Write(_trainingSeries.Length);
-        for (int i = 0; i < _trainingSeries.Length; i++)
-            writer.Write(Convert.ToDouble(_trainingSeries[i]));
-    }
 
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
@@ -962,58 +936,7 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             writer.Write(Convert.ToDouble(tensor[i]));
     }
 
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        int version = reader.ReadInt32();
-        if (version < 2 || version > SerializationVersion)
-            throw new NotSupportedException($"Unsupported serialization version: {version}");
 
-        int vocabularySize = reader.ReadInt32();
-        int embeddingDim = reader.ReadInt32();
-        int contextLength = reader.ReadInt32();
-        int forecastHorizon = reader.ReadInt32();
-        int numLayers = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-        _binMin = reader.ReadDouble();
-        _binMax = reader.ReadDouble();
-
-        ValidateOption(vocabularySize, _vocabularySize, "VocabularySize");
-        ValidateOption(embeddingDim, _options.EmbeddingDim, "EmbeddingDim");
-        ValidateOption(contextLength, _options.ContextLength, "ContextLength");
-        ValidateOption(forecastHorizon, _options.ForecastHorizon, "ForecastHorizon");
-        ValidateOption(numLayers, _options.NumLayers, "NumLayers");
-        ValidateOption(numHeads, _options.NumHeads, "NumHeads");
-
-        _binWidth = (_binMax - _binMin) / _vocabularySize;
-
-        _tokenEmbeddings = DeserializeTensor(reader);
-        _positionalEncoding = DeserializeTensor(reader);
-
-        int layerCount = reader.ReadInt32();
-        _transformerLayers = new List<ChronosTransformerLayerTensor<T>>(layerCount);
-        for (int i = 0; i < layerCount; i++)
-        {
-            var layer = new ChronosTransformerLayerTensor<T>();
-            layer.Deserialize(reader);
-            _transformerLayers.Add(layer);
-        }
-
-        _finalLayerNormGamma = DeserializeTensor(reader);
-        _finalLayerNormBeta = DeserializeTensor(reader);
-        _outputProjection = DeserializeTensor(reader);
-        _outputBias = DeserializeTensor(reader);
-
-        // Deserialize training series if present
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-        {
-            int tsLen = reader.ReadInt32();
-            _trainingSeries = new Vector<T>(tsLen);
-            for (int i = 0; i < tsLen; i++)
-                _trainingSeries[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
-
-        InitializeGradientAccumulators();
-    }
 
     private void ValidateOption(int serialized, int expected, string name)
     {
@@ -1133,29 +1056,47 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
     private int _headDim;
 
     // Self-attention weights - now using Tensor<T>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _queryProj;     // [embeddingDim, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _keyProj;       // [embeddingDim, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _valueProj;     // [embeddingDim, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputProj;    // [embeddingDim, embeddingDim]
 
     // Feed-forward network
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ffn1;          // [ffnDim, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ffn1Bias;      // [ffnDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ffn2;          // [embeddingDim, ffnDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ffn2Bias;      // [embeddingDim]
 
     // Layer normalization parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm1Gamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm1Beta;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm2Gamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _layerNorm2Beta;
 
     // Forward pass cache for backpropagation
+    [Scratch]
     private List<Tensor<T>>? _cachedInput;
+    [Scratch]
     private List<Tensor<T>>? _cachedNorm1;
+    [Scratch]
     private List<Tensor<T>>? _cachedAttentionOutput;
+    [Scratch]
     private List<Tensor<T>>? _cachedResidual1;
+    [Scratch]
     private List<Tensor<T>>? _cachedNorm2;
+    [Scratch]
     private List<Tensor<T>>? _cachedFfnHidden;
 
     public override bool SupportsTraining => true;
@@ -1756,25 +1697,6 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
         }
     }
 
-    public override void Serialize(BinaryWriter writer)
-    {
-        writer.Write(_embeddingDim);
-        writer.Write(_numHeads);
-
-        SerializeTensor(writer, _queryProj);
-        SerializeTensor(writer, _keyProj);
-        SerializeTensor(writer, _valueProj);
-        SerializeTensor(writer, _outputProj);
-        SerializeTensor(writer, _ffn1);
-        SerializeTensor(writer, _ffn1Bias);
-        SerializeTensor(writer, _ffn2);
-        SerializeTensor(writer, _ffn2Bias);
-        SerializeTensor(writer, _layerNorm1Gamma);
-        SerializeTensor(writer, _layerNorm1Beta);
-        SerializeTensor(writer, _layerNorm2Gamma);
-        SerializeTensor(writer, _layerNorm2Beta);
-    }
-
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
@@ -1782,29 +1704,6 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
             writer.Write(dim);
         for (int i = 0; i < tensor.Length; i++)
             writer.Write(Convert.ToDouble(tensor[i]));
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        int embeddingDim = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-
-        _embeddingDim = embeddingDim;
-        _numHeads = numHeads;
-        _headDim = embeddingDim / numHeads;
-
-        _queryProj = DeserializeTensor(reader);
-        _keyProj = DeserializeTensor(reader);
-        _valueProj = DeserializeTensor(reader);
-        _outputProj = DeserializeTensor(reader);
-        _ffn1 = DeserializeTensor(reader);
-        _ffn1Bias = DeserializeTensor(reader);
-        _ffn2 = DeserializeTensor(reader);
-        _ffn2Bias = DeserializeTensor(reader);
-        _layerNorm1Gamma = DeserializeTensor(reader);
-        _layerNorm1Beta = DeserializeTensor(reader);
-        _layerNorm2Gamma = DeserializeTensor(reader);
-        _layerNorm2Beta = DeserializeTensor(reader);
     }
 
     private Tensor<T> DeserializeTensor(BinaryReader reader)

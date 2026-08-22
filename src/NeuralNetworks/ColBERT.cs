@@ -50,7 +50,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT", "https://arxiv.org/abs/2004.12832", Year = 2020, Authors = "Omar Khattab, Matei Zaharia")]
-    public class ColBERT<T> : TransformerEmbeddingNetwork<T>
+    public partial class ColBERT<T> : TransformerEmbeddingNetwork<T>
     {
         private readonly ColBERTOptions _options;
 
@@ -269,23 +269,6 @@ namespace AiDotNet.NeuralNetworks
             return totalScore;
         }
 
-        /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new ColBERT<T>(
-                Architecture,
-                null,
-                null,
-                30522,
-                _outputDim,
-                MaxTokens,
-                12,
-                12,
-                3072,
-                LossFunction,
-                Convert.ToDouble(MaxGradNorm));
-        }
-
         /// <summary>
         /// Retrieves metadata about the ColBERT model.
         /// </summary>
@@ -299,19 +282,9 @@ namespace AiDotNet.NeuralNetworks
             return metadata;
         }
 
-        /// <inheritdoc/>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            base.SerializeNetworkSpecificData(writer);
-            writer.Write(_outputDim);
-        }
 
-        /// <inheritdoc/>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            base.DeserializeNetworkSpecificData(reader);
-            _outputDim = reader.ReadInt32();
-        }
+
+
 
         #endregion
     }

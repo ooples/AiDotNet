@@ -105,7 +105,9 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
     private Tensor<T>[]? _lastProjections;       // (order+1) projections: v, x_1, ..., x_N
     private Tensor<T>[]? _lastProjectionsRaw;     // pre-activation raw projections
@@ -113,6 +115,7 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>[]? _lastFilterHidden;       // hidden states from filter MLPs
     private Tensor<T>[]? _lastConvOutputs;        // results after each convolution
     private Tensor<T>[]? _lastGatedOutputs;       // results after each gating step
+    [Scratch]
     private Tensor<T>? _lastPreProjection;        // result before output projection
     private int[]? _originalInputShape;
 
@@ -127,7 +130,9 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>[]? _filterBiases2Gradients;
 
     // Gradients for output projection
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />

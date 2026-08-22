@@ -29,6 +29,7 @@ public class DeterministicBanditEnvironment<T> : IEnvironment<T>
     private readonly T[] _armRewards;
     private Random _random;
     private int _currentStep;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _currentState;
 
     /// <inheritdoc/>

@@ -131,30 +131,52 @@ public partial class LogLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastQuery;
+    [Scratch]
     private Tensor<T>? _lastKey;
+    [Scratch]
     private Tensor<T>? _lastValue;
+    [Scratch]
     private Tensor<T>? _lastGate;
+    [Scratch]
     private Tensor<T>? _lastGateRaw;
+    [Scratch]
     private Tensor<T>? _lastLogLinearOutput;
+    [Scratch]
     private Tensor<T>? _lastLevelOutputs; // [batch, seqLen, numHeads, numLevels, headDim]
+    [Scratch]
     private Tensor<T>? _lastLevelMixSoftmax; // [batch, seqLen, numHeads, numLevels]
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _queryBiasGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyBiasGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueBiasGradient;
+    [Scratch]
     private Tensor<T>? _levelMixWeightsGradient;
+    [Scratch]
     private Tensor<T>? _compressionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />
@@ -179,6 +201,9 @@ public partial class LogLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
     /// Gets the number of hierarchy levels.
     /// </summary>
     public int NumLevels => _numLevels;
+
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
 
     /// <summary>
     /// Creates a new Log-Linear Attention layer with hierarchical state compression.
@@ -213,6 +238,7 @@ public partial class LogLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

@@ -59,7 +59,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/1908.07442",
     Year = 2021,
     Authors = "Arik, S. O. & Pfister, T.")]
-public class TabNetNetwork<T> : TabularNeuralNetworkBase<T>
+public partial class TabNetNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly TabNetOptions<T> _options;
 
@@ -215,38 +215,8 @@ public class TabNetNetwork<T> : TabularNeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.NumDecisionSteps);
-        writer.Write(_options.FeatureDimension);
-        writer.Write(_options.OutputDimension);
-        writer.Write(_options.RelaxationFactor);
-        writer.Write(_options.SparsityCoefficient);
-        writer.Write(_options.BatchNormalizationMomentum);
-        writer.Write(_options.VirtualBatchSize);
-        writer.Write(_options.NumSharedLayers);
-        writer.Write(_options.NumStepSpecificLayers);
-        writer.Write(_options.Epsilon);
-        writer.Write(_options.EnablePreTraining);
-        writer.Write(_options.PreTrainingMaskingRatio);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.EnableGradientClipping);
-        writer.Write(_options.MaxGradientNorm);
-        writer.Write(_options.CategoricalEmbeddingDimension);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-    }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TabNetNetwork<T>(
-            Architecture,
-            _options,
-            _optimizer,
-            _lossFunction);
-    }
 }

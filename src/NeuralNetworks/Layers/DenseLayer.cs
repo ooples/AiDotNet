@@ -274,6 +274,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// <see cref="_weights"/> is a freed placeholder; each forward upcasts this to fp32 transiently for the
     /// matmul. Halves resident weight memory. Null in the normal full-precision path.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<Half>? _weightsHalf;
 
     // The fp16-resident upcast machinery (downcast-once + reused SIMD upcast buffer) lives in
@@ -300,6 +301,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// before actually making them.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _weightsGradient;
 
     /// <summary>
@@ -321,6 +323,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// It works together with the weight gradients to update all the layer's parameters.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
@@ -341,7 +344,9 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// errors in the output, making learning impossible.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput; // Pre-activation output for proper gradient computation
 
     /// <summary>
@@ -357,6 +362,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// NOT used while a gradient tape is active or in training (those need the recorded
     /// allocating op).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _fusedLinearScratch;
 
     // Q8_0 quantized weight (llama.cpp / ggml native layout: weight kept int8 [out,in] with one fp32
@@ -403,8 +409,11 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     }
 
     // GPU-resident cached tensors for GPU training pipeline
+    [Scratch]
     private Tensor<T>? _lastInputGpu;
+    [Scratch]
     private Tensor<T>? _lastPreActivationGpu; // Pre-activation for GPU backward pass
+    [Scratch]
     private Tensor<T>? _lastOutputGpu; // Post-activation for sigmoid/tanh backward
     private int[]? _gpuOriginalInputShape;
 
@@ -1585,7 +1594,9 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         }
     }
 
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _weightsVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _biasesVelocity;
 
     /// <summary>
@@ -1664,61 +1675,6 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         return Vector<T>.Concatenate(
             Vector<T>.FromMemory(_weightsGradient.Data),
             Vector<T>.FromMemory(_biasesGradient.Data));
-    }
-
-    public override void Serialize(BinaryWriter writer)
-    {
-        EnsureInitialized();
-        // Write weights
-        writer.Write(_weights.Length);
-        var wSpan = _weights.Data.Span;
-        for (int i = 0; i < _weights.Length; i++)
-            writer.Write(Convert.ToDouble(wSpan[i]));
-        // Write biases
-        writer.Write(_biases.Length);
-        var bSpan = _biases.Data.Span;
-        for (int i = 0; i < _biases.Length; i++)
-            writer.Write(Convert.ToDouble(bSpan[i]));
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        // Lazy ctor: if shape isn't resolved, recover inputSize from the
-        // saved weights length (= wLen / outputSize) and resolve before
-        // EnsureInitialized tries to allocate with a -1 sentinel. We
-        // simply read wLen first, then resolve, then read the weight
-        // values — no rewinding needed since wLen is the first int we
-        // consume from the layer's blob.
-        int wLen = reader.ReadInt32();
-        if (!IsShapeResolved)
-        {
-            int outputSize = OutputShape[0];
-            if (outputSize > 0 && wLen > 0 && wLen % outputSize == 0)
-            {
-                int inferredInput = wLen / outputSize;
-                ResolveFromShape(new[] { inferredInput });
-            }
-        }
-        EnsureInitialized();
-        // Read weights IN PLACE to preserve engine's persistent tensor reference
-        var wSpan = _weights.Data.Span;
-        for (int i = 0; i < Math.Min(wLen, _weights.Length); i++)
-            wSpan[i] = NumOps.FromDouble(reader.ReadDouble());
-        // Skip any extra values if serialized layer was bigger
-        for (int i = _weights.Length; i < wLen; i++)
-            reader.ReadDouble();
-
-        // Read biases IN PLACE
-        int bLen = reader.ReadInt32();
-        var bSpan = _biases.Data.Span;
-        for (int i = 0; i < Math.Min(bLen, _biases.Length); i++)
-            bSpan[i] = NumOps.FromDouble(reader.ReadDouble());
-        for (int i = _biases.Length; i < bLen; i++)
-            reader.ReadDouble();
-
-        // Notify engine that data changed (for GPU re-upload)
-        Engine.InvalidatePersistentTensor(_weights);
-        Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>

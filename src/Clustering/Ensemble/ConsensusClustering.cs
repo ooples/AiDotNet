@@ -58,12 +58,13 @@ namespace AiDotNet.Clustering.Ensemble;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Cluster Ensembles - A Knowledge Reuse Framework for Combining Multiple Partitions", "https://doi.org/10.1162/153244303321897735", Year = 2003, Authors = "Alexander Strehl, Joydeep Ghosh")]
-public class ConsensusClustering<T> : ClusteringBase<T>
+public partial class ConsensusClustering<T> : ClusteringBase<T>
 {
     private readonly ConsensusClusteringOptions<T> _options;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _coAssociationMatrix;
     private readonly INumericOperations<T> _numOps;
 
@@ -84,19 +85,6 @@ public class ConsensusClustering<T> : ClusteringBase<T>
     public Matrix<T>? CoAssociationMatrix => _coAssociationMatrix;
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new ConsensusClustering<T>(new ConsensusClusteringOptions<T>
-        {
-            NumBaseClusterings = _options.NumBaseClusterings,
-            Method = _options.Method,
-            FinalAlgorithm = _options.FinalAlgorithm,
-            NumClusters = _options.NumClusters,
-            Seed = _options.Seed
-        });
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

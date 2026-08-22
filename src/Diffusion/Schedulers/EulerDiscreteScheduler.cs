@@ -40,6 +40,7 @@ public sealed class EulerDiscreteScheduler<T> : NoiseSchedulerBase<T>
     /// <summary>
     /// Sigma values (noise levels) for each inference timestep.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _sigmas;
 
     /// <summary>

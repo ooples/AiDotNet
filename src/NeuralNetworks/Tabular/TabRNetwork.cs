@@ -61,7 +61,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2307.14338",
     Year = 2024,
     Authors = "Yury Gorishniy, Ivan Rubachev, Nikolay Kartashev, Daniil Shlenskii, Akim Kotelnikov, Artem Babenko")]
-public class TabRNetwork<T> : TabularNeuralNetworkBase<T>
+public partial class TabRNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly TabROptions<T> _options;
 
@@ -227,38 +227,8 @@ public class TabRNetwork<T> : TabularNeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.NumNeighbors);
-        writer.Write(_options.EmbeddingDimension);
-        writer.Write(_options.NumLayers);
-        writer.Write(_options.NumAttentionHeads);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.IncludeNeighborTargets);
-        writer.Write(_options.RetrievalTemperature);
-        writer.Write(_options.NormalizeEmbeddings);
-        writer.Write(_options.NumContextLayers);
-        writer.Write(_options.UseLayerNorm);
-        writer.Write(_options.ActivationType);
-        writer.Write(_options.UseFiLM);
-        writer.Write(_options.FeedForwardMultiplier);
-        writer.Write(_options.EnableGradientClipping);
-        writer.Write(_options.MaxGradientNorm);
-        writer.Write(_options.WeightDecay);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-    }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TabRNetwork<T>(
-            Architecture,
-            _options,
-            _optimizer,
-            _lossFunction);
-    }
 }

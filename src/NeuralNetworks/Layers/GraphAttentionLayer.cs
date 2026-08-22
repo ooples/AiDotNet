@@ -112,6 +112,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// <summary>
     /// The adjacency matrix defining graph structure.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _adjacencyMatrix;
 
     /// <summary>
@@ -142,6 +143,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// <summary>
     /// Cached input from forward pass for backward computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -152,16 +154,19 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// <summary>
     /// Cached output from forward pass for backward computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Cached attention coefficients from forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastAttentionCoefficients;
 
     /// <summary>
     /// Cached pre-softmax attention scores for gradient computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPreSoftmaxScores;
 
 
@@ -169,19 +174,23 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// <summary>
     /// Gradients for weight parameters.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _weightsGradient;
 
     /// <summary>
     /// Gradients for attention parameters.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _attentionWeightsGradient;
 
     /// <summary>
     /// Gradients for bias parameters.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _biasGradient;
 
     // GPU cache fields for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuLastInput;
     private IGpuBuffer? _gpuTransformedCache;  // [numNodes * outputFeatures * numHeads]
     private IGpuBuffer? _gpuAttentionCache;    // [numNodes * numNodes * numHeads]

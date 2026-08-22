@@ -526,20 +526,6 @@ public partial class ScoreGrad<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance with the same configuration.
-    /// </summary>
-    /// <returns>A new ScoreGrad instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the ScoreGrad model, CreateNewInstance builds and wires up model components. This sets up the ScoreGrad architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new ScoreGrad<T>(Architecture, _options, _numFeatures);
-    }
-
-    /// <summary>
     /// Serializes ScoreGrad-specific data.
     /// </summary>
     /// <param name="writer">The binary writer.</param>
@@ -548,22 +534,7 @@ public partial class ScoreGrad<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the ScoreGrad model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the ScoreGrad architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numNoiseScales);
-        writer.Write(_sigmaMin);
-        writer.Write(_sigmaMax);
-        writer.Write(_numLangevinSteps);
-        writer.Write(_stepSize);
-        writer.Write(_useAnnealing);
-        writer.Write(_annealingPower);
-        writer.Write(_numSamples);
-    }
+
 
     /// <summary>
     /// Deserializes ScoreGrad-specific data.
@@ -574,22 +545,7 @@ public partial class ScoreGrad<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the ScoreGrad model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the ScoreGrad architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numNoiseScales = reader.ReadInt32();
-        _sigmaMin = reader.ReadDouble();
-        _sigmaMax = reader.ReadDouble();
-        _numLangevinSteps = reader.ReadInt32();
-        _stepSize = reader.ReadDouble();
-        _useAnnealing = reader.ReadBoolean();
-        _annealingPower = reader.ReadDouble();
-        _numSamples = reader.ReadInt32();
-    }
+
 
     #endregion
 

@@ -727,6 +727,11 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
 
     private static bool ReferencesSameSource(IParameterSource<T>? registered, IParameterSource<T> candidate)
         => ReferenceEquals(registered, candidate)
+        || registered is ComponentCollectionParameterSource<T> collection
+           && collection.ContainsCurrent(
+               candidate is ComponentAccessorParameterSource<T> collectionCandidateAccessor
+                   ? collectionCandidateAccessor.Current
+                   : candidate)
         || registered is ComponentAccessorParameterSource<T> accessor
            && ReferenceEquals(accessor.Current,
                candidate is ComponentAccessorParameterSource<T> candidateAccessor

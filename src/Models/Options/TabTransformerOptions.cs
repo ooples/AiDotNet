@@ -113,14 +113,7 @@ public class TabTransformerOptions<T> : RiskModelOptions<T>
     public int[]? CategoricalCardinalities
     {
         get => _categoricalCardinalities;
-        set
-        {
-            if (value != null && _numCategoricalFeatures.HasValue && value.Length != _numCategoricalFeatures.Value)
-                throw new ArgumentException(
-                    $"CategoricalCardinalities.Length ({value.Length}) must match NumCategoricalFeatures ({_numCategoricalFeatures.Value}).",
-                    nameof(value));
-            _categoricalCardinalities = value;
-        }
+        set => _categoricalCardinalities = value;
     }
 
     /// <summary>
@@ -161,16 +154,7 @@ public class TabTransformerOptions<T> : RiskModelOptions<T>
     public int NumHeads
     {
         get => _numHeads;
-        set
-        {
-            if (value <= 0)
-                throw new ArgumentOutOfRangeException(nameof(value), "NumHeads must be positive.");
-            if (EmbeddingDimension % value != 0)
-                throw new ArgumentException(
-                    $"NumHeads ({value}) must evenly divide EmbeddingDimension ({EmbeddingDimension}).",
-                    nameof(value));
-            _numHeads = value;
-        }
+        set => _numHeads = value;
     }
 
     /// <summary>
@@ -287,6 +271,50 @@ public class TabTransformerOptions<T> : RiskModelOptions<T>
                     $"NumCategoricalFeatures ({value}) must match CategoricalCardinalities.Length ({CategoricalCardinalities.Length}) when CategoricalCardinalities is set.",
                     nameof(value));
             _numCategoricalFeatures = value == 0 ? null : value;
+        }
+    }
+
+    /// <summary>
+    /// Checks the relationships between these options, which individual setters cannot.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when a value is not positive.</exception>
+    /// <exception cref="ArgumentException">Thrown when two options contradict each other.</exception>
+    /// <remarks>
+    /// <para>
+    /// These checks used to live in the setters, which made them order-dependent: assigning
+    /// NumHeads before EmbeddingDimension compared it against the default rather than the intended
+    /// value, so the same pair of assignments succeeded or threw depending only on their order.
+    /// </para>
+    /// <para>
+    /// Worse, the enforcement was one-sided. NumHeads required that it divide EmbeddingDimension,
+    /// but EmbeddingDimension was a plain auto-property accepting anything, so setting NumHeads
+    /// first and EmbeddingDimension second produced an invalid object with no error at all.
+    /// </para>
+    /// <para>
+    /// Validating the relationship in one place removes both problems: any assignment order is
+    /// allowed while configuring, and the invariant is checked once, before the options are used.
+    /// This is the arrangement scikit-learn requires of its estimators, for the same reason.
+    /// </para>
+    /// </remarks>
+    public void Validate()
+    {
+        if (EmbeddingDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(EmbeddingDimension), EmbeddingDimension, "EmbeddingDimension must be positive.");
+        if (NumHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(NumHeads), NumHeads, "NumHeads must be positive.");
+
+        if (EmbeddingDimension % NumHeads != 0)
+            throw new ArgumentException(
+                $"NumHeads ({NumHeads}) must evenly divide EmbeddingDimension ({EmbeddingDimension}).",
+                nameof(NumHeads));
+
+        if (CategoricalCardinalities != null && _numCategoricalFeatures.HasValue
+            && CategoricalCardinalities.Length != _numCategoricalFeatures.Value)
+        {
+            throw new ArgumentException(
+                $"CategoricalCardinalities.Length ({CategoricalCardinalities.Length}) must match "
+                + $"NumCategoricalFeatures ({_numCategoricalFeatures.Value}).",
+                nameof(CategoricalCardinalities));
         }
     }
 }

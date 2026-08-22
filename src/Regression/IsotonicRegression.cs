@@ -55,18 +55,21 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Isotonic Regression Under Lipschitz Constraint", "https://doi.org/10.1080/01621459.1972.10482387")]
-public class IsotonicRegression<T> : NonLinearRegressionBase<T>
+public partial class IsotonicRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
     /// The sorted input values from the training data.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _xValues;
 
     /// <summary>
     /// The target values corresponding to the sorted input values.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _yValues;
     private int _trainingFeatureCount;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _olsCoefficients;
     private T _olsIntercept;
 
@@ -419,168 +422,6 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
 
         return Math.Max(0, left - 1);
     }
-
-    /// <summary>
-    /// Serializes the Isotonic Regression model to a byte array for storage or transmission.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method converts the Isotonic Regression model into a byte array that can be stored in a file, database,
-    /// or transmitted over a network. The serialized data includes the base class data, input values, and target
-    /// values used during training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves your trained model as a sequence of bytes.
-    /// 
-    /// Serialization allows you to:
-    /// - Save your model to a file
-    /// - Store your model in a database
-    /// - Send your model over a network
-    /// - Keep your model for later use without having to retrain it
-    /// 
-    /// The serialized data includes:
-    /// - The input values from your training data
-    /// - The corresponding output values
-    /// - All the information needed to recreate the model exactly as it was
-    /// 
-    /// Example:
-    /// ```csharp
-    /// // Serialize the model
-    /// byte[] modelData = isoReg.Serialize();
-    /// 
-    /// // Save to a file
-    /// File.WriteAllBytes("isotonicRegression.model", modelData);
-    /// ```
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize IsotonicRegression specific data
-        writer.Write(_xValues.Length);
-        for (int i = 0; i < _xValues.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_xValues[i]));
-        }
-
-        writer.Write(_yValues.Length);
-        for (int i = 0; i < _yValues.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_yValues[i]));
-        }
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Loads a previously serialized Isotonic Regression model from a byte array.
-    /// </summary>
-    /// <param name="modelData">The byte array containing the serialized model.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reconstructs an Isotonic Regression model from a byte array that was previously created using the
-    /// Serialize method. It restores the base class data, input values, and target values, allowing the model to be
-    /// used for predictions without retraining.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved model from a sequence of bytes.
-    /// 
-    /// Deserialization allows you to:
-    /// - Load a model that was saved earlier
-    /// - Use a model without having to retrain it
-    /// - Share models between different applications
-    /// 
-    /// When you deserialize a model:
-    /// - The input and output values from training are recovered
-    /// - The model is ready to make predictions immediately
-    /// - You don't need to go through the training process again
-    /// 
-    /// Example:
-    /// ```csharp
-    /// // Load from a file
-    /// byte[] modelData = File.ReadAllBytes("isotonicRegression.model");
-    /// 
-    /// // Deserialize the model
-    /// var isoReg = new IsotonicRegression&lt;double&gt;();
-    /// isoReg.Deserialize(modelData);
-    /// 
-    /// // Now you can use the model for predictions
-    /// var predictions = isoReg.Predict(newFeatures);
-    /// ```
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize IsotonicRegression specific data
-        int xLength = reader.ReadInt32();
-        _xValues = new Vector<T>(xLength);
-        for (int i = 0; i < xLength; i++)
-        {
-            _xValues[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        int yLength = reader.ReadInt32();
-        _yValues = new Vector<T>(yLength);
-        for (int i = 0; i < yLength; i++)
-        {
-            _yValues[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-    }
-
-    /// <summary>
-    /// Creates a new instance of the IsotonicRegression with the same configuration as the current instance.
-    /// </summary>
-    /// <returns>A new IsotonicRegression instance with the same options and regularization as the current instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the IsotonicRegression model with the same configuration options
-    /// and regularization settings as the current instance. This is useful for model cloning, ensemble methods, or
-    /// cross-validation scenarios where multiple instances of the same model with identical configurations are needed.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model's blueprint.
-    /// 
-    /// When you need multiple versions of the same type of model with identical settings:
-    /// - This method creates a new, empty model with the same configuration
-    /// - It's like making a copy of a recipe before you start cooking
-    /// - The new model has the same settings but no trained data
-    /// - This is useful for techniques that need multiple models, like cross-validation
-    /// 
-    /// For example, when testing your model on different subsets of data,
-    /// you'd want each test to use a model with identical settings.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new IsotonicRegression<T>(Options, Regularization);
-        if (SupportVectors.Rows > 0)
-            clone.SupportVectors = SupportVectors.Clone();
-        if (Alphas.Length > 0)
-            clone.Alphas = new Vector<T>(Alphas);
-        clone.B = B;
-        clone._xValues = new Vector<T>(_xValues);
-        clone._yValues = new Vector<T>(_yValues);
-        clone._trainingFeatureCount = _trainingFeatureCount;
-        clone._olsIntercept = _olsIntercept;
-        if (_olsCoefficients is not null)
-            clone._olsCoefficients = new Vector<T>(_olsCoefficients);
-        return clone;
-    }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {

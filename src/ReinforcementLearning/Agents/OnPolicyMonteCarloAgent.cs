@@ -41,7 +41,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
     "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
-public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
+public partial class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private OnPolicyMonteCarloOptions<T> _options;
 

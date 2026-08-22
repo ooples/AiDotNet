@@ -117,7 +117,10 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
                 }
             }
 
-        return result;
+        // Pairwise MMD chooses each direction independently, so three individually preferred
+        // directions can still form a directed cycle. Preserve the strongest learned edges while
+        // enforcing the DAG guarantee shared by causal discovery results.
+        return ProjectWeightedGraphToDag(result);
     }
 
     /// <summary>

@@ -52,7 +52,9 @@ public class GANDALFRegression<T> : GANDALFBase<T>
     private readonly FullyConnectedLayer<T> _regressionHead;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _backboneOutputCache;
+    [Scratch]
     private Tensor<T>? _predictionsCache;
 
     /// <summary>
@@ -103,7 +105,9 @@ public class GANDALFRegression<T> : GANDALFBase<T>
         _regressionHead = new FullyConnectedLayer<T>(
             Options.LeafDimension,
             outputDimension,
-            (IActivationFunction<T>?)null);
+            // Identity, stated rather than left to the default: FullyConnectedLayer resolves a null
+            // activation to ReLU, which would clamp this regression head to non-negative outputs.
+            new IdentityActivation<T>());
     }
 
     /// <summary>

@@ -53,8 +53,11 @@ public class SAINTClassifier<T> : SAINTBase<T>
     private readonly FullyConnectedLayer<T> _classificationHead;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _backboneOutputCache;
+    [Scratch]
     private Tensor<T>? _logitsCache;
+    [Scratch]
     private Tensor<T>? _probabilitiesCache;
 
     /// <summary>

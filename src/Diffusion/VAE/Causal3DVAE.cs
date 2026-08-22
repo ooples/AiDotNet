@@ -181,39 +181,11 @@ public partial class Causal3DVAE<T> : VAEModelBase<T>
         return x;
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        var clone = new Causal3DVAE<T>(
-            inputChannels: _inputChannels,
-            latentChannels: _latentChannels,
-            baseChannels: _baseChannels,
-            channelMultipliers: (int[])_channelMultipliers.Clone(),
-            temporalCompression: _temporalCompression,
-            latentScaleFactor: _latentScaleFactor);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
-    }
-
     private static int[] GetReducedShape(int[] shape, int lastDim)
     {
         var result = (int[])shape.Clone();
         result[^1] = lastDim;
         return result;
-    }
-
-    /// <inheritdoc />
-    public override IVAEModel<T> Clone()
-    {
-        var clone = new Causal3DVAE<T>(
-            inputChannels: _inputChannels,
-            latentChannels: _latentChannels,
-            baseChannels: _baseChannels,
-            channelMultipliers: (int[])_channelMultipliers.Clone(),
-            temporalCompression: _temporalCompression,
-            latentScaleFactor: _latentScaleFactor);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
     }
 
     protected override Vector<T> GetParameterGradients()

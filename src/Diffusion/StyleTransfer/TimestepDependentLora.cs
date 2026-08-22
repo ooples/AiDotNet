@@ -1,4 +1,5 @@
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 
@@ -79,11 +80,15 @@ public sealed class TimestepDependentLora<T>
 
     // The frozen initialization triplet. Subtracting its masked product is what makes the adapter
     // the identity at init WITHOUT forcing B or S to start at zero (see the class remarks).
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Matrix<T> _downInit;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Matrix<T> _upInit;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _singularInit;
 
     // Cached [inputDim, outputDim] delta for _cachedTimestep. Invalidated by InvalidateCache().
+    [Scratch]
     private Tensor<T>? _cachedDelta;
     private int _cachedTimestep = -1;
 

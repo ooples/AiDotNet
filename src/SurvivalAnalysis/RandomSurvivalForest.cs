@@ -503,12 +503,6 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
         return new RandomSurvivalForest<T>(NumTrees, MaxDepth, MinSamplesLeaf, MaxFeatures);
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new RandomSurvivalForest<T>(NumTrees, MaxDepth, MinSamplesLeaf, MaxFeatures);
-    }
-
     /// <summary>
     /// Creates a deep copy of this Random Survival Forest, preserving the
     /// trained tree ensemble. The base <see cref="SurvivalModelBase{T}.DeepCopy"/>

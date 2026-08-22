@@ -44,7 +44,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("3D ShapeNets: A Deep Representation for Volumetric Shapes", "https://arxiv.org/abs/1406.5670")]
-public class VoxelCNN<T> : VolumetricModelLayoutBase<T>
+public partial class VoxelCNN<T> : VolumetricModelLayoutBase<T>
 {
     private readonly VoxelCNNOptions _options;
 
@@ -349,39 +349,12 @@ public class VoxelCNN<T> : VolumetricModelLayoutBase<T>
     /// </summary>
     /// <param name="writer">The binary writer to serialize to.</param>
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(VoxelResolution);
-        writer.Write(NumConvBlocks);
-        writer.Write(BaseFilters);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data from a binary stream.
     /// </summary>
     /// <param name="reader">The binary reader to deserialize from.</param>
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        VoxelResolution = reader.ReadInt32();
-        NumConvBlocks = reader.ReadInt32();
-        BaseFilters = reader.ReadInt32();
-    }
 
-    /// <summary>
-    /// Creates a new instance of this model type for cloning purposes.
-    /// </summary>
-    /// <returns>A new <see cref="VoxelCNN{T}"/> instance with the same configuration.</returns>
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new VoxelCNN<T>(
-            Architecture,
-            VoxelResolution,
-            NumConvBlocks,
-            BaseFilters,
-            _optimizer,
-            _lossFunction,
-            MaxGradNormValue);
-    }
 }

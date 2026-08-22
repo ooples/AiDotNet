@@ -110,9 +110,11 @@ public partial class ConstellationNetAlgorithm<T, TInput, TOutput> : MetaLearner
     private readonly ConstellationNetOptions<T, TInput, TOutput> _constellationOptions;
 
     /// <summary>Parameters for the part detection module.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _partDetectorParams = new Vector<T>(0);
 
     /// <summary>Parameters for the spatial relation module.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _relationParams = new Vector<T>(0);
 
     /// <inheritdoc/>

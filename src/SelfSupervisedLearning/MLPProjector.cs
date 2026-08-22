@@ -51,36 +51,51 @@ public class MLPProjector<T> : IProjectorHead<T>
     // Layer 1: Input → Hidden
     private Tensor<T> _weight1;
     private Tensor<T> _bias1;
+    [Scratch]
     private Tensor<T>? _gradWeight1;
+    [Scratch]
     private Tensor<T>? _gradBias1;
 
     // BatchNorm 1
     private Tensor<T> _gamma1;
     private Tensor<T> _beta1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _runningMean1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _runningVar1;
+    [Scratch]
     private Tensor<T>? _gradGamma1;
+    [Scratch]
     private Tensor<T>? _gradBeta1;
 
     // Layer 2: Hidden → Output
     private Tensor<T> _weight2;
     private Tensor<T> _bias2;
+    [Scratch]
     private Tensor<T>? _gradWeight2;
+    [Scratch]
     private Tensor<T>? _gradBias2;
 
     // BatchNorm 2 (optional)
     private Tensor<T>? _gamma2;
     private Tensor<T>? _beta2;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _runningMean2;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _runningVar2;
+    [Scratch]
     private Tensor<T>? _gradGamma2;
+    [Scratch]
     private Tensor<T>? _gradBeta2;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _preActivation1;
     private Tensor<T>? _postBatchNorm1;
     private Tensor<T>? _postRelu1;
+    [Scratch]
     private Tensor<T>? _preActivation2;
 
     private bool _isTraining = true;

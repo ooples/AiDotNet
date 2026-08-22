@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2021,
     Authors = "Kong et al."
 )]
-public class DiffWave<T> : VocoderBase<T>
+public partial class DiffWave<T> : VocoderBase<T>
 {
     private readonly DiffWaveOptions _options;
 
@@ -207,77 +207,9 @@ public class DiffWave<T> : VocoderBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.MelChannels);
-        writer.Write(_options.HopSize);
-        writer.Write(_options.NumDiffusionSteps);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.NumResLayers);
-        writer.Write(_options.ResChannels);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.WeightDecay);
-        writer.Write(_options.OptimizerBatchSize);
-        writer.Write(_options.OptimizerBeta1);
-        writer.Write(_options.OptimizerBeta2);
-        writer.Write(_options.OptimizerEpsilon);
-        writer.Write(_options.MaxGradientNorm);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.MelChannels = reader.ReadInt32();
-        _options.HopSize = reader.ReadInt32();
-        _options.NumDiffusionSteps = reader.ReadInt32();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.NumResLayers = reader.ReadInt32();
-        _options.ResChannels = reader.ReadInt32();
-        // These optimizer fields were appended to preserve backward compatibility with model files
-        // written before they became configurable. Older payloads end after ResChannels.
-        const int optimizerPayloadBytes = (6 * sizeof(double)) + sizeof(int);
-        if (reader.BaseStream.Length - reader.BaseStream.Position >= optimizerPayloadBytes)
-        {
-            _options.LearningRate = reader.ReadDouble();
-            _options.WeightDecay = reader.ReadDouble();
-            _options.OptimizerBatchSize = reader.ReadInt32();
-            _options.OptimizerBeta1 = reader.ReadDouble();
-            _options.OptimizerBeta2 = reader.ReadDouble();
-            _options.OptimizerEpsilon = reader.ReadDouble();
-            _options.MaxGradientNorm = reader.ReadDouble();
-            MaxGradNorm = NumOps.FromDouble(_options.MaxGradientNorm);
-        }
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        if (_useNativeMode && !_preserveSuppliedOptimizer)
-            _optimizer = CreateDefaultOptimizer();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new DiffWave<T>(Architecture, mp, new DiffWaveOptions(_options));
 
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? cloneOptimizer = _optimizer switch
-        {
-            AdamWOptimizer<T, Tensor<T>, Tensor<T>> when _optimizer.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
-                => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options)),
-            AdamOptimizer<T, Tensor<T>, Tensor<T>> when _optimizer.GetOptions() is AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> options
-                => new AdamOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>(options)),
-            _ => null
-        };
-        return new DiffWave<T>(Architecture, new DiffWaveOptions(_options), cloneOptimizer);
-    }
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
     {

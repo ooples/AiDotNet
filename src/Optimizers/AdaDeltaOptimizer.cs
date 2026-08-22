@@ -31,7 +31,7 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
+public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
     /// Describes this AdaDelta instance for the fused kernel (Tensors
@@ -86,6 +86,7 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// - This information helps determine how big your next learning step should be
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _accumulatedSquaredGradients;
 
     /// <summary>
@@ -109,16 +110,19 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// process automatically based on past experience.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _accumulatedSquaredUpdates;
 
     /// <summary>
     /// Stores the pre-update snapshot of accumulated squared gradients for accurate reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _previousAccumulatedSquaredGradients;
 
     /// <summary>
     /// Stores the pre-update snapshot of accumulated squared updates for accurate reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _previousAccumulatedSquaredUpdates;
 
     /// <summary>
@@ -697,48 +701,6 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         return _options;
     }
 
-    /// <summary>
-    /// Serializes the AdaDelta optimizer to a byte array.
-    /// </summary>
-    /// <returns>A byte array representing the serialized optimizer.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method converts the optimizer's state, including its base class state and options,
-    /// into a byte array that can be stored or transmitted.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like packing up the optimizer into a compact form.
-    /// 
-    /// Imagine you're packing a suitcase:
-    /// 1. You pack the basic stuff (base class data)
-    /// 2. You write down how much basic stuff you packed
-    /// 3. You pack your special AdaDelta stuff (options)
-    /// 
-    /// This packed form can be saved or sent somewhere else, and later unpacked to recreate
-    /// the optimizer exactly as it was.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
-
-            // Serialize state vectors
-            SerializeVector(writer, _accumulatedSquaredGradients);
-            SerializeVector(writer, _accumulatedSquaredUpdates);
-            SerializeVector(writer, _previousAccumulatedSquaredGradients);
-            SerializeVector(writer, _previousAccumulatedSquaredUpdates);
-
-            return ms.ToArray();
-        }
-    }
-
     private void SerializeVector(BinaryWriter writer, Vector<T>? vector)
     {
         bool hasVector = vector is not null;
@@ -767,46 +729,6 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             return new Vector<T>(data);
         }
         return null;
-    }
-
-    /// <summary>
-    /// Deserializes the AdaDelta optimizer from a byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized optimizer data.</param>
-    /// <exception cref="InvalidOperationException">Thrown when deserialization of optimizer options fails.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method reconstructs the optimizer's state from a byte array, including its base class state and options.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like unpacking the optimizer from its compact form.
-    ///
-    /// Continuing the suitcase analogy:
-    /// 1. You check how much basic stuff was packed
-    /// 2. You unpack the basic stuff (base class data)
-    /// 3. You unpack and set up your special AdaDelta stuff (options)
-    ///
-    /// If there's a problem unpacking the special stuff, it will let you know with an error message.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<AdaDeltaOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-            // Deserialize state vectors
-            _accumulatedSquaredGradients = DeserializeVector(reader);
-            _accumulatedSquaredUpdates = DeserializeVector(reader);
-            _previousAccumulatedSquaredGradients = DeserializeVector(reader);
-            _previousAccumulatedSquaredUpdates = DeserializeVector(reader);
-        }
     }
 
     /// <summary>

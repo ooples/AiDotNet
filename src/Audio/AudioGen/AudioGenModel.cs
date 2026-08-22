@@ -88,7 +88,7 @@ namespace AiDotNet.Audio.AudioGen;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(string), typeof(Tensor<>))]
 [ResearchPaper("AudioGen: Textually Guided Audio Generation", "https://doi.org/10.48550/arXiv.2209.15352", Year = 2022, Authors = "Felix Kreuk, Gabriel Synnaeve, Adam Polyak, Uriel Singer, Alexandre Défossez, Jade Copet, Devi Parikh, Yaniv Taigman, Yossi Adi")]
-public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
+public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -936,80 +936,12 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write((int)_modelSize);
-        writer.Write(_sampleRate);
-        writer.Write(_durationSeconds);
-        writer.Write(_maxDurationSeconds);
-        writer.Write(_temperature);
-        writer.Write(_topK);
-        writer.Write(_topP);
-        writer.Write(_guidanceScale);
-        writer.Write(_channels);
-        writer.Write(_textHiddenDim);
-        writer.Write(_lmHiddenDim);
-        writer.Write(_numLmLayers);
-        writer.Write(_numHeads);
-        writer.Write(_numCodebooks);
-        writer.Write(_codebookSize);
-        writer.Write(_maxTextLength);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read values to advance stream position (validation done in CreateNewInstance)
-        _ = reader.ReadBoolean();  // useNativeMode
-        _ = reader.ReadInt32();    // modelSize
-        _ = reader.ReadInt32();    // sampleRate
-        _ = reader.ReadDouble();   // durationSeconds
-        _ = reader.ReadDouble();   // maxDurationSeconds
-        _ = reader.ReadDouble();   // temperature
-        _ = reader.ReadInt32();    // topK
-        _ = reader.ReadDouble();   // topP
-        _ = reader.ReadDouble();   // guidanceScale
-        _ = reader.ReadInt32();    // channels
-        _ = reader.ReadInt32();    // textHiddenDim
-        _ = reader.ReadInt32();    // lmHiddenDim
-        _ = reader.ReadInt32();    // numLmLayers
-        _ = reader.ReadInt32();    // numHeads
-        _ = reader.ReadInt32();    // numCodebooks
-        _ = reader.ReadInt32();    // codebookSize
-        _ = reader.ReadInt32();    // maxTextLength
-    }
 
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new AudioGenModel<T>(
-            Architecture,
-            _modelSize,
-            _sampleRate,
-            _durationSeconds,
-            _maxDurationSeconds,
-            _temperature,
-            _topK,
-            _topP,
-            _guidanceScale,
-            _channels,
-            _textHiddenDim,
-            _lmHiddenDim,
-            _numLmLayers,
-            _numHeads,
-            _numCodebooks,
-            _codebookSize,
-            _maxTextLength,
-            seed: null,
-            tokenizer: _tokenizer,
-            optimizer: null,
-            lossFunction: _lossFunction);
-    }
 
     #endregion
 

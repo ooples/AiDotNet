@@ -444,14 +444,6 @@ public partial class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>, 
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new REINFORCEAgent<T>(_reinforceOptions);
-        clone.SetParameters(GetParameters());
-        return clone;
-    }
-
-    /// <inheritdoc/>
     public Vector<T> ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {

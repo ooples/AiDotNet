@@ -55,12 +55,13 @@ namespace AiDotNet.Clustering.Partitioning;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("FCM: The Fuzzy c-Means Clustering Algorithm", "https://doi.org/10.1016/0098-3004(84)90020-7", Year = 1984, Authors = "James C. Bezdek, Robert Ehrlich, William Full")]
-public class FuzzyCMeans<T> : ClusteringBase<T>
+public partial class FuzzyCMeans<T> : ClusteringBase<T>
 {
     private readonly FuzzyCMeansOptions<T> _options;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _membershipMatrix = new Matrix<T>(0, 0);
 
     /// <summary>
@@ -83,19 +84,6 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
     public Matrix<T> MembershipMatrix => _membershipMatrix.Clone();
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new FuzzyCMeans<T>(new FuzzyCMeansOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            Fuzziness = _options.Fuzziness,
-            MaxIterations = _options.MaxIterations,
-            Tolerance = _options.Tolerance,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

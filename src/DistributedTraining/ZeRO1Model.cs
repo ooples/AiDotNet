@@ -63,8 +63,9 @@ namespace AiDotNet.DistributedTraining;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("ZeRO: Memory Optimizations Toward Training Trillion Parameter Models", "https://arxiv.org/abs/1910.02054")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
+public partial class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _computedGradients;
 
     /// <summary>
@@ -251,11 +252,5 @@ public class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         {
             Config.CommunicationBackend.Barrier();
         }
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> Clone()
-    {
-        return new ZeRO1Model<T, TInput, TOutput>(WrappedModel.Clone(), Config);
     }
 }

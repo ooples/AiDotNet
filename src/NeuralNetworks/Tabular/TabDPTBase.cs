@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using System;
 using System.Collections.Generic;
 using AiDotNet.Models.Parameters;
@@ -63,8 +64,11 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
     private readonly LayerNormalizationLayer<T> _finalNorm;
 
     // Cached values
+    [Scratch]
     private Tensor<T>? _embeddingsCache;
+    [Scratch]
     private Tensor<T>? _transformerOutputCache;
+    [Scratch]
     private Tensor<T>? _mlpOutputCache;
 
     /// <summary>
@@ -385,15 +389,23 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
         private readonly double _dropoutRate;
 
         // Attention weights
+        [AiDotNet.Attributes.Scratch]
         private Tensor<TBlock> _queryWeights;
+        [AiDotNet.Attributes.Scratch]
         private Tensor<TBlock> _keyWeights;
+        [AiDotNet.Attributes.Scratch]
         private Tensor<TBlock> _valueWeights;
+        [AiDotNet.Attributes.Scratch]
         private Tensor<TBlock> _outputWeights;
 
         // Attention gradients
+        [AiDotNet.Attributes.Scratch]
         private Tensor<TBlock> _queryGrad;
+        [AiDotNet.Attributes.Scratch]
         private Tensor<TBlock> _keyGrad;
+        [AiDotNet.Attributes.Scratch]
         private Tensor<TBlock> _valueGrad;
+        [AiDotNet.Attributes.Scratch]
         private Tensor<TBlock> _outputGrad;
 
         // Feed-forward layers
@@ -405,12 +417,19 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
         private readonly LayerNormalizationLayer<TBlock> _norm2;
 
         // Cached values
+        [Scratch]
         private Tensor<TBlock>? _inputCache;
+        [Scratch]
         private Tensor<TBlock>? _normInput1Cache;
+        [Scratch]
         private Tensor<TBlock>? _attentionOutputCache;
+        [Scratch]
         private Tensor<TBlock>? _queryCache;
+        [Scratch]
         private Tensor<TBlock>? _keyCache;
+        [Scratch]
         private Tensor<TBlock>? _valueCache;
+        [Scratch]
         private Tensor<TBlock>? _attentionScoresCache;
 
         /// <summary>The block attention projections, in serialization order.</summary>
@@ -746,6 +765,7 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
         private Tensor<TBlock> _featureValue;
         private Tensor<TBlock> _featureOutput;
 
+        [AiDotNet.Attributes.Scratch]
         private Tensor<TBlock>? _inputCache;
 
         /// <summary>The four projections, in serialization order.</summary>

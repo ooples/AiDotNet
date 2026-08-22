@@ -66,7 +66,7 @@ namespace AiDotNet.CausalInference;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("The Central Role of the Propensity Score in Observational Studies for Causal Effects", "https://doi.org/10.1093/biomet/70.1.41")]
-public class PropensityScoreMatching<T> : CausalModelBase<T>
+public partial class PropensityScoreMatching<T> : CausalModelBase<T>
 {
 
     /// <inheritdoc />
@@ -84,6 +84,7 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
     /// <summary>
     /// Stores the logistic regression coefficients for propensity score estimation.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _propensityCoefficients;
 
     /// <summary>
@@ -109,16 +110,19 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
     /// <summary>
     /// Cached treatment vector from fitting.
     /// </summary>
+    [Scratch]
     private Vector<int>? _cachedTreatment;
 
     /// <summary>
     /// Cached outcome vector from fitting.
     /// </summary>
+    [Scratch]
     private Vector<T>? _cachedOutcome;
 
     /// <summary>
     /// Cached feature matrix from fitting.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _cachedFeatures;
 
     /// <summary>
@@ -715,14 +719,6 @@ public class PropensityScoreMatching<T> : CausalModelBase<T>
         var newModel = new PropensityScoreMatching<T>(_caliper, _withReplacement, _matchRatio);
         newModel.SetParameters(parameters);
         return newModel;
-    }
-
-    /// <summary>
-    /// Creates a new instance of this type.
-    /// </summary>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new PropensityScoreMatching<T>(_caliper, _withReplacement, _matchRatio);
     }
 
     /// <summary>

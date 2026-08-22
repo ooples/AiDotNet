@@ -1,4 +1,5 @@
 using AiDotNet.Engines;
+using AiDotNet.Attributes;
 using System.Collections.Generic;
 using AiDotNet.Models.Parameters;
 using AiDotNet.LinearAlgebra;
@@ -72,7 +73,9 @@ public abstract class TabTransformerBase<T> : IParameterSource<T>
     private readonly List<Tensor<T>?> _categoricalEmbeddingsGrad;
 
     // Column embeddings (learned position for each categorical feature)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _columnEmbeddings;  // [numCat, embDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _columnEmbeddingsGrad;
 
     // Transformer encoder layers
@@ -85,10 +88,15 @@ public abstract class TabTransformerBase<T> : IParameterSource<T>
     private readonly List<FullyConnectedLayer<T>> _mlpLayers;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _numericalFeaturesCache;
+    [Scratch]
     private Matrix<int>? _categoricalIndicesCache;
+    [Scratch]
     private Tensor<T>? _embeddedCategoricalsCache;
+    [Scratch]
     private Tensor<T>? _transformedCategoricalsCache;
+    [Scratch]
     private Tensor<T>? _concatenatedCache;
 
     /// <summary>

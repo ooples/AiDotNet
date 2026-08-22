@@ -214,25 +214,6 @@ public partial class Instant3DModel<T> : ThreeDDiffusionModelBase<T>
 
     #region ICloneable
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-                return new Instant3DModel<T>(
-            unet: (UNetNoisePredictor<T>)_unet.Clone(),
-            vae: new StandardVAE<T>(
-                inputChannels: 3,
-                latentChannels: LATENT_CHANNELS,
-                baseChannels: 128,
-                channelMultipliers: [1, 2, 4, 4],
-                numResBlocksPerLevel: 2,
-                latentScaleFactor: 0.18215),
-            conditioner: _conditioner,
-            defaultPointCount: DefaultPointCount);
-    }
-
     #endregion
 
     #region Metadata

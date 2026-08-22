@@ -221,16 +221,19 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Gradient of the weights computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _weightsGradient;
 
     /// <summary>
     /// Gradient of the visible biases computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _visibleBiasesGradient;
 
     /// <summary>
     /// Gradient of the hidden biases computed during backpropagation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _hiddenBiasesGradient;
 
     /// <summary>
@@ -251,6 +254,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     /// This storage helps the RBM adjust its weights to make better reconstructions of the input data.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastVisibleInput;
 
     /// <summary>
@@ -277,6 +281,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     /// versus which ones it incorrectly generates on its own.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastHiddenOutput;
 
     /// <summary>
@@ -298,6 +303,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     /// how the RBM updates its weights to improve future reconstructions.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _reconstructedVisible;
 
     /// <summary>
@@ -319,6 +325,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     /// the RBM learn to distinguish real patterns from ones it incorrectly imagines.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _reconstructedHidden;
 
     /// <summary>

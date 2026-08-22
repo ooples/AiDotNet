@@ -41,7 +41,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
     "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
-public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
+public partial class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
 {
 
     /// <inheritdoc />
@@ -59,6 +59,7 @@ public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
     private Matrix<T> _weights;  // Weight matrix: [ActionSize x FeatureSize]
     private double _epsilon;
     private int _lastAction = -1;
+    [Scratch]
     private Vector<T>? _lastState = null;
 
     /// <summary>
@@ -288,8 +289,6 @@ public class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
             _lastAction = Convert.ToInt32(state.LastAction);
         }
     }
-
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new LinearSARSAAgent<T>(_options);
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }

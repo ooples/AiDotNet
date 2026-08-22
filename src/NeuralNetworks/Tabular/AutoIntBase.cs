@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using System.Collections.Generic;
 using AiDotNet.Models.Parameters;
 using AiDotNet.LinearAlgebra;
@@ -43,6 +44,7 @@ public abstract class AutoIntBase<T> : IParameterSource<T>
     private readonly Random _random = RandomHelper.CreateSecureRandom();
 
     // Feature embeddings
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _numericalEmbeddings;
     private readonly Tensor<T>[]? _categoricalEmbeddings;
 
@@ -54,10 +56,15 @@ public abstract class AutoIntBase<T> : IParameterSource<T>
     protected int MLPOutputDimension { get; }
 
     // Caches
+    [Scratch]
     private Tensor<T>? _numericalFeaturesCache;
+    [Scratch]
     private Matrix<int>? _categoricalIndicesCache;
+    [Scratch]
     private Tensor<T>? _embeddedFeaturesCache;
+    [Scratch]
     private List<Tensor<T>>? _interactingOutputsCache;
+    [Scratch]
     private Tensor<T>? _mlpOutputCache;
 
     // Embedding gradients

@@ -28,6 +28,7 @@ public class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBase<T>
     private readonly BeveridgeNelsonAlgorithmType _algorithm;
     private readonly ARIMAOptions<T> _arimaOptions;
     private readonly int _forecastHorizon;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Matrix<T> _multivariateSeries;
 
     /// <summary>

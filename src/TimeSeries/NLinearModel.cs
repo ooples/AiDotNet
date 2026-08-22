@@ -1,7 +1,8 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
-using AiDotNet.Optimizers;
+using AiDotNet.Optimizers;
+
 using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.TimeSeries;
@@ -228,28 +229,9 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
         return NumOps.FromDouble(IsFiniteValue(pred) ? pred : 0.0);
     }
 
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        writer.Write(_l);
-        for (int j = 0; j < _l; j++) { writer.Write(_w[j]); }
-        writer.Write(_b);
-        // StandardScaler stats are model state Predict depends on (Clone() round-trips through here).
-        writer.Write(_xMean);
-        writer.Write(_xStd);
-        writer.Write(_yMean);
-        writer.Write(_yStd);
-    }
 
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        reader.ReadInt32();
-        for (int j = 0; j < _l; j++) { _w[j] = reader.ReadDouble(); }
-        _b = reader.ReadDouble();
-        _xMean = reader.ReadDouble();
-        _xStd = reader.ReadDouble();
-        _yMean = reader.ReadDouble();
-        _yStd = reader.ReadDouble();
-    }
+
+
 
     public override ModelMetadata<T> GetModelMetadata()
     {

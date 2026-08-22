@@ -106,11 +106,13 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <summary>
     /// The adjacency matrix defining graph structure.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _adjacencyMatrix;
 
     /// <summary>
     /// Cached input from forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -121,36 +123,43 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <summary>
     /// Cached output from forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Cached aggregated neighbor features.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastAggregated;
 
     /// <summary>
     /// Cached pre-normalization output for gradient computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPreNorm;
 
     /// <summary>
     /// Cached degrees for each node.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastDegrees;
 
     /// <summary>
     /// Gradients for self weights.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _selfWeightsGradient;
 
     /// <summary>
     /// Gradients for neighbor weights.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _neighborWeightsGradient;
 
     /// <summary>
     /// Gradients for bias.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _biasGradient;
 
     /// <summary>
@@ -166,6 +175,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <summary>
     /// Cached reshaped adjacency matrix for backward pass.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _adjForBatch;
 
     /// <inheritdoc/>

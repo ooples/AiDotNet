@@ -97,7 +97,6 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
     /// <summary>
     /// Convolution kernel size for feature extraction.
     /// </summary>
-    private readonly int _convKernelSize;
 
     /// <summary>
     /// FFT size for STFT analysis.
@@ -296,7 +295,6 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
         _dfOrder = 5;
         _dfBins = 96;
         _numGruLayers = 2;
-        _convKernelSize = 3;
         _lookahead = 2;
         // Load ONNX model
         OnnxModel = new OnnxModel<T>(modelPath, onnxOptions);
@@ -373,7 +371,6 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
         _fftSize = fftSize;
         _hopSize = hopSize;
         _lookahead = lookahead;
-        _convKernelSize = 3;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
@@ -1047,55 +1044,10 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(IsOnnxMode);
-        writer.Write(SampleRate);
-        writer.Write(_numErbBands);
-        writer.Write(_hiddenDim);
-        writer.Write(_dfOrder);
-        writer.Write(_dfBins);
-        writer.Write(_numGruLayers);
-        writer.Write(_convKernelSize);
-        writer.Write(_fftSize);
-        writer.Write(_hopSize);
-        writer.Write(_lookahead);
-        writer.Write(EnhancementStrength);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read configuration values for validation
-        _ = reader.ReadBoolean(); // IsOnnxMode
-        _ = reader.ReadInt32();   // SampleRate
-        _ = reader.ReadInt32();   // _numErbBands
-        _ = reader.ReadInt32();   // _hiddenDim
-        _ = reader.ReadInt32();   // _dfOrder
-        _ = reader.ReadInt32();   // _dfBins
-        _ = reader.ReadInt32();   // _numGruLayers
-        _ = reader.ReadInt32();   // _convKernelSize
-        _ = reader.ReadInt32();   // _fftSize
-        _ = reader.ReadInt32();   // _hopSize
-        _ = reader.ReadInt32();   // _lookahead
-        EnhancementStrength = reader.ReadDouble();
-    }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DeepFilterNet<T>(
-            Architecture,
-            sampleRate: SampleRate,
-            numErbBands: _numErbBands,
-            hiddenDim: _hiddenDim,
-            dfOrder: _dfOrder,
-            dfBins: _dfBins,
-            numGruLayers: _numGruLayers,
-            fftSize: _fftSize,
-            hopSize: _hopSize,
-            lookahead: _lookahead);
-    }
 
     #endregion
 

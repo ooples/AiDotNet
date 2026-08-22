@@ -43,7 +43,7 @@ namespace AiDotNet.Audio.SourceSeparation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Danna-Sep: Unite to Separate - A Unified Model for Audio Source Separation", "https://doi.org/10.48550/arXiv.2410.11145", Year = 2024, Authors = "Dongchao Yang, Songxiang Liu, Yuanyuan Wang, Helen Meng")]
-public class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
+public partial class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -266,33 +266,9 @@ public class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.FftSize); w.Write(_options.HopLength);
-        w.Write(_options.NumFreqBins); w.Write(_options.EncoderDim); w.Write(_options.NumDualPathBlocks);
-        w.Write(_options.ChunkSize); w.Write(_options.NumHeads); w.Write(_options.NumSources);
-        w.Write(_options.SourceNames.Length);
-        foreach (var s in _options.SourceNames) w.Write(s);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.FftSize = r.ReadInt32(); _options.HopLength = r.ReadInt32();
-        _options.NumFreqBins = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumDualPathBlocks = r.ReadInt32();
-        _options.ChunkSize = r.ReadInt32(); _options.NumHeads = r.ReadInt32(); _options.NumSources = r.ReadInt32();
-        int numNames = r.ReadInt32();
-        var names = new string[numNames]; for (int i = 0; i < numNames; i++) names[i] = r.ReadString();
-        _options.SourceNames = names;
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new DannaSep<T>(Architecture, _options);
+
 
     #endregion
 

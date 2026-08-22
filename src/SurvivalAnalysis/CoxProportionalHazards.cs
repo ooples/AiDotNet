@@ -62,7 +62,7 @@ namespace AiDotNet.SurvivalAnalysis;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Regression Models and Life-Tables", "https://doi.org/10.1111/j.2517-6161.1972.tb00899.x", Year = 1972, Authors = "David R. Cox")]
-public class CoxProportionalHazards<T> : SurvivalModelBase<T>
+public partial class CoxProportionalHazards<T> : SurvivalModelBase<T>
 {
 
     /// <inheritdoc />
@@ -80,6 +80,7 @@ public class CoxProportionalHazards<T> : SurvivalModelBase<T>
     /// <summary>
     /// The estimated coefficients (log hazard ratios).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _coefficients = new Vector<T>(0);
 
     /// <summary>
@@ -529,14 +530,6 @@ public class CoxProportionalHazards<T> : SurvivalModelBase<T>
         var newModel = new CoxProportionalHazards<T>(_learningRate, _maxIterations, _tolerance, _l2Penalty);
         newModel.SetParameters(parameters);
         return newModel;
-    }
-
-    /// <summary>
-    /// Creates a new instance of the same type.
-    /// </summary>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new CoxProportionalHazards<T>(_learningRate, _maxIterations, _tolerance, _l2Penalty);
     }
 
     /// <summary>

@@ -31,6 +31,7 @@ namespace AiDotNet.FederatedLearning.ContinualLearning;
 public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningComponentBase<T>, IFederatedContinualLearningStrategy<T>
 {
     private readonly double _correctionStrength;
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _accumulatedImportance;
 
     /// <summary>

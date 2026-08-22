@@ -54,7 +54,7 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
 
     #region Fields
 
-    private readonly FinancialDQNAgentOptions<T> _options;
+    private readonly TradingAgentOptions<T> _options;
     private readonly INeuralNetwork<T> _qNetwork;
     [Buffer]
     private readonly INeuralNetwork<T> _targetNetwork;
@@ -101,13 +101,13 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     public FinancialDQNAgent(NeuralNetworkArchitecture<T> architecture, TradingAgentOptions<T> options)
         : base(options)
     {
-        _options = options as FinancialDQNAgentOptions<T> ?? new FinancialDQNAgentOptions<T>();
+        _options = options;
         _architecture = architecture;
 
         EnsureDefaultLayers(architecture, options.StateSize, options.ActionSize);
 
         _qNetwork = new NeuralNetwork<T>(architecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
-        _targetNetwork = new NeuralNetwork<T>(architecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        _targetNetwork = new NeuralNetwork<T>(architecture.CloneForModelConstruction(), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
         UpdateTargetNetwork();
     }
@@ -349,7 +349,10 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     public override void Deserialize(byte[] data)
     {
         _qNetwork.Deserialize(data);
-        UpdateTargetNetwork();
+        // Restore the same serialized topology into the target. A flat parameter vector cannot
+        // communicate lazy layer shapes, so copying it into the constructor-time target can reject
+        // a valid source whose graph resolved differently after its first forward.
+        _targetNetwork.Deserialize(data);
     }
 
     #endregion
@@ -372,19 +375,6 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
                 { "ParameterCount", ParameterCount }
             }
         };
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialDQNAgent model, Clone performs a supporting step in the workflow. It keeps the FinancialDQNAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new FinancialDQNAgent<T>(_architecture, TradingOptions);
-        clone.SetParameters(GetParameters());
-        return clone;
     }
 
     /// <inheritdoc/>

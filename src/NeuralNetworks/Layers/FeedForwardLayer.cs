@@ -174,6 +174,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
     /// each call and the result is consumed before the next call to this same layer instance.
     /// NOT used while a gradient tape is active or in training.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _fusedLinearScratch;
 
     /// <summary>
@@ -270,6 +271,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
     /// modify the weights.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _weightsGradient;
 
     /// <summary>
@@ -297,10 +299,13 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
     /// each bias affects only one output directly.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput;
+    [ExternalState]
     private Tensor<T>? _gpuOutput;
     private int[] _gpuInputShape = [];
 

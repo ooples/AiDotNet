@@ -25,7 +25,7 @@ namespace AiDotNet.Tests.IntegrationTests.Training;
 /// unreachable from the facade — walk-forward, purged k-fold and combinatorial purged among them —
 /// despite all of them already deriving DataSplitterBase&lt;T&gt;.
 /// </remarks>
-public class ConfiguredDataSplitterTests
+public partial class ConfiguredDataSplitterTests
 {
     private static (Matrix<double> X, Vector<double> Y) BuildData(int rows = 60, int cols = 3)
     {
@@ -74,7 +74,7 @@ public class ConfiguredDataSplitterTests
     }
 
     /// <summary>Records the training-partition size the optimizer was actually handed, to prove consumption.</summary>
-    private sealed class RecordingOptimizer : NormalOptimizer<double, Matrix<double>, Vector<double>>
+    private sealed partial class RecordingOptimizer : NormalOptimizer<double, Matrix<double>, Vector<double>>
     {
         public int LastTrainRows { get; private set; } = -1;
 

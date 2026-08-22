@@ -456,23 +456,7 @@ public partial class MixtureOfExpertsNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// - Deploy models to production
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write MoE options
-        writer.Write(_options.NumExperts);
-        writer.Write(_options.TopK);
-        writer.Write(_options.InputDim);
-        writer.Write(_options.OutputDim);
-        writer.Write(_options.HiddenExpansion);
-        writer.Write(_options.UseLoadBalancing);
-        writer.Write(_options.LoadBalancingWeight);
 
-        // Write optimizer type
-        writer.Write(_optimizer.GetType().FullName ?? "AdamOptimizer");
-
-        // Write loss function type
-        writer.Write(_lossFunction.GetType().FullName ?? "MeanSquaredErrorLoss");
-    }
 
     /// <summary>
     /// Deserializes Mixture-of-Experts network-specific data from a binary reader.
@@ -495,23 +479,7 @@ public partial class MixtureOfExpertsNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// The loaded model is ready to use for predictions without retraining.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read MoE options
-        _options.NumExperts = reader.ReadInt32();
-        _options.TopK = reader.ReadInt32();
-        _options.InputDim = reader.ReadInt32();
-        _options.OutputDim = reader.ReadInt32();
-        _options.HiddenExpansion = reader.ReadInt32();
-        _options.UseLoadBalancing = reader.ReadBoolean();
-        _options.LoadBalancingWeight = reader.ReadDouble();
 
-        // Read optimizer type (not used after reading)
-        reader.ReadString();
-
-        // Read loss function type (not used after reading)
-        reader.ReadString();
-    }
 
     /// <summary>
     /// Creates a new instance of the MixtureOfExpertsNeuralNetwork with the same configuration as the current instance.
@@ -554,30 +522,6 @@ public partial class MixtureOfExpertsNeuralNetwork<T> : VectorModelLayoutBase<T>
         }
 
         return copy;
-    }
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Create a clone of the options to ensure the new instance has independent configuration
-        var clonedOptions = new MixtureOfExpertsOptions<T>
-        {
-            NumExperts = _options.NumExperts,
-            TopK = _options.TopK,
-            InputDim = _options.InputDim,
-            OutputDim = _options.OutputDim,
-            HiddenExpansion = _options.HiddenExpansion,
-            UseLoadBalancing = _options.UseLoadBalancing,
-            LoadBalancingWeight = _options.LoadBalancingWeight,
-            RandomSeed = _options.RandomSeed
-        };
-
-        // Pass null for optimizer to create a fresh optimizer instance for the clone
-        return new MixtureOfExpertsNeuralNetwork<T>(
-            clonedOptions,
-            Architecture,
-            null,  // Let constructor create new optimizer
-            _lossFunction,
-            Convert.ToDouble(MaxGradNorm));
     }
 
     /// <summary>

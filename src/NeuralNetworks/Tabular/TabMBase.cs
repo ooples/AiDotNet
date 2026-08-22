@@ -1,4 +1,5 @@
 using AiDotNet.Engines;
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -60,14 +61,18 @@ public abstract class TabMBase<T>
     protected readonly int NumFeatures;
 
     // Feature embedding (optional)
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T>? _featureEmbeddings;  // [numFeatures, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _featureEmbeddingsGrad;
 
     // BatchEnsemble hidden layers
     private readonly List<BatchEnsembleLayer<T>> _hiddenLayers;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _embeddedInputCache;
+    [Scratch]
     private readonly List<Tensor<T>> _hiddenOutputsCache;
 
     /// <summary>

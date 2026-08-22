@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Extreme Learning Machine: Theory and Applications", "https://doi.org/10.1016/j.neucom.2005.12.126", Year = 2006, Authors = "Guang-Bin Huang, Qin-Yu Zhu, Chee-Kheong Siew")]
-public class ExtremeLearningMachine<T> : VectorModelLayoutBase<T>
+public partial class ExtremeLearningMachine<T> : VectorModelLayoutBase<T>
 {
     private readonly ExtremeLearningMachineOptions _options;
 
@@ -372,71 +372,9 @@ public class ExtremeLearningMachine<T> : VectorModelLayoutBase<T>
         };
     }
 
-    /// <summary>
-    /// Serializes Extreme Learning Machine-specific data to a binary writer.
-    /// </summary>
-    /// <param name="writer">The BinaryWriter to write the data to.</param>
-    /// <remarks>
-    /// <para>
-    /// This method writes ELM-specific configuration data to a binary stream. It includes
-    /// properties such as the hidden layer size and the weights of all layers. This data is needed
-    /// to reconstruct the ELM when deserializing.
-    /// </para>
-    /// <para><b>For Beginners:</b> This saves the special configuration of your ELM.
-    /// 
-    /// It's like writing down the recipe for how your specific ELM was built:
-    /// - How many hidden neurons it has
-    /// - The random weights used in the input-to-hidden connections
-    /// - The trained weights used in the hidden-to-output connections
-    /// 
-    /// This allows you to save the model and reload it later, without having to retrain it.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write hidden layer size
-        writer.Write(_hiddenLayerSize);
 
-        // Write whether we're in training mode
-        writer.Write(IsTrainingMode);
-    }
 
-    /// <summary>
-    /// Deserializes Extreme Learning Machine-specific data from a binary reader.
-    /// </summary>
-    /// <param name="reader">The BinaryReader to read the data from.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reads ELM-specific configuration data from a binary stream. It retrieves
-    /// properties such as the hidden layer size and the weights of all layers. After reading this data,
-    /// the ELM's state is fully restored to what it was when saved.
-    /// </para>
-    /// <para><b>For Beginners:</b> This restores the special configuration of your ELM from saved data.
-    /// 
-    /// It's like following the recipe to rebuild your ELM exactly as it was:
-    /// - Setting the hidden layer to the right size
-    /// - Restoring the random weights for the input-to-hidden connections
-    /// - Restoring the trained weights for the hidden-to-output connections
-    /// 
-    /// By reading these details, the ELM can be reconstructed exactly as it was
-    /// when it was saved, preserving all its behavior and learned patterns.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read hidden layer size
-        int hiddenLayerSize = reader.ReadInt32();
 
-        // Check if the hiddenLayerSize matches the current instance
-        if (hiddenLayerSize != _hiddenLayerSize)
-        {
-            Console.WriteLine($"Warning: Loaded ELM has hidden layer size {hiddenLayerSize}, " +
-                             $"but current instance has size {_hiddenLayerSize}");
-        }
-
-        // Read training mode
-        IsTrainingMode = reader.ReadBoolean();
-    }
 
     /// <summary>
     /// Trains the ELM using regularized least squares for improved generalization.
@@ -529,32 +467,5 @@ public class ExtremeLearningMachine<T> : VectorModelLayoutBase<T>
 
         // STEP 3: Update only the last layer (output layer) with the calculated weights
         UpdateOutputLayerWeights(outputWeights);
-    }
-
-    /// <summary>
-    /// Creates a new instance of the ExtremeLearningMachine with the same configuration as the current instance.
-    /// </summary>
-    /// <returns>A new ExtremeLearningMachine instance with the same architecture and hidden layer size as the current instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the ExtremeLearningMachine with the same architecture and hidden layer size
-    /// as the current instance. This is useful for model cloning, ensemble methods, or cross-validation scenarios where
-    /// multiple instances of the same model with identical configurations are needed.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a fresh copy of the ELM's blueprint.
-    /// 
-    /// When you need multiple versions of the same type of ELM with identical settings:
-    /// - This method creates a new, empty ELM with the same configuration
-    /// - It's like making a copy of a recipe before you start cooking
-    /// - The new ELM has the same structure but no trained data
-    /// - This is useful for techniques that need multiple models, like ensemble methods
-    /// 
-    /// For example, when training multiple ELMs on different subsets of data,
-    /// you'd want each one to have the same architecture and hidden layer size.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new ExtremeLearningMachine<T>(Architecture, _hiddenLayerSize);
     }
 }

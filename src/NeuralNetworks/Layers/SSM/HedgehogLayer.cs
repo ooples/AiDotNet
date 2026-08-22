@@ -95,9 +95,13 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
     // Trainable feature map MLP per head: phi(x) = W2 * GELU(W1 * x + b1) + b2
     // W1: [numHeads, headDim, hiddenDim], W2: [numHeads, hiddenDim, headDim]
     // b1: [numHeads, hiddenDim], b2: [numHeads, headDim]
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T> _featureMapW1;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T> _featureMapB1;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T> _featureMapW2;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T> _featureMapB2;
 
     // Output gate: [modelDim, modelDim]
@@ -117,34 +121,60 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastQuery;
+    [Scratch]
     private Tensor<T>? _lastKey;
+    [Scratch]
     private Tensor<T>? _lastValue;
+    [Scratch]
     private Tensor<T>? _lastPhiQ;
+    [Scratch]
     private Tensor<T>? _lastPhiK;
+    [Scratch]
     private Tensor<T>? _lastPhiQHidden;
+    [Scratch]
     private Tensor<T>? _lastPhiKHidden;
+    [Scratch]
     private Tensor<T>? _lastPhiQPreActivation;
+    [Scratch]
     private Tensor<T>? _lastPhiKPreActivation;
+    [Scratch]
     private Tensor<T>? _lastAttnOutput;
+    [Scratch]
     private Tensor<T>? _lastAttnDenominators;
+    [Scratch]
     private Tensor<T>? _lastGateRaw;
+    [Scratch]
     private Tensor<T>? _lastGate;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _featureMapW1Gradient;
+    [Scratch]
     private Tensor<T>? _featureMapB1Gradient;
+    [Scratch]
     private Tensor<T>? _featureMapW2Gradient;
+    [Scratch]
     private Tensor<T>? _featureMapB2Gradient;
+    [Scratch]
     private Tensor<T>? _outputGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />
@@ -169,6 +199,9 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
     /// Gets the hidden dimension of the feature map MLP.
     /// </summary>
     public int FeatureMapHiddenDim => _featureMapHiddenDim;
+
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
 
     /// <summary>
     /// Creates a new Hedgehog layer with trainable feature maps for linear attention.
@@ -205,6 +238,7 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

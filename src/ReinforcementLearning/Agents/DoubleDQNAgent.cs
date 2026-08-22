@@ -342,32 +342,6 @@ public partial class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, 
         _targetNetwork.Deserialize(targetNetworkBytes);
     }
 
-    /// <inheritdoc/>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clonedOptions = new DoubleDQNOptions<T>
-        {
-            StateSize = _options.StateSize,
-            ActionSize = _options.ActionSize,
-            LearningRate = LearningRate,
-            DiscountFactor = DiscountFactor,
-            LossFunction = LossFunction,
-            EpsilonStart = _epsilon,
-            EpsilonEnd = _options.EpsilonEnd,
-            EpsilonDecay = _options.EpsilonDecay,
-            BatchSize = _options.BatchSize,
-            ReplayBufferSize = _options.ReplayBufferSize,
-            TargetUpdateFrequency = _options.TargetUpdateFrequency,
-            WarmupSteps = _options.WarmupSteps,
-            HiddenLayers = _options.HiddenLayers,
-            Seed = _options.Seed
-        };
-
-        var clone = new DoubleDQNAgent<T>(clonedOptions);
-        clone.SetParameters(GetParameters());
-        return clone;
-    }
-
     /// <summary>
     /// Computes gradients of the loss with respect to this agent's parameters, without updating them.
     /// </summary>

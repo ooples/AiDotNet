@@ -44,7 +44,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ContextNet: Improving Convolutional Neural Networks for Automatic Speech Recognition with Global Context", "https://arxiv.org/abs/2005.03191", Year = 2020, Authors = "Han et al.")]
-public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly ContextNetOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -221,85 +221,10 @@ public class ContextNet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// model that loads successfully with silently wrong architecture options.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(SerializationVersionMarker);
-        w.Write(SerializationVersion);
 
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate);
-        w.Write(_options.MaxAudioLengthSeconds);
-        w.Write(_options.EncoderDim);
-        w.Write(_options.NumBlocks);
-        w.Write(_options.NumSubBlocks);
-        w.Write(_options.KernelSize);
-        w.Write(_options.WidthScaling);
-        w.Write(_options.SqueezeExcitationRatio);
-        w.Write(_options.NumMels);
-        w.Write(_options.VocabSize);
-        w.Write(_options.DropoutRate);
-        w.Write(_options.Language);
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        // The first byte decides the layout. 0xFF means a versioned payload; 0x00 or 0x01 is the v1
-        // bool that used to lead, and is consumed as that bool rather than re-read.
-        byte lead = r.ReadByte();
-        int version;
-        if (lead == SerializationVersionMarker)
-        {
-            version = r.ReadInt32();
-            if (version > SerializationVersion)
-            {
-                throw new InvalidOperationException(
-                    $"This ContextNet payload was written by a newer AiDotNet (serialization version " +
-                    $"{version}); this build reads up to version {SerializationVersion}. Upgrade AiDotNet " +
-                    $"to load it. Refusing rather than reading it as version {SerializationVersion}, which " +
-                    $"would load a model configured with whatever the extra bytes happened to decode to.");
-            }
-            _useNativeMode = r.ReadBoolean();
-        }
-        else
-        {
-            version = 1;
-            _useNativeMode = lead != 0;
-        }
 
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-
-        _options.SampleRate = r.ReadInt32();
-        _options.MaxAudioLengthSeconds = r.ReadInt32();
-        _options.EncoderDim = r.ReadInt32();
-        _options.NumBlocks = r.ReadInt32();
-
-        // Absent from v1. Left at their defaults there, which is the closest thing to the truth
-        // available: the payload was written by a build for which these were not configurable.
-        if (version >= 2)
-        {
-            _options.NumSubBlocks = r.ReadInt32();
-            _options.KernelSize = r.ReadInt32();
-            _options.WidthScaling = r.ReadDouble();
-        }
-
-        _options.SqueezeExcitationRatio = r.ReadInt32();
-        _options.NumMels = r.ReadInt32();
-        _options.VocabSize = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble();
-        _options.Language = r.ReadString();
-
-        base.SampleRate = _options.SampleRate;
-        base.NumMels = _options.NumMels;
-
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-        {
-            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-        }
-    }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new ContextNet<T>(Architecture, mp, _options); return new ContextNet<T>(Architecture, _options); }
     private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
     /// <summary>
     /// Maps token IDs to text. Without a loaded vocabulary, uses Unicode codepoint mapping

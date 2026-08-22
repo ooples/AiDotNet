@@ -60,7 +60,7 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
     Year = 2024,
     Authors = "Kuckreja et al."
 )]
-public class GeoChat<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
+public partial class GeoChat<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
 {
     private readonly GeoChatOptions _options;
 
@@ -264,40 +264,9 @@ public class GeoChat<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.ImageSize);
-        writer.Write(_options.VisionDim);
-        writer.Write(_options.DecoderDim);
-        writer.Write(_options.NumVisionLayers);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.NumHeads);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.ImageSize = reader.ReadInt32();
-        _options.VisionDim = reader.ReadInt32();
-        _options.DecoderDim = reader.ReadInt32();
-        _options.NumVisionLayers = reader.ReadInt32();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new GeoChat<T>(Architecture, mp, _options);
-        return new GeoChat<T>(Architecture, _options);
-    }
+
 
     private void ThrowIfDisposed()
     {

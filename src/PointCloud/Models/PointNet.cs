@@ -420,82 +420,9 @@ public partial class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numClasses);
-        writer.Write(_inputFeatureDim);
-        writer.Write(_inputTransformDim);
-        writer.Write(_useInputTransform);
-        writer.Write(_useFeatureTransform);
-        writer.Write(_useDropout);
-        writer.Write(_dropoutRate);
-        writer.Write(NumOps.ToDouble(_learningRate));
-        WriteIntArray(writer, _inputMlpChannels);
-        WriteIntArray(writer, _featureMlpChannels);
-        WriteIntArray(writer, _classifierChannels);
-        WriteIntArray(writer, _inputTransformMlpChannels);
-        WriteIntArray(writer, _inputTransformFcChannels);
-        WriteIntArray(writer, _featureTransformMlpChannels);
-        WriteIntArray(writer, _featureTransformFcChannels);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _numClasses = reader.ReadInt32();
-        _inputFeatureDim = reader.ReadInt32();
-        _inputTransformDim = reader.ReadInt32();
-        _useInputTransform = reader.ReadBoolean();
-        _useFeatureTransform = reader.ReadBoolean();
-        _useDropout = reader.ReadBoolean();
-        _dropoutRate = reader.ReadDouble();
-        _learningRate = NumOps.FromDouble(reader.ReadDouble());
-        _inputMlpChannels = ReadIntArray(reader, nameof(_inputMlpChannels), allowEmpty: false);
-        _featureMlpChannels = ReadIntArray(reader, nameof(_featureMlpChannels), allowEmpty: false);
-        _classifierChannels = ReadIntArray(reader, nameof(_classifierChannels), allowEmpty: true);
-        _inputTransformMlpChannels = ReadIntArray(reader, nameof(_inputTransformMlpChannels), allowEmpty: false);
-        _inputTransformFcChannels = ReadIntArray(reader, nameof(_inputTransformFcChannels), allowEmpty: false);
-        _featureTransformMlpChannels = ReadIntArray(reader, nameof(_featureTransformMlpChannels), allowEmpty: false);
-        _featureTransformFcChannels = ReadIntArray(reader, nameof(_featureTransformFcChannels), allowEmpty: false);
 
-        _classificationHeadLayers.Clear();
-        bool afterPooling = false;
-        foreach (var layer in Layers)
-        {
-            if (layer is AiDotNet.PointCloud.Layers.MaxPoolingLayer<T>)
-            {
-                afterPooling = true;
-                continue;
-            }
-            if (afterPooling && (layer is DenseLayer<T> || layer is DropoutLayer<T>))
-            {
-                _classificationHeadLayers.Add(layer);
-            }
-        }
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new PointNet<T>(
-            new PointNetOptions
-            {
-                NumClasses = _numClasses,
-                InputFeatureDim = _inputFeatureDim,
-                InputTransformDim = _inputTransformDim,
-                UseInputTransform = _useInputTransform,
-                UseFeatureTransform = _useFeatureTransform,
-                InputMlpChannels = _inputMlpChannels,
-                FeatureMlpChannels = _featureMlpChannels,
-                ClassifierChannels = _classifierChannels,
-                InputTransformMlpChannels = _inputTransformMlpChannels,
-                InputTransformFcChannels = _inputTransformFcChannels,
-                FeatureTransformMlpChannels = _featureTransformMlpChannels,
-                FeatureTransformFcChannels = _featureTransformFcChannels,
-                UseDropout = _useDropout,
-                DropoutRate = _dropoutRate,
-                LearningRate = NumOps.ToDouble(_learningRate)
-            },
-            LossFunction);
-    }
 
     private static int[] ValidateChannelArray(int[]? values, string paramName)
     {

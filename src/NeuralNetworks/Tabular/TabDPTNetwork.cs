@@ -59,7 +59,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2410.18164",
     Year = 2024,
     Authors = "Junwei Ma, Valentin Thomas, Rasa Hosseinzadeh, Hamidreza Kamkari, Alex Lacoste, Keyvan Golestan, Guangwei Yu, Maksims Volkovs, Anthony L. Caterini")]
-public class TabDPTNetwork<T> : TabularNeuralNetworkBase<T>
+public partial class TabDPTNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly TabDPTOptions<T> _options;
 
@@ -229,52 +229,8 @@ public class TabDPTNetwork<T> : TabularNeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.EmbeddingDimension);
-        writer.Write(_options.NumLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.FeedForwardMultiplier);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.MaxFeatures);
-        writer.Write(_options.ContextLength);
-        writer.Write(_options.UseLayerNorm);
-        writer.Write(_options.UsePreNorm);
-        writer.Write(_options.InitScale);
-        writer.Write(_options.UseFeatureAttention);
 
-        writer.Write(_options.OutputHeadDimensions.Length);
-        foreach (var dim in _options.OutputHeadDimensions)
-        {
-            writer.Write(dim);
-        }
-
-        if (_options.CategoricalCardinalities != null)
-        {
-            writer.Write(_options.CategoricalCardinalities.Length);
-            foreach (var card in _options.CategoricalCardinalities)
-            {
-                writer.Write(card);
-            }
-        }
-        else
-        {
-            writer.Write(0);
-        }
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-    }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TabDPTNetwork<T>(
-            Architecture,
-            _options,
-            _optimizer,
-            _lossFunction);
-    }
 }

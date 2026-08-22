@@ -155,15 +155,20 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
 
     private Tensor<T> _bias;
     private Tensor<T>? _transformationMatrixGradient;
+    [Scratch]
     private Tensor<T>? _biasGradient;
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastPreSquash;
+    [Scratch]
     private Tensor<T>? _lastCouplingCoefficients;
 
     public override bool SupportsTraining => true;
@@ -814,38 +819,6 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
             ? new Vector<T>(_biasGradient.ToArray())
             : new Vector<T>(_bias.Length);
         return Vector<T>.Concatenate(matGrad, biasGrad);
-    }
-
-    public override void Serialize(BinaryWriter writer)
-    {
-        // Persist resolved input capsule structure so Deserialize can
-        // re-resolve the 4-D transformation matrix shape. The matrix
-        // layout [inputCapsules, inputDimension, _numCapsules, _capsuleDimension]
-        // can't be uniquely inferred from param count alone (multiple
-        // (inputCapsules, inputDimension) pairs satisfy any total).
-        var inputShape = GetInputShape();
-        bool hasShape = inputShape != null && inputShape.Length >= 2
-            && System.Array.TrueForAll(inputShape, d => d > 0);
-        writer.Write(hasShape);
-        if (hasShape)
-        {
-            writer.Write(inputShape!.Length);
-            for (int i = 0; i < inputShape.Length; i++) writer.Write(inputShape[i]);
-        }
-        base.Serialize(writer);
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        bool hasShape = reader.ReadBoolean();
-        if (hasShape)
-        {
-            int rank = reader.ReadInt32();
-            var savedInput = new int[rank];
-            for (int i = 0; i < rank; i++) savedInput[i] = reader.ReadInt32();
-            if (!IsShapeResolved) ResolveFromShape(savedInput);
-        }
-        base.Deserialize(reader);
     }
 
     /// <summary>

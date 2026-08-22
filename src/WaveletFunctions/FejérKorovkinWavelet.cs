@@ -67,6 +67,7 @@ public class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
     /// a Fejér-Korovkin wavelet different from other types of wavelets.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _coefficients;
 
     /// <summary>
@@ -89,6 +90,7 @@ public class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
     /// like looking at something through frosted glass where you can see outlines but not details.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _scalingCoefficients;
 
     /// <summary>
@@ -111,6 +113,7 @@ public class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
     /// like an edge detection filter that highlights boundaries and textures in an image.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _waveletCoefficients;
 
     /// <summary>

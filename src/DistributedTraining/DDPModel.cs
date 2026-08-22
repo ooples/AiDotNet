@@ -68,8 +68,9 @@ namespace AiDotNet.DistributedTraining;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("PyTorch Distributed: Accelerating Data Parallel Training", "https://arxiv.org/abs/2006.15704")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
+public partial class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _computedGradients;
 
     /// <summary>
@@ -335,12 +336,5 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
         {
             Config.CommunicationBackend.Barrier();
         }
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> Clone()
-    {
-        var clonedWrappedModel = WrappedModel.Clone();
-        return new DDPModel<T, TInput, TOutput>(clonedWrappedModel, Config);
     }
 }

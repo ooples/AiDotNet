@@ -60,7 +60,7 @@ namespace AiDotNet.Clustering.Streaming;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Mini-Batch K-Means Clustering", "https://www.eecs.tufts.edu/~dsculley/papers/fastkmeans.pdf")]
-public class OnlineKMeans<T> : ClusteringBase<T>
+public partial class OnlineKMeans<T> : ClusteringBase<T>
 {
     private readonly OnlineKMeansOptions<T> _options;
 
@@ -91,23 +91,6 @@ public class OnlineKMeans<T> : ClusteringBase<T>
     public double CurrentLearningRate { get; private set; }
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new OnlineKMeans<T>(new OnlineKMeansOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            LearningRate = _options.LearningRate,
-            DecayLearningRate = _options.DecayLearningRate,
-            MinLearningRate = _options.MinLearningRate,
-            MaxIterations = _options.MaxIterations,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()

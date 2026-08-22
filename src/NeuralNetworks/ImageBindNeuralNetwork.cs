@@ -86,45 +86,55 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
 
     // Image encoder layers
     private readonly List<ILayer<T>> _imageEncoderLayers = [];
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _imageClsToken;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _imagePositionalEmbeddings;
     private ILayer<T>? _imagePatchEmbedding;
     private ILayer<T>? _imageProjection;
 
     // Text encoder layers
     private readonly List<ILayer<T>> _textEncoderLayers = [];
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _textPositionalEmbeddings;
     private ILayer<T>? _textTokenEmbedding;
     private ILayer<T>? _textProjection;
 
     // Audio encoder layers (uses spectrogram input)
     private readonly List<ILayer<T>> _audioEncoderLayers = [];
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _audioPositionalEmbeddings;
     private ILayer<T>? _audioConv;
     private ILayer<T>? _audioProjection;
 
     // Thermal encoder (similar to image encoder)
     private readonly List<ILayer<T>> _thermalEncoderLayers = [];
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _thermalClsToken;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _thermalPositionalEmbeddings;
     private ILayer<T>? _thermalPatchEmbedding;
     private ILayer<T>? _thermalProjection;
 
     // Depth encoder
     private readonly List<ILayer<T>> _depthEncoderLayers = [];
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _depthClsToken;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _depthPositionalEmbeddings;
     private ILayer<T>? _depthPatchEmbedding;
     private ILayer<T>? _depthProjection;
 
     // IMU encoder
     private readonly List<ILayer<T>> _imuEncoderLayers = [];
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _imuPositionalEmbeddings;
     private ILayer<T>? _imuEmbedding;
     private ILayer<T>? _imuProjection;
 
     // Video encoder (temporal aggregation over frames)
     private readonly List<ILayer<T>> _videoTemporalLayers = [];
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _videoTemporalPositionalEmbeddings;
     private ILayer<T>? _videoProjection;
 
@@ -1621,67 +1631,10 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_embeddingDimension);
-        writer.Write(_maxSequenceLength);
-        writer.Write(_imageSize);
-        writer.Write(_hiddenDim);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numHeads);
-        writer.Write(_patchSize);
-        writer.Write(_vocabularySize);
-        writer.Write(_audioSampleRate);
-        writer.Write(_audioMaxDuration);
-        writer.Write(_imuTimesteps);
-        writer.Write(_numVideoFrames);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // embeddingDim
-        _ = reader.ReadInt32(); // maxSeqLen
-        _ = reader.ReadInt32(); // imageSize
-        _ = reader.ReadInt32(); // hiddenDim
-        _ = reader.ReadInt32(); // numEncoderLayers
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadInt32(); // patchSize
-        _ = reader.ReadInt32(); // vocabularySize
-        _ = reader.ReadInt32(); // audioSampleRate
-        _ = reader.ReadInt32(); // audioMaxDuration
-        _ = reader.ReadInt32(); // imuTimesteps
-        _ = reader.ReadInt32(); // numVideoFrames
-        _ = reader.ReadBoolean(); // useNativeMode
 
-        // NeuralNetworkBase replaces Layers during deserialization. Rebind the modality
-        // views so inference/training and parameter enumeration use that restored graph.
-        if (_useNativeMode)
-        {
-            BindNativeLayers();
-        }
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new ImageBindNeuralNetwork<T>(
-            Architecture,
-            _imageSize,
-            channels: 3,
-            _patchSize,
-            _vocabularySize,
-            _maxSequenceLength,
-            _embeddingDimension,
-            _hiddenDim,
-            _numEncoderLayers,
-            _numHeads,
-            _audioSampleRate,
-            _audioMaxDuration,
-            _imuTimesteps,
-            _numVideoFrames);
-    }
 
     /// <inheritdoc/>
     protected override void Dispose(bool disposing)

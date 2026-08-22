@@ -99,9 +99,6 @@ public partial class CLIPTextConditioner<T> : TextConditioningBase<T>
             numLayers: GetNumLayers(_variant),
             numHeads: GetNumHeads(_variant));
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new CLIPTextConditioner<T>(Tokenizer, _variant, Architecture);
-
     /// <summary>
     /// CLIP pools by extracting the embedding at the EOS token position
     /// (Radford 2021 §3.1) and then applying <see cref="_textProjection"/>

@@ -125,36 +125,62 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Layer normalization parameters for the inner model input (pre-norm)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _lnGamma; // [modelDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _lnBeta;  // [modelDim]
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastNormalized;
+    [Scratch]
     private Tensor<T>? _lastQuery;
+    [Scratch]
     private Tensor<T>? _lastKey;
+    [Scratch]
     private Tensor<T>? _lastValue;
+    [Scratch]
     private Tensor<T>? _lastGate;
+    [Scratch]
     private Tensor<T>? _lastGateRaw;
+    [Scratch]
     private Tensor<T>? _lastTTTOutput;
+    [Scratch]
     private Tensor<T>? _lastInnerWeights; // All W_t snapshots: [batch, seqLen+1, numHeads, headDim, headDim]
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _queryBiasGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyBiasGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueBiasGradient;
+    [Scratch]
     private Tensor<T>? _innerWeightsInitGradient;
+    [Scratch]
     private Tensor<T>? _etaScaleGradient;
+    [Scratch]
     private Tensor<T>? _outputGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
+    [Scratch]
     private Tensor<T>? _lnGammaGradient;
+    [Scratch]
     private Tensor<T>? _lnBetaGradient;
 
     /// <inheritdoc />
@@ -179,6 +205,9 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
     /// Gets the inner learning rate used for test-time training updates.
     /// </summary>
     public T InnerLearningRate => _innerLearningRate;
+
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
 
     /// <summary>
     /// Creates a new TTT (Test-Time Training) layer implementing the TTT-Linear variant.
@@ -216,6 +245,7 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

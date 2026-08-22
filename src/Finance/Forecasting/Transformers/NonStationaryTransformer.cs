@@ -167,6 +167,7 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// adjust attention weights based on the data's statistical properties.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _tau;
 
     /// <summary>
@@ -178,6 +179,7 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// to better match the original data distribution.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _delta;
 
     #endregion
@@ -689,38 +691,6 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this network type.
-    /// </summary>
-    /// <returns>A new Non-stationary Transformer instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This factory method creates a copy of the model structure,
-    /// useful for ensemble methods or hyperparameter search.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new NonStationaryTransformerOptions<T>
-        {
-            SequenceLength = _sequenceLength,
-            LabelLength = _labelLength,
-            PredictionHorizon = _predictionHorizon,
-            NumFeatures = _numFeatures,
-            ModelDimension = _modelDimension,
-            NumEncoderLayers = _numEncoderLayers,
-            NumDecoderLayers = _numDecoderLayers,
-            NumHeads = _numHeads,
-            FeedForwardDimension = _feedForwardDim,
-            ProjectionDimension = _projectionDim,
-            UseSeriesStationarization = _useSeriesStationarization,
-            UseDeStationaryAttention = _useDeStationaryAttention,
-            Dropout = _dropout
-        };
-
-        return new NonStationaryTransformer<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Serializes network-specific data for persistence.
     /// </summary>
     /// <param name="writer">Binary writer for output.</param>
@@ -730,23 +700,7 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// into a format that can be saved to disk and loaded later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_labelLength);
-        writer.Write(_predictionHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_modelDimension);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numDecoderLayers);
-        writer.Write(_numHeads);
-        writer.Write(_feedForwardDim);
-        writer.Write(_projectionDim);
-        writer.Write(_useSeriesStationarization);
-        writer.Write(_useDeStationaryAttention);
-        writer.Write(_dropout);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data from persistence.
@@ -758,27 +712,7 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// from a saved format. Called when loading a model from disk.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _labelLength = reader.ReadInt32();
-        _predictionHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _modelDimension = reader.ReadInt32();
-        _numEncoderLayers = reader.ReadInt32();
-        _numDecoderLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _feedForwardDim = reader.ReadInt32();
-        _projectionDim = reader.ReadInt32();
-        _useSeriesStationarization = reader.ReadBoolean();
-        _useDeStationaryAttention = reader.ReadBoolean();
-        _dropout = reader.ReadDouble();
-        _useNativeMode = reader.ReadBoolean();
 
-        // Re-bind cached layer references to the deserialized (weight-loaded)
-        // layers so a clone runs on the loaded weights, not random init.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

@@ -47,6 +47,7 @@ public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
 
     private readonly IFullModel<T, TInput, TOutput> _featureEncoder;
     private readonly Dictionary<int, Tensor<T>> _prototypes;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _metricScale;
     private readonly T _temperature;
     private readonly TADAMOptions<T, TInput, TOutput> _options;

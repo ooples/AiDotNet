@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -30,7 +30,7 @@ namespace AiDotNet.Finance.Base;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
+public abstract partial class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
 {
     /// <summary>
     /// The confidence level used for risk calculations (e.g., 0.95 or 0.99).
@@ -336,11 +336,7 @@ public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
     /// so the model remembers them when loaded later.
     /// </para>
     /// </remarks>
-    protected override void SerializeModelSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_confidenceLevel);
-        writer.Write(_timeHorizon);
-    }
+
 
     /// <summary>
     /// Deserializes risk-specific model data.
@@ -351,23 +347,6 @@ public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
     /// <b>For Beginners:</b> Loads the saved risk settings from a file.
     /// </para>
     /// </remarks>
-    protected override void DeserializeModelSpecificData(BinaryReader reader)
-    {
-        _confidenceLevel = reader.ReadDouble();
-        _timeHorizon = reader.ReadInt32();
 
-        // Re-validate invariants after deserialize to prevent corrupt state
-        // Use same exclusive bounds as constructor: confidenceLevel must be in (0, 1)
-        if (_confidenceLevel <= 0 || _confidenceLevel >= 1)
-        {
-            throw new InvalidOperationException(
-                $"Deserialized confidenceLevel ({_confidenceLevel}) is invalid. Must be between 0 and 1 (exclusive).");
-        }
-        if (_timeHorizon < 1)
-        {
-            throw new InvalidOperationException(
-                $"Deserialized timeHorizon ({_timeHorizon}) is invalid. Must be at least 1.");
-        }
-    }
 
 }

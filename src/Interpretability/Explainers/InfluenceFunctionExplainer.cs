@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors;
@@ -54,6 +55,7 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
     private readonly INeuralNetwork<T>? _network;
     private readonly Func<Vector<T>, Vector<T>> _predictFunction;
     private readonly Func<Vector<T>, Vector<T>, T> _lossFunction;
+    [Scratch]
     private readonly Func<Vector<T>, Vector<T>, Vector<T>>? _gradientFunction;
     /// <summary>
     /// Optional caller-supplied parameter-space Hessian-vector product
@@ -77,6 +79,7 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
     private GPUExplainerHelper<T>? _gpuHelper;
 
     // Cached training gradients for efficiency
+    [Scratch]
     private Matrix<T>? _cachedTrainingGradients;
 
     /// <summary>

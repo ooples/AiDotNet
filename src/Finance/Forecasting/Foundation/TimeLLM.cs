@@ -526,31 +526,6 @@ public partial class TimeLLM<T> : ForecastingModelBase<T>
         };
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the TimeLLM model, CreateNewInstance builds and wires up model components. This sets up the TimeLLM architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new TimeLLMOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            PatchStride = _patchStride,
-            LLMDimension = _llmDimension,
-            NumPrototypes = _numPrototypes,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            DropoutRate = _dropout,
-            LLMBackbone = _llmBackbone
-        };
-
-        return new TimeLLM<T>(Architecture, options, _numFeatures);
-    }
-
     /// <summary>
     /// Writes Time-LLM-specific configuration during serialization.
     /// </summary>
@@ -558,20 +533,7 @@ public partial class TimeLLM<T> : ForecastingModelBase<T>
     /// <para><b>For Beginners:</b> Saves all the configuration needed to reconstruct this model.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_patchLength);
-        writer.Write(_patchStride);
-        writer.Write(_llmDimension);
-        writer.Write(_numPrototypes);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_dropout);
-        writer.Write(_numFeatures);
-        writer.Write(_llmBackbone);
-    }
+
 
     /// <summary>
     /// Reads Time-LLM-specific configuration during deserialization.
@@ -580,20 +542,7 @@ public partial class TimeLLM<T> : ForecastingModelBase<T>
     /// <para><b>For Beginners:</b> Loads the configuration that was saved during serialization.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _patchLength = reader.ReadInt32();
-        _patchStride = reader.ReadInt32();
-        _llmDimension = reader.ReadInt32();
-        _numPrototypes = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _numFeatures = reader.ReadInt32();
-        _llmBackbone = reader.ReadString();
-    }
+
 
     #endregion
 

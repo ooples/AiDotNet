@@ -646,16 +646,6 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         _oldPolicyNetwork.Deserialize(oldPolicyBytes);
     }
 
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        // Preserve the learned policy: a fresh TRPOAgent re-initialises its policy and
-        // value networks with new random weights, so without copying the trained
-        // parameters the clone would implement a different policy than the original.
-        var clone = new TRPOAgent<T>(_options, _optimizer);
-        clone.SetParameters(GetParameters());
-        return clone;
-    }
-
     /// <summary>
     /// Computes gradients of the loss with respect to this agent's parameters, without updating them.
     /// </summary>

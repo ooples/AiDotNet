@@ -71,10 +71,15 @@ public partial class CachedMultiHeadAttention<T> : LayerBase<T>, IShapeContract
     public PositionalEncodingType PositionalEncoding { get; private set; } = PositionalEncodingType.None;
 
     // Projection weights
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _queryWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _keyWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _valueWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputBias;
 
     // KV-Cache reference (shared across layers)
@@ -82,14 +87,21 @@ public partial class CachedMultiHeadAttention<T> : LayerBase<T>, IShapeContract
     private int _layerIndex;
 
     // Cached values for backward (training mode only)
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     // Gradients
+    [Scratch]
     private Matrix<T>? _queryWeightsGradient;
+    [Scratch]
     private Matrix<T>? _keyWeightsGradient;
+    [Scratch]
     private Matrix<T>? _valueWeightsGradient;
+    [Scratch]
     private Matrix<T>? _outputWeightsGradient;
+    [Scratch]
     private Vector<T>? _outputBiasGradient;
 
     /// <summary>
@@ -148,6 +160,9 @@ public partial class CachedMultiHeadAttention<T> : LayerBase<T>, IShapeContract
         set => _layerIndex = value;
     }
 
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
     /// <summary>
     /// Creates a new cached multi-head attention layer.
     /// </summary>
@@ -171,6 +186,7 @@ public partial class CachedMultiHeadAttention<T> : LayerBase<T>, IShapeContract
             [sequenceLength, embeddingDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         if (embeddingDimension % headCount != 0)
         {
             throw new ArgumentException(

@@ -105,16 +105,25 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
     private int _inputHeight;
     private int _inputWidth;
     private readonly List<ConvolutionalLayer<T>> _basicModules;
+    [Scratch]
     private Tensor<T>? _lastInput1;
+    [Scratch]
     private Tensor<T>? _lastInput2;
+    [Scratch]
     private Tensor<T>? _lastFlow;
 
     // Cached values for backward pass
+    [Scratch]
     private readonly List<Tensor<T>> _cachedPyramid1 = [];
+    [Scratch]
     private readonly List<Tensor<T>> _cachedPyramid2 = [];
+    [Scratch]
     private readonly List<Tensor<T>> _cachedWarped = [];
+    [Scratch]
     private readonly List<Tensor<T>> _cachedFlows = [];
+    [Scratch]
     private readonly List<Tensor<T>> _cachedModuleInputs = [];
+    [Scratch]
     private readonly List<Tensor<T>> _cachedGrids = [];
 
     #endregion
@@ -902,6 +911,7 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => true;
 
     // GPU Caches
+    [Scratch]
     private readonly Dictionary<(int batch, int height, int width), Tensor<T>> _identityGridCache = new();
     private readonly Dictionary<(int batch, int channels, int height, int width), (IGpuBuffer idx1, IGpuBuffer idx2)> _sliceIndicesCache = new();
 
@@ -1187,6 +1197,7 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
 
     #region Parameter Management
 
+    [Scratch]
     private Vector<T>? _pendingParameters;
 
     /// <inheritdoc/>

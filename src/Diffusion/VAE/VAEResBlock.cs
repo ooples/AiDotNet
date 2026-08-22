@@ -147,17 +147,25 @@ public partial class VAEResBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached input from forward pass for backward.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Cached intermediate values for backward pass.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _norm1Output;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _silu1Output;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _conv1Output;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _norm2Output;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _silu2Output;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _conv2Output;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _skipOutput;
 
     /// <inheritdoc />
@@ -177,6 +185,9 @@ public partial class VAEResBlock<T> : LayerBase<T>, IShapeContract
     /// Gets the number of groups for GroupNorm.
     /// </summary>
     public int NumGroups => _numGroups;
+
+    /// <summary>Construction state: the 'spatialSize' the layer was built with.</summary>
+    private readonly int _spatialSize;
 
     /// <summary>
     /// Initializes a new instance of the VAEResBlock class.
@@ -200,6 +211,7 @@ public partial class VAEResBlock<T> : LayerBase<T>, IShapeContract
     public VAEResBlock(int inChannels, int outChannels, int numGroups = 32, int spatialSize = 32)
         : base(CalculateInputShape(inChannels, spatialSize), CalculateOutputShape(outChannels, spatialSize))
     {
+        _spatialSize = spatialSize;
         if (inChannels <= 0)
             throw new ArgumentOutOfRangeException(nameof(inChannels), "Input channels must be positive.");
         if (outChannels <= 0)
@@ -368,53 +380,5 @@ public partial class VAEResBlock<T> : LayerBase<T>, IShapeContract
         _conv1.ResetState();
         _conv2.ResetState();
         _skipConv?.ResetState();
-    }
-
-    /// <summary>
-    /// Saves the block's state to a binary writer.
-    /// </summary>
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-        writer.Write(_inChannels);
-        writer.Write(_outChannels);
-        writer.Write(_numGroups);
-
-        _norm1.Serialize(writer);
-        _conv1.Serialize(writer);
-        _norm2.Serialize(writer);
-        _conv2.Serialize(writer);
-
-        writer.Write(_skipConv != null);
-        _skipConv?.Serialize(writer);
-    }
-
-    /// <summary>
-    /// Loads the block's state from a binary reader.
-    /// </summary>
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-        var inChannels = reader.ReadInt32();
-        var outChannels = reader.ReadInt32();
-        var numGroups = reader.ReadInt32();
-
-        if (inChannels != _inChannels || outChannels != _outChannels || numGroups != _numGroups)
-        {
-            throw new InvalidOperationException(
-                $"Architecture mismatch: expected ({_inChannels}, {_outChannels}, {_numGroups}) " +
-                $"but got ({inChannels}, {outChannels}, {numGroups}).");
-        }
-
-        _norm1.Deserialize(reader);
-        _conv1.Deserialize(reader);
-        _norm2.Deserialize(reader);
-        _conv2.Deserialize(reader);
-
-        var hasSkipConv = reader.ReadBoolean();
-        if (hasSkipConv && _skipConv != null)
-        {
-            _skipConv.Deserialize(reader);
-        }
     }
 }

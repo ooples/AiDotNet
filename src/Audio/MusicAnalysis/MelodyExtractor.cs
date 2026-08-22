@@ -40,7 +40,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Melody Extraction from Polyphonic Music Signals Using Pitch Contour Characteristics", "https://doi.org/10.1109/TASLP.2012.2188515")]
-public class MelodyExtractor<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
+public partial class MelodyExtractor<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -304,26 +304,9 @@ public class MelodyExtractor<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.NumMels); w.Write(_options.FftSize);
-        w.Write(_options.HopLength); w.Write(_options.HiddenDim); w.Write(_options.NumLayers);
-        w.Write(_options.NumPitchBins); w.Write(_options.MinFrequency);
-        w.Write(_options.MaxFrequency); w.Write(_options.VoicingThreshold); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.FftSize = r.ReadInt32();
-        _options.HopLength = r.ReadInt32(); _options.HiddenDim = r.ReadInt32(); _options.NumLayers = r.ReadInt32();
-        _options.NumPitchBins = r.ReadInt32(); _options.MinFrequency = r.ReadDouble();
-        _options.MaxFrequency = r.ReadDouble(); _options.VoicingThreshold = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new MelodyExtractor<T>(Architecture, _options);
+
 
     #endregion
 

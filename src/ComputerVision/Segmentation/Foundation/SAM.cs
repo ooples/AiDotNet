@@ -61,7 +61,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Segment Anything", "https://arxiv.org/abs/2304.02643", Year = 2023, Authors = "Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alexander C. Berg, Wan-Yen Lo, Piotr Dollár, Ross Girshick")]
-public class SAM<T> : Common.PromptableSegmentationBase<T>
+public partial class SAM<T> : Common.PromptableSegmentationBase<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -421,44 +421,12 @@ public class SAM<T> : Common.PromptableSegmentationBase<T>
     /// <summary>
     /// Writes configuration to a binary stream.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height);
-        writer.Write(_width);
-        writer.Write(_channels);
-        writer.Write(_numClasses);
-        writer.Write((int)_modelSize);
-        writer.Write(_decoderDim);
-        writer.Write(_dropRate);
-        writer.Write(_useNativeMode);
-        writer.Write(_onnxModelPath ?? string.Empty);
-        writer.Write(_encoderLayerEnd);
-        writer.Write(_channelDims.Length);
-        foreach (int d in _channelDims) writer.Write(d);
-        writer.Write(_depths.Length);
-        foreach (int d in _depths) writer.Write(d);
-    }
+
 
     /// <summary>
     /// Reads configuration from a binary stream.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _height = reader.ReadInt32();
-        _width = reader.ReadInt32();
-        _channels = reader.ReadInt32();
-        _numClasses = reader.ReadInt32();
-        _ = reader.ReadInt32(); // modelSize (readonly)
-        _ = reader.ReadInt32(); // decoderDim (readonly)
-        _ = reader.ReadDouble(); // dropRate (readonly)
-        _useNativeMode = reader.ReadBoolean();
-        _onnxModelPath = reader.ReadString();
-        _ = reader.ReadInt32(); // encoderLayerEnd
-        int dc = reader.ReadInt32();
-        for (int i = 0; i < dc; i++) _ = reader.ReadInt32();
-        int dd = reader.ReadInt32();
-        for (int i = 0; i < dd; i++) _ = reader.ReadInt32();
-    }
+
 
     /// <summary>
     /// Creates a new instance with the same configuration but fresh weights.
