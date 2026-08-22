@@ -70,6 +70,7 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
     private readonly BatchNormalizationLayer<T> _bn2;
     private readonly ConvolutionalLayer<T> _conv3x3;
     private readonly IActivationFunction<T> _relu;
+    private readonly double _bnMomentum;
 
     [Scratch]
     private Tensor<T>? _lastInput;
@@ -124,18 +125,19 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
 
         _inputChannels = -1; // resolved in OnFirstForward
         _growthRate = growthRate;
+        _bnMomentum = bnMomentum;
         _relu = new ReLUActivation<T>();
 
         int bottleneckChannels = 4 * growthRate;
 
-        _bn1 = new BatchNormalizationLayer<T>();
+        _bn1 = new BatchNormalizationLayer<T>(momentum: bnMomentum);
         _conv1x1 = new ConvolutionalLayer<T>(
             outputDepth: bottleneckChannels,
             kernelSize: 1,
             stride: 1,
             padding: 0,
             activationFunction: new IdentityActivation<T>());
-        _bn2 = new BatchNormalizationLayer<T>();
+        _bn2 = new BatchNormalizationLayer<T>(momentum: bnMomentum);
         _conv3x3 = new ConvolutionalLayer<T>(
             outputDepth: growthRate,
             kernelSize: 3,

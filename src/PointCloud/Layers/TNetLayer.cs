@@ -63,6 +63,8 @@ public partial class TNetLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _transformDim; // Dimension of transformation (e.g., 3 for XYZ, 64 for features)
     private readonly int _numFeatures;
+    private readonly int[] _mlpChannels;
+    private readonly int[] _fcChannels;
     private readonly List<ILayer<T>> _mlpLayers;
     private readonly List<ILayer<T>> _fcLayers;
     private readonly MaxPoolingLayer<T> _maxPooling;
@@ -118,11 +120,13 @@ public partial class TNetLayer<T> : LayerBase<T>, IShapeContract
         _mlpLayers = [];
         _fcLayers = [];
 
-        var mlp = ValidateChannelArray(mlpChannels ?? new[] { 64, 128, 1024 }, nameof(mlpChannels));
-        var fc = ValidateChannelArray(fcChannels ?? new[] { 512, 256 }, nameof(fcChannels));
+        _mlpChannels = ValidateChannelArray(
+            mlpChannels ?? new[] { 64, 128, 1024 }, nameof(mlpChannels));
+        _fcChannels = ValidateChannelArray(
+            fcChannels ?? new[] { 512, 256 }, nameof(fcChannels));
 
         int inputChannels = numFeatures;
-        foreach (var outChannels in mlp)
+        foreach (var outChannels in _mlpChannels)
         {
             _mlpLayers.Add(new PointConvolutionLayer<T>(inputChannels, outChannels, new ReLUActivation<T>()));
             inputChannels = outChannels;
@@ -131,7 +135,7 @@ public partial class TNetLayer<T> : LayerBase<T>, IShapeContract
         _maxPooling = new MaxPoolingLayer<T>(inputChannels);
 
         int fcInput = inputChannels;
-        foreach (var hidden in fc)
+        foreach (var hidden in _fcChannels)
         {
             _fcLayers.Add(new DenseLayer<T>(hidden, activationFunction: new ReLUActivation<T>()));
             fcInput = hidden;
@@ -325,6 +329,6 @@ public partial class TNetLayer<T> : LayerBase<T>, IShapeContract
             }
         }
 
-        return values;
+        return (int[])values.Clone();
     }
 }

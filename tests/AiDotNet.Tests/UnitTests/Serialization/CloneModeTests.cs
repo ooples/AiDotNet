@@ -1,9 +1,46 @@
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNetTests.UnitTests.Serialization;
+
+[AiDotNet.Attributes.ElementWiseShape]
+[AiDotNet.Attributes.AutoParameters]
+public sealed partial class CloneStateProbeLayer<T> : LayerBase<T>
+{
+    [AiDotNet.Attributes.Buffer(Name = "running", Role = PersistentTensorRole.Constant)]
+    private Tensor<T> _running = new([1]);
+
+    [AiDotNet.Attributes.Buffer(Name = "optimizer", Role = PersistentTensorRole.OptimizerState)]
+    private Tensor<T> _optimizer = new([1]);
+
+    public CloneStateProbeLayer()
+        : base([1], [1])
+    {
+        _running[0] = NumOps.FromDouble(-1);
+        _optimizer[0] = NumOps.FromDouble(-2);
+    }
+
+    public override bool SupportsTraining => false;
+
+    public double Running
+    {
+        get => NumOps.ToDouble(_running[0]);
+        set => _running[0] = NumOps.FromDouble(value);
+    }
+
+    public double Optimizer
+    {
+        get => NumOps.ToDouble(_optimizer[0]);
+        set => _optimizer[0] = NumOps.FromDouble(value);
+    }
+
+    public override void ResetState()
+    {
+    }
+}
 
 /// <summary>
 /// The three sharing modes have to differ under mutation, or they are one mode with three names.
@@ -79,6 +116,120 @@ public class CloneModeTests
 
         Assert.Equal(4242, shared.RandomSeed);
         Assert.NotEqual(4242, derived.RandomSeed ?? 0);
+    }
+
+    [Fact]
+    public void ShareRandomState_preserves_dropout_progress_while_default_derives_a_new_stream()
+    {
+        var original = new DropoutLayer<double>(0.5) { RandomSeed = 4242 };
+        var input = new Tensor<double>(new[] { 1, 256 });
+        input.Fill(1.0);
+
+        // Advance the source once before cloning. Merely copying the seed would restart the clone
+        // at mask zero and fail the next-output equality below.
+        _ = original.Forward(input);
+        var shared = (DropoutLayer<double>)original.Clone(
+            new CloneOptions { ShareRandomState = true });
+        var derived = (DropoutLayer<double>)original.Clone(CloneOptions.Full);
+
+        var expectedNext = original.Forward(input);
+        var sharedNext = shared.Forward(input);
+        var derivedNext = derived.Forward(input);
+
+        bool derivedDiffers = false;
+        for (int i = 0; i < expectedNext.Length; i++)
+        {
+            Assert.Equal(expectedNext[i], sharedNext[i]);
+            derivedDiffers |= expectedNext[i] != derivedNext[i];
+        }
+
+        Assert.True(derivedDiffers,
+            "The default clone reused the source dropout stream instead of deriving an independent one.");
+    }
+
+    [Fact]
+    public void Bare_clone_uses_the_generated_full_clone_path()
+    {
+        var original = Trained();
+
+        var clone = (DenseLayer<double>)original.Clone();
+        Mutate(clone);
+
+        Assert.Equal(1.0, original.GetParameters()[0], precision: 10);
+        Assert.Equal(99.0, clone.GetParameters()[0], precision: 10);
+    }
+
+    [Fact]
+    public void Buffer_and_optimizer_state_flags_are_independent()
+    {
+        var original = new CloneStateProbeLayer<double>
+        {
+            Running = 17,
+            Optimizer = 29,
+        };
+
+        var buffersOnly = (CloneStateProbeLayer<double>)original.Clone(new CloneOptions
+        {
+            IncludeParameters = false,
+            IncludeBuffers = true,
+            IncludeOptimizerState = false,
+        });
+        var optimizerOnly = (CloneStateProbeLayer<double>)original.Clone(new CloneOptions
+        {
+            IncludeParameters = false,
+            IncludeBuffers = false,
+            IncludeOptimizerState = true,
+        });
+
+        Assert.Equal(17, buffersOnly.Running);
+        Assert.Equal(-2, buffersOnly.Optimizer);
+        Assert.Equal(-1, optimizerOnly.Running);
+        Assert.Equal(29, optimizerOnly.Optimizer);
+    }
+
+    [Fact]
+    public void Shared_mode_aliases_registered_state_while_full_is_independent()
+    {
+        var original = new CloneStateProbeLayer<double>
+        {
+            Running = 17,
+            Optimizer = 29,
+        };
+
+        var full = (CloneStateProbeLayer<double>)original.Clone(CloneOptions.Full);
+        var shared = (CloneStateProbeLayer<double>)original.Clone(CloneOptions.Shared);
+
+        full.Running = 41;
+        full.Optimizer = 43;
+        Assert.Equal(17, original.Running);
+        Assert.Equal(29, original.Optimizer);
+
+        shared.Running = 47;
+        shared.Optimizer = 53;
+        Assert.Equal(47, original.Running);
+        Assert.Equal(53, original.Optimizer);
+    }
+
+    [Fact]
+    public void CopyOnWrite_mode_splits_registered_state_on_write()
+    {
+        var original = new CloneStateProbeLayer<double>
+        {
+            Running = 17,
+            Optimizer = 29,
+        };
+
+        var clone = (CloneStateProbeLayer<double>)original.Clone(CloneOptions.CopyOnWrite);
+        Assert.Equal(original.Running, clone.Running);
+        Assert.Equal(original.Optimizer, clone.Optimizer);
+
+        clone.Running = 41;
+        clone.Optimizer = 43;
+
+        Assert.Equal(17, original.Running);
+        Assert.Equal(29, original.Optimizer);
+        Assert.Equal(41, clone.Running);
+        Assert.Equal(43, clone.Optimizer);
     }
 
     private static void Mutate(DenseLayer<double> layer)

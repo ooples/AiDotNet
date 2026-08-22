@@ -1974,9 +1974,94 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
             // the complete source/destination layer graph before rebinding anything; an unsupported
             // graph remains untouched and takes the exact streaming fallback below.
             if (!copy.TryShareParametersFrom(this))
+            {
+                EnsureCloneParameterLayoutMatches(this, copy);
+#if NETFRAMEWORK
+                // IParameterizable's chunked API is unavailable on .NET Framework, so latent
+                // diffusion models deliberately expose no chunks there. Falling through to the
+                // streaming restore would therefore hand a non-empty clone a zero-length vector.
+                // The net471 target is retained for compatibility and cannot host foundation-scale
+                // models; use the contract-preserving flat path on that target only.
+                copy.SetParameters(GetParameters());
+#else
                 copy.SetParameterChunks(GetParameterChunks());
+#endif
+            }
             return copy;
         }
+    }
+
+    private static void EnsureCloneParameterLayoutMatches(
+        DiffusionModelBase<T> source,
+        DiffusionModelBase<T> destination)
+    {
+        var sourceLayout = source.ParameterLayout;
+        var destinationLayout = destination.ParameterLayout;
+        if (string.Equals(sourceLayout.Fingerprint, destinationLayout.Fingerprint,
+                StringComparison.Ordinal))
+            return;
+
+        var destinationById = destinationLayout.Slots.ToDictionary(
+            slot => slot.StableId,
+            StringComparer.Ordinal);
+        var differences = new List<string>();
+        for (int i = 0; i < sourceLayout.Slots.Count && differences.Count < 8; i++)
+        {
+            var sourceSlot = sourceLayout.Slots[i];
+            if (!destinationById.TryGetValue(sourceSlot.StableId, out var destinationSlot))
+            {
+                differences.Add($"missing '{sourceSlot.StableId}' ({sourceSlot.ParameterCount?.ToString() ?? "?"})");
+                continue;
+            }
+
+            if (sourceSlot.ParameterCount != destinationSlot.ParameterCount
+                || sourceSlot.MaterializedParameterCount != destinationSlot.MaterializedParameterCount
+                || sourceSlot.Readiness != destinationSlot.Readiness
+                || !ShapesEqual(sourceSlot.Shape, destinationSlot.Shape))
+            {
+                differences.Add(
+                    $"'{sourceSlot.StableId}' source={DescribeSlot(sourceSlot)}, "
+                    + $"clone={DescribeSlot(destinationSlot)}");
+            }
+        }
+
+        if (differences.Count < 8)
+        {
+            var sourceIds = new HashSet<string>(
+                sourceLayout.Slots.Select(slot => slot.StableId),
+                StringComparer.Ordinal);
+            for (int i = 0; i < destinationLayout.Slots.Count && differences.Count < 8; i++)
+            {
+                var slot = destinationLayout.Slots[i];
+                if (!sourceIds.Contains(slot.StableId))
+                    differences.Add($"extra '{slot.StableId}' ({slot.ParameterCount?.ToString() ?? "?"})");
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Clone configuration changed the parameter manifest for {source.GetType().Name}: "
+            + $"source declared/materialized={sourceLayout.ParameterCount?.ToString() ?? "?"}/"
+            + $"{sourceLayout.MaterializedParameterCount}, clone={destinationLayout.ParameterCount?.ToString() ?? "?"}/"
+            + $"{destinationLayout.MaterializedParameterCount}. "
+            + (differences.Count == 0
+                ? "Stable slot metadata or ordering differs."
+                : string.Join("; ", differences)));
+    }
+
+    private static string DescribeSlot(AiDotNet.Models.Parameters.ParameterSlotDescriptor slot)
+        => $"{slot.Readiness}, declared={slot.ParameterCount?.ToString() ?? "?"}, "
+           + $"materialized={slot.MaterializedParameterCount}, shape={DescribeShape(slot.Shape)}";
+
+    private static string DescribeShape(IReadOnlyList<int>? shape)
+        => shape is null ? "?" : $"[{string.Join(",", shape)}]";
+
+    private static bool ShapesEqual(IReadOnlyList<int>? left, IReadOnlyList<int>? right)
+    {
+        if (left is null || right is null) return left is null && right is null;
+        if (left.Count != right.Count) return false;
+        for (int i = 0; i < left.Count; i++)
+            if (left[i] != right[i]) return false;
+        return true;
     }
 
     /// <inheritdoc />

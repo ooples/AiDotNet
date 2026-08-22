@@ -1760,6 +1760,10 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     protected bool TryShareParametersFrom(NoisePredictorBase<T> source)
         => AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(source, this);
 
+    private bool TryShareParametersFrom(NoisePredictorBase<T> source, out string mismatch)
+        => AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(
+            source, this, out mismatch);
+
     /// <inheritdoc />
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
     {
@@ -2021,8 +2025,24 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
             // predictor to repeat it in an override. The helper performs a complete structural and
             // per-tensor shape preflight before it mutates the destination, so the streaming copy
             // remains the correctness fallback for custom or otherwise non-isomorphic graphs.
-            if (!copy.TryShareParametersFrom(this))
+            bool shared = copy.TryShareParametersFrom(this, out string shareMismatch);
+            if (!shared)
                 copy.SetParameterChunks(GetParameterChunks());
+
+            var sourceLayout = ParameterLayout;
+            var copyLayout = copy.ParameterLayout;
+            if (!string.Equals(sourceLayout.Fingerprint, copyLayout.Fingerprint,
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Clone state transfer changed the parameter manifest for {GetType().Name}: "
+                    + $"source declared/materialized={sourceLayout.ParameterCount?.ToString() ?? "?"}/"
+                    + $"{sourceLayout.MaterializedParameterCount}, clone="
+                    + $"{copyLayout.ParameterCount?.ToString() ?? "?"}/{copyLayout.MaterializedParameterCount}. "
+                    + (shared ? "The copy-on-write transfer reported success."
+                        : $"Copy-on-write preflight rejected the clone because {shareMismatch}; "
+                          + "the streaming fallback did not restore an identical manifest."));
+            }
             return copy;
         }
     }

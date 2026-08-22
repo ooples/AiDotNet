@@ -16,9 +16,10 @@ namespace AiDotNet.Tests.IntegrationTests.Cloning;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The point is the coverage number, not a pass. A layer whose required constructor arguments are
-/// not marked <c>[LayerState]</c> has no generated factory, so it cannot be rebuilt — and the only
-/// way to know how many of those there are is to try all of them.
+/// The coverage number explains how much the harness reached, while every reached layer is a hard
+/// correctness gate. A layer whose required constructor arguments are not marked <c>[LayerState]</c>
+/// has no generated factory, so it cannot be rebuilt — and the only way to know how many of those
+/// there are is to try all of them.
 /// </para>
 /// <para>
 /// Construction arguments come from <c>[LayerProperty(TestConstructorArgs = ...)]</c>, which 156 of
@@ -150,12 +151,14 @@ public class AllLayersCloneTests
         System.IO.File.WriteAllLines(
             System.IO.Path.Combine(dir, "aidotnet-layer-clone-sweep.txt"), report);
 
-        // The sweep is a measurement first. Asserting only that SOMETHING was exercised keeps a
-        // harness that constructs nothing from reporting success, without pinning a number that
-        // will move as layers gain [LayerState] coverage.
+        // Coverage can grow without pinning a brittle count, but every layer the harness actually
+        // reaches must clone. The previous measurement-only assertion let a non-zero failure list
+        // produce a green test, which made the sweep documentation rather than regression proof.
+        Assert.NotEmpty(cloned);
         Assert.True(
-            cloned.Count + failed.Count > 0,
-            "No layer was constructed, so this run measured nothing.");
+            failed.Count == 0,
+            $"{failed.Count} constructed layer(s) failed cloning:{Environment.NewLine}"
+                + string.Join(Environment.NewLine, failed));
     }
 
     private static bool DerivesFromLayerBase(Type type)

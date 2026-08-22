@@ -73,6 +73,11 @@ public partial class VGGishAudioEmbedding<T> : LayerBase<T>, IShapeContract
     /// <summary>Frames per patch in the published front-end (0.96 s at a 10 ms hop).</summary>
     public const int PaperPatchFrames = 96;
 
+    private readonly int _conv1Filters;
+    private readonly int _conv2Filters;
+    private readonly int _conv3Filters;
+    private readonly int _conv4Filters;
+
     private readonly ConvolutionalLayer<T> _conv1;
     private readonly MaxPoolingLayer<T> _pool1;
     private readonly ConvolutionalLayer<T> _conv2;
@@ -142,6 +147,10 @@ public partial class VGGishAudioEmbedding<T> : LayerBase<T>, IShapeContract
 
         EmbeddingSize = embeddingSize;
         FullyConnectedWidth = fullyConnectedWidth;
+        _conv1Filters = conv1Filters;
+        _conv2Filters = conv2Filters;
+        _conv3Filters = conv3Filters;
+        _conv4Filters = conv4Filters;
 
         // 3x3 kernels with padding 1 reproduce TensorFlow's SAME padding at stride 1, so each group
         // preserves its spatial extent and only the pools reduce it. ReLU on every convolution.

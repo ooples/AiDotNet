@@ -119,6 +119,7 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
     private readonly List<DenseBlockLayer<T>> _layers;
     private readonly int _numLayers;
     private readonly int _growthRate;
+    private readonly double _bnMomentum;
     // Non-readonly: lazy ctor leaves _inputChannels = -1 until
     // OnFirstForward resolves it from the runtime input tensor.
     private int _inputChannels;
@@ -195,6 +196,7 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
         _inputChannels = -1; // resolved in OnFirstForward
         _numLayers = numLayers;
         _growthRate = growthRate;
+        _bnMomentum = bnMomentum;
         _layers = new List<DenseBlockLayer<T>>(numLayers);
 
         for (int i = 0; i < numLayers; i++)

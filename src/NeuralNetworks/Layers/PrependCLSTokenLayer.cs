@@ -47,6 +47,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public partial class PrependCLSTokenLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _embedDim;
+    private readonly double _initScale;
 
     /// <inheritdoc />
     /// <remarks>
@@ -103,6 +104,7 @@ public partial class PrependCLSTokenLayer<T> : LayerBase<T>, IShapeContract
     {
         if (embedDim <= 0) throw new ArgumentOutOfRangeException(nameof(embedDim));
         _embedDim = embedDim;
+        _initScale = initScale;
         _cls = new Tensor<T>(new[] { 1, embedDim });
 
         var rng = seed.HasValue

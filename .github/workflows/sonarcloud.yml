@@ -295,6 +295,15 @@ jobs:
       - name: Build NuGet package
         run: dotnet pack --no-build -c Release --output ./artifacts
 
+      - name: Verify packaged generator and PackageReference integration
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem -LiteralPath ./artifacts -Filter 'AiDotNet.*.nupkg' |
+            Where-Object Name -NotLike '*.snupkg' |
+            Select-Object -First 1
+          if ($null -eq $package) { throw 'AiDotNet package was not produced.' }
+          ./scripts/Verify-NuGetGenerator.ps1 -PackagePath $package.FullName
+
       - name: Upload NuGet package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:

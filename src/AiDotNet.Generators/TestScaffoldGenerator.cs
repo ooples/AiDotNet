@@ -2223,6 +2223,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(combined, static (spc, source) =>
         {
             var ((((((models, tests), activations), losses), layers), algorithms), compilation) = source;
+
+            // This generator owns AiDotNet's repository test census and emits fixtures that
+            // depend on AiDotNetTests-only base classes and xUnit. The generator assembly is also
+            // shipped to PackageReference consumers so production generators (layer state,
+            // registries, schemas, etc.) activate automatically. Do not leak these repository-only
+            // fixtures or coverage diagnostics into arbitrary consumer compilations.
+            string assemblyName = compilation.AssemblyName ?? string.Empty;
+            if (!string.Equals(assemblyName, "AiDotNet", System.StringComparison.Ordinal) &&
+                !string.Equals(assemblyName, "AiDotNetTests", System.StringComparison.Ordinal))
+            {
+                return;
+            }
+
             Execute(spc, models, tests, compilation);
             ExecuteActivationAndLossGeneration(spc, activations, losses, compilation);
             ExecuteLayerGeneration(spc, layers, compilation);

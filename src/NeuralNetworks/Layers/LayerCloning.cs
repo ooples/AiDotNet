@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Collections.Generic;
+using System.Reflection;
 using AiDotNet.Models;
 using AiDotNet.Serialization;
 
@@ -33,6 +34,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </remarks>
 public static class LayerCloning
 {
+    private const string CloneRandomSeedKey = "__aidotnet_clone_random_seed";
+
     /// <summary>
     /// Creates an independent copy of a layer.
     /// </summary>
@@ -64,19 +67,35 @@ public static class LayerCloning
         if (source is null) throw new ArgumentNullException(nameof(source));
 
         var settings = options ?? CloneOptions.Full;
-        var clone = Reconstruct(source);
+        int? cloneSeed = settings.ShareRandomState
+            ? source.RandomSeed
+            : DeriveCloneSeed(source.RandomSeed);
 
-        // The clone derives its own stream unless asked to reuse the original's. A layer with no
-        // seed set has opted out of reproducibility, and copying null keeps it opted out.
-        if (settings.ShareRandomState) clone.RandomSeed = source.RandomSeed;
+        // An unseeded architecture clone still needs a genuinely fresh initialization. Several
+        // legacy layers expose `seed = 42` on their constructor without reflecting it into
+        // LayerBase.RandomSeed; replaying that literal would make every configuration-only clone
+        // start from identical weights. The reserved factory value affects construction only. The
+        // public RandomSeed remains null, preserving the caller's deliberate unseeded contract.
+        int? constructionSeed = cloneSeed;
+        if (!settings.IncludeParameters && !constructionSeed.HasValue)
+        {
+            constructionSeed = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom().Next();
+        }
 
-        if (settings.IncludeParameters)
+        var clone = Reconstruct(source, constructionSeed);
+
+        // A shared stream must restart from the same deterministic seed. The default derives a
+        // different, reproducible stream so two independently-trained clones do not receive the
+        // same stochastic masks forever. An unseeded source remains intentionally unseeded.
+        clone.RandomSeed = cloneSeed;
+
+        if (settings.IncludeParameters || settings.IncludeBuffers || settings.IncludeOptimizerState)
         {
             InstallInto(source, clone, settings);
 
             // AFTER the install, not before. Checking first measured an empty clone against a
             // resolved original and reported every lazy layer as broken.
-            if (clone.ParameterCount != source.ParameterCount)
+            if (settings.IncludeParameters && clone.ParameterCount != source.ParameterCount)
             {
                 throw new InvalidOperationException(
                     $"{source.GetType().Name} rebuilt with {clone.ParameterCount} parameters but "
@@ -86,7 +105,131 @@ public static class LayerCloning
             }
         }
 
+
+        // LAST: reconstruction and any shape-resolution probe may consume stochastic counters or
+        // Random instances. Apply the requested stream semantics only after that work is finished.
+        CopyRandomState(source, clone, settings.ShareRandomState);
+
         return clone;
+    }
+
+    private static void CopyRandomState<T>(
+        LayerBase<T> source,
+        LayerBase<T> clone,
+        bool shareRandomState)
+    {
+        source.CopyBaseRandomStateTo(clone, shareRandomState);
+
+        int randomFieldIndex = 0;
+        for (Type? type = source.GetType();
+             type is not null && type != typeof(LayerBase<T>);
+             type = type.BaseType)
+        {
+            foreach (var field in type.GetFields(
+                         BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
+                         | BindingFlags.DeclaredOnly))
+            {
+                if (field.FieldType == typeof(Random))
+                {
+                    var sourceRandom = (Random?)field.GetValue(source);
+                    if (sourceRandom is null) continue;
+
+                    Random replacement;
+                    if (shareRandomState)
+                    {
+                        replacement = CloneRandom(sourceRandom);
+                    }
+                    else if (clone.RandomSeed.HasValue)
+                    {
+                        int fieldSeed = DeriveFieldSeed(
+                            clone.RandomSeed.Value, field.Name, randomFieldIndex++);
+                        replacement = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(fieldSeed);
+                    }
+                    else
+                    {
+                        // The constructor already supplied an independent secure stream.
+                        continue;
+                    }
+
+                    field.SetValue(clone, replacement);
+                    continue;
+                }
+
+                if (!IsStochasticCounter(field)) continue;
+                field.SetValue(clone, shareRandomState
+                    ? field.GetValue(source)
+                    : Activator.CreateInstance(field.FieldType));
+            }
+        }
+    }
+
+    private static bool IsStochasticCounter(FieldInfo field)
+    {
+        if (field.IsInitOnly || field.IsStatic
+            || !field.Name.EndsWith("Counter", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        bool stochasticName = field.Name.IndexOf("seed", StringComparison.OrdinalIgnoreCase) >= 0
+                              || field.Name.IndexOf("dropPath", StringComparison.OrdinalIgnoreCase) >= 0
+                              || field.Name.IndexOf("init", StringComparison.OrdinalIgnoreCase) >= 0;
+        if (!stochasticName) return false;
+
+        Type type = field.FieldType;
+        return type == typeof(int) || type == typeof(uint)
+            || type == typeof(long) || type == typeof(ulong);
+    }
+
+    private static int DeriveFieldSeed(int seed, string fieldName, int index)
+    {
+        uint hash = unchecked((uint)seed) ^ unchecked((uint)index * 0x9E3779B9u);
+        for (int i = 0; i < fieldName.Length; i++)
+            hash = unchecked((hash ^ fieldName[i]) * 16777619u);
+        hash ^= hash >> 16;
+        hash *= 0x85EBCA6Bu;
+        hash ^= hash >> 13;
+        return unchecked((int)hash);
+    }
+
+    private static readonly MethodInfo MemberwiseCloneMethod = typeof(object).GetMethod(
+        "MemberwiseClone", BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new InvalidOperationException("Object.MemberwiseClone is unavailable.");
+
+    private static Random CloneRandom(Random source)
+    {
+        var clone = (Random)MemberwiseCloneMethod.Invoke(source, null)!;
+
+        // .NET Framework's Random stores its mutable seed table in an int[]; modern runtimes use
+        // primitive state fields or a private implementation object. Deep-copy both representations
+        // so source and clone advance identically but never consume one shared mutable stream.
+        for (Type? type = source.GetType(); type is not null; type = type.BaseType)
+        {
+            foreach (var field in type.GetFields(
+                         BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
+                         | BindingFlags.DeclaredOnly))
+            {
+                object? value = field.GetValue(source);
+                if (value is Array array)
+                    field.SetValue(clone, array.Clone());
+                else if (value is not null
+                         && !field.FieldType.IsValueType
+                         && field.FieldType != typeof(string))
+                    field.SetValue(clone, MemberwiseCloneMethod.Invoke(value, null));
+            }
+        }
+
+        return clone;
+    }
+
+    private static int? DeriveCloneSeed(int? sourceSeed)
+    {
+        if (!sourceSeed.HasValue) return null;
+
+        // SplitMix's integer avalanche gives a stable child seed without consuming or coupling the
+        // source stream. Keep this local and deterministic across target frameworks.
+        uint value = unchecked((uint)sourceSeed.Value + 0x9E3779B9u);
+        value = (value ^ (value >> 16)) * 0x85EBCA6Bu;
+        value = (value ^ (value >> 13)) * 0xC2B2AE35u;
+        return unchecked((int)(value ^ (value >> 16)));
     }
 
     /// <summary>
@@ -235,6 +378,8 @@ public static class LayerCloning
         // one appeared to work: both sides were unresolved and agreed at zero.
         CopyRegisteredBuffers(source, clone, settings);
 
+        if (!settings.IncludeParameters) return;
+
         var tensors = source.GetTrainableParameters();
         if (tensors.Count == 0) return;
 
@@ -244,13 +389,12 @@ public static class LayerCloning
             // Shared hands over the ORIGINAL tensors, so both handles are one set of weights and
             // training either trains both.
             //
-            // Deep and CopyOnWrite both take CloneShared views. They are observationally identical
-            // by construction -- the first write on either side splits them -- so a copy-on-write
-            // view IS a deep copy, reached without materialising a second set of weights. This is
-            // what NeuralNetworkBase.DeepCopy already relies on.
-            installed[i] = settings.Mode == CloneMode.Shared
-                ? tensors[i]
-                : (Tensor<T>)tensors[i].CloneShared();
+            installed[i] = settings.Mode switch
+            {
+                CloneMode.Shared => tensors[i],
+                CloneMode.CopyOnWrite => (Tensor<T>)tensors[i].CloneShared(),
+                _ => tensors[i].Clone(),
+            };
         }
 
         clone.SetTrainableParameters(installed);
@@ -270,7 +414,7 @@ public static class LayerCloning
     /// </remarks>
     private static void CopyRegisteredBuffers<T>(LayerBase<T> source, LayerBase<T> clone, CloneOptions settings)
     {
-        var sourceBuffers = source.GetRegisteredBuffers();
+        var sourceBuffers = source.GetRegisteredBufferState();
         if (sourceBuffers is null || sourceBuffers.Count == 0) return;
 
         var target = new Dictionary<string, Tensor<T>>(StringComparer.Ordinal);
@@ -283,9 +427,20 @@ public static class LayerCloning
             }
         }
 
-        foreach (var (name, tensor) in sourceBuffers)
+        foreach (var (name, tensor, persistenceRole, _) in sourceBuffers)
         {
             if (tensor is null || string.IsNullOrEmpty(name)) continue;
+
+            bool optimizerState = persistenceRole == PersistentTensorRole.OptimizerState;
+            if (optimizerState ? !settings.IncludeOptimizerState : !settings.IncludeBuffers)
+                continue;
+
+            // Shared means aliasing storage, including when the constructor allocated a same-sized
+            // destination buffer. The generated field map performs the rebind and retains the
+            // declaration's original roles.
+            if (settings.Mode == CloneMode.Shared
+                && clone.InstallRestoredBuffer(name, tensor))
+                continue;
 
             if (target.TryGetValue(name, out var existing) && existing.Length == tensor.Length)
             {
@@ -294,11 +449,12 @@ public static class LayerCloning
                 continue;
             }
 
-            // Shared hands over the original tensor for the same reason CopyOwnTensors does; a
-            // CloneShared view is observationally a deep copy until the first write splits it.
-            var installed = settings.Mode == CloneMode.Shared
-                ? tensor
-                : (Tensor<T>)tensor.CloneShared();
+            var installed = settings.Mode switch
+            {
+                CloneMode.Shared => tensor,
+                CloneMode.CopyOnWrite => (Tensor<T>)tensor.CloneShared(),
+                _ => tensor.Clone(),
+            };
             clone.InstallRestoredBuffer(name, installed);
         }
     }
@@ -336,13 +492,15 @@ public static class LayerCloning
     /// <param name="source">The layer to rebuild.</param>
     /// <returns>A new, freshly constructed layer of the same type and configuration.</returns>
     /// <exception cref="NotSupportedException">Thrown when the type has no generated factory.</exception>
-    private static LayerBase<T> Reconstruct<T>(LayerBase<T> source)
+    private static LayerBase<T> Reconstruct<T>(LayerBase<T> source, int? constructionSeed)
     {
         var metadata = new Dictionary<string, string>(StringComparer.Ordinal);
-        source.WriteConstructionState(metadata);
+        source.CaptureConstructionState(metadata);
 
         var values = new Dictionary<string, object>(StringComparer.Ordinal);
         foreach (var pair in metadata) values[pair.Key] = pair.Value;
+        source.CaptureConstructionObjects(values);
+        if (constructionSeed.HasValue) values[CloneRandomSeedKey] = constructionSeed.Value;
 
         var type = source.GetType();
         var bag = new LayerStateBag(values, type.Name);

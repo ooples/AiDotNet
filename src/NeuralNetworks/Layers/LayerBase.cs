@@ -6,6 +6,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Graph;
 using AiDotNet.Memory;
 using AiDotNet.Models.Parameters;
+using AiDotNet.Serialization;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -522,6 +523,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </para>
     /// </summary>
     public int? RandomSeed { get; set; }
+
+    /// <summary>Copies base-owned stochastic progress into a reconstructed clone.</summary>
+    internal void CopyBaseRandomStateTo(LayerBase<T> clone, bool shareRandomState)
+    {
+        if (clone is null) throw new ArgumentNullException(nameof(clone));
+        clone._initWeightsCallCounter = shareRandomState ? _initWeightsCallCounter : 0;
+        clone.SetTrainingMode(IsTrainingMode);
+    }
 
     /// <summary>
     /// Assigns <see cref="RandomSeed"/> from the active
@@ -5099,14 +5108,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     /// <summary>
-    /// Creates a copy of this layer.
+    /// Creates a complete, independent copy of this layer.
     /// </summary>
-    /// <returns>A new instance of the layer with the same configuration.</returns>
+    /// <returns>A reconstructed instance carrying the layer's configuration and learned state.</returns>
     /// <remarks>
     /// <para>
-    /// This method creates a shallow copy of the layer with deep copies of the input/output shapes and
-    /// activation functions. Derived classes should override this method to properly copy any additional
-    /// fields they define.
+    /// This method routes through the generated construction-state factory and the common tensor-state
+    /// installer. Derived layers should declare their constructor and tensor state; they should not
+    /// override this method.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates a duplicate of this layer.
     /// 
@@ -5122,29 +5131,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </para>
     /// </remarks>
     public virtual LayerBase<T> Clone()
-    {
-        var copy = (LayerBase<T>)this.MemberwiseClone();
-
-        // Deep copy any reference type members
-        copy.InputShape = (int[])InputShape.Clone();
-        copy.OutputShape = (int[])OutputShape.Clone();
-
-        // Copy activation functions (use same instance if not cloneable since they're typically stateless)
-        if (ScalarActivation != null)
-        {
-            copy.ScalarActivation = ScalarActivation is ICloneable cloneable
-                ? (IActivationFunction<T>)cloneable.Clone()
-                : ScalarActivation;
-        }
-        if (VectorActivation != null)
-        {
-            copy.VectorActivation = VectorActivation is ICloneable vectorCloneable
-                ? (IVectorActivationFunction<T>)vectorCloneable.Clone()
-                : VectorActivation;
-        }
-
-        return copy;
-    }
+        => (LayerBase<T>)LayerCloning.Clone(this, CloneOptions.Full);
 
     /// <summary>
     /// Calculates the derivative of a scalar activation function for each element of a tensor.
@@ -7216,8 +7203,87 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// afterwards. A layer that overrides <c>GetMetadata</c> without calling base opts itself out,
     /// which the generator reports as ADN0054.
     /// </remarks>
-    internal virtual void WriteConstructionState(Dictionary<string, string> metadata)
+    protected virtual void WriteConstructionState(Dictionary<string, string> metadata)
     {
+        WriteOrderedActivationState(metadata, vector: false);
+        WriteOrderedActivationState(metadata, vector: true);
+    }
+
+    /// <summary>Invokes the generated construction-state hook for clone infrastructure.</summary>
+    internal void CaptureConstructionState(Dictionary<string, string> metadata)
+        => WriteConstructionState(metadata);
+
+    /// <summary>
+    /// Writes live constructor components for an in-memory clone. Generated; do not implement by hand.
+    /// </summary>
+    /// <remarks>
+    /// Durable metadata records a component's type name. An in-memory clone can do better: it can
+    /// supply the actual activation/initializer/strategy instance to the generated constructor, so a
+    /// component with constructor configuration or no parameterless constructor is never replaced by
+    /// a default. This object-valued channel is never serialized.
+    /// </remarks>
+    protected virtual void WriteConstructionObjects(Dictionary<string, object> values)
+    {
+        WriteOrderedActivationObjects(values, vector: false);
+        WriteOrderedActivationObjects(values, vector: true);
+    }
+
+    /// <summary>Invokes the generated live-object hook for clone infrastructure.</summary>
+    internal void CaptureConstructionObjects(Dictionary<string, object> values)
+        => WriteConstructionObjects(values);
+
+    private void WriteOrderedActivationState(Dictionary<string, string> metadata, bool vector)
+    {
+        var activations = GetOrderedConstructionActivations(vector);
+        string kind = vector ? "vector" : "scalar";
+        for (int i = 0; i < activations.Count; i++)
+        {
+            metadata[$"__aidotnet_{kind}_activation_{i}"] =
+                LayerStateBag.FormatType(activations[i]);
+        }
+    }
+
+    private void WriteOrderedActivationObjects(Dictionary<string, object> values, bool vector)
+    {
+        var activations = GetOrderedConstructionActivations(vector);
+        string kind = vector ? "vector" : "scalar";
+        for (int i = 0; i < activations.Count; i++)
+        {
+            values[$"__aidotnet_{kind}_activation_{i}"] = activations[i];
+        }
+    }
+
+    /// <summary>
+    /// Returns the distinct activation objects exposed by this layer and its immediate registered
+    /// children, in construction order.
+    /// </summary>
+    /// <remarks>
+    /// Composite constructors can take more than one activation even though LayerBase historically
+    /// stored only one scalar and one vector activation. ReconstructionLayer is the canonical case:
+    /// its hidden activation lives on child 0/1 and its output activation on child 2. Enumerating the
+    /// immediate children lets generated factories bind both without adding a bespoke field or clone
+    /// override to every composite. Reference de-duplication keeps one activation reused by several
+    /// children in one constructor slot while retaining separately configured instances.
+    /// </remarks>
+    private List<object> GetOrderedConstructionActivations(bool vector)
+    {
+        var result = new List<object>();
+
+        void Add(object? activation)
+        {
+            if (activation is null || result.Any(existing => ReferenceEquals(existing, activation)))
+                return;
+            result.Add(activation);
+        }
+
+        Add(vector ? VectorActivation : ScalarActivation);
+        foreach (var child in GetSubLayers())
+        {
+            if (child is not LayerBase<T> layer) continue;
+            Add(vector ? layer.VectorActivation : layer.ScalarActivation);
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -7621,6 +7687,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     protected virtual bool TryRestoreBufferField(string name, Tensor<T> tensor) => false;
 
     /// <summary>
+    /// Reports whether <see cref="TryRestoreBufferField"/> can rebind the named generated buffer.
+    /// </summary>
+    /// <remarks>
+    /// Clone preflight must prove the complete persistent-state graph is adoptable before it shares
+    /// any trainable tensors. The generator emits this from the same name-to-field map as the restore
+    /// method, keeping the capability check side-effect free and preventing a half-mutated clone.
+    /// </remarks>
+    protected virtual bool CanRestoreBufferField(string name) => false;
+
+    /// <summary>
     /// Installs a buffer into the member that owns it and registers it, for callers outside the
     /// layer such as the clone path.
     /// </summary>
@@ -7633,6 +7709,95 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // take RegisterBuffer's default and turn an input-sized slot back into a counted one.
         return TryRestoreBufferField(name, tensor);
     }
+
+    /// <summary>Checks whether every registered source buffer can be installed without mutation.</summary>
+    internal bool CanAdoptRegisteredBuffersFrom(LayerBase<T> source)
+        => CanAdoptRegisteredBuffersFrom(source, out _);
+
+    /// <summary>Checks buffer adoption and describes the first structural mismatch.</summary>
+    internal bool CanAdoptRegisteredBuffersFrom(LayerBase<T> source, out string mismatch)
+    {
+        if (source is null)
+        {
+            mismatch = "source layer is null";
+            return false;
+        }
+
+        var sourceBuffers = source.GetRegisteredBufferState();
+        var destinationBuffers = GetRegisteredBufferState();
+        var destinationByName = new Dictionary<string, Tensor<T>>(StringComparer.Ordinal);
+        for (int i = 0; i < destinationBuffers.Count; i++)
+            destinationByName[destinationBuffers[i].Name] = destinationBuffers[i].Tensor;
+
+        var sourceNames = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < sourceBuffers.Count; i++)
+        {
+            var entry = sourceBuffers[i];
+            sourceNames.Add(entry.Name);
+            if (destinationByName.TryGetValue(entry.Name, out var existing)
+                && ShapesMatch(existing.Shape, entry.Tensor.Shape))
+                continue;
+            if (!CanRestoreBufferField(entry.Name))
+            {
+                string destinationShape = destinationByName.TryGetValue(entry.Name, out var current)
+                    ? DescribeTensorShape(current.Shape)
+                    : "<missing>";
+                mismatch = $"buffer '{entry.Name}' source shape={DescribeTensorShape(entry.Tensor.Shape)}, "
+                           + $"clone shape={destinationShape}, and the field cannot be rebound";
+                return false;
+            }
+        }
+
+        // A freshly reconstructed clone may not invent persistent state that is absent from the
+        // source. Input-sized state is still persistent clone state, so it follows the same rule.
+        for (int i = 0; i < destinationBuffers.Count; i++)
+            if (!sourceNames.Contains(destinationBuffers[i].Name))
+            {
+                mismatch = $"clone has extra buffer '{destinationBuffers[i].Name}' "
+                           + $"with shape {DescribeTensorShape(destinationBuffers[i].Tensor.Shape)}";
+                return false;
+            }
+
+        mismatch = string.Empty;
+        return true;
+    }
+
+    /// <summary>Installs all registered buffers using copy-on-write storage where rebinding is possible.</summary>
+    internal void AdoptRegisteredBuffersFrom(LayerBase<T> source)
+    {
+        if (!CanAdoptRegisteredBuffersFrom(source))
+            throw new InvalidOperationException(
+                $"{GetType().Name} cannot adopt the registered-buffer layout of {source.GetType().Name}.");
+
+        var destinationBuffers = GetRegisteredBuffers().ToDictionary(
+            entry => entry.Name,
+            entry => entry.Tensor,
+            StringComparer.Ordinal);
+        var sourceBuffers = source.GetRegisteredBufferState();
+        for (int i = 0; i < sourceBuffers.Count; i++)
+        {
+            var entry = sourceBuffers[i];
+            var shared = (Tensor<T>)entry.Tensor.CloneShared();
+            if (InstallRestoredBuffer(entry.Name, shared)) continue;
+
+            // Readonly generated buffers cannot be rebound, but preflight proved their existing
+            // tensor has the exact source shape. Copying into it preserves independence and state.
+            var existing = destinationBuffers[entry.Name];
+            for (int value = 0; value < entry.Tensor.Length; value++)
+                existing[value] = entry.Tensor[value];
+        }
+    }
+
+    private static bool ShapesMatch(TensorShape left, TensorShape right)
+    {
+        if (left.Length != right.Length) return false;
+        for (int i = 0; i < left.Length; i++)
+            if (left[i] != right[i]) return false;
+        return true;
+    }
+
+    private static string DescribeTensorShape(TensorShape shape)
+        => $"[{string.Join(",", shape.ToArray())}]";
 
     protected void RegisterBuffer(
         Tensor<T> tensor,
@@ -7733,6 +7898,41 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             var snapshot = new (string Name, Tensor<T> Tensor)[_registeredBuffers.Count];
             for (int i = 0; i < _registeredBuffers.Count; i++)
                 snapshot[i] = (_registeredBuffers[i].Name, _registeredBuffers[i].Tensor);
+            return snapshot;
+        }
+    }
+
+    /// <summary>
+    /// Takes a role-aware snapshot of registered non-trainable state for the common clone path.
+    /// </summary>
+    /// <remarks>
+    /// The public buffer view intentionally exposes only names and tensors. Cloning additionally
+    /// needs the persistence role so <see cref="CloneOptions.IncludeBuffers"/> and
+    /// <see cref="CloneOptions.IncludeOptimizerState"/> remain independent switches instead of
+    /// both copying every registered value.
+    /// </remarks>
+    internal IReadOnlyList<(
+        string Name,
+        Tensor<T> Tensor,
+        PersistentTensorRole PersistenceRole,
+        ParameterSlotRole StateRole)> GetRegisteredBufferState()
+    {
+        // Allow generated overrides to perform their lazy registration before taking the snapshot.
+        _ = GetRegisteredBuffers();
+
+        lock (_bufferRegistrationLock)
+        {
+            var snapshot = new (
+                string Name,
+                Tensor<T> Tensor,
+                PersistentTensorRole PersistenceRole,
+                ParameterSlotRole StateRole)[_registeredBuffers.Count];
+            for (int i = 0; i < _registeredBuffers.Count; i++)
+            {
+                var entry = _registeredBuffers[i];
+                snapshot[i] = (entry.Name, entry.Tensor, entry.PersistenceRole, entry.StateRole);
+            }
+
             return snapshot;
         }
     }
@@ -7970,6 +8170,38 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                             updates.Add((entry.Key, replacement));
                     }
                     foreach (var update in updates) dictionary[update.Key] = update.Value;
+                    continue;
+                }
+
+                // System.Array implements IList, but the IList indexer is valid only for
+                // one-dimensional arrays. Derived layers may legitimately keep rectangular
+                // lookup tables (for example Swin's relative-position index) alongside tensor
+                // arrays. Walk every array by its actual rank so merely rebinding parameters
+                // cannot fail on unrelated multidimensional state.
+                if (value is Array array)
+                {
+                    var indices = new int[array.Rank];
+                    for (int dimension = 0; dimension < indices.Length; dimension++)
+                        indices[dimension] = array.GetLowerBound(dimension);
+
+                    for (long visited = 0; visited < array.LongLength; visited++)
+                    {
+                        var replacement = ReplacementFor(array.GetValue(indices));
+                        if (replacement is not null)
+                            array.SetValue(replacement, indices);
+
+                        for (int dimension = indices.Length - 1; dimension >= 0; dimension--)
+                        {
+                            if (indices[dimension] < array.GetUpperBound(dimension))
+                            {
+                                indices[dimension]++;
+                                break;
+                            }
+
+                            indices[dimension] = array.GetLowerBound(dimension);
+                        }
+                    }
+
                     continue;
                 }
 

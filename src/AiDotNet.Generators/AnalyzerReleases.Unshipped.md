@@ -32,6 +32,7 @@ ADN0053 | AiDotNet.Serialization | Error | LayerStateGenerator, Required constru
 ADN0054 | AiDotNet.Serialization | Warning | LayerStateGenerator, Hand-written GetMetadata may drift from [LayerState]
 ADN0055 | AiDotNet.Serialization | Warning | LayerStateGenerator, [LayerState] layer cannot be registered in the generated factory
 ADN0056 | AiDotNet.Serialization | Error | LayerStateGenerator, [LayerState] is only supported on a class deriving from LayerBase
+ADN0057 | AiDotNet.Serialization | Info | LayerStateGenerator, Optional constructor parameter is pinned to its default in the generated factory
 ADNTEST001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Float test scaffold rewrite was a no-op
 ADNTEST002 | AiDotNet.TestScaffold | Disabled | TestScaffoldGenerator, Generated scaffold architecture size disagrees with its InputShape
 ADNTEST003 | AiDotNet.TestScaffold | Error | TestScaffoldGenerator, Two models share a simple name with no registered owner

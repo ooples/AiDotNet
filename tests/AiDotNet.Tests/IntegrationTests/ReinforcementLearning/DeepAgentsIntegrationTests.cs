@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
+using AiDotNet.Models.Parameters;
 using AiDotNet.ReinforcementLearning.Agents;
 using AiDotNet.ReinforcementLearning.Agents.A2C;
 using AiDotNet.ReinforcementLearning.Agents.A3C;
@@ -38,6 +39,58 @@ public class DeepAgentsIntegrationTests
     private const int ContinuousActionSize = 2;
     private const double LearningRate = 0.01;
     private const double DiscountFactor = 0.9;
+
+    [Fact]
+    public void DeepQ_target_network_has_one_buffer_owner_and_no_aggregate_alias()
+    {
+        var agent = new DQNAgent<double>(new DQNOptions<double>
+        {
+            StateSize = DiscreteStateSize,
+            ActionSize = DiscreteActionSize,
+            HiddenLayers = new List<int> { 4 },
+            Seed = 11
+        });
+
+        var layout = agent.ParameterLayout;
+
+        Assert.DoesNotContain(layout.Slots,
+            slot => slot.StableId.Contains("DeepReinforcementLearningAgentBase<T>::Networks"));
+        Assert.Contains(layout.Slots,
+            slot => slot.StableId.Contains("DQNAgent<T>::_targetNetwork")
+                && slot.Role == ParameterSlotRole.Buffer);
+        // The online network is registered by the legacy RegisterComponents hook, whose durable
+        // owner ID deliberately does not depend on the private field name. Its semantic contract is
+        // that trainable slots remain present while the explicitly named target is buffer-only.
+        Assert.Contains(layout.Slots, slot => slot.Role == ParameterSlotRole.Trainable);
+    }
+
+    [Fact]
+    public void Qmix_target_networks_have_buffer_owners_and_no_aggregate_alias()
+    {
+        var agent = new QMIXAgent<double>(new QMIXOptions<double>
+        {
+            NumAgents = 2,
+            StateSize = DiscreteStateSize,
+            ActionSize = DiscreteActionSize,
+            GlobalStateSize = 1,
+            AgentHiddenLayers = new List<int> { 4 },
+            MixingHiddenLayers = new List<int> { 4 }
+        });
+
+        var layout = agent.ParameterLayout;
+
+        Assert.DoesNotContain(layout.Slots,
+            slot => slot.StableId.Contains("DeepReinforcementLearningAgentBase<T>::Networks"));
+        Assert.Contains(layout.Slots,
+            slot => slot.StableId.Contains("QMIXAgent<T>::_targetAgentNetworks")
+                && slot.Role == ParameterSlotRole.Buffer);
+        Assert.Contains(layout.Slots,
+            slot => slot.StableId.Contains("QMIXAgent<T>::_targetMixingNetwork")
+                && slot.Role == ParameterSlotRole.Buffer);
+        Assert.Contains(layout.Slots,
+            slot => slot.StableId.Contains("QMIXAgent<T>::_agentNetworks")
+                && slot.Role == ParameterSlotRole.Trainable);
+    }
 
     [Fact(Timeout = 120000)]
     public async Task DeepQAgents_RunBasicWorkflow()

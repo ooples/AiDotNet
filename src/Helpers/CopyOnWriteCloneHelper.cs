@@ -27,8 +27,8 @@ namespace AiDotNet.Helpers;
 internal static class CopyOnWriteCloneHelper
 {
     /// <summary>
-    /// Re-binds every trainable parameter of <paramref name="dest"/> to a copy-on-write share of the
-    /// corresponding parameter of <paramref name="source"/>. Walks both object graphs in parallel by
+    /// Re-binds every trainable parameter and registered persistent buffer of <paramref name="dest"/>
+    /// to the corresponding state of <paramref name="source"/>. Walks both object graphs in parallel by
     /// reflection (identical runtime type ⇒ identical field order ⇒ matching layer order). Returns
     /// <c>false</c> — leaving <paramref name="dest"/> untouched — if the trainable-layer structure does
     /// not line up 1:1 (e.g. a freshly-constructed clone whose lazy layers aren't resolved yet), so the
@@ -37,13 +37,33 @@ internal static class CopyOnWriteCloneHelper
     internal static bool TryShareTrainableParameters<T>(
         IFullModel<T, Tensor<T>, Tensor<T>>? source,
         IFullModel<T, Tensor<T>, Tensor<T>>? dest)
+        => TryShareTrainableParameters(source, dest, out _);
+
+    /// <summary>Attempts the complete state share and reports the first preflight mismatch.</summary>
+    internal static bool TryShareTrainableParameters<T>(
+        IFullModel<T, Tensor<T>, Tensor<T>>? source,
+        IFullModel<T, Tensor<T>, Tensor<T>>? dest,
+        out string mismatch)
     {
-        if (source is null || dest is null || ReferenceEquals(source, dest)) return false;
-        if (source.GetType() != dest.GetType()) return false;
+        mismatch = string.Empty;
+        if (source is null || dest is null || ReferenceEquals(source, dest))
+        {
+            mismatch = "source and destination must be distinct non-null models";
+            return false;
+        }
+        if (source.GetType() != dest.GetType())
+        {
+            mismatch = $"model types differ ({source.GetType().Name} vs {dest.GetType().Name})";
+            return false;
+        }
 
         var srcLayers = CollectTrainableLayers<T>(source);
         var dstLayers = CollectTrainableLayers<T>(dest);
-        if (srcLayers.Count == 0 || srcLayers.Count != dstLayers.Count) return false;
+        if (srcLayers.Count == 0 || srcLayers.Count != dstLayers.Count)
+        {
+            mismatch = $"trainable layer counts differ ({srcLayers.Count} vs {dstLayers.Count})";
+            return false;
+        }
 
         // Verify the full structure — per-layer parameter COUNT and per-tensor SHAPE — matches BEFORE
         // mutating anything, so we never leave a half-shared clone and never rebind a shape-incompatible
@@ -71,7 +91,27 @@ internal static class CopyOnWriteCloneHelper
             if (currentShapesMatch) continue;
             if (dstLayers[i] is not AiDotNet.NeuralNetworks.Layers.LayerBase<T> destinationBase
                 || !destinationBase.CanAdoptTrainableParametersWithoutMaterialization(sps))
+            {
+                mismatch = $"layer {i} ({srcLayers[i].GetType().Name}) has incompatible trainable shapes: "
+                           + $"source={DescribeShapes(sps)}, clone={DescribeShapes(dps)}";
                 return false;
+            }
+        }
+
+        // The parameter-state contract is wider than the optimizer view: registered buffers carry
+        // running statistics, learned non-gradient state, and shape-bearing constants. Validate the
+        // complete buffer graph before sharing any trainable tensor; otherwise the helper can return
+        // true while a freshly reconstructed predictor still owns empty or differently-sized state.
+        for (int i = 0; i < srcLayers.Count; i++)
+        {
+            if (srcLayers[i] is not AiDotNet.NeuralNetworks.Layers.LayerBase<T> sourceBase
+                || dstLayers[i] is not AiDotNet.NeuralNetworks.Layers.LayerBase<T> destinationBase)
+                continue;
+            if (!destinationBase.CanAdoptRegisteredBuffersFrom(sourceBase, out string bufferMismatch))
+            {
+                mismatch = $"layer {i} ({srcLayers[i].GetType().Name}) {bufferMismatch}";
+                return false;
+            }
         }
 
         for (int i = 0; i < srcLayers.Count; i++)
@@ -84,8 +124,18 @@ internal static class CopyOnWriteCloneHelper
             dstLayers[i].SetTrainableParameters(shared);
         }
 
+        for (int i = 0; i < srcLayers.Count; i++)
+        {
+            if (srcLayers[i] is AiDotNet.NeuralNetworks.Layers.LayerBase<T> sourceBase
+                && dstLayers[i] is AiDotNet.NeuralNetworks.Layers.LayerBase<T> destinationBase)
+                destinationBase.AdoptRegisteredBuffersFrom(sourceBase);
+        }
+
         return true;
     }
+
+    private static string DescribeShapes<T>(IReadOnlyList<Tensor<T>> tensors)
+        => "[" + string.Join(", ", tensors.Select(t => "[" + string.Join(",", t.Shape.ToArray()) + "]")) + "]";
 
     private static IReadOnlyList<Tensor<T>> GetWithoutMaterialization<T>(ITrainableLayer<T> layer) =>
         layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layerBase

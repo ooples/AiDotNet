@@ -549,6 +549,24 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    }");
             sb.AppendLine();
 
+            sb.AppendLine("    /// <inheritdoc />");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
+            sb.AppendLine("    protected override bool CanRestoreBufferField(string name)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        switch (name)");
+            sb.AppendLine("        {");
+            foreach (var bf in bufferFields)
+            {
+                if (bf.ReadOnly) continue;
+                sb.AppendLine($"            case \"{EscapeStringLiteral(bf.Name)}\":");
+                sb.AppendLine("                return true;");
+            }
+            sb.AppendLine("            default:");
+            sb.AppendLine("                return base.CanRestoreBufferField(name);");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine();
+
             // Restoring a buffer means writing the FIELD, not just the registry: EnsureBuffersRegistered
             // reads each buffer out of its field, so a registration the field does not back is invisible
             // to the layer's own code. The name-to-field mapping is emitted because only the generator

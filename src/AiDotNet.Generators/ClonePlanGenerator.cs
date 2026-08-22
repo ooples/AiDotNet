@@ -758,6 +758,22 @@ public class ClonePlanGenerator : IIncrementalGenerator
 
         if (SymbolEqualityComparer.Default.Equals(from, to)) return true;
 
+        // A resolved optional value is commonly stored in a non-nullable field: constructors spell
+        // `int? outputChannels = null` and then persist `_outputChannels = outputChannels ?? input`.
+        // Passing that stored int back to ConstructorInfo for Nullable<int> is the exact CLR boxing
+        // representation of a nullable with HasValue=true. Refusing it pinned outputChannels (and
+        // similar shape-bearing options) to null, rebuilding custom predictors with default widths.
+        if (to is INamedTypeSymbol
+            {
+                OriginalDefinition.SpecialType: SpecialType.System_Nullable_T,
+                TypeArguments.Length: 1
+            } nullable
+            && SymbolEqualityComparer.Default.Equals(
+                from, nullable.TypeArguments[0].WithNullableAnnotation(NullableAnnotation.None)))
+        {
+            return true;
+        }
+
         for (var b = (from as INamedTypeSymbol)?.BaseType; b is not null; b = b.BaseType)
         {
             if (SymbolEqualityComparer.Default.Equals(b.WithNullableAnnotation(NullableAnnotation.None), to))

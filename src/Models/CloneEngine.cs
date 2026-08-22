@@ -364,11 +364,12 @@ public static class CloneEngine
     /// parameter/state contract.
     /// </para>
     /// <para>
-    /// This is deliberately configuration-only. Calling the child's public <c>Clone</c> here copied
-    /// all of its weights, after which diffusion and predictor bases copied the owner's parameter
-    /// chunks into the same child a second time. Besides doubling work, that pushed foundation-model
-    /// clone tests past their timeout. Structural reconstruction followed by the owner's single state
-    /// transfer is both independent and complete.
+    /// A materialized child is cloned through its public contract before falling back to
+    /// configuration-only reconstruction. Rebuilding a trained child as a blank shell loses lazy
+    /// layout information that its parent cannot infer: the parent then streams a 4,096-value chunk
+    /// into a child constructed for 64 values. Public clones use copy-on-write where supported, so
+    /// preserving that layout does not require eagerly duplicating foundation-scale storage; the
+    /// parent's state transfer remains the final authority.
     /// </para>
     /// <para>
     /// Matched on the library's own <c>ICloneable&lt;T&gt;</c> rather than a list of base types, so a
@@ -422,9 +423,38 @@ public static class CloneEngine
 
         if (cloneable?.GetMethod("Clone", Type.EmptyTypes) is not { } clone) return value;
 
-        // Prefer generated configuration reconstruction. It preserves the concrete child type and
-        // all constructor settings without copying learned tensors that the owning model is about to
-        // restore through its own state contract.
+        // Preserve the child's materialized layout first. Configuration-only construction cannot
+        // recover a width learned from data or a lazily-created sub-layer graph, and a later flat or
+        // chunked restore has no shape information with which to repair it.
+        try
+        {
+            object? cloned = clone.Invoke(value, null);
+            if (cloned is not null)
+            {
+                EnsureSubModelManifestMatches(value, cloned);
+                return cloned;
+            }
+        }
+        catch (TargetInvocationException ex) when (
+            ex.InnerException is InvalidOperationException invalid
+            && invalid.Message.StartsWith(
+                "Clone state transfer changed the parameter manifest",
+                StringComparison.Ordinal))
+        {
+            // The child clone proved that neither copy-on-write nor its streaming fallback restored
+            // an identical state surface. Falling back to a configuration shell here hides that
+            // evidence and hands the parent a predictably broken child, so preserve the contract
+            // failure and its layer/buffer diagnostic.
+            throw invalid;
+        }
+        catch (TargetInvocationException)
+        {
+            // Fall through to generated structural reconstruction. This remains important for a
+            // consumer clone implementation that cannot run before its parent has restored state.
+        }
+
+        // Generated configuration reconstruction is the compatibility fallback for cloneable
+        // components whose public clone declined above.
         try
         {
             return CopyConfiguration(value);
@@ -434,20 +464,27 @@ public static class CloneEngine
                                    or NotSupportedException
                                    or MissingMethodException)
         {
-            // Consumer-defined cloneable components may not participate in the generated registry.
-            // Their public Clone remains the compatibility fallback.
-        }
-
-        // A sub-module that cannot be reconstructed from a generated plan is not a reason to abandon
-        // the parent rebuild. Preserve the established public-clone fallback for custom components.
-        try
-        {
-            return clone.Invoke(value, null) ?? value;
-        }
-        catch (TargetInvocationException)
-        {
             return value;
         }
+    }
+
+    private static void EnsureSubModelManifestMatches(object source, object clone)
+    {
+        if (source is not AiDotNet.Models.Parameters.IParameterManifestProvider sourceProvider
+            || clone is not AiDotNet.Models.Parameters.IParameterManifestProvider cloneProvider)
+            return;
+
+        var sourceLayout = sourceProvider.ParameterLayout;
+        var cloneLayout = cloneProvider.ParameterLayout;
+        if (string.Equals(sourceLayout.Fingerprint, cloneLayout.Fingerprint,
+                StringComparison.Ordinal))
+            return;
+
+        throw new InvalidOperationException(
+            $"Cloning child component {source.GetType().Name} changed its parameter manifest: "
+            + $"source declared/materialized={sourceLayout.ParameterCount?.ToString() ?? "?"}/"
+            + $"{sourceLayout.MaterializedParameterCount}, clone="
+            + $"{cloneLayout.ParameterCount?.ToString() ?? "?"}/{cloneLayout.MaterializedParameterCount}.");
     }
 
     private static object? DuplicateNoiseScheduler(object source, Type schedulerInterface)

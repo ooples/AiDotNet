@@ -20,7 +20,7 @@ namespace AiDotNet.Generators;
 /// correctly declared an axis dynamic, the branch handed its constructor a <c>-1</c>.
 /// </para>
 /// <para>
-/// For each annotated constructor this emits (a) an <c>internal override void WriteConstructionState</c>
+/// For each annotated constructor this emits (a) a <c>protected override void WriteConstructionState</c>
 /// on the layer writing every marked parameter, and (b) an entry in a central factory keyed by open
 /// generic type that reconstructs the layer by calling that same constructor. Because both halves are
 /// derived from one declaration, they cannot drift apart — which is the failure mode Keras's
@@ -40,6 +40,7 @@ namespace AiDotNet.Generators;
 public class LayerStateGenerator : IIncrementalGenerator
 {
     private const string StateAttribute = "AiDotNet.Attributes.LayerStateAttribute";
+    private const string CloneRandomSeedKey = "__aidotnet_clone_random_seed";
 
     private static readonly DiagnosticDescriptor NotPartial = new(
         "ADN0050",
@@ -59,6 +60,16 @@ public class LayerStateGenerator : IIncrementalGenerator
         "'{0}' marks parameter '{1}' of type '{2}' as [LayerState], but only int, long, float, double, bool, "
             + "string, enum, int[] and interface values can round-trip through layer metadata",
         "AiDotNet.Serialization", DiagnosticSeverity.Error, true);
+
+    // Informational by design: pinning an optional argument is sometimes intentional, but it must
+    // never be invisible because a non-default value would otherwise be lost during reconstruction.
+    private static readonly DiagnosticDescriptor PinnedDefault = new(
+        "ADN0057",
+        "Optional constructor parameter is pinned to its default in the generated factory",
+        "'{0}' pins optional constructor parameter '{1}' to its declared default, so a rebuilt layer "
+            + "will not preserve a non-default value. Store it in a field named '{1}', '_{1}' or its "
+            + "PascalCase form and the generator will round-trip it",
+        "AiDotNet.Serialization", DiagnosticSeverity.Info, true);
 
     private static readonly DiagnosticDescriptor Unsuppliable = new(
         "ADN0053",
@@ -125,6 +136,16 @@ public class LayerStateGenerator : IIncrementalGenerator
         // that this is the one to rebuild through; inference only guesses. Selection uses that.
         bool explicitlyMarked = marked.Count > 0;
 
+        var safelyInferred = ctor.Parameters.Where(p =>
+            Classify(p.Type) is not ValueKind.Unsupported
+            // Interface-valued components are state too. The in-memory path supplies the live
+            // configured object through WriteConstructionObjects; durable restoration records the
+            // concrete type and either constructs it or fails loudly. Pinning a strategy/activation
+            // to null is never safer: it silently changes the rebuilt layer.
+            && FindBackingMember(
+                ctor.ContainingType, p, ctx.SemanticModel, syntax,
+                out _, out _) is not null).ToList();
+
         if (marked.Count == 0)
         {
             // INFERENCE. A constructor argument the layer stores in a field of the same name IS
@@ -139,29 +160,7 @@ public class LayerStateGenerator : IIncrementalGenerator
             // that raise ADN0053 / NoBackingMember below, so an inferred parameter cannot reach a
             // diagnostic. Reporting stays the exclusive province of an explicit [LayerState]
             // claim, which is the same narrowing ADN0056 already needed.
-            marked = ctor.Parameters.Where(p =>
-                Classify(p.Type) is not ValueKind.Unsupported
-                // Component is EXCLUDED from inference, though it stays valid as an explicit
-                // claim. A Component is rebuilt by parameterless Activator.CreateInstance, and
-                // whether the concrete implementation has such a constructor is unknowable here --
-                // only the saved payload names the type. Inferring them made Conv1DLayer save
-                // HeInitializationStrategy for `initializationStrategy` and then fail to rebuild
-                // it: "no public parameterless constructor". An author who writes [LayerState] on
-                // a Component is asserting their implementation can be rebuilt; inference cannot
-                // assert that on their behalf.
-                // ...EXCEPT an activation, because the two kinds of component are not alike. An
-                // initialization strategy only decides how weights are first filled, and a restore
-                // overwrites them, so letting it default costs nothing. An ACTIVATION is part of the
-                // forward computation: defaulting it changes what the layer computes. Skipping both
-                // made a TransformerEncoderBlock save GELU and rebuild as ReLU, so every output of
-                // the cloned model differed while its parameters compared byte-identical -- exactly
-                // the silent substitution LayerStateBag.Component refuses to make. The declared
-                // interface is enough to tell the two apart at compile time, and if an activation
-                // turns out not to be rebuildable, that check fails loudly, which is the trade it
-                // asks for.
-                && (Classify(p.Type) is not ValueKind.Component || IsActivation(p.Type, out _))
-                && FindBackingMember(ctor.ContainingType, p, out _, out bool memberIsNullable) is not null
-                && !memberIsNullable).ToList();
+            marked = safelyInferred;
 
             // A factory can only call this constructor if EVERY required argument can be supplied.
             // Layers whose constructor takes another layer (DenseLoRAAdapter's baseLayer,
@@ -173,6 +172,16 @@ public class LayerStateGenerator : IIncrementalGenerator
                 && ctor.Parameters.Any(p => !p.IsOptional && !marked.Contains(p, SymbolEqualityComparer.Default)))
             {
                 return null;
+            }
+        }
+        else
+        {
+            // An explicit attribute selects the constructor; it must not disable safe inference for
+            // its other arguments. The old either/or rule preserved the marked dimensions while
+            // silently pinning an unmarked padding, epsilon, momentum, or enum in the same call.
+            foreach (var parameter in safelyInferred)
+            {
+                if (!marked.Contains(parameter, SymbolEqualityComparer.Default)) marked.Add(parameter);
             }
         }
 
@@ -204,7 +213,7 @@ public class LayerStateGenerator : IIncrementalGenerator
 
         // THE HOST TYPE MUST BE ABLE TO CARRY THE GENERATED MEMBER. Analyze accepted any
         // constructor whose parameters carried [LayerState] and then emitted
-        // `partial class {TypeName}` with `internal override void WriteConstructionState`.
+        // `partial class {TypeName}` with `protected override void WriteConstructionState`.
         // A struct, a record, or a class not derived from LayerBase produced a raw C#
         // compiler error pointing INTO generated source -- an error about code the author
         // never wrote and cannot open. Refused here with a diagnostic on the declaration
@@ -272,14 +281,12 @@ public class LayerStateGenerator : IIncrementalGenerator
                     })),
         };
 
-        // One restored activation per kind, because TryCreate only receives one of each: the
-        // activation metadata records the function handed to base(...), and there is only ever one
-        // of those. So the FIRST activation parameter of a kind takes the restored value and any
-        // further one falls back to its own default -- LSTMLayer's `recurrentActivation` (sigmoid
-        // gates) must not be handed `activation` (tanh cell state). A required second activation
-        // slot has no value to fall back to and is reported by ADN0053.
-        var scalarActivationBound = false;
-        var vectorActivationBound = false;
+        // Activation slots are ordinal per kind. LayerBase records the distinct activation objects
+        // exposed by the layer and its immediate registered children in the same order, which lets
+        // a composite preserve both hidden and output activations without per-layer backing fields.
+        // The old one-per-kind gate silently defaulted every second activation.
+        var scalarActivationIndex = 0;
+        var vectorActivationIndex = 0;
 
         foreach (var p in ctor.Parameters)
         {
@@ -303,8 +310,12 @@ public class LayerStateGenerator : IIncrementalGenerator
                     return model;
                 }
 
-                info.BackingMember = FindBackingMember(type, p, out var needsConvert, out var memberIsNullable);
+                info.BackingMember = FindBackingMember(
+                    type, p, ctx.SemanticModel, syntax,
+                    out var needsConvert, out var memberIsNullable);
                 info.NeedsConvert = needsConvert;
+                info.IsNullable = IsNullableType(p.Type);
+                info.BackingMemberIsNullable = memberIsNullable;
                 if (info.BackingMember is null)
                 {
                     model.Diagnostics.Add(new PendingDiagnostic(
@@ -313,29 +324,19 @@ public class LayerStateGenerator : IIncrementalGenerator
                     return model;
                 }
 
-                // An `int?` parameter is fine when the layer stores it as a plain `int`, which is the
-                // common case. A nullable BACKING member is not: LayerStateBag.Format has no nullable
-                // overload and the format cannot express null.
-                if (memberIsNullable)
-                {
-                    model.Diagnostics.Add(new PendingDiagnostic(
-                        UnsupportedType, SpanFor(p, model),
-                        type.Name, p.Name, p.Type.ToDisplayString()));
-                    return model;
-                }
             }
-            else if (IsActivation(p.Type, out var vector)
-                && !(vector ? vectorActivationBound : scalarActivationBound))
+            else if (IsActivation(p.Type, out var vector))
             {
                 info.IsActivation = true;
                 info.IsVectorActivation = vector;
+                if (p.IsOptional) info.DefaultExpression = RenderDefault(p);
                 if (vector)
                 {
-                    vectorActivationBound = true;
+                    info.ActivationIndex = vectorActivationIndex++;
                 }
                 else
                 {
-                    scalarActivationBound = true;
+                    info.ActivationIndex = scalarActivationIndex++;
                 }
             }
             else if (p.IsOptional)
@@ -344,6 +345,22 @@ public class LayerStateGenerator : IIncrementalGenerator
                 // Taken from the symbol, so the emitted argument is the value the
                 // constructor signature actually promises.
                 info.DefaultExpression = RenderDefault(p);
+
+                // Entropy is deliberately NOT construction configuration. A Full clone installs
+                // the original tensors and then applies the requested random-stream semantics;
+                // an Architecture clone needs a fresh initialization. LayerCloning supplies its
+                // derived seed under the reserved key below, so replaying the source constructor's
+                // literal seed would be the wrong behaviour and reporting it as lost state would
+                // tell authors to persist something the clone contract explicitly replaces.
+                if (IsEntropyParameter(p))
+                {
+                    info.UseCloneRandomSeed = true;
+                }
+                else
+                {
+                    model.Diagnostics.Add(new PendingDiagnostic(
+                        PinnedDefault, SpanFor(p, model), type.Name, p.Name));
+                }
             }
             else
             {
@@ -397,12 +414,21 @@ public class LayerStateGenerator : IIncrementalGenerator
         type = Unwrap(type);
 
         if (type.TypeKind == TypeKind.Enum) return ValueKind.Enum;
+        if (type is ITypeParameterSymbol) return ValueKind.NumericTypeParameter;
 
         // A pluggable strategy: record which implementation was used and rebuild that one.
         if (type.TypeKind == TypeKind.Interface) return ValueKind.Component;
 
         if (type is IArrayTypeSymbol { Rank: 1 } arr && arr.ElementType.SpecialType == SpecialType.System_Int32)
             return ValueKind.Int32Array;
+
+        if (type is IArrayTypeSymbol { Rank: 1 } enumArray
+            && enumArray.ElementType.TypeKind == TypeKind.Enum)
+            return ValueKind.EnumArray;
+
+        if (IsJsonConfiguration(type)) return ValueKind.JsonObject;
+
+        if (IsCloneObject(type)) return ValueKind.CloneObject;
 
         return type.SpecialType switch
         {
@@ -433,7 +459,70 @@ public class LayerStateGenerator : IIncrementalGenerator
         return vector || fqn == "AiDotNet.Interfaces.IActivationFunction";
     }
 
-    private static string? FindBackingMember(INamedTypeSymbol type, IParameterSymbol p, out bool needsConvert, out bool memberIsNullable)
+    /// <summary>Whether a fixed compile-time type is safe to round-trip as JSON configuration.</summary>
+    private static bool IsJsonConfiguration(ITypeSymbol type)
+    {
+        if (type is not INamedTypeSymbol named || named.TypeKind != TypeKind.Class
+            || !(named.Name.EndsWith("Config", System.StringComparison.Ordinal)
+                 || named.Name.EndsWith("Options", System.StringComparison.Ordinal)))
+            return false;
+
+        var properties = named.GetMembers().OfType<IPropertySymbol>()
+            .Where(p => !p.IsStatic && !p.IsIndexer && p.DeclaredAccessibility == Accessibility.Public)
+            .Where(p => p.GetMethod is not null && p.SetMethod is not null)
+            .ToList();
+        return properties.Count > 0 && properties.All(p => IsJsonScalar(p.Type));
+    }
+
+    private static bool IsJsonScalar(ITypeSymbol type)
+    {
+        type = Unwrap(type);
+        return type.TypeKind == TypeKind.Enum
+            || type.SpecialType is SpecialType.System_Int32
+                or SpecialType.System_Int64
+                or SpecialType.System_Double
+                or SpecialType.System_Single
+                or SpecialType.System_Boolean
+                or SpecialType.System_String;
+    }
+
+    /// <summary>
+    /// Whether the in-memory construction-object channel can make an independent structural copy.
+    /// </summary>
+    private static bool IsCloneObject(ITypeSymbol type)
+    {
+        if (type is not INamedTypeSymbol named) return false;
+
+        string open = named.ConstructedFrom.ToDisplayString(UnqualifiedGenerics);
+        if (open == "AiDotNet.Tensors.LinearAlgebra.Tensor") return true;
+
+        // A list supplied to a composite constructor represents owned/shared child structure. The
+        // base cloner duplicates every element (layers through Clone, other stateful components
+        // through their generated/reflected configuration plan) and copies attributed state.
+        return open == "System.Collections.Generic.List";
+    }
+
+    /// <summary>Whether cloning intentionally replaces this optional entropy source.</summary>
+    private static bool IsEntropyParameter(IParameterSymbol parameter)
+    {
+        if (string.Equals(parameter.Name, "seed", System.StringComparison.OrdinalIgnoreCase)
+            && Unwrap(parameter.Type).SpecialType == SpecialType.System_Int32)
+        {
+            return true;
+        }
+
+        return string.Equals(parameter.Name, "random", System.StringComparison.OrdinalIgnoreCase)
+            && Unwrap(parameter.Type).ToDisplayString(FullyQualified)
+                == "global::System.Random";
+    }
+
+    private static string? FindBackingMember(
+        INamedTypeSymbol type,
+        IParameterSymbol p,
+        SemanticModel semanticModel,
+        ConstructorDeclarationSyntax constructor,
+        out bool needsConvert,
+        out bool memberIsNullable)
     {
         needsConvert = false;
         memberIsNullable = false;
@@ -454,10 +543,10 @@ public class LayerStateGenerator : IIncrementalGenerator
                     switch (member)
                     {
                         case IFieldSymbol f when SameType(f.Type, p.Type):
-                            memberIsNullable = IsNullableValueType(f.Type);
+                            memberIsNullable = IsNullableType(f.Type);
                             return f.Name;
                         case IPropertySymbol { GetMethod: not null } prop when SameType(prop.Type, p.Type):
-                            memberIsNullable = IsNullableValueType(prop.Type);
+                            memberIsNullable = IsNullableType(prop.Type);
                             return prop.Name;
 
                         // Layers routinely keep a numeric constructor argument converted to their
@@ -474,7 +563,60 @@ public class LayerStateGenerator : IIncrementalGenerator
             }
         }
 
+        // Names are a convention, not a contract. Resolve the member the constructor actually
+        // assigns from this parameter so `_epsilon = Normalize(epsilon)`, `_config = config ??
+        // Default`, and differently-named legacy fields remain generator-owned state rather than
+        // requiring one-off annotations in every layer. The left side must be a readable member on
+        // the layer and its type must be the same after unwrapping Nullable<T>; assignments hidden
+        // in lambdas are ignored because they need not run during construction.
+        foreach (var assignment in constructor.DescendantNodes().OfType<AssignmentExpressionSyntax>())
+        {
+            if (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression)
+                || assignment.Ancestors().Any(a => a is AnonymousFunctionExpressionSyntax))
+                continue;
+
+            bool readsParameter = assignment.Right.DescendantNodesAndSelf()
+                .OfType<IdentifierNameSyntax>()
+                .Any(id => SymbolEqualityComparer.Default.Equals(
+                    semanticModel.GetSymbolInfo(id).Symbol, p));
+            if (!readsParameter) continue;
+
+            var assigned = semanticModel.GetSymbolInfo(assignment.Left).Symbol;
+            switch (assigned)
+            {
+                case IFieldSymbol field
+                    when IsMemberOnLayerHierarchy(field.ContainingType, type)
+                        && SameType(field.Type, p.Type):
+                    memberIsNullable = IsNullableType(field.Type);
+                    return field.Name;
+                case IPropertySymbol { GetMethod: not null, IsIndexer: false } property
+                    when IsMemberOnLayerHierarchy(property.ContainingType, type)
+                        && SameType(property.Type, p.Type):
+                    memberIsNullable = IsNullableType(property.Type);
+                    return property.Name;
+                case IFieldSymbol numericField
+                    when IsMemberOnLayerHierarchy(numericField.ContainingType, type)
+                        && IsNumericTypeParameter(numericField.Type, p.Type, type):
+                    needsConvert = true;
+                    return numericField.Name;
+                case IPropertySymbol { GetMethod: not null, IsIndexer: false } numericProperty
+                    when IsMemberOnLayerHierarchy(numericProperty.ContainingType, type)
+                        && IsNumericTypeParameter(numericProperty.Type, p.Type, type):
+                    needsConvert = true;
+                    return numericProperty.Name;
+            }
+        }
+
         return null;
+    }
+
+    private static bool IsMemberOnLayerHierarchy(INamedTypeSymbol? memberType, INamedTypeSymbol layerType)
+    {
+        for (var current = layerType; current is not null; current = current.BaseType)
+        {
+            if (SymbolEqualityComparer.Default.Equals(current, memberType)) return true;
+        }
+        return false;
     }
 
     /// <summary>True when the member is held as THE LAYER'S numeric type parameter.</summary>
@@ -499,11 +641,14 @@ public class LayerStateGenerator : IIncrementalGenerator
     }
 
     private static bool SameType(ITypeSymbol a, ITypeSymbol b)
-        => Unwrap(a).ToDisplayString(FullyQualified) == Unwrap(b).ToDisplayString(FullyQualified);
+        => SymbolEqualityComparer.Default.Equals(
+            Unwrap(a).WithNullableAnnotation(NullableAnnotation.None),
+            Unwrap(b).WithNullableAnnotation(NullableAnnotation.None));
 
-    /// <summary>True for <c>Nullable&lt;T&gt;</c>, whose null the metadata format cannot represent.</summary>
-    private static bool IsNullableValueType(ITypeSymbol type)
-        => type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T };
+    /// <summary>True when the saved member can carry null and the format must preserve that fact.</summary>
+    private static bool IsNullableType(ITypeSymbol type)
+        => type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T }
+            || (type.IsReferenceType && type.NullableAnnotation == NullableAnnotation.Annotated);
 
     /// <summary>Strips <c>Nullable&lt;T&gt;</c> so an <c>int?</c> parameter matches an <c>int</c> field.</summary>
     private static ITypeSymbol Unwrap(ITypeSymbol type)
@@ -516,11 +661,6 @@ public class LayerStateGenerator : IIncrementalGenerator
 
     private static void Emit(SourceProductionContext spc, ImmutableArray<LayerModel> models)
     {
-        foreach (var d in models.SelectMany(m => m.Diagnostics).Select(d => d.ToDiagnostic()))
-        {
-            spc.ReportDiagnostic(d);
-        }
-
         // One constructor per type: if a layer offers several, the one that RESTORES THE MOST wins,
         // with source order kept only as the final tie-break.
         //
@@ -551,6 +691,21 @@ public class LayerStateGenerator : IIncrementalGenerator
                 .First())
             .OrderBy(TypeKey, System.StringComparer.Ordinal)
             .ToList();
+
+        // Diagnostics on a valid constructor describe the factory that is actually emitted, not
+        // every convenience overload on the type. Reporting them before selection made a correct
+        // wide constructor fail ADN0057 because a narrower forwarding overload pinned a value the
+        // generated factory never consumed (PatchGANDiscriminator.receptiveField is one example).
+        // Invalid candidates still report: an explicit [LayerState] claim must not disappear just
+        // because another overload happens to be usable.
+        var selected = new HashSet<LayerModel>(byType);
+        foreach (var model in models.Where(m => !m.IsValid || selected.Contains(m)))
+        {
+            foreach (var diagnostic in model.Diagnostics)
+            {
+                spc.ReportDiagnostic(diagnostic.ToDiagnostic());
+            }
+        }
 
         foreach (var model in byType)
         {
@@ -609,14 +764,33 @@ public class LayerStateGenerator : IIncrementalGenerator
         sb.AppendLine("{");
         sb.AppendLine("    /// <inheritdoc/>");
         sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.LayerStateGenerator\", \"1.0.0\")]");
-        sb.AppendLine("    internal override void WriteConstructionState(global::System.Collections.Generic.Dictionary<string, string> __metadata)");
+        sb.AppendLine("    protected override void WriteConstructionState(global::System.Collections.Generic.Dictionary<string, string> __metadata)");
         sb.AppendLine("    {");
         sb.AppendLine("        base.WriteConstructionState(__metadata);");
         foreach (var p in model.Parameters.Where(p => p.IsState))
         {
-            if (p.Kind == ValueKind.Component)
+            if (p.Kind is ValueKind.Component or ValueKind.CloneObject)
             {
                 sb.AppendLine($"        __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.FormatType(this.{p.BackingMember});");
+                continue;
+            }
+
+            if (p.Kind == ValueKind.JsonObject)
+            {
+                sb.AppendLine($"        __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.FormatJson(this.{p.BackingMember});");
+                continue;
+            }
+
+            if (p.Kind == ValueKind.EnumArray)
+            {
+                sb.AppendLine($"        __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.FormatEnumArray(this.{p.BackingMember});");
+                continue;
+            }
+
+            if (p.Kind == ValueKind.NumericTypeParameter)
+            {
+                string numeric = model.TypeParameters.Count > 0 ? model.TypeParameters[0] : "T";
+                sb.AppendLine($"        __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.Format(global::AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<{numeric}>().ToDouble(this.{p.BackingMember}));");
                 continue;
             }
 
@@ -632,16 +806,42 @@ public class LayerStateGenerator : IIncrementalGenerator
             // which is exactly right for a layer with no width yet.
             if (p.OmitWhenNonPositive)
             {
-                sb.AppendLine($"        if (this.{p.BackingMember} > 0)");
+                var positive = p.BackingMemberIsNullable
+                    ? $"this.{p.BackingMember}.HasValue && this.{p.BackingMember}.Value > 0"
+                    : $"this.{p.BackingMember} > 0";
+                var omitFormatter = p.BackingMemberIsNullable ? "FormatNullable" : "Format";
+                sb.AppendLine($"        if ({positive})");
                 sb.AppendLine("        {");
-                sb.AppendLine($"            __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.Format({read});");
+                sb.AppendLine($"            __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.{omitFormatter}({read});");
                 sb.AppendLine("        }");
                 continue;
             }
 
-            sb.AppendLine($"        __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.Format({read});");
+            var formatter = p.BackingMemberIsNullable ? "FormatNullable" : "Format";
+            sb.AppendLine($"        __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.{formatter}({read});");
         }
         sb.AppendLine("    }");
+
+        var components = model.Parameters
+            .Where(p => p.IsState && p.Kind is ValueKind.Component or ValueKind.JsonObject or ValueKind.CloneObject)
+            .ToList();
+        if (components.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("    /// <inheritdoc/>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.LayerStateGenerator\", \"1.0.0\")]");
+            sb.AppendLine("    protected override void WriteConstructionObjects(global::System.Collections.Generic.Dictionary<string, object> __values)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        base.WriteConstructionObjects(__values);");
+            foreach (var p in components)
+            {
+                sb.AppendLine($"        if (this.{p.BackingMember} is object __component_{p.Name})");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            __values[\"{p.Key}\"] = __component_{p.Name};");
+                sb.AppendLine("        }");
+            }
+            sb.AppendLine("    }");
+        }
         sb.AppendLine("}");
         // Close the outer types opened above.
         for (int i = 0; i < model.ContainingTypes.Count; i++)
@@ -759,23 +959,52 @@ public class LayerStateGenerator : IIncrementalGenerator
                 ? "global::AiDotNet.Interfaces.IVectorActivationFunction<T>"
                 : "global::AiDotNet.Interfaces.IActivationFunction<T>";
             var source = p.IsVectorActivation ? "vectorActivation" : "scalarActivation";
-            return $"{p.Name}: {source} as {iface}";
+            var kind = p.IsVectorActivation ? "vector" : "scalar";
+            var key = $"__aidotnet_{kind}_activation_{p.ActivationIndex}";
+            var fallback = p.ActivationIndex == 0
+                ? $"{source} as {iface}"
+                : p.DefaultExpression ?? "default";
+            return $"{p.Name}: state.Has(\"{key}\") "
+                + $"? state.Component<{iface}>(\"{key}\") : {fallback}";
+        }
+
+        if (p.UseCloneRandomSeed)
+        {
+            var fallback = p.DefaultExpression ?? "default!";
+            return p.TypeFqn.TrimEnd('?') == "global::System.Random"
+                ? $"{p.Name}: state.Has(\"{CloneRandomSeedKey}\") "
+                    + $"? global::AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(state.Int32(\"{CloneRandomSeedKey}\")) "
+                    + $": {fallback}"
+                : $"{p.Name}: state.Has(\"{CloneRandomSeedKey}\") "
+                    + $"? state.Int32(\"{CloneRandomSeedKey}\") : {fallback}";
         }
 
         // THE PARAMETER'S DEFAULT, NOT THE TYPE'S. Falls back to `default!` only when the
         // declaration genuinely has no value to render.
         if (p.UseDefault) return $"{p.Name}: {p.DefaultExpression ?? "default!"}";
 
-        var read = p.Kind switch
+        var read = (p.Kind, p.IsNullable) switch
         {
-            ValueKind.Int32 => $"state.Int32(\"{p.Key}\")",
-            ValueKind.Int64 => $"state.Int64(\"{p.Key}\")",
-            ValueKind.Double => $"state.Double(\"{p.Key}\")",
-            ValueKind.Single => $"state.Single(\"{p.Key}\")",
-            ValueKind.Boolean => $"state.Boolean(\"{p.Key}\")",
-            ValueKind.String => $"state.String(\"{p.Key}\")",
-            ValueKind.Int32Array => $"state.Int32Array(\"{p.Key}\")",
-            ValueKind.Enum => $"state.Enum<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
+            (ValueKind.Int32, false) => $"state.Int32(\"{p.Key}\")",
+            (ValueKind.Int32, true) => $"state.NullableInt32(\"{p.Key}\")",
+            (ValueKind.Int64, false) => $"state.Int64(\"{p.Key}\")",
+            (ValueKind.Int64, true) => $"state.NullableInt64(\"{p.Key}\")",
+            (ValueKind.Double, false) => $"state.Double(\"{p.Key}\")",
+            (ValueKind.Double, true) => $"state.NullableDouble(\"{p.Key}\")",
+            (ValueKind.Single, false) => $"state.Single(\"{p.Key}\")",
+            (ValueKind.Single, true) => $"state.NullableSingle(\"{p.Key}\")",
+            (ValueKind.Boolean, false) => $"state.Boolean(\"{p.Key}\")",
+            (ValueKind.Boolean, true) => $"state.NullableBoolean(\"{p.Key}\")",
+            (ValueKind.String, false) => $"state.String(\"{p.Key}\")",
+            (ValueKind.String, true) => $"state.NullableString(\"{p.Key}\")",
+            (ValueKind.Int32Array, false) => $"state.Int32Array(\"{p.Key}\")",
+            (ValueKind.Int32Array, true) => $"state.NullableInt32Array(\"{p.Key}\")",
+            (ValueKind.EnumArray, _) => $"state.EnumArray<{p.TypeFqn.TrimEnd('?', '[', ']')}>(\"{p.Key}\")",
+            (ValueKind.Enum, false) => $"state.Enum<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
+            (ValueKind.Enum, true) => $"state.NullableEnum<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
+            (ValueKind.JsonObject, _) => $"state.JsonObject<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
+            (ValueKind.CloneObject, _) => $"state.CloneObject<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
+            (ValueKind.NumericTypeParameter, _) => $"global::AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().FromDouble(state.Double(\"{p.Key}\"))",
             // Component returns null when the key is absent, which is correct for an optional
             // slot and a nullable-warning error (CS8604) when the constructor parameter is not
             // nullable. The factory already guards the whole call with state.HasAll(...), so a
@@ -783,10 +1012,10 @@ public class LayerStateGenerator : IIncrementalGenerator
             // worth an exception naming the key rather than a NullReferenceException from inside
             // the constructor. Not suppressed with `!`: that would hand the constructor a null and
             // fail somewhere less informative.
-            ValueKind.Component when !p.TypeFqn.EndsWith("?", System.StringComparison.Ordinal) =>
+            (ValueKind.Component, false) when !p.TypeFqn.EndsWith("?", System.StringComparison.Ordinal) =>
                 $"state.Component<{p.TypeFqn}>(\"{p.Key}\") ?? throw new global::System.InvalidOperationException("
                     + $"\"Saved state for '{p.Key}' is missing or names a type that could not be loaded.\")",
-            ValueKind.Component => $"state.Component<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
+            (ValueKind.Component, _) => $"state.Component<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
             _ => "default!",
         };
 
@@ -823,7 +1052,11 @@ public class LayerStateGenerator : IIncrementalGenerator
         String,
         Enum,
         Int32Array,
+        EnumArray,
         Component,
+        JsonObject,
+        CloneObject,
+        NumericTypeParameter,
     }
 
     /// <summary>The symbol's own span when it has one, else the model's.</summary>
@@ -931,6 +1164,8 @@ public class LayerStateGenerator : IIncrementalGenerator
         public bool IsState;
         public bool IsActivation;
         public bool IsVectorActivation;
+        /// <summary>Zero-based position among scalar or vector activation constructor slots.</summary>
+        public int ActivationIndex;
         public bool UseDefault;
         /// <summary>The parameter's DECLARED default rendered as C#, or null if it has none.</summary>
         /// <remarks>
@@ -941,6 +1176,12 @@ public class LayerStateGenerator : IIncrementalGenerator
         /// </remarks>
         public string? DefaultExpression;
         public bool NeedsConvert;
+        /// <summary>Whether the clone adapter supplies a derived entropy seed for this slot.</summary>
+        public bool UseCloneRandomSeed;
+        /// <summary>Whether the readable backing member itself can carry null.</summary>
+        public bool IsNullable;
+        /// <summary>Whether the writer's member, as opposed to the constructor parameter, can be null.</summary>
+        public bool BackingMemberIsNullable;
         public ValueKind Kind;
 
         /// <summary>

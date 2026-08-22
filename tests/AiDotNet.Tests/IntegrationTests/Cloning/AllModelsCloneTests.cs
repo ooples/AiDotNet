@@ -59,7 +59,14 @@ public class AllModelsCloneTests
     private readonly List<string> cloned = new();
     private readonly List<string> failed = new();
     private readonly List<string> notConstructed = new();
-    private readonly List<string> timedOut = new();
+    private readonly List<string> budgetExceeded = new();
+
+    /// <summary>Maximum observation window for one model in this diagnostic sweep.</summary>
+    /// <remarks>
+    /// Exceeding this budget is deliberately not called a hang. The number is a property of this
+    /// harness and runner capacity; changing it changes the count without changing model behavior.
+    /// </remarks>
+    private static readonly TimeSpan PerModelProbeBudget = TimeSpan.FromSeconds(20);
 
     /// <summary>
     /// Models whose original never materialized under the probe, so the two sides are not comparable.
@@ -172,23 +179,21 @@ public class AllModelsCloneTests
                 continue;
             }
 
-            // BEFORE the attempt, so a hang names the model it hung on.
+            // BEFORE the attempt, so a shard-level timeout still names the model it was observing.
             Note($"try   {open.Name}");
 
-            // A BUDGET PER MODEL. DocOwl never returns, and without this one model took the whole
-            // sweep down twice with nothing to show for fifteen minutes. A model that will not
-            // finish is its own result, reported separately from one that finishes wrongly.
+            // A BUDGET PER MODEL. This keeps one slow or stuck attempt from consuming the whole
+            // shard, but it is only an observation budget. It cannot distinguish a true deadlock
+            // from valid work that needs more time on this runner, so report it separately and do
+            // not turn the budget-sensitive count into a claimed hang rate.
             string? outcome = null;
             var work = System.Threading.Tasks.Task.Run(() => outcome = Attempt(open, closed));
 
-            // 20s, NOT 45s. Hangs dominate the clock: 81 of 519 models attempted did not finish,
-            // and at 45s each that was ~61 minutes of pure waiting -- about half of every shard's
-            // budget spent on models that were never going to answer. A model that has not cloned
-            // in 20 seconds is reported as hung either way, so the longer wait bought nothing.
-            if (!work.Wait(TimeSpan.FromSeconds(20)))
+            if (!work.Wait(PerModelProbeBudget))
             {
-                timedOut.Add($"{open.Name}: did not finish in 20s");
-                Note($"HANG  {open.Name}");
+                budgetExceeded.Add(
+                    $"{open.Name}: exceeded {PerModelProbeBudget.TotalSeconds:0}s observation budget");
+                Note($"LIMIT {open.Name}");
                 continue;
             }
 
@@ -201,7 +206,7 @@ public class AllModelsCloneTests
         _output.WriteLine($"clone FAILED       : {failed.Count}");
         _output.WriteLine($"not constructed    : {notConstructed.Count} (harness limit, not a clone result)");
         _output.WriteLine($"probe did not run  : {unresolved.Count} (harness limit, not a clone result)");
-        _output.WriteLine($"timed out          : {timedOut.Count}");
+        _output.WriteLine($"probe budget limit : {budgetExceeded.Count} (budget-sensitive; not a hang rate)");
         _output.WriteLine(string.Empty);
 
         foreach (var line in failed) _output.WriteLine($"FAIL  {line}");
@@ -218,14 +223,14 @@ public class AllModelsCloneTests
             $"clone FAILED       : {failed.Count}",
             $"not constructed    : {notConstructed.Count} (harness limit, not a clone result)",
             $"probe did not run  : {unresolved.Count} (harness limit, not a clone result)",
-            $"timed out          : {timedOut.Count}",
+            $"probe budget limit : {budgetExceeded.Count} (budget-sensitive; not a hang rate)",
             string.Empty,
         };
         report.AddRange(failed.Select(f => $"FAIL  {f}"));
         report.AddRange(notConstructed.Select(n => $"skip  {n}"));
         report.AddRange(unresolved.Select(u => $"lazy  {u}"));
 
-        report.AddRange(timedOut.Select(t => $"HANG  {t}"));
+        report.AddRange(budgetExceeded.Select(t => $"LIMIT {t}"));
         System.IO.File.WriteAllLines(ReportPath, report);
     }
 

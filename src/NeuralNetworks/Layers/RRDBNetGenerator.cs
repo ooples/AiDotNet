@@ -185,6 +185,8 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
     /// Upscaling factor (2 or 4).
     /// </summary>
     private readonly int _scale;
+    private readonly int _growthChannels;
+    private readonly double _residualScale;
 
     /// <summary>
     /// Cached input for backpropagation.
@@ -291,6 +293,8 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
         _scale = scale;
         _inputChannels = inputChannels;
         _outputChannels = outputChannels;
+        _growthChannels = growthChannels;
+        _residualScale = residualScale;
         _leakyReLU = new LeakyReLUActivation<T>(LeakyReLUSlope);
 
         // Initial convolution: inputChannels → numFeatures
