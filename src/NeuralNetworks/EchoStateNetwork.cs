@@ -1185,7 +1185,13 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
         // The managed path deliberately, not TryForwardGpuOptimized: the intermediate reservoir
         // state is the point of this method, and the fused GPU path only yields the final output.
         SettleReservoirState(inputVector);
-        var reservoirState = new Tensor<T>([1, _reservoirSize], _currentState);
+
+        // CLONE, do not alias. Tensor<T>(shape, vector) wraps the vector it is handed, and
+        // SettleReservoirState zeroes _currentState IN PLACE on its next call -- so a previously
+        // returned "Reservoir" tensor would silently change underneath a caller that kept it, which
+        // is exactly what an activation snapshot must not do. ComputeOutput already returns a fresh
+        // vector, so only the reservoir state needs copying.
+        var reservoirState = new Tensor<T>([1, _reservoirSize], _currentState.Clone());
         var readout = new Tensor<T>([1, _outputSize], ComputeOutput());
 
         return new Dictionary<string, Tensor<T>>

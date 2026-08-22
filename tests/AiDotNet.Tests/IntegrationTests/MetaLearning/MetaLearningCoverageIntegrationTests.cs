@@ -246,6 +246,47 @@ public class MetaLearningCoverageIntegrationTests
             null);
 
         Assert.Equal(model.ParameterCount, gradients.Length);
+
+        // LENGTH ALONE PROVES NOTHING. A zero, non-finite, or loss-independent vector of the right
+        // width satisfies the count and still means the fallback did no work.
+        Assert.All(
+            Enumerable.Range(0, gradients.Length),
+            i => Assert.True(
+                double.IsFinite(gradients[i]),
+                $"Fallback gradient[{i}] is {gradients[i]}; finite differences must not emit NaN or infinity."));
+        Assert.Contains(
+            Enumerable.Range(0, gradients.Length),
+            i => Math.Abs(gradients[i]) > 1e-12);
+
+        // null SELECTS THE LEARNER'S CONFIGURED LOSS -- asserted, not assumed. Re-running with that
+        // loss passed EXPLICITLY must reproduce the vector bit for bit.
+        var gradientsWithConfiguredLoss = InvokePrivate<Vector<double>>(
+            learner,
+            typeof(MetaLearnerBase<double, Matrix<double>, Vector<double>>),
+            "ComputeGradientsFallback",
+            model,
+            input,
+            expected,
+            learner.DefaultLossFunction);
+
+        Assert.Equal(gradients.Length, gradientsWithConfiguredLoss.Length);
+        for (int i = 0; i < gradients.Length; i++)
+            Assert.Equal(gradients[i], gradientsWithConfiguredLoss[i], precision: 12);
+
+        // ...and that equality is not vacuous: a DIFFERENT loss must move the gradient, otherwise
+        // lossOverride is being ignored and the check above would pass for the wrong reason.
+        var gradientsWithOtherLoss = InvokePrivate<Vector<double>>(
+            learner,
+            typeof(MetaLearnerBase<double, Matrix<double>, Vector<double>>),
+            "ComputeGradientsFallback",
+            model,
+            input,
+            expected,
+            new AiDotNet.LossFunctions.MeanAbsoluteErrorLoss<double>());
+
+        Assert.Contains(
+            Enumerable.Range(0, gradients.Length),
+            i => Math.Abs(gradients[i] - gradientsWithOtherLoss[i]) > 1e-9);
     }
 
     [Fact(Timeout = 120000)]

@@ -1081,17 +1081,34 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// </remarks>
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
     {
-        var noise = TensorToVector(input, input.Length);
-        var generated = GeneratorForward(noise, isTraining: false);
-        var supervised = SupervisorForward(generated, isTraining: false);
-        var recovered = RecoveryForward(supervised, isTraining: false);
+        var activations = new Dictionary<string, Tensor<T>>();
 
-        return new Dictionary<string, Tensor<T>>
+        var noise = TensorToVector(input, input.Length);
+        var current = GeneratorForward(noise, isTraining: false);
+        activations["Generator"] = VectorToTensor(current);
+
+        // ONLY STAGES THAT ACTUALLY EXIST. RebuildAllNetworks -- which Fit calls -- is what creates
+        // the supervisor and recovery stacks; InitializeLayers alone populates just the generator's
+        // Layers. SupervisorForward and RecoveryForward iterate their stack, so on an unfitted model
+        // those loops have nothing to run and return their input UNCHANGED. Reporting them anyway
+        // published the generator's output three times under three names: an identity value dressed
+        // as a distinct stage, which passes a non-empty check while describing nothing.
+        //
+        // Reporting only the initialised stacks keeps every entry a real computation. The generator
+        // always exists after InitializeLayers, so the result is never empty.
+        if (_supervisorLayers.Count > 0)
         {
-            ["Generator"] = VectorToTensor(generated),
-            ["Supervisor"] = VectorToTensor(supervised),
-            ["Recovery"] = VectorToTensor(recovered),
-        };
+            current = SupervisorForward(current, isTraining: false);
+            activations["Supervisor"] = VectorToTensor(current);
+        }
+
+        if (_recoveryLayers.Count > 0)
+        {
+            current = RecoveryForward(current, isTraining: false);
+            activations["Recovery"] = VectorToTensor(current);
+        }
+
+        return activations;
     }
 
     /// <inheritdoc />
