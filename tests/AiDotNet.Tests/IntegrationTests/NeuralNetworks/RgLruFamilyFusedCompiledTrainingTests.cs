@@ -56,6 +56,17 @@ public sealed class RgLruFamilyFusedCompiledTrainingTests
                 options: new HawkOptions { RecurrenceDimension = 40 }));
     }
 
+    /// <summary>
+    /// Finite check that exists on every target framework.
+    /// </summary>
+    /// <remarks>
+    /// <c>double.IsFinite</c> arrived in .NET Core 2.1 and is absent from .NET Framework 4.7.1,
+    /// which this project still targets, so calling it compiles for net10.0 and breaks the net471
+    /// leg of the same build. The same one-line helper is defined by the other suites that need
+    /// this check for the same reason.
+    /// </remarks>
+    private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
     private static NeuralNetworkArchitecture<double> CreateArchitecture()
         => new(
             InputType.OneDimensional,
@@ -104,11 +115,11 @@ public sealed class RgLruFamilyFusedCompiledTrainingTests
             Assert.True(
                 parametersBefore.Where((value, index) => value != parametersAfter[index]).Any(),
                 $"{modelName}'s automatically selected eager step did not update a live parameter.");
-            Assert.True(double.IsFinite(model.GetLastLoss()),
+            Assert.True(IsFinite(model.GetLastLoss()),
                 $"{modelName}'s automatically selected eager loss was not finite.");
-            Assert.All(parametersAfter, value => Assert.True(double.IsFinite(value),
+            Assert.All(parametersAfter, value => Assert.True(IsFinite(value),
                 $"{modelName} produced a non-finite parameter."));
-            Assert.All(gradients, value => Assert.True(double.IsFinite(value),
+            Assert.All(gradients, value => Assert.True(IsFinite(value),
                 $"{modelName} published a non-finite gradient."));
             Assert.Contains(gradients, value => value != 0.0);
 
@@ -116,7 +127,7 @@ public sealed class RgLruFamilyFusedCompiledTrainingTests
             // next call silently re-enters the compiled plan with stale recurrent state.
             model.Train(input, target);
             Assert.Equal(0, CompiledTapeTrainingStep<double>.GetFusedStepCount());
-            Assert.True(double.IsFinite(model.GetLastLoss()));
+            Assert.True(IsFinite(model.GetLastLoss()));
         }
         finally
         {
