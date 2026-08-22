@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -31,18 +31,58 @@ public class DiscoveryApiGenerator : IIncrementalGenerator
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        var classDeclarations = context.SyntaxProvider.CreateSyntaxProvider(
+        // THE PIPELINE CARRIES VALUES, NOT SYMBOLS. This transform used to return INamedTypeSymbol
+        // and the result was then Combine()d with CompilationProvider. Both defeat incremental
+        // caching, and the symbol is the serious one: ISymbol is not value-equatable, so no pipeline
+        // step could ever compare equal -- and each retained symbol roots the entire Compilation, so
+        // the cached pipeline pinned whole compilations in memory. That is what grows VBCSCompiler
+        // into the gigabytes across a long session.
+        //
+        // All semantic work now happens inside Analyze, which returns a value-equatable
+        // DiscoveryEntry. The Compilation is still consulted there, transiently, via
+        // ctx.SemanticModel.Compilation -- but it never escapes into the pipeline. This mirrors the
+        // shape LayerStateGenerator already uses.
+        var entries = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsCandidate(node),
-            transform: static (ctx, _) => GetModelClassOrNull(ctx))
-            .Where(static s => s is not null);
+            transform: static (ctx, _) => Analyze(ctx))
+            .Where(static e => e is not null)
+            .Select(static (e, _) => e ?? DiscoveryEntry.Empty);
 
-        var collected = classDeclarations.Collect().Combine(context.CompilationProvider);
+        context.RegisterSourceOutput(entries.Collect(), static (spc, collected) => Emit(spc, collected));
+    }
 
-        context.RegisterSourceOutput(collected, static (spc, source) =>
+    /// <summary>
+    /// Resolves one candidate class into a value-equatable entry, or null when it is not a
+    /// discoverable model. All symbol access is confined to this method.
+    /// </summary>
+    private static DiscoveryEntry? Analyze(GeneratorSyntaxContext ctx)
+    {
+        if (GetModelClassOrNull(ctx) is not INamedTypeSymbol modelClass)
+            return null;
+
+        var compilation = ctx.SemanticModel.Compilation;
+        var domainAttrSymbol = compilation.GetTypeByMetadataName(ModelDomainAttr);
+        var categoryAttrSymbol = compilation.GetTypeByMetadataName(ModelCategoryAttr);
+        var taskAttrSymbol = compilation.GetTypeByMetadataName(ModelTaskAttr);
+        var complexityAttrSymbol = compilation.GetTypeByMetadataName(ModelComplexityAttr);
+        var paperAttrSymbol = compilation.GetTypeByMetadataName(ResearchPaperAttr);
+        var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
+
+        if (domainAttrSymbol is null || categoryAttrSymbol is null ||
+            taskAttrSymbol is null || complexityAttrSymbol is null)
         {
-            var (candidates, compilation) = source;
-            Execute(spc, candidates, compilation);
-        });
+            return null;
+        }
+
+        if (exemptAttrSymbol is not null && HasAttribute(modelClass.GetAttributes(), exemptAttrSymbol))
+            return null;
+
+        var fullName = modelClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var entry = ExtractEntry(modelClass, fullName, domainAttrSymbol, categoryAttrSymbol,
+            taskAttrSymbol, complexityAttrSymbol, paperAttrSymbol);
+
+        // Same admission rule as before: no domain or no task means not discoverable.
+        return entry.Domains.Length > 0 && entry.Tasks.Length > 0 ? entry : null;
     }
 
     private static bool IsCandidate(SyntaxNode node)
@@ -82,26 +122,14 @@ public class DiscoveryApiGenerator : IIncrementalGenerator
         return false;
     }
 
-    private static void Execute(
-        SourceProductionContext context,
-        ImmutableArray<INamedTypeSymbol?> candidates,
-        Compilation compilation)
+    /// <summary>
+    /// Emits from already-resolved entries. Symbol work and the attribute/exempt filtering moved into
+    /// <see cref="Analyze"/>; the dedupe and ordering that determine emitted output stay here, where
+    /// the whole set is visible.
+    /// </summary>
+    private static void Emit(SourceProductionContext context, ImmutableArray<DiscoveryEntry> candidates)
     {
         if (candidates.IsDefaultOrEmpty)
-        {
-            EmitEmpty(context);
-            return;
-        }
-
-        var domainAttrSymbol = compilation.GetTypeByMetadataName(ModelDomainAttr);
-        var categoryAttrSymbol = compilation.GetTypeByMetadataName(ModelCategoryAttr);
-        var taskAttrSymbol = compilation.GetTypeByMetadataName(ModelTaskAttr);
-        var complexityAttrSymbol = compilation.GetTypeByMetadataName(ModelComplexityAttr);
-        var paperAttrSymbol = compilation.GetTypeByMetadataName(ResearchPaperAttr);
-        var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
-
-        if (domainAttrSymbol is null || categoryAttrSymbol is null ||
-            taskAttrSymbol is null || complexityAttrSymbol is null)
         {
             EmitEmpty(context);
             return;
@@ -110,26 +138,20 @@ public class DiscoveryApiGenerator : IIncrementalGenerator
         var entries = new List<DiscoveryEntry>();
         var seen = new HashSet<string>();
 
-        foreach (var modelClass in candidates)
+        foreach (var entry in candidates)
         {
-            if (modelClass is null)
+            if (entry.FullyQualifiedName.Length == 0)
+                continue;
+            if (!seen.Add(entry.FullyQualifiedName))
                 continue;
 
-            var fullName = modelClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            if (!seen.Add(fullName))
-                continue;
+            entries.Add(entry);
+        }
 
-            // Skip classes marked with [ModelMetadataExempt]
-            if (exemptAttrSymbol is not null && HasAttribute(modelClass.GetAttributes(), exemptAttrSymbol))
-                continue;
-
-            var entry = ExtractEntry(modelClass, fullName, domainAttrSymbol, categoryAttrSymbol,
-                taskAttrSymbol, complexityAttrSymbol, paperAttrSymbol);
-
-            if (entry.Domains.Count > 0 && entry.Tasks.Count > 0)
-            {
-                entries.Add(entry);
-            }
+        if (entries.Count == 0)
+        {
+            EmitEmpty(context);
+            return;
         }
 
         entries.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
@@ -146,12 +168,13 @@ public class DiscoveryApiGenerator : IIncrementalGenerator
         INamedTypeSymbol complexityAttrSymbol,
         INamedTypeSymbol? paperAttrSymbol)
     {
-        var entry = new DiscoveryEntry
-        {
-            ClassName = modelClass.Name,
-            FullyQualifiedName = fullyQualifiedName,
-            TypeParameterCount = modelClass.TypeParameters.Length
-        };
+        var domains = new List<int>();
+        var categories = new List<int>();
+        var tasks = new List<int>();
+        int complexity = 0;
+        bool hasComplexity = false;
+        string paperTitle = string.Empty;
+        string summary = string.Empty;
 
         foreach (var attr in modelClass.GetAttributes())
         {
@@ -161,24 +184,24 @@ public class DiscoveryApiGenerator : IIncrementalGenerator
             if (SymbolEqualityComparer.Default.Equals(attr.AttributeClass, domainAttrSymbol))
             {
                 if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int d)
-                    entry.Domains.Add(d);
+                    domains.Add(d);
             }
             else if (SymbolEqualityComparer.Default.Equals(attr.AttributeClass, categoryAttrSymbol))
             {
                 if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int c)
-                    entry.Categories.Add(c);
+                    categories.Add(c);
             }
             else if (SymbolEqualityComparer.Default.Equals(attr.AttributeClass, taskAttrSymbol))
             {
                 if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int t)
-                    entry.Tasks.Add(t);
+                    tasks.Add(t);
             }
             else if (SymbolEqualityComparer.Default.Equals(attr.AttributeClass, complexityAttrSymbol))
             {
                 if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int cx)
                 {
-                    entry.Complexity = cx;
-                    entry.HasComplexity = true;
+                    complexity = cx;
+                    hasComplexity = true;
                 }
             }
             else if (paperAttrSymbol is not null &&
@@ -186,7 +209,7 @@ public class DiscoveryApiGenerator : IIncrementalGenerator
             {
                 if (attr.ConstructorArguments.Length >= 2)
                 {
-                    entry.PaperTitle = attr.ConstructorArguments[0].Value as string ?? string.Empty;
+                    paperTitle = attr.ConstructorArguments[0].Value as string ?? string.Empty;
                 }
             }
         }
@@ -195,10 +218,20 @@ public class DiscoveryApiGenerator : IIncrementalGenerator
         var xmlDoc = modelClass.GetDocumentationCommentXml();
         if (!string.IsNullOrWhiteSpace(xmlDoc))
         {
-            entry.Summary = ExtractSummary(xmlDoc);
+            summary = ExtractSummary(xmlDoc);
         }
 
-        return entry;
+        return new DiscoveryEntry(
+            modelClass.Name,
+            fullyQualifiedName,
+            modelClass.TypeParameters.Length,
+            domains.ToImmutableArray(),
+            categories.ToImmutableArray(),
+            tasks.ToImmutableArray(),
+            complexity,
+            hasComplexity,
+            paperTitle,
+            summary);
     }
 
     private static string ExtractSummary(string xml)
@@ -477,7 +510,7 @@ public class DiscoveryApiGenerator : IIncrementalGenerator
         string methodName,
         string enumType,
         List<DiscoveryEntry> entries,
-        System.Func<DiscoveryEntry, List<int>> selector,
+        System.Func<DiscoveryEntry, ImmutableArray<int>> selector,
         Dictionary<int, string> nameMap)
     {
         // Group entries by their enum values
@@ -651,17 +684,105 @@ public class DiscoveryApiGenerator : IIncrementalGenerator
         return false;
     }
 
-    private class DiscoveryEntry
+    /// <summary>
+    /// One discoverable model, as plain values.
+    /// </summary>
+    /// <remarks>
+    /// IMMUTABLE AND STRUCTURALLY EQUAL ON PURPOSE. This type travels through the incremental
+    /// pipeline, so Roslyn compares instances to decide whether downstream work can be skipped. The
+    /// previous shape -- mutable properties over List&lt;int&gt; -- compared by REFERENCE, so two runs
+    /// producing identical data never matched and the generator re-ran in full every time.
+    /// ImmutableArray plus an explicit sequence comparison makes equality mean what the pipeline
+    /// needs it to mean.
+    /// </remarks>
+    private sealed class DiscoveryEntry : System.IEquatable<DiscoveryEntry>
     {
-        public string ClassName { get; set; } = string.Empty;
-        public string FullyQualifiedName { get; set; } = string.Empty;
-        public int TypeParameterCount { get; set; }
-        public List<int> Domains { get; } = new List<int>();
-        public List<int> Categories { get; } = new List<int>();
-        public List<int> Tasks { get; } = new List<int>();
-        public int Complexity { get; set; }
-        public bool HasComplexity { get; set; }
-        public string PaperTitle { get; set; } = string.Empty;
-        public string Summary { get; set; } = string.Empty;
+        public static readonly DiscoveryEntry Empty = new(
+            string.Empty, string.Empty, 0,
+            ImmutableArray<int>.Empty, ImmutableArray<int>.Empty, ImmutableArray<int>.Empty,
+            0, false, string.Empty, string.Empty);
+
+        public DiscoveryEntry(
+            string className,
+            string fullyQualifiedName,
+            int typeParameterCount,
+            ImmutableArray<int> domains,
+            ImmutableArray<int> categories,
+            ImmutableArray<int> tasks,
+            int complexity,
+            bool hasComplexity,
+            string paperTitle,
+            string summary)
+        {
+            ClassName = className;
+            FullyQualifiedName = fullyQualifiedName;
+            TypeParameterCount = typeParameterCount;
+            Domains = domains.IsDefault ? ImmutableArray<int>.Empty : domains;
+            Categories = categories.IsDefault ? ImmutableArray<int>.Empty : categories;
+            Tasks = tasks.IsDefault ? ImmutableArray<int>.Empty : tasks;
+            Complexity = complexity;
+            HasComplexity = hasComplexity;
+            PaperTitle = paperTitle;
+            Summary = summary;
+        }
+
+        public string ClassName { get; }
+        public string FullyQualifiedName { get; }
+        public int TypeParameterCount { get; }
+        public ImmutableArray<int> Domains { get; }
+        public ImmutableArray<int> Categories { get; }
+        public ImmutableArray<int> Tasks { get; }
+        public int Complexity { get; }
+        public bool HasComplexity { get; }
+        public string PaperTitle { get; }
+        public string Summary { get; }
+
+        public bool Equals(DiscoveryEntry? other)
+        {
+            if (other is null) return false;
+            if (ReferenceEquals(this, other)) return true;
+
+            return string.Equals(ClassName, other.ClassName, System.StringComparison.Ordinal)
+                && string.Equals(FullyQualifiedName, other.FullyQualifiedName, System.StringComparison.Ordinal)
+                && TypeParameterCount == other.TypeParameterCount
+                && Complexity == other.Complexity
+                && HasComplexity == other.HasComplexity
+                && string.Equals(PaperTitle, other.PaperTitle, System.StringComparison.Ordinal)
+                && string.Equals(Summary, other.Summary, System.StringComparison.Ordinal)
+                && SequenceEqual(Domains, other.Domains)
+                && SequenceEqual(Categories, other.Categories)
+                && SequenceEqual(Tasks, other.Tasks);
+        }
+
+        public override bool Equals(object? obj) => Equals(obj as DiscoveryEntry);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = 17;
+                hash = (hash * 31) + ClassName.GetHashCode();
+                hash = (hash * 31) + FullyQualifiedName.GetHashCode();
+                hash = (hash * 31) + TypeParameterCount;
+                hash = (hash * 31) + Complexity;
+                hash = (hash * 31) + (HasComplexity ? 1 : 0);
+                hash = (hash * 31) + PaperTitle.GetHashCode();
+                hash = (hash * 31) + Summary.GetHashCode();
+                hash = (hash * 31) + Domains.Length;
+                hash = (hash * 31) + Categories.Length;
+                hash = (hash * 31) + Tasks.Length;
+                return hash;
+            }
+        }
+
+        private static bool SequenceEqual(ImmutableArray<int> left, ImmutableArray<int> right)
+        {
+            if (left.Length != right.Length) return false;
+            for (int i = 0; i < left.Length; i++)
+            {
+                if (left[i] != right[i]) return false;
+            }
+            return true;
+        }
     }
 }
