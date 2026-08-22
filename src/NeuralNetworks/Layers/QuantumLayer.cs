@@ -244,8 +244,8 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
         // Prescale each row by its largest magnitude before squaring. This scale cancels out of
         // the final normalization, but keeps finite values near T.MaxValue from overflowing the
         // sum of squares and collapsing the entire state to zero.
-        var maxMagnitude = Engine.ReduceMax(
-            Engine.TensorAbs(realState), [1], keepDims: true, out _);
+        using var absoluteRealState = Engine.TensorAbs(realState);
+        var maxMagnitude = Engine.ReduceMax(absoluteRealState, [1], keepDims: true, out _);
         var positiveMagnitude = Engine.TensorGreaterThan(maxMagnitude, NumOps.Zero);
         var unitMagnitude = new Tensor<T>(maxMagnitude.Shape.ToArray());
         unitMagnitude.Fill(NumOps.One);

@@ -912,7 +912,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
             var sourceParameters = GetTrainableParameters();
             var copiedParameters = new Tensor<T>[sourceParameters.Count];
             for (int i = 0; i < sourceParameters.Count; i++)
-                copiedParameters[i] = (Tensor<T>)sourceParameters[i].Clone();
+                copiedParameters[i] = sourceParameters[i].Clone();
 
             copy.SetTrainableParameters(copiedParameters);
             copy._isInitialized = true;

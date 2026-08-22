@@ -964,7 +964,7 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
         // Latent projection. DecodeWithCache pads short latent vectors and truncates long ones;
         // backward must use the exact same effective input instead of requiring latent.Length == L.
-        var latentRow = new Tensor<T>(new[] { 1, _latentDim });                        // [1,L]
+        using var latentRow = new Tensor<T>(new[] { 1, _latentDim });                  // [1,L]
         int effectiveLatent = Math.Min(latent.Length, _latentDim);
         latent.Data.Span[..effectiveLatent].CopyTo(latentRow.Data.Span);
         var dPreCol = dPre.Reshape(new[] { _hiddenSize, 1 });                          // [H,1]
