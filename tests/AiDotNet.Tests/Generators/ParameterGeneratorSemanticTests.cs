@@ -579,6 +579,26 @@ public partial class RoleOnlyLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase
     }
 
     [Fact]
+    public async Task LayerGenerator_OptionalRoleOnlyParameter_DeclaresOnlyWhenPresent()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public partial class OptionalRoleOnlyLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    [TrainableParameter(Role = 1)]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T> _required = new();
+    [TrainableParameter(Role = 2, Optional = true)]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T> _optional = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+        Assert.Contains("__declared.Add((_required,", generated, StringComparison.Ordinal);
+        Assert.Contains("if (_optional.Length > 0)", generated, StringComparison.Ordinal);
+        Assert.Contains("__declared.Add((_optional,", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task LayerGenerator_LowPrecisionBackingFlowsThroughLogicalParameterSurfaces()
     {
         await Task.Yield();

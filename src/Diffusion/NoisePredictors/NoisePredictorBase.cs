@@ -659,8 +659,8 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
                     streamingEngaged = true;
                 }
 
-                if (lb is AiDotNet.Models.Parameters.IParameterSurfaceLifecycle lifecycle)
-                    lifecycle.PrepareParameterSurface(AiDotNet.Models.Parameters.ParameterSurfaceIntent.Read);
+                ((AiDotNet.Models.Parameters.IParameterSurfaceLifecycle)lb)
+                    .PrepareParameterSurface(AiDotNet.Models.Parameters.ParameterSurfaceIntent.Read);
             }
 
             // STATE slots, not trainable-only: this enumeration backs the flat vector and the chunk

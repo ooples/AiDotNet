@@ -665,12 +665,12 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             var sentinelRoots = new HashSet<string>(System.StringComparer.Ordinal);
             foreach (var pf in shapedFields)
             {
-                foreach (var axis in pf.Shape!.Split(','))
+                var declaredAxes = pf.Shape!.Split(',')
+                    .Select(axis => axis.Trim())
+                    .Where(axis => axis.Length > 0 && axis != "*")
+                    .Select(axis => TryGetAdaptiveAxisBinding(axis, out string bound) ? bound : axis);
+                foreach (string trimmed in declaredAxes)
                 {
-                    string trimmed = axis.Trim();
-                    if (trimmed.Length == 0 || trimmed == "*") continue;
-                    if (TryGetAdaptiveAxisBinding(trimmed, out string bound)) trimmed = bound;
-
                     // Each axis gets its own walk AND its own `visited` set. The hazard verdict is
                     // per-axis, and `visited` short-circuits on re-entry: sharing it let the first
                     // axis consume an identifier so that every later axis reading the same one
@@ -756,7 +756,11 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine($"        var __declared = new System.Collections.Generic.List<{tensorTupleType}>({tensorFields.Count});");
             foreach (var pf in tensorFields)
             {
-                if (pf.Condition is not null)
+                if (pf.Optional && pf.Condition is not null)
+                    sb.AppendLine($"        if (({pf.Condition}) && ({PresenceExpr(pf)}))");
+                else if (pf.Optional)
+                    sb.AppendLine($"        if ({PresenceExpr(pf)})");
+                else if (pf.Condition is not null)
                     sb.AppendLine($"        if ({pf.Condition})");
                 sb.AppendLine($"            __declared.Add(({pf.Name}, {pf.Role}));");
             }
@@ -1590,10 +1594,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         // this bounds pathological chains as well.
         if (depth > 4) return;
 
-        foreach (string identifier in ExtractIdentifiers(axisExpression))
+        foreach (string identifier in ExtractIdentifiers(axisExpression).Where(visited.Add))
         {
-            if (!visited.Add(identifier)) continue;
-
             ISymbol? member = null;
             for (INamedTypeSymbol? t = classSymbol; t is not null && member is null; t = t.BaseType)
             {
@@ -1650,10 +1652,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     /// </summary>
     private static string? TryGetComputedMemberBody(ISymbol member)
     {
-        foreach (var reference in member.DeclaringSyntaxReferences)
+        foreach (var node in member.DeclaringSyntaxReferences.Select(reference => reference.GetSyntax()))
         {
-            var node = reference.GetSyntax();
-
             if (node is PropertyDeclarationSyntax property)
             {
                 if (property.ExpressionBody is not null)
