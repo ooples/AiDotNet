@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -40,18 +40,42 @@ public class ComponentDiscoveryApiGenerator : IIncrementalGenerator
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        var classDeclarations = context.SyntaxProvider.CreateSyntaxProvider(
+        // Values, not symbols. See DiscoveryApiGenerator for the full rationale: an ISymbol in the
+        // pipeline is not value-equatable (so nothing ever caches) and roots the whole Compilation
+        // (so the cache pins compilations in memory). Analyze does the semantic work and returns a
+        // value-equatable entry; the Compilation is read transiently and never escapes.
+        var entries = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsCandidate(node),
-            transform: static (ctx, _) => GetComponentClassOrNull(ctx))
-            .Where(static s => s is not null);
+            transform: static (ctx, _) => Analyze(ctx))
+            .Where(static e => e is not null)
+            .Select(static (e, _) => e ?? ComponentDiscoveryEntry.Empty);
 
-        var collected = classDeclarations.Collect().Combine(context.CompilationProvider);
+        context.RegisterSourceOutput(entries.Collect(), static (spc, collected) => Emit(spc, collected));
+    }
 
-        context.RegisterSourceOutput(collected, static (spc, source) =>
-        {
-            var (candidates, compilation) = source;
-            Execute(spc, candidates, compilation);
-        });
+    /// <summary>
+    /// Resolves one candidate class into a value-equatable entry, or null when it is not a
+    /// discoverable component. All symbol access is confined to this method.
+    /// </summary>
+    private static ComponentDiscoveryEntry? Analyze(GeneratorSyntaxContext ctx)
+    {
+        if (GetComponentClassOrNull(ctx) is not INamedTypeSymbol componentClass)
+            return null;
+
+        var compilation = ctx.SemanticModel.Compilation;
+        var componentTypeAttrSymbol = compilation.GetTypeByMetadataName(ComponentTypeAttr);
+        var pipelineStageAttrSymbol = compilation.GetTypeByMetadataName(PipelineStageAttr);
+        var paperAttrSymbol = compilation.GetTypeByMetadataName(ResearchPaperAttr);
+
+        if (componentTypeAttrSymbol is null)
+            return null;
+
+        var fullName = componentClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var entry = ExtractEntry(componentClass, fullName,
+            componentTypeAttrSymbol, pipelineStageAttrSymbol, paperAttrSymbol);
+
+        // Same admission rule as before: no component type means not discoverable.
+        return entry.ComponentTypes.Length > 0 ? entry : null;
     }
 
     private static bool IsCandidate(SyntaxNode node)
@@ -88,22 +112,13 @@ public class ComponentDiscoveryApiGenerator : IIncrementalGenerator
         return null;
     }
 
-    private static void Execute(
-        SourceProductionContext context,
-        ImmutableArray<INamedTypeSymbol?> candidates,
-        Compilation compilation)
+    /// <summary>
+    /// Emits from already-resolved entries; dedupe and ordering stay here where the whole set is
+    /// visible, while symbol work lives in <see cref="Analyze"/>.
+    /// </summary>
+    private static void Emit(SourceProductionContext context, ImmutableArray<ComponentDiscoveryEntry> candidates)
     {
         if (candidates.IsDefaultOrEmpty)
-        {
-            EmitEmpty(context);
-            return;
-        }
-
-        var componentTypeAttrSymbol = compilation.GetTypeByMetadataName(ComponentTypeAttr);
-        var pipelineStageAttrSymbol = compilation.GetTypeByMetadataName(PipelineStageAttr);
-        var paperAttrSymbol = compilation.GetTypeByMetadataName(ResearchPaperAttr);
-
-        if (componentTypeAttrSymbol is null)
         {
             EmitEmpty(context);
             return;
@@ -112,22 +127,20 @@ public class ComponentDiscoveryApiGenerator : IIncrementalGenerator
         var entries = new List<ComponentDiscoveryEntry>();
         var seen = new HashSet<string>();
 
-        foreach (var componentClass in candidates)
+        foreach (var entry in candidates)
         {
-            if (componentClass is null)
+            if (entry.FullyQualifiedName.Length == 0)
+                continue;
+            if (!seen.Add(entry.FullyQualifiedName))
                 continue;
 
-            var fullName = componentClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            if (!seen.Add(fullName))
-                continue;
+            entries.Add(entry);
+        }
 
-            var entry = ExtractEntry(componentClass, fullName,
-                componentTypeAttrSymbol, pipelineStageAttrSymbol, paperAttrSymbol);
-
-            if (entry.ComponentTypes.Count > 0)
-            {
-                entries.Add(entry);
-            }
+        if (entries.Count == 0)
+        {
+            EmitEmpty(context);
+            return;
         }
 
         entries.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
@@ -142,12 +155,10 @@ public class ComponentDiscoveryApiGenerator : IIncrementalGenerator
         INamedTypeSymbol? pipelineStageAttrSymbol,
         INamedTypeSymbol? paperAttrSymbol)
     {
-        var entry = new ComponentDiscoveryEntry
-        {
-            ClassName = componentClass.Name,
-            FullyQualifiedName = fullyQualifiedName,
-            TypeParameterCount = componentClass.TypeParameters.Length
-        };
+        var componentTypes = new List<int>();
+        var pipelineStages = new List<int>();
+        string paperTitle = string.Empty;
+        string summary = string.Empty;
 
         foreach (var attr in componentClass.GetAttributes())
         {
@@ -157,20 +168,20 @@ public class ComponentDiscoveryApiGenerator : IIncrementalGenerator
             if (SymbolEqualityComparer.Default.Equals(attr.AttributeClass, componentTypeAttrSymbol))
             {
                 if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int ct)
-                    entry.ComponentTypes.Add(ct);
+                    componentTypes.Add(ct);
             }
             else if (pipelineStageAttrSymbol is not null &&
                      SymbolEqualityComparer.Default.Equals(attr.AttributeClass, pipelineStageAttrSymbol))
             {
                 if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int ps)
-                    entry.PipelineStages.Add(ps);
+                    pipelineStages.Add(ps);
             }
             else if (paperAttrSymbol is not null &&
                      SymbolEqualityComparer.Default.Equals(attr.AttributeClass, paperAttrSymbol))
             {
                 if (attr.ConstructorArguments.Length >= 2)
                 {
-                    entry.PaperTitle = attr.ConstructorArguments[0].Value as string ?? string.Empty;
+                    paperTitle = attr.ConstructorArguments[0].Value as string ?? string.Empty;
                 }
             }
         }
@@ -179,10 +190,17 @@ public class ComponentDiscoveryApiGenerator : IIncrementalGenerator
         var xmlDoc = componentClass.GetDocumentationCommentXml();
         if (!string.IsNullOrWhiteSpace(xmlDoc))
         {
-            entry.Summary = ExtractSummary(xmlDoc);
+            summary = ExtractSummary(xmlDoc);
         }
 
-        return entry;
+        return new ComponentDiscoveryEntry(
+            componentClass.Name,
+            fullyQualifiedName,
+            componentClass.TypeParameters.Length,
+            componentTypes.ToImmutableArray(),
+            pipelineStages.ToImmutableArray(),
+            paperTitle,
+            summary);
     }
 
     private static string ExtractSummary(string xml)
@@ -420,7 +438,7 @@ public class ComponentDiscoveryApiGenerator : IIncrementalGenerator
         string methodName,
         string enumType,
         List<ComponentDiscoveryEntry> entries,
-        System.Func<ComponentDiscoveryEntry, List<int>> selector,
+        System.Func<ComponentDiscoveryEntry, ImmutableArray<int>> selector,
         Dictionary<int, string> nameMap)
     {
         // Group entries by their enum values
@@ -539,14 +557,86 @@ public class ComponentDiscoveryApiGenerator : IIncrementalGenerator
             .Replace("\"", "&quot;");
     }
 
-    private class ComponentDiscoveryEntry
+    /// <summary>
+    /// One discoverable component, as plain values.
+    /// </summary>
+    /// <remarks>
+    /// Immutable and structurally equal because this type travels through the incremental pipeline;
+    /// the previous mutable List&lt;int&gt; shape compared by reference, so identical data never
+    /// matched and nothing downstream could be skipped.
+    /// </remarks>
+    private sealed class ComponentDiscoveryEntry : System.IEquatable<ComponentDiscoveryEntry>
     {
-        public string ClassName { get; set; } = string.Empty;
-        public string FullyQualifiedName { get; set; } = string.Empty;
-        public int TypeParameterCount { get; set; }
-        public List<int> ComponentTypes { get; } = new List<int>();
-        public List<int> PipelineStages { get; } = new List<int>();
-        public string PaperTitle { get; set; } = string.Empty;
-        public string Summary { get; set; } = string.Empty;
+        public static readonly ComponentDiscoveryEntry Empty = new(
+            string.Empty, string.Empty, 0,
+            ImmutableArray<int>.Empty, ImmutableArray<int>.Empty, string.Empty, string.Empty);
+
+        public ComponentDiscoveryEntry(
+            string className,
+            string fullyQualifiedName,
+            int typeParameterCount,
+            ImmutableArray<int> componentTypes,
+            ImmutableArray<int> pipelineStages,
+            string paperTitle,
+            string summary)
+        {
+            ClassName = className;
+            FullyQualifiedName = fullyQualifiedName;
+            TypeParameterCount = typeParameterCount;
+            ComponentTypes = componentTypes.IsDefault ? ImmutableArray<int>.Empty : componentTypes;
+            PipelineStages = pipelineStages.IsDefault ? ImmutableArray<int>.Empty : pipelineStages;
+            PaperTitle = paperTitle;
+            Summary = summary;
+        }
+
+        public string ClassName { get; }
+        public string FullyQualifiedName { get; }
+        public int TypeParameterCount { get; }
+        public ImmutableArray<int> ComponentTypes { get; }
+        public ImmutableArray<int> PipelineStages { get; }
+        public string PaperTitle { get; }
+        public string Summary { get; }
+
+        public bool Equals(ComponentDiscoveryEntry? other)
+        {
+            if (other is null) return false;
+            if (ReferenceEquals(this, other)) return true;
+
+            return string.Equals(ClassName, other.ClassName, System.StringComparison.Ordinal)
+                && string.Equals(FullyQualifiedName, other.FullyQualifiedName, System.StringComparison.Ordinal)
+                && TypeParameterCount == other.TypeParameterCount
+                && string.Equals(PaperTitle, other.PaperTitle, System.StringComparison.Ordinal)
+                && string.Equals(Summary, other.Summary, System.StringComparison.Ordinal)
+                && SequenceEqual(ComponentTypes, other.ComponentTypes)
+                && SequenceEqual(PipelineStages, other.PipelineStages);
+        }
+
+        public override bool Equals(object? obj) => Equals(obj as ComponentDiscoveryEntry);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = 17;
+                hash = (hash * 31) + ClassName.GetHashCode();
+                hash = (hash * 31) + FullyQualifiedName.GetHashCode();
+                hash = (hash * 31) + TypeParameterCount;
+                hash = (hash * 31) + PaperTitle.GetHashCode();
+                hash = (hash * 31) + Summary.GetHashCode();
+                hash = (hash * 31) + ComponentTypes.Length;
+                hash = (hash * 31) + PipelineStages.Length;
+                return hash;
+            }
+        }
+
+        private static bool SequenceEqual(ImmutableArray<int> left, ImmutableArray<int> right)
+        {
+            if (left.Length != right.Length) return false;
+            for (int i = 0; i < left.Length; i++)
+            {
+                if (left[i] != right[i]) return false;
+            }
+            return true;
+        }
     }
 }
