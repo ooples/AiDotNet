@@ -19,6 +19,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.0](https://github.com/ooples/AiDotNet/compare/v0.231.0...v1.0.0) (2026-08-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* **optimizers:** NewtonMethodOptimizer.Step throws NotSupportedException on a training context that cannot re-evaluate the loss (TapeStepContext. SupportsReevaluation false), and LevenbergMarquardtOptimizer.Step always throws. Both previously fell through to the base class's plain theta -= lr*g, so callers who selected a second-order method silently received gradient descent. Use Optimize() with an explicit dataset, or choose Adam/SGD for a first-order method or LBFGS for a quasi-Newton one.
+* **layers:** SafetyConfig.FrameSamplingRate and VideoSafetyConfig.FrameSamplingRate are removed. Sampling is a fixed per-video budget, which is what the cited paper does (arXiv:2411.05854 fed '14 image frames, 1 thumbnail, and text metadata' per video across 19,422 videos) -- a budget, not a frames-per-second rate. The property had no reader left, so an [Obsolete] shim would only have let callers keep binding to a no-op. Callers should delete their assignments; MultimodalVideoModerator<T>.TaxonomyFrameBudget is the budget. VideoSafetyConfig also drops its now-unused 'using System;'. SafetyConfig keeps its own -- Array.Empty<string>() still needs it -- so the reviewer's conditional removal does not apply.
+* **autoformer:** removes public API (AiDotNet.Autodiff.GradientCheckpointing<T>, CheckpointingExtensions, DiffusionMemoryManager.Checkpoint/.CheckpointSequence). No caller existed in this repo, but downstream consumers referencing them will need to move to the AiDotNet.Tensors primitive.
+
+### Features
+
+* **analyzers:** enforce the golden patterns at build time ([#1984](https://github.com/ooples/AiDotNet/issues/1984)) ([6f38489](https://github.com/ooples/AiDotNet/commit/6f38489572941faeeecf52972e7fd55cf830fb00))
+* **deepar:** pluggable predictive-distribution head (Gaussian | Student-t | spline) ([#1890](https://github.com/ooples/AiDotNet/issues/1890)) ([8b8fd64](https://github.com/ooples/AiDotNet/commit/8b8fd6404d8247fac8fbfde6cbb90ad602a1df8c))
+* **facade:** purged/embargoed chronological validation split by default for forecast models ([#1894](https://github.com/ooples/AiDotNet/issues/1894)) ([6b83163](https://github.com/ooples/AiDotNet/commit/6b83163ff3fcc57248c76a7c820be6255a1caf9a))
+* **finance-rl:** greenfield portfolio-manager RL core — env + risk-adjusted rewards + honest-eval harness ([#1895](https://github.com/ooples/AiDotNet/issues/1895)) ([259d58b](https://github.com/ooples/AiDotNet/commit/259d58baa5927c24420ae1e2eac5f8997c53ba74))
+* **optimizer:** divergence guard + ReduceLROnPlateau coordinated with early stopping ([#1892](https://github.com/ooples/AiDotNet/issues/1892)) ([a923166](https://github.com/ooples/AiDotNet/commit/a9231660fc923058aeb34a8c12549343dc24dc66))
+* **rag:** productionize the RAG pipeline (real LLM, real vector stores, async, quantization, eval, facade wiring) ([#1896](https://github.com/ooples/AiDotNet/issues/1896)) ([61bb013](https://github.com/ooples/AiDotNet/commit/61bb0133a913f266c527fa0f8029c03999a66d98))
+* **serving:** OpenAI-compatible API, streaming generation, and serving benchmark ([#1882](https://github.com/ooples/AiDotNet/issues/1882)) ([b2464b4](https://github.com/ooples/AiDotNet/commit/b2464b4471d79d06ab48b70a9411d05f88c7f1cd))
+
+
+### Bug Fixes
+
+* **audio:** make the mel front-end mandatory and replace fabricated spectrograms ([#2027](https://github.com/ooples/AiDotNet/issues/2027)) ([bc5111f](https://github.com/ooples/AiDotNet/commit/bc5111fdd6423f5af9309468b7aaf869c6f196f5))
+* **build:** add the base hooks the [#1789](https://github.com/ooples/AiDotNet/issues/1789) split slices override ([#1991](https://github.com/ooples/AiDotNet/issues/1991)) ([bfd91b6](https://github.com/ooples/AiDotNet/commit/bfd91b66783f731dc1e2bfd19771652a495cd24f))
+* **build:** restore the broadcast call surface removed by tensors 0.121.0 ([#1987](https://github.com/ooples/AiDotNet/issues/1987)) ([f451025](https://github.com/ooples/AiDotNet/commit/f451025e9919ac45a3d9ce540d90336bb2c29945))
+* **facade:** Configure* must not silently drop configuration — AIDN090/091 analyzer + segmentation overlay renderer ([#2007](https://github.com/ooples/AiDotNet/issues/2007)) ([d843c80](https://github.com/ooples/AiDotNet/commit/d843c805d8bc26d8943256a744c2d831f2862a4a))
+* **facade:** quantization trained-state + rank-3 tensor training + interface-completeness guard ([#1887](https://github.com/ooples/AiDotNet/issues/1887)) ([d70b641](https://github.com/ooples/AiDotNet/commit/d70b64115f6f0d07dd35dba6d424037ea6b9c207))
+* **layers:** DenseLayer linear-by-default — fix ReLU-head zero-collapse across model-family shards ([#1789](https://github.com/ooples/AiDotNet/issues/1789)) ([5b074eb](https://github.com/ooples/AiDotNet/commit/5b074eb35e0cb6919ae85eea3a56c1c93114cb98))
+* **licensing:** unblock CI + v2 aidn2 hardening (P1) — capability gating, CRL, scope/machine binding ([#1891](https://github.com/ooples/AiDotNet/issues/1891)) ([c551cbb](https://github.com/ooples/AiDotNet/commit/c551cbb88c092d7fd9c6348b0dbc415d3ad8e91a))
+* **optimizers:** make every fused optimizer spec describe what its Step() actually does ([#2009](https://github.com/ooples/AiDotNet/issues/2009)) ([264780d](https://github.com/ooples/AiDotNet/commit/264780d8b2810783099d78047509915b1c418b81))
+* **tests:** build model inputs from the effective shape, not the declared one ([#2025](https://github.com/ooples/AiDotNet/issues/2025)) ([a087259](https://github.com/ooples/AiDotNet/commit/a0872593ed8b8ccfc2af360522aaeb966d84fc2a))
+* **tests:** repair two harness defects that failed before asserting ([#2035](https://github.com/ooples/AiDotNet/issues/2035)) ([1f3bc96](https://github.com/ooples/AiDotNet/commit/1f3bc962caf22f4e707c67867a4786817a0976a9))
+* **tests:** repair UTF-8 corruption in TrainingContractParityTests doc comment ([#1898](https://github.com/ooples/AiDotNet/issues/1898)) ([e50cca9](https://github.com/ooples/AiDotNet/commit/e50cca99377cd68b0c27dd7a00ea60accfe92d76))
+* **training:** pass the configured optimizer to trainwithtape ([#1986](https://github.com/ooples/AiDotNet/issues/1986)) ([17893cb](https://github.com/ooples/AiDotNet/commit/17893cb3891393a7b7f45260a5d694cbb5caea19))
+
+
+### Performance
+
+* **autoformer:** compute the correlation spectrum with one matmul; revive 20 dead GPU tests ([#1916](https://github.com/ooples/AiDotNet/issues/1916)) ([1f691fd](https://github.com/ooples/AiDotNet/commit/1f691fd3503aa28107c1493c12f337bc454046a5))
+* **models:** fix census hot paths and bounded fixture drift ([#2006](https://github.com/ooples/AiDotNet/issues/2006)) ([9f73afe](https://github.com/ooples/AiDotNet/commit/9f73afe31bc3af12612b2c55f09b13f22e0f7b5c))
+* **timeseries:** stop per-element GPU host reads in Autoformer/Informer/TFT forwards ([#1897](https://github.com/ooples/AiDotNet/issues/1897)) ([7be00cd](https://github.com/ooples/AiDotNet/commit/7be00cddfa53db490113c1f465998ca2b1dc686e))
+
 ## [Unreleased]
 
 ### Changed
