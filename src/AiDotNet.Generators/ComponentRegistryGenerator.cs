@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -32,18 +32,41 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         // Syntax-first filter: non-abstract class declarations (any class can have [ComponentType])
-        var classDeclarations = context.SyntaxProvider.CreateSyntaxProvider(
+        // Values, not symbols -- see DiscoveryApiGenerator for the full rationale.
+        var entries = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsCandidate(node),
-            transform: static (ctx, _) => GetComponentClassOrNull(ctx))
-            .Where(static s => s is not null);
+            transform: static (ctx, _) => Analyze(ctx))
+            .Where(static e => e is not null)
+            .Select(static (e, _) => e ?? ComponentEntryData.Empty);
 
-        var collected = classDeclarations.Collect().Combine(context.CompilationProvider);
+        context.RegisterSourceOutput(entries.Collect(), static (spc, collected) => Emit(spc, collected));
+    }
 
-        context.RegisterSourceOutput(collected, static (spc, source) =>
-        {
-            var (candidates, compilation) = source;
-            Execute(spc, candidates, compilation);
-        });
+    /// <summary>
+    /// Resolves one candidate class into a value-equatable entry, or null when it carries no
+    /// [ComponentType]. All symbol access is confined to this method.
+    /// </summary>
+    private static ComponentEntryData? Analyze(GeneratorSyntaxContext ctx)
+    {
+        if (GetComponentClassOrNull(ctx) is not INamedTypeSymbol componentClass)
+            return null;
+
+        var compilation = ctx.SemanticModel.Compilation;
+        var componentTypeAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ComponentTypeAttr);
+        var pipelineStageAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, PipelineStageAttr);
+        var componentDependencyAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ComponentDependencyAttr);
+        var researchPaperAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ResearchPaperAttr);
+
+        if (componentTypeAttrSymbol is null)
+            return null;
+
+        var fullName = componentClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var entry = ExtractMetadata(
+            componentClass, fullName,
+            componentTypeAttrSymbol, pipelineStageAttrSymbol,
+            componentDependencyAttrSymbol, researchPaperAttrSymbol);
+
+        return entry.ComponentTypes.Length > 0 ? entry : null;
     }
 
     private static bool IsCandidate(SyntaxNode node)
@@ -81,25 +104,9 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
         return null;
     }
 
-    private static void Execute(
-        SourceProductionContext context,
-        ImmutableArray<INamedTypeSymbol?> candidates,
-        Compilation compilation)
+    private static void Emit(SourceProductionContext context, ImmutableArray<ComponentEntryData> candidates)
     {
         if (candidates.IsDefaultOrEmpty)
-        {
-            EmitEmptyRegistry(context);
-            return;
-        }
-
-        // Resolve attribute type symbols
-        var componentTypeAttrSymbol = compilation.GetTypeByMetadataName(ComponentTypeAttr);
-        var pipelineStageAttrSymbol = compilation.GetTypeByMetadataName(PipelineStageAttr);
-        var componentDependencyAttrSymbol = compilation.GetTypeByMetadataName(ComponentDependencyAttr);
-        var researchPaperAttrSymbol = compilation.GetTypeByMetadataName(ResearchPaperAttr);
-
-        // If the core attribute doesn't exist, emit empty registry
-        if (componentTypeAttrSymbol is null)
         {
             EmitEmptyRegistry(context);
             return;
@@ -108,27 +115,22 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
         var entries = new List<ComponentEntryData>();
         var seen = new HashSet<string>();
 
-        foreach (var componentClass in candidates)
+        foreach (var entry in candidates)
         {
-            if (componentClass is null)
+            if (entry.FullyQualifiedName.Length == 0)
                 continue;
-
-            var fullName = componentClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
             // Deduplicate (same class can appear from multiple syntax trees for partial classes)
-            if (!seen.Add(fullName))
+            if (!seen.Add(entry.FullyQualifiedName))
                 continue;
 
-            var entry = ExtractMetadata(
-                componentClass, fullName,
-                componentTypeAttrSymbol, pipelineStageAttrSymbol,
-                componentDependencyAttrSymbol, researchPaperAttrSymbol);
+            entries.Add(entry);
+        }
 
-            // Only include classes that have at least one ComponentType
-            if (entry.ComponentTypes.Count > 0)
-            {
-                entries.Add(entry);
-            }
+        if (entries.Count == 0)
+        {
+            EmitEmptyRegistry(context);
+            return;
         }
 
         // Sort entries by fully-qualified name for deterministic output
@@ -146,12 +148,11 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
         INamedTypeSymbol? researchPaperAttrSymbol)
     {
         var attributes = componentClass.GetAttributes();
-        var entry = new ComponentEntryData
-        {
-            FullyQualifiedName = fullyQualifiedName,
-            ClassName = componentClass.Name,
-            TypeParameterCount = componentClass.TypeParameters.Length
-        };
+        var componentTypes = new List<int>();
+        var pipelineStages = new List<int>();
+        var dependencies = new List<DependencyData>();
+        var papers = new List<PaperData>();
+        string summary = string.Empty;
 
         foreach (var attr in attributes)
         {
@@ -165,7 +166,7 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
                     var val = attr.ConstructorArguments[0].Value;
                     if (val is int intVal)
                     {
-                        entry.ComponentTypes.Add(intVal);
+                        componentTypes.Add(intVal);
                     }
                 }
             }
@@ -177,14 +178,16 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
                     var val = attr.ConstructorArguments[0].Value;
                     if (val is int intVal)
                     {
-                        entry.PipelineStages.Add(intVal);
+                        pipelineStages.Add(intVal);
                     }
                 }
             }
             else if (componentDependencyAttrSymbol is not null &&
                      SymbolEqualityComparer.Default.Equals(attr.AttributeClass, componentDependencyAttrSymbol))
             {
-                var dep = new DependencyData();
+                string depTypeName = string.Empty;
+                string depDescription = string.Empty;
+                bool depRequired = true;
 
                 // First constructor argument is typeof(DependencyType)
                 if (attr.ConstructorArguments.Length >= 1)
@@ -192,14 +195,14 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
                     var typeArg = attr.ConstructorArguments[0].Value as INamedTypeSymbol;
                     if (typeArg is not null)
                     {
-                        dep.DependencyTypeName = typeArg.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                        depTypeName = typeArg.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                     }
                 }
 
                 // Second constructor argument (if present) is description string
                 if (attr.ConstructorArguments.Length >= 2)
                 {
-                    dep.Description = attr.ConstructorArguments[1].Value as string ?? string.Empty;
+                    depDescription = attr.ConstructorArguments[1].Value as string ?? string.Empty;
                 }
 
                 // Check named arguments for Description and Required
@@ -207,38 +210,41 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
                 {
                     if (named.Key == "Description" && named.Value.Value is string desc)
                     {
-                        dep.Description = desc;
+                        depDescription = desc;
                     }
                     else if (named.Key == "Required" && named.Value.Value is bool required)
                     {
-                        dep.Required = required;
+                        depRequired = required;
                     }
                 }
 
-                entry.Dependencies.Add(dep);
+                dependencies.Add(new DependencyData(depTypeName, depDescription, depRequired));
             }
             else if (researchPaperAttrSymbol is not null &&
                      SymbolEqualityComparer.Default.Equals(attr.AttributeClass, researchPaperAttrSymbol))
             {
-                var paper = new PaperData();
+                string paperTitle = string.Empty;
+                string paperUrl = string.Empty;
+                int paperYear = 0;
+                string paperAuthors = string.Empty;
                 if (attr.ConstructorArguments.Length >= 2)
                 {
-                    paper.Title = attr.ConstructorArguments[0].Value as string ?? string.Empty;
-                    paper.Url = attr.ConstructorArguments[1].Value as string ?? string.Empty;
+                    paperTitle = attr.ConstructorArguments[0].Value as string ?? string.Empty;
+                    paperUrl = attr.ConstructorArguments[1].Value as string ?? string.Empty;
                 }
                 // Check named arguments for Year and Authors
                 foreach (var named in attr.NamedArguments)
                 {
                     if (named.Key == "Year" && named.Value.Value is int year)
                     {
-                        paper.Year = year;
+                        paperYear = year;
                     }
                     else if (named.Key == "Authors" && named.Value.Value is string authors)
                     {
-                        paper.Authors = authors;
+                        paperAuthors = authors;
                     }
                 }
-                entry.Papers.Add(paper);
+                papers.Add(new PaperData(paperTitle, paperUrl, paperYear, paperAuthors));
             }
         }
 
@@ -246,10 +252,18 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
         var xmlDoc = componentClass.GetDocumentationCommentXml();
         if (!string.IsNullOrWhiteSpace(xmlDoc))
         {
-            entry.Summary = ExtractXmlElement(xmlDoc, "summary");
+            summary = ExtractXmlElement(xmlDoc, "summary");
         }
 
-        return entry;
+        return new ComponentEntryData(
+            fullyQualifiedName,
+            componentClass.Name,
+            componentClass.TypeParameters.Length,
+            componentTypes.ToImmutableArray(),
+            pipelineStages.ToImmutableArray(),
+            dependencies.ToImmutableArray(),
+            papers.ToImmutableArray(),
+            summary);
     }
 
     private static string ExtractXmlElement(string xml, string elementName)
@@ -580,7 +594,7 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
         sb.AppendLine($"            {entry.TypeParameterCount},");
 
         // ComponentTypes array
-        if (entry.ComponentTypes.Count == 0)
+        if (entry.ComponentTypes.Length == 0)
         {
             sb.AppendLine("            System.Array.Empty<ComponentType>(),");
         }
@@ -592,7 +606,7 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
         }
 
         // PipelineStages array
-        if (entry.PipelineStages.Count == 0)
+        if (entry.PipelineStages.Length == 0)
         {
             sb.AppendLine("            System.Array.Empty<PipelineStage>(),");
         }
@@ -604,7 +618,7 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
         }
 
         // Dependencies array
-        if (entry.Dependencies.Count == 0)
+        if (entry.Dependencies.Length == 0)
         {
             sb.AppendLine("            System.Array.Empty<ComponentDependencyEntry>(),");
         }
@@ -620,7 +634,7 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
         }
 
         // Papers array
-        if (entry.Papers.Count == 0)
+        if (entry.Papers.Length == 0)
         {
             sb.AppendLine("            System.Array.Empty<ComponentPaperEntry>(),");
         }
@@ -653,30 +667,190 @@ public class ComponentRegistryGenerator : IIncrementalGenerator
             .Replace("\t", "\\t") + "\"";
     }
 
-    private class ComponentEntryData
+    /// <summary>
+    /// One registered component, as plain values.
+    /// </summary>
+    /// <remarks>
+    /// Structural equality has to reach THROUGH the nested collections, not stop at the top-level
+    /// type: this entry owns Dependencies and Papers, so DependencyData and PaperData are equatable
+    /// too. Comparing the outer object while its children compared by reference would leave the
+    /// pipeline exactly as uncacheable as before.
+    /// </remarks>
+    private sealed class ComponentEntryData : System.IEquatable<ComponentEntryData>
     {
-        public string FullyQualifiedName { get; set; } = string.Empty;
-        public string ClassName { get; set; } = string.Empty;
-        public int TypeParameterCount { get; set; }
-        public List<int> ComponentTypes { get; } = new List<int>();
-        public List<int> PipelineStages { get; } = new List<int>();
-        public List<DependencyData> Dependencies { get; } = new List<DependencyData>();
-        public List<PaperData> Papers { get; } = new List<PaperData>();
-        public string Summary { get; set; } = string.Empty;
+        public static readonly ComponentEntryData Empty = new(
+            string.Empty, string.Empty, 0,
+            ImmutableArray<int>.Empty, ImmutableArray<int>.Empty,
+            ImmutableArray<DependencyData>.Empty, ImmutableArray<PaperData>.Empty, string.Empty);
+
+        public ComponentEntryData(
+            string fullyQualifiedName,
+            string className,
+            int typeParameterCount,
+            ImmutableArray<int> componentTypes,
+            ImmutableArray<int> pipelineStages,
+            ImmutableArray<DependencyData> dependencies,
+            ImmutableArray<PaperData> papers,
+            string summary)
+        {
+            FullyQualifiedName = fullyQualifiedName;
+            ClassName = className;
+            TypeParameterCount = typeParameterCount;
+            ComponentTypes = componentTypes.IsDefault ? ImmutableArray<int>.Empty : componentTypes;
+            PipelineStages = pipelineStages.IsDefault ? ImmutableArray<int>.Empty : pipelineStages;
+            Dependencies = dependencies.IsDefault ? ImmutableArray<DependencyData>.Empty : dependencies;
+            Papers = papers.IsDefault ? ImmutableArray<PaperData>.Empty : papers;
+            Summary = summary;
+        }
+
+        public string FullyQualifiedName { get; }
+        public string ClassName { get; }
+        public int TypeParameterCount { get; }
+        public ImmutableArray<int> ComponentTypes { get; }
+        public ImmutableArray<int> PipelineStages { get; }
+        public ImmutableArray<DependencyData> Dependencies { get; }
+        public ImmutableArray<PaperData> Papers { get; }
+        public string Summary { get; }
+
+        public bool Equals(ComponentEntryData? other)
+        {
+            if (other is null) return false;
+            if (ReferenceEquals(this, other)) return true;
+
+            return string.Equals(FullyQualifiedName, other.FullyQualifiedName, System.StringComparison.Ordinal)
+                && string.Equals(ClassName, other.ClassName, System.StringComparison.Ordinal)
+                && TypeParameterCount == other.TypeParameterCount
+                && string.Equals(Summary, other.Summary, System.StringComparison.Ordinal)
+                && IntsEqual(ComponentTypes, other.ComponentTypes)
+                && IntsEqual(PipelineStages, other.PipelineStages)
+                && ItemsEqual(Dependencies, other.Dependencies)
+                && ItemsEqual(Papers, other.Papers);
+        }
+
+        public override bool Equals(object? obj) => Equals(obj as ComponentEntryData);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = 17;
+                hash = (hash * 31) + FullyQualifiedName.GetHashCode();
+                hash = (hash * 31) + ClassName.GetHashCode();
+                hash = (hash * 31) + TypeParameterCount;
+                hash = (hash * 31) + Summary.GetHashCode();
+                hash = (hash * 31) + ComponentTypes.Length;
+                hash = (hash * 31) + PipelineStages.Length;
+                hash = (hash * 31) + Dependencies.Length;
+                hash = (hash * 31) + Papers.Length;
+                return hash;
+            }
+        }
+
+        private static bool IntsEqual(ImmutableArray<int> left, ImmutableArray<int> right)
+        {
+            if (left.Length != right.Length) return false;
+            for (int i = 0; i < left.Length; i++)
+            {
+                if (left[i] != right[i]) return false;
+            }
+            return true;
+        }
+
+        private static bool ItemsEqual<TItem>(ImmutableArray<TItem> left, ImmutableArray<TItem> right)
+            where TItem : System.IEquatable<TItem>
+        {
+            if (left.Length != right.Length) return false;
+            for (int i = 0; i < left.Length; i++)
+            {
+                if (!left[i].Equals(right[i])) return false;
+            }
+            return true;
+        }
     }
 
-    private class DependencyData
+    /// <remarks>
+    /// CONSTRUCTOR-INITIALISED AND GET-ONLY ON PURPOSE. This type is an ELEMENT of an
+    /// ImmutableArray held by a cached pipeline entry, and ImmutableArray freezes the SEQUENCE, not
+    /// the elements. While these had settable properties, an element could still be mutated after
+    /// Roslyn had compared the entry, which makes the entry's Equals and GetHashCode unstable for
+    /// exactly the cached state this refactor is trying to make comparable.
+    /// </remarks>
+    private sealed class DependencyData : System.IEquatable<DependencyData>
     {
-        public string DependencyTypeName { get; set; } = string.Empty;
-        public string Description { get; set; } = string.Empty;
-        public bool Required { get; set; } = true;
+        public DependencyData(string dependencyTypeName, string description, bool required)
+        {
+            DependencyTypeName = dependencyTypeName;
+            Description = description;
+            Required = required;
+        }
+
+        public string DependencyTypeName { get; }
+        public string Description { get; }
+        public bool Required { get; }
+
+        public bool Equals(DependencyData? other)
+            => other is not null
+            && string.Equals(DependencyTypeName, other.DependencyTypeName, System.StringComparison.Ordinal)
+            && string.Equals(Description, other.Description, System.StringComparison.Ordinal)
+            && Required == other.Required;
+
+        public override bool Equals(object? obj) => Equals(obj as DependencyData);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = 17;
+                hash = (hash * 31) + DependencyTypeName.GetHashCode();
+                hash = (hash * 31) + Description.GetHashCode();
+                hash = (hash * 31) + (Required ? 1 : 0);
+                return hash;
+            }
+        }
     }
 
-    private class PaperData
+    /// <remarks>
+    /// CONSTRUCTOR-INITIALISED AND GET-ONLY ON PURPOSE. This type is an ELEMENT of an
+    /// ImmutableArray held by a cached pipeline entry, and ImmutableArray freezes the SEQUENCE, not
+    /// the elements. While these had settable properties, an element could still be mutated after
+    /// Roslyn had compared the entry, which makes the entry's Equals and GetHashCode unstable for
+    /// exactly the cached state this refactor is trying to make comparable.
+    /// </remarks>
+    private sealed class PaperData : System.IEquatable<PaperData>
     {
-        public string Title { get; set; } = string.Empty;
-        public string Url { get; set; } = string.Empty;
-        public int Year { get; set; }
-        public string Authors { get; set; } = string.Empty;
+        public PaperData(string title, string url, int year, string authors)
+        {
+            Title = title;
+            Url = url;
+            Year = year;
+            Authors = authors;
+        }
+
+        public string Title { get; }
+        public string Url { get; }
+        public int Year { get; }
+        public string Authors { get; }
+
+        public bool Equals(PaperData? other)
+            => other is not null
+            && string.Equals(Title, other.Title, System.StringComparison.Ordinal)
+            && string.Equals(Url, other.Url, System.StringComparison.Ordinal)
+            && Year == other.Year
+            && string.Equals(Authors, other.Authors, System.StringComparison.Ordinal);
+
+        public override bool Equals(object? obj) => Equals(obj as PaperData);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = 17;
+                hash = (hash * 31) + Title.GetHashCode();
+                hash = (hash * 31) + Url.GetHashCode();
+                hash = (hash * 31) + Year;
+                hash = (hash * 31) + Authors.GetHashCode();
+                return hash;
+            }
+        }
     }
 }
