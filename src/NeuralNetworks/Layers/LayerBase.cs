@@ -785,6 +785,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     protected virtual bool TryRebindForParameterCount(int parameterCount) => false;
 
     /// <summary>
+    /// Whether <paramref name="parameterCount"/> is achievable by this layer at SOME input shape.
+    /// </summary>
+    /// <remarks>
+    /// Consulted only while the shape is still unresolved, to decide whether
+    /// <see cref="SetParameters"/> should park a payload for later replay or reject it now.
+    /// The default returns <c>true</c> -- a layer that cannot decide must defer, which is the
+    /// long-standing behaviour. Override it where the parameter count follows a known formula in
+    /// the unresolved axis, so an impossible vector fails at the call that supplied it instead of
+    /// at some later forward.
+    /// </remarks>
+    protected virtual bool CanEverAcceptParameterCount(int parameterCount) => true;
+
+    /// <summary>
     /// Returns the one ordered component walk used by count, flat read/write, state chunks, and
     /// gradient scattering. Generated declarations are authoritative for order; runtime registries
     /// are a compatibility supplement and may add only components not already declared.
@@ -6581,6 +6594,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
         if (!shapeKnown && !currentLayoutMatches)
         {
+            // Park only what could actually be restored later. Deferring is right when the payload
+            // is merely un-checkable yet, and wrong when the layer's own shape formula admits no
+            // input width that ever produces this length -- then SetParameters accepts an
+            // impossible vector silently and the error only surfaces at some later forward, far
+            // from the call that caused it. Layers that can decide opt in by overriding
+            // CanEverAcceptParameterCount; the default says yes, so nothing else changes.
+            if (!CanEverAcceptParameterCount(parameters.Length))
+            {
+                throw new ArgumentException(
+                    $"{GetType().Name} can never hold {parameters.Length} parameters at any input "
+                    + "shape, so this vector cannot be restored once the shape resolves.",
+                    nameof(parameters));
+            }
+
             if (Parameters.Length != 0)
             {
                 throw new InvalidOperationException(
