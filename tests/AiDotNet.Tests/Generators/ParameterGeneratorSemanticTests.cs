@@ -286,6 +286,28 @@ public partial class AdaptiveLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase
     }
 
     [Fact]
+    public async Task LayerGenerator_FiltersNonSemanticAxesBeforeSentinelAnalysis()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public partial class SparseShapeLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    private int _channels = -1;
+    [TrainableParameter(Shape = ""*, , _channels / 2"")]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T> _weights = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+
+        // Empty and fully-adaptive axes carry no sentinel source. The concrete expression must
+        // still be walked and guarded before integer arithmetic can launder -1 into zero.
+        Assert.Contains("if (_channels < 0) return", generated, StringComparison.Ordinal);
+        Assert.Contains("ShapeOf(-2, _channels / 2)", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("if (*", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task LayerGenerator_EmitsOnlyDeclaredTrainableAndPersistentRoles()
     {
         await Task.Yield();

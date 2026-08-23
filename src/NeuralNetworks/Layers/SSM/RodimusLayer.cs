@@ -137,7 +137,6 @@ public partial class RodimusLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _lastTemperature;
     private Tensor<T>? _lastTemperatureRaw;
     private Tensor<T>? _lastForgetGate;
-    private Tensor<T>? _lastSelectionWeights;
     private Tensor<T>? _lastOutputGate;
     private Tensor<T>? _lastOutputGateRaw;
     private Tensor<T>? _lastRecurrenceOutput;
@@ -331,9 +330,10 @@ public partial class RodimusLayer<T> : LayerBase<T>, IShapeContract
             Engine.Reshape(_temperatureBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
         _lastTemperatureRaw = tempRaw;
 
-        var temperature = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
-        for (int i = 0; i < temperature.Length; i++)
-            temperature[i] = Softplus(tempRaw[i]);
+        // Engine.Softplus, not a scalar loop over a rented buffer: the loop severed the tape between
+        // tempRaw and temperature, so _temperatureWeights/_temperatureBias got no gradient even once
+        // the recurrence below was differentiable. The forget gate under this already used Engine.
+        var temperature = Engine.Softplus(tempRaw);
         _lastTemperature = temperature;
 
         // Step 3: Forget gate
@@ -392,114 +392,79 @@ public partial class RodimusLayer<T> : LayerBase<T>, IShapeContract
     /// The temperature tau controls selection sharpness:
     /// - tau near 0: Only the highest-scoring key-value pair updates the state (very selective)
     /// - tau large: All key-value pairs contribute equally (uniform update)
+    ///
+    /// Built from Engine ops so the recurrence stays on the autodiff tape. The NumOps scalar loop
+    /// this replaces was detached from it, so q/k/v, the temperature parameters and both forget-gate
+    /// parameters - 7 of this layer's 11 trainable tensors - received no gradient and never learned.
+    /// The layer has no Backward override, so the tape was its only gradient path.
+    /// The selection softmax drops the scalar loop's 1e-10 denominator guard: after the row max is
+    /// subtracted the sum is always at least 1, so the guard could only bias the result.
     /// </remarks>
     private Tensor<T> TemperedRecurrenceForward(
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         Tensor<T> temperature, Tensor<T> forgetGate,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        int headBatch = batchSize * _numHeads;
         T baseScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
-        // State matrix per head: [batch, numHeads, headDim, headDim]
-        var state = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        var allStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
-        var selectionWeightsCache = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var qHeads = ToHeadMajor(q, batchSize, seqLen);                       // [HB, S, D]
+        var kHeads = ToHeadMajor(k, batchSize, seqLen);
+        var vHeads = ToHeadMajor(v, batchSize, seqLen);
+        // Temperature and the forget gate are scalar per (head, timestep).
+        var tauHeads = Engine.Reshape(Engine.TensorPermute(temperature, new[] { 0, 2, 1 }),
+            new[] { headBatch, seqLen, 1 });
+        var fgHeads = Engine.Reshape(Engine.TensorPermute(forgetGate, new[] { 0, 2, 1 }),
+            new[] { headBatch, seqLen, 1 });
+
+        var state = Tensor<T>.CreateDefault(
+            new[] { headBatch, _headDimension, _headDimension }, NumOps.Zero);
+        var outputs = new List<Tensor<T>>(seqLen);
 
         for (int t = 0; t < seqLen; t++)
         {
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
+            var qT = Engine.TensorSliceAxis(qHeads, 1, t);                    // [HB, D]
+            var kT = Engine.TensorSliceAxis(kHeads, 1, t);
+            var vT = Engine.TensorSliceAxis(vHeads, 1, t);
+            var tauT = Engine.TensorSliceAxis(tauHeads, 1, t);                // [HB, 1]
+            var fgT = Engine.Reshape(Engine.TensorSliceAxis(fgHeads, 1, t), new[] { headBatch, 1, 1 });
 
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    T tau = temperature[new[] { bi, t, hi }];
-                    T fGate = forgetGate[new[] { bi, t, hi }];
+            // Tempered selection score is an ELEMENTWISE q*k product over the head dimension - not a
+            // dot product - divided by the temperature, then softmaxed across that dimension.
+            var scores = Engine.TensorDivide(
+                Engine.TensorMultiplyScalar(Engine.TensorMultiply(qT, kT), baseScale),
+                Engine.TensorTile(tauT, new[] { 1, _headDimension }));
+            var sel = Engine.Softmax(scores, axis: -1);                       // [HB, D]
 
-                    // Compute tempered selection scores: score_i = (q dot k_i) / (sqrt(d) * tau)
-                    // Here k_i are the individual key dimension values, and the softmax
-                    // distributes attention across the head dimensions
-                    var scores = new T[_headDimension];
-                    T maxScore = NumOps.MinValue;
-                    for (int ki = 0; ki < _headDimension; ki++)
-                    {
-                        int flatKi = dimStart + ki;
-                        // Score is the product of q and k scaled by temperature
-                        T qVal = q[new[] { bi, t, flatKi }];
-                        T kVal = k[new[] { bi, t, flatKi }];
-                        T score = NumOps.Divide(
-                            NumOps.Multiply(NumOps.Multiply(qVal, kVal), baseScale), tau);
-                        scores[ki] = score;
-                        if (NumOps.GreaterThan(score, maxScore))
-                            maxScore = score;
-                    }
+            // S_t = fg * S_{t-1} + v_t (x) (sel * k_t * baseScale)
+            var kRow = Engine.Reshape(
+                Engine.TensorMultiply(sel, Engine.TensorMultiplyScalar(kT, baseScale)),
+                new[] { headBatch, 1, _headDimension });
+            var vCol = Engine.Reshape(vT, new[] { headBatch, _headDimension, 1 });
+            state = Engine.TensorAdd(
+                Engine.TensorMultiply(state, fgT),
+                Engine.BatchMatMul(vCol, kRow));
 
-                    // Softmax over key dimensions for selection weights
-                    T sumExp = NumOps.Zero;
-                    var expScores = new T[_headDimension];
-                    for (int ki = 0; ki < _headDimension; ki++)
-                    {
-                        expScores[ki] = NumOps.Exp(NumOps.Subtract(scores[ki], maxScore));
-                        sumExp = NumOps.Add(sumExp, expScores[ki]);
-                    }
-                    T sumExpInv = NumOps.Divide(NumOps.One, NumOps.Add(sumExp, NumOps.FromDouble(1e-10)));
-
-                    var selWeights = new T[_headDimension];
-                    for (int ki = 0; ki < _headDimension; ki++)
-                    {
-                        selWeights[ki] = NumOps.Multiply(expScores[ki], sumExpInv);
-                        selectionWeightsCache[new[] { bi, t, hi, ki }] = selWeights[ki];
-                    }
-
-                    // Gated state update: S_t = forget * S_{t-1} + selWeight * (k * v^T)
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        for (int ki = 0; ki < _headDimension; ki++)
-                        {
-                            int flatKi = dimStart + ki;
-                            int flatDi = dimStart + di;
-                            T kVal = NumOps.Multiply(k[new[] { bi, t, flatKi }], baseScale);
-                            T vVal = v[new[] { bi, t, flatDi }];
-
-                            T prevS = state[new[] { bi, hi, di, ki }];
-                            // Tempered update: selectionWeight scales the outer product
-                            T update = NumOps.Multiply(selWeights[ki],
-                                NumOps.Multiply(kVal, vVal));
-                            T newS = NumOps.Add(NumOps.Multiply(fGate, prevS), update);
-                            state[new[] { bi, hi, di, ki }] = newS;
-                        }
-                    }
-
-                    // Output: o_t = S_t * q_t
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T oVal = NumOps.Zero;
-                        for (int ki = 0; ki < _headDimension; ki++)
-                        {
-                            int flatKi = dimStart + ki;
-                            T qVal = q[new[] { bi, t, flatKi }];
-                            oVal = NumOps.Add(oVal,
-                                NumOps.Multiply(state[new[] { bi, hi, di, ki }], qVal));
-                        }
-                        output[new[] { bi, t, flatDi }] = oVal;
-                    }
-                }
-            }
-
-            // Save state snapshot for backward pass
-            for (int bi = 0; bi < batchSize; bi++)
-                for (int hi2 = 0; hi2 < _numHeads; hi2++)
-                    for (int di = 0; di < _headDimension; di++)
-                        for (int ki = 0; ki < _headDimension; ki++)
-                            allStates[new[] { bi, t + 1, hi2, di, ki }] = state[new[] { bi, hi2, di, ki }];
+            var qCol = Engine.Reshape(qT, new[] { headBatch, _headDimension, 1 });
+            outputs.Add(Engine.Reshape(Engine.BatchMatMul(state, qCol),
+                new[] { headBatch, 1, _headDimension }));
         }
 
-        _lastStates = allStates;
-        _lastSelectionWeights = selectionWeightsCache;
-        return output;
+        _lastStates = state;
+        return FromHeadMajor(Engine.TensorConcatenate(outputs.ToArray(), 1), batchSize, seqLen);
     }
+
+    private Tensor<T> ToHeadMajor(Tensor<T> value, int batchSize, int seqLen) =>
+        Engine.Reshape(Engine.TensorPermute(
+            Engine.Reshape(value, new[] { batchSize, seqLen, _numHeads, _headDimension }),
+            new[] { 0, 2, 1, 3 }),
+            new[] { batchSize * _numHeads, seqLen, _headDimension });
+
+    private Tensor<T> FromHeadMajor(Tensor<T> value, int batchSize, int seqLen) =>
+        Engine.Reshape(Engine.TensorPermute(
+            Engine.Reshape(value, new[] { batchSize, _numHeads, seqLen, _headDimension }),
+            new[] { 0, 2, 1, 3 }),
+            new[] { batchSize, seqLen, _modelDimension });
 
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
@@ -597,7 +562,6 @@ public partial class RodimusLayer<T> : LayerBase<T>, IShapeContract
         _lastTemperature = null;
         _lastTemperatureRaw = null;
         _lastForgetGate = null;
-        _lastSelectionWeights = null;
         _lastOutputGate = null;
         _lastOutputGateRaw = null;
         _lastRecurrenceOutput = null;

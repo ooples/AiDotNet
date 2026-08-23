@@ -372,6 +372,11 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
     /// Computes Householder vectors from input for each timestep.
     /// Returns shape [batch * seqLen, numHouseholders, numHeads, headDim].
     /// </summary>
+    /// <remarks>
+    /// The projection does not depend on the head index at all - every head sees the same vector -
+    /// so this is one matmul per Householder index, tiled across heads. Built from Engine ops so
+    /// _householderWeights stays on the tape; the scalar loop this replaces severed it.
+    /// </remarks>
     private Tensor<T> ComputeHouseholderVectors(Tensor<T> inputFlat, int batchSize, int seqLen)
     {
         int total = batchSize * seqLen;
@@ -392,62 +397,19 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Applies the product of M Householder reflections to the state, then scales by alpha.
-    /// S <- alpha * H * S  where H = H_M * ... * H_1.
+    /// Gated DeltaProduct recurrence: Householder-product transition, alpha gate, then delta update.
+    /// <code>
+    ///   S_t = alpha_t * (H_M ... H_1) * S_{t-1} + beta_t * v_t * k_t^T
+    ///   O_t = S_t * q_t                       where H_m = I - 2 u u^T / (||u||^2 + eps)
+    /// </code>
     /// </summary>
-    private void ApplyGatedHouseholderProduct(
-        Tensor<T> state, Tensor<T> hVecs, T alphaVal,
-        int bi, int hi, int posFlat)
-    {
-        // First apply Householder reflections: S <- H * S
-        for (int mi = 0; mi < _numHouseholders; mi++)
-        {
-            T normSq = NumOps.Zero;
-            for (int d = 0; d < _headDimension; d++)
-            {
-                T u = hVecs[new[] { posFlat, mi, hi, d }];
-                normSq = NumOps.Add(normSq, NumOps.Multiply(u, u));
-            }
-            T eps = NumOps.FromDouble(1e-8);
-            normSq = NumOps.Add(normSq, eps);
-            T twoOverNormSq = NumOps.Divide(NumOps.FromDouble(2.0), normSq);
-
-            for (int j = 0; j < _headDimension; j++)
-            {
-                T dot = NumOps.Zero;
-                for (int d = 0; d < _headDimension; d++)
-                {
-                    T u = hVecs[new[] { posFlat, mi, hi, d }];
-                    dot = NumOps.Add(dot, NumOps.Multiply(u, state[new[] { bi, hi, d, j }]));
-                }
-                T factor = NumOps.Multiply(twoOverNormSq, dot);
-
-                for (int d = 0; d < _headDimension; d++)
-                {
-                    T u = hVecs[new[] { posFlat, mi, hi, d }];
-                    state[new[] { bi, hi, d, j }] = NumOps.Subtract(
-                        state[new[] { bi, hi, d, j }],
-                        NumOps.Multiply(factor, u));
-                }
-            }
-        }
-
-        // Then scale by alpha: S <- alpha * S
-        for (int di = 0; di < _headDimension; di++)
-        {
-            for (int ki = 0; ki < _headDimension; ki++)
-            {
-                state[new[] { bi, hi, di, ki }] = NumOps.Multiply(
-                    alphaVal, state[new[] { bi, hi, di, ki }]);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Gated DeltaProduct recurrence:
-    /// S_t = alpha_t * H_t * S_{t-1} + beta_t * v_t * k_t^T
-    /// O_t = S_t * q_t
-    /// </summary>
+    /// <remarks>
+    /// Written with Engine ops, mirroring the ungated <c>DeltaProductLayer</c> - which computes the
+    /// same recurrence and is already fully differentiable. The scalar loop this replaces was
+    /// detached from the tape, so q/k/v, both gates and the Householder weights (8 of 12 trainable
+    /// tensors) received no gradient and never learned. This layer has no Backward override, so the
+    /// tape was its only gradient path.
+    /// </remarks>
     private Tensor<T> GatedDeltaProductRecurrence(
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         Tensor<T> alpha, Tensor<T> beta,
@@ -515,35 +477,17 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
         return Engine.Reshape(outputHeads, new[] { batchSize, seqLen, _modelDimension });
     }
 
-    /// <summary>
-    /// Accumulates Householder weight gradients from per-position gradients.
-    /// </summary>
-    private void AccumulateHouseholderWeightGradients(
-        Tensor<T> dHVecs, Tensor<T> inputFlat, int batchSize, int seqLen)
-    {
-        int total = batchSize * seqLen;
-        var gradient = _householderWeightsGradient ?? throw new InvalidOperationException("Gradients not initialized.");
+    private Tensor<T> ToHeadMajor(Tensor<T> value, int batchSize, int seqLen) =>
+        Engine.Reshape(Engine.TensorPermute(
+            Engine.Reshape(value, new[] { batchSize, seqLen, _numHeads, _headDimension }),
+            new[] { 0, 2, 1, 3 }),
+            new[] { batchSize * _numHeads, seqLen, _headDimension });
 
-        for (int mi = 0; mi < _numHouseholders; mi++)
-        {
-            for (int pos = 0; pos < total; pos++)
-            {
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        T dH = dHVecs[new[] { pos, mi, hi, d }];
-                        for (int j = 0; j < _modelDimension; j++)
-                        {
-                            gradient[new[] { mi, j, d }] = NumOps.Add(
-                                gradient[new[] { mi, j, d }],
-                                NumOps.Multiply(dH, inputFlat[new[] { pos, j }]));
-                        }
-                    }
-                }
-            }
-        }
-    }
+    private Tensor<T> FromHeadMajor(Tensor<T> value, int batchSize, int seqLen) =>
+        Engine.Reshape(Engine.TensorPermute(
+            Engine.Reshape(value, new[] { batchSize, _numHeads, seqLen, _headDimension }),
+            new[] { 0, 2, 1, 3 }),
+            new[] { batchSize, seqLen, _modelDimension });
 
     /// <summary>
     /// Computes input gradient contribution from Householder vectors.

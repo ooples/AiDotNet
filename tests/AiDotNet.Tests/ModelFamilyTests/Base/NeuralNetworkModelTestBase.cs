@@ -1789,6 +1789,18 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             }
             else if (value is System.Collections.IEnumerable seq and not string)
             {
+                // NOT EVERY IEnumerable FIELD IS A COLLECTION OF LAYERS. Tensor<T> implements
+                // IEnumerable, and enumerating a SparseTensor<T> throws outright --
+                // "GetFlat is not supported on sparse tensors" out of Tensor<T>.GetEnumerator().
+                // SparseNeuralNetwork holds exactly such a field, so this walk died with an
+                // exception that said nothing about sub-layer registration and took the whole
+                // invariant down with it.
+                //
+                // Skipping these weakens nothing: the loop below only ever counts ILayer<T> items,
+                // and a tensor/vector/matrix cannot contain a layer. The registration question is
+                // still asked in full for every field that could actually hold one.
+                if (IsTensorLike(value)) continue;
+
                 foreach (var item in seq)
                 {
                     if (item is not ILayer<T> c) continue;
@@ -1804,6 +1816,17 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         foreach (var sub in exposed) CheckReachable(sub, offenders, visited);
     }
+
+    /// <summary>
+    /// True when a value is a numeric container rather than a collection of child layers.
+    /// </summary>
+    /// <remarks>
+    /// These types implement <see cref="System.Collections.IEnumerable"/> but can never hold an
+    /// <see cref="ILayer{T}"/>, and <c>SparseTensor&lt;T&gt;</c> throws from its enumerator rather
+    /// than yielding anything, so the structural walk must not try to enumerate them.
+    /// </remarks>
+    private static bool IsTensorLike(object value)
+        => value is Tensor<T> or Vector<T> or Matrix<T>;
     /// <summary>
     /// After a forward pass has materialized the weights, the count and the vector must describe
     /// the same parameter set.
