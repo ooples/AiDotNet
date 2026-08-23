@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -264,7 +264,7 @@ public partial class VocosGeneratorLayer<T> : LayerBase<T>, IShapeContract
             block = _blockProjections[i].Forward(block);
             block = Engine.TensorPermute(block, new[] { 0, 2, 1 });
             var scale = Engine.Reshape(_layerScales[i], new[] { 1, _hiddenDim, 1 });
-            block = Engine.TensorBroadcastMultiply(block, scale);
+            block = Engine.TensorMultiply(block, scale);
             x = Engine.TensorAdd(residual, block);
         }
 
@@ -321,7 +321,7 @@ public partial class VocosGeneratorLayer<T> : LayerBase<T>, IShapeContract
 
         var timeFrames = DifferentiableInverseRealFft(real, imaginary, batch, frames);
         var window = Engine.Reshape(_window, new[] { 1, 1, _nFft });
-        timeFrames = Engine.TensorBroadcastMultiply(timeFrames, window);
+        timeFrames = Engine.TensorMultiply(timeFrames, window);
 
         int paddedLength = (frames - 1) * _hopLength + _nFft;
         Tensor<T>? overlapAdded = null;
@@ -361,7 +361,7 @@ public partial class VocosGeneratorLayer<T> : LayerBase<T>, IShapeContract
             inverseEnvelope[sample] = NumOps.FromDouble(
                 envelope[sample] > 1e-8 ? 1.0 / envelope[sample] : 0.0);
         }
-        var normalized = Engine.TensorBroadcastMultiply(overlapAdded, inverseEnvelope);
+        var normalized = Engine.TensorMultiply(overlapAdded, inverseEnvelope);
 
         int samePadding = (_nFft - _hopLength) / 2;
         int waveformLength = frames * _hopLength;
@@ -415,11 +415,11 @@ public partial class VocosGeneratorLayer<T> : LayerBase<T>, IShapeContract
                 imaginaryBlocks, new[] { 0, 0, 0, half }, new[] { batch, frames, blocks, half });
 
             var twiddledReal = Engine.TensorSubtract(
-                Engine.TensorBroadcastMultiply(oddReal, _inverseFftCosines[stage]),
-                Engine.TensorBroadcastMultiply(oddImaginary, _inverseFftSines[stage]));
+                Engine.TensorMultiply(oddReal, _inverseFftCosines[stage]),
+                Engine.TensorMultiply(oddImaginary, _inverseFftSines[stage]));
             var twiddledImaginary = Engine.TensorAdd(
-                Engine.TensorBroadcastMultiply(oddReal, _inverseFftSines[stage]),
-                Engine.TensorBroadcastMultiply(oddImaginary, _inverseFftCosines[stage]));
+                Engine.TensorMultiply(oddReal, _inverseFftSines[stage]),
+                Engine.TensorMultiply(oddImaginary, _inverseFftCosines[stage]));
 
             real = Engine.Reshape(
                 Engine.TensorConcatenate(

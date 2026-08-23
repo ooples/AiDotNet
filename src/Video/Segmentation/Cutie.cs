@@ -690,7 +690,7 @@ public class Cutie<T> : NeuralNetworkBase<T>
             for (int k = 0; k < scaledScores.Count; k++)
             {
                 var weight = Engine.TensorExp(Engine.TensorSubtract(scaledScores[k], maxScore)); // [b,1,h,w], max term == 1
-                var term = Engine.TensorBroadcastMultiply(_memoryBank[k].Value, weight);          // [b,C,h,w]
+                var term = Engine.TensorMultiply(_memoryBank[k].Value, weight);                   // [b,C,h,w]
                 accumulated = accumulated is null ? term : Engine.TensorAdd(accumulated, term);
                 weightSum = weightSum is null ? weight : Engine.TensorAdd(weightSum, weight);
             }
@@ -700,7 +700,7 @@ public class Cutie<T> : NeuralNetworkBase<T>
 
             // Divide by the softmax denominator. weightSum >= 1 everywhere (the max term contributes
             // exactly exp(0) = 1), so this division is always well defined -- no epsilon needed.
-            attended = Engine.TensorBroadcastDivide(accumulated, weightSum);
+            attended = Engine.TensorDivide(accumulated, weightSum);
         }
 
         // ALWAYS run the memory-attention layers (indices 10-13), even when the memory bank is empty, so

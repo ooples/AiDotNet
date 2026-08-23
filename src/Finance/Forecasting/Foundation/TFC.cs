@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -690,7 +690,7 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
     /// <remarks>
     /// Traceable RevIN forward (Kim et al. 2022). Uses <see cref="IEngine.ReduceMean{T}"/>,
     /// <see cref="IEngine.ReduceVariance{T}"/>, <see cref="IEngine.TensorSqrt{T}"/>, and
-    /// <see cref="IEngine.TensorBroadcastDivide{T}"/> so every op records on the tape and
+    /// <see cref="IEngine.TensorDivide{T}"/> so every op records on the tape and
     /// re-executes under the compiled fused plan. The per-instance mean/std are captured
     /// in tensor fields (not <see cref="Vector{T}"/> scalars) so <see cref="DenormalizeForecast"/>
     /// stays on-tape too — an inference call refreshes the tensors and a compiled-plan
@@ -733,8 +733,8 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
         var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-5)));
 
         // (x - mean) / std via BroadcastSubtract + BroadcastDivide.
-        var centered = Engine.TensorBroadcastSubtract(flat, mean);
-        var normalized = Engine.TensorBroadcastDivide(centered, std);
+        var centered = Engine.TensorSubtract(flat, mean);
+        var normalized = Engine.TensorDivide(centered, std);
 
         if (reshaped)
             normalized = Engine.Reshape(normalized, input._shape);
@@ -768,8 +768,8 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
 
         bool reshaped = forecast.Rank != 2;
         var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
-        var scaled = Engine.TensorBroadcastMultiply(work, std);
-        var shifted = Engine.TensorBroadcastAdd(scaled, mean);
+        var scaled = Engine.TensorMultiply(work, std);
+        var shifted = Engine.TensorAdd(scaled, mean);
         return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
     }
 

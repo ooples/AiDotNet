@@ -1440,7 +1440,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         // well-formed unit embedding (||x||^2 ~ dim).
         var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-6)));
         // Divide element-wise: x / ||x||
-        return Engine.TensorBroadcastDivide(tensor, norm);
+        return Engine.TensorDivide(tensor, norm);
     }
 
     /// <summary>

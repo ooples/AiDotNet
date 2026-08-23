@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -310,7 +310,7 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
         // Forward: output = input @ weights.T + bias
         var weightsTransposed = Engine.TensorTranspose(_weights);
         var matmul = Engine.TensorMatMul(flattenedInput, weightsTransposed);
-        var withBias = Engine.TensorBroadcastAdd(matmul, _bias);
+        var withBias = Engine.TensorAdd(matmul, _bias);
 
         _lastPreActivation = withBias;
 

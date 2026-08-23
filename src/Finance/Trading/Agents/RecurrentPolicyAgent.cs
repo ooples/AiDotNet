@@ -118,7 +118,7 @@ public sealed class RecurrentPolicyAgent<T> : IPortfolioAgent<T>
         _h = h;
         _c = c;
 
-        var proj = Engine.TensorBroadcastAdd(Engine.TensorMatMul(_meanW, h), _meanB); // [A,1]
+        var proj = Engine.TensorAdd(Engine.TensorMatMul(_meanW, h), _meanB); // [A,1]
         var mean = Engine.Tanh(proj);
         var result = new T[_actionDim];
         for (int a = 0; a < _actionDim; a++) result[a] = mean[a, 0];
@@ -201,7 +201,7 @@ public sealed class RecurrentPolicyAgent<T> : IPortfolioAgent<T>
             h = hNew;
             c = cNew;
 
-            var meanT = Engine.Tanh(Engine.TensorBroadcastAdd(Engine.TensorMatMul(_meanW, h), _meanB)); // [A,1]
+            var meanT = Engine.Tanh(Engine.TensorAdd(Engine.TensorMatMul(_meanW, h), _meanB)); // [A,1]
             var actionT = new Tensor<T>(new[] { _actionDim, 1 });
             for (int a = 0; a < _actionDim; a++) actionT[a, 0] = _actions[t][a];
 

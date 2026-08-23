@@ -28,6 +28,29 @@ public class DeepLearningCausalDiscoveryTests
 
     private static readonly string[] FeatureNames = ["X0", "X1", "X2"];
 
+    private static Matrix<double> CreateCgnnDagRegressionData()
+    {
+        const int n = 200;
+        var rng = new Random(42);
+        var data = new Matrix<double>(n, 4);
+        for (int i = 0; i < n; i++)
+        {
+            double x0 = rng.NextDouble() * 2.0 - 1.0;
+            double x1 = 0.8 * x0 + (rng.NextDouble() * 0.2 - 0.1);
+            double x2 = 0.6 * x1 + (rng.NextDouble() * 0.2 - 0.1);
+            double x3 = -0.7 * x0 + (rng.NextDouble() * 0.2 - 0.1);
+
+            data[i, 0] = x0;
+            data[i, 1] = x1;
+            data[i, 2] = x2;
+            data[i, 3] = x3;
+        }
+
+        return data;
+    }
+
+    private static readonly string[] CgnnFeatureNames = ["X0", "X1", "X2", "X3"];
+
     [Fact(Timeout = 120000)]
     public async Task DAGGNN_FindsCausalStructure()
     {
@@ -89,6 +112,28 @@ public class DeepLearningCausalDiscoveryTests
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         CausalDiscoveryTestHelper.AssertMeaningfulGraph(graph);
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
+    }
+
+    [Theory(Timeout = 120000)]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(7)]
+    [InlineData(42)]
+    [InlineData(2028)]
+    public async Task CGNN_PairwiseOrientations_AlwaysProduceADag(int seed)
+    {
+        await Task.Yield();
+        var algo = new CGNNAlgorithm<double>(new AiDotNet.Models.Options.CausalDiscoveryOptions
+        {
+            Seed = seed,
+            HiddenUnits = 16,
+            MaxEpochs = 30
+        });
+
+        var graph = algo.DiscoverStructure(CreateCgnnDagRegressionData(), CgnnFeatureNames);
+
+        Assert.True(graph.IsDAG(),
+            $"CGNN returned a directed cycle for seed {seed}; pairwise MMD orientations must be projected onto a DAG.");
     }
 
     [Fact(Timeout = 120000)]

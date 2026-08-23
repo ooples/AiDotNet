@@ -133,20 +133,20 @@ public static class S6Scan<T>
 
             // Discretize: A_bar = exp(delta * A) where A = -exp(A_log)
             // Clone broadcast results to ensure contiguous memory layout
-            var deltaA = Engine.TensorBroadcastMultiply(delta_t_3D, negA3D).Clone();
+            var deltaA = Engine.TensorMultiply(delta_t_3D, negA3D).Clone();
             var A_bar = Engine.TensorExp(deltaA).Clone();
 
             // B_bar * x = delta * B * x (Euler discretization for B)
-            var deltaB = Engine.TensorBroadcastMultiply(delta_t_3D, B_t_3D).Clone();
-            var Bbar_x = Engine.TensorBroadcastMultiply(deltaB, x_t_3D).Clone();
+            var deltaB = Engine.TensorMultiply(delta_t_3D, B_t_3D).Clone();
+            var Bbar_x = Engine.TensorMultiply(deltaB, x_t_3D).Clone();
 
             // State update: h = A_bar * h + B_bar * x (all Engine tensor ops)
             h = Engine.TensorAdd(Engine.TensorMultiply(A_bar, h), Bbar_x);
 
             // Output: y_t = sum_n(C * h) + D * x (Engine reduction + broadcast)
-            var Ch = Engine.TensorBroadcastMultiply(C_t_3D, h).Clone();
+            var Ch = Engine.TensorMultiply(C_t_3D, h).Clone();
             var y_t = Engine.ReduceSum(Ch, new int[] { 2 });                   // [batch, innerDim]
-            var Dx = Engine.TensorBroadcastMultiply(D2D, x_t);                // [batch, innerDim]
+            var Dx = Engine.TensorMultiply(D2D, x_t);                // [batch, innerDim]
             y_t = Engine.TensorAdd(y_t, Dx);
 
             // Store hidden state and output
@@ -413,12 +413,12 @@ public static class S6Scan<T>
             var x_t_3D = Engine.TensorExpandDims(x_t, 2);          // [batch, innerDim, 1]
 
             // A_bar = exp(delta * A)
-            var deltaA = Engine.TensorBroadcastMultiply(delta_t_3D, negA3D);
+            var deltaA = Engine.TensorMultiply(delta_t_3D, negA3D);
             gates[t] = Engine.TensorExp(deltaA);
 
             // B_bar * x = delta * B * x
-            var deltaB = Engine.TensorBroadcastMultiply(delta_t_3D, B_t_3D);
-            values[t] = Engine.TensorBroadcastMultiply(deltaB, x_t_3D);
+            var deltaB = Engine.TensorMultiply(delta_t_3D, B_t_3D);
+            values[t] = Engine.TensorMultiply(deltaB, x_t_3D);
         }
 
         // Step 2: Inclusive parallel prefix scan via iterative doubling
@@ -470,9 +470,9 @@ public static class S6Scan<T>
             var x_t = Engine.TensorSqueeze(Engine.TensorNarrow(x, 1, t, 1), axis: 1);          // [batch, innerDim]
             var C_t_3D = Engine.TensorExpandDims(C_t, 1);      // [batch, 1, stateDim]
 
-            var Ch = Engine.TensorBroadcastMultiply(C_t_3D, hiddenStates[t]);
+            var Ch = Engine.TensorMultiply(C_t_3D, hiddenStates[t]);
             var y_t = Engine.ReduceSum(Ch, new int[] { 2 });    // [batch, innerDim]
-            var Dx = Engine.TensorBroadcastMultiply(D2D, x_t);
+            var Dx = Engine.TensorMultiply(D2D, x_t);
             y_t = Engine.TensorAdd(y_t, Dx);
 
             output.SetSlice(1, t, y_t);

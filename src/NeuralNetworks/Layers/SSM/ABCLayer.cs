@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -85,6 +85,11 @@ public partial class ABCLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _numHeads;
     private readonly int _headDimension;
 
+    // Slot state is seeded from the slot keys scaled down by this factor, so the memory starts near
+    // (but not at) zero. Not a value from the paper - it is this implementation's initialisation
+    // choice, kept exactly as the previous scalar loop had it so the forward output is unchanged.
+    private const double SlotInitScale = 0.1;
+
     // Q, K, V projections: [modelDim, modelDim]
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
 
@@ -96,7 +101,11 @@ public partial class ABCLayer<T> : LayerBase<T>, IShapeContract
 
     private Tensor<T> _valueWeights;
 
-    // Slot key embeddings: [numHeads, numSlots, headDim]
+    // Slot key embeddings: [numHeads, numSlots, headDim]. Trainable like its q/k/v siblings:
+    // the slot-competition scan reads it directly, and without the attribute it was neither
+    // trained nor serialized even though _slotKeysGradient was already declared for it.
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _slotKeys;
 
     // Forget gate projection: [modelDim, numHeads]
@@ -130,9 +139,6 @@ public partial class ABCLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _lastKey;
     private Tensor<T>? _lastValue;
     private Tensor<T>? _lastForgetGate;
-    private Tensor<T>? _lastWriteWeights;
-    private Tensor<T>? _lastReadWeights;
-    private Tensor<T>? _lastSlotStates;
     private Tensor<T>? _lastOutputGate;
     private Tensor<T>? _lastOutputGateRaw;
     private Tensor<T>? _lastSlotReadOutput;
@@ -324,22 +330,26 @@ public partial class ABCLayer<T> : LayerBase<T>, IShapeContract
         _lastValue = v;
 
         // Step 2: Forget gate
-        var forgetRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var forgetRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _forgetGateWeights),
             Engine.Reshape(_forgetGateBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
         var forgetGate = Engine.Sigmoid(forgetRaw);
         _lastForgetGate = forgetGate;
 
         // Step 3: Output gate
-        var gateRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var outputGate = Engine.Swish(gateRaw);
         _lastOutputGate = outputGate;
         _lastOutputGateRaw = gateRaw;
 
-        // Step 4: Slot competition, write, and read
-        var slotOutput = SlotCompetitionForward(q, k, v, forgetGate, batchSize, seqLen);
+        // Step 4: Slot competition, write, and read.
+        // One fused, differentiable op for the whole recurrence. The scalar loop this replaces was
+        // detached from the tape, so q/k/v and both forget-gate parameters received NO gradient and
+        // never learned - this layer has no Backward override, so the tape is its only gradient path.
+        var slotOutput = Engine.AbcScanForward(
+            q, k, v, forgetGate, _slotKeys, _numHeads, SlotInitScale);
         _lastSlotReadOutput = slotOutput;
 
         // Step 5: Gated output
@@ -349,7 +359,7 @@ public partial class ABCLayer<T> : LayerBase<T>, IShapeContract
         var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorMatMul(gatedFlat, _outputProjectionWeights);
         var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
+        outputFlat = Engine.TensorAdd(outputFlat, outBias);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
@@ -366,163 +376,6 @@ public partial class ABCLayer<T> : LayerBase<T>, IShapeContract
         return Engine.Reshape(result, outputShape);
     }
 
-    /// <summary>
-    /// Competitive slot write and read mechanism.
-    /// </summary>
-    /// <remarks>
-    /// For each timestep t and head h:
-    ///   1. Write scores: score[s] = k_t^T * slotKey[s] / sqrt(d)
-    ///   2. Write weights: w[s] = softmax(score) over slots
-    ///   3. Slot update: slot[s] = forget * slot[s] + w[s] * v_t
-    ///   4. Read scores: readScore[s] = q_t^T * slot[s] / sqrt(d)
-    ///   5. Read weights: r[s] = softmax(readScore) over slots
-    ///   6. Output: o_t = sum_s r[s] * slot[s]
-    /// </remarks>
-    private Tensor<T> SlotCompetitionForward(
-        Tensor<T> q, Tensor<T> k, Tensor<T> v,
-        Tensor<T> forgetGate, int batchSize, int seqLen)
-    {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        T scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
-
-        // Slot values: [batch, numHeads, numSlots, headDim] - the actual slot content
-        var slotValues = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _numSlots, _headDimension });
-        // Initialize slot values to small random-like state (from slot keys scaled down)
-        for (int bi = 0; bi < batchSize; bi++)
-            for (int hi = 0; hi < _numHeads; hi++)
-                for (int si = 0; si < _numSlots; si++)
-                    for (int di = 0; di < _headDimension; di++)
-                        slotValues[new[] { bi, hi, si, di }] = NumOps.Multiply(
-                            _slotKeys[new[] { hi, si, di }], NumOps.FromDouble(0.1));
-
-        // Save all slot states for backward pass: [batch, seqLen+1, numHeads, numSlots, headDim]
-        var allStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _numSlots, _headDimension });
-        for (int bi = 0; bi < batchSize; bi++)
-            for (int hi = 0; hi < _numHeads; hi++)
-                for (int si = 0; si < _numSlots; si++)
-                    for (int di = 0; di < _headDimension; di++)
-                        allStates[new[] { bi, 0, hi, si, di }] = slotValues[new[] { bi, hi, si, di }];
-
-        // Cache write and read weights for backward pass
-        var writeWeights = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _numSlots });
-        var readWeights = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads, _numSlots });
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
-
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    T fGate = forgetGate[new[] { bi, t, hi }];
-
-                    // Step 1: Compute write scores using key against slot keys
-                    var wScores = new T[_numSlots];
-                    T maxWScore = NumOps.MinValue;
-                    for (int si = 0; si < _numSlots; si++)
-                    {
-                        T dot = NumOps.Zero;
-                        for (int d = 0; d < _headDimension; d++)
-                        {
-                            int flatD = dimStart + d;
-                            dot = NumOps.Add(dot,
-                                NumOps.Multiply(k[new[] { bi, t, flatD }],
-                                    _slotKeys[new[] { hi, si, d }]));
-                        }
-                        wScores[si] = NumOps.Multiply(dot, scale);
-                        if (NumOps.GreaterThan(wScores[si], maxWScore))
-                            maxWScore = wScores[si];
-                    }
-
-                    // Step 2: Softmax over slots for write weights
-                    T sumExpW = NumOps.Zero;
-                    var expW = new T[_numSlots];
-                    for (int si = 0; si < _numSlots; si++)
-                    {
-                        expW[si] = NumOps.Exp(NumOps.Subtract(wScores[si], maxWScore));
-                        sumExpW = NumOps.Add(sumExpW, expW[si]);
-                    }
-                    T sumExpWInv = NumOps.Divide(NumOps.One, NumOps.Add(sumExpW, NumOps.FromDouble(1e-10)));
-
-                    // Step 3: Forget old content and write new content
-                    for (int si = 0; si < _numSlots; si++)
-                    {
-                        T wWeight = NumOps.Multiply(expW[si], sumExpWInv);
-                        writeWeights[new[] { bi, t, hi, si }] = wWeight;
-
-                        for (int di = 0; di < _headDimension; di++)
-                        {
-                            int flatDi = dimStart + di;
-                            T prevSlot = slotValues[new[] { bi, hi, si, di }];
-                            T vVal = v[new[] { bi, t, flatDi }];
-
-                            // slot = forget * slot + writeWeight * value
-                            T newSlot = NumOps.Add(
-                                NumOps.Multiply(fGate, prevSlot),
-                                NumOps.Multiply(wWeight, vVal));
-                            slotValues[new[] { bi, hi, si, di }] = newSlot;
-                        }
-                    }
-
-                    // Step 4: Compute read scores using query against current slot content
-                    var rScores = new T[_numSlots];
-                    T maxRScore = NumOps.MinValue;
-                    for (int si = 0; si < _numSlots; si++)
-                    {
-                        T dot = NumOps.Zero;
-                        for (int d = 0; d < _headDimension; d++)
-                        {
-                            int flatD = dimStart + d;
-                            dot = NumOps.Add(dot,
-                                NumOps.Multiply(q[new[] { bi, t, flatD }],
-                                    slotValues[new[] { bi, hi, si, d }]));
-                        }
-                        rScores[si] = NumOps.Multiply(dot, scale);
-                        if (NumOps.GreaterThan(rScores[si], maxRScore))
-                            maxRScore = rScores[si];
-                    }
-
-                    // Step 5: Softmax for read weights
-                    T sumExpR = NumOps.Zero;
-                    var expR = new T[_numSlots];
-                    for (int si = 0; si < _numSlots; si++)
-                    {
-                        expR[si] = NumOps.Exp(NumOps.Subtract(rScores[si], maxRScore));
-                        sumExpR = NumOps.Add(sumExpR, expR[si]);
-                    }
-                    T sumExpRInv = NumOps.Divide(NumOps.One, NumOps.Add(sumExpR, NumOps.FromDouble(1e-10)));
-
-                    // Step 6: Weighted read from slots
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T oVal = NumOps.Zero;
-                        for (int si = 0; si < _numSlots; si++)
-                        {
-                            T rWeight = NumOps.Multiply(expR[si], sumExpRInv);
-                            readWeights[new[] { bi, t, hi, si }] = rWeight;
-                            oVal = NumOps.Add(oVal,
-                                NumOps.Multiply(rWeight, slotValues[new[] { bi, hi, si, di }]));
-                        }
-                        output[new[] { bi, t, flatDi }] = oVal;
-                    }
-                }
-            }
-
-            // Save slot state snapshot for backward pass
-            for (int bi = 0; bi < batchSize; bi++)
-                for (int hi = 0; hi < _numHeads; hi++)
-                    for (int si = 0; si < _numSlots; si++)
-                        for (int di = 0; di < _headDimension; di++)
-                            allStates[new[] { bi, t + 1, hi, si, di }] = slotValues[new[] { bi, hi, si, di }];
-        }
-
-        _lastSlotStates = allStates;
-        _lastWriteWeights = writeWeights;
-        _lastReadWeights = readWeights;
-        return output;
-    }
 
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
@@ -617,9 +470,6 @@ public partial class ABCLayer<T> : LayerBase<T>, IShapeContract
         _lastKey = null;
         _lastValue = null;
         _lastForgetGate = null;
-        _lastWriteWeights = null;
-        _lastReadWeights = null;
-        _lastSlotStates = null;
         _lastOutputGate = null;
         _lastOutputGateRaw = null;
         _lastSlotReadOutput = null;

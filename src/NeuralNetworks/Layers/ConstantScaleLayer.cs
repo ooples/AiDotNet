@@ -22,14 +22,14 @@ public partial class ConstantScaleLayer<T> : LayerBase<T>, IShapeContract
 
     /// <summary>
     /// Singleton scale held as a Tensor so Forward can use the same
-    /// tape-tracked <see cref="IEngine.TensorBroadcastMultiply{T}"/> path
+    /// tape-tracked <see cref="IEngine.TensorMultiply{T}"/> path
     /// that RMSNorm uses for its γ gain. <c>Engine.TensorMultiplyScalar</c>
     /// records as a unary-scalar op that does NOT propagate gradient back
     /// to its tensor input on the autodiff tape — using it in Forward
     /// breaks gradient flow upstream (caught by
     /// <c>T5Conditioner_Training_ChangesParameters</c>: the EmbeddingLayer
     /// stops receiving gradients when ConstantScaleLayer sits between it
-    /// and the transformer blocks). <see cref="IEngine.TensorBroadcastMultiply{T}"/>
+    /// and the transformer blocks). <see cref="IEngine.TensorMultiply{T}"/>
     /// IS tape-tracked (used by every Norm/Embedding/MHA forward), so the
     /// composition <c>broadcastMultiply(input, scaleTensor)</c> preserves
     /// gradient flow back to <c>input</c> while still producing the same
@@ -51,7 +51,7 @@ public partial class ConstantScaleLayer<T> : LayerBase<T>, IShapeContract
 
     /// <inheritdoc/>
     protected override Tensor<T> ForwardTraced(Tensor<T> input) =>
-        Engine.TensorBroadcastMultiply(input, _scaleTensor);
+        Engine.TensorMultiply(input, _scaleTensor);
 
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients() => new Vector<T>(0);

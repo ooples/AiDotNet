@@ -271,14 +271,14 @@ public partial class MinGRULayer<T> : LayerBase<T>, IShapeContract
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
         var projected = Engine.TensorMatMul(inputFlat, _inputProjectionWeights);
         var projBias = Engine.Reshape(_inputProjectionBias, new[] { 1, _expandedDimension });
-        projected = Engine.TensorBroadcastAdd(projected, projBias);
+        projected = Engine.TensorAdd(projected, projBias);
         var projected3D = Engine.Reshape(projected, new[] { batchSize, seqLen, _expandedDimension });
         _lastProjectedInput = projected3D;
 
         // Step 2: Gate computation: z_t = sigma(W_z * projected_t + b_z)
         var gatePreAct = Engine.TensorMatMul(Engine.Reshape(projected, new[] { batchSize * seqLen, _expandedDimension }), _gateWeights);
         var gateBias2D = Engine.Reshape(_gateBias, new[] { 1, _expandedDimension });
-        gatePreAct = Engine.TensorBroadcastAdd(gatePreAct, gateBias2D);
+        gatePreAct = Engine.TensorAdd(gatePreAct, gateBias2D);
         var gatePreAct3D = Engine.Reshape(gatePreAct, new[] { batchSize, seqLen, _expandedDimension });
         var gate = Engine.Sigmoid(gatePreAct3D);
         _lastGatePreAct = gatePreAct3D;
@@ -287,7 +287,7 @@ public partial class MinGRULayer<T> : LayerBase<T>, IShapeContract
         // Step 3: Candidate computation: h_tilde_t = W_h * projected_t + b_h
         var candidate = Engine.TensorMatMul(Engine.Reshape(projected, new[] { batchSize * seqLen, _expandedDimension }), _candidateWeights);
         var candBias2D = Engine.Reshape(_candidateBias, new[] { 1, _expandedDimension });
-        candidate = Engine.TensorBroadcastAdd(candidate, candBias2D);
+        candidate = Engine.TensorAdd(candidate, candBias2D);
         var candidate3D = Engine.Reshape(candidate, new[] { batchSize, seqLen, _expandedDimension });
         _lastCandidate = candidate3D;
 
@@ -299,7 +299,7 @@ public partial class MinGRULayer<T> : LayerBase<T>, IShapeContract
         var recFlat = Engine.Reshape(recurrenceOutput, new[] { batchSize * seqLen, _expandedDimension });
         var outputFlat = Engine.TensorMatMul(recFlat, _outputProjectionWeights);
         var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
+        outputFlat = Engine.TensorAdd(outputFlat, outBias);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);

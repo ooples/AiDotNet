@@ -265,17 +265,17 @@ public partial class DeltaNetLayer<T> : LayerBase<T>, IShapeContract
         // Step 1: Q, K, V projections
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
 
-        var qFlat = Engine.TensorBroadcastAdd(
+        var qFlat = Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _queryWeights),
             Engine.Reshape(_queryBias, new[] { 1, _modelDimension }));
         var q = Engine.Reshape(qFlat, new[] { batchSize, seqLen, _modelDimension });
 
-        var kFlat = Engine.TensorBroadcastAdd(
+        var kFlat = Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _keyWeights),
             Engine.Reshape(_keyBias, new[] { 1, _modelDimension }));
         var k = Engine.Reshape(kFlat, new[] { batchSize, seqLen, _modelDimension });
 
-        var vFlat = Engine.TensorBroadcastAdd(
+        var vFlat = Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _valueWeights),
             Engine.Reshape(_valueBias, new[] { 1, _modelDimension }));
         var v = Engine.Reshape(vFlat, new[] { batchSize, seqLen, _modelDimension });
@@ -285,7 +285,7 @@ public partial class DeltaNetLayer<T> : LayerBase<T>, IShapeContract
         _lastValue = v;
 
         // Step 2: Beta (write strength) via sigmoid
-        var betaRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var betaRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _betaWeights),
             Engine.Reshape(_betaBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
         var beta = Engine.Sigmoid(betaRaw);
@@ -300,7 +300,7 @@ public partial class DeltaNetLayer<T> : LayerBase<T>, IShapeContract
             Engine.Reshape(output, new[] { batchSize * seqLen, _modelDimension }),
             _outputProjectionWeights);
         var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
+        outputFlat = Engine.TensorAdd(outputFlat, outBias);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
@@ -367,7 +367,7 @@ public partial class DeltaNetLayer<T> : LayerBase<T>, IShapeContract
 
             var prediction = Engine.BatchMatMul(state, kCol);
             var delta = Engine.TensorSubtract(vCol, prediction);
-            var update = Engine.TensorBroadcastMultiply(
+            var update = Engine.TensorMultiply(
                 Engine.BatchMatMul(delta, kRow), betaT);
             state = Engine.TensorAdd(state, update);
 

@@ -213,13 +213,26 @@ public class MultiInputPortTests
     {
         var layer = new DecoderLayer<double>(attentionSize: 8, feedForwardSize: 16, activation: (IActivationFunction<double>?)null);
 
-        Assert.Equal(3, layer.InputPorts.Count);
-        Assert.Equal("decoder_input", layer.InputPorts[0].Name);
-        Assert.True(layer.InputPorts[0].Required);
-        Assert.Equal("encoder_output", layer.InputPorts[1].Name);
-        Assert.True(layer.InputPorts[1].Required);
-        Assert.Equal("mask", layer.InputPorts[2].Name);
-        Assert.False(layer.InputPorts[2].Required);
+        // ASSERT ON THE VARIANT, NOT ON THE FLAT UNION. DecoderLayer declares its ports under two
+        // [TensorPort] variants -- "default" (decoder_input, encoder_output) and "named"
+        // (decoder_input, encoder_output, mask) -- and InputPorts is deliberately the union of
+        // both, which InputContractManifest then groups: Variants = InputPorts.GroupBy(p =>
+        // p.Variant). So InputPorts.Count is 5 by design, and asserting 3 on it was measuring the
+        // wrong surface; it only ever passed while "named" was the sole declared variant.
+        //
+        // The contract this test is about -- decoder input, encoder memory, optional mask -- is the
+        // "named" variant, so resolve it and assert there. That is strictly more specific than
+        // before: it pins the port order, requiredness AND the variant they belong to.
+        var manifest = layer.GetInputContract();
+        var named = Assert.Single(manifest.Variants.Where(variant => variant.Name == "named"));
+
+        Assert.Equal(3, named.Ports.Count);
+        Assert.Equal("decoder_input", named.Ports[0].Name);
+        Assert.True(named.Ports[0].Required);
+        Assert.Equal("encoder_output", named.Ports[1].Name);
+        Assert.True(named.Ports[1].Required);
+        Assert.Equal("mask", named.Ports[2].Name);
+        Assert.False(named.Ports[2].Required);
     }
 
     #endregion

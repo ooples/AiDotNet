@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -554,8 +554,8 @@ public class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
         // already [batch, horizon]; the batched training path is rank-2 and keeps the tape intact.
         bool reshaped = forecast.Rank != 2;
         var work = reshaped ? Engine.Reshape(forecast, new[] { batchSize, forecast.Length / batchSize }) : forecast;
-        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
-        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        var scaled = Engine.TensorMultiply(work, stdT);
+        var shifted = Engine.TensorAdd(scaled, meanT);
         return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
     }
 

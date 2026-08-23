@@ -208,8 +208,15 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             _usingCustomLayers = false;
         }
 
-        // Timestep projection is always internal
-        _timestepProjection = new FullyConnectedLayer<T>(_options.TimestepEmbeddingDimension,
+        // Timestep projection is always internal, and maps TimestepEmbeddingDimension onto itself.
+        // Both widths are declared for the same reason as TabSynGenerator: the (outputSize,
+        // activation) overload leaves the input at -1, and a lazily-bound layer permanently takes
+        // the width of the first tensor that reaches it -- which is not necessarily the sinusoidal
+        // embedding it is meant to project.
+        int timestepEmbeddingDimension = _options.TimestepEmbeddingDimension;
+        _timestepProjection = new FullyConnectedLayer<T>(
+            timestepEmbeddingDimension,
+            timestepEmbeddingDimension,
             new SiLUActivation<T>() as IActivationFunction<T>);
     }
 
@@ -236,14 +243,20 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             ? GetLastLayerOutputSize()
             : _lastHiddenDim;
 
+        // lastHidden is the INPUT width and was already being computed above -- the comment says
+        // "with actual dimensions" -- but both heads were constructed through the
+        // (outputSize, activation) overload, discarding it and leaving the input at -1 for lazy
+        // inference. A lazily-bound layer keeps the width of the first tensor that reaches it, so a
+        // head bound to a narrow probe and then rejected the real MLP hidden state:
+        // "Matrix dimensions incompatible: [1,64] x [3,5]".
         if (_numNumericalFeatures > 0)
         {
-            _numericalOutputHead = new FullyConnectedLayer<T>(_numNumericalFeatures, identity);
+            _numericalOutputHead = new FullyConnectedLayer<T>(lastHidden, _numNumericalFeatures, identity);
         }
 
         if (_totalCategoricalWidth > 0)
         {
-            _categoricalOutputHead = new FullyConnectedLayer<T>(_totalCategoricalWidth, identity);
+            _categoricalOutputHead = new FullyConnectedLayer<T>(lastHidden, _totalCategoricalWidth, identity);
         }
     }
 

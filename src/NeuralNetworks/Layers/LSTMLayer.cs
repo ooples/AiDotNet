@@ -1328,28 +1328,28 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
             // the LSTM propagate gradient to its input, so upstream layers train end-to-end.
             var xt = Engine.TensorSliceAxis(input3D, axis: 1, index: t);
 
-            // Forget Gate - using TensorBroadcastAdd for bias (supports [batch, hidden] + [hidden] broadcasting)
+            // Forget Gate - using TensorAdd for bias (supports [batch, hidden] + [hidden] broadcasting)
             var f = Engine.TensorMatMul(xt, WfiT);
             f = Engine.TensorAdd(f, Engine.TensorMatMul(currentH, WfhT));
-            f = Engine.TensorBroadcastAdd(f, biasF2D);
+            f = Engine.TensorAdd(f, biasF2D);
             f = Engine.Sigmoid(f);
 
             // Input Gate
             var i = Engine.TensorMatMul(xt, WiiT);
             i = Engine.TensorAdd(i, Engine.TensorMatMul(currentH, WihT));
-            i = Engine.TensorBroadcastAdd(i, biasI2D);
+            i = Engine.TensorAdd(i, biasI2D);
             i = Engine.Sigmoid(i);
 
             // Cell Candidate
             var c_tilde = Engine.TensorMatMul(xt, WciT);
             c_tilde = Engine.TensorAdd(c_tilde, Engine.TensorMatMul(currentH, WchT));
-            c_tilde = Engine.TensorBroadcastAdd(c_tilde, biasC2D);
+            c_tilde = Engine.TensorAdd(c_tilde, biasC2D);
             c_tilde = Engine.Tanh(c_tilde);
 
             // Output Gate
             var o = Engine.TensorMatMul(xt, WoiT);
             o = Engine.TensorAdd(o, Engine.TensorMatMul(currentH, WohT));
-            o = Engine.TensorBroadcastAdd(o, biasO2D);
+            o = Engine.TensorAdd(o, biasO2D);
             o = Engine.Sigmoid(o);
 
             // Update Cell State

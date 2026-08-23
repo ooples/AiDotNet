@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -192,7 +192,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>, IShapeContract
             // Apply Mask: [V*S, 1] broadcast to [V*S, C]
             // We need to create the mask tensor from the buffer
             // _spiralMaskGpu is a buffer. Wrap in tensor?
-            // TensorBroadcastMultiply needs two tensors.
+            // TensorMultiply needs two tensors.
             // Or use element-wise multiply if we can replicate mask.
             // Let's assume we can wrap buffer.
             using var maskTensor = GpuTensorHelper.UploadToGpu<T>(backend, _spiralMaskGpu!, [numGather, 1], GpuTensorRole.Constant, ownsBuffer: false);
@@ -918,7 +918,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> AddBiases(Tensor<T> output, int numVertices)
     {
         var biasExpanded = Engine.Reshape(_biases, new[] { 1, OutputChannels });
-        return Engine.TensorBroadcastAdd(output, biasExpanded);
+        return Engine.TensorAdd(output, biasExpanded);
     }
 
     #endregion
