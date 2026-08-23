@@ -794,7 +794,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             foreach (var pf in tensorFields)
             {
                 if (pf.Optional && pf.Condition is not null)
-                    sb.AppendLine($"        if (({pf.Condition}) && ({PresenceExpr(pf)}))");
+                    sb.AppendLine($"        if ({PresenceExpr(pf)})");
                 else if (pf.Optional)
                     sb.AppendLine($"        if ({PresenceExpr(pf)})");
                 else if (pf.Condition is not null)
