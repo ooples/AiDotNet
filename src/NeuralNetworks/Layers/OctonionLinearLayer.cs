@@ -267,7 +267,7 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>, IShapeContract
         // Add biases through the engine so the tape retains the route to _biases.
         // Indexer mutation writes values into the matmul result but creates no backward op,
         // which made every octonion bias look detached to reverse-mode autodiff.
-        output3D = Engine.TensorBroadcastAdd(output3D, _biases);
+        output3D = Engine.TensorAdd(output3D, _biases);
 
         _lastOutput = output3D;
 

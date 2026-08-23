@@ -322,8 +322,8 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
         var inverseRms = Engine.TensorReciprocal(
             Engine.TensorSqrt(
                 Engine.TensorAddScalar(meanSquare, NumOps.FromDouble(1e-6))));
-        var normalized = Engine.TensorBroadcastMultiply(heads, inverseRms);
-        var scaled = Engine.TensorBroadcastMultiply(
+        var normalized = Engine.TensorMultiply(heads, inverseRms);
+        var scaled = Engine.TensorMultiply(
             normalized,
             Engine.Reshape(scale, new[] { 1, 1, _numHeads, _headDimension }));
         return (
@@ -369,7 +369,7 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
         _lastKeyRmsInv = kRmsInv;
 
         // Step 3: Compute output gate
-        var gateRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Swish(gateRaw);
@@ -391,7 +391,7 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
 
         // Step 7: Output projection
         var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _modelDimension });
-        var outputFlat = Engine.TensorBroadcastAdd(
+        var outputFlat = Engine.TensorAdd(
             Engine.TensorMatMul(gatedFlat, _outputProjectionWeights),
             Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension }));
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });

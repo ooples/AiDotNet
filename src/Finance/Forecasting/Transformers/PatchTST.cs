@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Base;
@@ -1348,8 +1348,8 @@ public partial class PatchTST<T> : ForecastingModelBase<T>
             // per-feature stats [NumFeatures] across the trailing feature axis.
             // Manual per-element indexing detached the graph before the loss,
             // zeroing gradients. Stats are constants (paper-faithful affine reverse).
-            var scaled = Engine.TensorBroadcastMultiply(input, _instanceStd);
-            return Engine.TensorBroadcastAdd(scaled, _instanceMean);
+            var scaled = Engine.TensorMultiply(input, _instanceStd);
+            return Engine.TensorAdd(scaled, _instanceMean);
         }
 
         return result;

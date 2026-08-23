@@ -16,7 +16,7 @@ namespace AiDotNet.Interpolation;
 /// surface is changing (its "slope" and "curvature"), resulting in smoother, more natural-looking results.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public class BicubicInterpolation<T> : I2DInterpolation<T>
+public partial class BicubicInterpolation<T> : I2DInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the grid points.

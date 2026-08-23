@@ -41,7 +41,7 @@ namespace AiDotNet.Diffusion.Audio;
 /// </remarks>
 [ComponentType(ComponentType.Encoder)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class ShortTimeFourierTransform<T>
+public partial class ShortTimeFourierTransform<T>
 {
     /// <summary>
     /// Provides numeric operations for the specific type T.

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Helpers;
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -998,7 +998,7 @@ internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>,
             var weight = _weights[layer];
             var linear = Engine.TensorMatMul(weight, col);                 // [out, 1]
             var biasCol = Engine.Reshape(_biases[layer], new[] { weight.Shape[0], 1 });
-            linear = Engine.TensorBroadcastAdd(linear, biasCol);
+            linear = Engine.TensorAdd(linear, biasCol);
             col = layer < _weights.Count - 1 ? Engine.ReLU(linear) : linear;
         }
 
@@ -1023,7 +1023,7 @@ internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>,
             var weight = _weights[layer];               // [outSize, inSize]
             var linear = Engine.TensorMatMul(weight, x); // [outSize, B]
             var biasCol = Engine.Reshape(_biases[layer], new[] { weight.Shape[0], 1 });
-            linear = Engine.TensorBroadcastAdd(linear, biasCol);
+            linear = Engine.TensorAdd(linear, biasCol);
 
             // ReLU on every layer except the linear output head.
             x = layer < _weights.Count - 1 ? Engine.ReLU(linear) : linear;

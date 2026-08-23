@@ -372,8 +372,8 @@ public partial class TOTO<T> : TimeSeriesFoundationModelBase<T>
 
         int rows = forecast.Length / features;
         var fc2d = Engine.Reshape(forecast, new[] { rows, features });
-        var scaled = Engine.TensorBroadcastMultiply(fc2d, stdRow);
-        var shifted = Engine.TensorBroadcastAdd(scaled, meanRow);
+        var scaled = Engine.TensorMultiply(fc2d, stdRow);
+        var shifted = Engine.TensorAdd(scaled, meanRow);
         return Engine.Reshape(shifted, forecast._shape);
     }
 

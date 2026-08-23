@@ -22,7 +22,7 @@ namespace AiDotNet.Statistics;
 /// This information helps you improve your model and decide if it's ready to use in real-world situations.
 /// </para>
 /// </remarks>
-public class ModelStats<T, TInput, TOutput>
+public partial class ModelStats<T, TInput, TOutput>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly ModelStatsOptions _options;

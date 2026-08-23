@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Engines;
 
@@ -177,7 +177,7 @@ public partial class PReLULayer<T> : LayerBase<T>
         var positivePart = Engine.ReLU(input);
         var negativePart = Engine.ReLU(Engine.TensorNegate(input));
         var alphaBroadcast = Engine.Reshape(_alpha, _alphaBroadcastShape);
-        var scaledNegative = Engine.TensorBroadcastMultiply(negativePart, alphaBroadcast);
+        var scaledNegative = Engine.TensorMultiply(negativePart, alphaBroadcast);
         return Engine.TensorSubtract(positivePart, scaledNegative);
     }
 

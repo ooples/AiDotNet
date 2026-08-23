@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -541,14 +541,14 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
 
         // Transform path: transform = activation(input @ weights + bias)
         var transformLinear = Engine.TensorMatMul(input, _transformWeights);
-        var transformWithBias = Engine.TensorBroadcastAdd(transformLinear, _transformBias);
+        var transformWithBias = Engine.TensorAdd(transformLinear, _transformBias);
         _lastTransformPreActivation = cacheBwd ? transformWithBias : null; // Store pre-activation for backward pass
         var transformOutput = ApplyActivation(transformWithBias, _transformActivation, _vectorTransformActivation);
         _lastTransformOutput = cacheBwd ? transformOutput : null;
 
         // Gate path: gate = sigmoid(input @ weights + bias)
         var gateLinear = Engine.TensorMatMul(input, _gateWeights);
-        var gateWithBias = Engine.TensorBroadcastAdd(gateLinear, _gateBias);
+        var gateWithBias = Engine.TensorAdd(gateLinear, _gateBias);
         _lastGatePreActivation = cacheBwd ? gateWithBias : null; // Store pre-activation for backward pass
         var gateOutput = ApplyActivation(gateWithBias, _gateActivation, _vectorGateActivation);
         _lastGateOutput = cacheBwd ? gateOutput : null;

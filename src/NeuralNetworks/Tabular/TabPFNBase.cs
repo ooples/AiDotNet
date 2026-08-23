@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class TabPFNBase<T> : IParameterSource<T>
+public abstract partial class TabPFNBase<T> : IParameterSource<T>
 {
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
@@ -549,7 +549,7 @@ public abstract class TabPFNBase<T> : IParameterSource<T>
     /// <summary>
     /// TabPFN-specific transformer block with causal masking for in-context learning.
     /// </summary>
-    private sealed class TabPFNTransformerBlock<TBlock> : IParameterSource<TBlock>
+    private sealed partial class TabPFNTransformerBlock<TBlock> : IParameterSource<TBlock>
     {
         private static readonly INumericOperations<TBlock> NumOps = MathHelper.GetNumericOperations<TBlock>();
 

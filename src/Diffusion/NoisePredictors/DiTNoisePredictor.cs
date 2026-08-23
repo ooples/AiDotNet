@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -252,11 +252,11 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
     // inference forward (ForwardScratchGate.Enabled). Bit-identical to the allocating path.
     // ──────────────────────────────────────────────────────────────────────────
     [Scratch]
-    private Tensor<T>? _adaLnScaledScratch;   // TensorBroadcastMultiply(x, 1+scale)
+    private Tensor<T>? _adaLnScaledScratch;   // TensorMultiply(x, 1+scale)
     [Scratch]
-    private Tensor<T>? _adaLnOutScratch;       // TensorBroadcastAdd(scaled, shift)
+    private Tensor<T>? _adaLnOutScratch;       // TensorAdd(scaled, shift)
     [Scratch]
-    private Tensor<T>? _gateScratch;           // TensorBroadcastMultiply(residual, gate)
+    private Tensor<T>? _gateScratch;           // TensorMultiply(residual, gate)
 
     /// <summary>Element-wise shape-array equality for the #1672 scratch-reuse decision.</summary>
     private static bool ShapeMatches(int[] a, int[] b)
@@ -815,8 +815,8 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
         }
 
         // Position embedding is [1, numPatches, hiddenSize], x is [batch, numPatches, hiddenSize]
-        // TensorBroadcastAdd handles the batch dimension broadcasting
-        return Engine.TensorBroadcastAdd<T>(x, _posEmbed);
+        // TensorAdd handles the batch dimension broadcasting
+        return Engine.TensorAdd<T>(x, _posEmbed);
     }
 
     /// <summary>
@@ -954,8 +954,8 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
             return _adaLnOutScratch;
         }
 
-        var scaled = Engine.TensorBroadcastMultiply<T>(x, scalePlusOne);
-        return Engine.TensorBroadcastAdd<T>(scaled, shiftView);
+        var scaled = Engine.TensorMultiply<T>(x, scalePlusOne);
+        return Engine.TensorAdd<T>(scaled, shiftView);
     }
 
     /// <summary>
@@ -1063,7 +1063,7 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// Gated residual add: <c>result = x + gateView * residual</c>.
     /// <paramref name="gateView"/> is a <c>[B, 1, hidden]</c> view sliced from
     /// the AdaLN modulation tensor — no scratch allocation, no scalar fill.
-    /// Uses <see cref="IEngine.TensorBroadcastMultiply"/> for the per-channel
+    /// Uses <see cref="IEngine.TensorMultiply"/> for the per-channel
     /// gate broadcast.
     /// </summary>
     private Tensor<T> AddWithGate(Tensor<T> x, Tensor<T> residual, Tensor<T> gateView)
@@ -1080,7 +1080,7 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
             return Engine.TensorAdd<T>(x, _gateScratch);
         }
 
-        var gated = Engine.TensorBroadcastMultiply<T>(residual, gateView);
+        var gated = Engine.TensorMultiply<T>(residual, gateView);
         return Engine.TensorAdd<T>(x, gated);
     }
 

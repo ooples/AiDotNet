@@ -20,7 +20,7 @@ namespace AiDotNet.ReinforcementLearning.Environments;
 /// making it perfect for testing - you always know what reward to expect.
 /// </para>
 /// </remarks>
-public class DeterministicBanditEnvironment<T> : IEnvironment<T>
+public partial class DeterministicBanditEnvironment<T> : IEnvironment<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _actionSpaceSize;

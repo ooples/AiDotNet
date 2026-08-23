@@ -1043,14 +1043,14 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
             // gradients flow back to W*/U*/b*. The old code applied activations with
             // input.Transform and gated with the instance .ElementwiseMultiply/.Add,
             // which detached the autodiff graph and left the GRU weights ungradiented.
-            var zPre = Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WzT), Engine.TensorMatMul(currentHiddenState, UzT)), _bz);
+            var zPre = Engine.TensorAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WzT), Engine.TensorMatMul(currentHiddenState, UzT)), _bz);
             var z = ActivateTape(zPre, _vectorRecurrentActivation, _recurrentActivation, gate: true);
 
-            var rPre = Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WrT), Engine.TensorMatMul(currentHiddenState, UrT)), _br);
+            var rPre = Engine.TensorAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WrT), Engine.TensorMatMul(currentHiddenState, UrT)), _br);
             var r = ActivateTape(rPre, _vectorRecurrentActivation, _recurrentActivation, gate: true);
 
             var rh = Engine.TensorMultiply(r, currentHiddenState);
-            var hPre = Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WhT), Engine.TensorMatMul(rh, UhT)), _bh);
+            var hPre = Engine.TensorAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WhT), Engine.TensorMatMul(rh, UhT)), _bh);
             var h_candidate = ActivateTape(hPre, _vectorActivation, _activation, gate: false);
 
             // Compute (1 - z) using cached ones tensor — avoids per-timestep allocation
@@ -1413,7 +1413,7 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
         // Need to transpose to get [inputSize, hiddenSize] and [hiddenSize, hiddenSize]
         var WT = Engine.TensorTranspose(W);
         var UT = Engine.TensorTranspose(U);
-        var gate = Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(input, WT), Engine.TensorMatMul(hidden, UT)), b);
+        var gate = Engine.TensorAdd(Engine.TensorAdd(Engine.TensorMatMul(input, WT), Engine.TensorMatMul(hidden, UT)), b);
         return ApplyActivation(gate, isRecurrent);
     }
 

@@ -411,7 +411,7 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
         var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, modelDim });
         var projected = Engine.TensorMatMul(input2D, _inputProjectionWeights);
         var bias2D = Engine.Reshape(_inputProjectionBias, new[] { 1, _innerDimension });
-        var projectedWithBias = Engine.TensorBroadcastAdd(projected, bias2D);
+        var projectedWithBias = Engine.TensorAdd(projected, bias2D);
         var projected3D = Engine.Reshape(projectedWithBias, new[] { batchSize, seqLen, _innerDimension });
         _lastProjectedInput = projected3D;
 
@@ -423,7 +423,7 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
         var scanFlat = Engine.Reshape(scanOutput, new[] { batchSize * seqLen, _innerDimension });
         var outputFlat = Engine.TensorMatMul(scanFlat, _outputProjectionWeights);
         var outBias2D = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        var outputWithBias = Engine.TensorBroadcastAdd(outputFlat, outBias2D);
+        var outputWithBias = Engine.TensorAdd(outputFlat, outBias2D);
         var output3D = Engine.Reshape(outputWithBias, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
@@ -465,8 +465,8 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
         var delta = Engine.TensorExp(_logDelta);
         _cachedKernelDelta = delta;
         var delta2D = Engine.Reshape(delta, new[] { _innerDimension, 1 });
-        var scaledReal = Engine.TensorBroadcastMultiply(_aReal, delta2D);
-        var scaledImag = Engine.TensorBroadcastMultiply(_aImag, delta2D);
+        var scaledReal = Engine.TensorMultiply(_aReal, delta2D);
+        var scaledImag = Engine.TensorMultiply(_aImag, delta2D);
         var expReal = Engine.TensorExp(scaledReal);
         var aBarReal = Engine.TensorMultiply(expReal, Engine.TensorCos(scaledImag));
         var aBarImag = Engine.TensorMultiply(expReal, Engine.TensorSin(scaledImag));
@@ -614,17 +614,17 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
             //   real = A_bar_r * h_r - A_bar_i * h_i
             //   imag = A_bar_r * h_i + A_bar_i * h_r
             var ahReal = Engine.TensorAdd(
-                Engine.TensorBroadcastMultiply(aBarReal3D, hReal),
-                Engine.TensorNegate(Engine.TensorBroadcastMultiply(aBarImag3D, hImag)));
+                Engine.TensorMultiply(aBarReal3D, hReal),
+                Engine.TensorNegate(Engine.TensorMultiply(aBarImag3D, hImag)));
             var ahImag = Engine.TensorAdd(
-                Engine.TensorBroadcastMultiply(aBarReal3D, hImag),
-                Engine.TensorBroadcastMultiply(aBarImag3D, hReal));
+                Engine.TensorMultiply(aBarReal3D, hImag),
+                Engine.TensorMultiply(aBarImag3D, hReal));
 
             // Complex B_bar * x (x is real, so imag part of x is 0):
             //   real = B_bar_r * x
             //   imag = B_bar_i * x
-            var bxReal = Engine.TensorBroadcastMultiply(bBarReal3D, x_t_3D);
-            var bxImag = Engine.TensorBroadcastMultiply(bBarImag3D, x_t_3D);
+            var bxReal = Engine.TensorMultiply(bBarReal3D, x_t_3D);
+            var bxImag = Engine.TensorMultiply(bBarImag3D, x_t_3D);
 
             hReal = Engine.TensorAdd(ahReal, bxReal);
             hImag = Engine.TensorAdd(ahImag, bxImag);
@@ -632,12 +632,12 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
             // Output: y_t = sum_n Re(C * h) + D * x
             // Re(C * h) = C_r * h_r - C_i * h_i
             var chReal = Engine.TensorAdd(
-                Engine.TensorBroadcastMultiply(cReal3D, hReal),
-                Engine.TensorNegate(Engine.TensorBroadcastMultiply(cImag3D, hImag)));
+                Engine.TensorMultiply(cReal3D, hReal),
+                Engine.TensorNegate(Engine.TensorMultiply(cImag3D, hImag)));
             var y_t = Engine.ReduceSum(chReal, new int[] { 2 });  // [batch, innerDim]
 
             // Skip connection
-            var Dx = Engine.TensorBroadcastMultiply(D2D, x_t);
+            var Dx = Engine.TensorMultiply(D2D, x_t);
             y_t = Engine.TensorAdd(y_t, Dx);
 
             allHiddenReal.SetSlice(1, t + 1, hReal);
@@ -924,18 +924,18 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
             var dD_t = Engine.ReduceSum(Engine.TensorMultiply(x_t, dOut_t), new int[] { 0 });
             _dParamGradient = Engine.TensorAdd(_dParamGradient, dD_t);
 
-            var dX_t = Engine.TensorBroadcastMultiply(D2D, dOut_t);
+            var dX_t = Engine.TensorMultiply(D2D, dOut_t);
 
             // Gradient from output: y = sum_n Re(C * h)
             // dh_real += C_r * dOut, dh_imag -= C_i * dOut (from Re(C*h) = C_r*h_r - C_i*h_i)
             dhReal = Engine.TensorAdd(dhReal,
-                Engine.TensorBroadcastMultiply(cReal3D, dOut_t_3D));
+                Engine.TensorMultiply(cReal3D, dOut_t_3D));
             dhImag = Engine.TensorAdd(dhImag,
-                Engine.TensorNegate(Engine.TensorBroadcastMultiply(cImag3D, dOut_t_3D)));
+                Engine.TensorNegate(Engine.TensorMultiply(cImag3D, dOut_t_3D)));
 
             // dC_real = sum_batch sum_d(h_real * dOut), dC_imag = -sum_batch sum_d(h_imag * dOut)
-            var hR_dOut = Engine.TensorBroadcastMultiply(hReal_t, dOut_t_3D);
-            var hI_dOut = Engine.TensorBroadcastMultiply(hImag_t, dOut_t_3D);
+            var hR_dOut = Engine.TensorMultiply(hReal_t, dOut_t_3D);
+            var hI_dOut = Engine.TensorMultiply(hImag_t, dOut_t_3D);
             var dCr_t = Engine.ReduceSum(hR_dOut, new int[] { 0 });
             var dCi_t = Engine.TensorNegate(Engine.ReduceSum(hI_dOut, new int[] { 0 }));
             _cRealGradient = Engine.TensorAdd(_cRealGradient, dCr_t);
@@ -951,7 +951,7 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
 
             // d_x from B_bar * x (x is real):
             // dx += sum_n(B_bar_r * dh_r + B_bar_i * dh_i)
-            var bBarRDh = Engine.TensorBroadcastMultiply(
+            var bBarRDh = Engine.TensorMultiply(
                 Engine.TensorExpandDims(
                     new Tensor<T>(new[] { _innerDimension, _stateDimension }), 0),
                 dhReal);
@@ -967,8 +967,8 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
 
 
             // dB: dh * x (for each complex component)
-            var dBr_t = Engine.ReduceSum(Engine.TensorBroadcastMultiply(dhReal, x_t_3D), new int[] { 0 });
-            var dBi_t = Engine.ReduceSum(Engine.TensorBroadcastMultiply(dhImag, x_t_3D), new int[] { 0 });
+            var dBr_t = Engine.ReduceSum(Engine.TensorMultiply(dhReal, x_t_3D), new int[] { 0 });
+            var dBi_t = Engine.ReduceSum(Engine.TensorMultiply(dhImag, x_t_3D), new int[] { 0 });
             _bRealGradient = Engine.TensorAdd(_bRealGradient, dBr_t);
             _bImagGradient = Engine.TensorAdd(_bImagGradient, dBi_t);
 
@@ -982,11 +982,11 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
             var bR3D = Engine.TensorExpandDims(_bReal, 0);
             var bI3D = Engine.TensorExpandDims(_bImag, 0);
             var dXFromState = Engine.TensorAdd(
-                Engine.ReduceSum(Engine.TensorBroadcastMultiply(bR3D, dhReal), new int[] { 2 }),
-                Engine.ReduceSum(Engine.TensorBroadcastMultiply(bI3D, dhImag), new int[] { 2 }));
+                Engine.ReduceSum(Engine.TensorMultiply(bR3D, dhReal), new int[] { 2 }),
+                Engine.ReduceSum(Engine.TensorMultiply(bI3D, dhImag), new int[] { 2 }));
 
             var deltaExpanded = Engine.TensorExpandDims(delta, 0);
-            dX_t = Engine.TensorAdd(dX_t, Engine.TensorBroadcastMultiply(deltaExpanded, dXFromState));
+            dX_t = Engine.TensorAdd(dX_t, Engine.TensorMultiply(deltaExpanded, dXFromState));
 
             // Accumulate A gradient BEFORE BPTT (dhReal is dL/dh[t+1] at this point).
             // dL/dA_bar = (dhReal * hReal_prev + dhImag * hImag_prev,
@@ -1001,11 +1001,11 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
             // Propagate gradient to previous hidden state (BPTT)
             // dh_prev = conj(A_bar) * dh (for complex: A_bar^* * dh)
             var newDhReal = Engine.TensorAdd(
-                Engine.TensorBroadcastMultiply(aBarReal3D, dhReal),
-                Engine.TensorBroadcastMultiply(aBarImag3D, dhImag));
+                Engine.TensorMultiply(aBarReal3D, dhReal),
+                Engine.TensorMultiply(aBarImag3D, dhImag));
             var newDhImag = Engine.TensorAdd(
-                Engine.TensorBroadcastMultiply(aBarReal3D, dhImag),
-                Engine.TensorNegate(Engine.TensorBroadcastMultiply(aBarImag3D, dhReal)));
+                Engine.TensorMultiply(aBarReal3D, dhImag),
+                Engine.TensorNegate(Engine.TensorMultiply(aBarImag3D, dhReal)));
             dhReal = newDhReal;
             dhImag = newDhImag;
 

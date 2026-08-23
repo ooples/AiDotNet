@@ -22,7 +22,7 @@ namespace AiDotNet.WaveletFunctions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
+public partial class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
 {
 
     /// <summary>

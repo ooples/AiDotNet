@@ -1136,10 +1136,10 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
 
         // Content write weighting c^w_t (tape), then w^w_t = g^w_t (g^a_t a_t + (1−g^a_t) c^w_t)  [N,1] tape.
         Tensor<T> contentWrite = ContentAddressingTensor(memory, writeKey, writeStrength);
-        Tensor<T> writeWeight = Engine.TensorBroadcastMultiply(
+        Tensor<T> writeWeight = Engine.TensorMultiply(
             Engine.TensorAdd(
-                Engine.TensorBroadcastMultiply(allocation, allocGate),
-                Engine.TensorBroadcastMultiply(contentWrite, OneMinus(allocGate))),
+                Engine.TensorMultiply(allocation, allocGate),
+                Engine.TensorMultiply(contentWrite, OneMinus(allocGate))),
             writeGate);
 
         // Memory update M_t = M_{t-1} ∘ (1 − w^w_t ⊗ e_t) + w^w_t ⊗ v_t  [N,W] tape.
@@ -1190,9 +1190,9 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
             // w^{r,i}_t = π_b b + π_c c + π_f f  [N,1] tape (gradient flows via read modes π and content c).
             Tensor<T> readWeight = Engine.TensorAdd(
                 Engine.TensorAdd(
-                    Engine.TensorBroadcastMultiply(backward, piBackward),
-                    Engine.TensorBroadcastMultiply(contentRead, piContent)),
-                Engine.TensorBroadcastMultiply(forward, piForward));
+                    Engine.TensorMultiply(backward, piBackward),
+                    Engine.TensorMultiply(contentRead, piContent)),
+                Engine.TensorMultiply(forward, piForward));
             // read vector r^i_t = (w^{r,i}_t)ᵀ M_t  → [1,N]·[N,W] = [1,W].
             Tensor<T> readVec = Engine.TensorMatMul(Engine.Reshape(readWeight, [1, n]), memoryAfter);
             readVecs.Add(readVec);
@@ -1300,9 +1300,9 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
         Tensor<T> dot = Engine.TensorMatMul(memory, Engine.Reshape(key, [w, 1]));                       // [N,1]
         Tensor<T> mNorm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(memory, memory), new[] { 1 }, keepDims: true)); // [N,1]
         Tensor<T> kNorm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(key, key), new[] { 1 }, keepDims: true));       // [1,1]
-        Tensor<T> denom = Engine.TensorAddScalar(Engine.TensorBroadcastMultiply(mNorm, kNorm), eps);    // [N,1]
+        Tensor<T> denom = Engine.TensorAddScalar(Engine.TensorMultiply(mNorm, kNorm), eps);    // [N,1]
         Tensor<T> cos = Engine.TensorMultiply(dot, Engine.TensorReciprocal(denom));                     // [N,1]
-        Tensor<T> scaled = Engine.TensorBroadcastMultiply(cos, strength);                               // [N,1] (β broadcast)
+        Tensor<T> scaled = Engine.TensorMultiply(cos, strength);                               // [N,1] (β broadcast)
         return Engine.Softmax(scaled, axis: 0);                                                         // [N,1]
     }
 

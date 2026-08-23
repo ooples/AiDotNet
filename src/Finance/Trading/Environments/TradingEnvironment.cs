@@ -50,7 +50,7 @@ namespace AiDotNet.Finance.Trading.Environments;
     "https://arxiv.org/abs/2511.12120",
     Year = 2020,
     Authors = "Hongyang Yang, Xiao-Yang Liu, Shan Zhong, Anwar Walid")]
-public abstract class TradingEnvironment<T> : IEnvironment<T>
+public abstract partial class TradingEnvironment<T> : IEnvironment<T>
 {
     protected readonly INumericOperations<T> NumOps;
     protected IEngine Engine => AiDotNetEngine.Current;

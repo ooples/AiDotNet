@@ -321,17 +321,17 @@ public partial class VAEDetector<T> : AnomalyDetectorBase<T>
 
         // Encoder: hidden = ReLU(x @ W1 + b1)  (SIMD)
         var xT = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
-        var hiddenPre = Engine.TensorBroadcastAdd(
+        var hiddenPre = Engine.TensorAdd(
             Engine.TensorMatMul(xT, Tensor<T>.FromMatrix(encoderW1)),
             Tensor<T>.FromVector(encoderB1).Reshape(1, _hiddenDim));
         var hidden = Engine.ReLU(hiddenPre.Reshape(_hiddenDim).ToVector());
 
         // Encoder: mean = hidden @ WMean + bMean, logVar = hidden @ WLogVar + bLogVar  (SIMD)
         var hT = Tensor<T>.FromVector(hidden).Reshape(1, _hiddenDim);
-        var mean = Engine.TensorBroadcastAdd(
+        var mean = Engine.TensorAdd(
             Engine.TensorMatMul(hT, Tensor<T>.FromMatrix(encoderWMean)),
             Tensor<T>.FromVector(encoderBMean).Reshape(1, _latentDim)).Reshape(_latentDim).ToVector();
-        var logVar = Engine.TensorBroadcastAdd(
+        var logVar = Engine.TensorAdd(
             Engine.TensorMatMul(hT, Tensor<T>.FromMatrix(encoderWLogVar)),
             Tensor<T>.FromVector(encoderBLogVar).Reshape(1, _latentDim)).Reshape(_latentDim).ToVector();
 
@@ -360,14 +360,14 @@ public partial class VAEDetector<T> : AnomalyDetectorBase<T>
 
         // Decoder: hidden2 = ReLU(z @ W1 + b1)  (SIMD)
         var zT = Tensor<T>.FromVector(z).Reshape(1, _latentDim);
-        var h2Pre = Engine.TensorBroadcastAdd(
+        var h2Pre = Engine.TensorAdd(
             Engine.TensorMatMul(zT, Tensor<T>.FromMatrix(decoderW1)),
             Tensor<T>.FromVector(decoderB1).Reshape(1, _hiddenDim));
         var hidden2 = Engine.ReLU(h2Pre.Reshape(_hiddenDim).ToVector());
 
         // Decoder: reconstruction = hidden2 @ W2 + b2  (SIMD, linear)
         var h2T = Tensor<T>.FromVector(hidden2).Reshape(1, _hiddenDim);
-        var reconstruction = Engine.TensorBroadcastAdd(
+        var reconstruction = Engine.TensorAdd(
             Engine.TensorMatMul(h2T, Tensor<T>.FromMatrix(decoderW2)),
             Tensor<T>.FromVector(decoderB2).Reshape(1, _inputDim)).Reshape(_inputDim).ToVector();
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -704,8 +704,8 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
 
             var channelMajor = Engine.TensorPermute(forecast, new[] { 0, 2, 1 });
             var flat = Engine.Reshape(channelMajor, new[] { rows, horizon });
-            var channelScaled = Engine.TensorBroadcastMultiply(flat, channelStd);
-            var channelShifted = Engine.TensorBroadcastAdd(channelScaled, channelMean);
+            var channelScaled = Engine.TensorMultiply(flat, channelStd);
+            var channelShifted = Engine.TensorAdd(channelScaled, channelMean);
             var restoredChannelMajor = Engine.Reshape(channelShifted, new[] { batch, features, horizon });
             return Engine.TensorPermute(restoredChannelMajor, new[] { 0, 2, 1 });
         }
@@ -720,8 +720,8 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
 
         bool reshaped = forecast.Rank != 2;
         var work = reshaped ? Engine.Reshape(forecast, new[] { 1, forecast.Length }) : forecast;
-        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
-        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        var scaled = Engine.TensorMultiply(work, stdT);
+        var shifted = Engine.TensorAdd(scaled, meanT);
         return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
     }
 

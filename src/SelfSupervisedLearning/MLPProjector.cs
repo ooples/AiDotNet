@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -34,7 +34,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Simple Framework for Contrastive Learning of Visual Representations", "https://arxiv.org/abs/2002.05709", Year = 2020, Authors = "Ting Chen, Simon Kornblith, Mohammad Norouzi, Geoffrey Hinton")]
-public class MLPProjector<T> : IProjectorHead<T>
+public partial class MLPProjector<T> : IProjectorHead<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -364,7 +364,7 @@ public class MLPProjector<T> : IProjectorHead<T>
         // Vectorized: output = input @ weight + bias
         var output = Engine.TensorMatMul(input, weight);
         var bias2D = bias.Reshape(1, weight.Shape[1]);
-        return Engine.TensorBroadcastAdd(output, bias2D);
+        return Engine.TensorAdd(output, bias2D);
     }
 
     private (Tensor<T> inputGrad, Tensor<T> weightGrad, Tensor<T> biasGrad) LinearBackward(

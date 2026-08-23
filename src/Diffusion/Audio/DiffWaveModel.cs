@@ -911,7 +911,7 @@ public class DiffWaveResidualBlock<T>
     /// <remarks>
     /// Channel convention: paper-faithful channels-FIRST layout
     /// <c>[B, C, T]</c>. Reshape the <c>[B, C]</c> embedding to
-    /// <c>[B, C, 1]</c> so <c>TensorBroadcastAdd</c> replicates it
+    /// <c>[B, C, 1]</c> so <c>TensorAdd</c> replicates it
     /// across the T axis to produce <c>[B, C, T]</c>. Falls through to a
     /// plain <c>TensorAdd</c> when the shape contract isn't met so the
     /// engine surfaces a clear shape-mismatch error.
@@ -924,7 +924,7 @@ public class DiffWaveResidualBlock<T>
         {
             var unsqueezed = _engine.Reshape(embedding,
                 new[] { embedding.Shape[0], embedding.Shape[1], 1 });
-            return _engine.TensorBroadcastAdd(x, unsqueezed);
+            return _engine.TensorAdd(x, unsqueezed);
         }
         return _engine.TensorAdd(x, embedding);
     }

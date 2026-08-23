@@ -509,7 +509,7 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
         var embMean = Engine.TensorMultiplyScalar(
             Engine.ReduceSum(embedded, new[] { 0 }, keepDims: true),
             _numOps.FromDouble(1.0 / seqLen));
-        Tensor<T> decTrend = Engine.TensorBroadcastAdd(_decoderTrendInit, embMean);
+        Tensor<T> decTrend = Engine.TensorAdd(_decoderTrendInit, embMean);
         for (int i = 0; i < _decoderLayers.Count; i++)
             (decSeasonal, decTrend) = DecoderLayerEngine(decSeasonal, decTrend, seasonal, trend, i);
 
@@ -588,7 +588,7 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
     // Broadcast-add a [D] bias across the sequence dim of a [S, D] tensor
     // (Engine.TensorAdd requires equal shapes; the FFN biases need broadcasting).
     private Tensor<T> AddBias(Tensor<T> x, Tensor<T> bias)
-        => Engine.TensorBroadcastAdd(x, Engine.Reshape(bias, new[] { 1, bias.Shape[0] }));
+        => Engine.TensorAdd(x, Engine.Reshape(bias, new[] { 1, bias.Shape[0] }));
 
     // Auto-correlation attention (Wu et al. 2021, "Autoformer", §3.1) on 2-D [seq, embDim] tensors,
     // built from IEngine ops so the gradient tape differentiates Autoformer's DEFINING time-delay
@@ -722,12 +722,12 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
 
         // Aggregate: out[t,d] = Σ_i weights[i] · v[(t + lag_i) mod lk, d], for t in [0, lq).
         var w0 = Engine.Reshape(Engine.TensorNarrow(weights, 0, 0, 1), new[] { 1, 1 });
-        var agg = Engine.TensorBroadcastMultiply(RollAndFit(v, topLags[0], lk, lq), w0);
+        var agg = Engine.TensorMultiply(RollAndFit(v, topLags[0], lk, lq), w0);
         for (int i = 1; i < topLags.Length; i++)
         {
             var rolled = RollAndFit(v, topLags[i], lk, lq);
             var wi = Engine.Reshape(Engine.TensorNarrow(weights, 0, i, 1), new[] { 1, 1 });
-            agg = Engine.TensorAdd(agg, Engine.TensorBroadcastMultiply(rolled, wi));
+            agg = Engine.TensorAdd(agg, Engine.TensorMultiply(rolled, wi));
         }
         return agg;
     }

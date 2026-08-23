@@ -201,7 +201,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
     /// <summary>
     /// Represents a single 3D Gaussian in the scene.
     /// </summary>
-    private sealed class Gaussian
+    private sealed partial class Gaussian
     {
         public Gaussian(int colorDim, INumericOperations<T> numOps)
         {

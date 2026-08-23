@@ -310,17 +310,17 @@ public partial class LonghornLayer<T> : LayerBase<T>, IShapeContract
         // Step 1: Q, K, V projections
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
 
-        var qFlat = Engine.TensorBroadcastAdd(
+        var qFlat = Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _queryWeights),
             Engine.Reshape(_queryBias, new[] { 1, _modelDimension }));
         var q = Engine.Reshape(qFlat, new[] { batchSize, seqLen, _modelDimension });
 
-        var kFlat = Engine.TensorBroadcastAdd(
+        var kFlat = Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _keyWeights),
             Engine.Reshape(_keyBias, new[] { 1, _modelDimension }));
         var k = Engine.Reshape(kFlat, new[] { batchSize, seqLen, _modelDimension });
 
-        var vFlat = Engine.TensorBroadcastAdd(
+        var vFlat = Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _valueWeights),
             Engine.Reshape(_valueBias, new[] { 1, _modelDimension }));
         var v = Engine.Reshape(vFlat, new[] { batchSize, seqLen, _modelDimension });
@@ -330,7 +330,7 @@ public partial class LonghornLayer<T> : LayerBase<T>, IShapeContract
         _lastValue = v;
 
         // Step 2: Alpha (learning rate / update gate) via sigmoid
-        var alphaRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var alphaRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _alphaWeights),
             Engine.Reshape(_alphaBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
         var alpha = Engine.Sigmoid(alphaRaw);
@@ -348,7 +348,7 @@ public partial class LonghornLayer<T> : LayerBase<T>, IShapeContract
         var normedFlat = Engine.Reshape(normedOutput, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorMatMul(normedFlat, _outputProjectionWeights);
         var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
+        outputFlat = Engine.TensorAdd(outputFlat, outBias);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
@@ -422,11 +422,11 @@ public partial class LonghornLayer<T> : LayerBase<T>, IShapeContract
                 new[] { headBatch, 1, 1 });
             var oneMinusAlpha = Engine.ScalarMinusTensor(NumOps.One, alphaT);
 
-            var retained = Engine.TensorBroadcastMultiply(state, oneMinusAlpha);
+            var retained = Engine.TensorMultiply(state, oneMinusAlpha);
             var observation = Engine.BatchMatMul(
                 vCol, Engine.TensorPermute(kCol, new[] { 0, 2, 1 }));
             state = Engine.TensorAdd(
-                retained, Engine.TensorBroadcastMultiply(observation, alphaT));
+                retained, Engine.TensorMultiply(observation, alphaT));
 
             outputs.Add(Engine.Reshape(Engine.BatchMatMul(state, qCol),
                 new[] { headBatch, 1, _headDimension }));

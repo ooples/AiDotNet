@@ -153,7 +153,7 @@ public sealed partial class TemporalConv3DLayer<T> : LayerBase<T>, IShapeContrac
             [_paddingDepth, _paddingHeight, _paddingWidth],
             [1, 1, 1]);
         var bias = Engine.Reshape(_biases, [1, _outputChannels, 1, 1, 1]);
-        return Engine.TensorBroadcastAdd(convolved, bias);
+        return Engine.TensorAdd(convolved, bias);
     }
 
     /// <inheritdoc />

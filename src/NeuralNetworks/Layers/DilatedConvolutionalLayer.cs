@@ -661,7 +661,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 
             // Add bias using broadcast: reshape [outputDepth] to [1, outputDepth, 1, 1]
             var biasReshaped = Engine.Reshape(_biases, [1, _outputDepth, 1, 1]);
-            var withBias = Engine.TensorBroadcastAdd(convOutput, biasReshaped);
+            var withBias = Engine.TensorAdd(convOutput, biasReshaped);
             outputNCHW = ApplyActivation(withBias);
             _lastOutput = outputNCHW;
         }

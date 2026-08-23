@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Initialization;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -303,7 +303,7 @@ public partial class OccupancyNetworkDecoder<T> : LayerBase<T>, IShapeContract
         var normalized = norm.Forward(x);
         var gamma = gammaGen.Forward(c);
         var beta = betaGen.Forward(c);
-        return Engine.TensorBroadcastAdd(Engine.TensorBroadcastMultiply(normalized, gamma), beta);
+        return Engine.TensorAdd(Engine.TensorMultiply(normalized, gamma), beta);
     }
 
     private IEnumerable<ILayer<T>> SubLayers()

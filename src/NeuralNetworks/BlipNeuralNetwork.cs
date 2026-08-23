@@ -870,7 +870,7 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
             // Slice to actual sequence length using proper int[] parameters
             var posSlice = Engine.TensorSlice(posEmbTensor, new[] { 0, 0 }, new[] { seqLen, _hiddenDim });
             var posExpanded = Engine.TensorExpandDims<T>(posSlice, 0);
-            hidden = Engine.TensorBroadcastAdd<T>(hidden, posExpanded);
+            hidden = Engine.TensorAdd<T>(hidden, posExpanded);
         }
 
         // Process through transformer layers
@@ -927,7 +927,7 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
 
             var posSlice = Engine.TensorSlice(posEmbTensor, new[] { 0, 0 }, new[] { seqLen, _hiddenDim });
             var posExpanded = Engine.TensorExpandDims<T>(posSlice, 0);
-            hidden = Engine.TensorBroadcastAdd<T>(hidden, posExpanded);
+            hidden = Engine.TensorAdd<T>(hidden, posExpanded);
         }
 
         // Process through transformer layers
@@ -1139,7 +1139,7 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
 
             var posSlice = Engine.TensorSlice(posEmbTensor, new[] { 0, 0 }, new[] { seqLen, _hiddenDim });
             var posExpanded = Engine.TensorExpandDims<T>(posSlice, 0);
-            hidden = Engine.TensorBroadcastAdd<T>(hidden, posExpanded);
+            hidden = Engine.TensorAdd<T>(hidden, posExpanded);
         }
 
         // Process through transformer layers (except final projection)
@@ -1191,7 +1191,7 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
 
             var posSlice = Engine.TensorSlice(posEmbTensor, new[] { 0, 0 }, new[] { seqLen, _hiddenDim });
             var posExpanded = Engine.TensorExpandDims<T>(posSlice, 0);
-            hidden = Engine.TensorBroadcastAdd<T>(hidden, posExpanded);
+            hidden = Engine.TensorAdd<T>(hidden, posExpanded);
         }
 
         // Process through transformer layers (except final projection)
@@ -1228,7 +1228,7 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
 
             var posSlice = Engine.TensorSlice(posEmbTensor, new[] { 0, 0 }, new[] { seqLen, _hiddenDim });
             var posExpanded = Engine.TensorExpandDims<T>(posSlice, 0);
-            hidden = Engine.TensorBroadcastAdd<T>(hidden, posExpanded);
+            hidden = Engine.TensorAdd<T>(hidden, posExpanded);
         }
 
         // Process through decoder layers

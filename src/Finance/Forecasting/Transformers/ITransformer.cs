@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -1081,8 +1081,8 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
             // dims (features is the trailing axis). Manual per-element indexing here
             // detached the graph right before the loss, zeroing all gradients. The
             // RevIN stats are treated as constants (paper-faithful affine reverse).
-            var scaled = Engine.TensorBroadcastMultiply(input, _instanceStd);
-            return Engine.TensorBroadcastAdd(scaled, _instanceMean);
+            var scaled = Engine.TensorMultiply(input, _instanceStd);
+            return Engine.TensorAdd(scaled, _instanceMean);
         }
 
         return result;

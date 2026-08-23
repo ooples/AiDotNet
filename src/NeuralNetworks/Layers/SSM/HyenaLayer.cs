@@ -296,7 +296,7 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
 
         for (int i = 0; i <= _order; i++)
         {
-            var rawProj = Engine.TensorBroadcastAdd(
+            var rawProj = Engine.TensorAdd(
                 Engine.TensorMatMul(inputFlat, _inputProjectionWeights[i]),
                 _inputProjectionBiases[i].Reshape(1, _modelDimension));
             projectionsRaw[i] = Engine.Reshape(rawProj, new[] { batchSize, seqLen, _modelDimension });
@@ -334,7 +334,7 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
         for (int i = 0; i < _order; i++)
         {
             // MLP layer 1: posEnc [seqLen, 1] x W1 [1, filterDim] + b1 -> [seqLen, filterDim]
-            var hidden = Engine.TensorBroadcastAdd(
+            var hidden = Engine.TensorAdd(
                 Engine.TensorMatMul(posEnc, _filterWeights1[i]),
                 _filterBiases1[i].Reshape(1, _filterDim));
 
@@ -343,7 +343,7 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
             filterHiddenStates[i] = hidden; // save pre-activation for backward
 
             // MLP layer 2: hiddenAct [seqLen, filterDim] x W2 [filterDim, modelDim] + b2 -> [seqLen, modelDim]
-            var filter = Engine.TensorBroadcastAdd(
+            var filter = Engine.TensorAdd(
                 Engine.TensorMatMul(hiddenAct, _filterWeights2[i]),
                 _filterBiases2[i].Reshape(1, _modelDimension));
 
@@ -389,7 +389,7 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
 
         // Step 4: Output projection
         var currentFlat = Engine.Reshape(current, new[] { batchSize * seqLen, _modelDimension });
-        var outputFlat = Engine.TensorBroadcastAdd(
+        var outputFlat = Engine.TensorAdd(
             Engine.TensorMatMul(currentFlat, _outputProjectionWeights),
             Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension }));
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
@@ -436,7 +436,7 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
                 var filterStep = Engine.Reshape(
                     Engine.TensorSliceAxis(filter, axis: 0, index: k),
                     new[] { 1, _modelDimension });
-                var term = Engine.TensorBroadcastMultiply(inputStep, filterStep);
+                var term = Engine.TensorMultiply(inputStep, filterStep);
                 sum = sum is null ? term : Engine.TensorAdd(sum, term);
             }
 

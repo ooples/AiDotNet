@@ -66,7 +66,7 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type.</typeparam>
-public sealed class TimestepDependentLora<T>
+public sealed partial class TimestepDependentLora<T>
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 

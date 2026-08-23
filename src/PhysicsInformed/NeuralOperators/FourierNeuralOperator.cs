@@ -1366,7 +1366,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             var matmul = Engine.TensorMatMul(flat, weightsT);
 
             // Bias shape [C_out] broadcasts across the B*S rows.
-            var biased = Engine.TensorBroadcastAdd(matmul, _pointwiseBias);
+            var biased = Engine.TensorAdd(matmul, _pointwiseBias);
 
             // [B*S, C_out] → [B, d_1, ..., d_N, C_out]
             int[] unflatShape = new int[rank];

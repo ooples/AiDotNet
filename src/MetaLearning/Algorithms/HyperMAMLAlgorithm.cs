@@ -277,7 +277,7 @@ public partial class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
 }
 
 /// <summary>Adapted model wrapper for HyperMAML.</summary>
-internal class HyperMAMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+internal partial class HyperMAMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private readonly IFullModel<T, TInput, TOutput> _model;
     [AiDotNet.Attributes.TrainableParameter]

@@ -1014,7 +1014,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         // Build the additive adjacency mask once if we'll need it. Encoding is
         // (adj * 1e9 - 1e9): where adj=1 → 0 (no penalty); where adj=0 → -1e9
         // (drives softmax weight to ~0). Replaces per-element `if adj==0:
-        // score = -inf` branch + softmax-with-skip logic. Engine.TensorBroadcastAdd
+        // score = -inf` branch + softmax-with-skip logic. Engine.TensorAdd
         // handles [1, N, N] → [B, N, N] broadcast for 2D adjacency.
         Tensor<T>? additiveMask = null;
         if (_useStructuralEncoding && _adjacencyMatrix != null)
@@ -1051,13 +1051,13 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
             if (_useStructuralEncoding && _structuralBias != null)
             {
                 var biasH = Engine.TensorSlice(_structuralBias, [h, 0, 0], [1, numNodes, numNodes]);
-                scores = Engine.TensorBroadcastAdd(scores, biasH);
+                scores = Engine.TensorAdd(scores, biasH);
             }
 
             // Apply adjacency mask via additive penalty (precomputed above).
             if (additiveMask != null)
             {
-                scores = Engine.TensorBroadcastAdd(scores, additiveMask);
+                scores = Engine.TensorAdd(scores, additiveMask);
             }
 
             // Softmax over the last axis (j-dimension) — fused mean/exp/normalize.

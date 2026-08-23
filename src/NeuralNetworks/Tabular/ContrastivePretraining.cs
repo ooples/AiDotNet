@@ -27,7 +27,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class ContrastivePretraining<T>
+public partial class ContrastivePretraining<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private IEngine Engine => AiDotNetEngine.Current;

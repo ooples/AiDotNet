@@ -862,7 +862,7 @@ public partial class NBEATSDetector<T> : AnomalyDetectorBase<T>
         // SIMD: output = input @ W + b via Engine.TensorMatMul
         int outputSize = W.Columns;
         var inputTensor = Tensor<T>.FromVector(input).Reshape(1, input.Length);
-        var result = Engine.TensorBroadcastAdd(
+        var result = Engine.TensorAdd(
             Engine.TensorMatMul(inputTensor, Tensor<T>.FromMatrix(W)),
             Tensor<T>.FromVector(b).Reshape(1, outputSize));
         return result.Reshape(outputSize).ToVector();

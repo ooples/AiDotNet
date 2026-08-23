@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -600,7 +600,7 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         }
 
         // Position embedding is [1, numPatches, hiddenSize] - broadcasts over batch
-        return Engine.TensorBroadcastAdd<T>(x, _posEmbed);
+        return Engine.TensorAdd<T>(x, _posEmbed);
     }
 
     private Tensor<T> CreateSinusoidalPositionEmbedding(int numPatches)
@@ -874,8 +874,8 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
             shiftSpan[h] = shift[h % shift.Length];
         }
 
-        var scaled = Engine.TensorBroadcastMultiply(x, scaleTensor);
-        return Engine.TensorBroadcastAdd(scaled, shiftTensor);
+        var scaled = Engine.TensorMultiply(x, scaleTensor);
+        return Engine.TensorAdd(scaled, shiftTensor);
     }
 
     private Tensor<T> AddWithGate(Tensor<T> x, Tensor<T> residual, T[] gate)
@@ -891,7 +891,7 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
             gateSpan[h] = gate[h % gate.Length];
         }
 
-        var gated = Engine.TensorBroadcastMultiply(residual, gateTensor);
+        var gated = Engine.TensorMultiply(residual, gateTensor);
         return Engine.TensorAdd<T>(x, gated);
     }
 

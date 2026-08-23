@@ -37,7 +37,7 @@ namespace AiDotNet.Interpretability.Explainers;
 /// - Debugging models by finding unexpected important features
 /// </para>
 /// </remarks>
-public class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAblationExplanation<T>>, IGlobalExplainer<T, GlobalFeatureAblationResult<T>>, IGlobalAttributionExplainer<T>, IGPUAcceleratedExplainer<T>
+public partial class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAblationExplanation<T>>, IGlobalExplainer<T, GlobalFeatureAblationResult<T>>, IGlobalAttributionExplainer<T>, IGPUAcceleratedExplainer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 

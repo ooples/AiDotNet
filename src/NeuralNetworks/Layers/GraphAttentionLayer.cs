@@ -447,7 +447,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
 
                 // Add bias using broadcasting and set in output
                 var biasBroadcast = Engine.Reshape(_bias, [1, _combinedOutputFeatures]);
-                var biasedOutput = Engine.TensorBroadcastAdd(batchOutput, biasBroadcast);
+                var biasedOutput = Engine.TensorAdd(batchOutput, biasBroadcast);
                 output.SetSlice(b, biasedOutput);
             }
 
@@ -549,7 +549,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
                 var neighborScores = Engine.TensorMatMul(wh, attnNeigh);
                 var neighborRow = Engine.Reshape(neighborScores, [1, numNodes]);
                 // e_ij = LeakyReLU(self_i + neigh_j): broadcast [N,1] + [1,N] -> [N,N].
-                var scores = Engine.LeakyReLU(Engine.TensorBroadcastAdd(selfScores, neighborRow), _alpha);
+                var scores = Engine.LeakyReLU(Engine.TensorAdd(selfScores, neighborRow), _alpha);
                 // Additive mask: 0 where an edge exists, -1e9 where adj == 0, so masked
                 // neighbours get ~0 softmax weight (constant tensor, not a tape parameter).
                 // Precomputed once per batch element above (head-independent).
@@ -580,7 +580,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
             ? Engine.Concat(denseHeadOutputs, 2)
             : Engine.TensorDivideScalar(denseHeadSum!, NumOps.FromDouble(_numHeads));
         var denseBias = Engine.Reshape(_bias, [1, 1, _combinedOutputFeatures]);
-        output = Engine.TensorBroadcastAdd(combinedHeads, denseBias);
+        output = Engine.TensorAdd(combinedHeads, denseBias);
 
         activatedOutput = ApplyActivation(output);
 

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -124,12 +124,12 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
         int batchSize = z.Shape[0];
         var mean = Engine.TensorDivideScalar(
             Engine.ReduceSum(z, new[] { 0 }, keepDims: true), NumOps.FromDouble(batchSize));
-        var centered = Engine.TensorBroadcastSubtract(z, mean);
+        var centered = Engine.TensorSubtract(z, mean);
         var variance = Engine.TensorDivideScalar(
             Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: true),
             NumOps.FromDouble(batchSize));
         var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-12)));
-        return Engine.TensorBroadcastDivide(centered, std);
+        return Engine.TensorDivide(centered, std);
     }
 
     private T ComputeLossScalarLegacy(Tensor<T> z1, Tensor<T> z2)

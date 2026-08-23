@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 // SHAPE-PRESERVING AT EVERY RANK, which is worth stating because the interior does change shape twice.
 // The squeeze pools the spatial axes away to [B, C] and the excitation runs a bottleneck through
-// _reducedChannels - but ForwardTraced ends at TensorBroadcastMultiply(input, excitationReshaped),
+// _reducedChannels - but ForwardTraced ends at TensorMultiply(input, excitationReshaped),
 // where excitationReshaped is deliberately reshaped to broadcast against the ORIGINAL input at each of
 // the rank-1/2/3/4/higher branches. The result is always the input's own shape.
 //
@@ -754,7 +754,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         // squeezed: [batchSize, channels], weights1: [channels, reducedChannels]
         var fc1Output = Engine.TensorMatMul(squeezed, _weights1);
         var fc1BiasReshaped = Engine.Reshape(_bias1, new[] { 1, _reducedChannels });
-        var fc1Biased = Engine.TensorBroadcastAdd(fc1Output, fc1BiasReshaped);
+        var fc1Biased = Engine.TensorAdd(fc1Output, fc1BiasReshaped);
         _lastFc1Biased = fc1Biased;
 
         var activated1 = ApplyTensorActivation(fc1Biased, isFirstActivation: true);
@@ -764,7 +764,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         // activated1: [batchSize, reducedChannels], weights2: [reducedChannels, channels]
         var fc2Output = Engine.TensorMatMul(activated1, _weights2);
         var fc2BiasReshaped = Engine.Reshape(_bias2, new[] { 1, _channels });
-        var fc2Biased = Engine.TensorBroadcastAdd(fc2Output, fc2BiasReshaped);
+        var fc2Biased = Engine.TensorAdd(fc2Output, fc2BiasReshaped);
         _lastFc2Biased = fc2Biased;
 
         var excitation = ApplyTensorActivation(fc2Biased, isFirstActivation: false);
@@ -806,7 +806,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
             excitationReshaped = Engine.Reshape(excitation, shape);
         }
 
-        var output = Engine.TensorBroadcastMultiply(input, excitationReshaped);
+        var output = Engine.TensorMultiply(input, excitationReshaped);
 
         _lastOutput = output;
         return output;

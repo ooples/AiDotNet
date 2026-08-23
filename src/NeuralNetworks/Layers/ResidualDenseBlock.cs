@@ -741,12 +741,24 @@ public partial class ResidualDenseBlock<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
     {
-        var output = TensorAllocator.Rent<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            output.Data.Span[i] = _activation.Activate(input.Data.Span[i]);
-        }
-        return output;
+        // ENGINE OP, NOT A RAW SPAN LOOP. Filling a rented tensor element by element produces a
+        // tensor the autodiff tape has never seen: DifferentiableOps is internal to
+        // AiDotNet.Tensors, so an Engine call is the ONLY way a layer's math reaches the tape.
+        //
+        // Measured directly before this change, running the layer under a tape and asking for a
+        // gradient on every cached tensor: _convOutputs[0..3] (the pre-activations) came back
+        // ABSENT while their _activationOutputs did have gradients, and _convOutputs[4] -- the one
+        // conv whose output never passes through here -- was on the tape. The chain was cut at
+        // exactly these four calls, so conv1..conv4's weights and the input's route through them
+        // lost their gradient entirely. What survived was the input's path via the recorded
+        // TensorConcatenate and AddResidual, which is why the input VJP was partially right
+        // (~1.5-12% off) rather than absent, and why the error was independent of activation sign.
+        //
+        // Engine.LeakyReLU is the same primitive UNetDiscriminator and GraphAttentionLayer already
+        // use, and it allocates through TensorAllocator.Rent internally exactly as this did, so
+        // nothing is given up on the allocation path. Alpha still comes from _activation, so the
+        // ESRGAN 0.2 negative slope is unchanged.
+        return Engine.LeakyReLU(input, _activation.Alpha);
     }
 
     /// <summary>

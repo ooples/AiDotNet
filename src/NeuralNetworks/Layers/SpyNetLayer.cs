@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -725,7 +725,7 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
                 NumOps.FromDouble((double)targetH / height),
             },
             new[] { 1, 2, 1, 1 });
-        var scaled = Engine.TensorBroadcastMultiply(upsampled, channelScale);
+        var scaled = Engine.TensorMultiply(upsampled, channelScale);
         return hasBatch
             ? scaled
             : Engine.Reshape(scaled, new[] { 2, targetH, targetW });
@@ -783,7 +783,7 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
             new[] { 1, 1, 1, 2 });
         var grid = Engine.TensorAdd(
             identity,
-            Engine.TensorBroadcastMultiply(flowNhwc, normalization));
+            Engine.TensorMultiply(flowNhwc, normalization));
 
         // Engine.GridSample is NCHW (PyTorch F.grid_sample convention, standardized in Tensors #777):
         // input [batch, C, H, W], grid [batch, outH, outW, 2] -> output [batch, C, outH, outW]. SpyNet

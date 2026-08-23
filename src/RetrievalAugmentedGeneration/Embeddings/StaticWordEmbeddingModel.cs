@@ -34,7 +34,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Embeddings;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class StaticWordEmbeddingModel<T> : EmbeddingModelBase<T>
+public partial class StaticWordEmbeddingModel<T> : EmbeddingModelBase<T>
 {
     private readonly Dictionary<string, Vector<T>> _wordVectors;
     private readonly int _dimension;

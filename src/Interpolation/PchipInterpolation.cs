@@ -17,7 +17,7 @@ namespace AiDotNet.Interpolation;
 /// general shape and trends of your original data.
 /// </para>
 /// </remarks>
-public class PchipInterpolation<T> : IInterpolation<T>
+public partial class PchipInterpolation<T> : IInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the data points.

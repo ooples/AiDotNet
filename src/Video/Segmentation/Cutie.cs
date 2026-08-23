@@ -651,7 +651,7 @@ public partial class Cutie<T> : NeuralNetworkBase<T>
                 // score[b,1,h,w] = sum_c query*key  (reduce over the channel axis, keep it for broadcast).
                 var score = Engine.ReduceSum(Engine.TensorMultiply(query, key), new[] { 1 }, keepDims: true);
                 var weight = Engine.TensorExp(Engine.TensorMultiplyScalar(score, scale)); // [b,1,h,w]
-                var term = Engine.TensorBroadcastMultiply(value, weight);                 // [b,C,h,w]
+                var term = Engine.TensorMultiply(value, weight);                 // [b,C,h,w]
                 accumulated = accumulated is null ? term : Engine.TensorAdd(accumulated, term);
             }
             // The loop above runs at least once because this branch is only entered for a

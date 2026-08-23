@@ -438,11 +438,11 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
         var weight0 = Engine.TensorMultiplyScalar(mask0, NumOps.FromDouble(1.0 - time));
         var weight1 = Engine.TensorMultiplyScalar(mask1, NumOps.FromDouble(time));
         var numerator = Engine.TensorAdd(
-            Engine.TensorBroadcastMultiply(warpedImage0, weight0),
-            Engine.TensorBroadcastMultiply(warpedImage1, weight1));
+            Engine.TensorMultiply(warpedImage0, weight0),
+            Engine.TensorMultiply(warpedImage1, weight1));
         var denominator = Engine.TensorAddScalar(
             Engine.TensorAdd(weight0, weight1), NumOps.FromDouble(SynthesisBlendEpsilon));
-        var merged = Engine.TensorBroadcastDivide(numerator, denominator);
+        var merged = Engine.TensorDivide(numerator, denominator);
         return Engine.TensorClamp(Engine.TensorAdd(merged, residual), NumOps.Zero, NumOps.One);
     }
 

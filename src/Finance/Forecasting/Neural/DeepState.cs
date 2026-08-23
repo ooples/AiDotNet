@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -903,7 +903,7 @@ public partial class DeepState<T> : ForecastingModelBase<T>
         // for its transition/observation branches.
         bool broadcastCompatible = BroadcastShapesMatch(a._shape, b._shape);
         if (broadcastCompatible)
-            return Engine.TensorBroadcastAdd(a, b);
+            return Engine.TensorAdd(a, b);
 
         int minLen = Math.Min(a.Length, b.Length);
         var flatA = Engine.Reshape(a, [a.Length]);

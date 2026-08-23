@@ -131,7 +131,7 @@ public sealed partial class DiffusionAttentionLayer<T> : LayerBase<T>, IShapeCon
         attended = Engine.TensorPermute(attended, [0, 2, 1, 3]).Contiguous();
         attended = Engine.Reshape(attended, [batch, queryLength, _queryDimension]);
         var projected = Engine.TensorMatMul(attended, _outputWeights);
-        return Engine.TensorBroadcastAdd(projected, _outputBias);
+        return Engine.TensorAdd(projected, _outputBias);
     }
 
     /// <inheritdoc />

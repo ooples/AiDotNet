@@ -21,7 +21,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
 /// - FFN (feed-forward network) for each query
 /// </para>
 /// </remarks>
-internal class DETRDecoder<T>
+internal partial class DETRDecoder<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _numLayers;

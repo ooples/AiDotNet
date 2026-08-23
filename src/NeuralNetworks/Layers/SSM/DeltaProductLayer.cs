@@ -295,7 +295,7 @@ public partial class DeltaProductLayer<T> : LayerBase<T>, IShapeContract
         _lastValue = v;
 
         // Step 2: Beta (write strength)
-        var betaRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var betaRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _betaWeights),
             Engine.Reshape(_betaBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
         var beta = Engine.Sigmoid(betaRaw);
@@ -314,7 +314,7 @@ public partial class DeltaProductLayer<T> : LayerBase<T>, IShapeContract
         var outputFlat = Engine.TensorMatMul(
             Engine.Reshape(recOutput, new[] { batchSize * seqLen, _modelDimension }), _outputProjectionWeights);
         var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
+        outputFlat = Engine.TensorAdd(outputFlat, outBias);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
@@ -444,7 +444,7 @@ public partial class DeltaProductLayer<T> : LayerBase<T>, IShapeContract
                 var uRow = Engine.TensorPermute(uCol, new[] { 0, 2, 1 });
                 var normSq = Engine.BatchMatMul(uRow, uCol);
                 var denominator = Engine.TensorAddScalar(normSq, NumOps.FromDouble(1e-8));
-                var reflection = Engine.TensorBroadcastMultiply(
+                var reflection = Engine.TensorMultiply(
                     Engine.BatchMatMul(uCol, uRow),
                     Engine.TensorDivide(Tensor<T>.CreateDefault(
                         new[] { headBatch, 1, 1 }, two), denominator));
@@ -459,7 +459,7 @@ public partial class DeltaProductLayer<T> : LayerBase<T>, IShapeContract
                 new[] { headBatch, _headDimension, 1 });
             var betaT = Engine.Reshape(Engine.TensorSliceAxis(betaHeads, 1, t),
                 new[] { headBatch, 1, 1 });
-            state = Engine.TensorAdd(state, Engine.TensorBroadcastMultiply(
+            state = Engine.TensorAdd(state, Engine.TensorMultiply(
                 Engine.BatchMatMul(vCol, Engine.TensorPermute(kCol, new[] { 0, 2, 1 })), betaT));
             outputs.Add(Engine.Reshape(Engine.BatchMatMul(state, qCol),
                 new[] { headBatch, 1, _headDimension }));

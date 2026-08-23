@@ -15,7 +15,7 @@ namespace AiDotNet.Interpolation;
 /// It's particularly useful when you know your data should never "change direction" between points.
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class MonotoneCubicInterpolation<T> : IInterpolation<T>
+public partial class MonotoneCubicInterpolation<T> : IInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the known data points.

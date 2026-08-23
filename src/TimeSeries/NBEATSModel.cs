@@ -591,7 +591,7 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
     /// </para>
     /// <para>
     /// <b>Status (AiDotNet.Tensors ≥ 0.112.0):</b> the compiled fused plan now trains N-BEATS's
-    /// doubly-residual op graph (per-layer <c>TensorPermute</c> + <c>TensorBroadcastAdd</c>) faithfully —
+    /// doubly-residual op graph (per-layer <c>TensorPermute</c> + <c>TensorAdd</c>) faithfully —
     /// AiDotNet.Tensors #759 fixed the multi-consumer grad-buffer zeroing that made those ops' backward
     /// explode, and #764 fixed the GPU-resident-parameter mistrain. Verified on GPU: the resident run
     /// reduces the eager-forward training MSE and improves the held-out MSE over the untrained baseline, so
@@ -718,7 +718,7 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
                 epochStepCount++;
 
                 // Divergence guard (defensive). AiDotNet.Tensors #759 fixed the TensorPermute +
-                // TensorBroadcastAdd backward that used to make the captured plan produce exploding Adam
+                // TensorAdd backward that used to make the captured plan produce exploding Adam
                 // updates for N-BEATS's doubly-residual graph, so on Tensors >= 0.112.0 the fused step trains
                 // correctly. This guard remains as a cheap belt-and-braces check against any future
                 // non-finite / exploding step loss (e.g. a different linked Tensors build): on a NaN or a

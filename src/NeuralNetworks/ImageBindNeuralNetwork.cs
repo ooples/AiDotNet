@@ -863,7 +863,7 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
             [projected.Rank - 1],
             keepDims: true);
         var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-12)));
-        var normalized = Engine.TensorBroadcastDivide(projected, norm);
+        var normalized = Engine.TensorDivide(projected, norm);
         if (activations is not null) activations["Image/NormalizedEmbedding"] = normalized.Clone();
         return normalized;
     }

@@ -33,7 +33,7 @@ namespace AiDotNet.WaveletFunctions;
 /// and one for synthesizing - that work together perfectly.
 /// </para>
 /// </remarks>
-public class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
+public partial class BiorthogonalWavelet<T> : WaveletFunctionBase<T>
 {
     /// <summary>
     /// The order of the wavelet used for decomposition.

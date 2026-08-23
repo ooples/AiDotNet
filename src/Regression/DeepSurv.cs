@@ -393,7 +393,7 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             {
                 // SIMD: output = input @ weights + biases via Engine.TensorMatMul
                 var inputTensor = Tensor<T>.FromVector(current[i]).Reshape(1, current[i].Length);
-                var result = Engine.TensorBroadcastAdd(
+                var result = Engine.TensorAdd(
                     Engine.TensorMatMul(inputTensor, weightTensor), biasTensor);
                 // SIMD activation via IActivationFunction.Forward
                 result = _options.Activation.Activate(result);

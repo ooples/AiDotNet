@@ -342,7 +342,7 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     private Tensor<T> MatMulBias(Tensor<T> x, Tensor<T> w, Tensor<T>? bias)
     {
         var r = Engine.TensorMatMul(x, w);
-        if (bias != null) r = Engine.TensorBroadcastAdd(r, Engine.Reshape(bias, [1, bias.Shape[0]]));
+        if (bias != null) r = Engine.TensorAdd(r, Engine.Reshape(bias, [1, bias.Shape[0]]));
         return r;
     }
 
@@ -356,7 +356,7 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         // 1. Input embedding + sinusoidal positional encoding -> [B*L, d].
         var flatIn = Engine.Reshape(batchInput, [batch * seq, 1]);
         var emb = Engine.TensorMatMul(flatIn, _inputEmbeddingWeight); // [B*L, d]
-        emb = Engine.TensorBroadcastAdd(emb, Engine.Reshape(_inputEmbeddingBias, [1, d]));
+        emb = Engine.TensorAdd(emb, Engine.Reshape(_inputEmbeddingBias, [1, d]));
         var posData = new Vector<T>(batch * seq * d);
         var peHost = _positionalEncodingHost ??= _positionalEncoding.GetCpuData();
         for (int bi = 0; bi < batch; bi++)

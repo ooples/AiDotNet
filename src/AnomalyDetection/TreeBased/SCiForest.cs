@@ -222,7 +222,7 @@ public partial class SCiForest<T> : AnomalyDetectorBase<T>
         return indices.Take(sampleSize).ToArray();
     }
 
-    private class SCiTree
+    private partial class SCiTree
     {
         private readonly INumericOperations<T> _ops;
 

@@ -18,7 +18,7 @@ namespace AiDotNet.Interpolation;
 /// This method requires at least 5 data points to work properly.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public class AkimaInterpolation<T> : IInterpolation<T>
+public partial class AkimaInterpolation<T> : IInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the data points.

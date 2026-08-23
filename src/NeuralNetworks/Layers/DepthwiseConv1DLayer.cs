@@ -173,7 +173,7 @@ public partial class DepthwiseConv1DLayer<T> : LayerBase<T>, IShapeContract
 
         // Broadcast bias [C*mult] -> [1, C*mult, 1] and add, then activate.
         var biasReshaped = Engine.Reshape(_bias, new[] { 1, _channels * _multiplier, 1 });
-        var withBias = Engine.TensorBroadcastAdd(conv, biasReshaped);
+        var withBias = Engine.TensorAdd(conv, biasReshaped);
         return ApplyActivation(withBias);
     }
 

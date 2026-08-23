@@ -16,7 +16,7 @@ namespace AiDotNet.Interpolation;
 /// and efficient, especially when dealing with many data points.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public class BarycentricRationalInterpolation<T> : IInterpolation<T>
+public partial class BarycentricRationalInterpolation<T> : IInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the data points.

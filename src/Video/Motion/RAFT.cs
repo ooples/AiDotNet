@@ -587,7 +587,7 @@ public partial class RAFT<T> : OpticalFlowBase<T>
         {
             sliceStart[1] = c;
             var flowC = Engine.TensorSlice(flowUnfolded, sliceStart, sliceLen);
-            var product = Engine.TensorBroadcastMultiply(maskNormalized, flowC);
+            var product = Engine.TensorMultiply(maskNormalized, flowC);
             subPixelByChannel[c] = Engine.ReduceSum(product, new[] { 2 }, keepDims: false);
         }
 

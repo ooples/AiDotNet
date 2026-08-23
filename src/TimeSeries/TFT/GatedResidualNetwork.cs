@@ -16,7 +16,7 @@ namespace AiDotNet.TimeSeries.TFT;
 /// (token-wise), matching the Temporal Fusion Transformer tape-training campaign.
 /// The final layer normalization uses learned affine parameters (γ, β).
 /// </remarks>
-internal class GatedResidualNetwork<T>
+internal partial class GatedResidualNetwork<T>
 {
     private static IEngine Engine => AiDotNetEngine.Current;
 
@@ -134,7 +134,7 @@ internal class GatedResidualNetwork<T>
         int outSize = weight.Shape[0];
         var result = Engine.TensorMatMul(x, Engine.TensorTranspose(weight));
         if (bias != null)
-            result = Engine.TensorBroadcastAdd(result, Engine.Reshape(bias, [1, outSize]));
+            result = Engine.TensorAdd(result, Engine.Reshape(bias, [1, outSize]));
         return result;
     }
 

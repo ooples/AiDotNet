@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class TabMBase<T>
+public abstract partial class TabMBase<T>
 {
     /// <summary>
     /// Numeric operations helper for type T.

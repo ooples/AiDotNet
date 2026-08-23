@@ -357,7 +357,7 @@ public partial class PaTHAttentionLayer<T> : LayerBase<T>, IShapeContract
         _lastAttentionOutput = attnOutput;
 
         // Step 4: Output gate
-        var gateRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Sigmoid(gateRaw);
@@ -371,7 +371,7 @@ public partial class PaTHAttentionLayer<T> : LayerBase<T>, IShapeContract
         var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorMatMul(gatedFlat, _outputProjectionWeights);
         var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
+        outputFlat = Engine.TensorAdd(outputFlat, outBias);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
@@ -413,7 +413,7 @@ public partial class PaTHAttentionLayer<T> : LayerBase<T>, IShapeContract
             Engine.TensorDivide(dot, normSquared), NumOps.FromDouble(2.0));
         var reflected = Engine.TensorSubtract(
             heads,
-            Engine.TensorBroadcastMultiply(vectors, coefficient));
+            Engine.TensorMultiply(vectors, coefficient));
         return Engine.Reshape(
             reflected,
             new[] { batchSize, seqLen, _modelDimension });

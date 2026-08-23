@@ -718,25 +718,25 @@ public partial class DAGMMDetector<T> : AnomalyDetectorBase<T>
         // Encoder layer 1: encH = tanh(x @ encW1 + encB1)
         var xTensor = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
         var encH1 = Engine.TensorMatMul(xTensor, Tensor<T>.FromMatrix(encW1));
-        encH1 = Engine.TensorBroadcastAdd(encH1, Tensor<T>.FromVector(encB1).Reshape(1, _hiddenDim));
+        encH1 = Engine.TensorAdd(encH1, Tensor<T>.FromVector(encB1).Reshape(1, _hiddenDim));
         encH1 = Engine.Tanh(encH1);
         var encH = encH1.Reshape(_hiddenDim).ToVector();
 
         // Encoder layer 2: z = tanh(encH @ encW2 + encB2)
         var encH2 = Engine.TensorMatMul(encH1, Tensor<T>.FromMatrix(encW2));
-        encH2 = Engine.TensorBroadcastAdd(encH2, Tensor<T>.FromVector(encB2).Reshape(1, _latentDim));
+        encH2 = Engine.TensorAdd(encH2, Tensor<T>.FromVector(encB2).Reshape(1, _latentDim));
         encH2 = Engine.Tanh(encH2);
         var z = encH2.Reshape(_latentDim).ToVector();
 
         // Decoder layer 1: decH = tanh(z @ decW1 + decB1)
         var decH1 = Engine.TensorMatMul(encH2, Tensor<T>.FromMatrix(decW1));
-        decH1 = Engine.TensorBroadcastAdd(decH1, Tensor<T>.FromVector(decB1).Reshape(1, _hiddenDim));
+        decH1 = Engine.TensorAdd(decH1, Tensor<T>.FromVector(decB1).Reshape(1, _hiddenDim));
         decH1 = Engine.Tanh(decH1);
         var decH = decH1.Reshape(_hiddenDim).ToVector();
 
         // Decoder layer 2: xRecon = z @ decW2 + decB2 (no activation)
         var decH2 = Engine.TensorMatMul(decH1, Tensor<T>.FromMatrix(decW2));
-        decH2 = Engine.TensorBroadcastAdd(decH2, Tensor<T>.FromVector(decB2).Reshape(1, _inputDim));
+        decH2 = Engine.TensorAdd(decH2, Tensor<T>.FromVector(decB2).Reshape(1, _inputDim));
         var xRecon = decH2.Reshape(_inputDim).ToVector();
 
         // Compute reconstruction features using Engine.DotProduct
@@ -770,13 +770,13 @@ public partial class DAGMMDetector<T> : AnomalyDetectorBase<T>
         // Estimation network layer 1: estH = tanh(zc @ estW1 + estB1)
         var zcTensor = Tensor<T>.FromVector(zc).Reshape(1, _zDim);
         var estH1 = Engine.TensorMatMul(zcTensor, Tensor<T>.FromMatrix(estW1));
-        estH1 = Engine.TensorBroadcastAdd(estH1, Tensor<T>.FromVector(estB1).Reshape(1, _hiddenDim));
+        estH1 = Engine.TensorAdd(estH1, Tensor<T>.FromVector(estB1).Reshape(1, _hiddenDim));
         estH1 = Engine.Tanh(estH1);
         var estH = estH1.Reshape(_hiddenDim).ToVector();
 
         // Estimation network layer 2: logits = estH @ estW2 + estB2
         var estH2 = Engine.TensorMatMul(estH1, Tensor<T>.FromMatrix(estW2));
-        estH2 = Engine.TensorBroadcastAdd(estH2, Tensor<T>.FromVector(estB2).Reshape(1, _numMixtures));
+        estH2 = Engine.TensorAdd(estH2, Tensor<T>.FromVector(estB2).Reshape(1, _numMixtures));
         var logitVec = estH2.Reshape(_numMixtures).ToVector();
         var logits = new double[_numMixtures];
         double maxLogit = double.MinValue;

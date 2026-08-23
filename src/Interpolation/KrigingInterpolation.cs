@@ -14,7 +14,7 @@ namespace AiDotNet.Interpolation;
 /// This method is widely used in geography, mining, and environmental science.
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class KrigingInterpolation<T> : I2DInterpolation<T>
+public partial class KrigingInterpolation<T> : I2DInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the known data points.

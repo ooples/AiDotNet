@@ -383,7 +383,7 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
         _lastPhiKPreActivation = phiKPreAct;
 
         // Step 3: Compute output gate
-        var gateRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Swish(gateRaw);
@@ -400,7 +400,7 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
 
         // Step 6: Output projection
         var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _modelDimension });
-        var outputFlat = Engine.TensorBroadcastAdd(
+        var outputFlat = Engine.TensorAdd(
             Engine.TensorMatMul(gatedFlat, _outputProjectionWeights),
             Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension }));
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
@@ -435,7 +435,7 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
                 new[] { tokens, _numHeads, _headDimension, _featureMapHiddenDim }),
             new[] { headBatch, _headDimension, _featureMapHiddenDim });
         var preActivation = Engine.Reshape(
-            Engine.TensorBroadcastAdd(
+            Engine.TensorAdd(
                 Engine.BatchMatMul(heads, w1),
                 Engine.Reshape(
                     Engine.TensorBroadcastTo(
@@ -456,7 +456,7 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
                     new[] { 1, _numHeads, _featureMapHiddenDim, _headDimension }),
                 new[] { tokens, _numHeads, _featureMapHiddenDim, _headDimension }),
             new[] { headBatch, _featureMapHiddenDim, _headDimension });
-        var output = Engine.TensorBroadcastAdd(
+        var output = Engine.TensorAdd(
             Engine.BatchMatMul(hidden, w2),
             Engine.Reshape(
                 Engine.TensorBroadcastTo(

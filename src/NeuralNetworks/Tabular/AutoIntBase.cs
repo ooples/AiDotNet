@@ -33,7 +33,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class AutoIntBase<T> : IParameterSource<T>
+public abstract partial class AutoIntBase<T> : IParameterSource<T>
 {
     protected readonly AutoIntOptions<T> Options;
     protected readonly int NumNumericalFeatures;

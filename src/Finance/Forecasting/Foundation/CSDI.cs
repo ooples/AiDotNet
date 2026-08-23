@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -677,8 +677,8 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
         var mean = Engine.ReduceMean(flat, new[] { 1 }, keepDims: true);
         var variance = Engine.ReduceVariance(flat, new[] { 1 }, keepDims: true);
         var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-5)));
-        var centered = Engine.TensorBroadcastSubtract(flat, mean);
-        var normalized = Engine.TensorBroadcastDivide(centered, std);
+        var centered = Engine.TensorSubtract(flat, mean);
+        var normalized = Engine.TensorDivide(centered, std);
         return reshaped ? Engine.Reshape(normalized, input._shape) : normalized;
     }
 

@@ -18,7 +18,7 @@ namespace AiDotNet.Interpolation;
 /// smooth transitions. This is particularly useful when your data points aren't arranged in a grid.
 /// </para>
 /// </remarks>
-public class RadialBasisFunctionInterpolation<T> : I2DInterpolation<T>
+public partial class RadialBasisFunctionInterpolation<T> : I2DInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the data points.

@@ -331,13 +331,13 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
             var x_t = Engine.TensorSliceAxis(input3D, axis: 1, index: t); // [batch, modelDim]
 
             // Gate computations
-            var iGateRaw = Engine.TensorBroadcastAdd(
+            var iGateRaw = Engine.TensorAdd(
                 Engine.TensorMatMul(x_t, _inputGateWeights),
                 Engine.Reshape(_inputGateBias, new[] { 1, _modelDimension }));
-            var fGateRaw = Engine.TensorBroadcastAdd(
+            var fGateRaw = Engine.TensorAdd(
                 Engine.TensorMatMul(x_t, _forgetGateWeights),
                 Engine.Reshape(_forgetGateBias, new[] { 1, _modelDimension }));
-            var oGate = Engine.Sigmoid(Engine.TensorBroadcastAdd(
+            var oGate = Engine.Sigmoid(Engine.TensorAdd(
                 Engine.TensorMatMul(x_t, _outputGateWeights),
                 Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })));
 
@@ -377,11 +377,11 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
             var vCol = Engine.Reshape(vHead, new[] { headBatch, _headDimension, 1 });
             var kRow = Engine.TensorPermute(kCol, new[] { 0, 2, 1 });
             cellState = Engine.TensorAdd(
-                Engine.TensorBroadcastMultiply(cellState, fScale),
-                Engine.TensorBroadcastMultiply(Engine.BatchMatMul(vCol, kRow), iScale));
+                Engine.TensorMultiply(cellState, fScale),
+                Engine.TensorMultiply(Engine.BatchMatMul(vCol, kRow), iScale));
             normState = Engine.TensorAdd(
-                Engine.TensorBroadcastMultiply(normState, fScale),
-                Engine.TensorBroadcastMultiply(kCol, iScale));
+                Engine.TensorMultiply(normState, fScale),
+                Engine.TensorMultiply(kCol, iScale));
 
             var numerator = Engine.BatchMatMul(cellState, qCol);
             var denominator = Engine.TensorMax(
@@ -391,7 +391,7 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
             var oScalar = Engine.Reshape(Engine.TensorSlice(oHead,
                 new[] { 0, 0 }, new[] { headBatch, 1 }), new[] { headBatch, 1, 1 });
             var normalized = Engine.TensorDivide(
-                Engine.TensorBroadcastMultiply(numerator, oScalar),
+                Engine.TensorMultiply(numerator, oScalar),
                 Engine.TensorTile(denominator, new[] { 1, _headDimension, 1 }));
             var h_t = Engine.Reshape(normalized, new[] { batchSize, _modelDimension });
 
@@ -406,7 +406,7 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
             // Output projection
             var y_t = Engine.TensorMatMul(h_t, _outputProjectionWeights);
             var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-            y_t = Engine.TensorBroadcastAdd(y_t, outBias);
+            y_t = Engine.TensorAdd(y_t, outBias);
 
             outputList.Add(Engine.Reshape(y_t, new[] { batchSize, 1, _modelDimension }));
         }

@@ -271,7 +271,7 @@ public partial class KimiLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
         _lastValue = v;
 
         // Step 2: Output gate
-        var gateRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var outputGate = Engine.Swish(gateRaw);
@@ -290,7 +290,7 @@ public partial class KimiLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
         var scaledKeyHeads = Engine.TensorMultiplyScalar(
             kHeads,
             NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension)));
-        var gateRawHeads = Engine.TensorBroadcastAdd(
+        var gateRawHeads = Engine.TensorAdd(
             Engine.ReduceSum(
                 Engine.TensorMultiply(scaledKeyHeads, vHeads),
                 new[] { 3 },
@@ -316,7 +316,7 @@ public partial class KimiLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
         var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorMatMul(gatedFlat, _outputProjectionWeights);
         var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
+        outputFlat = Engine.TensorAdd(outputFlat, outBias);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);

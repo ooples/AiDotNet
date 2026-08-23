@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -1308,7 +1308,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         var maxPerRow = Engine.ReduceMax(logits, new[] { 1 }, keepDims: true, out _); // [batchSize, 1]
 
         // Step 2: Subtract max for numerical stability - use broadcasting
-        var shiftedLogits = Engine.TensorBroadcastSubtract<T>(logits, maxPerRow); // [batchSize, numExperts]
+        var shiftedLogits = Engine.TensorSubtract<T>(logits, maxPerRow); // [batchSize, numExperts]
 
         // Step 3: Apply exp element-wise
         var expValues = Engine.TensorExp(shiftedLogits); // [batchSize, numExperts]
@@ -1317,7 +1317,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         var expSum = Engine.ReduceSum(expValues, new[] { 1 }, keepDims: true); // [batchSize, 1]
 
         // Step 5: Normalize - divide each row by its sum (with broadcasting)
-        var softmax = Engine.TensorBroadcastDivide<T>(expValues, expSum); // [batchSize, numExperts]
+        var softmax = Engine.TensorDivide<T>(expValues, expSum); // [batchSize, numExperts]
 
         return softmax;
     }
@@ -1379,12 +1379,12 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         }
 
         // Step 3: Multiply original weights by mask using tape-tracked Engine operation
-        var maskedWeights = Engine.TensorBroadcastMultiply(weights, mask); // [batchSize, numExperts]
+        var maskedWeights = Engine.TensorMultiply(weights, mask); // [batchSize, numExperts]
 
         // Step 4: Renormalize using tape-tracked operations (epsilon scalar for numerical stability)
         var sumPerRow = Engine.ReduceSum(maskedWeights, new[] { 1 }, keepDims: true); // [batchSize, 1]
         var safeSumPerRow = Engine.TensorAddScalar(sumPerRow, NumOps.FromDouble(1e-10));
-        var sparseWeights = Engine.TensorBroadcastDivide(maskedWeights, safeSumPerRow); // [batchSize, numExperts]
+        var sparseWeights = Engine.TensorDivide(maskedWeights, safeSumPerRow); // [batchSize, numExperts]
 
         // Convert topKIndicesTensor to int[,] for backward compatibility
         var topKIndices = new int[batchSize, k];
@@ -1464,12 +1464,12 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
             }
 
             // Tape-tracked multiply + accumulate
-            var weightedOutput = Engine.TensorBroadcastMultiply(expertOutput, weightColumn2D);
+            var weightedOutput = Engine.TensorMultiply(expertOutput, weightColumn2D);
 
             if (combined == null)
                 combined = weightedOutput;
             else
-                combined = Engine.TensorBroadcastAdd(combined, weightedOutput);
+                combined = Engine.TensorAdd(combined, weightedOutput);
         }
 
         return combined!;
@@ -1540,7 +1540,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
             if (expertOutput.Shape.Length == 2)
             {
                 // Element-wise multiply outputGradient with expertOutput, then sum over output dim
-                var product = Engine.TensorBroadcastMultiply(outputGradient, expertOutput);
+                var product = Engine.TensorMultiply(outputGradient, expertOutput);
                 var summed = Engine.ReduceSum(product, new[] { 1 }, keepDims: false); // [batchSize]
 
                 // Store in weightGradients column
@@ -1589,7 +1589,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         // Multiply gradient by weight (broadcasts across output dimensions)
         // outputGradient shape: [batchSize, outputDim]
         // weightColumn shape: [batchSize, 1] -> broadcasts to [batchSize, outputDim]
-        var weightedGradient = Engine.TensorBroadcastMultiply(outputGradient, weightColumn);
+        var weightedGradient = Engine.TensorMultiply(outputGradient, weightColumn);
 
         return weightedGradient;
     }

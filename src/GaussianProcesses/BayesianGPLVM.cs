@@ -44,7 +44,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 [ResearchPaper("Bayesian Gaussian Process Latent Variable Model", "https://doi.org/10.48550/arXiv.1309.6835", Year = 2010, Authors = "Michalis K. Titsias, Neil D. Lawrence")]
-public class BayesianGPLVM<T>
+public partial class BayesianGPLVM<T>
 {
     /// <summary>
     /// The kernel function for the mapping from latent to observed space.

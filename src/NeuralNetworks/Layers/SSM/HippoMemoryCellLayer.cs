@@ -365,20 +365,20 @@ public partial class HippoMemoryCellLayer<T> : LayerBase<T>, IShapeContract
             var current = Engine.TensorSliceAxis(sequence, 1, step);
             var xh = Engine.TensorConcatenate(new[] { current, hidden }, axis: 1);
             var memoryInput = Engine.TensorMatMul(xh, _memoryWeights);
-            memoryInput = Engine.TensorBroadcastAdd(memoryInput, _memoryBias);
+            memoryInput = Engine.TensorAdd(memoryInput, _memoryBias);
             memory = UpdateMemory(memory, memoryInput, step, batchSize);
 
             var flattenedMemory = Engine.Reshape(memory,
                 new[] { batchSize, _memorySize * _memoryOrder });
             var xm = Engine.TensorConcatenate(new[] { current, flattenedMemory }, axis: 1);
             var candidate = Engine.TensorMatMul(xm, _hiddenWeights);
-            candidate = Engine.TensorBroadcastAdd(candidate, _hiddenBias);
+            candidate = Engine.TensorAdd(candidate, _hiddenBias);
             candidate = Engine.Tanh(candidate);
 
             if (_useGate)
             {
                 var gate = Engine.TensorMatMul(xm, _gateWeights);
-                gate = Engine.TensorBroadcastAdd(gate, _gateBias);
+                gate = Engine.TensorAdd(gate, _gateBias);
                 gate = Engine.Sigmoid(gate);
                 var keep = Engine.TensorAddScalar(
                     Engine.TensorMultiplyScalar(gate, NumOps.FromDouble(-1.0)), NumOps.One);

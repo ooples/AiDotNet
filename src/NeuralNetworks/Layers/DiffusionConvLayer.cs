@@ -858,7 +858,7 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> AddBiases(Tensor<T> output, int numVertices)
     {
         var biasExpanded = Engine.Reshape(_biases, new[] { 1, OutputChannels });
-        return Engine.TensorBroadcastAdd(output, biasExpanded);
+        return Engine.TensorAdd(output, biasExpanded);
     }
 
     private void EnsureEigenbasisForExecution()

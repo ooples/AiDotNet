@@ -13,7 +13,7 @@ namespace AiDotNet.Interpolation;
 /// flexible ruler that naturally creates gentle curves.
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
-public class CubicBSplineInterpolation<T> : IInterpolation<T>
+public partial class CubicBSplineInterpolation<T> : IInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the data points.

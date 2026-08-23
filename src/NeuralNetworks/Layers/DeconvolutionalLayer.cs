@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -666,7 +666,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
             // reshape across calls would reuse a handle primed during inference
             // (no GradFn), causing backward to dead-end before reaching _biases.
             var biasReshaped = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
-            var biasedOutput = Engine.TensorBroadcastAdd(output, biasReshaped);
+            var biasedOutput = Engine.TensorAdd(output, biasReshaped);
 
             result = ApplyActivation(biasedOutput);
         }

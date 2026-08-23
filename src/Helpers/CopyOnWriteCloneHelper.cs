@@ -77,6 +77,26 @@ internal static class CopyOnWriteCloneHelper
         {
             var sps = GetAuthoritativeSourceValues(srcLayers[i]);
             var dps = GetWithoutMaterialization(dstLayers[i]);
+            bool hasMaterializedSourceValue = false;
+            bool hasSourcePlaceholder = false;
+            for (int p = 0; p < sps.Count; p++)
+            {
+                if (sps[p].Length == 0) hasSourcePlaceholder = true;
+                else hasMaterializedSourceValue = true;
+            }
+
+            // A layer is allowed to remain wholly deferred when its execution path was not used
+            // (DiT's cross-attention projections in an unconditional forward are the canonical
+            // example). Those zero-sized tensors are shape placeholders, not values to adopt.
+            // A partially materialized layer, however, cannot be rebound atomically through the
+            // all-slots setter, so fail the COW candidate before mutating either graph.
+            if (hasSourcePlaceholder && hasMaterializedSourceValue)
+            {
+                mismatch = $"layer {i} ({srcLayers[i].GetType().Name}) has a partially materialized "
+                           + $"trainable surface: source={DescribeShapes(sps)}";
+                return false;
+            }
+
             bool currentShapesMatch = sps.Count == dps.Count;
             if (currentShapesMatch)
             {
@@ -117,7 +137,11 @@ internal static class CopyOnWriteCloneHelper
         for (int i = 0; i < srcLayers.Count; i++)
         {
             var sp = GetAuthoritativeSourceValues(srcLayers[i]);
-            if (sp.Count > 0)
+            bool hasSourceValues = sp.Count > 0;
+            for (int p = 0; p < sp.Count && hasSourceValues; p++)
+                hasSourceValues = sp[p].Length > 0;
+
+            if (hasSourceValues)
             {
                 var shared = new Tensor<T>[sp.Count];
                 for (int p = 0; p < sp.Count; p++)
@@ -130,7 +154,13 @@ internal static class CopyOnWriteCloneHelper
             // skipped merely because sp.Count == 0, its real first forward may rebuild the children
             // after their COW tensors were installed. Commit every graph node, including parameter-
             // free parents, so the adopted descendant graph is the graph execution keeps.
-            if (dstLayers[i] is AiDotNet.NeuralNetworks.Layers.LayerBase<T> destinationBase)
+            // Commit nodes that received real values, and parameter-free composites whose child
+            // graph must survive first-forward reconciliation. A node whose source owns only
+            // zero-sized placeholders is still deferred by definition; committing it would call
+            // the materialization boundary and replace those placeholders with freshly initialized
+            // weights that the source never owned.
+            if ((hasSourceValues || sp.Count == 0)
+                && dstLayers[i] is AiDotNet.NeuralNetworks.Layers.LayerBase<T> destinationBase)
                 destinationBase.CommitTrainableParameterAdoption();
         }
 

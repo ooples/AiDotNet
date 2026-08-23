@@ -616,7 +616,7 @@ public partial class ControlNetModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return Engine.TensorBroadcastAdd(a, b);
+        return Engine.TensorAdd(a, b);
     }
 
     /// <inheritdoc />

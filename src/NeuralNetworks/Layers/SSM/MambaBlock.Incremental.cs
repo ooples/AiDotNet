@@ -51,7 +51,7 @@ public partial class MambaBlock<T>
         var input2D = Engine.Reshape(tokenInput, new[] { batchSize, _modelDimension });
         var projected = Engine.TensorMatMul(input2D, _inputProjectionWeights);
         var bias2D = Engine.Reshape(_inputProjectionBias, new[] { 1, _innerDimension * 2 });
-        var projectedWithBias = Engine.TensorBroadcastAdd(projected, bias2D);
+        var projectedWithBias = Engine.TensorAdd(projected, bias2D);
         var projected3D = Engine.Reshape(projectedWithBias, new[] { batchSize, 1, _innerDimension * 2 });
 
         var xBranch = Engine.TensorNarrow(projected3D, 2, 0, _innerDimension);                 // [batch, 1, inner]
@@ -81,7 +81,7 @@ public partial class MambaBlock<T>
         var deltaFlat = Engine.Reshape(deltaLowRank, new[] { batchSize, _dtRank });
         var deltaProjFlat = Engine.TensorMatMul(deltaFlat, _dtProjectionWeights);
         var dtBias2D = Engine.Reshape(_dtProjectionBias, new[] { 1, _innerDimension });
-        var deltaProjWithBias = Engine.TensorBroadcastAdd(deltaProjFlat, dtBias2D);
+        var deltaProjWithBias = Engine.TensorAdd(deltaProjFlat, dtBias2D);
         var deltaProj3D = Engine.Reshape(deltaProjWithBias, new[] { batchSize, 1, _innerDimension });
         var delta = Engine.Softplus(deltaProj3D);
 
@@ -100,7 +100,7 @@ public partial class MambaBlock<T>
         var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize, _innerDimension });
         var outputFlat = Engine.TensorMatMul(gatedFlat, _outputProjectionWeights);
         var outBias2D = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        var outputWithBias = Engine.TensorBroadcastAdd(outputFlat, outBias2D);
+        var outputWithBias = Engine.TensorAdd(outputFlat, outBias2D);
         var output3D = Engine.Reshape(outputWithBias, new[] { batchSize, 1, _modelDimension });
 
         // Residual + activation (identical to Forward).

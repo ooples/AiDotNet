@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ComponentType(ComponentType.Regularizer)]
 [PipelineStage(PipelineStage.Training)]
-public class GhostBatchNormalization<T>
+public partial class GhostBatchNormalization<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _numFeatures;
@@ -189,16 +189,16 @@ public class GhostBatchNormalization<T>
             int numGhosts = batchSize / _virtualBatchSize;
             var grouped = engine.Reshape(input, new[] { numGhosts, _virtualBatchSize, _numFeatures });
             var gMean = engine.ReduceMean(grouped, new[] { 1 }, keepDims: true);                 // [numGhosts,1,F]
-            var gCentered = engine.TensorBroadcastAdd(grouped, engine.TensorMultiplyScalar(gMean, minusOne));
+            var gCentered = engine.TensorAdd(grouped, engine.TensorMultiplyScalar(gMean, minusOne));
             var gVar = engine.ReduceMean(engine.TensorMultiply(gCentered, gCentered), new[] { 1 }, keepDims: true);
             var gStd = engine.TensorSqrt(engine.TensorAddScalar(gVar, eps));
-            var gNorm = engine.TensorBroadcastDivide(gCentered, gStd);                            // [numGhosts,vbs,F]
+            var gNorm = engine.TensorDivide(gCentered, gStd);                            // [numGhosts,vbs,F]
             normalized = engine.Reshape(gNorm, new[] { batchSize, _numFeatures });
 
             // Running statistics track the FULL-batch mean/var (used at inference, which sees no
             // virtual-batch structure).
             var bMean = engine.ReduceMean(input, new[] { 0 }, keepDims: true);
-            var bCentered = engine.TensorBroadcastAdd(input, engine.TensorMultiplyScalar(bMean, minusOne));
+            var bCentered = engine.TensorAdd(input, engine.TensorMultiplyScalar(bMean, minusOne));
             var bVar = engine.ReduceMean(engine.TensorMultiply(bCentered, bCentered), new[] { 0 }, keepDims: true);
             UpdateRunningStatistics(bMean, bVar);
         }
@@ -207,20 +207,20 @@ public class GhostBatchNormalization<T>
             // Single virtual batch (batch <= virtualBatchSize, or not an exact multiple): normalize
             // over the whole batch — one ghost.
             var meanRow = engine.ReduceMean(input, new[] { 0 }, keepDims: true);
-            var centered = engine.TensorBroadcastAdd(input, engine.TensorMultiplyScalar(meanRow, minusOne));
+            var centered = engine.TensorAdd(input, engine.TensorMultiplyScalar(meanRow, minusOne));
             var varRow = engine.ReduceMean(engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: true);
             UpdateRunningStatistics(meanRow, varRow);
             var std = engine.TensorSqrt(engine.TensorAddScalar(varRow, eps));
-            normalized = engine.TensorBroadcastDivide(centered, std);
+            normalized = engine.TensorDivide(centered, std);
         }
         else
         {
             // Inference / single-sample: input-independent running statistics.
             var meanRow = Tensor<T>.FromVector(_runningMean).Reshape(new[] { 1, _numFeatures });
             var varRow = Tensor<T>.FromVector(_runningVar).Reshape(new[] { 1, _numFeatures });
-            var centered = engine.TensorBroadcastAdd(input, engine.TensorMultiplyScalar(meanRow, minusOne));
+            var centered = engine.TensorAdd(input, engine.TensorMultiplyScalar(meanRow, minusOne));
             var std = engine.TensorSqrt(engine.TensorAddScalar(varRow, eps));
-            normalized = engine.TensorBroadcastDivide(centered, std);
+            normalized = engine.TensorDivide(centered, std);
         }
 
         _normalizedCache = normalized;
@@ -228,8 +228,8 @@ public class GhostBatchNormalization<T>
         // Scale/shift by the learnable gamma/beta.
         var gammaRow = Tensor<T>.FromVector(_gamma).Reshape(new[] { 1, _numFeatures });
         var betaRow = Tensor<T>.FromVector(_beta).Reshape(new[] { 1, _numFeatures });
-        var scaled = engine.TensorBroadcastMultiply(normalized, gammaRow);
-        return engine.TensorBroadcastAdd(scaled, betaRow);
+        var scaled = engine.TensorMultiply(normalized, gammaRow);
+        return engine.TensorAdd(scaled, betaRow);
     }
 
     private void UpdateRunningStatistics(Tensor<T> meanRow, Tensor<T> varRow)

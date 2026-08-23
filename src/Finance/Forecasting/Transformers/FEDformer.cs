@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -867,8 +867,8 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
             // stats broadcast over the trailing feature axis). The manual copy
             // detached the graph before the loss, zeroing gradients. Stats are
             // constants (paper-faithful reversible affine).
-            var scaled = Engine.TensorBroadcastMultiply(input, _instanceStd);
-            return Engine.TensorBroadcastAdd(scaled, _instanceMean);
+            var scaled = Engine.TensorMultiply(input, _instanceStd);
+            return Engine.TensorAdd(scaled, _instanceMean);
         }
 
         return result;

@@ -447,7 +447,7 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, modelDim });
         var projected = Engine.TensorMatMul(input2D, _inputProjectionWeights);
         var bias2D = Engine.Reshape(_inputProjectionBias, new[] { 1, _innerDimension * 2 });
-        var projectedWithBias = Engine.TensorBroadcastAdd(projected, bias2D);
+        var projectedWithBias = Engine.TensorAdd(projected, bias2D);
         var projected3D = Engine.Reshape(projectedWithBias, new[] { batchSize, seqLen, _innerDimension * 2 });
 
         // Split into x and z branches
@@ -478,7 +478,7 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         var deltaFlat = Engine.Reshape(deltaLowRank, new[] { batchSize * seqLen, _dtRank });
         var deltaProjFlat = Engine.TensorMatMul(deltaFlat, _dtProjectionWeights);
         var dtBias2D = Engine.Reshape(_dtProjectionBias, new[] { 1, _innerDimension });
-        var deltaProjWithBias = Engine.TensorBroadcastAdd(deltaProjFlat, dtBias2D);
+        var deltaProjWithBias = Engine.TensorAdd(deltaProjFlat, dtBias2D);
         var deltaProj3D = Engine.Reshape(deltaProjWithBias, new[] { batchSize, seqLen, _innerDimension });
 
         _lastDeltaPreSoftplus = deltaProj3D;
@@ -530,7 +530,7 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _innerDimension });
         var outputFlat = Engine.TensorMatMul(gatedFlat, _outputProjectionWeights);
         var outBias2D = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        var outputWithBias = Engine.TensorBroadcastAdd(outputFlat, outBias2D);
+        var outputWithBias = Engine.TensorAdd(outputFlat, outBias2D);
         var output3D = Engine.Reshape(outputWithBias, new[] { batchSize, seqLen, _modelDimension });
 
         // Residual connection: h = h + Block(h). Standard Mamba block pattern
@@ -582,7 +582,7 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         var causalNcl = Engine.TensorNarrow(padded, dim: 2, start: 0, length: seqLen);
         var causal = Engine.TensorPermute(causalNcl, new[] { 0, 2, 1 }).Contiguous();
         var bias = Engine.Reshape(_convBias, new[] { 1, 1, _innerDimension });
-        return Engine.TensorBroadcastAdd(causal, bias);
+        return Engine.TensorAdd(causal, bias);
     }
 
     /// <summary>

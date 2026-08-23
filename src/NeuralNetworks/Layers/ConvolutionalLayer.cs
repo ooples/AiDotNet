@@ -1,4 +1,4 @@
-﻿using AiDotNet.Helpers;
+using AiDotNet.Helpers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -1300,7 +1300,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             // flows automatically in both eager and compiled-plan training.
             var dw = Engine.DepthwiseConv2D(input4D, _kernels, new[] { Stride, Stride }, new[] { Padding, Padding });
             var biasReshapedDw = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
-            result = ApplyActivation(Engine.TensorBroadcastAdd(dw, biasReshapedDw));
+            result = ApplyActivation(Engine.TensorAdd(dw, biasReshapedDw));
         }
         else if (fusedActivation != FusedActivationType.None)
         {
@@ -1318,7 +1318,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         {
             // Tape-tracked path: zero-alloc Into/InPlace variants bypass the gradient
             // tape, so while a tape is active we must use the non-in-place Engine ops
-            // (Conv2D + TensorBroadcastAdd) so the backward pass can follow the
+            // (Conv2D + TensorAdd) so the backward pass can follow the
             // gradient chain back to the kernel and bias tensors.
             //
             // The IsTrainingMode branch additionally covers the **compiled training
@@ -1347,7 +1347,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             // leaving _biases with zero gradient on every training step.
             var conv = Engine.Conv2D(input4D, _kernels, Stride, Padding, dilation: 1);
             var biasReshapedForTape = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
-            result = Engine.TensorBroadcastAdd(conv, biasReshapedForTape);
+            result = Engine.TensorAdd(conv, biasReshapedForTape);
         }
         else
         {

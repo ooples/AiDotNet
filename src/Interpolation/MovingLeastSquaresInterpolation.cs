@@ -16,7 +16,7 @@ namespace AiDotNet.Interpolation;
 /// giving more weight to nearby points when estimating a value at a specific location.
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class MovingLeastSquaresInterpolation<T> : I2DInterpolation<T>
+public partial class MovingLeastSquaresInterpolation<T> : I2DInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the known data points.

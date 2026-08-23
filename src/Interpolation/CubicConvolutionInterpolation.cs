@@ -15,7 +15,7 @@ namespace AiDotNet.Interpolation;
 /// estimates for the points in between.
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
-public class CubicConvolutionInterpolation<T> : I2DInterpolation<T>
+public partial class CubicConvolutionInterpolation<T> : I2DInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the data points.

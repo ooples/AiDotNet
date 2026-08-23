@@ -29,7 +29,7 @@ namespace AiDotNet.FederatedLearning.Graph;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ComponentType(ComponentType.FederatedAggregator)]
 [PipelineStage(PipelineStage.Training)]
-public class GraphNodeGenerator<T> : FederatedLearningComponentBase<T>
+public partial class GraphNodeGenerator<T> : FederatedLearningComponentBase<T>
 {
     private readonly int _inputDim;
     private readonly int _hiddenDim;

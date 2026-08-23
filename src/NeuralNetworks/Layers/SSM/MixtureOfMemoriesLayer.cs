@@ -170,8 +170,6 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _lastForgetGates;  // [batch, seqLen, numMemories]
     [Scratch]
     private Tensor<T>? _lastForgetGatesRaw;
-    [Scratch]
-    private Tensor<T>? _lastStates;       // [batch, seqLen+1, numMemories, numHeads, headDim, headDim]
     private int[]? _originalInputShape;
 
     // Gradients
@@ -359,15 +357,15 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>, IShapeContract
         // Step 1: Q, K, V projections
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
 
-        var q = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var q = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _queryWeights),
             Engine.Reshape(_queryBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
 
-        var k = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var k = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _keyWeights),
             Engine.Reshape(_keyBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
 
-        var v = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var v = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _valueWeights),
             Engine.Reshape(_valueBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
 
@@ -376,17 +374,17 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>, IShapeContract
         _lastValue = v;
 
         // Step 2: Router computations
-        var writeLogits = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var writeLogits = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _writeRouterWeights),
             Engine.Reshape(_writeRouterBias, new[] { 1, _numMemories })), new[] { batchSize, seqLen, _numMemories });
-        var writeWeights = SoftmaxLastDim(writeLogits, batchSize, seqLen, _numMemories);
+        var writeWeights = Engine.Softmax(writeLogits, axis: -1);
 
-        var readLogits = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var readLogits = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _readRouterWeights),
             Engine.Reshape(_readRouterBias, new[] { 1, _numMemories })), new[] { batchSize, seqLen, _numMemories });
-        var readWeights = SoftmaxLastDim(readLogits, batchSize, seqLen, _numMemories);
+        var readWeights = Engine.Softmax(readLogits, axis: -1);
 
-        var forgetGatesRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var forgetGatesRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _gateRouterWeights),
             Engine.Reshape(_gateRouterBias, new[] { 1, _numMemories })), new[] { batchSize, seqLen, _numMemories });
         var forgetGates = Engine.Sigmoid(forgetGatesRaw);
@@ -397,7 +395,7 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>, IShapeContract
         _lastForgetGatesRaw = forgetGatesRaw;
 
         // Step 3: Output gate
-        var gateRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Swish(gateRaw);
@@ -413,7 +411,7 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>, IShapeContract
 
         // Step 6: Output projection
         var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _modelDimension });
-        var outputFlat = Engine.TensorBroadcastAdd(
+        var outputFlat = Engine.TensorAdd(
             Engine.TensorMatMul(gatedFlat, _outputProjectionWeights),
             Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension }));
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
@@ -433,132 +431,102 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Computes softmax along the last dimension.
-    /// </summary>
-    private Tensor<T> SoftmaxLastDim(Tensor<T> logits, int batchSize, int seqLen, int dim)
-    {
-        var result = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, dim });
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                // Find max for numerical stability
-                T maxVal = logits[new[] { bi, t, 0 }];
-                for (int d = 1; d < dim; d++)
-                {
-                    T val = logits[new[] { bi, t, d }];
-                    if (NumOps.GreaterThan(val, maxVal))
-                        maxVal = val;
-                }
-
-                T sumExp = NumOps.Zero;
-                for (int d = 0; d < dim; d++)
-                {
-                    T expVal = NumOps.Exp(NumOps.Subtract(logits[new[] { bi, t, d }], maxVal));
-                    result[new[] { bi, t, d }] = expVal;
-                    sumExp = NumOps.Add(sumExp, expVal);
-                }
-
-                for (int d = 0; d < dim; d++)
-                    result[new[] { bi, t, d }] = NumOps.Divide(result[new[] { bi, t, d }], sumExp);
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
     /// MoM forward: multi-memory state recurrence with routing.
     /// </summary>
+    /// <remarks>
+    /// <code>
+    ///   S_m,t = g_m,t * S_m,t-1 + w_m,t * (v_t (x) k_t / sqrt(d))     per memory m
+    ///   O_t   = sum_m r_m,t * (S_m,t * q_t)
+    /// </code>
+    /// Built from Engine ops so the recurrence stays on the autodiff tape. The NumOps scalar loop
+    /// this replaces was detached from it, so q/k/v with their biases and all three routers - 12 of
+    /// this layer's 16 trainable tensors, the worst of the SSM family - received no gradient and
+    /// never learned. The layer has no Backward override, so the tape was its only gradient path.
+    /// The write, read and forget weights are scalar per (batch, memory) and shared across heads,
+    /// so they are laid out to the head-major [batch*numHeads, 1, 1] form before broadcasting.
+    /// </remarks>
     private Tensor<T> MoMForward(
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         Tensor<T> writeWeights, Tensor<T> readWeights, Tensor<T> forgetGates,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        // Memory states: [batch, numMemories, numHeads, headDim, headDim]
-        var memStates = new T[batchSize, _numMemories, _numHeads, _headDimension, _headDimension];
-
-        // Save all states for backward: [batch, seqLen+1, numMemories, numHeads, headDim, headDim]
-        // This would be very large, so we only save the final states per timestep
-        var allStates = new Tensor<T>(new[] { batchSize, seqLen + 1, _numMemories, _numHeads, _headDimension, _headDimension });
-
+        int headBatch = batchSize * _numHeads;
         T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
+
+        var qHeads = ToHeadMajor(q, batchSize, seqLen);                          // [HB, S, D]
+        var kHeads = Engine.TensorMultiplyScalar(ToHeadMajor(k, batchSize, seqLen), keyScale);
+        var vHeads = ToHeadMajor(v, batchSize, seqLen);
+
+        var memStates = new Tensor<T>[_numMemories];
+        for (int mi = 0; mi < _numMemories; mi++)
+            memStates[mi] = Tensor<T>.CreateDefault(
+                new[] { headBatch, _headDimension, _headDimension }, NumOps.Zero);
+
+        var outputs = new List<Tensor<T>>(seqLen);
 
         for (int t = 0; t < seqLen; t++)
         {
-            for (int hi = 0; hi < _numHeads; hi++)
+            var qCol = Engine.Reshape(Engine.TensorSliceAxis(qHeads, 1, t),
+                new[] { headBatch, _headDimension, 1 });
+            var kRow = Engine.Reshape(Engine.TensorSliceAxis(kHeads, 1, t),
+                new[] { headBatch, 1, _headDimension });
+            var vCol = Engine.Reshape(Engine.TensorSliceAxis(vHeads, 1, t),
+                new[] { headBatch, _headDimension, 1 });
+            var outer = Engine.BatchMatMul(vCol, kRow);                          // [HB, D, D]
+
+            // Write into every memory, gated per memory.
+            for (int mi = 0; mi < _numMemories; mi++)
             {
-                int dimStart = hi * _headDimension;
-
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    // Extract key, value for this head
-                    var kHead = new T[_headDimension];
-                    var vHead = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        kHead[di] = NumOps.Multiply(k[new[] { bi, t, dimStart + di }], keyScale);
-                        vHead[di] = v[new[] { bi, t, dimStart + di }];
-                    }
-
-                    // Write to each memory: S_m[t] = g_m * S_m[t-1] + w_m * v * k^T
-                    for (int mi = 0; mi < _numMemories; mi++)
-                    {
-                        T wm = writeWeights[new[] { bi, t, mi }];
-                        T gm = forgetGates[new[] { bi, t, mi }];
-
-                        for (int di = 0; di < _headDimension; di++)
-                        {
-                            for (int dj = 0; dj < _headDimension; dj++)
-                            {
-                                T prevState = memStates[bi, mi, hi, di, dj];
-                                T writeVal = NumOps.Multiply(wm,
-                                    NumOps.Multiply(vHead[di], kHead[dj]));
-                                memStates[bi, mi, hi, di, dj] = NumOps.Add(
-                                    NumOps.Multiply(gm, prevState), writeVal);
-                            }
-                        }
-                    }
-
-                    // Read from all memories: o = sum_m r_m * S_m * q
-                    var qHead = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                        qHead[di] = q[new[] { bi, t, dimStart + di }];
-
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T oVal = NumOps.Zero;
-
-                        for (int mi = 0; mi < _numMemories; mi++)
-                        {
-                            T rm = readWeights[new[] { bi, t, mi }];
-                            T smq = NumOps.Zero;
-                            for (int dj = 0; dj < _headDimension; dj++)
-                                smq = NumOps.Add(smq,
-                                    NumOps.Multiply(memStates[bi, mi, hi, di, dj], qHead[dj]));
-
-                            oVal = NumOps.Add(oVal, NumOps.Multiply(rm, smq));
-                        }
-
-                        output[new[] { bi, t, flatDi }] = oVal;
-                    }
-
-                    // Save states for backward
-                    for (int mi = 0; mi < _numMemories; mi++)
-                        for (int di = 0; di < _headDimension; di++)
-                            for (int dj = 0; dj < _headDimension; dj++)
-                                allStates[new[] { bi, t + 1, mi, hi, di, dj }] = memStates[bi, mi, hi, di, dj];
-                }
+                var gm = BroadcastPerMemory(forgetGates, t, mi, batchSize);
+                var wm = BroadcastPerMemory(writeWeights, t, mi, batchSize);
+                memStates[mi] = Engine.TensorAdd(
+                    Engine.TensorMultiply(memStates[mi], gm),
+                    Engine.TensorMultiply(outer, wm));
             }
+
+            // Read from every memory, mixed by the read router. Memory 0 seeds the sum so the
+            // accumulator is non-null by construction (there is always at least one memory).
+            var combined = Engine.TensorMultiply(
+                Engine.BatchMatMul(memStates[0], qCol),
+                BroadcastPerMemory(readWeights, t, 0, batchSize));
+            for (int mi = 1; mi < _numMemories; mi++)
+            {
+                combined = Engine.TensorAdd(combined, Engine.TensorMultiply(
+                    Engine.BatchMatMul(memStates[mi], qCol),
+                    BroadcastPerMemory(readWeights, t, mi, batchSize)));
+            }
+            outputs.Add(Engine.Reshape(combined, new[] { headBatch, 1, _headDimension }));
         }
 
-        _lastStates = allStates;
-        return output;
+        return FromHeadMajor(Engine.TensorConcatenate(outputs.ToArray(), 1), batchSize, seqLen);
     }
+
+    /// <summary>
+    /// Takes the scalar router value for memory <paramref name="memory"/> at timestep
+    /// <paramref name="t"/> from a [batch, seqLen, numMemories] tensor and lays it out as
+    /// [batch*numHeads, 1, 1]. The value is shared across heads, and head-major ordering is
+    /// index = b*numHeads + h, so each batch value repeats numHeads times consecutively.
+    /// </summary>
+    private Tensor<T> BroadcastPerMemory(Tensor<T> routed, int t, int memory, int batchSize) =>
+        Engine.Reshape(
+            Engine.TensorTile(
+                Engine.Reshape(
+                    Engine.TensorSliceAxis(Engine.TensorSliceAxis(routed, 1, t), 1, memory),
+                    new[] { batchSize, 1, 1 }),
+                new[] { 1, _numHeads, 1 }),
+            new[] { batchSize * _numHeads, 1, 1 });
+
+    private Tensor<T> ToHeadMajor(Tensor<T> value, int batchSize, int seqLen) =>
+        Engine.Reshape(Engine.TensorPermute(
+            Engine.Reshape(value, new[] { batchSize, seqLen, _numHeads, _headDimension }),
+            new[] { 0, 2, 1, 3 }),
+            new[] { batchSize * _numHeads, seqLen, _headDimension });
+
+    private Tensor<T> FromHeadMajor(Tensor<T> value, int batchSize, int seqLen) =>
+        Engine.Reshape(Engine.TensorPermute(
+            Engine.Reshape(value, new[] { batchSize, _numHeads, seqLen, _headDimension }),
+            new[] { 0, 2, 1, 3 }),
+            new[] { batchSize, seqLen, _modelDimension });
 
     /// <summary>
     /// Backward pass for softmax: dLogits[i] = softmax[i] * (dOutput[i] - sum_j(softmax[j]*dOutput[j]))
@@ -700,7 +668,6 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>, IShapeContract
         _lastReadWeights = null;
         _lastForgetGates = null;
         _lastForgetGatesRaw = null;
-        _lastStates = null;
         _originalInputShape = null;
         _queryWeightsGradient = null;
         _queryBiasGradient = null;

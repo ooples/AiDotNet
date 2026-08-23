@@ -665,7 +665,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
         // Use IEngine for GPU-accelerated broadcast addition
         // Reshape bias to [1, 1, dim] for proper broadcasting
         var biasReshaped = Engine.Reshape(bias, new[] { 1, 1, bias.Length });
-        return Engine.TensorBroadcastAdd(input, biasReshaped);
+        return Engine.TensorAdd(input, biasReshaped);
     }
 
     private Tensor<T> TransposeWeights(Tensor<T> weights)

@@ -396,8 +396,8 @@ public partial class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
 
         bool reshaped = forecast.Rank < 2;
         var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
-        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
-        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        var scaled = Engine.TensorMultiply(work, stdT);
+        var shifted = Engine.TensorAdd(scaled, meanT);
         return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
     }
 

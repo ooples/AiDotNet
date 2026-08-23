@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -275,7 +275,7 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
             int posLen = _posEmbed.Shape[1];
             if (seqLen == posLen)
             {
-                patches = Engine.TensorBroadcastAdd<T>(patches, _posEmbed);
+                patches = Engine.TensorAdd<T>(patches, _posEmbed);
             }
             else
             {
@@ -471,7 +471,7 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
             timeSpan.Slice(srcOffset, copyLen).CopyTo(timeData.AsSpan(b * hiddenDim, copyLen));
         }
         var timeBroadcast = new Tensor<T>(new[] { batch, 1, hiddenDim }, new Vector<T>(timeData));
-        return Engine.TensorBroadcastAdd<T>(patches, timeBroadcast);
+        return Engine.TensorAdd<T>(patches, timeBroadcast);
     }
 
     private static Tensor<T> CloneTensor(Tensor<T> t)
@@ -484,7 +484,7 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
-        return AiDotNetEngine.Current.TensorBroadcastAdd(a, b);
+        return AiDotNetEngine.Current.TensorAdd(a, b);
     }
 
     private Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)

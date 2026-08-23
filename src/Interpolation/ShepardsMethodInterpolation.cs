@@ -17,7 +17,7 @@ namespace AiDotNet.Interpolation;
 /// the influence of distant points diminishes.
 /// </para>
 /// </remarks>
-public class ShepardsMethodInterpolation<T> : I2DInterpolation<T>
+public partial class ShepardsMethodInterpolation<T> : I2DInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the data points.

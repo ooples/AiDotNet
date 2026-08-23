@@ -375,12 +375,12 @@ namespace AiDotNet.NeuralNetworks
             // along the embedding axis — strict TensorAdd requires identical
             // shapes and throws "Tensor shapes must match. Got [4, 100] and
             // [4, 1]", which was cascade-failing 11 GloVeTests. Use
-            // TensorBroadcastAdd: it's tape-tracked (same as TensorAdd) and
+            // TensorAdd: it's tape-tracked (same as TensorAdd) and
             // expands the [seqLen, 1] bias across the embedding dim.
             var b = Layers[2].Forward(input);
             var bTilde = Layers[3].Forward(input);
-            var withBias = Engine.TensorBroadcastAdd(sumW, b);
-            return Engine.TensorBroadcastAdd(withBias, bTilde);
+            var withBias = Engine.TensorAdd(sumW, b);
+            return Engine.TensorAdd(withBias, bTilde);
         }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks

@@ -15,7 +15,7 @@ namespace AiDotNet.Interpolation;
 /// dots with a flexible curve rather than straight lines.
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
-public class CubicSplineInterpolation<T> : IInterpolation<T>
+public partial class CubicSplineInterpolation<T> : IInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the data points (independent variable).

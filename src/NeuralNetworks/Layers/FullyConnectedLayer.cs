@@ -1,4 +1,4 @@
-﻿using AiDotNet.Helpers;
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -539,7 +539,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
 
         // Add biases (broadcast)
         var biasBroadcast = Engine.Reshape(_biases, new[] { 1, _biases.Shape[0] });
-        var biasedOutput = Engine.TensorBroadcastAdd(linearOutput, biasBroadcast);
+        var biasedOutput = Engine.TensorAdd(linearOutput, biasBroadcast);
 
         var result = ApplyActivation(biasedOutput);
 

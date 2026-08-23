@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -1307,11 +1307,11 @@ public partial class VideoUNetPredictor<T> : NoisePredictorBase<T>
         var shiftTensor = new Tensor<T>(shiftData, broadcastShape);
 
         // x = x * (1 + scale) + shift
-        var onePlusScale = Engine.TensorBroadcastAdd(
+        var onePlusScale = Engine.TensorAdd(
             scaleTensor,
             Tensor<T>.CreateDefault(broadcastShape, NumOps.One));
-        var modulated = Engine.TensorBroadcastMultiply(x, onePlusScale);
-        return Engine.TensorBroadcastAdd(modulated, shiftTensor);
+        var modulated = Engine.TensorMultiply(x, onePlusScale);
+        return Engine.TensorAdd(modulated, shiftTensor);
     }
 
     /// <summary>

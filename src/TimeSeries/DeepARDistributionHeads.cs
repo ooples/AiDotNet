@@ -95,7 +95,7 @@ internal abstract class DeepARDistributionHead<T> : NeuralNetworks.Layers.LayerB
     {
         var o = Engine.TensorMatMul(w, h);
         var bCol = Engine.Reshape(b, new[] { b.Length, 1 });
-        return Engine.TensorBroadcastAdd(o, bCol);
+        return Engine.TensorAdd(o, bCol);
     }
 
     /// <summary>Numerically-stable scalar softplus (matches the model's inference-time softplus).</summary>

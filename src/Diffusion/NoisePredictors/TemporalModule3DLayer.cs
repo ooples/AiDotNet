@@ -103,7 +103,7 @@ public sealed partial class TemporalModule3DLayer<T> : LayerBase<T>
         hidden = Engine.TensorSiLU(hidden);
         hidden = _temporalConv1.Forward(hidden);
         var timeProjection = _temporalTimeProjection.Forward(Engine.TensorSiLU(timeBatch));
-        hidden = Engine.TensorBroadcastAdd(
+        hidden = Engine.TensorAdd(
             hidden, Engine.Reshape(timeProjection, [batch, _channels, 1, 1, 1]));
         hidden = NormalizeVideo(_temporalNorm2, hidden);
         hidden = Engine.TensorSiLU(hidden);

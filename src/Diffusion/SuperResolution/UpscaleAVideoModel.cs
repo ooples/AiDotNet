@@ -955,7 +955,7 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         var scale = new Tensor<T>([1, 1, 1, 2]);
         scale[0, 0, 0, 0] = NumOps.FromDouble(width <= 1 ? 0.0 : 2.0 / (width - 1));
         scale[0, 0, 0, 1] = NumOps.FromDouble(height <= 1 ? 0.0 : 2.0 / (height - 1));
-        var normalizedFlow = Engine.TensorBroadcastMultiply(
+        var normalizedFlow = Engine.TensorMultiply(
             Engine.TensorPermute(flow, [0, 2, 3, 1]), scale);
         var grid = Engine.TensorAdd(baseGrid, normalizedFlow);
         return Engine.GridSample(

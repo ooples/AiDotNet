@@ -364,7 +364,7 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
         var negativeThresholds = Engine.Reshape(
             Engine.TensorNegate(_thresholds),
             [1, _depth]);
-        return Engine.Sigmoid(Engine.TensorBroadcastAdd(weightedFeatures, negativeThresholds));
+        return Engine.Sigmoid(Engine.TensorAdd(weightedFeatures, negativeThresholds));
     }
 
     private Tensor<T> ComputeLeafProbabilities(Tensor<T> splitDecisions, int batchSize)

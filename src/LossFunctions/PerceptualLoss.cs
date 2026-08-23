@@ -36,7 +36,7 @@ namespace AiDotNet.LossFunctions;
 [LossTask(LossTask.ImageGeneration)]
 [LossTask(LossTask.SuperResolution)]
 [LossProperty(IsNonNegative = true, ZeroForIdentical = true, ApiShape = LossApiShape.ImageMatrix, ExpectedOutput = OutputType.Continuous)]
-public class PerceptualLoss<T> : LossFunctionBase<T>
+public partial class PerceptualLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
     /// The feature extractor function that converts images to feature representations.

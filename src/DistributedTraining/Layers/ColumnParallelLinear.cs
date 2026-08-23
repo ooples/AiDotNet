@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -134,7 +134,7 @@ public sealed partial class ColumnParallelLinear<T> : LayerBase<T>, IShapeContra
         var x = _f.Apply(input);
         var weightT = Engine.TensorTranspose(_weightShard);                  // [inputSize, localOut]
         var linear = Engine.TensorMatMul(x, weightT);                        // [batch, localOut]
-        var biased = Engine.TensorBroadcastAdd(linear, Engine.Reshape(_biasShard, new[] { 1, _localOutputSize }));
+        var biased = Engine.TensorAdd(linear, Engine.Reshape(_biasShard, new[] { 1, _localOutputSize }));
         var local = ApplyActivation(biased);
         // Tape-aware gather: forward AllGathers the output columns, backward returns this rank's column
         // slice so gradients still flow to _weightShard/_biasShard (a value-copy gather would sever them).

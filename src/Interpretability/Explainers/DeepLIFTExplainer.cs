@@ -39,7 +39,7 @@ namespace AiDotNet.Interpretability.Explainers;
 ///   compared to the reference
 /// </para>
 /// </remarks>
-public class DeepLIFTExplainer<T> : ILocalExplainer<T, DeepLIFTExplanation<T>>, IGlobalAttributionExplainer<T>, IGPUAcceleratedExplainer<T>
+public partial class DeepLIFTExplainer<T> : ILocalExplainer<T, DeepLIFTExplanation<T>>, IGlobalAttributionExplainer<T>, IGPUAcceleratedExplainer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 

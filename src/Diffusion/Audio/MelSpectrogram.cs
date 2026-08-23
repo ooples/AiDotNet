@@ -46,7 +46,7 @@ namespace AiDotNet.Diffusion.Audio;
 /// </remarks>
 [ComponentType(ComponentType.Encoder)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class MelSpectrogram<T>
+public partial class MelSpectrogram<T>
 {
     /// <summary>
     /// Provides numeric operations for the specific type T.

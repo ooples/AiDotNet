@@ -1,4 +1,4 @@
-﻿using AiDotNet.Helpers;
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -1009,8 +1009,8 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         var shiftReshaped = Engine.Reshape(shift, broadcastShape);
 
         // Engine-accelerated broadcast: tape-tracked + SIMD + GPU-capable
-        var scaled = Engine.TensorBroadcastMultiply(input, scaleReshaped);
-        return Engine.TensorBroadcastAdd(scaled, shiftReshaped);
+        var scaled = Engine.TensorMultiply(input, scaleReshaped);
+        return Engine.TensorAdd(scaled, shiftReshaped);
     }
 
     /// <summary>

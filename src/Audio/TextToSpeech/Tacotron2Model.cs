@@ -1260,8 +1260,8 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
 
         // Combine: tanh(projQuery + projKeys + projLocation)
         // Broadcast query and location across sequence dimension
-        var queryBroadcast = Engine.TensorBroadcastAdd(projKeys, projQuery); // [1, seqLen, attDim]
-        var combined = Engine.TensorBroadcastAdd(queryBroadcast, projLocation); // [1, seqLen, attDim]
+        var queryBroadcast = Engine.TensorAdd(projKeys, projQuery); // [1, seqLen, attDim]
+        var combined = Engine.TensorAdd(queryBroadcast, projLocation); // [1, seqLen, attDim]
         var tanhScores = Engine.Tanh(combined); // [1, seqLen, attDim]
 
         // [3] Energy projection: v^T * tanh(...) → scalar per position

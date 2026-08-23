@@ -56,7 +56,7 @@ public sealed partial class LearnedTokenTypeEmbeddingLayer<T> : LayerBase<T>
         var segmentZero = Engine.TensorSlice(_embeddings, [0, 0], [1, _embeddingSize]);
         if (input.Rank == 3)
             segmentZero = Engine.Reshape(segmentZero, [1, 1, _embeddingSize]);
-        return Engine.TensorBroadcastAdd(input, segmentZero);
+        return Engine.TensorAdd(input, segmentZero);
     }
 
     /// <inheritdoc />

@@ -225,7 +225,7 @@ public partial class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
         return indices.Take(sampleSize).ToArray();
     }
 
-    private class ExtendedIsolationTree
+    private partial class ExtendedIsolationTree
     {
         private readonly int _extensionLevel;
         private readonly Random _random;

@@ -35,7 +35,7 @@ namespace AiDotNet.Interpretability.Explainers;
 /// - Image classification: "This image looks like these training images of cats"
 /// </para>
 /// </remarks>
-public class PrototypeExplainer<T> : ILocalExplainer<T, PrototypeExplanation<T>>
+public partial class PrototypeExplainer<T> : ILocalExplainer<T, PrototypeExplanation<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 

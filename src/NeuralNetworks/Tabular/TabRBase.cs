@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class TabRBase<T> : IParameterSource<T>
+public abstract partial class TabRBase<T> : IParameterSource<T>
 {
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.

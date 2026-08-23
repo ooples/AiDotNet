@@ -1,4 +1,4 @@
-﻿
+
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Attention;
@@ -388,7 +388,7 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>, IShapeContract
 
         // Output projection with broadcast bias add — all tape-tracked.
         var projected = Engine.TensorMatMul(attentionOutput, _outputWeights);
-        var output = Engine.TensorBroadcastAdd(projected, _outputBias);
+        var output = Engine.TensorAdd(projected, _outputBias);
         var activated = ApplyActivation(output);
 
         if (_originalInputShape == null || _originalInputShape.Length == 3)

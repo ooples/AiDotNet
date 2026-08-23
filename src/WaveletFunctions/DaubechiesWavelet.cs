@@ -38,7 +38,7 @@ namespace AiDotNet.WaveletFunctions;
 /// vanishing moments but wider support.
 /// </para>
 /// </remarks>
-public class DaubechiesWavelet<T> : WaveletFunctionBase<T>
+public partial class DaubechiesWavelet<T> : WaveletFunctionBase<T>
 {
     /// <summary>
     /// The order of the Daubechies wavelet.

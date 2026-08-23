@@ -319,14 +319,14 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
         // Layer 1: h = LeakyReLU(x @ W1 + b1)  (SIMD)
         T leakyAlpha = NumOps.FromDouble(0.2);
         var xT = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
-        var hPre = Engine.TensorBroadcastAdd(
+        var hPre = Engine.TensorAdd(
             Engine.TensorMatMul(xT, Tensor<T>.FromMatrix(encW1)),
             Tensor<T>.FromVector(encB1).Reshape(1, _hiddenDim));
         var h = Engine.LeakyReLU(hPre.Reshape(_hiddenDim), leakyAlpha).ToVector();
 
         // Layer 2: z = h @ W2 + b2  (SIMD, linear)
         var hT = Tensor<T>.FromVector(h).Reshape(1, _hiddenDim);
-        var z = Engine.TensorBroadcastAdd(
+        var z = Engine.TensorAdd(
             Engine.TensorMatMul(hT, Tensor<T>.FromMatrix(encW2)),
             Tensor<T>.FromVector(encB2).Reshape(1, _latentDim)).Reshape(_latentDim).ToVector();
 
@@ -348,14 +348,14 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
         // Layer 1: h = LeakyReLU(z @ W1 + b1)  (SIMD)
         T leakyAlpha = NumOps.FromDouble(0.2);
         var zT = Tensor<T>.FromVector(z).Reshape(1, _latentDim);
-        var hPre = Engine.TensorBroadcastAdd(
+        var hPre = Engine.TensorAdd(
             Engine.TensorMatMul(zT, Tensor<T>.FromMatrix(decW1)),
             Tensor<T>.FromVector(decB1).Reshape(1, _hiddenDim));
         var h = Engine.LeakyReLU(hPre.Reshape(_hiddenDim), leakyAlpha).ToVector();
 
         // Layer 2: xRecon = h @ W2 + b2  (SIMD, linear)
         var hT = Tensor<T>.FromVector(h).Reshape(1, _hiddenDim);
-        var xRecon = Engine.TensorBroadcastAdd(
+        var xRecon = Engine.TensorAdd(
             Engine.TensorMatMul(hT, Tensor<T>.FromMatrix(decW2)),
             Tensor<T>.FromVector(decB2).Reshape(1, _inputDim)).Reshape(_inputDim).ToVector();
 
@@ -377,14 +377,14 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
         // Layer 1: h = LeakyReLU(xRecon @ W1 + b1)  (SIMD)
         T leakyAlpha = NumOps.FromDouble(0.2);
         var xRT = Tensor<T>.FromVector(xRecon).Reshape(1, _inputDim);
-        var hPre = Engine.TensorBroadcastAdd(
+        var hPre = Engine.TensorAdd(
             Engine.TensorMatMul(xRT, Tensor<T>.FromMatrix(reEncW1)),
             Tensor<T>.FromVector(reEncB1).Reshape(1, _hiddenDim));
         var h = Engine.LeakyReLU(hPre.Reshape(_hiddenDim), leakyAlpha).ToVector();
 
         // Layer 2: zRecon = h @ W2 + b2  (SIMD, linear)
         var hT = Tensor<T>.FromVector(h).Reshape(1, _hiddenDim);
-        var zRecon = Engine.TensorBroadcastAdd(
+        var zRecon = Engine.TensorAdd(
             Engine.TensorMatMul(hT, Tensor<T>.FromMatrix(reEncW2)),
             Tensor<T>.FromVector(reEncB2).Reshape(1, _latentDim)).Reshape(_latentDim).ToVector();
 

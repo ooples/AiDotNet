@@ -574,7 +574,7 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
         var maxLogit = Engine.ReduceMax(logits, [1], keepDims: true, out _);
 
         // Subtract max for stability: logits - max
-        var shifted = Engine.TensorBroadcastSubtract<T>(logits, maxLogit);
+        var shifted = Engine.TensorSubtract<T>(logits, maxLogit);
 
         // Compute exp(shifted)
         var expValues = Engine.TensorExp(shifted);
@@ -583,7 +583,7 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
         var sumExp = Engine.ReduceSum(expValues, [1], keepDims: true);
 
         // Normalize: exp / sum using element-wise division with broadcast
-        return Engine.TensorBroadcastDivide<T>(expValues, sumExp);
+        return Engine.TensorDivide<T>(expValues, sumExp);
     }
 
     #region Abstract Method Implementations

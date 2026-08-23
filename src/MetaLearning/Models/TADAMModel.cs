@@ -40,7 +40,7 @@ namespace AiDotNet.MetaLearning.Models;
     Authors = "Oreshkin, B. N., Rodriguez, P., & Lacoste, A.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+public partial class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     protected static IEngine Engine => AiDotNetEngine.Current;

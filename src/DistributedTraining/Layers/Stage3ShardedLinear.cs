@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -25,7 +25,7 @@ namespace AiDotNet.DistributedTraining.Layers;
 // outputSize]. A contract mentioning _shardLen or WorldSize would describe the parameter layout rather
 // than the tensor the caller receives, and would differ from rank to rank - which a shape must not.
 //
-// Rank 2 only: the chain is TensorMatMul(input, weightT) followed by TensorBroadcastAdd against a
+// Rank 2 only: the chain is TensorMatMul(input, weightT) followed by TensorAdd against a
 // [1, _outputSize] bias, both of which want an explicit [batch, features] operand.
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
@@ -111,7 +111,7 @@ public sealed partial class Stage3ShardedLinear<T> : LayerBase<T>, IShapeContrac
         // its data-parallel gradient is averaged across ranks — otherwise each rank's local batch would
         // drift the replicated bias apart.
         var syncBias = _averageBiasGradient.Apply(_bias);
-        var biased = Engine.TensorBroadcastAdd(linear, Engine.Reshape(syncBias, new[] { 1, _outputSize }));
+        var biased = Engine.TensorAdd(linear, Engine.Reshape(syncBias, new[] { 1, _outputSize }));
         return ApplyActivation(biased);
     }
 

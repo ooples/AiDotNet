@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Options;
@@ -467,7 +467,7 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
 
     /// <summary>
     /// Tape-tracked forward pass for training. Mirrors <see cref="Predict"/> but
-    /// uses Engine ops (TensorConcatenate, TensorBroadcastAdd, Reshape, TensorSlice)
+    /// uses Engine ops (TensorConcatenate, TensorAdd, Reshape, TensorSlice)
     /// so gradients flow back through the patch embedding, transformer encoder
     /// stack, and classification head. Cls token and positional embeddings are
     /// wrapped as constant Tensor&lt;T&gt; for the tape so the rest of the network
@@ -522,7 +522,7 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
         //    directly via tape-tracked Reshape, not copy into a fresh
         //    constant.
         var posEmbedding = Engine.Reshape(_positionalEmbeddings, new[] { 1, _numPatches + 1, _hiddenDim });
-        var withPos = Engine.TensorBroadcastAdd(sequence, posEmbedding);
+        var withPos = Engine.TensorAdd(sequence, posEmbedding);
 
         // 5. Transformer encoder stack (Layers[1..count-2]) — each block is
         //    tape-aware via its own Forward.

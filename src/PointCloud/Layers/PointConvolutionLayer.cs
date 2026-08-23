@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 // File-level, deliberately: two Tensors namespaces in the project's global usings also define a
 // TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
 using AiDotNet.Attributes;
@@ -135,7 +135,7 @@ public partial class PointConvolutionLayer<T> : LayerBase<T>, IShapeContract
         // are tape-tracked, so the gradient reaches the registered _weights / _biases and
         // flows on to the input.
         var matmul = Engine.TensorMatMul(input, _weights);                               // [N, Out]
-        var biased = Engine.TensorBroadcastAdd(matmul, Engine.Reshape(_biases, [1, _outputChannels]));
+        var biased = Engine.TensorAdd(matmul, Engine.Reshape(_biases, [1, _outputChannels]));
         return ApplyActivation(biased);
     }
 

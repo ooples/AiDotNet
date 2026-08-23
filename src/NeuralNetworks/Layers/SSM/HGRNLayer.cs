@@ -271,7 +271,7 @@ public partial class HGRNLayer<T> : LayerBase<T>, IShapeContract
         var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, modelDim });
         var projected = Engine.TensorMatMul(input2D, _inputProjectionWeights);
         var projBias = Engine.Reshape(_inputProjectionBias, new[] { 1, _modelDimension });
-        projected = Engine.TensorBroadcastAdd(projected, projBias);
+        projected = Engine.TensorAdd(projected, projBias);
         var projected3D = Engine.Reshape(projected, new[] { batchSize, seqLen, _modelDimension });
         _lastProjectedInput = projected3D;
 
@@ -279,11 +279,11 @@ public partial class HGRNLayer<T> : LayerBase<T>, IShapeContract
         var fBias = Engine.Reshape(_forgetGateBias, new[] { 1, _modelDimension });
         var iBias = Engine.Reshape(_inputGateBias, new[] { 1, _modelDimension });
         var forgetGate3D = Engine.Reshape(
-            Engine.Sigmoid(Engine.TensorBroadcastAdd(
+            Engine.Sigmoid(Engine.TensorAdd(
                 Engine.TensorMatMul(projected, _forgetGateWeights), fBias)),
             new[] { batchSize, seqLen, _modelDimension });
         var inputGate3D = Engine.Reshape(
-            Engine.Sigmoid(Engine.TensorBroadcastAdd(
+            Engine.Sigmoid(Engine.TensorAdd(
                 Engine.TensorMatMul(projected, _inputGateWeights), iBias)),
             new[] { batchSize, seqLen, _modelDimension });
 
@@ -300,7 +300,7 @@ public partial class HGRNLayer<T> : LayerBase<T>, IShapeContract
         var outFlat = Engine.Reshape(recurrenceOutput, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorMatMul(outFlat, _outputProjectionWeights);
         var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
+        outputFlat = Engine.TensorAdd(outputFlat, outBias);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);

@@ -77,7 +77,8 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
         T corrThreshold = NumOps.FromDouble(EdgeThreshold);
         T eps = NumOps.FromDouble(1e-10);
 
-        var result = new Matrix<T>(d, d);
+        var candidateEdges = new double[d, d];
+        var sourceScore = new double[d];
 
         // For each pair with significant correlation, determine direction via MMD
         for (int i = 0; i < d; i++)
@@ -93,34 +94,48 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
 
                 // Direction with lower MMD wins
                 T varFrom, olsWeight;
+                int from, to;
                 if (NumOps.GreaterThan(mmdJI, mmdIJ))
                 {
                     // i→j
+                    from = i;
+                    to = j;
                     varFrom = cov[i, i];
-                    if (NumOps.GreaterThan(varFrom, eps))
-                    {
-                        olsWeight = NumOps.Divide(cov[i, j], varFrom);
-                        if (NumOps.GreaterThan(NumOps.Abs(olsWeight), NumOps.FromDouble(0.1)))
-                            result[i, j] = olsWeight;
-                    }
                 }
                 else
                 {
                     // j→i
+                    from = j;
+                    to = i;
                     varFrom = cov[j, j];
-                    if (NumOps.GreaterThan(varFrom, eps))
-                    {
-                        olsWeight = NumOps.Divide(cov[j, i], varFrom);
-                        if (NumOps.GreaterThan(NumOps.Abs(olsWeight), NumOps.FromDouble(0.1)))
-                            result[j, i] = olsWeight;
-                    }
                 }
+
+                if (!NumOps.GreaterThan(varFrom, eps)) continue;
+
+                olsWeight = NumOps.Divide(cov[from, to], varFrom);
+                if (!NumOps.GreaterThan(NumOps.Abs(olsWeight), NumOps.FromDouble(0.1))) continue;
+
+                candidateEdges[from, to] = NumOps.ToDouble(olsWeight);
+
+                // Pairwise MMD orientation rules out only two-cycles; three or more individually
+                // preferred directions can still form a directed cycle. Accumulate the confidence
+                // of every accepted orientation into a global source ordering, then retain only
+                // edges that agree with that ordering. This preserves the strongest pairwise MMD
+                // evidence while making the public graph a DAG by construction.
+                double confidence = Math.Max(
+                    Math.Abs(NumOps.ToDouble(mmdJI) - NumOps.ToDouble(mmdIJ)),
+                    1e-12);
+                sourceScore[from] += confidence;
+                sourceScore[to] -= confidence;
             }
 
-        // Pairwise MMD chooses each direction independently, so three individually preferred
-        // directions can still form a directed cycle. Preserve the strongest learned edges while
-        // enforcing the DAG guarantee shared by causal discovery results.
-        return ProjectWeightedGraphToDag(result);
+        var acyclicEdges = ProjectToDag(candidateEdges, d, sourceScore);
+        var result = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                result[i, j] = NumOps.FromDouble(acyclicEdges[i, j]);
+
+        return result;
     }
 
     /// <summary>
