@@ -1536,9 +1536,19 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     // If f(x) ≈ f(10x) for all x, the network ignores input magnitude.
     // =====================================================
 
+    /// <summary>
+    /// Whether "scaling the input must change the output" is a meaningful invariant for this
+    /// network. Default true. Override to false ONLY where insensitivity to a 10x input is the
+    /// architecture behaving correctly, and say why -- a network that ignores its input is the
+    /// exact defect this invariant exists to catch, so an unexplained opt-out hides a real bug.
+    /// </summary>
+    protected virtual bool ScaledInputInvariantApplicable => true;
+
     [Fact(Timeout = 120000)]
     public virtual async Task ScaledInput_ShouldChangeOutput()
     {
+        if (!ScaledInputInvariantApplicable) return;
+
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -1582,10 +1592,36 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 break;
             }
         }
+        // Printing only the first 8 elements is actively misleading for one-hot models: a SOM whose
+        // winning neuron sits past index 7 reports "[0,0,0,0,0,0,0,0]" and reads as an all-zero
+        // forward pass, when the output is a perfectly valid one-hot that simply did not MOVE.
+        // Those are different defects and want different fixes, so the message names which it is.
+        Assert.True(output1.Length > 0 && output2.Length > 0,
+            $"Network returned an empty output during scaled-input testing: " +
+            $"len={output1.Length}/{output2.Length}.");
+
+        int nz1 = 0, nz2 = 0, arg1 = 0, arg2 = 0;
+        for (int i = 0; i < output1.Length; i++)
+        {
+            if (Math.Abs(ConvertToDouble(output1[i])) > 0) nz1++;
+            if (ConvertToDouble(output1[i]) > ConvertToDouble(output1[arg1])) arg1 = i;
+        }
+        for (int i = 0; i < output2.Length; i++)
+        {
+            if (Math.Abs(ConvertToDouble(output2[i])) > 0) nz2++;
+            if (ConvertToDouble(output2[i]) > ConvertToDouble(output2[arg2])) arg2 = i;
+        }
+
         Assert.True(anyDifferent,
             "Network output didn't change when input was scaled 10x. Forward pass may ignore input values. " +
-            $"output1=[{string.Join(",", Enumerable.Range(0, Math.Min(8, output1.Length)).Select(i => ConvertToDouble(output1[i]).ToString("G6")))}], " +
-            $"output2=[{string.Join(",", Enumerable.Range(0, Math.Min(8, output2.Length)).Select(i => ConvertToDouble(output2[i]).ToString("G6")))}].");
+            $"len={output1.Length}; nonzeros={nz1}/{nz2}; argmax={arg1}/{arg2}; " +
+            (nz1 == 0 && nz2 == 0
+                ? "BOTH OUTPUTS ARE ENTIRELY ZERO -- the forward pass produced nothing. "
+                : nz1 == 1 && nz2 == 1
+                    ? "both outputs are one-hot on the SAME index -- the forward pass ran, the selection just did not move. "
+                    : "") +
+            $"output1[0..8]=[{string.Join(",", Enumerable.Range(0, Math.Min(8, output1.Length)).Select(i => ConvertToDouble(output1[i]).ToString("G6")))}], " +
+            $"output2[0..8]=[{string.Join(",", Enumerable.Range(0, Math.Min(8, output2.Length)).Select(i => ConvertToDouble(output2[i]).ToString("G6")))}].");
     }
 
     // =====================================================
