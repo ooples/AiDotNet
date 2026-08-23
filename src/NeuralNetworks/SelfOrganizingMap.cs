@@ -285,9 +285,21 @@ public class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
-
+        // NO GPU LAYER-CHAIN FAST PATH HERE. TryForwardGpuOptimized delegates to ForwardGpu, which
+        // walks the LAYER CHAIN -- and this model deliberately has none: InitializeLayers is empty
+        // because a SOM's parameters are its codebook in _weights, not a stack of layers. Walking an
+        // empty chain returns the input verbatim, so with a DirectGpuTensorEngine (the default on
+        // this machine) Predict returned its own input: 128 values straight through instead of a
+        // one-hot activation over the 64 map neurons. The BMU was never computed and every
+        // downstream consumer -- clustering, quantization error, the one-hot contract documented on
+        // this class -- silently received a passthrough.
+        //
+        // This was invisible to ScaledInput_ShouldChangeOutput, which PASSES on the broken path: an
+        // identity passthrough trivially changes when the input is scaled. The invariant was
+        // satisfied for the wrong reason.
+        //
+        // Engine acceleration is not lost. The distance computation that actually dominates BMU
+        // selection already runs through vectorized engine ops in ComputeSquaredDistances.
         var flatInput = input.Rank == 1 ? input : input.Reshape(new[] { input.Length });
         if (flatInput.Length != _inputDimension)
             throw new ArgumentException($"Input must have {_inputDimension} elements, but got {flatInput.Length}");
