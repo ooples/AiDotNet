@@ -625,12 +625,8 @@ public class ComputerVisionExtendedIntegrationTests
         var gradient = loss.ComputeGradient(predicted, actual);
 
         Assert.Equal(4, gradient.Length);
-        bool hasNonZero = false;
         for (int i = 0; i < gradient.Length; i++)
-        {
-            if (Math.Abs(gradient[i]) > 1e-10) hasNonZero = true;
-        }
-        Assert.True(hasNonZero, "DETR gradient should have non-zero elements");
+            Assert.Equal(-0.25, gradient[i], precision: 10);
     }
 
     [Fact(Timeout = 120000)]
