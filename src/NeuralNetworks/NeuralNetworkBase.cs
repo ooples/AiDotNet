@@ -7946,7 +7946,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             long paramCount;
             try
             {
-                paramCount = PlanningParameterCount;
+                // Both truths, because they answer different questions. PlanningParameterCount is
+                // the manifest's allocation-free view of what is declared or materialized;
+                // ParameterCount is the model's OWN public declaration, which a subclass may
+                // override to report a size the manifest cannot express -- foundation models
+                // routinely do. Consulting only the manifest meant such an override was invisible
+                // here, so a model declaring 50 B parameters never crossed a 10 B threshold and
+                // silently ran eager. Taking the greater keeps the manifest's answer whenever it is
+                // the larger one, so no model loses streaming it already got.
+                //
+                // ParameterCount is read exactly ONCE, and only on this branch -- a model whose
+                // structural estimate already cleared the threshold still pays no parameter walk at
+                // all. ParameterLayoutNotReadyException derives from InvalidOperationException, so a
+                // shape-deferred model is handled by the existing catch below and simply retries.
+                paramCount = Math.Max(PlanningParameterCount, ParameterCount);
             }
             catch (Exception ex) when (
                 ex is InvalidOperationException ||
