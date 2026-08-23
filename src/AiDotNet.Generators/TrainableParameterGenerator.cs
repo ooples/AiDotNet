@@ -83,15 +83,28 @@ public class TrainableParameterGenerator : IIncrementalGenerator
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // Find all class declarations that might have [TrainableParameter] fields
-        var classDeclarations = context.SyntaxProvider
+        // The pipeline used to cache ClassDeclarationSyntax. A syntax node is the same class of
+        // leak as a symbol: it holds its SyntaxTree, which roots the entire Compilation, so every
+        // cached entry pinned a compilation in memory. It now carries only each candidate's
+        // metadata name, and the symbol is re-resolved from the compilation at the point of use.
+        //
+        // Same deliberate scope limit as ModelParameterGenerator: this fixes the retention, not the
+        // re-execution. The per-class analysis is large enough that moving it into the transform
+        // would carry more regression risk than the incremental win is worth, so
+        // CompilationProvider stays and the generator still runs every compilation -- it just no
+        // longer holds compilations alive.
+        var classNames = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (node, _) => node is ClassDeclarationSyntax cds &&
                     cds.Modifiers.Any(m => m.Text == "partial"),
-                transform: static (ctx, _) => (ClassDeclarationSyntax)ctx.Node)
-            .Where(static c => c is not null);
+                transform: static (ctx, _) =>
+                    ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is INamedTypeSymbol symbol
+                        ? GeneratorHelpers.MetadataNameOf(symbol)
+                        : null)
+            .Where(static n => n is not null)
+            .Select(static (n, _) => n ?? string.Empty);
 
-        var compilationAndClasses = context.CompilationProvider.Combine(classDeclarations.Collect());
+        var compilationAndClasses = context.CompilationProvider.Combine(classNames.Collect());
 
         context.RegisterSourceOutput(compilationAndClasses, static (spc, source) => Execute(source.Left, source.Right, spc));
 
@@ -105,23 +118,41 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                     cds.Members.OfType<FieldDeclarationSyntax>().Any(static f =>
                         f.AttributeLists.SelectMany(static al => al.Attributes).Any(static a =>
                             IsTrainableParameterAttributeName(a.Name.ToString()))),
-                transform: static (ctx, _) => (ClassDeclarationSyntax)ctx.Node)
-            .Where(static c => c is not null);
+                transform: static (ctx, _) =>
+                    ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is INamedTypeSymbol symbol
+                        ? GeneratorHelpers.MetadataNameOf(symbol)
+                        : null)
+            .Where(static n => n is not null)
+            .Select(static (n, _) => n ?? string.Empty)
+            .Collect()
+            .Combine(context.CompilationProvider);
 
-        context.RegisterSourceOutput(nonPartialDeclarations, static (spc, cds) =>
+        context.RegisterSourceOutput(nonPartialDeclarations, static (spc, source) =>
         {
-            var offenders = cds.Members.OfType<FieldDeclarationSyntax>()
-                .Where(static f => f.AttributeLists.SelectMany(static al => al.Attributes)
-                    .Any(static a => IsTrainableParameterAttributeName(a.Name.ToString())))
-                .SelectMany(static f => f.Declaration.Variables.Select(static v => v.Identifier.Text))
-                .ToList();
-            if (offenders.Count == 0) return;
+            var seen = new HashSet<string>(System.StringComparer.Ordinal);
+            foreach (var metadataName in source.Left)
+            {
+                if (metadataName.Length == 0 || !seen.Add(metadataName)) continue;
+                if (GeneratorHelpers.ResolveSourceType(source.Right, metadataName) is not INamedTypeSymbol symbol)
+                    continue;
 
-            spc.ReportDiagnostic(Diagnostic.Create(
-                NonPartialTrainableParameter,
-                cds.Identifier.GetLocation(),
-                cds.Identifier.Text,
-                string.Join(", ", offenders)));
+                var offenders = symbol.GetMembers().OfType<IFieldSymbol>()
+                    .Where(static field => field.GetAttributes().Any(static attribute =>
+                        attribute.AttributeClass is { } attributeClass &&
+                        IsTrainableParameterAttributeName(attributeClass.Name)))
+                    .Select(static field => field.Name)
+                    .ToList();
+                if (offenders.Count == 0) continue;
+
+                var location = symbol.Locations.FirstOrDefault(static item => item.SourceTree is not null);
+                if (location is null) continue;
+
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    NonPartialTrainableParameter,
+                    location,
+                    symbol.Name,
+                    string.Join(", ", offenders)));
+            }
         });
     }
 
@@ -136,18 +167,19 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         return name == "TrainableParameter" || name == "TrainableParameterAttribute";
     }
 
-    private static void Execute(Compilation compilation, ImmutableArray<ClassDeclarationSyntax> classes, SourceProductionContext context)
-    {
-        if (classes.IsDefaultOrEmpty) return;
 
-        var attributeSymbol = compilation.GetTypeByMetadataName(TrainableParameterAttributeName);
+    private static void Execute(Compilation compilation, ImmutableArray<string> classMetadataNames, SourceProductionContext context)
+    {
+        if (classMetadataNames.IsDefaultOrEmpty) return;
+
+        var attributeSymbol = GeneratorHelpers.ResolveSourceType(compilation, TrainableParameterAttributeName);
 
         // [AutoParameters] remains a migration marker, but it never assigns semantics. PyTorch can
         // infer from nn.Parameter because that is a distinct type; Tensor<T> is also used for
         // activations, caches, datasets and buffers, so treating its CLR type or nullability as a
         // role silently corrupts the parameter graph.
-        var autoParamsSymbol = compilation.GetTypeByMetadataName("AiDotNet.Attributes.AutoParametersAttribute");
-        var bufferSymbol = compilation.GetTypeByMetadataName("AiDotNet.Attributes.BufferAttribute");
+        var autoParamsSymbol = GeneratorHelpers.ResolveSourceType(compilation, "AiDotNet.Attributes.AutoParametersAttribute");
+        var bufferSymbol = GeneratorHelpers.ResolveSourceType(compilation, "AiDotNet.Attributes.BufferAttribute");
         // Bail only if NO discovery route exists. This used to return whenever
         // TrainableParameterAttribute was missing, which also disabled register-call discovery,
         // sub-layer registration, buffers and [AutoParameters] -- every mechanism, gated on one
@@ -157,10 +189,15 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         // Group by containing class (multiple partial declarations possible)
         var processedClasses = new HashSet<string>();
 
-        foreach (var classDecl in classes)
+        // Partial classes contribute one name per declaration; resolve each distinct name once.
+        var resolvedNames = new HashSet<string>();
+
+        foreach (var metadataName in classMetadataNames)
         {
-            var model = compilation.GetSemanticModel(classDecl.SyntaxTree);
-            var classSymbol = model.GetDeclaredSymbol(classDecl) as INamedTypeSymbol;
+            if (metadataName.Length == 0) continue;
+            if (!resolvedNames.Add(metadataName)) continue;
+
+            var classSymbol = GeneratorHelpers.ResolveSourceType(compilation, metadataName);
             if (classSymbol is null) continue;
 
             // Check if class extends LayerBase<T>
@@ -1962,41 +1999,6 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// Every member a declared shape axis transitively reads, so the emitted declaration can be
-    /// guarded on the sources of its arithmetic rather than only on the number that arithmetic
-    /// produced.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The -1 lazy sentinel is a VALUE, and values do not survive arithmetic. The post-hoc scan the
-    /// declaration already runs -- reject an axis that came out negative -- catches a sentinel that
-    /// was copied, and misses one that was divided. ConvolutionalLayer is the case that proves it:
-    /// </para>
-    /// <code>
-    /// InputDepth = -1;                                   // ctor: "not resolved yet"
-    /// private int KernelInChannels => InputDepth / Groups;
-    /// [TrainableParameter(Shape = "OutputDepth, KernelInChannels, KernelSize, KernelSize")]
-    /// </code>
-    /// <para>
-    /// For a depthwise convolution Groups is 8, so KernelInChannels is <c>-1 / 8 == 0</c>. That is
-    /// not negative, so the scan passes it, and the layer declares <c>[8, 0, 3, 3]</c> -- a shape it
-    /// has no way to know and which happens to look concrete. A checkpoint then hands back the
-    /// correct <c>[8, 1, 3, 3]</c> and TryAdoptRestoredParameters rejects the RIGHT tensor against a
-    /// placeholder the layer should never have emitted:
-    /// </para>
-    /// <code>
-    /// ConvolutionalLayer`1 parameters do not conform to the resolved shape.
-    /// Expected weights [8, 0, 3, 3] and biases [8], but received weights [8, 1, 3, 3] and biases [8].
-    /// </code>
-    /// <para>
-    /// Guarding the roots instead of the result closes the whole class: the question "can this layer
-    /// answer yet" is asked of <c>InputDepth</c>, where the sentinel still exists, instead of of
-    /// <c>KernelInChannels</c>, where it has already been laundered into a plausible number. Members
-    /// that are always positive -- Groups, KernelSize, OutputDepth -- cost one non-negative
-    /// comparison each and can never trip it.
-    /// </para>
-    /// </remarks>
-    /// <summary>
     /// What the walk over one declared axis learned about whether that axis can launder a sentinel.
     /// </summary>
     /// <remarks>
@@ -2030,6 +2032,40 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         return false;
     }
 
+    /// <summary>
+    /// Finds every member a declared shape axis transitively reads, so the emitted declaration can
+    /// guard the sources of its arithmetic rather than only the number that arithmetic produced.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The -1 lazy sentinel is a VALUE, and values do not survive arithmetic. The post-hoc scan the
+    /// declaration already runs -- reject an axis that came out negative -- catches a sentinel that
+    /// was copied, and misses one that was divided. ConvolutionalLayer is the case that proves it:
+    /// </para>
+    /// <code>
+    /// InputDepth = -1;                                   // ctor: "not resolved yet"
+    /// private int KernelInChannels => InputDepth / Groups;
+    /// [TrainableParameter(Shape = "OutputDepth, KernelInChannels, KernelSize, KernelSize")]
+    /// </code>
+    /// <para>
+    /// For a depthwise convolution Groups is 8, so KernelInChannels is <c>-1 / 8 == 0</c>. That is
+    /// not negative, so the scan passes it, and the layer declares <c>[8, 0, 3, 3]</c> -- a shape it
+    /// has no way to know and which happens to look concrete. A checkpoint then hands back the
+    /// correct <c>[8, 1, 3, 3]</c> and TryAdoptRestoredParameters rejects the RIGHT tensor against a
+    /// placeholder the layer should never have emitted:
+    /// </para>
+    /// <code>
+    /// ConvolutionalLayer`1 parameters do not conform to the resolved shape.
+    /// Expected weights [8, 0, 3, 3] and biases [8], but received weights [8, 1, 3, 3] and biases [8].
+    /// </code>
+    /// <para>
+    /// Guarding the roots instead of the result closes the whole class: the question "can this layer
+    /// answer yet" is asked of <c>InputDepth</c>, where the sentinel still exists, instead of of
+    /// <c>KernelInChannels</c>, where it has already been laundered into a plausible number. Members
+    /// that are always positive -- Groups, KernelSize, OutputDepth -- cost one non-negative
+    /// comparison each and can never trip it.
+    /// </para>
+    /// </remarks>
     private static void CollectDeclaredShapeSentinelRoots(
         INamedTypeSymbol classSymbol,
         string axisExpression,

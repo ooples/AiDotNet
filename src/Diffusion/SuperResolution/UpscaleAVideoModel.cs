@@ -118,6 +118,16 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     protected override void RegisterComponents()
     {
         EnsureInitialized();
+        // Upscale-A-Video always executes the temporal, concatenated RGB-condition,
+        // and text-cross-attention path, including when callers inject a bounded or
+        // otherwise customized VideoUNetPredictor. Resolve that legal route before
+        // publishing parameter chunks; the predictor's generic parameter-enumeration
+        // fallback is intentionally unconditional and would otherwise size its lazy
+        // input convolution for four latent channels instead of the actual seven.
+        _videoUNet.TriggerLazyShapeResolution(
+            includeVideo: true,
+            includeTextConditioning: true,
+            includeImageConditioning: true);
         RegisterParameterComponent("denoiser/video-unet", _videoUNet);
         RegisterParameterComponent("vae/temporal", _temporalVAE);
     }
@@ -287,6 +297,12 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
             return _videoUNet.TemporalTrainingLayers;
         }
     }
+
+    /// <summary>
+    /// Retains the bounded temporal-training gradient surface for wrappers such as
+    /// StableVideoSR that expose the neural-network gradient accessor contract.
+    /// </summary>
+    protected override bool RetainTrainingGradientSurface => true;
 
     #endregion
 

@@ -52,6 +52,7 @@ namespace AiDotNet.Tensors.LinearAlgebra
 namespace AiDotNet.Interfaces
 {
     public interface IParameterSource<T> { }
+    public interface IModelSerializer { }
     public interface ILayer<T> { }
 }
 namespace AiDotNet.NeuralNetworks.Layers
@@ -1092,6 +1093,29 @@ public partial class StateNetwork<T> : AiDotNet.NeuralNetworks.NeuralNetworkBase
         Assert.DoesNotContain("StateNetwork._stages", generated, StringComparison.Ordinal);
         Assert.DoesNotContain("DeclareLayerList", generated, StringComparison.Ordinal);
         Assert.DoesNotContain("DeclareParameterSource", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ModelStateGenerator_DoesNotPersistRegisteredParameterChildTwice()
+    {
+        await Task.Yield();
+        const string source = @"
+public sealed class SerializableChild : AiDotNet.Interfaces.IModelSerializer { }
+public partial class CompositeModel<T> : AiDotNet.Models.ModelBase<T, object, object>
+{
+    private SerializableChild _child = new();
+    private bool _trained;
+
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(_child);
+    }
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelStateGenerator(), source);
+        Assert.Contains("CompositeModel._trained", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("CompositeModel._child", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("DeclareChild", generated, StringComparison.Ordinal);
     }
 
     [Fact]

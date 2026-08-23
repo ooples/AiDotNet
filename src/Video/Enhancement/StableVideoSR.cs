@@ -64,6 +64,7 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
     private bool _useNativeMode;
     private bool _disposed;
     private UpscaleAVideoModel<T>? _diffusionCore;
+    private readonly bool _usesInjectedDiffusionCore;
     [ExternalState]
     private readonly IConditioningModule<T>? _conditioner;
 
@@ -88,13 +89,16 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
     /// <summary>Creates a StableVideoSR model in native training mode.</summary>
     public StableVideoSR(NeuralNetworkArchitecture<T> architecture, StableVideoSROptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        IConditioningModule<T>? conditioner = null)
+        IConditioningModule<T>? conditioner = null,
+        UpscaleAVideoModel<T>? diffusionCore = null)
         : base(architecture)
     {
         _options = options is null ? new StableVideoSROptions() : new StableVideoSROptions(options);
         _options.ValidateNativePaperContract();
         _useNativeMode = true;
         _conditioner = conditioner;
+        _diffusionCore = diffusionCore;
+        _usesInjectedDiffusionCore = diffusionCore is not null;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
@@ -209,6 +213,7 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
+        if (_diffusionCore is not null) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -258,6 +263,14 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
         }
     }
 
+    /// <inheritdoc />
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_diffusionCore is not null)
+            return _diffusionCore.GetLastTrainingParameterGradients();
+        return base.GetParameterGradients();
+    }
+
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
@@ -287,7 +300,6 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
             : $"{_conditioner.GetType().Name} ({_conditioner.EmbeddingDimension}D)";
         return m;
     }
-
 
 
 

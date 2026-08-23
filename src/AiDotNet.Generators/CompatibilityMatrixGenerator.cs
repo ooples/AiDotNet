@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -125,18 +125,76 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        var classDeclarations = context.SyntaxProvider.CreateSyntaxProvider(
+        // Values, not symbols -- see DiscoveryApiGenerator. This generator also carried a Roslyn
+        // Location in its model, which is just as bad as a symbol: a Location holds its SyntaxTree,
+        // which roots the whole Compilation. The entry now carries the type's metadata name.
+        var compatEntries = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsCandidate(node),
-            transform: static (ctx, _) => GetModelClassOrNull(ctx))
-            .Where(static s => s is not null);
+            transform: static (ctx, _) => Analyze(ctx))
+            .Where(static e => e is not null)
+            .Select(static (e, _) => e ?? CompatEntry.Empty);
 
-        var collected = classDeclarations.Collect().Combine(context.CompilationProvider);
+        // CompilationProvider is back, and ONLY for diagnostics. A Location cannot live in cached
+        // pipeline state -- it holds its SyntaxTree, which roots the Compilation -- but a Location
+        // REBUILT from a file path via Location.Create(string, ...) is an EXTERNAL location, and
+        // Roslyn cannot apply source-level suppression to those: #pragma warning disable AIDN030
+        // and [SuppressMessage] simply stop working. Emitting external locations would have taken
+        // suppression away from anyone relying on it, silently.
+        //
+        // So the pipeline carries the metadata name, and the genuine syntax-tree-backed Location is
+        // recovered from the re-resolved symbol at the point the diagnostic is reported.
+        context.RegisterSourceOutput(
+            compatEntries.Collect().Combine(context.CompilationProvider),
+            static (spc, source) => Emit(spc, source.Left, source.Right));
+    }
 
-        context.RegisterSourceOutput(collected, static (spc, source) =>
+    /// <summary>
+    /// Resolves one candidate class into a value-equatable entry, or null when it declares no
+    /// [ModelCategory]. All symbol access is confined to this method.
+    /// </summary>
+    private static CompatEntry? Analyze(GeneratorSyntaxContext ctx)
+    {
+        if (GetModelClassOrNull(ctx) is not INamedTypeSymbol modelClass)
+            return null;
+
+        var compilation = ctx.SemanticModel.Compilation;
+        var categoryAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelCategoryAttr);
+        var exemptAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelMetadataExemptAttr);
+        var categoryEnumType = GeneratorHelpers.ResolveSourceType(compilation, "AiDotNet.Enums.ModelCategory");
+
+        if (categoryAttrSymbol is null)
+            return null;
+
+        if (exemptAttrSymbol is not null && HasAttribute(modelClass.GetAttributes(), exemptAttrSymbol))
+            return null;
+
+        var categories = new List<int>();
+        foreach (var attr in modelClass.GetAttributes())
         {
-            var (candidates, compilation) = source;
-            Execute(spc, candidates, compilation);
-        });
+            if (attr.AttributeClass is not null &&
+                SymbolEqualityComparer.Default.Equals(attr.AttributeClass, categoryAttrSymbol))
+            {
+                if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int c)
+                    categories.Add(c);
+            }
+        }
+
+        if (categories.Count == 0)
+            return null;
+
+        // Resolve display names here, while the enum symbol is in hand, so Emit needs no
+        // Compilation of its own.
+        var names = new List<string>();
+        foreach (var c in categories)
+            names.Add(GetCategoryName(c, categoryEnumType));
+
+        return new CompatEntry(
+            modelClass.Name,
+            modelClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            modelClass.TypeParameters.Length,
+            categories.ToImmutableArray(),
+            names.ToImmutableArray(),
+            GeneratorHelpers.MetadataNameOf(modelClass));
     }
 
     private static bool IsCandidate(SyntaxNode node)
@@ -169,16 +227,9 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         return null;
     }
 
-    private static void Execute(
-        SourceProductionContext context,
-        ImmutableArray<INamedTypeSymbol?> candidates,
-        Compilation compilation)
+    private static void Emit(SourceProductionContext context, ImmutableArray<CompatEntry> candidates, Compilation compilation)
     {
-        var categoryAttrSymbol = compilation.GetTypeByMetadataName(ModelCategoryAttr);
-        var exemptAttrSymbol = compilation.GetTypeByMetadataName(ModelMetadataExemptAttr);
-        var categoryEnumType = compilation.GetTypeByMetadataName("AiDotNet.Enums.ModelCategory");
-
-        if (categoryAttrSymbol is null || candidates.IsDefaultOrEmpty)
+        if (candidates.IsDefaultOrEmpty)
         {
             EmitCompatibilityClass(context, new List<CompatEntry>());
             return;
@@ -187,41 +238,14 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         var entries = new List<CompatEntry>();
         var seen = new HashSet<string>();
 
-        foreach (var modelClass in candidates)
+        foreach (var entry in candidates)
         {
-            if (modelClass is null)
+            if (entry.FullyQualifiedName.Length == 0)
+                continue;
+            if (!seen.Add(entry.FullyQualifiedName))
                 continue;
 
-            var fullName = modelClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            if (!seen.Add(fullName))
-                continue;
-
-            // Skip classes marked with [ModelMetadataExempt]
-            if (exemptAttrSymbol is not null && HasAttribute(modelClass.GetAttributes(), exemptAttrSymbol))
-                continue;
-
-            var categories = new List<int>();
-            foreach (var attr in modelClass.GetAttributes())
-            {
-                if (attr.AttributeClass is not null &&
-                    SymbolEqualityComparer.Default.Equals(attr.AttributeClass, categoryAttrSymbol))
-                {
-                    if (attr.ConstructorArguments.Length >= 1 && attr.ConstructorArguments[0].Value is int c)
-                        categories.Add(c);
-                }
-            }
-
-            if (categories.Count > 0)
-            {
-                entries.Add(new CompatEntry
-                {
-                    ClassName = modelClass.Name,
-                    FullyQualifiedName = fullName,
-                    TypeParameterCount = modelClass.TypeParameters.Length,
-                    Categories = categories,
-                    Location = modelClass.Locations.Length > 0 ? modelClass.Locations[0] : null
-                });
-            }
+            entries.Add(entry);
         }
 
         entries.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
@@ -232,14 +256,25 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         foreach (var entry in entries)
         {
             var (_, _, _, warnings) = GetCompatibilityRules(entry.Categories);
-            if (warnings.Count > 0 && entry.Location is not null)
+            if (warnings.Count == 0)
+                continue;
+
+            // Recover the REAL, syntax-tree-backed location. When the type cannot be resolved we
+            // report nothing, exactly as the previous no-location path did -- never an external
+            // location that suppression cannot reach.
+            var declaration = entry.MetadataName.Length > 0
+                ? GeneratorHelpers.ResolveSourceType(compilation, entry.MetadataName)
+                : null;
+            var location = declaration?.Locations.FirstOrDefault(l => l.SourceTree is not null);
+
+            if (location is not null)
             {
-                var categoryNames = string.Join(", ", entry.Categories.Select(c => GetCategoryName(c, categoryEnumType)));
+                var categoryNames = string.Join(", ", entry.CategoryNames);
                 bool isImpossible = warnings.Any(w => w.StartsWith("IMPOSSIBLE:", System.StringComparison.Ordinal));
 
                 context.ReportDiagnostic(Diagnostic.Create(
                     isImpossible ? ImpossibleOptimizerCombination : SuspiciousOptimizer,
-                    entry.Location,
+                    location,
                     entry.ClassName,
                     categoryNames));
             }
@@ -422,7 +457,7 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         context.AddSource("ModelCompatibility.g.cs", sb.ToString());
     }
 
-    private static (List<string> optimizers, List<string> lossFunctions, List<string> preprocessors, List<string> warnings) GetCompatibilityRules(List<int> categories)
+    private static (List<string> optimizers, List<string> lossFunctions, List<string> preprocessors, List<string> warnings) GetCompatibilityRules(ImmutableArray<int> categories)
     {
         var lossFunctions = new HashSet<string>();
         var preprocessors = new HashSet<string>();
@@ -769,12 +804,79 @@ public class CompatibilityMatrixGenerator : IIncrementalGenerator
         return false;
     }
 
-    private class CompatEntry
+    /// <summary>
+    /// One categorised model, as plain values. The declaration site is carried as a metadata name
+    /// rather than a Roslyn Location: a Location holds its SyntaxTree and would root the whole
+    /// Compilation. The real Location is re-resolved when a diagnostic is reported.
+    /// </summary>
+    private sealed class CompatEntry : System.IEquatable<CompatEntry>
     {
-        public string ClassName { get; set; } = string.Empty;
-        public string FullyQualifiedName { get; set; } = string.Empty;
-        public int TypeParameterCount { get; set; }
-        public List<int> Categories { get; set; } = new List<int>();
-        public Location? Location { get; set; }
+        public static readonly CompatEntry Empty = new(
+            string.Empty, string.Empty, 0,
+            ImmutableArray<int>.Empty, ImmutableArray<string>.Empty, string.Empty);
+
+        public CompatEntry(
+            string className,
+            string fullyQualifiedName,
+            int typeParameterCount,
+            ImmutableArray<int> categories,
+            ImmutableArray<string> categoryNames,
+            string metadataName)
+        {
+            ClassName = className;
+            FullyQualifiedName = fullyQualifiedName;
+            TypeParameterCount = typeParameterCount;
+            Categories = categories.IsDefault ? ImmutableArray<int>.Empty : categories;
+            CategoryNames = categoryNames.IsDefault ? ImmutableArray<string>.Empty : categoryNames;
+            MetadataName = metadataName;
+        }
+
+        public string ClassName { get; }
+        public string FullyQualifiedName { get; }
+        public int TypeParameterCount { get; }
+        public ImmutableArray<int> Categories { get; }
+        public ImmutableArray<string> CategoryNames { get; }
+        public string MetadataName { get; }
+
+        public bool Equals(CompatEntry? other)
+        {
+            if (other is null) return false;
+            if (ReferenceEquals(this, other)) return true;
+
+            if (!string.Equals(ClassName, other.ClassName, System.StringComparison.Ordinal)) return false;
+            if (!string.Equals(FullyQualifiedName, other.FullyQualifiedName, System.StringComparison.Ordinal)) return false;
+            if (TypeParameterCount != other.TypeParameterCount) return false;
+            if (!string.Equals(MetadataName, other.MetadataName, System.StringComparison.Ordinal)) return false;
+            if (Categories.Length != other.Categories.Length) return false;
+            for (int i = 0; i < Categories.Length; i++)
+            {
+                if (Categories[i] != other.Categories[i]) return false;
+            }
+            if (CategoryNames.Length != other.CategoryNames.Length) return false;
+            for (int i = 0; i < CategoryNames.Length; i++)
+            {
+                if (!string.Equals(CategoryNames[i], other.CategoryNames[i], System.StringComparison.Ordinal)) return false;
+            }
+            return true;
+        }
+
+        public override bool Equals(object? obj) => Equals(obj as CompatEntry);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = 17;
+                hash = (hash * 31) + ClassName.GetHashCode();
+                hash = (hash * 31) + FullyQualifiedName.GetHashCode();
+                hash = (hash * 31) + TypeParameterCount;
+                hash = (hash * 31) + Categories.Length;
+                hash = (hash * 31) + CategoryNames.Length;
+                hash = (hash * 31) + MetadataName.GetHashCode();
+                return hash;
+            }
+        }
     }
+
+
 }

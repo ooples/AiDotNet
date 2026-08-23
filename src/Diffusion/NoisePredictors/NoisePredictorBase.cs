@@ -1995,7 +1995,24 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         }
         else
         {
-            SetParameters(SerializationHelper<T>.DeserializeVector(reader, parameterMarker));
+            if (parameterMarker < 0)
+            {
+                throw new InvalidOperationException(
+                    $"Unsupported parameter payload marker: {parameterMarker}.");
+            }
+
+            // The legacy payload's vector length was already consumed above while distinguishing it
+            // from the chunked sentinel. DeserializeVector(reader, expectedLength) expects to read
+            // that prefix itself, so calling it here interpreted the first parameter bytes as a
+            // second length and failed for nested predictor state. Read the known-length body
+            // directly; ReadValue remains the exact inverse of SerializeVector's WriteValue for T.
+            var parameters = new Vector<T>(parameterMarker);
+            for (int i = 0; i < parameterMarker; i++)
+            {
+                parameters[i] = SerializationHelper<T>.ReadValue(reader);
+            }
+
+            SetParameters(parameters);
         }
     }
 

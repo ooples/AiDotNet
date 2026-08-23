@@ -102,6 +102,7 @@ public class ModelStateGenerator : IIncrementalGenerator
 
         var members = new List<(string Name, string Call)>();
         bool hasExplicitState = false;
+        var registrations = ParameterMemberSemanticModel.GetRegistrationClassifications(type);
 
         foreach (var member in type.GetMembers())
         {
@@ -155,7 +156,13 @@ public class ModelStateGenerator : IIncrementalGenerator
             // List<ConvLayerTensor<T>> _convLayers` before the type was ever consulted, which is the
             // same shape as the KNearestNeighbors defect above: the payload carried everything except
             // the part that decides the answer.
-            var classification = ParameterMemberSemanticModel.Classify(member);
+            // Imperative parameter-component registration is a state-ownership declaration too.
+            // Treating it as unclassified makes the declared-state envelope serialize the same
+            // child a second time after the parameter/clone path has already restored it. That is
+            // both redundant and unsafe for a materialized lazy child whose constructor clone owns
+            // the exact runtime layout.
+            var classification = ParameterMemberSemanticModel.ClassifyWithRegistrations(
+                member, registrations);
             if (member is IFieldSymbol { IsReadOnly: true }
                 && !IsModelOptions(memberType)
                 && !IsSerializableModel(memberType)
