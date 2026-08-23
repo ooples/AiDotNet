@@ -524,7 +524,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // #638/#1650: genuine inference runs in eval mode so every Conv / Dense layer takes
         // its zero-allocation, GPU-resident inference fast path (Conv2DInto + in-place bias,
         // resident FusedLinear) instead of the allocating tape/training Forward branch
-        // (Conv2D + host TensorBroadcastAdd, which de-residents the buffer). That residency
+        // (Conv2D + host TensorAdd, which de-residents the buffer). That residency
         // is what lets the resident inference graph capture the whole UNet forward as one
         // CUDA graph. This UNet contains no Dropout / eval-dependent layers, so eval is
         // numerically identical to training mode here. Skipped when a gradient tape is

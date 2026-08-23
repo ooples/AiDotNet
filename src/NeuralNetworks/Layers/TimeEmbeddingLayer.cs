@@ -396,7 +396,7 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         // sinEmbed: [batch, embeddingDim] @ _linear1Weights: [embeddingDim, outputDim] -> [batch, outputDim]
         var preActivation = Engine.TensorMatMul(sinEmbed, _linear1Weights);
         var bias1Broadcast = Engine.Reshape(_linear1Bias, [1, _outputDim]);
-        preActivation = Engine.TensorBroadcastAdd(preActivation, bias1Broadcast);
+        preActivation = Engine.TensorAdd(preActivation, bias1Broadcast);
 
         // Swish is the SiLU activation and records its VJP through IEngine.
         var hidden = Engine.Swish(preActivation);
@@ -406,7 +406,7 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         // hidden: [batch, outputDim] @ _linear2Weights: [outputDim, outputDim] -> [batch, outputDim]
         var output = Engine.TensorMatMul(hidden, _linear2Weights);
         var bias2Broadcast = Engine.Reshape(_linear2Bias, [1, _outputDim]);
-        output = Engine.TensorBroadcastAdd(output, bias2Broadcast);
+        output = Engine.TensorAdd(output, bias2Broadcast);
 
         return output;
     }

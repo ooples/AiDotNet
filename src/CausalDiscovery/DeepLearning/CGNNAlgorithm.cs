@@ -153,6 +153,7 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
                     if (next != node && NumOps.GreaterThan(NumOps.Abs(result[node, next]), eps))
                         pending.Push(next);
                 }
+
             }
 
             return false;

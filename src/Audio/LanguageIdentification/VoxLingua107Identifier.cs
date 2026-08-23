@@ -725,7 +725,7 @@ public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILan
             broadcastShape[axis] = 1;
         broadcastShape[^1] = attention.Length;
         var channelGate = Engine.Reshape(attention, broadcastShape);
-        return Engine.TensorBroadcastMultiply(input, channelGate);
+        return Engine.TensorMultiply(input, channelGate);
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
@@ -748,7 +748,7 @@ public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILan
             timeAxes[axis] = axis;
 
         var meanKeepDims = Engine.ReduceMean(input, timeAxes, keepDims: true);
-        var centered = Engine.TensorBroadcastSubtract(input, meanKeepDims);
+        var centered = Engine.TensorSubtract(input, meanKeepDims);
         var variance = Engine.ReduceMean(
             Engine.TensorMultiply(centered, centered), timeAxes, keepDims: false);
         var std = Engine.TensorSqrt(

@@ -672,7 +672,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
 
         // Add bias (reshape to [1, outChannels, 1, 1] for broadcast)
         var biasNCHW = Engine.Reshape(_convBias, [1, outputChannels, 1, 1]);
-        convNCHW = Engine.TensorBroadcastAdd(convNCHW, biasNCHW);
+        convNCHW = Engine.TensorAdd(convNCHW, biasNCHW);
 
         // Convert back to NHWC and reshape to capsule layout
         var convNHWC = Engine.TensorPermute(convNCHW, [0, 2, 3, 1]);

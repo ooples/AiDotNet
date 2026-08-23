@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -825,7 +825,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
                 // Then max over axis 0
 
                 var prevExpanded = Engine.Reshape(prevViterbi, [_numClasses, 1]); // [numClasses, 1]
-                var scoresWithTrans = Engine.TensorBroadcastAdd(prevExpanded, decodeTransitions); // [numClasses, numClasses]
+                var scoresWithTrans = Engine.TensorAdd(prevExpanded, decodeTransitions); // [numClasses, numClasses]
 
                 // This branch is INFERENCE-ONLY: the training-mode short-circuit
                 // at the top of Forward (line ~730) returns raw emissions before
@@ -1095,8 +1095,8 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
                 // scores[i, j] = alpha[i] + transitions[i, j] + emitT[j]
                 var alphaCol = Engine.Reshape(alpha, [_numClasses, 1]);            // [C, 1]
                 var emitRow = Engine.Reshape(emitT, [1, _numClasses]);             // [1, C]
-                var alphaPlusTrans = Engine.TensorBroadcastAdd(alphaCol, _transitionMatrix); // [C, C]
-                var scores = Engine.TensorBroadcastAdd(alphaPlusTrans, emitRow);   // [C, C]
+                var alphaPlusTrans = Engine.TensorAdd(alphaCol, _transitionMatrix); // [C, C]
+                var scores = Engine.TensorAdd(alphaPlusTrans, emitRow);   // [C, C]
 
                 // alpha_new = LogSumExp(scores, axis=0) → [C]
                 alpha = TapeLogSumExpAxis(scores, axis: 0); // [C] (axis-0 reduced)
@@ -1137,10 +1137,10 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
 
                 var ohPrevExpanded = Engine.Reshape(ohPrev, [seqLen - 1, _numClasses, 1]);
                 var ohCurrExpanded = Engine.Reshape(ohCurr, [seqLen - 1, 1, _numClasses]);
-                var ohOuter = Engine.TensorBroadcastMultiply(ohPrevExpanded, ohCurrExpanded);    // [seqLen-1, C, C]
+                var ohOuter = Engine.TensorMultiply(ohPrevExpanded, ohCurrExpanded);    // [seqLen-1, C, C]
 
                 var transExpanded = Engine.Reshape(_transitionMatrix, [1, _numClasses, _numClasses]);
-                var transMasked = Engine.TensorBroadcastMultiply(ohOuter, transExpanded);        // [seqLen-1, C, C]
+                var transMasked = Engine.TensorMultiply(ohOuter, transExpanded);        // [seqLen-1, C, C]
                 var transTotal = Engine.ReduceSum(transMasked, [0, 1, 2], keepDims: false);      // scalar
                 var transTotal1D = Engine.Reshape(transTotal, [1]);
 
@@ -1193,7 +1193,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
         // max along axis, keepDims=true so we can broadcast-subtract
         var max = Engine.ReduceMax(x, [axis], keepDims: true, out _);
         var negMax = Engine.TensorNegate(max);
-        var shifted = Engine.TensorBroadcastAdd(x, negMax);
+        var shifted = Engine.TensorAdd(x, negMax);
         var expShifted = Engine.TensorExp(shifted);
         var sumExp = Engine.ReduceSum(expShifted, [axis], keepDims: true);
         var logSum = Engine.TensorLog(sumExp);

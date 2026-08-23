@@ -310,7 +310,7 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>, IShapeContract
         var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
         var projected = Engine.TensorMatMul(input2D, _inputProjectionWeights);
         var bias2D = Engine.Reshape(_inputProjectionBias, new[] { 1, _modelDimension });
-        var projectedWithBias = Engine.TensorBroadcastAdd(projected, bias2D);
+        var projectedWithBias = Engine.TensorAdd(projected, bias2D);
         var projected3D = Engine.Reshape(projectedWithBias, new[] { batchSize, seqLen, _modelDimension });
         _lastProjectedInput = projected3D;
 
@@ -322,7 +322,7 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>, IShapeContract
         var recFlat = Engine.Reshape(recurrenceOutput, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorMatMul(recFlat, _outputProjectionWeights);
         var outBias2D = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        var outputWithBias = Engine.TensorBroadcastAdd(outputFlat, outBias2D);
+        var outputWithBias = Engine.TensorAdd(outputFlat, outBias2D);
         var output3D = Engine.Reshape(outputWithBias, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);

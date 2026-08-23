@@ -289,21 +289,21 @@ public partial class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
 
         // Layer 1: h1 = ReLU(x @ W1 + b1)  (SIMD)
         var xT = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
-        var h1Pre = Engine.TensorBroadcastAdd(
+        var h1Pre = Engine.TensorAdd(
             Engine.TensorMatMul(xT, Tensor<T>.FromMatrix(w1)),
             Tensor<T>.FromVector(b1).Reshape(1, _hiddenDim));
         var h1 = Engine.ReLU(h1Pre.Reshape(_hiddenDim).ToVector());
 
         // Layer 2: h2 = ReLU(h1 @ W2 + b2)  (SIMD)
         var h1T = Tensor<T>.FromVector(h1).Reshape(1, _hiddenDim);
-        var h2Pre = Engine.TensorBroadcastAdd(
+        var h2Pre = Engine.TensorAdd(
             Engine.TensorMatMul(h1T, Tensor<T>.FromMatrix(w2)),
             Tensor<T>.FromVector(b2).Reshape(1, _hiddenDim));
         var h2 = Engine.ReLU(h2Pre.Reshape(_hiddenDim).ToVector());
 
         // Output layer (linear, no activation)  (SIMD)
         var h2T = Tensor<T>.FromVector(h2).Reshape(1, _hiddenDim);
-        var outPre = Engine.TensorBroadcastAdd(
+        var outPre = Engine.TensorAdd(
             Engine.TensorMatMul(h2T, Tensor<T>.FromMatrix(w3)),
             Tensor<T>.FromVector(b3).Reshape(1, _outputDim));
         var output = outPre.Reshape(_outputDim).ToVector();
@@ -328,21 +328,21 @@ public partial class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
 
         // Layer 1: h1 = ReLU(x @ W1 + b1)  (SIMD)
         var xT = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
-        var h1Pre = Engine.TensorBroadcastAdd(
+        var h1Pre = Engine.TensorAdd(
             Engine.TensorMatMul(xT, Tensor<T>.FromMatrix(w1)),
             Tensor<T>.FromVector(b1).Reshape(1, _hiddenDim));
         var h1 = Engine.ReLU(h1Pre.Reshape(_hiddenDim).ToVector());
 
         // Layer 2: h2 = ReLU(h1 @ W2 + b2)  (SIMD)
         var h1T = Tensor<T>.FromVector(h1).Reshape(1, _hiddenDim);
-        var h2Pre = Engine.TensorBroadcastAdd(
+        var h2Pre = Engine.TensorAdd(
             Engine.TensorMatMul(h1T, Tensor<T>.FromMatrix(w2)),
             Tensor<T>.FromVector(b2).Reshape(1, _hiddenDim));
         var h2 = Engine.ReLU(h2Pre.Reshape(_hiddenDim).ToVector());
 
         // Output layer (linear)  (SIMD)
         var h2T = Tensor<T>.FromVector(h2).Reshape(1, _hiddenDim);
-        var outPre = Engine.TensorBroadcastAdd(
+        var outPre = Engine.TensorAdd(
             Engine.TensorMatMul(h2T, Tensor<T>.FromMatrix(w3)),
             Tensor<T>.FromVector(b3).Reshape(1, _outputDim));
         var output = outPre.Reshape(_outputDim).ToVector();

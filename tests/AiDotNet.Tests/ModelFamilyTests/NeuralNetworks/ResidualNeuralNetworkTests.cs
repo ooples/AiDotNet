@@ -26,6 +26,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// and it is measuring the gradient instead of float32 rounding.
 /// </para>
 /// </remarks>
+[Xunit.Collection("FoundationScaleSerial")]
 public class ResidualNeuralNetworkTests : NeuralNetworkModelTestBase<double>
 {
     protected override int[] InputShape => [128];

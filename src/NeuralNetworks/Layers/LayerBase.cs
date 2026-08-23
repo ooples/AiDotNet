@@ -1147,6 +1147,28 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         => System.Array.Empty<(Tensor<T>?, TensorShape, PersistentTensorRole)>();
 
     /// <summary>
+    /// The same declared parameters as <see cref="DeclaredParameterShapes"/>, but WITHOUT their
+    /// expected shapes — the tensor slots and their roles alone.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This exists because a lazy layer's honest answer to "what shape should this be" is "I do not
+    /// know yet", while its answer to "which tensors do you own" is always known: the declarations
+    /// are compiled in. Separating the two is what lets a restore proceed on a layer that cannot
+    /// size itself — see <see cref="TryAdoptRestoredParameters"/>, where a checkpoint that carries
+    /// real tensors is authoritative precisely when the layer has no shape of its own to check them
+    /// against.
+    /// </para>
+    /// <para>
+    /// Reads no dimension and computes no axis, so it is safe on an unresolved layer where
+    /// <see cref="DeclaredParameterShapes"/> deliberately returns empty.
+    /// </para>
+    /// </remarks>
+    protected virtual IReadOnlyList<(Tensor<T>? Tensor, PersistentTensorRole Role)>
+        DeclaredParameterTensors()
+        => System.Array.Empty<(Tensor<T>?, PersistentTensorRole)>();
+
+    /// <summary>
     /// Concrete shapes used only to size adaptive parameter declarations without allocating them.
     /// </summary>
     /// <remarks>
@@ -1408,6 +1430,30 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         return count;
     }
 
+    /// <summary>
+    /// Whether this layer's declared parameter surface still has values left to materialize.
+    /// </summary>
+    /// <remarks>
+    /// The value surface and the chunk surface must describe the same model, but only the chunk
+    /// path materialized before it counted. A component whose weights are still lazy has no value
+    /// slot to report, so it was silently skipped and the flat vector came out narrower than the
+    /// manifest -- 904,740 against 954,084 on a cloned UNet predictor, which is what turned a
+    /// Clone() into "Expected 904740 parameters, got 954084".
+    ///
+    /// Materializing unconditionally on the value path closes that gap but pays for it everywhere:
+    /// preparing every layer on every enumeration recurses through each sub-layer tree repeatedly
+    /// and lifts peak memory enough to abort a whole diffusion run (measured: the family aborted
+    /// after 65 of 206 tests on a host crash where the unmodified base completed all 206).
+    ///
+    /// The declaration already knows which layers are the problem. It is computed from the
+    /// generated manifest without allocating a value, and its materialized flag is false exactly
+    /// for the layers whose slots would come up short. Gating on it leaves the already-resident
+    /// majority untouched and reaches only the lazy remainder -- the same set the chunk path
+    /// would have materialized anyway.
+    /// </remarks>
+    internal bool DeclaredSurfaceNeedsMaterialization()
+        => TryGetDeclaredParameterCount(out _, out bool materialized) && !materialized;
+
     private bool TryGetDeclaredParameterCount(out long count, out bool materialized)
     {
         EnsureDeclaredSubLayerStructure();
@@ -1500,7 +1546,31 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     protected bool TryAdoptRestoredParameters()
     {
         var declared = DeclaredParameterShapes();
-        if (declared is null || declared.Count == 0) return false;
+
+        // NO DECLARATION means this layer cannot size itself yet -- it is still carrying the -1
+        // sentinel. That is not the same as having nothing to restore, and treating it that way is
+        // what dropped trained weights: a checkpoint holding real tensors was handed to a layer that
+        // shrugged, and the values went nowhere.
+        //
+        // When the layer has no shape of its own to check against, the CHECKPOINT is authoritative.
+        // This is the same contract as PyTorch's LazyModuleMixin, where loading a state_dict into a
+        // lazy module infers the module's shape from the saved tensors rather than demanding the
+        // module already know it. There is nothing to validate against here and nothing to gain by
+        // refusing: the saved tensors are the only statement of truth in the room.
+        // GATED ON HasActiveDeclaredParameterShapes, and the distinction is the whole safety of this
+        // path. "Declares shapes that are not resolved yet" and "declares no shapes at all" both
+        // produce an empty list here, and only the first can be adopted safely.
+        //
+        // A layer that declares a shape is telling us its tensors are supposed to have a known
+        // geometry; when it cannot state that geometry yet, a non-empty tensor in the slot must
+        // have come from the restore, because construction had nothing to size it with. A layer
+        // that declares NO shape gives us no such guarantee: its constructor allocates real tensors
+        // eagerly, so a populated slot is ordinary construction, not a checkpoint. Adopting those
+        // returns true, which tells EnsureInitializationCore the layer is ready and skips
+        // initialization altogether -- and an uninitialized layer does not fail an assertion, it
+        // takes the test host down with it.
+        if (declared is null || declared.Count == 0)
+            return HasActiveDeclaredParameterShapes && TryAdoptRestoredParametersUnresolved();
 
         int supplied = 0, conforming = 0;
         for (int i = 0; i < declared.Count; i++)
@@ -1535,6 +1605,60 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             $"{GetType().Name} parameters do not conform to the resolved shape. " +
             $"Expected {DescribeDeclaredShapes(declared, expected: true)}, " +
             $"but received {DescribeDeclaredShapes(declared, expected: false)}.");
+    }
+
+    /// <summary>
+    /// Adopts restored tensors on a layer that cannot yet state its own shapes, taking the
+    /// checkpoint as authoritative.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The three outcomes mirror <see cref="TryAdoptRestoredParameters"/> exactly, minus the shape
+    /// comparison there is no shape to make: NOTHING supplied means initialize normally; EVERY
+    /// tensor supplied means adopt them; a PARTIAL set is a broken lifecycle and is reported rather
+    /// than half-applied. Dropping the partial case here would have reopened the hole that method's
+    /// remarks describe, on the one path where the layer is least able to notice.
+    /// </para>
+    /// <para>
+    /// Shapes are not validated because validating them is precisely what this layer cannot do. The
+    /// alternative -- refuse the restore -- is strictly worse: it discards known-good trained values
+    /// in favour of a shape the layer admits it does not know.
+    /// </para>
+    /// </remarks>
+    private bool TryAdoptRestoredParametersUnresolved()
+    {
+        var tensors = DeclaredParameterTensors();
+        if (tensors is null || tensors.Count == 0) return false;
+
+        int supplied = 0;
+        for (int i = 0; i < tensors.Count; i++)
+        {
+            var tensor = tensors[i].Tensor;
+
+            // Rank zero is also "not supplied", for the reason recorded in the sibling method: a
+            // rank-0 placeholder has Length 1 because the product of no dimensions is 1.
+            if (tensor is null || tensor.Length == 0 || tensor.Shape.Length == 0) continue;
+            supplied++;
+        }
+
+        if (supplied == 0) return false;
+
+        if (supplied != tensors.Count)
+        {
+            throw new InvalidOperationException(
+                $"{GetType().Name} received a partial parameter restore: {supplied} of " +
+                $"{tensors.Count} declared tensors were supplied. The layer cannot resolve its own " +
+                "shapes yet, so the checkpoint is the only description of them, and an incomplete " +
+                "one cannot be completed from anywhere else.");
+        }
+
+        for (int i = 0; i < tensors.Count; i++)
+        {
+            var (tensor, role) = tensors[i];
+            if (tensor is not null) RegisterTrainableParameter(tensor, role);
+        }
+
+        return true;
     }
 
     private static bool ShapeMatchesDeclared(Tensor<T> tensor, TensorShape expected)
@@ -5769,6 +5893,42 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         {
             if (components[i].Kind == DeclaredParameterComponentKind.Trainable)
                 slots.Add(ValueSlot(components[i]));
+        }
+        return slots;
+    }
+
+    /// <summary>
+    /// Every slot the FLAT PARAMETER VECTOR carries: trainable tensors AND persistent buffers, in
+    /// the order <see cref="GetParameters"/> lays them out.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The sibling above is deliberately trainable-only, and both are needed. Gradients and
+    /// copy-on-write concern themselves with what TRAINS, so a running mean has no place in them.
+    /// The flat vector and the chunk stream concern themselves with what must be RESTORED, and a
+    /// checkpoint that drops a BatchNorm's running statistics does not reproduce the model it
+    /// claims to.
+    /// </para>
+    /// <para>
+    /// Using the trainable-only view for a value surface is what makes the two disagree on width:
+    /// ParameterCount answers from the declaration, which counts buffers, while an enumeration that
+    /// skips them yields a shorter vector. SetParameters(GetParameters()) then fails on its own
+    /// output, which is failure class P1 arriving from the buffer side instead of the lazy side.
+    /// </para>
+    /// </remarks>
+    internal IReadOnlyList<TrainableParameterValueSlot> GetOwnParameterStateValueSlots()
+    {
+        var components = GetOrderedParameterComponents();
+        var slots = new List<TrainableParameterValueSlot>();
+        for (int i = 0; i < components.Length; i++)
+        {
+            // Legacy storage is excluded on purpose: it is carried by the Parameters vector itself
+            // rather than by a component tensor, and FillParameters already emits it separately.
+            if (components[i].Kind is DeclaredParameterComponentKind.Trainable
+                or DeclaredParameterComponentKind.Buffer)
+            {
+                slots.Add(ValueSlot(components[i]));
+            }
         }
         return slots;
     }

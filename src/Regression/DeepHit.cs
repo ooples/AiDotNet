@@ -830,7 +830,7 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         for (int i = 0; i < n; i++)
         {
             var inputTensor = Tensor<T>.FromVector(input[i]).Reshape(1, input[i].Length);
-            var result = Engine.TensorBroadcastAdd(
+            var result = Engine.TensorAdd(
                 Engine.TensorMatMul(inputTensor, weightTensor), biasTensor);
 
             preActivation[i] = result.Reshape(outputSize).ToVector();

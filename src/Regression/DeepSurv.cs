@@ -645,7 +645,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             for (int i = 0; i < n; i++)
             {
                 var inputTensor = Tensor<T>.FromVector(current[i]).Reshape(1, current[i].Length);
-                var result = Engine.TensorBroadcastAdd(
+                var result = Engine.TensorAdd(
                     Engine.TensorMatMul(inputTensor, weightTensor), biasTensor);
                 preActivation[i] = result.Reshape(outputSize).ToVector();
             }

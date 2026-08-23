@@ -465,9 +465,9 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         // Optional projection biases (StarCoder2). Broadcast [outDim] over the flattened [N, outDim] projection.
         if (_queryBias.Length > 0)
         {
-            Q_flat = Engine.TensorBroadcastAdd(Q_flat, Engine.Reshape(_queryBias, new[] { 1, _numHeads * _headDimension }));
-            K_flat = Engine.TensorBroadcastAdd(K_flat, Engine.Reshape(_keyBias, new[] { 1, _numKVHeads * _headDimension }));
-            V_flat = Engine.TensorBroadcastAdd(V_flat, Engine.Reshape(_valueBias, new[] { 1, _numKVHeads * _headDimension }));
+            Q_flat = Engine.TensorAdd(Q_flat, Engine.Reshape(_queryBias, new[] { 1, _numHeads * _headDimension }));
+            K_flat = Engine.TensorAdd(K_flat, Engine.Reshape(_keyBias, new[] { 1, _numKVHeads * _headDimension }));
+            V_flat = Engine.TensorAdd(V_flat, Engine.Reshape(_valueBias, new[] { 1, _numKVHeads * _headDimension }));
         }
 
         // Reshape Q: [batch, seq, numHeads, headDim] -> [batch, numHeads, seq, headDim]
@@ -572,7 +572,7 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         // chain from _outputBias on every training step (a cached reshape primed
         // during inference would dead-end backward at the cached handle).
         var biasBroadcast = Engine.Reshape(_outputBias, new[] { 1, 1, _embeddingDimension });
-        var outputWithBias = Engine.TensorBroadcastAdd(output3D, biasBroadcast);
+        var outputWithBias = Engine.TensorAdd(output3D, biasBroadcast);
         var result = ApplyActivation(outputWithBias);
 
         _lastOutput = cacheBwd ? result : null;

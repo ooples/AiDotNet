@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -921,8 +921,8 @@ public partial class Crossformer<T> : ForecastingModelBase<T>
             // the graph before the loss — training routes through Forecast, which
             // calls this denorm, so the detach zeroed all gradients. Stats are
             // constants (paper-faithful reversible affine).
-            var scaled = Engine.TensorBroadcastMultiply(input, _instanceStd);
-            return Engine.TensorBroadcastAdd(scaled, _instanceMean);
+            var scaled = Engine.TensorMultiply(input, _instanceStd);
+            return Engine.TensorAdd(scaled, _instanceMean);
         }
     }
 

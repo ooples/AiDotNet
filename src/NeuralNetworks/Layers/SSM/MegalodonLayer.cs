@@ -349,7 +349,7 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
         // Step 2: Project CEMA output back to model dimension
         var cemaFlat = Engine.Reshape(cemaOutput, new[] { batchSize * seqLen, _emaDimension });
         var emaProjected = Engine.TensorMatMul(cemaFlat, _emaOutputWeights);
-        emaProjected = Engine.TensorBroadcastAdd(emaProjected, Engine.Reshape(_emaOutputBias, new[] { 1, _modelDimension }));
+        emaProjected = Engine.TensorAdd(emaProjected, Engine.Reshape(_emaOutputBias, new[] { 1, _modelDimension }));
         var emaOut3D = Engine.Reshape(emaProjected, new[] { batchSize, seqLen, _modelDimension });
 
         // Step 3: Q, K, V projections for gated attention
@@ -367,7 +367,7 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
         _lastAttentionOutput = attentionOutput;
 
         // Step 5: Gating between attention and CEMA outputs
-        var gateRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _gateWeights),
             Engine.Reshape(_gateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Sigmoid(gateRaw);
@@ -384,7 +384,7 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
         // Step 6: Output projection
         var mixedFlat = Engine.Reshape(mixed, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorMatMul(mixedFlat, _outputProjectionWeights);
-        outputFlat = Engine.TensorBroadcastAdd(outputFlat, Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension }));
+        outputFlat = Engine.TensorAdd(outputFlat, Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension }));
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
@@ -416,7 +416,7 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
     {
         var inputFlat = Engine.Reshape(input, new[] { batchSize * seqLen, _modelDimension });
         var emaInput = Engine.TensorMatMul(inputFlat, _emaInputWeights);
-        emaInput = Engine.TensorBroadcastAdd(
+        emaInput = Engine.TensorAdd(
             emaInput,
             Engine.Reshape(_emaInputBias, new[] { 1, _emaDimension }));
         var emaInput3D = Engine.Reshape(
@@ -475,7 +475,7 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
         // Project input to EMA dimension
         var inputFlat = input.Reshape(batchSize * seqLen, _modelDimension);
         var emaInput = Engine.TensorMatMul(inputFlat, _emaInputWeights);
-        emaInput = Engine.TensorBroadcastAdd(emaInput, _emaInputBias.Reshape(1, _emaDimension));
+        emaInput = Engine.TensorAdd(emaInput, _emaInputBias.Reshape(1, _emaDimension));
         var emaInput3D = emaInput.Reshape(batchSize, seqLen, _emaDimension);
         _lastEmaInput = emaInput3D;
 

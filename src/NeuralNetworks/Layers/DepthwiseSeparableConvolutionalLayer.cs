@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -948,7 +948,7 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
 
             // Add bias using broadcast: reshape [outputDepth] to [1, outputDepth, 1, 1]
             var biasReshaped = Engine.Reshape(_biases, [1, _outputDepth, 1, 1]);
-            pointwiseOutputNCHW = Engine.TensorBroadcastAdd(pointwiseOutputNCHW, biasReshaped);
+            pointwiseOutputNCHW = Engine.TensorAdd(pointwiseOutputNCHW, biasReshaped);
 
             // Cache pre-activation for derivative computation
             _lastPreActivation = pointwiseOutputNCHW;

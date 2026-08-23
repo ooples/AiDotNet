@@ -326,7 +326,7 @@ internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>, ISha
             data[i] = NumOps.FromDouble(initValue);
         }
         // Store column-shaped [size, 1] up-front so ForwardTape can feed the bias
-        // straight into TensorBroadcastAdd ([hidden, B] + [hidden, 1]) without an
+        // straight into TensorAdd ([hidden, B] + [hidden, 1]) without an
         // Engine.Reshape on every forward pass (re-profile #4: the per-forward
         // reshape node was ~1% of driver wall). Same contiguous data as [size],
         // so gradient flow / optimizer moments are bit-identical.
@@ -443,7 +443,7 @@ internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>, ISha
         }
 
         // Hidden layers: y = ReLU(W x + b). Bias broadcasts across B columns.
-        // Engine.TensorBroadcastAdd handles the [hidden, 1] -> [hidden, B]
+        // Engine.TensorAdd handles the [hidden, 1] -> [hidden, B]
         // broadcast natively; TensorAdd requires shapes to match exactly
         // and would otherwise throw at the batched ([hidden, B>1]) call
         // sites.
@@ -451,20 +451,20 @@ internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>, ISha
         {
             var linear = Engine.TensorMatMul(_fcWeights[layer], x);  // [hidden, B]
             // Biases are stored column-shaped [hidden, 1] (see CreateBiasTensor), so
-            // they feed TensorBroadcastAdd directly — no per-forward Engine.Reshape.
-            linear = Engine.TensorBroadcastAdd(linear, _fcBiases[layer]);
+            // they feed TensorAdd directly — no per-forward Engine.Reshape.
+            linear = Engine.TensorAdd(linear, _fcBiases[layer]);
             x = Engine.ReLU(linear);
         }
 
         // theta_backcast = W_bc x + b_bc         shape [theta_bc, B]
         int backcastLayerIdx = _numHiddenLayers;
         var thetaBackcast = Engine.TensorMatMul(_fcWeights[backcastLayerIdx], x);
-        thetaBackcast = Engine.TensorBroadcastAdd(thetaBackcast, _fcBiases[backcastLayerIdx]);
+        thetaBackcast = Engine.TensorAdd(thetaBackcast, _fcBiases[backcastLayerIdx]);
 
         // theta_forecast = W_fc x + b_fc        shape [theta_fc, B]
         int forecastLayerIdx = _numHiddenLayers + 1;
         var thetaForecast = Engine.TensorMatMul(_fcWeights[forecastLayerIdx], x);
-        thetaForecast = Engine.TensorBroadcastAdd(thetaForecast, _fcBiases[forecastLayerIdx]);
+        thetaForecast = Engine.TensorAdd(thetaForecast, _fcBiases[forecastLayerIdx]);
 
         // Basis expansion (paper §3.3): backcast = V_b @ theta_bc,
         // forecast = V_f @ theta_fc. Output shapes [L, B] and [H, B].

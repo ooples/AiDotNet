@@ -26,7 +26,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
     Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output)]
-public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeContract
+public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeContract
 {
     /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
@@ -62,11 +62,17 @@ public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeContract
     private readonly List<ILayer<T>> _localizationLayers = [];
     private readonly DenseLayer<T> _featureProjection;
 
+    // NOT readonly, and the class is partial: both are required for [TrainableParameter] to do
+    // anything at all. The generator emits its restore surface INTO the declaring class, so a
+    // non-partial class gets no generated file and the attributes are inert -- which is what had
+    // happened here. The generated SetTrainableParameters then has to rebind these two fields, which
+    // readonly forbids outside the constructor. They are still only assigned in the constructor and
+    // by that generated restore.
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
-    private readonly Tensor<T> _controlWeights;
+    private Tensor<T> _controlWeights;
 
     [TrainableParameter(Role = PersistentTensorRole.Biases)]
-    private readonly Tensor<T> _controlBias;
+    private Tensor<T> _controlBias;
 
     private readonly Tensor<T> _inverseKernel;
     private readonly Tensor<T> _targetCoordinateRepresentation;
@@ -174,7 +180,7 @@ public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeContract
         localization = Engine.Reshape(localization, [batch, _localizationFeatureSize]);
         var features = _featureProjection.Forward(localization);
         features = Engine.TensorMultiplyScalar(features, NumOps.FromDouble(LocalizationScale));
-        var flatControl = Engine.TensorBroadcastAdd(
+        var flatControl = Engine.TensorAdd(
             Engine.TensorMatMul(features, _controlWeights), _controlBias);
         var sourceControl = Engine.Reshape(flatControl, [batch, _controlPointCount, 2]);
         var padding = new Tensor<T>([batch, 3, 2]);
@@ -199,34 +205,32 @@ public sealed class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeContract
             input, grid, GridSampleMode.Bilinear, GridSamplePadding.Zeros, alignCorners: true);
     }
 
-    public override Vector<T> GetParameterGradients()
-    {
-        var values = new List<T>();
-        foreach (var layer in ParameterLayers) values.AddRange(layer.GetParameterGradients());
-        var own = base.GetParameterGradients();
-        values.AddRange(own);
-        return new Vector<T>([.. values]);
-    }
-
-    public override void UpdateParameters(T learningRate)
-    {
-        foreach (var layer in ParameterLayers) layer.UpdateParameters(learningRate);
-        var own = base.GetParameterGradients();
-        int expected = _controlWeights.Length + _controlBias.Length;
-        if (own.Length != expected)
-            throw new InvalidOperationException(
-                $"SVTRThinPlateSplineLayer expected {expected} own gradients, got {own.Length}. " +
-                "Run backward before updating parameters.");
-        for (int i = 0; i < _controlWeights.Length; i++)
-            _controlWeights[i] = NumOps.Subtract(
-                _controlWeights[i], NumOps.Multiply(learningRate, own[i]));
-        for (int i = 0; i < _controlBias.Length; i++)
-            _controlBias[i] = NumOps.Subtract(
-                _controlBias[i], NumOps.Multiply(
-                    learningRate, own[_controlWeights.Length + i]));
-        Engine.InvalidatePersistentTensor(_controlWeights);
-        Engine.InvalidatePersistentTensor(_controlBias);
-    }
+    // GetParameterGradients and UpdateParameters are deliberately NOT overridden.
+    //
+    // Both used to be hand-rolled walks, and they disagreed with the canonical one and with each
+    // other. LayerBase.FillParameterGradients exists precisely to prevent this and says so: it
+    // "MIRRORS FillParameters DELIBERATELY, rather than building its own ordering ... A separate
+    // walk that merely intends to agree will drift the first time either side gains a member, and
+    // misaligned gradients are far worse than the missing ones they replace: every parameter would
+    // be updated by some other parameter's derivative."
+    //
+    // It had drifted, and measurably so. GetParameters() emits 94,649 scalars for this layer, but
+    // the old GetParameterGradients() override returned 3,765,049 -- roughly 40x too long, matching
+    // neither the parameter vector nor the 20,520 own scalars. It concatenated each child's own
+    // already-recursive gradient vector in front of a base value that is itself already recursive,
+    // duplicating the whole subtree. A gradient vector that cannot be index-aligned with the
+    // parameter vector silently updates every parameter by some other parameter's derivative.
+    //
+    // The two overrides also asserted incompatible contracts on the SAME base call: the gradient
+    // override treated base.GetParameterGradients() as own-only and prepended children, while
+    // UpdateParameters asserted its length equalled _controlWeights.Length + _controlBias.Length.
+    // Both cannot hold once the base walk recurses, which it does.
+    //
+    // Composite layers that carry BOTH registered trainable tensors and RegisterSubLayer children
+    // -- ConvNeXtV2Block is the reference shape -- override neither method and let the base walk
+    // handle the whole subtree. _controlWeights and _controlBias are registered trainable tensors,
+    // so they are covered by that walk with no bespoke code and, more importantly, no second
+    // ordering that can drift again.
 
     public override void ResetState()
     {

@@ -294,7 +294,7 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>, IShapeContract
         if (_bias != null)
         {
             var biasBcast = Engine.Reshape(_bias, [1, _outputDim]);
-            output = Engine.TensorBroadcastAdd(output, biasBcast);
+            output = Engine.TensorAdd(output, biasBcast);
         }
 
         return output;
@@ -344,7 +344,7 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>, IShapeContract
         if (_bias != null)
         {
             var biasBcast = Engine.Reshape(_bias, [1, _outputDim]);
-            output = Engine.TensorBroadcastAdd(output, biasBcast);
+            output = Engine.TensorAdd(output, biasBcast);
         }
 
         return output;
