@@ -326,9 +326,7 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
         if (length == 0) return;
 
         const int ParallelThreshold = 1 << 18; // 256K doubles ≈ 2MB
-        int cores = Math.Max(1, Environment.ProcessorCount);
-
-        if (length < ParallelThreshold || cores == 1)
+        if (length < ParallelThreshold)
         {
             // Even the sequential path benefits from skipping LockedRandom's
             // per-NextDouble lock — UNet / VAE in SD 1.5 ctor allocate
@@ -349,14 +347,16 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
         // single-threaded. Pre-seed per-chunk RNGs from the master so the parallel
         // work remains deterministic relative to the master seed. System.Random
         // is NOT thread-safe, so we MUST use per-thread instances.
-        int chunkSize = (length + cores - 1) / cores;
-        var seeds = new int[cores];
-        for (int c = 0; c < cores; c++) seeds[c] = Random.Next();
+        // Fixed-size chunks (not per-core): partitioning by ProcessorCount made
+        // seeded init produce different weights on machines with different core counts.
+        int chunkCount = (length + ParallelThreshold - 1) / ParallelThreshold;
+        var seeds = new int[chunkCount];
+        for (int c = 0; c < chunkCount; c++) seeds[c] = Random.Next();
 
-        System.Threading.Tasks.Parallel.For(0, cores, c =>
+        System.Threading.Tasks.Parallel.For(0, chunkCount, c =>
         {
-            int chunkStart = c * chunkSize;
-            int chunkEnd = Math.Min(chunkStart + chunkSize, length);
+            int chunkStart = c * ParallelThreshold;
+            int chunkEnd = Math.Min(chunkStart + ParallelThreshold, length);
             if (chunkStart >= chunkEnd) return;
             // Per-chunk RNG via CreateUnlockedSeededRandom — the chunks
             // are touched by exactly one thread (the Parallel.For body),
@@ -435,9 +435,7 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
         if (length == 0) return;
 
         const int ParallelThreshold = 1 << 18;
-        int cores = Math.Max(1, Environment.ProcessorCount);
-
-        if (length < ParallelThreshold || cores == 1)
+        if (length < ParallelThreshold)
         {
             // See XavierFillDouble — same lock-elision rationale.
             int seqSeed = Random.Next();
@@ -446,14 +444,16 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
             return;
         }
 
-        int chunkSize = (length + cores - 1) / cores;
-        var seeds = new int[cores];
-        for (int c = 0; c < cores; c++) seeds[c] = Random.Next();
+        // Fixed-size chunks (not per-core): partitioning by ProcessorCount made
+        // seeded init produce different weights on machines with different core counts.
+        int chunkCount = (length + ParallelThreshold - 1) / ParallelThreshold;
+        var seeds = new int[chunkCount];
+        for (int c = 0; c < chunkCount; c++) seeds[c] = Random.Next();
 
-        System.Threading.Tasks.Parallel.For(0, cores, c =>
+        System.Threading.Tasks.Parallel.For(0, chunkCount, c =>
         {
-            int chunkStart = c * chunkSize;
-            int chunkEnd = Math.Min(chunkStart + chunkSize, length);
+            int chunkStart = c * ParallelThreshold;
+            int chunkEnd = Math.Min(chunkStart + ParallelThreshold, length);
             if (chunkStart >= chunkEnd) return;
             // See CreateUnlockedSeededRandom — same lock-elision rationale.
             var chunkRng = CreateUnlockedSeededRandom(seeds[c]);
@@ -511,22 +511,22 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
         if (length == 0) return;
 
         const int ParallelThreshold = 1 << 18; // 256K doubles ≈ 2 MB
-        int cores = Math.Max(1, Environment.ProcessorCount);
-
-        if (length < ParallelThreshold || cores == 1)
+        if (length < ParallelThreshold)
         {
             UniformFillChunkDouble(dst.AsSpan(offset, length), limit, Random);
             return;
         }
 
-        int chunkSize = (length + cores - 1) / cores;
-        var seeds = new int[cores];
-        for (int c = 0; c < cores; c++) seeds[c] = Random.Next();
+        // Fixed-size chunks (not per-core): partitioning by ProcessorCount made
+        // seeded init produce different weights on machines with different core counts.
+        int chunkCount = (length + ParallelThreshold - 1) / ParallelThreshold;
+        var seeds = new int[chunkCount];
+        for (int c = 0; c < chunkCount; c++) seeds[c] = Random.Next();
 
-        System.Threading.Tasks.Parallel.For(0, cores, c =>
+        System.Threading.Tasks.Parallel.For(0, chunkCount, c =>
         {
-            int chunkStart = c * chunkSize;
-            int chunkEnd = Math.Min(chunkStart + chunkSize, length);
+            int chunkStart = c * ParallelThreshold;
+            int chunkEnd = Math.Min(chunkStart + ParallelThreshold, length);
             if (chunkStart >= chunkEnd) return;
             // Per-thread seeded RNG — System.Random is NOT thread-safe.
             var chunkRng = RandomHelper.CreateSeededRandom(seeds[c]);
@@ -550,22 +550,22 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
         if (length == 0) return;
 
         const int ParallelThreshold = 1 << 18;
-        int cores = Math.Max(1, Environment.ProcessorCount);
-
-        if (length < ParallelThreshold || cores == 1)
+        if (length < ParallelThreshold)
         {
             UniformFillChunkFloat(dst.AsSpan(offset, length), limit, Random);
             return;
         }
 
-        int chunkSize = (length + cores - 1) / cores;
-        var seeds = new int[cores];
-        for (int c = 0; c < cores; c++) seeds[c] = Random.Next();
+        // Fixed-size chunks (not per-core): partitioning by ProcessorCount made
+        // seeded init produce different weights on machines with different core counts.
+        int chunkCount = (length + ParallelThreshold - 1) / ParallelThreshold;
+        var seeds = new int[chunkCount];
+        for (int c = 0; c < chunkCount; c++) seeds[c] = Random.Next();
 
-        System.Threading.Tasks.Parallel.For(0, cores, c =>
+        System.Threading.Tasks.Parallel.For(0, chunkCount, c =>
         {
-            int chunkStart = c * chunkSize;
-            int chunkEnd = Math.Min(chunkStart + chunkSize, length);
+            int chunkStart = c * ParallelThreshold;
+            int chunkEnd = Math.Min(chunkStart + ParallelThreshold, length);
             if (chunkStart >= chunkEnd) return;
             var chunkRng = RandomHelper.CreateSeededRandom(seeds[c]);
             UniformFillChunkFloat(dst.AsSpan(offset + chunkStart, chunkEnd - chunkStart), limit, chunkRng);
