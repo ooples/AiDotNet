@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -35,19 +35,66 @@ public class ModelRegistryGenerator : IIncrementalGenerator
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // Syntax-first filter: non-abstract class declarations with base types
-        var classDeclarations = context.SyntaxProvider.CreateSyntaxProvider(
+        // Values, not symbols -- see DiscoveryApiGenerator. Note Analyze deliberately does NOT
+        // filter: the discovery manifest lists EVERY concrete IFullModel, annotated or not, so the
+        // admission rules (HasAnyMetadata / HasAllRequiredMetadata) have to stay in Emit where both
+        // consumers can apply them. The relative file path the manifest needs is derived here too,
+        // because a Location roots its SyntaxTree and must not enter the pipeline.
+        var modelEntries = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: static (node, _) => IsCandidate(node),
-            transform: static (ctx, _) => GetModelClassOrNull(ctx))
-            .Where(static s => s is not null);
+            transform: static (ctx, _) => Analyze(ctx))
+            .Where(static e => e is not null)
+            .Select(static (e, _) => e ?? ModelEntryData.Empty);
 
-        var collected = classDeclarations.Collect().Combine(context.CompilationProvider);
+        context.RegisterSourceOutput(modelEntries.Collect(), static (spc, collected) => Emit(spc, collected));
+    }
 
-        context.RegisterSourceOutput(collected, static (spc, source) =>
+    /// <summary>
+    /// Resolves one candidate class into a value-equatable entry. Returns an entry for every
+    /// concrete IFullModel, annotated or not, because the discovery manifest needs them all.
+    /// All symbol access is confined to this method.
+    /// </summary>
+    private static ModelEntryData? Analyze(GeneratorSyntaxContext ctx)
+    {
+        if (GetModelClassOrNull(ctx) is not INamedTypeSymbol modelClass)
+            return null;
+
+        var compilation = ctx.SemanticModel.Compilation;
+        var domainAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelDomainAttr);
+        var categoryAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelCategoryAttr);
+        var taskAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelTaskAttr);
+        var complexityAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelComplexityAttr);
+        var inputAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelInputAttr);
+        var paperAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ResearchPaperAttr);
+
+        var fullName = modelClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+        // Derive the manifest's relative file path here; a Location cannot live in the pipeline.
+        var filePath = string.Empty;
+        var location = modelClass.Locations.FirstOrDefault();
+        if (location is not null && location.SourceTree is not null)
         {
-            var (candidates, compilation) = source;
-            Execute(spc, candidates, compilation);
-        });
+            filePath = location.SourceTree.FilePath.Replace("\\", "/");
+            var srcIdx = filePath.IndexOf("/src/", System.StringComparison.OrdinalIgnoreCase);
+            if (srcIdx >= 0)
+            {
+                filePath = filePath.Substring(srcIdx + 1);
+            }
+        }
+
+        // When the core attributes are absent the registry is empty, but the manifest still lists
+        // the class -- so return a metadata-free entry rather than null.
+        if (domainAttrSymbol is null || categoryAttrSymbol is null ||
+            taskAttrSymbol is null || complexityAttrSymbol is null ||
+            inputAttrSymbol is null)
+        {
+            return ModelEntryData.MetadataFree(fullName, modelClass.Name, modelClass.TypeParameters.Length, filePath);
+        }
+
+        return ExtractMetadata(
+            modelClass, fullName, filePath,
+            domainAttrSymbol, categoryAttrSymbol, taskAttrSymbol,
+            complexityAttrSymbol, inputAttrSymbol, paperAttrSymbol);
     }
 
     private static bool IsCandidate(SyntaxNode node)
@@ -93,60 +140,35 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         return false;
     }
 
-    private static void Execute(
-        SourceProductionContext context,
-        ImmutableArray<INamedTypeSymbol?> candidates,
-        Compilation compilation)
+    private static void Emit(SourceProductionContext context, ImmutableArray<ModelEntryData> candidates)
     {
         if (candidates.IsDefaultOrEmpty)
         {
             EmitEmptyRegistry(context);
-            EmitDiscoveryManifest(context, candidates, new HashSet<string>());
-            return;
-        }
-
-        // Resolve attribute type symbols
-        var domainAttrSymbol = compilation.GetTypeByMetadataName(ModelDomainAttr);
-        var categoryAttrSymbol = compilation.GetTypeByMetadataName(ModelCategoryAttr);
-        var taskAttrSymbol = compilation.GetTypeByMetadataName(ModelTaskAttr);
-        var complexityAttrSymbol = compilation.GetTypeByMetadataName(ModelComplexityAttr);
-        var inputAttrSymbol = compilation.GetTypeByMetadataName(ModelInputAttr);
-        var paperAttrSymbol = compilation.GetTypeByMetadataName(ResearchPaperAttr);
-
-        // If core attributes don't exist, emit empty registry
-        if (domainAttrSymbol is null || categoryAttrSymbol is null ||
-            taskAttrSymbol is null || complexityAttrSymbol is null ||
-            inputAttrSymbol is null)
-        {
-            EmitEmptyRegistry(context);
-            EmitDiscoveryManifest(context, candidates, new HashSet<string>());
+            EmitDiscoveryManifest(context, ImmutableArray<ModelEntryData>.Empty, new HashSet<string>());
             return;
         }
 
         var entries = new List<ModelEntryData>();
+        var deduped = new List<ModelEntryData>();
         var seen = new HashSet<string>();
         var manifestAnnotatedNames = new HashSet<string>();
 
-        foreach (var modelClass in candidates)
+        foreach (var entry in candidates)
         {
-            if (modelClass is null)
+            if (entry.FullyQualifiedName.Length == 0)
                 continue;
-
-            var fullName = modelClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
             // Deduplicate (same class can appear from multiple syntax trees for partial classes)
-            if (!seen.Add(fullName))
+            if (!seen.Add(entry.FullyQualifiedName))
                 continue;
 
-            var entry = ExtractMetadata(
-                modelClass, fullName,
-                domainAttrSymbol, categoryAttrSymbol, taskAttrSymbol,
-                complexityAttrSymbol, inputAttrSymbol, paperAttrSymbol);
+            deduped.Add(entry);
 
             // Track models with at least one metadata attribute for manifest progress
             if (entry.HasAnyMetadata)
             {
-                manifestAnnotatedNames.Add(fullName);
+                manifestAnnotatedNames.Add(entry.FullyQualifiedName);
             }
 
             // Only include fully-annotated models in the registry to avoid default enum values
@@ -162,12 +184,13 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         EmitRegistry(context, entries);
 
         // Emit discovery manifest listing ALL concrete IFullModel classes with file paths
-        EmitDiscoveryManifest(context, candidates, manifestAnnotatedNames);
+        EmitDiscoveryManifest(context, deduped.ToImmutableArray(), manifestAnnotatedNames);
     }
 
     private static ModelEntryData ExtractMetadata(
         INamedTypeSymbol modelClass,
         string fullyQualifiedName,
+        string relativeFilePath,
         INamedTypeSymbol domainAttrSymbol,
         INamedTypeSymbol categoryAttrSymbol,
         INamedTypeSymbol taskAttrSymbol,
@@ -176,12 +199,16 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         INamedTypeSymbol? paperAttrSymbol)
     {
         var attributes = modelClass.GetAttributes();
-        var entry = new ModelEntryData
-        {
-            FullyQualifiedName = fullyQualifiedName,
-            ClassName = modelClass.Name,
-            TypeParameterCount = modelClass.TypeParameters.Length
-        };
+        var domains = new List<int>();
+        var categories = new List<int>();
+        var tasks = new List<int>();
+        var papers = new List<PaperData>();
+        int complexity = 0;
+        bool hasComplexity = false;
+        string inputTypeName = string.Empty;
+        string outputTypeName = string.Empty;
+        string summary = string.Empty;
+        string beginnerGuide = string.Empty;
 
         foreach (var attr in attributes)
         {
@@ -195,7 +222,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
                     var val = attr.ConstructorArguments[0].Value;
                     if (val is int intVal)
                     {
-                        entry.Domains.Add(intVal);
+                        domains.Add(intVal);
                     }
                 }
             }
@@ -206,7 +233,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
                     var val = attr.ConstructorArguments[0].Value;
                     if (val is int intVal)
                     {
-                        entry.Categories.Add(intVal);
+                        categories.Add(intVal);
                     }
                 }
             }
@@ -217,7 +244,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
                     var val = attr.ConstructorArguments[0].Value;
                     if (val is int intVal)
                     {
-                        entry.Tasks.Add(intVal);
+                        tasks.Add(intVal);
                     }
                 }
             }
@@ -228,8 +255,8 @@ public class ModelRegistryGenerator : IIncrementalGenerator
                     var val = attr.ConstructorArguments[0].Value;
                     if (val is int intVal)
                     {
-                        entry.Complexity = intVal;
-                        entry.HasComplexity = true;
+                        complexity = intVal;
+                        hasComplexity = true;
                     }
                 }
             }
@@ -241,36 +268,39 @@ public class ModelRegistryGenerator : IIncrementalGenerator
                     var outputType = attr.ConstructorArguments[1].Value as INamedTypeSymbol;
                     if (inputType is not null)
                     {
-                        entry.InputTypeName = inputType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                        inputTypeName = inputType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                     }
                     if (outputType is not null)
                     {
-                        entry.OutputTypeName = outputType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                        outputTypeName = outputType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                     }
                 }
             }
             else if (paperAttrSymbol is not null &&
                      SymbolEqualityComparer.Default.Equals(attr.AttributeClass, paperAttrSymbol))
             {
-                var paper = new PaperData();
+                string paperTitle = string.Empty;
+                string paperUrl = string.Empty;
+                int paperYear = 0;
+                string paperAuthors = string.Empty;
                 if (attr.ConstructorArguments.Length >= 2)
                 {
-                    paper.Title = attr.ConstructorArguments[0].Value as string ?? string.Empty;
-                    paper.Url = attr.ConstructorArguments[1].Value as string ?? string.Empty;
+                    paperTitle = attr.ConstructorArguments[0].Value as string ?? string.Empty;
+                    paperUrl = attr.ConstructorArguments[1].Value as string ?? string.Empty;
                 }
                 // Check named arguments for Year and Authors
                 foreach (var named in attr.NamedArguments)
                 {
                     if (named.Key == "Year" && named.Value.Value is int year)
                     {
-                        paper.Year = year;
+                        paperYear = year;
                     }
                     else if (named.Key == "Authors" && named.Value.Value is string authors)
                     {
-                        paper.Authors = authors;
+                        paperAuthors = authors;
                     }
                 }
-                entry.Papers.Add(paper);
+                papers.Add(new PaperData(paperTitle, paperUrl, paperYear, paperAuthors));
             }
         }
 
@@ -278,11 +308,25 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         var xmlDoc = modelClass.GetDocumentationCommentXml();
         if (!string.IsNullOrWhiteSpace(xmlDoc))
         {
-            entry.Summary = ExtractXmlElement(xmlDoc, "summary");
-            entry.BeginnerGuide = ExtractBeginnerRemarks(xmlDoc);
+            summary = ExtractXmlElement(xmlDoc, "summary");
+            beginnerGuide = ExtractBeginnerRemarks(xmlDoc);
         }
 
-        return entry;
+        return new ModelEntryData(
+            fullyQualifiedName,
+            modelClass.Name,
+            modelClass.TypeParameters.Length,
+            relativeFilePath,
+            domains.ToImmutableArray(),
+            categories.ToImmutableArray(),
+            tasks.ToImmutableArray(),
+            complexity,
+            hasComplexity,
+            inputTypeName,
+            outputTypeName,
+            papers.ToImmutableArray(),
+            summary,
+            beginnerGuide);
     }
 
     private static string ExtractXmlElement(string xml, string elementName)
@@ -700,7 +744,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         sb.AppendLine($"            {entry.TypeParameterCount},");
 
         // Domains array
-        if (entry.Domains.Count == 0)
+        if (entry.Domains.Length == 0)
         {
             sb.AppendLine("            System.Array.Empty<ModelDomain>(),");
         }
@@ -712,7 +756,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         }
 
         // Categories array
-        if (entry.Categories.Count == 0)
+        if (entry.Categories.Length == 0)
         {
             sb.AppendLine("            System.Array.Empty<ModelCategory>(),");
         }
@@ -724,7 +768,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         }
 
         // Tasks array
-        if (entry.Tasks.Count == 0)
+        if (entry.Tasks.Length == 0)
         {
             sb.AppendLine("            System.Array.Empty<ModelTask>(),");
         }
@@ -743,7 +787,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         sb.AppendLine($"            {EscapeString(entry.OutputTypeName)},");
 
         // Papers array
-        if (entry.Papers.Count == 0)
+        if (entry.Papers.Length == 0)
         {
             sb.AppendLine("            System.Array.Empty<ResearchPaperEntry>(),");
         }
@@ -777,37 +821,176 @@ public class ModelRegistryGenerator : IIncrementalGenerator
             .Replace("\t", "\\t") + "\"";
     }
 
-    private class ModelEntryData
+    /// <summary>
+    /// One discovered model, as plain values. RelativeFilePath is carried instead of a Location:
+    /// a Location holds its SyntaxTree and would root the whole Compilation in the pipeline.
+    /// </summary>
+    private sealed class ModelEntryData : System.IEquatable<ModelEntryData>
     {
-        public string FullyQualifiedName { get; set; } = string.Empty;
-        public string ClassName { get; set; } = string.Empty;
-        public int TypeParameterCount { get; set; }
-        public List<int> Domains { get; } = new List<int>();
-        public List<int> Categories { get; } = new List<int>();
-        public List<int> Tasks { get; } = new List<int>();
-        public int Complexity { get; set; }
-        public bool HasComplexity { get; set; }
-        public string InputTypeName { get; set; } = string.Empty;
-        public string OutputTypeName { get; set; } = string.Empty;
-        public List<PaperData> Papers { get; } = new List<PaperData>();
-        public string Summary { get; set; } = string.Empty;
-        public string BeginnerGuide { get; set; } = string.Empty;
+        public static readonly ModelEntryData Empty = MetadataFree(string.Empty, string.Empty, 0, string.Empty);
+
+        /// <summary>An entry with no metadata -- still listed by the discovery manifest.</summary>
+        public static ModelEntryData MetadataFree(string fullyQualifiedName, string className, int typeParameterCount, string relativeFilePath)
+            => new(fullyQualifiedName, className, typeParameterCount, relativeFilePath,
+                ImmutableArray<int>.Empty, ImmutableArray<int>.Empty, ImmutableArray<int>.Empty,
+                0, false, string.Empty, string.Empty, ImmutableArray<PaperData>.Empty,
+                string.Empty, string.Empty);
+
+        public ModelEntryData(
+            string fullyQualifiedName,
+            string className,
+            int typeParameterCount,
+            string relativeFilePath,
+            ImmutableArray<int> domains,
+            ImmutableArray<int> categories,
+            ImmutableArray<int> tasks,
+            int complexity,
+            bool hasComplexity,
+            string inputTypeName,
+            string outputTypeName,
+            ImmutableArray<PaperData> papers,
+            string summary,
+            string beginnerGuide)
+        {
+            FullyQualifiedName = fullyQualifiedName;
+            ClassName = className;
+            TypeParameterCount = typeParameterCount;
+            RelativeFilePath = relativeFilePath;
+            Domains = domains.IsDefault ? ImmutableArray<int>.Empty : domains;
+            Categories = categories.IsDefault ? ImmutableArray<int>.Empty : categories;
+            Tasks = tasks.IsDefault ? ImmutableArray<int>.Empty : tasks;
+            Complexity = complexity;
+            HasComplexity = hasComplexity;
+            InputTypeName = inputTypeName;
+            OutputTypeName = outputTypeName;
+            Papers = papers.IsDefault ? ImmutableArray<PaperData>.Empty : papers;
+            Summary = summary;
+            BeginnerGuide = beginnerGuide;
+        }
+
+        public string FullyQualifiedName { get; }
+        public string ClassName { get; }
+        public int TypeParameterCount { get; }
+        public string RelativeFilePath { get; }
+        public ImmutableArray<int> Domains { get; }
+        public ImmutableArray<int> Categories { get; }
+        public ImmutableArray<int> Tasks { get; }
+        public int Complexity { get; }
+        public bool HasComplexity { get; }
+        public string InputTypeName { get; }
+        public string OutputTypeName { get; }
+        public ImmutableArray<PaperData> Papers { get; }
+        public string Summary { get; }
+        public string BeginnerGuide { get; }
 
         public bool HasAnyMetadata =>
-            Domains.Count > 0 || Categories.Count > 0 || Tasks.Count > 0 || HasComplexity ||
-            !string.IsNullOrEmpty(InputTypeName) || Papers.Count > 0;
+            Domains.Length > 0 || Categories.Length > 0 || Tasks.Length > 0 || HasComplexity ||
+            !string.IsNullOrEmpty(InputTypeName) || Papers.Length > 0;
 
         public bool HasAllRequiredMetadata =>
-            Domains.Count > 0 && Categories.Count > 0 && Tasks.Count > 0 && HasComplexity &&
+            Domains.Length > 0 && Categories.Length > 0 && Tasks.Length > 0 && HasComplexity &&
             !string.IsNullOrEmpty(InputTypeName);
+
+        public bool Equals(ModelEntryData? other)
+        {
+            if (other is null) return false;
+            if (ReferenceEquals(this, other)) return true;
+
+            if (!string.Equals(FullyQualifiedName, other.FullyQualifiedName, System.StringComparison.Ordinal)) return false;
+            if (!string.Equals(ClassName, other.ClassName, System.StringComparison.Ordinal)) return false;
+            if (TypeParameterCount != other.TypeParameterCount) return false;
+            if (!string.Equals(RelativeFilePath, other.RelativeFilePath, System.StringComparison.Ordinal)) return false;
+            if (Complexity != other.Complexity || HasComplexity != other.HasComplexity) return false;
+            if (!string.Equals(InputTypeName, other.InputTypeName, System.StringComparison.Ordinal)) return false;
+            if (!string.Equals(OutputTypeName, other.OutputTypeName, System.StringComparison.Ordinal)) return false;
+            if (!string.Equals(Summary, other.Summary, System.StringComparison.Ordinal)) return false;
+            if (!string.Equals(BeginnerGuide, other.BeginnerGuide, System.StringComparison.Ordinal)) return false;
+            if (!IntsEqual(Domains, other.Domains)) return false;
+            if (!IntsEqual(Categories, other.Categories)) return false;
+            if (!IntsEqual(Tasks, other.Tasks)) return false;
+            if (Papers.Length != other.Papers.Length) return false;
+            for (int i = 0; i < Papers.Length; i++)
+            {
+                if (!Papers[i].Equals(other.Papers[i])) return false;
+            }
+            return true;
+        }
+
+        public override bool Equals(object? obj) => Equals(obj as ModelEntryData);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = 17;
+                hash = (hash * 31) + FullyQualifiedName.GetHashCode();
+                hash = (hash * 31) + ClassName.GetHashCode();
+                hash = (hash * 31) + TypeParameterCount;
+                hash = (hash * 31) + RelativeFilePath.GetHashCode();
+                hash = (hash * 31) + Complexity;
+                hash = (hash * 31) + (HasComplexity ? 1 : 0);
+                hash = (hash * 31) + Domains.Length;
+                hash = (hash * 31) + Categories.Length;
+                hash = (hash * 31) + Tasks.Length;
+                hash = (hash * 31) + Papers.Length;
+                return hash;
+            }
+        }
+
+        private static bool IntsEqual(ImmutableArray<int> left, ImmutableArray<int> right)
+        {
+            if (left.Length != right.Length) return false;
+            for (int i = 0; i < left.Length; i++)
+            {
+                if (left[i] != right[i]) return false;
+            }
+            return true;
+        }
     }
 
-    private class PaperData
+    /// <remarks>
+    /// CONSTRUCTOR-INITIALISED AND GET-ONLY ON PURPOSE. This type is an ELEMENT of an
+    /// ImmutableArray held by a cached pipeline entry, and ImmutableArray freezes the SEQUENCE, not
+    /// the elements. While these had settable properties, an element could still be mutated after
+    /// Roslyn had compared the entry, which makes the entry's Equals and GetHashCode unstable for
+    /// exactly the cached state this refactor is trying to make comparable.
+    /// </remarks>
+    private sealed class PaperData : System.IEquatable<PaperData>
     {
-        public string Title { get; set; } = string.Empty;
-        public string Url { get; set; } = string.Empty;
-        public int Year { get; set; }
-        public string Authors { get; set; } = string.Empty;
+        public PaperData(string title, string url, int year, string authors)
+        {
+            Title = title;
+            Url = url;
+            Year = year;
+            Authors = authors;
+        }
+
+        public string Title { get; }
+        public string Url { get; }
+        public int Year { get; }
+        public string Authors { get; }
+
+        public bool Equals(PaperData? other)
+            => other is not null
+            && string.Equals(Title, other.Title, System.StringComparison.Ordinal)
+            && string.Equals(Url, other.Url, System.StringComparison.Ordinal)
+            && Year == other.Year
+            && string.Equals(Authors, other.Authors, System.StringComparison.Ordinal);
+
+        public override bool Equals(object? obj) => Equals(obj as PaperData);
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = 17;
+                hash = (hash * 31) + Title.GetHashCode();
+                hash = (hash * 31) + Url.GetHashCode();
+                hash = (hash * 31) + Year;
+                hash = (hash * 31) + Authors.GetHashCode();
+                return hash;
+            }
+        }
     }
 
     /// <summary>
@@ -816,7 +999,7 @@ public class ModelRegistryGenerator : IIncrementalGenerator
     /// </summary>
     private static void EmitDiscoveryManifest(
         SourceProductionContext context,
-        ImmutableArray<INamedTypeSymbol?> candidates,
+        ImmutableArray<ModelEntryData> candidates,
         HashSet<string> annotatedFullNames)
     {
         var sb = new StringBuilder();
@@ -835,31 +1018,16 @@ public class ModelRegistryGenerator : IIncrementalGenerator
         var manifestEntries = new List<(string className, string fullName, string filePath, bool hasAttributes)>();
         var seen = new HashSet<string>();
 
-        foreach (var modelClass in candidates)
+        foreach (var entry in candidates)
         {
-            if (modelClass is null)
+            if (entry.FullyQualifiedName.Length == 0)
+                continue;
+            if (!seen.Add(entry.FullyQualifiedName))
                 continue;
 
-            var fullName = modelClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            if (!seen.Add(fullName))
-                continue;
-
-            var location = modelClass.Locations.FirstOrDefault();
-            var filePath = string.Empty;
-            if (location is not null && location.SourceTree is not null)
-            {
-                filePath = location.SourceTree.FilePath;
-                // Normalize to forward slashes and make relative to src/
-                filePath = filePath.Replace("\\", "/");
-                var srcIdx = filePath.IndexOf("/src/", System.StringComparison.OrdinalIgnoreCase);
-                if (srcIdx >= 0)
-                {
-                    filePath = filePath.Substring(srcIdx + 1); // Keep "src/..."
-                }
-            }
-
-            var hasAttributes = annotatedFullNames.Contains(fullName);
-            manifestEntries.Add((modelClass.Name, fullName, filePath, hasAttributes));
+            // The relative path was derived in Analyze, where the Location was still available.
+            var hasAttributes = annotatedFullNames.Contains(entry.FullyQualifiedName);
+            manifestEntries.Add((entry.ClassName, entry.FullyQualifiedName, entry.RelativeFilePath, hasAttributes));
         }
 
         // Sort by file path for deterministic output and easy batching

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -39,13 +39,58 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
     /// <inheritdoc/>
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
+        // Symbols must not live in cached pipeline state: an IMethodSymbol roots its containing
+        // type and therefore the entire Compilation, so every cached entry pinned a compilation in
+        // memory. This generator never touched CompilationProvider, which is precisely why scoping
+        // the original sweep by "uses CompilationProvider" missed it.
+        //
+        // The pipeline now carries (containing type metadata name, method name) and the symbols are
+        // re-resolved at the point of use. Introducing CompilationProvider costs nothing in caching
+        // terms -- a symbol is not value-equatable, so this pipeline could never cache anyway.
+        // Retention is fixed; re-execution is not.
         var methods = context.SyntaxProvider.CreateSyntaxProvider(
                 predicate: static (node, _) => node is MethodDeclarationSyntax m && m.AttributeLists.Count > 0,
-                transform: static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as IMethodSymbol)
-            .Where(static m => m is not null && HasToolAttribute(m))
-            .Collect();
+                transform: static (ctx, _) =>
+                {
+                    if (ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is not IMethodSymbol method) return null;
+                    if (!HasToolAttribute(method)) return null;
+                    if (method.ContainingType is null) return null;
+                    return MethodKey(method);
+                })
+            .Where(static m => m is not null)
+            .Select(static (m, _) => m ?? string.Empty)
+            .Collect()
+            .Combine(context.CompilationProvider);
 
-        context.RegisterSourceOutput(methods, static (spc, ms) => Execute(spc, ms));
+        context.RegisterSourceOutput(methods, static (spc, source) => Execute(spc, source.Left, source.Right));
+    }
+
+    /// <summary>
+    /// Identifies ONE method, overloads included: owner, name, arity, and each parameter's ref kind
+    /// and fully-qualified type.
+    /// </summary>
+    /// <remarks>
+    /// Owner plus name is not enough. Two [AgentTool] overloads share that key, so resolving it
+    /// meant expanding the first occurrence to EVERY attributed overload via GetMembers -- which
+    /// does not guarantee declaration order and, where overloads interleave with other tools,
+    /// reorders the emitted schema. The key now names exactly one method and resolves to exactly
+    /// one method, so emission order follows the pipeline order as it did before this refactor.
+    /// </remarks>
+    private static string MethodKey(IMethodSymbol method)
+    {
+        var sb = new StringBuilder();
+        sb.Append(GeneratorHelpers.MetadataNameOf(method.ContainingType));
+        sb.Append('|').Append(method.Name);
+        sb.Append('|').Append(method.Arity.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        foreach (var parameter in method.Parameters)
+        {
+            sb.Append('|')
+              .Append(parameter.RefKind.ToString())
+              .Append(' ')
+              .Append(parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        }
+
+        return sb.ToString();
     }
 
     private static bool HasToolAttribute(IMethodSymbol method) =>
@@ -53,8 +98,42 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
             a.AttributeClass?.Name == ToolAttribute &&
             a.AttributeClass.ContainingNamespace?.ToDisplayString() == ToolsNamespace);
 
-    private static void Execute(SourceProductionContext context, ImmutableArray<IMethodSymbol?> methods)
+    private static void Execute(SourceProductionContext context, ImmutableArray<string> methodKeys, Compilation compilation)
     {
+        if (methodKeys.IsDefaultOrEmpty) return;
+
+        // Re-resolve one method per key, preserving pipeline order. Each key identifies a single
+        // overload, so this is a 1:1 mapping -- no GetMembers fan-out, and no dependence on member
+        // ordering. The [AgentTool] filter already ran in the transform; re-applying it keeps the
+        // admission rule identical.
+        var resolved = new List<IMethodSymbol?>();
+        var seenKeys = new HashSet<string>(System.StringComparer.Ordinal);
+        foreach (var key in methodKeys)
+        {
+            if (key.Length == 0 || !seenKeys.Add(key)) continue;
+
+            int firstBar = key.IndexOf('|');
+            if (firstBar <= 0) continue;
+            int secondBar = key.IndexOf('|', firstBar + 1);
+            if (secondBar < 0) continue;
+
+            var owner = GeneratorHelpers.ResolveSourceType(compilation, key.Substring(0, firstBar));
+            if (owner is null) continue;
+
+            var name = key.Substring(firstBar + 1, secondBar - firstBar - 1);
+            foreach (var member in owner.GetMembers(name))
+            {
+                if (member is IMethodSymbol m
+                    && HasToolAttribute(m)
+                    && string.Equals(MethodKey(m), key, System.StringComparison.Ordinal))
+                {
+                    resolved.Add(m);
+                    break;
+                }
+            }
+        }
+
+        var methods = resolved.ToImmutableArray();
         if (methods.IsDefaultOrEmpty) return;
 
         // Group accessible, non-generic [AgentTool] methods by their containing type.
@@ -554,4 +633,5 @@ public class AgentToolSchemaGenerator : IIncrementalGenerator
         sb.Append("\"");
         return sb.ToString();
     }
+
 }

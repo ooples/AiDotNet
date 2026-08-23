@@ -401,6 +401,31 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
     /// </remarks>
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
+        // LossFunctionExtensions routes the vector compatibility API through this
+        // differentiable tensor overload using rank-1 tensors. Preserve the documented
+        // vector contract (mean L1) instead of indexing those tensors as structured DETR
+        // batches. This branch deliberately uses engine operations so ComputeGradient
+        // remains tape-tracked all the way back to the caller's prediction vector.
+        if (predicted.Rank == 1 || target.Rank == 1)
+        {
+            if (predicted.Rank != 1 || target.Rank != 1)
+                throw new ArgumentException(
+                    "DETR vector compatibility loss requires both inputs to be rank-1 tensors.");
+            if (predicted.Shape[0] != target.Shape[0])
+                throw new ArgumentException(
+                    $"DETR vector compatibility loss requires equal lengths, got {predicted.Shape[0]} and {target.Shape[0]}.");
+
+            var vectorDiff = Engine.TensorSubtract(predicted, target);
+            return Engine.ReduceMean(
+                Engine.TensorAbs(vectorDiff),
+                new[] { 0 },
+                keepDims: false);
+        }
+
+        if (predicted.Rank != 3 || target.Rank != 3)
+            throw new ArgumentException(
+                "DETR set loss requires rank-3 predicted and target tensors.");
+
         int batch = predicted.Shape[0];
         int numQueries = predicted.Shape[1];
         int predDim = predicted.Shape[2]; // num_classes + 4

@@ -64,6 +64,7 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
     private bool _useNativeMode;
     private bool _disposed;
     private UpscaleAVideoModel<T>? _diffusionCore;
+    private readonly bool _usesInjectedDiffusionCore;
     [ExternalState]
     private readonly IConditioningModule<T>? _conditioner;
 
@@ -106,6 +107,7 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
         _useNativeMode = true;
         _conditioner = conditioner;
         _diffusionCore = diffusionCore;
+        _usesInjectedDiffusionCore = diffusionCore is not null;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
@@ -220,6 +222,7 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
+        if (_diffusionCore is not null) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -273,10 +276,9 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_diffusionCore is not null)
-            return _diffusionCore.GetLastTrainingGradients();
+            return _diffusionCore.GetLastTrainingParameterGradients();
         return base.GetParameterGradients();
     }
-
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
@@ -396,30 +398,34 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
     {
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             return new StableVideoSR<T>(Architecture, p, new StableVideoSROptions(_options));
-        return new StableVideoSR<T>(Architecture, new StableVideoSROptions(_options), conditioner: _conditioner);
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// The native diffusion core is registered as the model's trainable component but is not part
-    /// of the outer wrapper's layer list. The base serializer therefore cannot see its size before
-    /// allocating one contiguous payload, which exceeds the CLR array limit for the released graph.
-    /// Clone the component through its own architecture-preserving clone contract instead.
-    /// </remarks>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        ThrowIfDisposed();
-        if (!_useNativeMode || _diffusionCore is null)
-            return base.DeepCopy();
-
-        var coreCopy = (UpscaleAVideoModel<T>)_diffusionCore.Clone();
+        var clonedCore = _usesInjectedDiffusionCore && _diffusionCore is not null
+            ? (UpscaleAVideoModel<T>)_diffusionCore.Clone()
+            : null;
         return new StableVideoSR<T>(
             Architecture,
             new StableVideoSROptions(_options),
             conditioner: _conditioner,
-            diffusionCore: coreCopy);
+            diffusionCore: clonedCore);
     }
 
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        if (!_usesInjectedDiffusionCore || _diffusionCore is null)
+            return base.DeepCopy();
+
+        // An injected core carries architecture that StableVideoSROptions intentionally
+        // does not describe. Clone that core directly instead of serializing its chunks
+        // into a newly-created paper-default graph with a different per-tensor layout.
+        return new StableVideoSR<T>(
+            Architecture,
+            new StableVideoSROptions(_options),
+            conditioner: _conditioner,
+            diffusionCore: (UpscaleAVideoModel<T>)_diffusionCore.Clone());
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> Clone() => DeepCopy();
     #endregion
 
     #region Disposal

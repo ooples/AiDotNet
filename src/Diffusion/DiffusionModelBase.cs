@@ -145,12 +145,6 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </summary>
     protected virtual bool SupportsFusedDenoising => false;
 
-    /// <summary>
-    /// Opts a component into retaining a bounded flat copy of its most recent eager tape gradients.
-    /// Disabled by default so ordinary diffusion training keeps its existing allocation profile.
-    /// </summary>
-    protected virtual bool RetainsLastTrainingGradients => false;
-
     private static void RestoreShadow(Tensor<T> param, Vector<T> shadow)
     {
         var span = param.Data.Span;
@@ -201,15 +195,23 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     // this field is not copied.
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainingOptimizer;
 
-    // Retain the last eager tape gradient surface only when it is small enough to be useful without
-    // turning a paper-scale diffusion training step into a second model-sized allocation. Neural
-    // wrappers that delegate training to a diffusion component use this to honor their public
-    // GetParameterGradients contract. Larger models report that the surface is unavailable instead
-    // of returning a misleading empty/all-zero vector.
-    private const int MaxRetainedTrainingGradientScalars = 10_000_000;
-    private Vector<T>? _lastTrainingGradients;
-    private bool _lastTrainingGradientSurfaceUnavailable;
+    // Retain a bounded snapshot for wrappers that expose INeuralNetworkModel's gradient
+    // accessor. Diffusion training updates per-tensor weights directly, so without this
+    // bridge a wrapper can train correctly while GetParameterGradients silently returns
+    // an empty vector. Never flatten foundation-scale gradients merely for observability.
+    private Vector<T>? _lastTrainingParameterGradients;
+    private bool _trainingGradientSurfaceUnavailable;
+    protected virtual bool RetainTrainingGradientSurface => false;
+    protected virtual long MaxRetainedTrainingGradientScalars => 10_000_000;
 
+    internal Vector<T> GetLastTrainingParameterGradients()
+    {
+        if (_trainingGradientSurfaceUnavailable)
+            throw new NotSupportedException(
+                "The most recent diffusion step exceeded the bounded gradient-retention surface.");
+        return _lastTrainingParameterGradients ?? throw new NotSupportedException(
+            "No diffusion training gradients have been computed yet.");
+    }
     /// <summary>
     /// Cached result of the reflection walk that discovers trainable parameter tensors.
     /// The walk was called per Train step, consuming a non-trivial amount of time on
@@ -1231,9 +1233,8 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        _lastTrainingGradients = null;
-        _lastTrainingGradientSurfaceUnavailable = false;
-
+        _lastTrainingParameterGradients = null;
+        _trainingGradientSurfaceUnavailable = false;
         // Copy-on-write: if this model shares weight tensors with a clone/parent, give it a private
         // copy before we mutate weights in place below, so the other model isn't corrupted.
         EnsureOwnWeights();
@@ -1400,6 +1401,11 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                     weightDecay: mfsWd,
                     out T _))
             {
+                // The fused optimizer owns its internal gradient buffers and deliberately
+                // does not expose them. Say so explicitly instead of leaving a stale or
+                // empty public snapshot behind.
+                if (RetainTrainingGradientSurface)
+                    _trainingGradientSurfaceUnavailable = true;
                 if (qatShadows is not null && qatParams is not null)
                 {
                     for (int i = 0; i < qatParams.Length; i++)
@@ -1447,15 +1453,8 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
         // Backward pass via graph-based autodiff.
         var grads = tape.ComputeGradients(loss, paramTensors);
-
-        if (RetainsLastTrainingGradients)
-        {
-            long gradientScalarCount = paramTensors.Sum(parameter => (long)parameter.Length);
-            if (gradientScalarCount <= MaxRetainedTrainingGradientScalars)
-                _lastTrainingGradients = FlattenGradients(paramTensors, grads);
-            else
-                _lastTrainingGradientSurfaceUnavailable = true;
-        }
+        if (RetainTrainingGradientSurface)
+            RetainTrainingParameterGradients(paramTensors, grads);
 
         // Global gradient-norm clipping (canonical diffusion training: HuggingFace
         // diffusers and the SVD / Video-Diffusion reference recipes call
@@ -1554,25 +1553,6 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             noisySampleTensor, noiseTensor,
             RecomputeForward, RecomputeLoss);
         _trainingOptimizer.Step(stepContext);
-    }
-
-    /// <summary>
-    /// Returns the gradients computed by the most recent eager training step in trainable-tensor
-    /// order. Large-model training deliberately does not retain a second flat copy.
-    /// </summary>
-    internal Vector<T> GetLastTrainingGradients()
-    {
-        if (!RetainsLastTrainingGradients)
-            throw new NotSupportedException("This diffusion model does not retain training gradients.");
-
-        if (_lastTrainingGradientSurfaceUnavailable)
-        {
-            throw new NotSupportedException(
-                $"Retaining more than {MaxRetainedTrainingGradientScalars:N0} diffusion gradient " +
-                "scalars would duplicate a model-sized training buffer.");
-        }
-
-        return _lastTrainingGradients ?? Vector<T>.Empty();
     }
 
     /// <inheritdoc />
@@ -2204,6 +2184,26 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             offset += p.Length;
         }
         return flat;
+    }
+
+    private void RetainTrainingParameterGradients(
+        Tensor<T>[] parameters,
+        Dictionary<Tensor<T>, Tensor<T>> gradients)
+    {
+        long scalarCount = 0;
+        foreach (var parameter in parameters)
+        {
+            scalarCount = checked(scalarCount + parameter.Length);
+            if (scalarCount > MaxRetainedTrainingGradientScalars || scalarCount > int.MaxValue)
+            {
+                _trainingGradientSurfaceUnavailable = true;
+                _lastTrainingParameterGradients = null;
+                return;
+            }
+        }
+
+        _lastTrainingParameterGradients = FlattenGradients(parameters, gradients);
+        _trainingGradientSurfaceUnavailable = false;
     }
 
     /// <inheritdoc />
