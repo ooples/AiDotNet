@@ -1524,6 +1524,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // winning neuron sits past index 7 reports "[0,0,0,0,0,0,0,0]" and reads as an all-zero
         // forward pass, when the output is a perfectly valid one-hot that simply did not MOVE.
         // Those are different defects and want different fixes, so the message names which it is.
+        Assert.True(output1.Length > 0 && output2.Length > 0,
+            $"Network returned an empty output during scaled-input testing: " +
+            $"len={output1.Length}/{output2.Length}.");
+
         int nz1 = 0, nz2 = 0, arg1 = 0, arg2 = 0;
         for (int i = 0; i < output1.Length; i++)
         {

@@ -67,9 +67,8 @@ public class YamlConfigSourceGenerator : IIncrementalGenerator
                     return null;
                 if (symbol.ContainingNamespace.ToDisplayString() != "AiDotNet")
                     return null;
-                // MetadataName keeps the arity suffix (AiModelBuilder`3) that
-                // GetTypeByMetadataName needs in order to resolve a generic type.
-                return symbol.ContainingNamespace.ToDisplayString() + "." + symbol.MetadataName;
+                // The shared helper also preserves nested-type '+' separators.
+                return GeneratorHelpers.MetadataNameOf(symbol);
             })
             .Where(static n => n is not null)
             .Select(static (n, _) => n ?? string.Empty)

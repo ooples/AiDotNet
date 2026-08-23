@@ -54,11 +54,13 @@ That harness does not reproduce the 12.6 GB VBCSCompiler seen during development
 experiment (design-time builds, or many more incremental compilations) is still owed.
 
 ## Environment notes
+
 - Builds die in the GENERATION phase when free RAM is low. Fix: kill VBCSCompiler
   (it reached 10 GB), which restores several GB. Machine has 15.4 GB total.
 - Disk chronically near-full; NuGet global-packages already cleared once (35 GB).
 
-## Deferred, not done
-SOM/RBF split: fix SelfOrganizingMap all-zero output as a product bug; exempt
-RadialBasisFunctionNetwork from ScaledInput_ShouldChangeOutput with rationale
-(Gaussian saturation far from centres is correct).
+## SOM/RBF changes
+
+Completed in this PR: `SelfOrganizingMap.Predict` now returns a one-hot BMU vector, its
+contract has direct regression coverage, and the SOM/RBF scaled-input exemptions document
+why global rescaling is not a valid sensitivity probe for these local/competitive models.

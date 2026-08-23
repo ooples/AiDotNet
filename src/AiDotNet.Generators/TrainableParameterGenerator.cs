@@ -118,23 +118,41 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                     cds.Members.OfType<FieldDeclarationSyntax>().Any(static f =>
                         f.AttributeLists.SelectMany(static al => al.Attributes).Any(static a =>
                             IsTrainableParameterAttributeName(a.Name.ToString()))),
-                transform: static (ctx, _) => (ClassDeclarationSyntax)ctx.Node)
-            .Where(static c => c is not null);
+                transform: static (ctx, _) =>
+                    ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is INamedTypeSymbol symbol
+                        ? GeneratorHelpers.MetadataNameOf(symbol)
+                        : null)
+            .Where(static n => n is not null)
+            .Select(static (n, _) => n ?? string.Empty)
+            .Collect()
+            .Combine(context.CompilationProvider);
 
-        context.RegisterSourceOutput(nonPartialDeclarations, static (spc, cds) =>
+        context.RegisterSourceOutput(nonPartialDeclarations, static (spc, source) =>
         {
-            var offenders = cds.Members.OfType<FieldDeclarationSyntax>()
-                .Where(static f => f.AttributeLists.SelectMany(static al => al.Attributes)
-                    .Any(static a => IsTrainableParameterAttributeName(a.Name.ToString())))
-                .SelectMany(static f => f.Declaration.Variables.Select(static v => v.Identifier.Text))
-                .ToList();
-            if (offenders.Count == 0) return;
+            var seen = new HashSet<string>(System.StringComparer.Ordinal);
+            foreach (var metadataName in source.Left)
+            {
+                if (metadataName.Length == 0 || !seen.Add(metadataName)) continue;
+                if (GeneratorHelpers.ResolveSourceType(source.Right, metadataName) is not INamedTypeSymbol symbol)
+                    continue;
 
-            spc.ReportDiagnostic(Diagnostic.Create(
-                NonPartialTrainableParameter,
-                cds.Identifier.GetLocation(),
-                cds.Identifier.Text,
-                string.Join(", ", offenders)));
+                var offenders = symbol.GetMembers().OfType<IFieldSymbol>()
+                    .Where(static field => field.GetAttributes().Any(static attribute =>
+                        attribute.AttributeClass is { } attributeClass &&
+                        IsTrainableParameterAttributeName(attributeClass.Name)))
+                    .Select(static field => field.Name)
+                    .ToList();
+                if (offenders.Count == 0) continue;
+
+                var location = symbol.Locations.FirstOrDefault(static item => item.SourceTree is not null);
+                if (location is null) continue;
+
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    NonPartialTrainableParameter,
+                    location,
+                    symbol.Name,
+                    string.Join(", ", offenders)));
+            }
         });
     }
 
@@ -1527,41 +1545,6 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// Every member a declared shape axis transitively reads, so the emitted declaration can be
-    /// guarded on the sources of its arithmetic rather than only on the number that arithmetic
-    /// produced.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The -1 lazy sentinel is a VALUE, and values do not survive arithmetic. The post-hoc scan the
-    /// declaration already runs -- reject an axis that came out negative -- catches a sentinel that
-    /// was copied, and misses one that was divided. ConvolutionalLayer is the case that proves it:
-    /// </para>
-    /// <code>
-    /// InputDepth = -1;                                   // ctor: "not resolved yet"
-    /// private int KernelInChannels => InputDepth / Groups;
-    /// [TrainableParameter(Shape = "OutputDepth, KernelInChannels, KernelSize, KernelSize")]
-    /// </code>
-    /// <para>
-    /// For a depthwise convolution Groups is 8, so KernelInChannels is <c>-1 / 8 == 0</c>. That is
-    /// not negative, so the scan passes it, and the layer declares <c>[8, 0, 3, 3]</c> -- a shape it
-    /// has no way to know and which happens to look concrete. A checkpoint then hands back the
-    /// correct <c>[8, 1, 3, 3]</c> and TryAdoptRestoredParameters rejects the RIGHT tensor against a
-    /// placeholder the layer should never have emitted:
-    /// </para>
-    /// <code>
-    /// ConvolutionalLayer`1 parameters do not conform to the resolved shape.
-    /// Expected weights [8, 0, 3, 3] and biases [8], but received weights [8, 1, 3, 3] and biases [8].
-    /// </code>
-    /// <para>
-    /// Guarding the roots instead of the result closes the whole class: the question "can this layer
-    /// answer yet" is asked of <c>InputDepth</c>, where the sentinel still exists, instead of of
-    /// <c>KernelInChannels</c>, where it has already been laundered into a plausible number. Members
-    /// that are always positive -- Groups, KernelSize, OutputDepth -- cost one non-negative
-    /// comparison each and can never trip it.
-    /// </para>
-    /// </remarks>
-    /// <summary>
     /// What the walk over one declared axis learned about whether that axis can launder a sentinel.
     /// </summary>
     /// <remarks>
@@ -1595,6 +1578,40 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         return false;
     }
 
+    /// <summary>
+    /// Finds every member a declared shape axis transitively reads, so the emitted declaration can
+    /// guard the sources of its arithmetic rather than only the number that arithmetic produced.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The -1 lazy sentinel is a VALUE, and values do not survive arithmetic. The post-hoc scan the
+    /// declaration already runs -- reject an axis that came out negative -- catches a sentinel that
+    /// was copied, and misses one that was divided. ConvolutionalLayer is the case that proves it:
+    /// </para>
+    /// <code>
+    /// InputDepth = -1;                                   // ctor: "not resolved yet"
+    /// private int KernelInChannels => InputDepth / Groups;
+    /// [TrainableParameter(Shape = "OutputDepth, KernelInChannels, KernelSize, KernelSize")]
+    /// </code>
+    /// <para>
+    /// For a depthwise convolution Groups is 8, so KernelInChannels is <c>-1 / 8 == 0</c>. That is
+    /// not negative, so the scan passes it, and the layer declares <c>[8, 0, 3, 3]</c> -- a shape it
+    /// has no way to know and which happens to look concrete. A checkpoint then hands back the
+    /// correct <c>[8, 1, 3, 3]</c> and TryAdoptRestoredParameters rejects the RIGHT tensor against a
+    /// placeholder the layer should never have emitted:
+    /// </para>
+    /// <code>
+    /// ConvolutionalLayer`1 parameters do not conform to the resolved shape.
+    /// Expected weights [8, 0, 3, 3] and biases [8], but received weights [8, 1, 3, 3] and biases [8].
+    /// </code>
+    /// <para>
+    /// Guarding the roots instead of the result closes the whole class: the question "can this layer
+    /// answer yet" is asked of <c>InputDepth</c>, where the sentinel still exists, instead of of
+    /// <c>KernelInChannels</c>, where it has already been laundered into a plausible number. Members
+    /// that are always positive -- Groups, KernelSize, OutputDepth -- cost one non-negative
+    /// comparison each and can never trip it.
+    /// </para>
+    /// </remarks>
     private static void CollectDeclaredShapeSentinelRoots(
         INamedTypeSymbol classSymbol,
         string axisExpression,
