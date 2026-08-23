@@ -403,7 +403,7 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
         var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, modelDim });
         var projected = Engine.TensorMatMul(input2D, _inputProjectionWeights);
         var bias2D = Engine.Reshape(_inputProjectionBias, new[] { 1, _innerDimension * 2 });
-        var projectedWithBias = Engine.TensorBroadcastAdd(projected, bias2D);
+        var projectedWithBias = Engine.TensorAdd(projected, bias2D);
         var projected3D = Engine.Reshape(projectedWithBias, new[] { batchSize, seqLen, _innerDimension * 2 });
 
         var xBranch = SliceTensor(projected3D, 2, 0, _innerDimension);
@@ -426,7 +426,7 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
             .Reshape(batchSize, seqLen, _stateDimension);
         var dtParam = Engine.TensorMatMul(siluFlat, _dtProjectionWeights);
         var dtBias2D = Engine.Reshape(_dtProjectionBias, new[] { 1, _numHeads });
-        dtParam = Engine.TensorBroadcastAdd(dtParam, dtBias2D);
+        dtParam = Engine.TensorAdd(dtParam, dtBias2D);
         var dt3D = Engine.Reshape(dtParam, new[] { batchSize, seqLen, _numHeads });
         _lastDeltaPreSoftplus = dt3D;
         var delta = Engine.Softplus(dt3D);
@@ -451,7 +451,7 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
         var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _innerDimension });
         var outputFlat = Engine.TensorMatMul(gatedFlat, _outputProjectionWeights);
         var outBias2D = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        var outputWithBias = Engine.TensorBroadcastAdd(outputFlat, outBias2D);
+        var outputWithBias = Engine.TensorAdd(outputFlat, outBias2D);
         var output3D = Engine.Reshape(outputWithBias, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
@@ -524,11 +524,11 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
 
         // negAExp[1, innerDim] = repeat(-exp(A_log), headDim); dExp[1, innerDim] = repeat(D, headDim).
         var negAExpRow = Engine.Reshape(
-            Engine.TensorBroadcastMultiply(
+            Engine.TensorMultiply(
                 Engine.Reshape(Engine.TensorNegate(Engine.TensorExp(_aLog)), new[] { _numHeads, 1 }), onesHD),
             new[] { 1, innerDim });
         var dExpRow = Engine.Reshape(
-            Engine.TensorBroadcastMultiply(Engine.Reshape(_dParam, new[] { _numHeads, 1 }), onesHD),
+            Engine.TensorMultiply(Engine.Reshape(_dParam, new[] { _numHeads, 1 }), onesHD),
             new[] { 1, innerDim });
 
         // h_0 = 0 : [batch, innerDim, stateDim] (initial recurrent state, a constant).
@@ -544,24 +544,24 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
 
             // dt_t expanded per-head -> per-inner-dim: [B, numHeads, 1] * ones[numHeads, headDim] -> [B, innerDim].
             var deltaExp = Engine.Reshape(
-                Engine.TensorBroadcastMultiply(Engine.Reshape(deltaHeads, new[] { batchSize, _numHeads, 1 }), onesHD),
+                Engine.TensorMultiply(Engine.Reshape(deltaHeads, new[] { batchSize, _numHeads, 1 }), onesHD),
                 new[] { batchSize, innerDim });
 
             // aBar_t = exp(dt_t * (-exp(A))) : [B, innerDim].
-            var aBar = Engine.TensorExp(Engine.TensorBroadcastMultiply(deltaExp, negAExpRow));
+            var aBar = Engine.TensorExp(Engine.TensorMultiply(deltaExp, negAExpRow));
 
             // h_t = aBar_t (.) h_{t-1} + (dt_t (.) x_t) (x) B_t : [B, innerDim, stateDim].
-            var term1 = Engine.TensorBroadcastMultiply(Engine.Reshape(aBar, new[] { batchSize, innerDim, 1 }), h);
+            var term1 = Engine.TensorMultiply(Engine.Reshape(aBar, new[] { batchSize, innerDim, 1 }), h);
             var dtx = Engine.TensorMultiply(deltaExp, xT);
-            var term2 = Engine.TensorBroadcastMultiply(
+            var term2 = Engine.TensorMultiply(
                 Engine.Reshape(dtx, new[] { batchSize, innerDim, 1 }),
                 Engine.Reshape(bT, new[] { batchSize, 1, sd }));
             h = Engine.TensorAdd(term1, term2);
 
             // y_t = sum_n (C_t (.) h_t) + D (.) x_t : [B, innerDim].
-            var cH = Engine.TensorBroadcastMultiply(Engine.Reshape(cT, new[] { batchSize, 1, sd }), h);
+            var cH = Engine.TensorMultiply(Engine.Reshape(cT, new[] { batchSize, 1, sd }), h);
             var ySsm = Engine.ReduceSum(cH, new[] { 2 }, keepDims: false);
-            var yT = Engine.TensorAdd(ySsm, Engine.TensorBroadcastMultiply(xT, dExpRow));
+            var yT = Engine.TensorAdd(ySsm, Engine.TensorMultiply(xT, dExpRow));
             ySteps.Add(Engine.Reshape(yT, new[] { batchSize, 1, innerDim }));
         }
 
@@ -609,7 +609,7 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
         var negAHeads = Engine.TensorNegate(Engine.TensorExp(_aLog));                    // [H]
         var negAHeadsRow = Engine.Reshape(negAHeads, new[] { 1, 1, numHeads });
         var dExpRow = Engine.Reshape(
-            Engine.TensorBroadcastMultiply(Engine.Reshape(_dParam, new[] { numHeads, 1 }), onesHD),
+            Engine.TensorMultiply(Engine.Reshape(_dParam, new[] { numHeads, 1 }), onesHD),
             new[] { 1, 1, innerDim });
 
         // Carried recurrent state h_in : [B, innerDim, sd], starts at zero.
@@ -626,7 +626,7 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
             var cc = Engine.TensorNarrow(c, dim: 1, start: s0, length: ln);              // [B, ln, sd]
 
             // logA[b, t, h] = dt * (-exp(A))  (<= 0).
-            var logA = Engine.TensorBroadcastMultiply(dc, negAHeadsRow);                 // [B, ln, H]
+            var logA = Engine.TensorMultiply(dc, negAHeadsRow);                 // [B, ln, H]
 
             // cumA[b, t, h] = inclusive prefix sum over time = TrilOnes[ln, ln] @ logA.
             var trilOnes = BuildBatchedLowerTriOnes(batchSize, ln);                      // [B, ln, ln]
@@ -635,7 +635,7 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
             // Per-head lower-triangular decay L[bh, t, j] = exp(cumA_t - cumA_j) for t >= j, else 0.
             var cumAbh = Engine.Reshape(Engine.TensorPermute(cumA, new[] { 0, 2, 1 }),
                 new[] { batchSize * numHeads, ln });                                     // [B*H, ln]
-            var decayDiff = Engine.TensorBroadcastSubtract(
+            var decayDiff = Engine.TensorSubtract(
                 Engine.Reshape(cumAbh, new[] { batchSize * numHeads, ln, 1 }),
                 Engine.Reshape(cumAbh, new[] { batchSize * numHeads, 1, ln }));          // [B*H, ln, ln]
             var trilMask = BuildBatchedLowerTriOnes(batchSize * numHeads, ln);          // [B*H, ln, ln] (0/1)
@@ -656,7 +656,7 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
             var onesHrow = new Tensor<T>(new[] { 1, numHeads, 1 });
             { var s = onesHrow.Data.Span; for (int i = 0; i < s.Length; i++) s[i] = NumOps.One; }
             var gTiled = Engine.Reshape(
-                Engine.TensorBroadcastMultiply(Engine.Reshape(g, new[] { batchSize, 1, ln * ln }), onesHrow),
+                Engine.TensorMultiply(Engine.Reshape(g, new[] { batchSize, 1, ln * ln }), onesHrow),
                 new[] { batchSize * numHeads, ln, ln });                                 // [B*H, ln, ln]
             var mMat = Engine.TensorMultiply(lDecay, gTiled);                            // [B*H, ln, ln]
 
@@ -684,7 +684,7 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
             // y_chunk = y_intra + y_carry + D (.) x.
             var yChunk = Engine.TensorAdd(
                 Engine.TensorAdd(yIntra, yCarry),
-                Engine.TensorBroadcastMultiply(xc, dExpRow));
+                Engine.TensorMultiply(xc, dExpRow));
             yChunks.Add(yChunk);
 
             // Carry state to the next chunk:
@@ -693,10 +693,10 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
                 new[] { batchSize, 1, numHeads });                                       // [B, 1, H]
             var cumALastCh = Engine.BatchMatMul(cumALast, eb);                           // [B, 1, innerDim]
             var decayFull = Engine.TensorExp(Engine.Reshape(cumALastCh, new[] { batchSize, innerDim, 1 }));
-            var w = Engine.TensorExp(Engine.TensorBroadcastSubtract(cumALastCh, cumACh)); // [B, ln, innerDim]
+            var w = Engine.TensorExp(Engine.TensorSubtract(cumALastCh, cumACh)); // [B, ln, innerDim]
             var wdtx = Engine.TensorMultiply(w, dtx);                                     // [B, ln, innerDim]
             var contrib = Engine.BatchMatMul(Engine.TensorPermute(wdtx, new[] { 0, 2, 1 }), bc); // [B, innerDim, sd]
-            hIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(decayFull, hIn), contrib);
+            hIn = Engine.TensorAdd(Engine.TensorMultiply(decayFull, hIn), contrib);
         }
 
         return Engine.TensorConcatenate(yChunks.ToArray(), 1);                            // [B, seqLen, innerDim]
@@ -741,12 +741,12 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
         var sq = Engine.TensorMultiply(input, input);                          // [b, s, d]
         var meanSq = Engine.ReduceMean(sq, new[] { 2 }, keepDims: true);       // [b, s, 1]
         var rms = Engine.TensorSqrt(Engine.TensorAddScalar(meanSq, NumOps.FromDouble(1e-6)));
-        var normalized = Engine.TensorBroadcastDivide(input, rms);             // [b, s, d]
+        var normalized = Engine.TensorDivide(input, rms);             // [b, s, d]
 
         var gammaR = Engine.Reshape(_normGamma, new[] { 1, 1, _innerDimension });
         var betaR = Engine.Reshape(_normBeta, new[] { 1, 1, _innerDimension });
-        var scaled = Engine.TensorBroadcastMultiply(normalized, gammaR);
-        return Engine.TensorBroadcastAdd(scaled, betaR);
+        var scaled = Engine.TensorMultiply(normalized, gammaR);
+        return Engine.TensorAdd(scaled, betaR);
     }
 
     /// <summary>
@@ -949,12 +949,12 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
             var wK = Engine.Reshape(
                 Engine.TensorNarrow(_convWeights, 1, k, 1),
                 new[] { 1, 1, _innerDimension });
-            var term = Engine.TensorBroadcastMultiply(shifted, wK);
+            var term = Engine.TensorMultiply(shifted, wK);
             acc = acc is null ? term : Engine.TensorAdd(acc, term);
         }
 
         var biasReshaped = Engine.Reshape(_convBias, new[] { 1, 1, _innerDimension });
-        return Engine.TensorBroadcastAdd(acc!, biasReshaped);
+        return Engine.TensorAdd(acc!, biasReshaped);
     }
 
     /// <summary>

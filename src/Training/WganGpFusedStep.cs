@@ -199,8 +199,8 @@ public sealed class WganGpFusedStep<T> : IDisposable
         // Interpolated x̃ = ε · real + (1 − ε) · fake, broadcasting ε over the
         // sample. epsilon01 has shape [B, 1, ...] matching the sample.
         var interpolated = Engine.TensorAdd(
-            Engine.TensorBroadcastMultiply(epsilon01, real),
-            Engine.TensorBroadcastMultiply(
+            Engine.TensorMultiply(epsilon01, real),
+            Engine.TensorMultiply(
                 Engine.TensorSubtract(OnesLike(epsilon01), epsilon01),
                 fake));
 

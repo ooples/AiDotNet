@@ -333,19 +333,19 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
         // Layer 1: h1 = LeakyReLU(z @ genW1 + genB1)
         var zTensor = Tensor<T>.FromVector(z).Reshape(1, _latentDim);
         var layer1 = Engine.TensorMatMul(zTensor, Tensor<T>.FromMatrix(genW1));
-        layer1 = Engine.TensorBroadcastAdd(layer1, Tensor<T>.FromVector(genB1).Reshape(1, _hiddenDim));
+        layer1 = Engine.TensorAdd(layer1, Tensor<T>.FromVector(genB1).Reshape(1, _hiddenDim));
         layer1 = Engine.LeakyReLU(layer1, NumOps.FromDouble(0.2));
         var h1 = layer1.Reshape(_hiddenDim).ToVector();
 
         // Layer 2: h2 = LeakyReLU(h1 @ genW2 + genB2)
         var layer2 = Engine.TensorMatMul(layer1, Tensor<T>.FromMatrix(genW2));
-        layer2 = Engine.TensorBroadcastAdd(layer2, Tensor<T>.FromVector(genB2).Reshape(1, _hiddenDim));
+        layer2 = Engine.TensorAdd(layer2, Tensor<T>.FromVector(genB2).Reshape(1, _hiddenDim));
         layer2 = Engine.LeakyReLU(layer2, NumOps.FromDouble(0.2));
         var h2 = layer2.Reshape(_hiddenDim).ToVector();
 
         // Output layer: output = tanh(h2 @ genW3 + genB3)
         var layer3 = Engine.TensorMatMul(layer2, Tensor<T>.FromMatrix(genW3));
-        layer3 = Engine.TensorBroadcastAdd(layer3, Tensor<T>.FromVector(genB3).Reshape(1, _inputDim));
+        layer3 = Engine.TensorAdd(layer3, Tensor<T>.FromVector(genB3).Reshape(1, _inputDim));
         layer3 = Engine.Tanh(layer3);
         var output = layer3.Reshape(_inputDim).ToVector();
 
@@ -371,19 +371,19 @@ public partial class AnoGANDetector<T> : AnomalyDetectorBase<T>
         // Layer 1: h1 = LeakyReLU(x @ discW1 + discB1)
         var xTensor = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
         var dLayer1 = Engine.TensorMatMul(xTensor, Tensor<T>.FromMatrix(discW1));
-        dLayer1 = Engine.TensorBroadcastAdd(dLayer1, Tensor<T>.FromVector(discB1).Reshape(1, _hiddenDim));
+        dLayer1 = Engine.TensorAdd(dLayer1, Tensor<T>.FromVector(discB1).Reshape(1, _hiddenDim));
         dLayer1 = Engine.LeakyReLU(dLayer1, NumOps.FromDouble(0.2));
         var h1 = dLayer1.Reshape(_hiddenDim).ToVector();
 
         // Layer 2: h2 = LeakyReLU(h1 @ discW2 + discB2)
         var dLayer2 = Engine.TensorMatMul(dLayer1, Tensor<T>.FromMatrix(discW2));
-        dLayer2 = Engine.TensorBroadcastAdd(dLayer2, Tensor<T>.FromVector(discB2).Reshape(1, _hiddenDim));
+        dLayer2 = Engine.TensorAdd(dLayer2, Tensor<T>.FromVector(discB2).Reshape(1, _hiddenDim));
         dLayer2 = Engine.LeakyReLU(dLayer2, NumOps.FromDouble(0.2));
         var h2 = dLayer2.Reshape(_hiddenDim).ToVector();
 
         // Output layer: sigmoid(h2 @ discW3 + discB3)
         var dLayer3 = Engine.TensorMatMul(dLayer2, Tensor<T>.FromMatrix(discW3));
-        dLayer3 = Engine.TensorBroadcastAdd(dLayer3, Tensor<T>.FromVector(discB3).Reshape(1, 1));
+        dLayer3 = Engine.TensorAdd(dLayer3, Tensor<T>.FromVector(discB3).Reshape(1, 1));
         // Sigmoid: 1/(1+exp(-x))
         T output = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(dLayer3[0]))));
 

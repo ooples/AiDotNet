@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -826,8 +826,8 @@ public partial class Informer<T> : ForecastingModelBase<T>
             // Tape-connected denormalization (output * std + mean, stats [B,1,F]
             // broadcast across time). Manual per-element copy detached the graph
             // before the loss, zeroing gradients. Stats are constants (paper-faithful).
-            var scaled = Engine.TensorBroadcastMultiply(input, _instanceStd);
-            return Engine.TensorBroadcastAdd(scaled, _instanceMean);
+            var scaled = Engine.TensorMultiply(input, _instanceStd);
+            return Engine.TensorAdd(scaled, _instanceMean);
         }
     }
 

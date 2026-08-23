@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -1313,11 +1313,11 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         var shiftTensor = new Tensor<T>(shiftData, broadcastShape);
 
         // x = x * (1 + scale) + shift
-        var onePlusScale = Engine.TensorBroadcastAdd(
+        var onePlusScale = Engine.TensorAdd(
             scaleTensor,
             Tensor<T>.CreateDefault(broadcastShape, NumOps.One));
-        var modulated = Engine.TensorBroadcastMultiply(x, onePlusScale);
-        return Engine.TensorBroadcastAdd(modulated, shiftTensor);
+        var modulated = Engine.TensorMultiply(x, onePlusScale);
+        return Engine.TensorAdd(modulated, shiftTensor);
     }
 
     /// <summary>
@@ -1971,6 +1971,20 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
         bool includeTextConditioning = false,
         bool includeImageConditioning = false)
     {
+        // The released Upscale-A-Video graph has no unconditional/image-free execution
+        // path: its seven-channel input is the four-channel latent concatenated with the
+        // low-resolution RGB condition, and each Transformer3D block consumes the SD-x4
+        // CLIP encoder states. Parameter enumeration must therefore materialize that same
+        // conditioned video route. Resolving the generic four-dimensional/null-condition
+        // route either throws at cross-attention or sizes lazy layers for a path the model
+        // can never legally execute.
+        if (_architectureProfile == VideoUNetArchitectureProfile.UpscaleAVideo)
+        {
+            includeVideo = true;
+            includeTextConditioning = true;
+            includeImageConditioning = true;
+        }
+
         if (_lazyShapeResolved
             && (!includeVideo || _lazyShapeResolvedWithVideo)
             && (!includeTextConditioning || _lazyShapeResolvedWithTextConditioning)

@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -490,7 +490,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
 
             // Sum contributions and add biases using Engine operations
             var preActivation = Engine.TensorAdd(inputContribution, hiddenContribution);
-            preActivation = Engine.TensorBroadcastAdd(preActivation, _biases); // Broadcasting biases across batch
+            preActivation = Engine.TensorAdd(preActivation, _biases); // Broadcasting biases across batch
 
             // Apply activation
             var newHidden = ApplyActivation(preActivation);

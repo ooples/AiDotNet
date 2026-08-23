@@ -144,7 +144,7 @@ public partial class GandalfGFLULayer<T> : LayerBase<T>, IShapeContract
             // over the batch and applied to the running representation.
             var maskRow = Engine.Reshape(_maskLogits![s], new[] { 1, _numFeatures });
             var mask = Engine.Softmax(maskRow);                           // [1, F]
-            var feat = Engine.TensorBroadcastMultiply(h, mask);           // [batch, F]
+            var feat = Engine.TensorMultiply(h, mask);           // [batch, F]
 
             // (2) Gated transformation (GLU): linear -> split into value/gate halves -> value ⊙ σ(gate).
             var z = _inTransform![s].Forward(feat);                       // [batch, 2F]

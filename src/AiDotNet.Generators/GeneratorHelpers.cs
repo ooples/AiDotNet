@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -12,6 +12,51 @@ namespace AiDotNet.Generators;
 /// </summary>
 internal static class GeneratorHelpers
 {
+    /// <summary>
+    /// Builds the metadata name <c>GetTypeByMetadataName</c> expects: the arity suffix for generics
+    /// and '+' separators for nested types.
+    /// </summary>
+    /// <remarks>
+    /// Generators carry this string through the incremental pipeline INSTEAD of an ISymbol, because
+    /// a symbol in cached pipeline state roots the whole Compilation.
+    /// </remarks>
+    public static string MetadataNameOf(INamedTypeSymbol symbol)
+    {
+        var name = symbol.MetadataName;
+        for (var containing = symbol.ContainingType; containing is not null; containing = containing.ContainingType)
+        {
+            name = containing.MetadataName + "+" + name;
+        }
+
+        var ns = symbol.ContainingNamespace;
+        if (ns is not null && !ns.IsGlobalNamespace)
+        {
+            name = ns.ToDisplayString() + "." + name;
+        }
+
+        return name;
+    }
+
+    /// <summary>
+    /// Re-resolves a type that a syntax provider found in THIS compilation, from the metadata name
+    /// carried through the pipeline in its place.
+    /// </summary>
+    /// <remarks>
+    /// ASSEMBLY-SCOPED FIRST, deliberately. Compilation.GetTypeByMetadataName returns null when
+    /// referenced assemblies also define the same metadata name -- it does not disambiguate. Every
+    /// candidate here came from a syntax tree in the current compilation, so the source assembly is
+    /// both the correct scope and immune to that ambiguity. Without this, a name collision with any
+    /// referenced assembly would silently drop the type and take its diagnostics
+    /// (AIDN044/045/050/051/052/060/061/086) down with it. The compilation-wide lookup remains as a
+    /// fallback for the partial/merged cases the assembly lookup does not cover.
+    /// </remarks>
+    public static INamedTypeSymbol? ResolveSourceType(Compilation compilation, string metadataName)
+    {
+        if (string.IsNullOrEmpty(metadataName)) return null;
+        return compilation.Assembly.GetTypeByMetadataName(metadataName)
+            ?? compilation.GetTypeByMetadataName(metadataName);
+    }
+
     // NOTE: These dictionaries must be kept in sync with the corresponding enums in AiDotNet.Enums.
     // Source generators cannot reference the runtime assembly, so we duplicate the mappings here.
     // If you add/rename an enum member, update the corresponding dictionary below.

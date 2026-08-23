@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -194,10 +194,10 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
         var oneMinusSigs3D = Engine.TensorSubtractScalar(
             Engine.TensorNegate(sigs3D), NumOps.Negate(NumOps.One));
         // perPath[b, c, d] = mask[c, d] * sigs[b, d] + (1 - mask[c, d]) * (1 - sigs[b, d])
-        var maskedSigs = Engine.TensorBroadcastMultiply(sigs3D, mask);
+        var maskedSigs = Engine.TensorMultiply(sigs3D, mask);
         var oneMinusMask = Engine.TensorSubtractScalar(
             Engine.TensorNegate(mask), NumOps.Negate(NumOps.One));
-        var maskedOneMinusSigs = Engine.TensorBroadcastMultiply(oneMinusSigs3D, oneMinusMask);
+        var maskedOneMinusSigs = Engine.TensorMultiply(oneMinusSigs3D, oneMinusMask);
         var perPath = Engine.TensorAdd(maskedSigs, maskedOneMinusSigs);
 
         // Reduce path product via log-sum-exp on the depth axis.

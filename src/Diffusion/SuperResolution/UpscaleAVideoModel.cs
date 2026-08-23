@@ -118,6 +118,16 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     protected override void RegisterComponents()
     {
         EnsureInitialized();
+        // Upscale-A-Video always executes the temporal, concatenated RGB-condition,
+        // and text-cross-attention path, including when callers inject a bounded or
+        // otherwise customized VideoUNetPredictor. Resolve that legal route before
+        // publishing parameter chunks; the predictor's generic parameter-enumeration
+        // fallback is intentionally unconditional and would otherwise size its lazy
+        // input convolution for four latent channels instead of the actual seven.
+        _videoUNet.TriggerLazyShapeResolution(
+            includeVideo: true,
+            includeTextConditioning: true,
+            includeImageConditioning: true);
         RegisterParameterComponent("denoiser/video-unet", _videoUNet);
         RegisterParameterComponent("vae/temporal", _temporalVAE);
     }
@@ -283,6 +293,12 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
             return _videoUNet.TemporalTrainingLayers;
         }
     }
+
+    /// <summary>
+    /// Retains the bounded temporal-training gradient surface for wrappers such as
+    /// StableVideoSR that expose the neural-network gradient accessor contract.
+    /// </summary>
+    protected override bool RetainTrainingGradientSurface => true;
 
     #endregion
 
@@ -951,7 +967,7 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         var scale = new Tensor<T>([1, 1, 1, 2]);
         scale[0, 0, 0, 0] = NumOps.FromDouble(width <= 1 ? 0.0 : 2.0 / (width - 1));
         scale[0, 0, 0, 1] = NumOps.FromDouble(height <= 1 ? 0.0 : 2.0 / (height - 1));
-        var normalizedFlow = Engine.TensorBroadcastMultiply(
+        var normalizedFlow = Engine.TensorMultiply(
             Engine.TensorPermute(flow, [0, 2, 3, 1]), scale);
         var grid = Engine.TensorAdd(baseGrid, normalizedFlow);
         return Engine.GridSample(

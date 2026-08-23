@@ -243,7 +243,7 @@ public partial class GatedLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
 
         var gFlat = Engine.TensorMatMul(input2D, _gateWeights);
         var gBias = Engine.Reshape(_gateBias, new[] { 1, totalDim });
-        gFlat = Engine.TensorBroadcastAdd(gFlat, gBias);
+        gFlat = Engine.TensorAdd(gFlat, gBias);
         var gate = Engine.Sigmoid(Engine.Reshape(gFlat, new[] { batchSize, seqLen, totalDim }));
 
         _lastQuery = q;
@@ -270,7 +270,7 @@ public partial class GatedLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
         var outFlat = Engine.Reshape(output, new[] { batchSize * seqLen, totalDim });
         var outputFlat = Engine.TensorMatMul(outFlat, _outputWeights);
         var outBias2D = Engine.Reshape(_outputBias, new[] { 1, _modelDimension });
-        outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias2D);
+        outputFlat = Engine.TensorAdd(outputFlat, outBias2D);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         // Residual + output normalization. The gated-linear-attention recurrence above is

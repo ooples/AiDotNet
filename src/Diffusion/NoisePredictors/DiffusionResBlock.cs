@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 // File-level, deliberately: two Tensors namespaces in the project's global usings also define a
 // TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
 using AiDotNet.Attributes;
@@ -443,7 +443,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
             if (useInPlace)
                 Engine.TensorBroadcastAddInPlace(h, timeProj);
             else
-                h = Engine.TensorBroadcastAdd(h, timeProj);
+                h = Engine.TensorAdd(h, timeProj);
             RbTick("time");
         }
 

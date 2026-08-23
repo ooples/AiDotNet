@@ -21,6 +21,9 @@ namespace AiDotNet.Tests.IntegrationTests.MetaLearning;
 
 public class MetaLearningCoverageIntegrationTests
 {
+    private static bool IsFinite(double value)
+        => !double.IsNaN(value) && !double.IsInfinity(value);
+
     private static MetaLearningTask<double, Matrix<double>, Vector<double>> CreateVectorTask(
         int seed,
         int supportRows = 2,
@@ -155,7 +158,9 @@ public class MetaLearningCoverageIntegrationTests
             $"fixed-tensor-task-{seed}");
     }
 
-    private static T InvokePrivate<T>(object instance, Type declaringType, string methodName, params object[] args)
+    // object?[] so a call can pass an explicit null for an optional/nullable parameter without
+    // reaching for the null-forgiving operator.
+    private static T InvokePrivate<T>(object instance, Type declaringType, string methodName, params object?[] args)
     {
         var method = declaringType.GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(method);
@@ -216,7 +221,8 @@ public class MetaLearningCoverageIntegrationTests
         var options = new MetaLearnerOptionsBase<double>
         {
             InnerLearningRate = 0.02,
-            OuterLearningRate = 0.03
+            OuterLearningRate = 0.03,
+            RandomSeed = 42
         };
         var learner = new TestMetaLearner(model, options);
 
@@ -230,15 +236,80 @@ public class MetaLearningCoverageIntegrationTests
         input[0, 1] = -0.2;
         var expected = new Vector<double>(new[] { 0.4 });
 
+        // FOUR parameters, not three. ComputeGradientsFallback gained a trailing
+        // ILossFunction<T>? lossOverride and this reflection call was never updated, so it threw
+        // TargetParameterCountException before reaching a single assertion. null selects the
+        // learner's configured LossFunction, which is the behaviour this test is covering.
         var gradients = InvokePrivate<Vector<double>>(
             learner,
             typeof(MetaLearnerBase<double, Matrix<double>, Vector<double>>),
             "ComputeGradientsFallback",
             model,
             input,
-            expected);
+            expected,
+            null);
 
         Assert.Equal(model.ParameterCount, gradients.Length);
+
+        // LENGTH ALONE PROVES NOTHING. A zero, non-finite, or loss-independent vector of the right
+        // width satisfies the count and still means the fallback did no work.
+        Assert.All(
+            Enumerable.Range(0, gradients.Length),
+            i => Assert.True(
+                IsFinite(gradients[i]),
+                $"Fallback gradient[{i}] is {gradients[i]}; finite differences must not emit NaN or infinity."));
+        Assert.Contains(
+            Enumerable.Range(0, gradients.Length),
+            i => Math.Abs(gradients[i]) > 1e-12);
+
+        // null SELECTS THE LEARNER'S CONFIGURED LOSS -- asserted, not assumed. Resetting replays the
+        // same seeded SPSA directions, so passing that loss EXPLICITLY must reproduce the vector.
+        learner.Reset();
+        var gradientsWithConfiguredLoss = InvokePrivate<Vector<double>>(
+            learner,
+            typeof(MetaLearnerBase<double, Matrix<double>, Vector<double>>),
+            "ComputeGradientsFallback",
+            model,
+            input,
+            expected,
+            learner.DefaultLossFunction);
+
+        Assert.Equal(gradients.Length, gradientsWithConfiguredLoss.Length);
+        Assert.All(
+            Enumerable.Range(0, gradientsWithConfiguredLoss.Length),
+            i => Assert.True(
+                IsFinite(gradientsWithConfiguredLoss[i]),
+                $"Configured-loss gradient[{i}] is {gradientsWithConfiguredLoss[i]}; the fallback must " +
+                "stay finite when the loss is supplied explicitly."));
+        for (int i = 0; i < gradients.Length; i++)
+            Assert.Equal(gradients[i], gradientsWithConfiguredLoss[i], precision: 12);
+
+        // ...and that equality is not vacuous: with the same seeded SPSA directions, a DIFFERENT
+        // loss must move the gradient, otherwise lossOverride is being ignored.
+        learner.Reset();
+        var gradientsWithOtherLoss = InvokePrivate<Vector<double>>(
+            learner,
+            typeof(MetaLearnerBase<double, Matrix<double>, Vector<double>>),
+            "ComputeGradientsFallback",
+            model,
+            input,
+            expected,
+            new AiDotNet.LossFunctions.MeanAbsoluteErrorLoss<double>());
+
+        // VALIDATE THE ALTERNATE-LOSS VECTOR BEFORE COMPARING IT. A difference predicate alone is
+        // satisfied by a NaN, an infinity, or a longer vector as soon as any one element differs, so
+        // the comparison below would "pass" on a result that is itself invalid.
+        Assert.Equal(gradients.Length, gradientsWithOtherLoss.Length);
+        Assert.All(
+            Enumerable.Range(0, gradientsWithOtherLoss.Length),
+            i => Assert.True(
+                IsFinite(gradientsWithOtherLoss[i]),
+                $"Alternate-loss gradient[{i}] is {gradientsWithOtherLoss[i]}; a different loss must " +
+                "still produce a finite gradient."));
+
+        Assert.Contains(
+            Enumerable.Range(0, gradients.Length),
+            i => Math.Abs(gradients[i] - gradientsWithOtherLoss[i]) > 1e-9);
     }
 
     [Fact(Timeout = 120000)]

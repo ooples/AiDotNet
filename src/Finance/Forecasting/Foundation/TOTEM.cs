@@ -718,8 +718,8 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 
         bool reshaped = forecast.Rank != 2;
         var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
-        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
-        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        var scaled = Engine.TensorMultiply(work, stdT);
+        var shifted = Engine.TensorAdd(scaled, meanT);
         return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
     }
 
@@ -865,7 +865,7 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         // codebooks shape: [numCodebooks, codebookSize, codebookDim] → add batch axis.
         var headExpanded = Engine.Reshape(head, new[] { numPositions, _numCodebooks, 1, dimPerCodebook });
         var codebookExpanded = Engine.Reshape(codebooks, new[] { 1, _numCodebooks, _codebookSize, dimPerCodebook });
-        var diff = Engine.TensorBroadcastSubtract(headExpanded, codebookExpanded);
+        var diff = Engine.TensorSubtract(headExpanded, codebookExpanded);
         var diffSq = Engine.TensorMultiply(diff, diff);
         var distances = Engine.ReduceSum(diffSq, new[] { 3 }, keepDims: false);
         // distances shape: [numPositions, numCodebooks, codebookSize].

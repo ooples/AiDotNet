@@ -1120,8 +1120,8 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
             // broadcast over the whole tensor). The manual per-element copy
             // detached the graph before the loss, zeroing all gradients. Stats are
             // constants (paper-faithful de-stationarization, Liu et al. 2022).
-            var scaled = Engine.TensorBroadcastMultiply(input, _instanceStd);
-            return Engine.TensorBroadcastAdd(scaled, _instanceMean);
+            var scaled = Engine.TensorMultiply(input, _instanceStd);
+            return Engine.TensorAdd(scaled, _instanceMean);
         }
 
         return result;

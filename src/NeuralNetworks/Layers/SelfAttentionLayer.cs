@@ -792,7 +792,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         // chain from _outputBias on every training step — caching a reshape
         // primed during inference breaks the bias gradient.
         var biasBroadcast = Engine.Reshape(_outputBias, new[] { 1, 1, embeddingDimension });
-        var outputBiased = Engine.TensorBroadcastAdd(outputFlat, biasBroadcast);
+        var outputBiased = Engine.TensorAdd(outputFlat, biasBroadcast);
 
         var output = ApplyActivation(outputBiased);
 
@@ -993,7 +993,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         // Rent and zero-fill for broadcast (used as broadcast target, needs zeros)
         var target = TensorAllocator.Rent<T>(new[] { batchSize, _sequenceLength, _embeddingDimension });
         target.Fill(NumOps.Zero);
-        return Engine.TensorBroadcastAdd(target, biasReshaped);
+        return Engine.TensorAdd(target, biasReshaped);
     }
 
     /// <summary>

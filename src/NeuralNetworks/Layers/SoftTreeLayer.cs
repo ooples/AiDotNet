@@ -224,7 +224,7 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
 
         // Add biases (broadcast)
         var biasesBroadcast = Engine.Reshape(_splitBiases, [1, _numInternalNodes]);
-        splitLogits = Engine.TensorBroadcastAdd(splitLogits, biasesBroadcast);
+        splitLogits = Engine.TensorAdd(splitLogits, biasesBroadcast);
 
         // Apply temperature scaling
         var tempScale = NumOps.FromDouble(1.0 / _temperature);

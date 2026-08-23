@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
@@ -907,7 +907,8 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
         return Engine.ReduceMean(squared, allAxes, keepDims: false);
     }
 
-    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
+
 
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
@@ -1364,8 +1365,8 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
 
         // Combine: tanh(projQuery + projKeys + projLocation)
         // Broadcast query and location across sequence dimension
-        var queryBroadcast = Engine.TensorBroadcastAdd(projKeys, projQuery); // [1, seqLen, attDim]
-        var combined = Engine.TensorBroadcastAdd(queryBroadcast, projLocation); // [1, seqLen, attDim]
+        var queryBroadcast = Engine.TensorAdd(projKeys, projQuery); // [1, seqLen, attDim]
+        var combined = Engine.TensorAdd(queryBroadcast, projLocation); // [1, seqLen, attDim]
         var tanhScores = Engine.Tanh(combined); // [1, seqLen, attDim]
 
         // [3] Energy projection: v^T * tanh(...) → scalar per position

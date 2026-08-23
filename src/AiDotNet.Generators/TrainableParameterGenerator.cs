@@ -57,33 +57,129 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             + "Restore then has nothing to validate against and a clone can keep freshly initialized weights instead of trained ones, "
             + "which is invisible at compile time and shows up only as a weight-drift failure much later.");
 
+    private static readonly DiagnosticDescriptor UnguardableDeclaredShapeAxis = new(
+        "AIDN098",
+        "Declared parameter axis cannot be proven resolved",
+        "'{0}' declares the parameter axis '{1}', which the generator cannot trace to a dimension it can guard. A lazy layer carries -1 until its first forward, and arithmetic turns that into a plausible number ('-1 / groups' is 0), so this axis can be declared as a real size before it is known. Write the axis over fields or auto-properties the generator can follow, or resolve the dimension before it is declared.",
+        "AiDotNet.ParameterAutomation",
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "The -1 lazy sentinel is a value, and values do not survive arithmetic. The declaration's own scan rejects an axis "
+            + "that came out negative, which catches a sentinel that was copied and misses one that was divided or multiplied. When the "
+            + "generator cannot reach the roots an axis is computed from, it cannot emit the readiness guard either, and the layer can "
+            + "publish a shape it has no way to know -- which then rejects a correct checkpoint as non-conforming.");
+
+    private static readonly DiagnosticDescriptor NonPartialTrainableParameter = new(
+        "AIDN099",
+        "[TrainableParameter] on a non-partial class does nothing",
+        "'{0}' declares [TrainableParameter] on {1} but is not partial, so this generator cannot emit into it and the declaration has NO effect. The layer gets no SetTrainableParameters, no DeclaredParameterTensors, and no restore path, so a checkpoint holding its trained weights is silently discarded. Add the partial modifier.",
+        "AiDotNet.ParameterAutomation",
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Generated parameter automation is emitted as a second partial declaration of the same class, so a non-partial "
+            + "class is invisible to the generator's syntax predicate. Nothing fails at compile time -- the attribute is simply inert -- "
+            + "and the layer then falls through to fresh initialization on every restore, which surfaces only as a weight-drift or "
+            + "round-trip failure far from the declaration. SVTRThinPlateSplineLayer sat in exactly this state.");
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // Find all class declarations that might have [TrainableParameter] fields
-        var classDeclarations = context.SyntaxProvider
+        // The pipeline used to cache ClassDeclarationSyntax. A syntax node is the same class of
+        // leak as a symbol: it holds its SyntaxTree, which roots the entire Compilation, so every
+        // cached entry pinned a compilation in memory. It now carries only each candidate's
+        // metadata name, and the symbol is re-resolved from the compilation at the point of use.
+        //
+        // Same deliberate scope limit as ModelParameterGenerator: this fixes the retention, not the
+        // re-execution. The per-class analysis is large enough that moving it into the transform
+        // would carry more regression risk than the incremental win is worth, so
+        // CompilationProvider stays and the generator still runs every compilation -- it just no
+        // longer holds compilations alive.
+        var classNames = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (node, _) => node is ClassDeclarationSyntax cds &&
                     cds.Modifiers.Any(m => m.Text == "partial"),
-                transform: static (ctx, _) => (ClassDeclarationSyntax)ctx.Node)
-            .Where(static c => c is not null);
+                transform: static (ctx, _) =>
+                    ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is INamedTypeSymbol symbol
+                        ? GeneratorHelpers.MetadataNameOf(symbol)
+                        : null)
+            .Where(static n => n is not null)
+            .Select(static (n, _) => n ?? string.Empty);
 
-        var compilationAndClasses = context.CompilationProvider.Combine(classDeclarations.Collect());
+        var compilationAndClasses = context.CompilationProvider.Combine(classNames.Collect());
 
         context.RegisterSourceOutput(compilationAndClasses, static (spc, source) => Execute(source.Left, source.Right, spc));
+
+        // The predicate above admits only partial classes, which is correct for EMISSION and is also
+        // why a missing partial is silent: the class that needs the generator most simply never
+        // reaches it. This second pass exists to make that state loud. It emits no source.
+        var nonPartialDeclarations = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                predicate: static (node, _) => node is ClassDeclarationSyntax cds &&
+                    !cds.Modifiers.Any(m => m.Text == "partial") &&
+                    cds.Members.OfType<FieldDeclarationSyntax>().Any(static f =>
+                        f.AttributeLists.SelectMany(static al => al.Attributes).Any(static a =>
+                            IsTrainableParameterAttributeName(a.Name.ToString()))),
+                transform: static (ctx, _) =>
+                    ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is INamedTypeSymbol symbol
+                        ? GeneratorHelpers.MetadataNameOf(symbol)
+                        : null)
+            .Where(static n => n is not null)
+            .Select(static (n, _) => n ?? string.Empty)
+            .Collect()
+            .Combine(context.CompilationProvider);
+
+        context.RegisterSourceOutput(nonPartialDeclarations, static (spc, source) =>
+        {
+            var seen = new HashSet<string>(System.StringComparer.Ordinal);
+            foreach (var metadataName in source.Left)
+            {
+                if (metadataName.Length == 0 || !seen.Add(metadataName)) continue;
+                if (GeneratorHelpers.ResolveSourceType(source.Right, metadataName) is not INamedTypeSymbol symbol)
+                    continue;
+
+                var offenders = symbol.GetMembers().OfType<IFieldSymbol>()
+                    .Where(static field => field.GetAttributes().Any(static attribute =>
+                        attribute.AttributeClass is { } attributeClass &&
+                        IsTrainableParameterAttributeName(attributeClass.Name)))
+                    .Select(static field => field.Name)
+                    .ToList();
+                if (offenders.Count == 0) continue;
+
+                var location = symbol.Locations.FirstOrDefault(static item => item.SourceTree is not null);
+                if (location is null) continue;
+
+                spc.ReportDiagnostic(Diagnostic.Create(
+                    NonPartialTrainableParameter,
+                    location,
+                    symbol.Name,
+                    string.Join(", ", offenders)));
+            }
+        });
     }
 
-    private static void Execute(Compilation compilation, ImmutableArray<ClassDeclarationSyntax> classes, SourceProductionContext context)
+    /// <summary>
+    /// Matches the attribute as written in source, where the <c>Attribute</c> suffix and any
+    /// namespace qualification are both optional.
+    /// </summary>
+    private static bool IsTrainableParameterAttributeName(string name)
     {
-        if (classes.IsDefaultOrEmpty) return;
+        int lastDot = name.LastIndexOf('.');
+        if (lastDot >= 0) name = name.Substring(lastDot + 1);
+        return name == "TrainableParameter" || name == "TrainableParameterAttribute";
+    }
 
-        var attributeSymbol = compilation.GetTypeByMetadataName(TrainableParameterAttributeName);
+
+    private static void Execute(Compilation compilation, ImmutableArray<string> classMetadataNames, SourceProductionContext context)
+    {
+        if (classMetadataNames.IsDefaultOrEmpty) return;
+
+        var attributeSymbol = GeneratorHelpers.ResolveSourceType(compilation, TrainableParameterAttributeName);
 
         // [AutoParameters] remains a migration marker, but it never assigns semantics. PyTorch can
         // infer from nn.Parameter because that is a distinct type; Tensor<T> is also used for
         // activations, caches, datasets and buffers, so treating its CLR type or nullability as a
         // role silently corrupts the parameter graph.
-        var autoParamsSymbol = compilation.GetTypeByMetadataName("AiDotNet.Attributes.AutoParametersAttribute");
-        var bufferSymbol = compilation.GetTypeByMetadataName("AiDotNet.Attributes.BufferAttribute");
+        var autoParamsSymbol = GeneratorHelpers.ResolveSourceType(compilation, "AiDotNet.Attributes.AutoParametersAttribute");
+        var bufferSymbol = GeneratorHelpers.ResolveSourceType(compilation, "AiDotNet.Attributes.BufferAttribute");
         // Bail only if NO discovery route exists. This used to return whenever
         // TrainableParameterAttribute was missing, which also disabled register-call discovery,
         // sub-layer registration, buffers and [AutoParameters] -- every mechanism, gated on one
@@ -93,10 +189,15 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         // Group by containing class (multiple partial declarations possible)
         var processedClasses = new HashSet<string>();
 
-        foreach (var classDecl in classes)
+        // Partial classes contribute one name per declaration; resolve each distinct name once.
+        var resolvedNames = new HashSet<string>();
+
+        foreach (var metadataName in classMetadataNames)
         {
-            var model = compilation.GetSemanticModel(classDecl.SyntaxTree);
-            var classSymbol = model.GetDeclaredSymbol(classDecl) as INamedTypeSymbol;
+            if (metadataName.Length == 0) continue;
+            if (!resolvedNames.Add(metadataName)) continue;
+
+            var classSymbol = GeneratorHelpers.ResolveSourceType(compilation, metadataName);
             if (classSymbol is null) continue;
 
             // Check if class extends LayerBase<T>
@@ -390,9 +491,22 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             });
 
             // Generate the partial class source
+            var unguardableAxes = new List<string>();
             var source = GenerateSource(
                 classSymbol, paramFields, gradientFields, subLayerFields, bufferFields,
-                useRuntimeParameterRegistry, emitParameterFreeContract);
+                useRuntimeParameterRegistry, emitParameterFreeContract, unguardableAxes);
+
+            // A declared axis the generator could not trace back to a guardable dimension. Emitting
+            // the declaration anyway is what let ConvolutionalLayer publish [8, 0, 3, 3] from an
+            // unresolved InputDepth and then reject the correct [8, 1, 3, 3] a checkpoint handed it.
+            foreach (var axis in unguardableAxes.Distinct(System.StringComparer.Ordinal))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    UnguardableDeclaredShapeAxis,
+                    classSymbol.Locations.FirstOrDefault(),
+                    classSymbol.Name,
+                    axis));
+            }
             // Use fully qualified name to avoid collisions across namespaces
             var qualifiedName = classSymbol.ToDisplayString().Replace('.', '_').Replace('<', '_').Replace('>', '_');
             var hintName = $"{qualifiedName}.TrainableParameters.g.cs";
@@ -407,7 +521,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         List<SubLayerFieldInfo> subLayerFields,
         List<(string Field, string Name, string Role, string StateRole)> bufferFields,
         bool useRuntimeParameterRegistry,
-        bool emitParameterFreeContract)
+        bool emitParameterFreeContract,
+        ICollection<string>? unguardableAxes = null)
     {
         var ns = classSymbol.ContainingNamespace.ToDisplayString();
         var className = classSymbol.Name;
@@ -579,6 +694,52 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// </remarks>");
             sb.AppendLine($"    protected override System.Collections.Generic.IReadOnlyList<{tupleType}> DeclaredParameterShapes()");
             sb.AppendLine("    {");
+
+            // Guard the SOURCES of the shape arithmetic before evaluating it. The scan further down
+            // rejects an axis that came out negative, which catches a sentinel that was copied and
+            // misses one that was divided: `-1 / Groups` is 0 for any Groups >= 2, and a declared 0
+            // reads as a real axis. See CollectDeclaredShapeSentinelRoots for the full case.
+            var sentinelRoots = new HashSet<string>(System.StringComparer.Ordinal);
+            foreach (var pf in shapedFields)
+            {
+                foreach (string axis in pf.Shape!.Split(',')
+                    .Select(a => a.Trim())
+                    .Where(axis => axis.Length > 0 && axis != "*"))
+                {
+                    string trimmed = TryGetAdaptiveAxisBinding(axis, out string bound) ? bound : axis;
+
+                    // Each axis gets its own walk AND its own `visited` set. The hazard verdict is
+                    // per-axis, and `visited` short-circuits on re-entry: sharing it let the first
+                    // axis consume an identifier so that every later axis reading the same one
+                    // never reached the `member is null` branch and never recorded its unfollowable
+                    // read. Two axes computing over the same unfollowable member would then report
+                    // only the first, leaving the second unguarded AND unreported -- the precise
+                    // failure this diagnostic exists to catch.
+                    //
+                    // Roots stay shared: any one unresolved root sinks the whole declaration, and
+                    // the HashSet keeps the emitted guards unique.
+                    var walk = new DeclaredAxisWalk();
+                    var sentinelVisited = new HashSet<string>(System.StringComparer.Ordinal);
+                    CollectDeclaredShapeSentinelRoots(classSymbol, trimmed, sentinelRoots, sentinelVisited, 0, walk);
+
+                    // Computes something, and reads something we could not follow to a dimension.
+                    // Either alone is fine -- a direct read of a -1 is caught by the scan below, and
+                    // arithmetic over roots we CAN see is guarded above. Together they are the hole.
+                    if (walk.IsHazard) unguardableAxes?.Add(trimmed);
+                }
+            }
+
+            if (sentinelRoots.Count > 0)
+            {
+                sb.AppendLine("        // A dimension this declaration reads is still the -1 lazy sentinel, so the shapes below");
+                sb.AppendLine("        // cannot be computed yet. Checked on the SOURCES rather than on the result: arithmetic");
+                sb.AppendLine("        // launders the sentinel into a plausible non-negative number (-1 / groups == 0), and a");
+                sb.AppendLine("        // laundered axis is indistinguishable from a real one by the time it reaches the scan.");
+                foreach (string root in sentinelRoots.OrderBy(r => r, System.StringComparer.Ordinal))
+                    sb.AppendLine($"        if ({root} < 0) return System.Array.Empty<{arrayType}>();");
+                sb.AppendLine();
+            }
+
             sb.AppendLine($"        var __declared = new System.Collections.Generic.List<{tupleType}>({shapedFields.Count});");
             foreach (var pf in shapedFields)
             {
@@ -600,6 +761,42 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine($"                    return System.Array.Empty<{arrayType}>();");
             sb.AppendLine("            }");
             sb.AppendLine("        }");
+            sb.AppendLine();
+            sb.AppendLine("        return __declared;");
+            sb.AppendLine("    }");
+            sb.AppendLine();
+
+        }
+
+        // DeclaredParameterTensors — the slots and roles alone, with NO shape computed.
+        //
+        // Gated on the parameter fields themselves and NOT on shapedFields, which is the whole
+        // point. A [TrainableParameter] with no Shape = "..." argument still has a tensor and a
+        // role; only its DIMENSIONS are unstated. Emitting this alongside the shape declaration
+        // would have covered exactly the layers that least need it and skipped the ones that do:
+        // SubpixelConvolutionalLayer and SVTRThinPlateSplineLayer declare a role and no shape, so
+        // TryAdoptRestoredParameters saw an empty declaration, returned false, and fell through to
+        // fresh initialization -- silently discarding a restore that was holding trained weights.
+        // That is the "Output[0] differs after serialization roundtrip: original=0" failure, and
+        // the 1,984 scalars SVTR loses across a round trip.
+        var tensorFields = useRuntimeParameterRegistry
+            ? new List<ParameterFieldInfo>()
+            : paramFields.Where(p => p.CollectionKind == ParameterCollectionKind.Direct).ToList();
+        if (tensorFields.Count > 0)
+        {
+            string tp2 = GetTypeParamName(classSymbol);
+            string tensorTupleType = $"(Tensor<{tp2}>? Tensor, PersistentTensorRole Role)";
+            sb.AppendLine("    /// <summary>The declared parameter slots and roles, without their shapes.</summary>");
+            sb.AppendLine("    /// <remarks>Auto-generated — computes no axis, so an unresolved layer can still answer.</remarks>");
+            sb.AppendLine($"    protected override System.Collections.Generic.IReadOnlyList<{tensorTupleType}> DeclaredParameterTensors()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        var __declared = new System.Collections.Generic.List<{tensorTupleType}>({tensorFields.Count});");
+            foreach (var pf in tensorFields)
+            {
+                if (pf.Condition is not null)
+                    sb.AppendLine($"        if ({pf.Condition})");
+                sb.AppendLine($"            __declared.Add(({pf.Name}, {pf.Role}));");
+            }
             sb.AppendLine();
             sb.AppendLine("        return __declared;");
             sb.AppendLine("    }");
@@ -1345,6 +1542,242 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 return b.TypeArguments[0].ToDisplayString();
         }
         return "T";
+    }
+
+    /// <summary>
+    /// What the walk over one declared axis learned about whether that axis can launder a sentinel.
+    /// </summary>
+    /// <remarks>
+    /// A DIRECT read cannot launder. If <c>InputShape[0]</c> is -1 then the axis is -1, and the
+    /// scan the declaration already runs rejects it. Only ARITHMETIC destroys the sentinel, by
+    /// mapping a negative onto a non-negative — <c>-1 / groups</c> is 0 for any groups above 1.
+    /// So an axis is a hazard only when it both computes something AND reads something the
+    /// generator could not follow to a guardable dimension. Flagging every unfollowable read would
+    /// condemn <c>InputShape[0]</c>, which is both idiomatic here and already safe.
+    /// </remarks>
+    private sealed class DeclaredAxisWalk
+    {
+        public bool SawArithmetic;
+        public bool SawUnfollowableRead;
+        public bool IsHazard => SawArithmetic && SawUnfollowableRead;
+    }
+
+    /// <summary>True when an expression applies arithmetic, ignoring the <c>*(...)</c> wildcard syntax.</summary>
+    private static bool ContainsArithmetic(string expression)
+    {
+        for (int i = 0; i < expression.Length; i++)
+        {
+            char c = expression[i];
+            if (c is '+' or '-' or '/' or '%') return true;
+
+            // '*' is arithmetic EXCEPT as the adaptive-axis marker, which is stripped before this
+            // point when it wraps the whole axis but can still lead a bare '*'.
+            if (c == '*' && i > 0) return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Finds every member a declared shape axis transitively reads, so the emitted declaration can
+    /// guard the sources of its arithmetic rather than only the number that arithmetic produced.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The -1 lazy sentinel is a VALUE, and values do not survive arithmetic. The post-hoc scan the
+    /// declaration already runs -- reject an axis that came out negative -- catches a sentinel that
+    /// was copied, and misses one that was divided. ConvolutionalLayer is the case that proves it:
+    /// </para>
+    /// <code>
+    /// InputDepth = -1;                                   // ctor: "not resolved yet"
+    /// private int KernelInChannels => InputDepth / Groups;
+    /// [TrainableParameter(Shape = "OutputDepth, KernelInChannels, KernelSize, KernelSize")]
+    /// </code>
+    /// <para>
+    /// For a depthwise convolution Groups is 8, so KernelInChannels is <c>-1 / 8 == 0</c>. That is
+    /// not negative, so the scan passes it, and the layer declares <c>[8, 0, 3, 3]</c> -- a shape it
+    /// has no way to know and which happens to look concrete. A checkpoint then hands back the
+    /// correct <c>[8, 1, 3, 3]</c> and TryAdoptRestoredParameters rejects the RIGHT tensor against a
+    /// placeholder the layer should never have emitted:
+    /// </para>
+    /// <code>
+    /// ConvolutionalLayer`1 parameters do not conform to the resolved shape.
+    /// Expected weights [8, 0, 3, 3] and biases [8], but received weights [8, 1, 3, 3] and biases [8].
+    /// </code>
+    /// <para>
+    /// Guarding the roots instead of the result closes the whole class: the question "can this layer
+    /// answer yet" is asked of <c>InputDepth</c>, where the sentinel still exists, instead of of
+    /// <c>KernelInChannels</c>, where it has already been laundered into a plausible number. Members
+    /// that are always positive -- Groups, KernelSize, OutputDepth -- cost one non-negative
+    /// comparison each and can never trip it.
+    /// </para>
+    /// </remarks>
+    private static void CollectDeclaredShapeSentinelRoots(
+        INamedTypeSymbol classSymbol,
+        string axisExpression,
+        HashSet<string> roots,
+        HashSet<string> visited,
+        int depth,
+        DeclaredAxisWalk? walk = null)
+    {
+        if (walk is not null && ContainsArithmetic(axisExpression)) walk.SawArithmetic = true;
+        // Four hops covers every declaration in the library and stops a property that reads itself,
+        // directly or through a cycle, from recursing forever. `visited` already breaks true cycles;
+        // this bounds pathological chains as well.
+        if (depth > 4) return;
+
+        foreach (string identifier in ExtractIdentifiers(axisExpression))
+        {
+            if (!visited.Add(identifier)) continue;
+
+            ISymbol? member = null;
+            for (INamedTypeSymbol? t = classSymbol; t is not null && member is null; t = t.BaseType)
+            {
+                member = t.GetMembers(identifier)
+                          .FirstOrDefault(m => m is IFieldSymbol or IPropertySymbol);
+            }
+
+            // Not a member of this layer: a type name, a method, a `Math` qualifier or a literal.
+            // Nothing to guard, and nothing to recurse into -- but if arithmetic is being applied
+            // around it, the walk can no longer prove this axis is resolved.
+            if (member is null)
+            {
+                if (walk is not null && !IsKnownSafeIdentifier(identifier)) walk.SawUnfollowableRead = true;
+                continue;
+            }
+
+            ITypeSymbol? memberType = member switch
+            {
+                IFieldSymbol f => f.Type,
+                IPropertySymbol p => p.Type,
+                _ => null,
+            };
+
+            // Only integral dimensions can carry the sentinel. A bool condition or a tensor field
+            // reached through an expression is not a dimension and must not become a guard.
+            if (memberType is null ||
+                (memberType.SpecialType != SpecialType.System_Int32 &&
+                 memberType.SpecialType != SpecialType.System_Int64))
+            {
+                continue;
+            }
+
+            // A computed member is a conduit, not a root -- guarding it is exactly the mistake this
+            // method exists to avoid. Follow it to whatever it reads and guard THAT. A member with
+            // no body we can read (auto-property, plain field, or one declared in another assembly)
+            // is where the recursion bottoms out and where the sentinel is still intact.
+            string? body = TryGetComputedMemberBody(member);
+            if (body is not null)
+            {
+                CollectDeclaredShapeSentinelRoots(classSymbol, body, roots, visited, depth + 1, walk);
+                continue;
+            }
+
+            // Constants are fixed at compile time and cannot hold a runtime sentinel.
+            if (member is IFieldSymbol { HasConstantValue: true }) continue;
+
+            roots.Add(identifier);
+        }
+    }
+
+    /// <summary>
+    /// The expression a property or field computes, when the generator can see one: an expression
+    /// body, a get-accessor that is a single return, or a field initializer.
+    /// </summary>
+    private static string? TryGetComputedMemberBody(ISymbol member)
+    {
+        foreach (var node in member.DeclaringSyntaxReferences.Select(r => r.GetSyntax()))
+        {
+
+            if (node is PropertyDeclarationSyntax property)
+            {
+                if (property.ExpressionBody is not null)
+                    return property.ExpressionBody.Expression.ToString();
+
+                var getter = property.AccessorList?.Accessors
+                    .FirstOrDefault(a => a.IsKind(SyntaxKind.GetAccessorDeclaration));
+                if (getter?.ExpressionBody is not null)
+                    return getter.ExpressionBody.Expression.ToString();
+                if (getter?.Body?.Statements.Count == 1 &&
+                    getter.Body.Statements[0] is ReturnStatementSyntax { Expression: { } returned })
+                {
+                    return returned.ToString();
+                }
+
+                // An auto-property, or a getter with real control flow. Neither is a conduit we can
+                // follow, so the property itself is the root.
+                return null;
+            }
+
+            // A field whose initializer is a bare literal is a root, not a conduit -- following it
+            // would add nothing and `int _n = 8;` has no members to guard.
+            //
+            // Unwrap unary +/- first. `private int _inputDepth = -1;` is a
+            // PrefixUnaryExpressionSyntax wrapping the literal 1, NOT a LiteralExpressionSyntax, so
+            // testing the outer node alone treated it as a conduit and returned "-1" as a body.
+            // Recursing into "-1" finds no identifier, so no guard was emitted -- for the exact
+            // sentinel this whole feature exists to catch, merely because the layer wrote it as a
+            // field initializer instead of a constructor assignment.
+            if (node is VariableDeclaratorSyntax { Initializer.Value: { } initializer } &&
+                Unwrap(initializer) is not LiteralExpressionSyntax)
+            {
+                return initializer.ToString();
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Identifiers that appear inside declared axes but can never carry the lazy sentinel: language
+    /// keywords, and the numeric helpers axes are routinely written over.
+    /// </summary>
+    private static bool IsKnownSafeIdentifier(string identifier) => identifier switch
+    {
+        "Math" or "Max" or "Min" or "Abs" or "Ceiling" or "Floor" or "Round" or "Pow" or "Sqrt" => true,
+        "int" or "long" or "checked" or "unchecked" or "this" or "new" or "true" or "false" => true,
+        _ => false,
+    };
+
+    /// <summary>
+    /// Strips parentheses and unary +/- so a signed literal is recognised as the literal it is.
+    /// </summary>
+    private static ExpressionSyntax Unwrap(ExpressionSyntax expression)
+    {
+        while (true)
+        {
+            switch (expression)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    expression = parenthesized.Expression;
+                    continue;
+                case PrefixUnaryExpressionSyntax unary when unary.IsKind(SyntaxKind.UnaryMinusExpression)
+                                                         || unary.IsKind(SyntaxKind.UnaryPlusExpression):
+                    expression = unary.Operand;
+                    continue;
+                default:
+                    return expression;
+            }
+        }
+    }
+
+    /// <summary>C# identifiers in an expression, in source order, without allocating a regex.</summary>
+    private static IEnumerable<string> ExtractIdentifiers(string expression)
+    {
+        for (int i = 0; i < expression.Length;)
+        {
+            char c = expression[i];
+            if (!char.IsLetter(c) && c != '_') { i++; continue; }
+
+            int start = i;
+            while (i < expression.Length && (char.IsLetterOrDigit(expression[i]) || expression[i] == '_')) i++;
+
+            // Skip a member access tail: in `Math.Max(a, b)` the interesting names are `a` and `b`,
+            // and `Max` is not a member of the layer anyway. Skipping it keeps `visited` honest.
+            if (start > 0 && expression[start - 1] == '.') continue;
+
+            yield return expression.Substring(start, i - start);
+        }
     }
 
     private static string ToValidationShapeAxis(string axis)

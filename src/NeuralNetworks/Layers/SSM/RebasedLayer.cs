@@ -277,7 +277,7 @@ public partial class RebasedLayer<T> : LayerBase<T>, IShapeContract
         _lastValue = v;
 
         // Step 2: Output gate
-        var gateRaw = Engine.Reshape(Engine.TensorBroadcastAdd(
+        var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var outputGate = Engine.Swish(gateRaw);
@@ -300,7 +300,7 @@ public partial class RebasedLayer<T> : LayerBase<T>, IShapeContract
         var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorMatMul(gatedFlat, _outputProjectionWeights);
         var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
-        outputFlat = Engine.TensorBroadcastAdd(outputFlat, outBias);
+        outputFlat = Engine.TensorAdd(outputFlat, outBias);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
@@ -331,7 +331,7 @@ public partial class RebasedLayer<T> : LayerBase<T>, IShapeContract
                 Engine.ReduceSum(fourthPower, new[] { 3 }, keepDims: true),
                 NumOps.FromDouble(1e-8)));
         return Engine.Reshape(
-            Engine.TensorBroadcastDivide(squared, norm),
+            Engine.TensorDivide(squared, norm),
             new[] { batchSize, seqLen, _modelDimension });
     }
 
