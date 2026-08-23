@@ -293,6 +293,22 @@ public sealed class ModelStateRegistry<T>
                 CopyCollectionState(name, current, restored);
             });
 
+    /// <summary>
+    /// Declares a deterministic repair that runs after the ordinary state entries in the payload.
+    /// </summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="restore">Rebuilds state derived from the entries restored before it.</param>
+    /// <remarks>
+    /// The entry intentionally writes no payload. Its presence in the name-framed state block makes
+    /// the callback version-safe, while registration order ensures options and fitted dimensions are
+    /// available before generated code reconstructs helpers that are derived from them.
+    /// </remarks>
+    public void DeclareAfterRestore(string name, Action restore)
+    {
+        if (restore is null) throw new ArgumentNullException(nameof(restore));
+        Add(name, _ => { }, _ => restore());
+    }
+
     /// <summary>Declares a readonly list of vectors and restores its contents in place.</summary>
     public void DeclareInPlace(string name, Func<List<Vector<T>>?> get)
         => Declare(name, get, restored => RestoreCollectionInPlace(name, get, restored));
@@ -909,6 +925,55 @@ public sealed class ModelStateRegistry<T>
 
                 if (length > 0) child.Deserialize(bytes);
             });
+
+    /// <summary>
+    /// Declares an assignable fitted child whose parent already owns the canonical construction
+    /// factory for its abstract or interface-typed slot.
+    /// </summary>
+    /// <typeparam name="TChild">The child's serializer contract.</typeparam>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the current fitted child.</param>
+    /// <param name="set">Installs a child created during restore.</param>
+    /// <param name="create">Builds the configured concrete child when the slot is empty.</param>
+    /// <remarks>
+    /// A parent factory is stronger construction evidence than reflection: it preserves the exact
+    /// configured implementation even when <typeparamref name="TChild"/> is an interface and the
+    /// concrete child requires constructor arguments. Stacking classifiers are the canonical shape.
+    /// </remarks>
+    public void DeclareChild<TChild>(
+        string name,
+        Func<TChild?> get,
+        Action<TChild?> set,
+        Func<TChild> create)
+        where TChild : class, IModelSerializer
+    {
+        if (create is null) throw new ArgumentNullException(nameof(create));
+        Add(name,
+            w =>
+            {
+                var child = get();
+                if (child is null) { w.Write(-1); return; }
+                var bytes = child.Serialize();
+                w.Write(bytes.Length);
+                w.Write(bytes);
+            },
+            r =>
+            {
+                int length = r.ReadInt32();
+                if (length < 0) { set(null); return; }
+
+                var bytes = r.ReadBytes(length);
+                var child = get();
+                if (child is null)
+                {
+                    child = create() ?? throw new InvalidOperationException(
+                        $"State '{name}' used its configured child factory, but the factory returned null.");
+                    set(child);
+                }
+
+                if (length > 0) child.Deserialize(bytes);
+            });
+    }
 
     /// <summary>Declares a nested parameter source, such as a duelling agent's target network.</summary>
     /// <param name="name">A stable name, unique within the model.</param>

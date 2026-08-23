@@ -13026,7 +13026,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             }
 
             // Create the layer.
-            var layer = DeserializationHelper.CreateLayerFromType<T>(layerType, inputShape, outputShape, additionalParams);
+            ILayer<T> layer = DeserializationHelper.CreateLayerFromType<T>(
+                layerType, inputShape, outputShape, additionalParams);
 
             // Lazy layers need their shape resolved before SetParameters can size sub-layer
             // weights. The serialized inputShape is concrete by definition when the source
@@ -13080,6 +13081,23 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             if (extraParametersVector != null && layer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> extrasLayer)
             {
                 extrasLayer.SetExtraParameters(extraParametersVector);
+            }
+
+            // Prefer restoring into the constructor-created layer at the same canonical slot when
+            // the full layer persistence contract accepts it. This preserves readonly model fields
+            // that are aliases into Layers: replacing the canonical object would leave such a field
+            // permanently attached to the stale graph, while copying the restored state in place
+            // keeps both ownership views identical. A topology or shape that cannot be restored in
+            // place simply retains the newly reconstructed layer and follows the normal generated
+            // alias-rebinding path below.
+            if (i < previousLayers.Length
+                && previousLayers[i] is LayerBase<T> previousLayer
+                && layer is LayerBase<T> restoredLayer
+                && previousLayer.GetType() == restoredLayer.GetType()
+                && TryRestoreLayerStateForClone(restoredLayer, previousLayer))
+            {
+                if (!ReferenceEquals(restoredLayer, previousLayer)) restoredLayer.Dispose();
+                layer = previousLayer;
             }
 
             // Add the layer to the network
@@ -14239,6 +14257,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 ? destinationLayer.GetTrainableParametersWithoutMaterialization()
                 : dst.GetTrainableParameters();
 
+            if (dst is LayerBase<T> declaredDestination
+                && !declaredDestination.TrainableParametersConformToActiveDeclaration(sp))
+            {
+                return RejectCandidate(
+                    $"trainable layer {i} ({src.GetType().Name}) source tensors contradict the clone's generated shape declaration");
+            }
+
+            if (src is LayerBase<T> bufferedSource
+                && dst is LayerBase<T> bufferedDestination
+                && !bufferedDestination.CanAdoptRegisteredBuffersFrom(
+                    bufferedSource, out string bufferMismatch))
+            {
+                return RejectCandidate(
+                    $"trainable layer {i} ({src.GetType().Name}) has incompatible registered buffers: {bufferMismatch}");
+            }
+
             // LayerBase.SetTrainableParameters is itself the universal runtime-registry adoption
             // path. It rebinds derived fields, arrays, lists and dictionaries by tensor identity,
             // then invokes the generated adoption hook. Rejecting that base implementation here
@@ -14306,21 +14340,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 var shared = new Tensor<T>[sp.Count];
                 for (int p = 0; p < sp.Count; p++)
                     shared[p] = (Tensor<T>)sp[p].CloneShared();
-                try { dst.SetTrainableParameters(shared); }
-                catch (ArgumentException)
+                try
+                {
+                    dst.SetTrainableParameters(shared);
+
+                    // Generated setters atomically rebind their fields, then leave an adoption signal
+                    // for LayerBase's common lazy-initialization gate. Consume that signal NOW, one node
+                    // at a time, before the clone's first real forward can interpret its earlier
+                    // shape-only resolution as permission to allocate fresh tensors over the trained
+                    // ones. The own-node boundary avoids recursively materializing foundation-scale
+                    // descendants before their corresponding COW slots are installed.
+                    if (dst is LayerBase<T> reboundDestination)
+                        reboundDestination.CommitTrainableParameterAdoption();
+                }
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
                 {
                     return RejectCandidate(
-                        $"trainable layer {i} ({src.GetType().Name}) rejected its shared tensors");
+                        $"trainable layer {i} ({src.GetType().Name}) rejected its shared tensors: {ex.Message}");
                 }
-
-                // Generated setters atomically rebind their fields, then leave an adoption signal
-                // for LayerBase's common lazy-initialization gate. Consume that signal NOW, one node
-                // at a time, before the clone's first real forward can interpret its earlier
-                // shape-only resolution as permission to allocate fresh tensors over the trained
-                // ones. The own-node boundary avoids recursively materializing foundation-scale
-                // descendants before their corresponding COW slots are installed.
-                if (dst is LayerBase<T> reboundDestination)
-                    reboundDestination.CommitTrainableParameterAdoption();
             }
 
             // Parameter-free composite nodes still participate in shape-only lifecycle. Their
@@ -14331,6 +14368,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             else if (dst is LayerBase<T> parameterFreeDestination)
             {
                 parameterFreeDestination.CommitTrainableParameterAdoption();
+            }
+
+            // Registered buffers are persistent execution state outside the optimizer tensor view
+            // (reservoir matrices, running statistics, masks). The generic COW helper already
+            // adopts them, but NeuralNetworkBase's optimized path omitted the same step and could
+            // return a clone whose trainable weights matched while its forward-only state remained
+            // freshly initialized.
+            if (src is LayerBase<T> sourceWithBuffers
+                && dst is LayerBase<T> destinationWithBuffers)
+            {
+                destinationWithBuffers.AdoptRegisteredBuffersFrom(sourceWithBuffers);
             }
 
             // Copy serialization EXTRAS (non-trainable trained state NOT in GetTrainableParameters —
@@ -14483,6 +14531,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                         $"{sourceBytes.Length}, clone length {cloneBytes.Length}");
                 }
             }
+
         }
 
         // Carry each layer's per-layer RandomSeed (and the one-shot wired latch) into the clone.

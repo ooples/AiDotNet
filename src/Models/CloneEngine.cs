@@ -382,6 +382,15 @@ public static class CloneEngine
     {
         if (value is null) return null;
 
+        // Options are mutable constructor blueprints. Passing the source instance straight into a
+        // reconstructed model makes model.GetOptions() and clone.GetOptions() the same object, so
+        // configuring either model after Clone silently reconfigures both. The options clone engine
+        // is generated for every concrete ModelOptions type and copies inherited settings too.
+        if (value is ModelOptions)
+        {
+            return CopyConfiguration(value);
+        }
+
         // Mutable blueprints can own models/layers without being models themselves. Reusing such a
         // constructor argument makes the reconstructed parent share those owned objects before its
         // parameter state is even restored. Let the blueprint produce an independent structural

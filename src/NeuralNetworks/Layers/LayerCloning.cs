@@ -163,6 +163,21 @@ public static class LayerCloning
         }
     }
 
+    /// <summary>
+    /// Preserves the future initialization state of a copy-on-write layer whose parameter tensors
+    /// are still wholly deferred.
+    /// </summary>
+    internal static void CopyDeferredRandomState<T>(LayerBase<T> source, LayerBase<T> clone)
+    {
+        if (source is null) throw new ArgumentNullException(nameof(source));
+        if (clone is null) throw new ArgumentNullException(nameof(clone));
+        if (source.GetType() != clone.GetType())
+            throw new ArgumentException("Deferred random state requires matching layer types.", nameof(clone));
+
+        clone.RandomSeed = source.RandomSeed;
+        CopyRandomState(source, clone, shareRandomState: true);
+    }
+
     private static bool IsStochasticCounter(FieldInfo field)
     {
         if (field.IsInitOnly || field.IsStatic

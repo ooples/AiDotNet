@@ -945,6 +945,39 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     /// <summary>
+    /// Validates supplied tensors against this layer's active generated shape declaration when the
+    /// declaration is concrete enough to answer.
+    /// </summary>
+    /// <remarks>
+    /// A materialized destination can still carry stale tensors whose shapes happen to match the
+    /// source while contradicting its own construction metadata. Copy-on-write preflight must ask
+    /// the declaration as well as the current storage; otherwise adoption fails only after the
+    /// clone has already been partially rebound. Runtime-registered layers have no active generated
+    /// declaration and therefore remain valid by construction.
+    /// </remarks>
+    internal bool TrainableParametersConformToActiveDeclaration(
+        IReadOnlyList<Tensor<T>> parameters)
+    {
+        if (!HasActiveDeclaredParameterShapes) return true;
+
+        var declared = DeclaredParameterShapes();
+        // An unresolved declaration cannot answer yet. The existing current-shape and lazy-adoption
+        // checks remain the conservative authority for that state.
+        if (declared is null || declared.Count == 0) return true;
+        if (declared.Count != parameters.Count) return false;
+
+        for (int i = 0; i < declared.Count; i++)
+        {
+            var parameter = parameters[i];
+            if (parameter is null || parameter.Length == 0 || parameter.Shape.Length == 0
+                || !ShapeMatchesDeclared(parameter, declared[i].Expected))
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Materializes this layer, if it can be, before its parameter values are read or written.
     /// </summary>
     /// <remarks>
@@ -7113,7 +7146,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // axis exactly recoverable from the payload length. Resolve immediately when they do;
             // otherwise the first real input will materialize the tensors and replay this payload.
             if (TryInferInputShapeFromParameterCount(parameters.Length, out var inferredInput))
-                ResolveFromShape(inferredInput);
+            {
+                bool fullyConcrete = inferredInput.Length > 0;
+                for (int axis = 0; axis < inferredInput.Length; axis++)
+                    if (inferredInput[axis] <= 0) { fullyConcrete = false; break; }
+
+                if (fullyConcrete)
+                    ResolveFromShape(inferredInput);
+                else
+                    TryMaterializePartiallyInferredParameterSurface(inferredInput);
+            }
 
             TryApplyPendingParameterRestore();
             return;
@@ -7147,6 +7189,42 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
         _pendingParameterRestore = null;
         ApplyConcreteParameterVector(parameters);
+    }
+
+    /// <summary>
+    /// Materializes a generated parameter surface when the checkpoint determines every weight
+    /// dimension but intentionally does not determine unrelated data axes.
+    /// </summary>
+    /// <remarks>
+    /// Image convolutions commonly size weights from channels alone while height and width remain
+    /// dynamic. Forcing neutral spatial dimensions through <see cref="ResolveFromShape"/> would
+    /// falsely mark the whole layer resolved and suppress its real first-forward shape update.
+    /// Instead, publish only the inferred axes, allocate from the now-concrete generated tensor
+    /// declarations, and leave the layer shape-deferred for the first real input.
+    /// </remarks>
+    private bool TryMaterializePartiallyInferredParameterSurface(int[] inferredInput)
+    {
+        if (inferredInput is null || inferredInput.Length == 0) return false;
+        UpdateInputShape((int[])inferredInput.Clone());
+
+        var declared = DeclaredParameterShapes();
+        if (declared is null || declared.Count == 0) return false;
+        var rebuilt = new Tensor<T>[declared.Count];
+        for (int i = 0; i < declared.Count; i++)
+        {
+            var expected = declared[i].Expected;
+            if (expected.Length == 0) return false;
+            var dimensions = new int[expected.Length];
+            for (int axis = 0; axis < expected.Length; axis++)
+            {
+                dimensions[axis] = expected[axis];
+                if (dimensions[axis] <= 0) return false;
+            }
+            rebuilt[i] = new Tensor<T>(dimensions);
+        }
+
+        SetTrainableParameters(rebuilt);
+        return true;
     }
 
     /// <summary>Distributes a validated vector through the ordered component manifest.</summary>
@@ -8288,6 +8366,99 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         AdoptTrainableParameterTensors(parameters);
         _cachedParameterCount = -1;
         BumpParameterEpoch();
+    }
+
+    /// <summary>
+    /// Rebinds a legacy layer whose complete parameter order is exposed by an explicit
+    /// <c>GetAllTensors()</c> convention consumed by source generation.
+    /// </summary>
+    /// <remarks>
+    /// The convention supplies order; this shared boundary supplies the part a returned array
+    /// cannot: replacing the tensor handles held in private fields, arrays, lists, or dictionaries
+    /// and synchronizing the persistent engine registry. It is invoked only by generated setters.
+    /// </remarks>
+    protected void SetConventionEnumeratedTrainableParameters(
+        IReadOnlyList<Tensor<T>> current,
+        IReadOnlyList<Tensor<T>> parameters)
+    {
+        if (current is null) throw new ArgumentNullException(nameof(current));
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (parameters.Count != current.Count)
+        {
+            throw new ArgumentException(
+                $"{GetType().Name} exposes {current.Count} convention-enumerated parameters but received {parameters.Count}.",
+                nameof(parameters));
+        }
+
+        var roles = new PersistentTensorRole[current.Count];
+        for (int i = 0; i < current.Count; i++)
+        {
+            roles[i] = InferConventionParameterRole(current[i]);
+            for (int registered = 0; registered < _registeredTensors.Count; registered++)
+            {
+                if (!ReferenceEquals(current[i], _registeredTensors[registered])) continue;
+                roles[i] = _registeredTensorRoles[registered];
+                break;
+            }
+        }
+
+        RebindRuntimeParameterHandles(current, parameters);
+        ClearRegisteredParameters();
+        for (int i = 0; i < parameters.Count; i++)
+            AppendTrainableParameter(parameters[i], roles[i]);
+
+        AdoptTrainableParameterTensors(parameters);
+        MarkTrainableParametersRebound();
+    }
+
+    private PersistentTensorRole InferConventionParameterRole(Tensor<T> tensor)
+    {
+        for (Type? type = GetType(); type is not null && type != typeof(LayerBase<T>); type = type.BaseType)
+        {
+            var fields = type.GetFields(
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.DeclaredOnly);
+
+            foreach (var field in fields)
+            {
+                object? value = field.GetValue(this);
+                bool owns = ReferenceEquals(value, tensor);
+                if (!owns && value is System.Collections.IDictionary dictionary)
+                {
+                    foreach (System.Collections.DictionaryEntry entry in dictionary)
+                    {
+                        if (!ReferenceEquals(entry.Value, tensor)) continue;
+                        owns = true;
+                        break;
+                    }
+                }
+                else if (!owns && value is System.Collections.IEnumerable sequence && value is not string)
+                {
+                    foreach (object? item in sequence)
+                    {
+                        if (!ReferenceEquals(item, tensor)) continue;
+                        owns = true;
+                        break;
+                    }
+                }
+
+                if (!owns) continue;
+                string name = field.Name.ToLowerInvariant();
+                if (name.Contains("bias") || name.Contains("beta"))
+                    return PersistentTensorRole.Biases;
+                if (name.Contains("embedding"))
+                    return PersistentTensorRole.Embeddings;
+                if (name.Contains("norm") || name.Contains("gamma"))
+                    return PersistentTensorRole.NormalizationParams;
+                if (name.Contains("scale"))
+                    return PersistentTensorRole.ScaleParameters;
+                return PersistentTensorRole.Weights;
+            }
+        }
+
+        return PersistentTensorRole.Weights;
     }
 
     private void RebindRuntimeParameterHandles(

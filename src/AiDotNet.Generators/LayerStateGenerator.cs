@@ -174,7 +174,8 @@ public class LayerStateGenerator : IIncrementalGenerator
             // would trade a clear "no factory" for a call that cannot compile, and REPORTING it
             // would be a diagnostic against a layer whose author claimed nothing.
             if (marked.Count > 0
-                && ctor.Parameters.Any(p => !p.IsOptional && !marked.Contains(p, SymbolEqualityComparer.Default)))
+                && ctor.Parameters.Any(p => !p.IsOptional
+                    && !marked.Contains(p, SymbolEqualityComparer.Default)))
             {
                 return null;
             }
@@ -337,6 +338,21 @@ public class LayerStateGenerator : IIncrementalGenerator
                 info.IsActivation = true;
                 info.IsVectorActivation = vector;
                 if (p.IsOptional) info.DefaultExpression = RenderDefault(p);
+
+                // Prefer the constructor argument's own stored member when one exists. Composite
+                // layers frequently expose LayerBase.ScalarActivation as Identity while storing a
+                // different activation for an internal FFN (PreLNTransformerBlock is the canonical
+                // case). Binding such an argument to ordered slot zero silently reconstructed GELU
+                // as Identity. The ordered channel remains the fallback for composites whose
+                // constructor activation is represented only by child layers.
+                info.BackingMember = FindBackingMember(
+                    type, p, ctx.SemanticModel, syntax,
+                    out _, out _);
+                if (info.BackingMember is not null)
+                {
+                    info.UseBackedActivation = true;
+                    info.Key = StateKey(p) ?? p.Name;
+                }
                 if (vector)
                 {
                     info.ActivationIndex = vectorActivationIndex++;
@@ -517,10 +533,36 @@ public class LayerStateGenerator : IIncrementalGenerator
             || DerivesFromLayerBase(named))
             return true;
 
+        // Composite layer constructors commonly accept IEnumerable<ILayer<T>> while retaining a
+        // private List<ILayer<T>>. Treat every one-argument layer collection abstraction as owned
+        // construction topology, before the general interface classification can reduce it to a
+        // type name. LayerStateBag clones the elements independently in memory and persists the
+        // same allowlisted layer payload for durable restoration.
+        if (named.TypeArguments.Length == 1
+            && IsLayerValue(named.TypeArguments[0])
+            && open is "System.Collections.Generic.IEnumerable"
+                or "System.Collections.Generic.ICollection"
+                or "System.Collections.Generic.IList"
+                or "System.Collections.Generic.IReadOnlyCollection"
+                or "System.Collections.Generic.IReadOnlyList")
+        {
+            return true;
+        }
+
         // A list supplied to a composite constructor represents owned/shared child structure. The
         // base cloner duplicates every element (layers through Clone, other stateful components
         // through their generated/reflected configuration plan) and copies attributed state.
         return open == "System.Collections.Generic.List";
+    }
+
+    private static bool IsLayerValue(ITypeSymbol type)
+    {
+        if (type is not INamedTypeSymbol named) return false;
+        string open = named.ConstructedFrom.ToDisplayString(UnqualifiedGenerics);
+        return open is "AiDotNet.Interfaces.ILayer" or "AiDotNet.NeuralNetworks.Layers.LayerBase"
+            || named.AllInterfaces.Any(i =>
+                i.ConstructedFrom.ToDisplayString(UnqualifiedGenerics) == "AiDotNet.Interfaces.ILayer")
+            || DerivesFromLayerBase(named);
     }
 
     /// <summary>Whether cloning intentionally replaces this optional entropy source.</summary>
@@ -822,6 +864,13 @@ public class LayerStateGenerator : IIncrementalGenerator
         sb.AppendLine("    protected override void WriteConstructionState(global::System.Collections.Generic.Dictionary<string, string> __metadata)");
         sb.AppendLine("    {");
         sb.AppendLine("        base.WriteConstructionState(__metadata);");
+        foreach (var p in model.Parameters.Where(p => p.UseBackedActivation))
+        {
+            sb.AppendLine($"        if (this.{p.BackingMember} is not null)");
+            sb.AppendLine("        {");
+            sb.AppendLine($"            __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.FormatType(this.{p.BackingMember});");
+            sb.AppendLine("        }");
+        }
         foreach (var p in model.Parameters.Where(p => p.IsState))
         {
             if (p.Kind is ValueKind.Component or ValueKind.CloneObject)
@@ -831,7 +880,10 @@ public class LayerStateGenerator : IIncrementalGenerator
                 // layer, which then failed while resolving the empty component.
                 sb.AppendLine($"        if (this.{p.BackingMember} is not null)");
                 sb.AppendLine("        {");
-                sb.AppendLine($"            __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.FormatType(this.{p.BackingMember});");
+                string componentFormatter = p.Kind == ValueKind.CloneObject
+                    ? "FormatCloneObject"
+                    : "FormatType";
+                sb.AppendLine($"            __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.{componentFormatter}(this.{p.BackingMember});");
                 sb.AppendLine("        }");
                 continue;
             }
@@ -884,7 +936,8 @@ public class LayerStateGenerator : IIncrementalGenerator
         sb.AppendLine("    }");
 
         var components = model.Parameters
-            .Where(p => p.IsState && p.Kind is ValueKind.Component or ValueKind.JsonObject or ValueKind.CloneObject)
+            .Where(p => p.UseBackedActivation
+                || (p.IsState && p.Kind is ValueKind.Component or ValueKind.JsonObject or ValueKind.CloneObject))
             .ToList();
         if (components.Count > 0)
         {
@@ -1015,7 +1068,9 @@ public class LayerStateGenerator : IIncrementalGenerator
                     required.Add("vectorActivation is null");
                     var slot = model.Parameters.First(p => p.IsActivation && !p.IsVectorActivation);
                     if (slot.DefaultExpression is null)
-                        required.Add("scalarActivation is not null || state.Has(\"__aidotnet_scalar_activation_0\")");
+                        required.Add(slot.UseBackedActivation
+                            ? $"state.Has(\"{slot.Key}\")"
+                            : "scalarActivation is not null || state.Has(\"__aidotnet_scalar_activation_0\")");
                 }
                 else if (vector)
                 {
@@ -1062,6 +1117,7 @@ public class LayerStateGenerator : IIncrementalGenerator
             var source = p.IsVectorActivation ? "vectorActivation" : "scalarActivation";
             var kind = p.IsVectorActivation ? "vector" : "scalar";
             var key = $"__aidotnet_{kind}_activation_{p.ActivationIndex}";
+            if (p.UseBackedActivation) key = p.Key;
             var fallback = p.ActivationIndex == 0
                 ? $"{source} as {iface}"
                 : p.DefaultExpression ?? "default";
@@ -1295,6 +1351,8 @@ public class LayerStateGenerator : IIncrementalGenerator
         public bool IsOptionalState;
         public bool IsActivation;
         public bool IsVectorActivation;
+        /// <summary>Whether this activation has an exact constructor-argument backing member.</summary>
+        public bool UseBackedActivation;
         /// <summary>Zero-based position among scalar or vector activation constructor slots.</summary>
         public int ActivationIndex;
         public bool UseDefault;

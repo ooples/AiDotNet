@@ -75,25 +75,39 @@ internal static class CopyOnWriteCloneHelper
         // throwaway forward merely to allocate destination storage that will immediately be replaced.
         for (int i = 0; i < srcLayers.Count; i++)
         {
+            if (srcLayers[i].GetType() != dstLayers[i].GetType())
+            {
+                mismatch = $"layer {i} types differ ({srcLayers[i].GetType().Name} vs "
+                           + $"{dstLayers[i].GetType().Name})";
+                return false;
+            }
+
             var sps = GetAuthoritativeSourceValues(srcLayers[i]);
             var dps = GetWithoutMaterialization(dstLayers[i]);
             bool hasMaterializedSourceValue = false;
             bool hasSourcePlaceholder = false;
             for (int p = 0; p < sps.Count; p++)
             {
-                if (sps[p].Length == 0) hasSourcePlaceholder = true;
-                else hasMaterializedSourceValue = true;
+                if (sps[p].Length == 0)
+                {
+                    hasSourcePlaceholder = true;
+                }
+                else
+                {
+                    hasMaterializedSourceValue = true;
+                }
             }
 
-            // A layer is allowed to remain wholly deferred when its execution path was not used
-            // (DiT's cross-attention projections in an unconditional forward are the canonical
-            // example). Those zero-sized tensors are shape placeholders, not values to adopt.
-            // A partially materialized layer, however, cannot be rebound atomically through the
-            // all-slots setter, so fail the COW candidate before mutating either graph.
+            // A mixed live/placeholder surface cannot be shared atomically: skipping the layer
+            // would drop its live values, while cloning the zero-sized entries would pretend they
+            // contain learned state. Route that partial lifecycle through the eager fallback.
+            // A WHOLLY deferred layer is different: it contains no values to transfer, and both
+            // graphs retain the same declaration-driven lazy state. Rejecting it disabled COW for
+            // ordinary predictors with optional branches (DiT's unused conditioning projections).
             if (hasSourcePlaceholder && hasMaterializedSourceValue)
             {
-                mismatch = $"layer {i} ({srcLayers[i].GetType().Name}) has a partially materialized "
-                           + $"trainable surface: source={DescribeShapes(sps)}";
+                mismatch = $"layer {i} ({srcLayers[i].GetType().Name}) has a deferred "
+                           + $"partial trainable surface: source={DescribeShapes(sps)}";
                 return false;
             }
 
@@ -148,6 +162,19 @@ internal static class CopyOnWriteCloneHelper
                     shared[p] = (Tensor<T>)sp[p].CloneShared();
                 dstLayers[i].SetTrainableParameters(shared);
             }
+            else if (sp.Count > 0
+                     && srcLayers[i] is AiDotNet.NeuralNetworks.Layers.LayerBase<T> deferredSource
+                     && dstLayers[i] is AiDotNet.NeuralNetworks.Layers.LayerBase<T> deferredDestination)
+            {
+                // Zero-sized placeholders still carry FUTURE parameter state: the seed, RNG
+                // progress, and initialization counter that determine the values allocated on the
+                // first read/forward. Copying no tensors and reporting success made two untouched
+                // lazy predictors initialize independently after Clone. Preserve that state with
+                // the same shared-base mechanism used by LayerCloning, without materializing either
+                // side or sacrificing the foundation-scale O(1) path.
+                AiDotNet.NeuralNetworks.Layers.LayerCloning.CopyDeferredRandomState(
+                    deferredSource, deferredDestination);
+            }
 
             // A composite can own no tensor itself while owning trainable descendants. Shape-only
             // graph bring-up still leaves that parent at a pending first-forward boundary; if it is
@@ -156,9 +183,9 @@ internal static class CopyOnWriteCloneHelper
             // free parents, so the adopted descendant graph is the graph execution keeps.
             // Commit nodes that received real values, and parameter-free composites whose child
             // graph must survive first-forward reconciliation. A node whose source owns only
-            // zero-sized placeholders is still deferred by definition; committing it would call
-            // the materialization boundary and replace those placeholders with freshly initialized
-            // weights that the source never owned.
+            // a mixed live/placeholder source cannot reach this phase: preflight routes that graph
+            // through the state-transfer fallback so a clone never reports success after dropping
+            // real values. A wholly deferred node deliberately remains lazy on both sides.
             if ((hasSourceValues || sp.Count == 0)
                 && dstLayers[i] is AiDotNet.NeuralNetworks.Layers.LayerBase<T> destinationBase)
                 destinationBase.CommitTrainableParameterAdoption();

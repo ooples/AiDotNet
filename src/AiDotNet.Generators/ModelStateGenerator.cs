@@ -243,7 +243,8 @@ public class ModelStateGenerator : IIncrementalGenerator
                 nullableTarget: memberType.NullableAnnotation == NullableAnnotation.Annotated
                     || memberType.IsValueType,
                 restoreInPlace: member is IFieldSymbol { IsReadOnly: true },
-                exactPrecisionShadow: carryNativePrecisionShadow);
+                exactPrecisionShadow: carryNativePrecisionShadow,
+                childFactory: ChildFactoryExpression(type, memberType));
 
             if (call is null)
             {
@@ -271,6 +272,19 @@ public class ModelStateGenerator : IIncrementalGenerator
 
             members.Add((member.Name, call));
             hasExplicitState |= annotated;
+        }
+
+        var fittedInfrastructureRepairs = FittedInfrastructureRepairs(type);
+        if (fittedInfrastructureRepairs.Count > 0)
+        {
+            var repair = new StringBuilder();
+            repair.Append($"state.DeclareAfterRestore(\"{type.Name}.$fittedInfrastructure\", () => {{ if (IsFitted) {{ ");
+            foreach (var (field, expression) in fittedInfrastructureRepairs)
+            {
+                repair.Append($"if ({field} is null) {field} = {expression}; ");
+            }
+            repair.Append("} });");
+            members.Add(("$fittedInfrastructure", repair.ToString()));
         }
 
         // A declaring type ALWAYS gets its Core method, even empty: its hand-written hook calls it
@@ -530,7 +544,8 @@ public class ModelStateGenerator : IIncrementalGenerator
         bool annotated,
         bool nullableTarget,
         bool restoreInPlace,
-        bool exactPrecisionShadow)
+        bool exactPrecisionShadow,
+        string? childFactory)
     {
         // A nullable value type has a state the registry cannot express: "not set" is not a number,
         // and the getter cannot hand an int? to something expecting an int. MOMENT proved it -- the
@@ -701,11 +716,15 @@ public class ModelStateGenerator : IIncrementalGenerator
                    && !IsSerializableModel(memberType) =>
                 $"state.DeclareParameterSource(\"{id}\", {getter});",
 
-            _ when !IsInfrastructure(memberType) && IsSerializableModel(memberType)
+            _ when (!IsInfrastructure(memberType) || IsFittedSerializer(memberType))
+                   && IsSerializableModel(memberType)
                    && nullableTarget && !restoreInPlace =>
-                $"state.DeclareChild<{memberType.ToDisplayString().TrimEnd('?')}>(\"{id}\", {getter}, {setter});",
+                childFactory is null
+                    ? $"state.DeclareChild<{memberType.ToDisplayString().TrimEnd('?')}>(\"{id}\", {getter}, {setter});"
+                    : $"state.DeclareChild<{memberType.ToDisplayString().TrimEnd('?')}>(\"{id}\", {getter}, {setter}, {childFactory});",
 
-            _ when !IsInfrastructure(memberType) && IsSerializableModel(memberType) =>
+            _ when (!IsInfrastructure(memberType) || IsFittedSerializer(memberType))
+                   && IsSerializableModel(memberType) =>
                 $"state.DeclareChild<{memberType.ToDisplayString().TrimEnd('?')}>(\"{id}\", {getter});",
 
             // A list of nested models -- an agent's per-actor target networks, a mixer's per-agent
@@ -820,6 +839,7 @@ public class ModelStateGenerator : IIncrementalGenerator
 
         if (named.Name is "List" or "IList" or "IReadOnlyList" or "IEnumerable"
                 or "ICollection" or "IReadOnlyCollection"
+                or "HashSet" or "ISet" or "IReadOnlySet"
             && named.TypeArguments.Length == 1)
             return CanCarryObjectState(named.TypeArguments[0], numeric, visiting, depth + 1);
 
@@ -842,7 +862,8 @@ public class ModelStateGenerator : IIncrementalGenerator
             a.AttributeClass?.ToDisplayString() == "Newtonsoft.Json.JsonConstructorAttribute"));
         if (!hasJsonConstructor
             && !named.InstanceConstructors.Any(c => c.Parameters.Length == 0
-                || c.Parameters.All(p => p.IsOptional)))
+                || c.Parameters.All(p => p.IsOptional))
+            && !HasSingleJsonMappableConstructor(named))
         {
             return false;
         }
@@ -877,6 +898,68 @@ public class ModelStateGenerator : IIncrementalGenerator
         return true;
     }
 
+    /// <summary>
+    /// Whether Json.NET can reconstruct a class through its single public value constructor.
+    /// </summary>
+    /// <remarks>
+    /// Json.NET binds a lone public parameterized constructor by member name. Requiring every
+    /// object-state type to also expose a parameterless or explicitly attributed constructor
+    /// excluded immutable value records such as NEAT Genome/Connection even though their complete
+    /// public shape is constructor-mappable. Keep the proof narrow: exactly one public constructor,
+    /// and every required argument must have a same-typed readable public property or field.
+    /// Remaining writable properties and constructor-created collections are populated by Json.NET
+    /// after construction and are validated by the ordinary public-shape walk below.
+    /// </remarks>
+    private static bool HasSingleJsonMappableConstructor(INamedTypeSymbol type)
+    {
+        var constructors = type.InstanceConstructors
+            .Where(c => c.DeclaredAccessibility == Accessibility.Public)
+            .ToList();
+        if (constructors.Count != 1 || constructors[0].Parameters.Length == 0) return false;
+
+        foreach (var parameter in constructors[0].Parameters)
+        {
+            bool matched = false;
+            for (var current = type; current is not null
+                && current.SpecialType != SpecialType.System_Object; current = current.BaseType)
+            {
+                foreach (var member in current.GetMembers())
+                {
+                    if (!string.Equals(member.Name, parameter.Name,
+                            System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    ITypeSymbol? memberType = member switch
+                    {
+                        IPropertySymbol { IsStatic: false, IsIndexer: false,
+                            GetMethod.DeclaredAccessibility: Accessibility.Public } property => property.Type,
+                        IFieldSymbol { IsStatic: false,
+                            DeclaredAccessibility: Accessibility.Public } field => field.Type,
+                        _ => null,
+                    };
+                    if (memberType is null) continue;
+                    if (!SymbolEqualityComparer.Default.Equals(
+                            memberType.WithNullableAnnotation(NullableAnnotation.NotAnnotated),
+                            parameter.Type.WithNullableAnnotation(NullableAnnotation.NotAnnotated)))
+                    {
+                        continue;
+                    }
+
+                    matched = true;
+                    break;
+                }
+
+                if (matched) break;
+            }
+
+            if (!matched && !parameter.IsOptional) return false;
+        }
+
+        return true;
+    }
+
     /// <summary>Whether a member holds a model's options.</summary>
     /// <param name="type">The member's type.</param>
     /// <returns><see langword="true"/> when it derives from <c>ModelOptions</c>.</returns>
@@ -888,6 +971,152 @@ public class ModelStateGenerator : IIncrementalGenerator
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Finds a configured factory already owned by the parent for an assignable fitted child.
+    /// </summary>
+    private static string? ChildFactoryExpression(INamedTypeSymbol owner, ITypeSymbol childType)
+    {
+        var expected = childType.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        foreach (var member in owner.GetMembers())
+        {
+            ITypeSymbol? factoryType = member switch
+            {
+                IFieldSymbol { IsStatic: false } field => field.Type,
+                IPropertySymbol { IsStatic: false, GetMethod: not null } property => property.Type,
+                _ => null,
+            };
+            if (factoryType is not INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1 } factory
+                || factory.OriginalDefinition.ToDisplayString() != "System.Func<TResult>")
+            {
+                continue;
+            }
+
+            var produced = factory.TypeArguments[0]
+                .WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+            if (!SymbolEqualityComparer.Default.Equals(produced, expected)) continue;
+
+            return $"() => {member.Name} is null "
+                + $"? throw new global::System.InvalidOperationException(\"Configured child factory '{member.Name}' is not available during restore.\") "
+                + $": {member.Name}()";
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// True when an infrastructure component is itself fitted state with a canonical serializer.
+    /// </summary>
+    private static bool IsFittedSerializer(ITypeSymbol type)
+    {
+        if (!IsSerializableModel(type)) return false;
+        return type.GetMembers("IsFitted").OfType<IPropertySymbol>().Any(property =>
+            property.GetMethod is not null
+            && property.Type.SpecialType == SpecialType.System_Boolean);
+    }
+
+    /// <summary>
+    /// Recovers constructor expressions already used by Fit for derived helper components.
+    /// </summary>
+    /// <remarks>
+    /// The generator reuses source construction rather than reverse-engineering constructor
+    /// arguments. Expressions that read a method local are rejected; only owner members, type
+    /// parameters, literals and member names rooted in those owner members are safe to replay.
+    /// </remarks>
+    private static List<(string Field, string Expression)> FittedInfrastructureRepairs(
+        INamedTypeSymbol owner)
+    {
+        bool hasFittedLatch = false;
+        for (var current = owner; current is not null; current = current.BaseType)
+        {
+            hasFittedLatch |= current.GetMembers("IsFitted").OfType<IPropertySymbol>().Any(property =>
+                property.GetMethod is not null
+                && property.Type.SpecialType == SpecialType.System_Boolean);
+        }
+        if (!hasFittedLatch) return new List<(string, string)>();
+
+        var ownerNames = new HashSet<string>(owner.GetMembers()
+            .Where(member => !member.IsStatic)
+            .Select(member => member.Name), System.StringComparer.Ordinal);
+        foreach (var parameter in owner.TypeParameters) ownerNames.Add(parameter.Name);
+
+        var repairs = new List<(string Field, string Expression)>();
+        foreach (var field in owner.GetMembers().OfType<IFieldSymbol>())
+        {
+            if (field.IsStatic || field.IsReadOnly || field.IsImplicitlyDeclared
+                || field.NullableAnnotation != NullableAnnotation.Annotated
+                || field.Type is not INamedTypeSymbol { TypeKind: TypeKind.Class, IsAbstract: false } fieldType
+                || IsSerializableModel(field.Type) || IsLayer(field.Type)
+                || !IsDerivedFittedHelperType(fieldType))
+            {
+                continue;
+            }
+
+            string? construction = null;
+            foreach (var syntaxReference in owner.DeclaringSyntaxReferences)
+            {
+                if (syntaxReference.GetSyntax() is not ClassDeclarationSyntax declaration) continue;
+                foreach (var assignment in declaration.DescendantNodes().OfType<AssignmentExpressionSyntax>())
+                {
+                    string assignedName = assignment.Left switch
+                    {
+                        IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+                        MemberAccessExpressionSyntax { Name: IdentifierNameSyntax identifier } =>
+                            identifier.Identifier.ValueText,
+                        _ => string.Empty,
+                    };
+                    if (assignedName != field.Name
+                        || assignment.Right is not ObjectCreationExpressionSyntax creation
+                        || !CanReplayConstructionExpression(creation, ownerNames))
+                    {
+                        continue;
+                    }
+
+                    construction = creation.ToString();
+                    break;
+                }
+                if (construction is not null) break;
+            }
+
+            if (construction is not null) repairs.Add((field.Name, construction));
+        }
+
+        return repairs;
+    }
+
+    private static bool IsDerivedFittedHelperType(INamedTypeSymbol type)
+        => IsInfrastructure(type)
+           || type.GetAttributes().Any(attribute => attribute.AttributeClass?.Name is
+               "ComponentTypeAttribute" or "PipelineStageAttribute");
+
+    private static bool CanReplayConstructionExpression(
+        ObjectCreationExpressionSyntax creation,
+        HashSet<string> ownerNames)
+    {
+        foreach (var identifier in creation.DescendantNodes().OfType<IdentifierNameSyntax>())
+        {
+            // The constructed type and the right-hand names of member accesses are type/property
+            // syntax, not captured locals. Only unqualified value roots need ownership proof.
+            if (identifier.Parent is GenericNameSyntax
+                || identifier.Parent is QualifiedNameSyntax
+                || identifier.Parent is MemberAccessExpressionSyntax access
+                    && ReferenceEquals(access.Name, identifier))
+            {
+                continue;
+            }
+
+            if (!ownerNames.Contains(identifier.Identifier.ValueText)) return false;
+        }
+
+        return true;
+    }
+
+    private static int StateRestorePriority(string call)
+    {
+        if (call.IndexOf(".DeclareOptions(", System.StringComparison.Ordinal) >= 0) return -100;
+        if (call.IndexOf(".DeclareAfterRestore(", System.StringComparison.Ordinal) >= 0) return 100;
+        return 0;
     }
 
     private static string Render(
@@ -948,7 +1177,9 @@ public class ModelStateGenerator : IIncrementalGenerator
 
         // Ordered by name so the payload does not depend on declaration order, which a refactor can
         // change without anybody meaning to.
-        foreach (var member in members.OrderBy(m => m.Name, System.StringComparer.Ordinal))
+        foreach (var member in members
+            .OrderBy(m => StateRestorePriority(m.Call))
+            .ThenBy(m => m.Name, System.StringComparer.Ordinal))
         {
             sb.AppendLine($"{indent}        {member.Call}");
         }

@@ -22,6 +22,8 @@ namespace AiDotNet.Serialization;
 /// </remarks>
 public readonly struct LayerStateBag
 {
+    private const string LayerObjectPrefix = "aidotnet-layer-v1:";
+    private const string LayerCollectionPrefix = "aidotnet-layer-list-v1:";
     private readonly Dictionary<string, object>? _values;
     private readonly string _layerName;
 
@@ -321,6 +323,28 @@ public readonly struct LayerStateBag
     public TObject CloneObject<TObject>(string key) where TObject : class
     {
         if (!TryRaw(key, out var value)) throw Missing(key, typeof(TObject).Name);
+        if (value is string text && text.StartsWith(LayerObjectPrefix, StringComparison.Ordinal))
+        {
+            object restored = RestoreLayerConstructionObject(
+                typeof(TObject), text.Substring(LayerObjectPrefix.Length));
+            if (restored is TObject typed) return typed;
+
+            throw new InvalidOperationException(
+                $"Cannot rebuild {_layerName}: durable construction object '{key}' restored as "
+                + $"{restored.GetType().FullName}, which is not assignable to {typeof(TObject).FullName}.");
+        }
+        if (value is string collectionText
+            && collectionText.StartsWith(LayerCollectionPrefix, StringComparison.Ordinal))
+        {
+            object restored = RestoreLayerConstructionCollection(
+                typeof(TObject), collectionText.Substring(LayerCollectionPrefix.Length));
+            if (restored is TObject typed) return typed;
+
+            throw new InvalidOperationException(
+                $"Cannot rebuild {_layerName}: durable construction collection '{key}' restored as "
+                + $"{restored.GetType().FullName}, which is not assignable to {typeof(TObject).FullName}.");
+        }
+
         if (value is not TObject configured)
         {
             throw new InvalidOperationException(
@@ -332,6 +356,276 @@ public readonly struct LayerStateBag
         return (TObject)CloneConstructionObject(
             configured,
             new Dictionary<object, object>(ConstructionReferenceComparer.Instance));
+    }
+
+    /// <summary>
+    /// Formats an owned construction object for layer metadata.
+    /// </summary>
+    /// <remarks>
+    /// Layer objects use a registry-checked binary payload containing their generated construction
+    /// metadata and complete layer state. Other construction objects retain the legacy type
+    /// description: delegates and arbitrary object graphs are intentionally not activated from a
+    /// durable payload. The in-memory object channel still clones all supported shapes directly.
+    /// </remarks>
+    public static string FormatCloneObject(object? value)
+    {
+        if (value is null) return string.Empty;
+
+        Type? layerBase = FindGenericBase(value.GetType(), "AiDotNet.NeuralNetworks.Layers.LayerBase`1");
+        if (layerBase is null)
+        {
+            if (TryGetLayerCollection(value, out var layers))
+                return FormatLayerCollection(layers);
+            return FormatType(value);
+        }
+
+        var inputShape = (int[]?)value.GetType().GetMethod("GetInputShape", Type.EmptyTypes)?.Invoke(value, null)
+            ?? Array.Empty<int>();
+        var outputShape = (int[]?)value.GetType().GetMethod("GetOutputShape", Type.EmptyTypes)?.Invoke(value, null)
+            ?? Array.Empty<int>();
+        // GetMetadata is the internal virtual persistence contract on LayerBase. Looking it up on
+        // the runtime type with the public-only convenience overload silently returned null, so a
+        // nested construction layer was emitted with no constructor metadata at all. Invoke the
+        // base declaration explicitly; reflection still performs virtual dispatch to any derived
+        // override (for example GQA's head-count and RoPE metadata).
+        var metadata = layerBase.GetMethod(
+                "GetMetadata",
+                BindingFlags.NonPublic | BindingFlags.Instance)
+            ?.Invoke(value, null) as IDictionary<string, string>
+            ?? new Dictionary<string, string>(StringComparer.Ordinal);
+
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            Type runtimeType = value.GetType();
+            Type definition = runtimeType.IsGenericType
+                ? runtimeType.GetGenericTypeDefinition()
+                : runtimeType;
+            writer.Write(definition.FullName ?? definition.Name);
+            WriteShape(writer, inputShape);
+            WriteShape(writer, outputShape);
+            writer.Write(metadata.Count);
+            foreach (var pair in metadata.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+            {
+                writer.Write(pair.Key ?? string.Empty);
+                writer.Write(pair.Value ?? string.Empty);
+            }
+
+            var serialize = layerBase.GetMethod(
+                "Serialize",
+                BindingFlags.Public | BindingFlags.Instance,
+                binder: null,
+                new[] { typeof(BinaryWriter) },
+                modifiers: null);
+            if (serialize is null)
+                throw new InvalidOperationException(
+                    $"Cannot persist construction layer {runtimeType.FullName}: Serialize(BinaryWriter) is unavailable.");
+            serialize.Invoke(value, new object[] { writer });
+            writer.Flush();
+        }
+
+        return LayerObjectPrefix + Convert.ToBase64String(stream.ToArray());
+    }
+
+    private static bool TryGetLayerCollection(object value, out List<object> layers)
+    {
+        layers = new List<object>();
+        if (value is string || value is not IEnumerable enumerable) return false;
+
+        Type? elementType = FindEnumerableElementType(value.GetType());
+        if (elementType is null || FindLayerInterface(elementType) is null) return false;
+
+        foreach (object? item in enumerable)
+        {
+            if (item is null
+                || FindGenericBase(item.GetType(), "AiDotNet.NeuralNetworks.Layers.LayerBase`1") is null)
+            {
+                layers.Clear();
+                return false;
+            }
+            layers.Add(item);
+        }
+        return true;
+    }
+
+    private static string FormatLayerCollection(IReadOnlyList<object> layers)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write(layers.Count);
+            for (int i = 0; i < layers.Count; i++)
+                writer.Write(FormatCloneObject(layers[i]));
+            writer.Flush();
+        }
+        return LayerCollectionPrefix + Convert.ToBase64String(stream.ToArray());
+    }
+
+    private object RestoreLayerConstructionCollection(Type expectedType, string encoded)
+    {
+        Type? elementType = FindEnumerableElementType(expectedType);
+        if (elementType is null || FindLayerInterface(elementType) is null)
+            throw new InvalidOperationException(
+                $"Cannot rebuild {_layerName}: {expectedType.FullName} is not a layer collection.");
+
+        byte[] bytes;
+        try { bytes = Convert.FromBase64String(encoded); }
+        catch (FormatException ex)
+        {
+            throw new InvalidOperationException(
+                $"Cannot rebuild {_layerName}: a durable construction-layer collection is not valid base64.", ex);
+        }
+
+        using var stream = new MemoryStream(bytes, writable: false);
+        using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+        int count = reader.ReadInt32();
+        if (count < 0) throw new InvalidDataException("Construction-layer collection count cannot be negative.");
+
+        Type listType = typeof(List<>).MakeGenericType(elementType);
+        var list = (IList)(Activator.CreateInstance(listType)
+            ?? throw new InvalidOperationException($"Cannot create {listType.FullName}."));
+        for (int i = 0; i < count; i++)
+        {
+            string item = reader.ReadString();
+            if (!item.StartsWith(LayerObjectPrefix, StringComparison.Ordinal))
+                throw new InvalidDataException("Construction-layer collection contains a non-layer payload.");
+            list.Add(RestoreLayerConstructionObject(
+                elementType, item.Substring(LayerObjectPrefix.Length)));
+        }
+        if (stream.Position != stream.Length)
+            throw new InvalidDataException("Construction-layer collection payload has trailing data.");
+
+        if (!expectedType.IsArray) return list;
+        Array array = Array.CreateInstance(elementType, count);
+        list.CopyTo(array, 0);
+        return array;
+    }
+
+    private object RestoreLayerConstructionObject(Type expectedType, string encoded)
+    {
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(encoded);
+        }
+        catch (FormatException ex)
+        {
+            throw new InvalidOperationException(
+                $"Cannot rebuild {_layerName}: a durable construction-layer payload is not valid base64.", ex);
+        }
+
+        Type? layerInterface = FindLayerInterface(expectedType);
+        Type? numericType = layerInterface?.GetGenericArguments()[0];
+        if (numericType is null)
+        {
+            throw new InvalidOperationException(
+                $"Cannot rebuild {_layerName}: the requested construction object does not expose ILayer<T>.");
+        }
+
+        MethodInfo restore = typeof(LayerStateBag).GetMethod(
+            nameof(RestoreLayerConstructionObjectCore),
+            BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("Layer construction restore helper is unavailable.");
+        try
+        {
+            return restore.MakeGenericMethod(numericType).Invoke(null, new object[] { bytes })
+                ?? throw new InvalidOperationException("Layer construction restore returned null.");
+        }
+        catch (TargetInvocationException ex) when (ex.InnerException is not null)
+        {
+            throw new InvalidOperationException(
+                $"Cannot rebuild {_layerName}: its durable construction layer could not be restored.",
+                ex.InnerException);
+        }
+    }
+
+    private static object RestoreLayerConstructionObjectCore<T>(byte[] bytes)
+    {
+        using var stream = new MemoryStream(bytes, writable: false);
+        using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+        string typeName = reader.ReadString();
+        int[] inputShape = ReadShape(reader);
+        int[] outputShape = ReadShape(reader);
+        int metadataCount = reader.ReadInt32();
+        if (metadataCount < 0)
+            throw new InvalidDataException("Construction-layer metadata count cannot be negative.");
+
+        var metadata = new Dictionary<string, object>(metadataCount, StringComparer.Ordinal);
+        for (int i = 0; i < metadataCount; i++) metadata[reader.ReadString()] = reader.ReadString();
+
+        object created = AiDotNet.Helpers.DeserializationHelper.CreateLayerFromType<T>(
+            typeName, inputShape, outputShape, metadata);
+        if (created is not AiDotNet.NeuralNetworks.Layers.LayerBase<T> layer)
+            throw new InvalidDataException(
+                $"Construction object '{typeName}' did not rebuild as LayerBase<{typeof(T).Name}>.");
+
+        layer.Deserialize(reader);
+        if (stream.Position != stream.Length)
+            throw new InvalidDataException(
+                $"Construction-layer payload for '{typeName}' has trailing data.");
+        return layer;
+    }
+
+    private static Type? FindLayerInterface(Type type)
+    {
+        if (type.IsGenericType
+            && type.GetGenericTypeDefinition().FullName == "AiDotNet.Interfaces.ILayer`1")
+            return type;
+
+        return type.GetInterfaces().FirstOrDefault(candidate =>
+            candidate.IsGenericType
+            && candidate.GetGenericTypeDefinition().FullName == "AiDotNet.Interfaces.ILayer`1");
+    }
+
+    private static Type? FindEnumerableElementType(Type type)
+    {
+        if (type.IsArray) return type.GetElementType();
+        if (type.IsGenericType && type.GetGenericArguments().Length == 1
+            && type.GetGenericTypeDefinition() is Type definition
+            && (definition == typeof(IEnumerable<>)
+                || definition == typeof(ICollection<>)
+                || definition == typeof(IList<>)
+                || definition == typeof(IReadOnlyCollection<>)
+                || definition == typeof(IReadOnlyList<>)
+                || definition == typeof(List<>)))
+        {
+            return type.GetGenericArguments()[0];
+        }
+
+        foreach (Type candidate in type.GetInterfaces())
+        {
+            if (candidate.IsGenericType
+                && candidate.GetGenericTypeDefinition() == typeof(IEnumerable<>))
+                return candidate.GetGenericArguments()[0];
+        }
+        return null;
+    }
+
+    private static Type? FindGenericBase(Type type, string genericDefinitionName)
+    {
+        for (Type? current = type; current is not null && current != typeof(object); current = current.BaseType)
+        {
+            if (current.IsGenericType
+                && current.GetGenericTypeDefinition().FullName == genericDefinitionName)
+                return current;
+        }
+        return null;
+    }
+
+    private static void WriteShape(BinaryWriter writer, int[] shape)
+    {
+        writer.Write(shape.Length);
+        for (int i = 0; i < shape.Length; i++) writer.Write(shape[i]);
+    }
+
+    private static int[] ReadShape(BinaryReader reader)
+    {
+        int count = reader.ReadInt32();
+        if (count < 0 || count > 64)
+            throw new InvalidDataException($"Construction-layer shape rank {count} is invalid.");
+        var shape = new int[count];
+        for (int i = 0; i < count; i++) shape[i] = reader.ReadInt32();
+        return shape;
     }
 
     private static object CloneConstructionObject(

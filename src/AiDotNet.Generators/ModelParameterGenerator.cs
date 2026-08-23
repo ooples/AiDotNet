@@ -105,6 +105,8 @@ public class ModelParameterGenerator : IIncrementalGenerator
             bool emitTensors = onNetworkTrunk && !DeclaresOwn(classSymbol, ExtraTensorsHook);
             bool emitLayers = onNetworkTrunk && !DeclaresOwn(classSymbol, ExtraLayersHook);
             bool emitLayerAliasRebinding = onNetworkTrunk && !DeclaresLayerAliasRebinding(classSymbol);
+            bool publishesFlatParameterGradients = PublishesFlatParameterGradients(classSymbol);
+            bool publishesParameterGradients = PublishesParameterGradients(classSymbol);
             if (!hasRegistry && !emitTensors && !emitLayers && !emitLayerAliasRebinding) continue;
 
             if (!processed.Add(classSymbol.ToDisplayString())) continue;
@@ -117,6 +119,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
                 var layerAliasRebinders = new List<string>();
                 var layerAliasCopiers = new List<string>();
                 var trainableTensorCopiers = new List<string>();
+                var ownedTensorEnumerators = new List<string>();
                 var persistentFields = new List<(string Name, string SourceExpression, string Role, string Availability)>();
                 foreach (var member in classSymbol.GetMembers())
                 {
@@ -156,6 +159,19 @@ public class ModelParameterGenerator : IIncrementalGenerator
                         {
                             var nestedTensors = NestedNetworkTensorAccessorFor(tf.Type, tf.Name, elem);
                             if (nestedTensors is not null) tensors.Add(nestedTensors);
+                            if (publishesParameterGradients)
+                            {
+                                var ownedEnumerator = OwnedTensorEnumeratorAccessorFor(
+                                    tf.Type, tf.Name, elem);
+                                if (ownedEnumerator is not null)
+                                    ownedTensorEnumerators.Add(ownedEnumerator);
+                            }
+                            if (publishesFlatParameterGradients)
+                            {
+                                var nestedRecord = NestedParameterRecordTensorAccessorFor(
+                                    tf.Type, tf.Name, elem);
+                                if (nestedRecord is not null) tensors.Add(nestedRecord);
+                            }
                         }
                         var tensorAccessor = classification.Kind == ParameterMemberSemanticModel.Kind.Trainable
                             ? TensorAccessorFor(tf.Type, tf.Name, elem)
@@ -207,6 +223,19 @@ public class ModelParameterGenerator : IIncrementalGenerator
                         {
                             var nestedTensors = NestedNetworkTensorAccessorFor(tp.Type, tp.Name, elem);
                             if (nestedTensors is not null) tensors.Add(nestedTensors);
+                            if (publishesParameterGradients)
+                            {
+                                var ownedEnumerator = OwnedTensorEnumeratorAccessorFor(
+                                    tp.Type, tp.Name, elem);
+                                if (ownedEnumerator is not null)
+                                    ownedTensorEnumerators.Add(ownedEnumerator);
+                            }
+                            if (publishesFlatParameterGradients)
+                            {
+                                var nestedRecord = NestedParameterRecordTensorAccessorFor(
+                                    tp.Type, tp.Name, elem);
+                                if (nestedRecord is not null) tensors.Add(nestedRecord);
+                            }
                         }
                         if (classification.Kind == ParameterMemberSemanticModel.Kind.Trainable)
                         {
@@ -221,6 +250,22 @@ public class ModelParameterGenerator : IIncrementalGenerator
                         var acc = LayerAccessorFor(tp.Type, tp.Name, elem);
                         if (acc is not null) layerGroups.Add(acc);
                     }
+                }
+
+                // Publishing model-owned gradients is an explicit claim that the class owns an
+                // optimizer surface. Recover unclassified, non-null numeric storage not already
+                // admitted by attributes, then append nested records that expose their own stable
+                // EnumerateTensors contract. Attribute-backed tensors retain declaration order;
+                // inferred storage follows them, matching the model's checked gradient surface.
+                if (emitTensors && publishesParameterGradients)
+                {
+                    if (!publishesFlatParameterGradients
+                        || (tensors.Count == 0 && layerGroups.Count == 0
+                            && additionalLayerGroups.Count == 0))
+                    {
+                        tensors.AddRange(InferredFlatGradientTensorAccessors(classSymbol, elem));
+                    }
+                    tensors.AddRange(ownedTensorEnumerators);
                 }
 
                 if (tensors.Count > 0 || layerGroups.Count > 0 || layerAliasRebinders.Count > 0
@@ -694,6 +739,215 @@ public class ModelParameterGenerator : IIncrementalGenerator
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Discovers a collection of nested parameter records from a declaration inside the record.
+    /// </summary>
+    /// <remarks>
+    /// A nested record is opted in by at least one <c>[TrainableParameter]</c> member. Once opted in,
+    /// its non-null public Tensor/Vector properties are storage, not arbitrary model fields; private
+    /// storage still requires the annotation. This is the collection analogue of a layer's generated
+    /// parameter walk and is what lets explicit representations such as Gaussian splats participate
+    /// without a model-owned <c>GetExtraTrainableTensors</c> override.
+    /// </remarks>
+    private static string? NestedParameterRecordTensorAccessorFor(
+        ITypeSymbol collectionType,
+        string name,
+        string elem)
+    {
+        var element = CollectionElementType(collectionType)
+            ?.WithNullableAnnotation(NullableAnnotation.NotAnnotated) as INamedTypeSymbol;
+        if (element is null || element.TypeKind != TypeKind.Class) return null;
+
+        var annotatedStorage = element.GetMembers()
+            .Where(member => ParameterMemberSemanticModel.Classify(member).Kind
+                == ParameterMemberSemanticModel.Kind.Trainable)
+            .ToList();
+        if (annotatedStorage.Count == 0) return null;
+
+        var slots = new List<(string Name, ITypeSymbol Type, int Position)>();
+        foreach (var member in element.GetMembers())
+        {
+            ITypeSymbol? memberType = null;
+            bool include = false;
+            if (member is IFieldSymbol field && !field.IsStatic && !field.IsImplicitlyDeclared)
+            {
+                memberType = field.Type;
+                include = ParameterMemberSemanticModel.Classify(field).Kind
+                    == ParameterMemberSemanticModel.Kind.Trainable
+                    && field.DeclaredAccessibility != Accessibility.Private;
+            }
+            else if (member is IPropertySymbol property
+                && !property.IsStatic && !property.IsIndexer && property.GetMethod is not null
+                && property.DeclaredAccessibility == Accessibility.Public)
+            {
+                memberType = property.Type;
+                include = !AliasesAccessibleAnnotatedStorage(property, annotatedStorage);
+            }
+
+            if (!include || memberType is null
+                || memberType.NullableAnnotation == NullableAnnotation.Annotated
+                || NumericFamilyFor(memberType, elem) is not ("Tensor" or "Vector"))
+            {
+                continue;
+            }
+
+            int position = member.Locations.FirstOrDefault(location => location.IsInSource)
+                ?.SourceSpan.Start ?? int.MaxValue;
+            slots.Add((member.Name, memberType, position));
+        }
+
+        if (slots.Count == 0) return null;
+        slots = slots
+            .OrderBy(slot => ParameterSemanticOrder(slot.Name))
+            .ThenBy(slot => slot.Position)
+            .ToList();
+
+        var expressions = new List<string>(slots.Count);
+        foreach (var slot in slots)
+        {
+            var access = $"__item.{slot.Name}";
+            expressions.Add(NumericFamilyFor(slot.Type, elem) == "Tensor"
+                ? access
+                : $"new Tensor<{elem}>([{access}.Length], {access})");
+        }
+
+        var elementName = element.ToDisplayString();
+        return $"({name} ?? (global::System.Collections.Generic.IEnumerable<{elementName}>)"
+            + $"global::System.Array.Empty<{elementName}>()).SelectMany(__item => "
+            + $"new Tensor<{elem}>?[] {{ {string.Join(", ", expressions)} }})";
+    }
+
+    /// <summary>
+    /// Discovers a nested owned-record collection that explicitly publishes its tensor order.
+    /// </summary>
+    private static string? OwnedTensorEnumeratorAccessorFor(
+        ITypeSymbol collectionType,
+        string name,
+        string elem)
+    {
+        var element = CollectionElementType(collectionType)
+            ?.WithNullableAnnotation(NullableAnnotation.NotAnnotated) as INamedTypeSymbol;
+        if (element is null) return null;
+
+        var enumerator = element.GetMembers("EnumerateTensors")
+            .OfType<IMethodSymbol>()
+            .FirstOrDefault(method => !method.IsStatic && method.Parameters.Length == 0
+                && method.DeclaredAccessibility != Accessibility.Private
+                && CollectionElementType(method.ReturnType) is ITypeSymbol returned
+                && NumericFamilyFor(returned, elem) == "Tensor");
+        if (enumerator is null) return null;
+
+        string elementName = element.ToDisplayString();
+        return $"({name} ?? (global::System.Collections.Generic.IEnumerable<{elementName}>)"
+            + $"global::System.Array.Empty<{elementName}>()).SelectMany(__item => __item.EnumerateTensors())";
+    }
+
+    private static bool AliasesAccessibleAnnotatedStorage(
+        IPropertySymbol property,
+        IReadOnlyList<ISymbol> annotatedStorage)
+    {
+        var annotatedNames = new HashSet<string>(
+            annotatedStorage
+                .Where(member => member.DeclaredAccessibility != Accessibility.Private)
+                .Select(member => member.Name),
+            System.StringComparer.Ordinal);
+        foreach (var syntaxReference in property.DeclaringSyntaxReferences)
+        {
+            if (syntaxReference.GetSyntax() is not PropertyDeclarationSyntax declaration) continue;
+            if (declaration.ExpressionBody?.Expression is IdentifierNameSyntax expression
+                && annotatedNames.Contains(expression.Identifier.ValueText))
+            {
+                return true;
+            }
+
+            if (declaration.AccessorList is null) continue;
+            var getter = declaration.AccessorList.Accessors.FirstOrDefault(accessor =>
+                accessor.Keyword.ValueText == "get");
+            if (getter?.ExpressionBody?.Expression is IdentifierNameSyntax getterExpression
+                && annotatedNames.Contains(getterExpression.Identifier.ValueText))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Infers direct numeric storage only for a class that explicitly publishes a checked flat
+    /// gradient and has no other discoverable optimizer surface.
+    /// </summary>
+    private static IEnumerable<string> InferredFlatGradientTensorAccessors(
+        INamedTypeSymbol type,
+        string elem)
+    {
+        return type.GetMembers()
+            .Where(member => !member.IsStatic && !member.IsImplicitlyDeclared)
+            .Select(member => (Member: member, Type: MemberType(member)))
+            .Where(candidate => candidate.Type is not null
+                && candidate.Type.NullableAnnotation != NullableAnnotation.Annotated
+                && NumericFamilyFor(candidate.Type, elem) is "Tensor" or "Vector"
+                && ParameterMemberSemanticModel.Classify(candidate.Member).Kind
+                    is ParameterMemberSemanticModel.Kind.Unclassified)
+            .OrderBy(candidate => ParameterSemanticOrder(candidate.Member.Name))
+            .ThenBy(candidate => candidate.Member.Locations
+                .FirstOrDefault(location => location.IsInSource)?.SourceSpan.Start ?? int.MaxValue)
+            .Select(candidate => candidate.Type is null
+                ? null
+                : TensorAccessorFor(candidate.Type, candidate.Member.Name, elem))
+            .Where(accessor => accessor is not null)
+            .Select(accessor => accessor ?? string.Empty);
+    }
+
+    private static bool PublishesFlatParameterGradients(INamedTypeSymbol type)
+        => PublishesParameterGradients(type, flatOnly: true);
+
+    private static bool PublishesParameterGradients(INamedTypeSymbol type)
+        => PublishesParameterGradients(type, flatOnly: false);
+
+    private static bool PublishesParameterGradients(INamedTypeSymbol type, bool flatOnly)
+    {
+        foreach (var syntaxReference in type.DeclaringSyntaxReferences)
+        {
+            if (syntaxReference.GetSyntax() is not ClassDeclarationSyntax declaration) continue;
+            if (declaration.DescendantNodes().OfType<InvocationExpressionSyntax>().Any(invocation =>
+                invocation.Expression switch
+                {
+                    IdentifierNameSyntax identifier =>
+                        identifier.Identifier.ValueText == "PublishFlatParameterGradients"
+                        || (!flatOnly && identifier.Identifier.ValueText == "PublishParameterGradients"),
+                    MemberAccessExpressionSyntax { Name: IdentifierNameSyntax identifier } =>
+                        identifier.Identifier.ValueText == "PublishFlatParameterGradients"
+                        || (!flatOnly && identifier.Identifier.ValueText == "PublishParameterGradients"),
+                    _ => false,
+                }))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Stable family order for conventional flat-gradient records. It affects ordering only; entry
+    /// into the generated graph still requires the explicit publish/annotation evidence above.
+    /// </summary>
+    private static int ParameterSemanticOrder(string name)
+    {
+        string key = name.TrimStart('_').ToLowerInvariant();
+        if (key.Contains("weight")) return 0;
+        if (key.Contains("position")) return 10;
+        if (key.Contains("rotation")) return 20;
+        if (key.Contains("scale")) return 30;
+        if (key.Contains("opacity")) return 40;
+        if (key.Contains("color")) return 50;
+        if (key.Contains("visible") && key.Contains("bias")) return 60;
+        if (key.Contains("hidden") && key.Contains("bias")) return 70;
+        if (key.Contains("bias")) return 80;
+        return 100;
     }
 
     /// <summary>
