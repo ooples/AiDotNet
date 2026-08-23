@@ -762,6 +762,29 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     /// <summary>
+    /// Gives a layer whose shape is ALREADY resolved a chance to re-bind its parameter tensors to a
+    /// different input width that <paramref name="parameterCount"/> pins exactly, instead of having
+    /// <see cref="SetParameters"/> reject the payload.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The sibling <see cref="TryInferInputShapeFromParameterCount"/> only runs while the shape is
+    /// still unknown. Once a forward has materialized the weights, a payload sized for another width
+    /// -- the shape Clone produces when it carries a resolved width across -- had nowhere to go and
+    /// SetParameters threw. Override this to re-allocate, and return <c>true</c> only when the new
+    /// layout genuinely matches; the caller re-reads the manifest and still throws if it does not.
+    /// </para>
+    /// <para>
+    /// Rebind through <see cref="ReplaceTrainableParameter"/>, never unregister/register: the latter
+    /// appends, which reorders the registry against field order and transposes the layer's
+    /// parameters on the next copy-on-write clone.
+    /// </para>
+    /// </remarks>
+    /// <param name="parameterCount">Length of the payload being restored.</param>
+    /// <returns><c>true</c> if the layer re-bound itself and the caller should re-check the layout.</returns>
+    protected virtual bool TryRebindForParameterCount(int parameterCount) => false;
+
+    /// <summary>
     /// Returns the one ordered component walk used by count, flat read/write, state chunks, and
     /// gradient scattering. Generated declarations are authoritative for order; runtime registries
     /// are a compatibility supplement and may add only components not already declared.
@@ -6575,6 +6598,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
             TryApplyPendingParameterRestore();
             return;
+        }
+
+        // Last chance before rejecting: a layer whose shape is already resolved may still be able
+        // to ACCEPT this payload by re-resolving an input axis the length pins exactly. The
+        // TryInferInputShapeFromParameterCount path above only runs while the shape is unknown, so
+        // an already-materialized layer handed a payload for a different width had no way back.
+        // This runs only where the next statement would otherwise throw, so no layer that already
+        // accepts its payload can reach it.
+        if (!currentLayoutMatches && TryRebindForParameterCount(parameters.Length))
+        {
+            components = GetOrderedParameterComponents();
+            currentConcreteCount = FillParameters(null, 0);
+            currentLayoutMatches = parameters.Length == currentConcreteCount;
         }
 
         if (!currentLayoutMatches)
