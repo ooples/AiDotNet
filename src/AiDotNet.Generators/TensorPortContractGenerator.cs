@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -151,16 +151,24 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
     /// <inheritdoc />
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
+        // Symbols must not live in cached pipeline state -- an ISymbol roots the whole Compilation.
+        // Same fix and same trade-off as the rest of this series: the pipeline carries metadata
+        // names, the symbol is re-resolved at the point of use, and CompilationProvider costs
+        // nothing in caching terms because a symbol pipeline could never cache to begin with.
         var types = context.SyntaxProvider.CreateSyntaxProvider(
                 static (node, _) => node is TypeDeclarationSyntax declaration
                     && (declaration.AttributeLists.Count > 0
                         || declaration.Members.OfType<MethodDeclarationSyntax>()
                             .Any(method => method.AttributeLists.Count > 0)),
-                static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol)
-            .Where(static symbol => symbol is not null)
-            .Collect();
+                static (ctx, _) => ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) is INamedTypeSymbol symbol
+                    ? GeneratorHelpers.MetadataNameOf(symbol)
+                    : null)
+            .Where(static n => n is not null)
+            .Select(static (n, _) => n ?? string.Empty)
+            .Collect()
+            .Combine(context.CompilationProvider);
 
-        context.RegisterSourceOutput(types, static (spc, symbols) => EmitContracts(spc, symbols));
+        context.RegisterSourceOutput(types, static (spc, source) => EmitContracts(spc, source.Left, source.Right));
 
         var factoryFindings = context.SyntaxProvider.CreateSyntaxProvider(
                 static (node, _) => node is MethodDeclarationSyntax method
@@ -183,8 +191,18 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
         });
     }
 
-    private static void EmitContracts(SourceProductionContext spc, ImmutableArray<INamedTypeSymbol?> symbols)
+    private static void EmitContracts(SourceProductionContext spc, ImmutableArray<string> metadataNames, Compilation compilation)
     {
+        var resolvedNames = new HashSet<string>(System.StringComparer.Ordinal);
+        var resolvedSymbols = new List<INamedTypeSymbol?>();
+        foreach (var metadataName in metadataNames)
+        {
+            if (metadataName.Length == 0 || !resolvedNames.Add(metadataName)) continue;
+            if (GeneratorHelpers.ResolveSourceType(compilation, metadataName) is INamedTypeSymbol resolved)
+                resolvedSymbols.Add(resolved);
+        }
+        var symbols = resolvedSymbols.ToImmutableArray();
+
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var type in symbols)
         {
@@ -1383,4 +1401,5 @@ public sealed class TensorPortContractGenerator : IIncrementalGenerator
         public Domain Produced { get; }
         public Domain Required { get; }
     }
+
 }
