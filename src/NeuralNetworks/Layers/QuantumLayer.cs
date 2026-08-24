@@ -401,17 +401,25 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
             backend.Abs(stateReal, absoluteState, batchSize * dimension);
             using var maxMagnitude = backend.AllocateBuffer(batchSize);
             backend.MaxAxis(absoluteState, maxMagnitude, batchSize, dimension);
+            // Substitute 1 -- not a tiny floor -- for a row whose maximum is zero, matching the
+            // CPU's TensorWhere(max > 0, max, 1) exactly. A floor of float.Epsilon looks safer and
+            // is the opposite: CL_FP_DENORM is *optional* in OpenCL, so a conforming device may
+            // flush subnormals in arithmetic, turning the floor back into 0. Reciprocal(0) is then
+            // +Inf and every all-zero row comes back 0 * Inf = NaN -- on any input, not just an
+            // exotic one. A normal-valued sentinel cannot degrade that way on any device.
+            using var zeroMagnitude = backend.AllocateBuffer(batchSize);
+            backend.Fill(zeroMagnitude, 0f, batchSize);
+            using var positiveMagnitude = backend.AllocateBuffer(batchSize);
+            backend.GreaterThan(maxMagnitude, zeroMagnitude, positiveMagnitude, batchSize);
+            using var unitMagnitude = backend.AllocateBuffer(batchSize);
+            backend.Fill(unitMagnitude, 1f, batchSize);
             using var safeMaxMagnitude = backend.AllocateBuffer(batchSize);
-            backend.Clamp(
-                maxMagnitude,
-                safeMaxMagnitude,
-                float.Epsilon,
-                float.MaxValue,
-                batchSize);
+            backend.Where(
+                positiveMagnitude, maxMagnitude, unitMagnitude, safeMaxMagnitude, batchSize);
 
-            // Reciprocal(float.Epsilon) overflows even though the input row is finite. Factor
-            // 1/max into two finite 1/sqrt(max) multiplies: zero rows remain exactly zero, the
-            // smallest subnormal row scales to unit magnitude, and no intermediate becomes Inf.
+            // Reciprocal of a very small *normal* max still overflows to Inf even though the row
+            // is finite (1/1.2e-38 > float.MaxValue). Factor 1/max into two finite 1/sqrt(max)
+            // multiplies so no intermediate becomes Inf.
             using var sqrtSafeMaxMagnitude = backend.AllocateBuffer(batchSize);
             backend.Sqrt(safeMaxMagnitude, sqrtSafeMaxMagnitude, batchSize);
             using var inverseSqrtMaxMagnitude = backend.AllocateBuffer(batchSize);
