@@ -605,6 +605,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         _reboundParametersAdopted = false;
         _trainableParametersRebound = true;
         BumpParameterEpoch();
+        OnParameterValuesChanged();
+    }
+
+    /// <summary>
+    /// Notifies a layer that its trainable parameter values or tensor bindings changed.
+    /// </summary>
+    /// <remarks>
+    /// Layers that derive packed, transposed, quantized, or otherwise cached representations from
+    /// their parameters override this hook to discard those representations. The base implementation
+    /// is intentionally empty; persistent engine tensors are invalidated by the restore path itself.
+    /// </remarks>
+    protected virtual void OnParameterValuesChanged()
+    {
     }
 
     /// <summary>
@@ -6581,6 +6594,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             _pendingParameterRestore = null;
             Parameters = parameters;
             BumpParameterEpoch();
+            OnParameterValuesChanged();
             return;
         }
 
@@ -6666,6 +6680,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 int count = ParameterComponentScalarCount(component);
                 for (int j = 0; j < count; j++)
                     WriteParameterComponentScalar(component, j, parameters[index++]);
+                if (component.Tensor is not null)
+                    Engine.InvalidatePersistentTensor(component.Tensor);
                 continue;
             }
 
@@ -6685,6 +6701,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 $"{GetType().Name} consumed {index} of {parameters.Length} parameter values.");
 
         BumpParameterEpoch();
+        OnParameterValuesChanged();
     }
 
     /// <summary>
@@ -7562,6 +7579,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             sources[i].Data.Span.CopyTo(dst[i].Data.Span);
             Engine.InvalidatePersistentTensor(dst[i]);
         }
+        OnParameterValuesChanged();
     }
 
     /// <summary>

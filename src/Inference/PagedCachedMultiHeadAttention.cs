@@ -210,6 +210,18 @@ public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAw
         _flashConfig.UseCausalMask = useCausalMask;
     }
 
+    /// <inheritdoc />
+    protected override void OnParameterValuesChanged()
+    {
+        base.OnParameterValuesChanged();
+
+        // Evaluation uses two derived representations of the projections: the engine's persistent
+        // GEMM tensors and the paged kernel's transposed/quantized float copies. LayerBase invalidates
+        // the persistent tensors after an in-place restore; clear the kernel copies here as well so
+        // batched and single-token decode always observe the same generation of the weights.
+        InvalidateKernelWeightCache();
+    }
+
     /// <summary>
     /// Configures positional encoding for this paged cached attention layer.
     /// </summary>
