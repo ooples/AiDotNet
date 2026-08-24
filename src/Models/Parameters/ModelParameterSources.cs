@@ -92,6 +92,24 @@ public interface IVariableLengthParameterSource<T> : IParameterSource<T>
 }
 
 /// <summary>
+/// Persists the non-numeric structure that gives a variable parameter surface its shape.
+/// </summary>
+/// <remarks>
+/// A flat parameter vector can restore values only after the destination owns the same slots. Sparse
+/// tables are the canonical example: their state/action keys are topology, while the values stored at
+/// those keys are parameters. Model bases write this small topology block before restoring the vector,
+/// keeping values single-owned by <see cref="IParameterSource{T}"/>.
+/// </remarks>
+public interface IParameterTopologySource
+{
+    /// <summary>Writes the keys/shapes required to recreate this source's parameter slots.</summary>
+    void WriteParameterTopology(BinaryWriter writer);
+
+    /// <summary>Recreates this source's parameter slots without restoring their numeric values.</summary>
+    void ReadParameterTopology(BinaryReader reader);
+}
+
+/// <summary>
 /// A whole <see cref="Vector{T}"/> field exposed as a parameter surface.
 /// </summary>
 /// <remarks>

@@ -629,6 +629,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 && paramFields.Count == 0
                 && subLayerFields.Count == 0
                 && bufferFields.Count == 0;
+            bool legacyParametersAreDerivedSnapshot = HasDerivedLegacyParameterSnapshot(
+                compilation, classSymbol);
 
             if (paramFields.Count == 0 && subLayerFields.Count == 0 && bufferFields.Count == 0
                 && !emitParameterFreeContract) continue;
@@ -648,7 +650,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             var source = GenerateSource(
                 classSymbol, paramFields, gradientFields, subLayerFields, bufferFields,
                 useRuntimeParameterRegistry, useConventionalTensorEnumerator,
-                emitParameterFreeContract, unguardableAxes);
+                emitParameterFreeContract, legacyParametersAreDerivedSnapshot, unguardableAxes);
 
             // A declared axis the generator could not trace back to a guardable dimension. Emitting
             // the declaration anyway is what let ConvolutionalLayer publish [8, 0, 3, 3] from an
@@ -668,6 +670,42 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         }
     }
 
+    /// <summary>
+    /// Finds the legacy migration pattern where a composite caches its already-declared parameter
+    /// graph in <c>LayerBase.Parameters</c>. That vector is a derived snapshot, not another owned
+    /// component, and publishing both representations duplicates every nested parameter.
+    /// </summary>
+    private static bool HasDerivedLegacyParameterSnapshot(
+        Compilation compilation,
+        INamedTypeSymbol classSymbol)
+    {
+        foreach (var reference in classSymbol.DeclaringSyntaxReferences)
+        {
+            if (reference.GetSyntax() is not ClassDeclarationSyntax declaration) continue;
+            var semanticModel = compilation.GetSemanticModel(declaration.SyntaxTree);
+
+            foreach (var assignment in declaration.DescendantNodes().OfType<AssignmentExpressionSyntax>())
+            {
+                if (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression)
+                    || semanticModel.GetSymbolInfo(assignment.Left).Symbol is not IFieldSymbol target
+                    || target.Name != "Parameters"
+                    || !IsOnTypeHierarchy(target.ContainingType, classSymbol)
+                    || assignment.Right is not InvocationExpressionSyntax invocation
+                    || invocation.ArgumentList.Arguments.Count != 0
+                    || semanticModel.GetSymbolInfo(invocation).Symbol is not IMethodSymbol method
+                    || method.Name != "GetParameters"
+                    || !IsOnTypeHierarchy(method.ContainingType, classSymbol))
+                {
+                    continue;
+                }
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static string GenerateSource(
         INamedTypeSymbol classSymbol,
         List<ParameterFieldInfo> paramFields,
@@ -677,6 +715,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         bool useRuntimeParameterRegistry,
         bool useConventionalTensorEnumerator,
         bool emitParameterFreeContract,
+        bool legacyParametersAreDerivedSnapshot,
         ICollection<string>? unguardableAxes = null)
     {
         var ns = classSymbol.ContainingNamespace.ToDisplayString();
@@ -717,6 +756,14 @@ public class TrainableParameterGenerator : IIncrementalGenerator
 
         sb.AppendLine($"partial class {className}{typeParams}");
         sb.AppendLine("{");
+
+        if (legacyParametersAreDerivedSnapshot)
+        {
+            sb.AppendLine("    /// <summary>Auto-generated: the legacy flat vector is a derived view of declared parameter components.</summary>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
+            sb.AppendLine("    protected override bool LegacyParametersAreDerivedSnapshot => true;");
+            sb.AppendLine();
+        }
 
         if (emitParameterFreeContract)
         {
@@ -1893,11 +1940,15 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 if (!safe) continue;
 
                 string rendered = string.Join(", ", axes.Select(axis => axis.ToString()));
-                rendered = Regex.Replace(
-                    rendered,
-                    @"\b_?inputDepth\b",
-                    "InputShape[0]",
-                    RegexOptions.IgnoreCase);
+                string? inputChannels = InputChannelShapeExpression(classSymbol);
+                if (inputChannels is not null)
+                {
+                    rendered = Regex.Replace(
+                        rendered,
+                        @"\b_?inputDepth\b",
+                        inputChannels,
+                        RegexOptions.IgnoreCase);
+                }
                 int score = axes.Sum(axis =>
                     axis.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>().Count() * 10
                     + axis.DescendantNodesAndSelf().OfType<LiteralExpressionSyntax>()
@@ -1908,6 +1959,70 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             }
         }
         return best;
+    }
+
+    /// <summary>
+    /// Resolves the declared input-channel axis without assuming a channels-first layout.
+    /// </summary>
+    /// <remarks>
+    /// <c>_inputDepth</c> is the historical name for input channel count in convolution layers. It
+    /// is not necessarily axis zero: NHWC places it last, NCHW places it third from last, and 3-D
+    /// NCDHW places it fourth from last. Measuring from the end also makes an optional leading batch
+    /// axis irrelevant. If declarations disagree, leave the field expression untouched so normal
+    /// deferred restoration can resolve it instead of generating a confidently wrong shape.
+    /// </remarks>
+    private static string? InputChannelShapeExpression(INamedTypeSymbol classSymbol)
+    {
+        int? offsetFromEnd = null;
+        bool foundInputLayout = false;
+        foreach (var attribute in classSymbol.GetAttributes())
+        {
+            if (attribute.AttributeClass?.ToDisplayString()
+                != "AiDotNet.Attributes.TensorLayoutAttribute")
+                continue;
+
+            bool isOutput = attribute.NamedArguments.Any(argument =>
+                argument.Key == "Direction"
+                && argument.Value.Value is int direction
+                && direction == 1);
+            if (isOutput) continue;
+            foundInputLayout = true;
+
+            if (attribute.ConstructorArguments.Length == 0
+                || attribute.ConstructorArguments[0].Kind != TypedConstantKind.Array)
+                return null;
+            var axes = attribute.ConstructorArguments[0].Values;
+            int channelIndex = -1;
+            for (int i = 0; i < axes.Length; i++)
+            {
+                if (EnumMemberName(axes[i]) == "Channels")
+                {
+                    channelIndex = i;
+                    break;
+                }
+            }
+            if (channelIndex < 0) return null;
+
+            int candidate = axes.Length - channelIndex;
+            if (offsetFromEnd.HasValue && offsetFromEnd.Value != candidate) return null;
+            offsetFromEnd = candidate;
+        }
+
+        if (!foundInputLayout || !offsetFromEnd.HasValue) return null;
+        return offsetFromEnd.Value == 1
+            ? "InputShape[InputShape.Length - 1]"
+            : $"InputShape[InputShape.Length - {offsetFromEnd.Value}]";
+    }
+
+    private static string? EnumMemberName(TypedConstant value)
+    {
+        if (value.Type is not INamedTypeSymbol enumType || value.Value is null) return null;
+        foreach (var member in enumType.GetMembers().OfType<IFieldSymbol>())
+        {
+            if (!member.HasConstantValue || member.ConstantValue is null) continue;
+            if (Equals(member.ConstantValue, value.Value)) return member.Name;
+        }
+        return null;
     }
 
     private static bool IsOnTypeHierarchy(INamedTypeSymbol? candidate, INamedTypeSymbol type)

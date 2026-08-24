@@ -215,9 +215,10 @@ public static class CloneRegistry
     /// <remarks>
     /// <para>
     /// The rule is that everything is configuration unless provably otherwise. A property is
-    /// carried when it can be both read and written; a read-only or computed property is skipped
-    /// because it is derived from the values that <i>are</i> carried, and re-deriving it is what
-    /// keeps a clone consistent rather than merely equal.
+    /// carried when it can be publicly read and written; a read-only, privately set, or computed
+    /// property is skipped because it is constructor-owned or derived from the values that
+    /// <i>are</i> carried, and re-deriving it is what keeps a clone consistent rather than merely
+    /// equal.
     /// </para>
     /// <para>
     /// Deliberately <b>not</b> excluded by type shape: delegates and interfaces are carried, since
@@ -241,7 +242,7 @@ public static class CloneRegistry
 
             foreach (var property in declared.OrderBy(p => p.Name, StringComparer.Ordinal))
             {
-                if (!property.CanRead || !property.CanWrite) continue;
+                if (!property.CanRead || property.SetMethod?.IsPublic != true) continue;
                 if (property.GetIndexParameters().Length > 0) continue;
                 if (IsExcluded(property)) continue;
                 if (!seen.Add(property.Name)) continue;

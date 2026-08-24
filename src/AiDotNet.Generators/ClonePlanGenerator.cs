@@ -3,6 +3,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace AiDotNet.Generators;
@@ -26,9 +27,10 @@ namespace AiDotNet.Generators;
 /// declaring anything.
 /// </para>
 /// <para>
-/// <b>What counts as configuration.</b> Everything settable, unless provably otherwise. Read-only
-/// and computed properties are skipped because the compiler proves they are derived from what is
-/// carried, so re-deriving them keeps a clone consistent rather than merely equal. Delegates and
+/// <b>What counts as configuration.</b> Everything publicly settable, unless provably otherwise.
+/// Read-only, privately set, and computed properties are skipped because they are constructor-owned
+/// or derived from what is carried, so re-deriving them keeps a clone consistent rather than merely
+/// equal. Delegates and
 /// interfaces are deliberately <i>kept</i>: activation functions, kernels and schedules arrive that
 /// way and are genuine configuration, so excluding them by type shape would produce a clone that
 /// behaves differently while looking correct.
@@ -214,7 +216,7 @@ public class ClonePlanGenerator : IIncrementalGenerator
         sb.AppendLine("    private static void Add(List<ClonePlanEntry> entries, Type owner, string name, CloneCopyKind kind)");
         sb.AppendLine("    {");
         sb.AppendLine("        var p = owner.GetProperty(name, BindingFlags.Public | BindingFlags.Instance);");
-        sb.AppendLine("        if (p is not null && p.CanRead && p.CanWrite) entries.Add(new ClonePlanEntry(p, kind));");
+        sb.AppendLine("        if (p is not null && p.CanRead && p.SetMethod?.IsPublic == true) entries.Add(new ClonePlanEntry(p, kind));");
         sb.AppendLine("    }");
         sb.AppendLine("}");
 
@@ -301,7 +303,8 @@ public class ClonePlanGenerator : IIncrementalGenerator
                 .OfType<IPropertySymbol>()
                 .Where(p => p.DeclaredAccessibility == Accessibility.Public)
                 .Where(p => !p.IsStatic && !p.IsIndexer)
-                .Where(p => p.GetMethod is not null && p.SetMethod is not null)
+                .Where(p => p.GetMethod is not null
+                            && p.SetMethod?.DeclaredAccessibility == Accessibility.Public)
                 .Where(p => !IsExcluded(p))
                 .OrderBy(p => p.Name, System.StringComparer.Ordinal);
 
@@ -442,6 +445,7 @@ public class ClonePlanGenerator : IIncrementalGenerator
                 if (constructor.Parameters[i].RefKind != RefKind.None) { satisfied = false; break; }
 
                 mapped[i] = FindDirectConstructorAssignment(type, constructor, constructor.Parameters[i])
+                    ?? FindNestedSource(type, constructor.Parameters[i])
                     ?? FindSource(type, constructor.Parameters[i]);
             }
 
@@ -523,7 +527,17 @@ public class ClonePlanGenerator : IIncrementalGenerator
 
             foreach (var assignment in declaration.DescendantNodes().OfType<AssignmentExpressionSyntax>())
             {
-                if (assignment.Right is not IdentifierNameSyntax right
+                // Optional constructor arguments are normally stored through
+                // `member = parameter ?? new DefaultOptions()`. That is still direct storage of the
+                // effective constructor configuration: after construction the member is the only
+                // authoritative value, and replaying it reproduces both the explicit and default
+                // cases. Requiring a bare identifier dropped exactly these option members and let a
+                // same-named base property win later by heuristic.
+                ExpressionSyntax carried = assignment.Right is BinaryExpressionSyntax coalesce
+                        && coalesce.IsKind(SyntaxKind.CoalesceExpression)
+                    ? coalesce.Left
+                    : assignment.Right;
+                if (carried is not IdentifierNameSyntax right
                     || !string.Equals(right.Identifier.ValueText, parameter.Name,
                         System.StringComparison.Ordinal))
                     continue;
@@ -565,6 +579,68 @@ public class ClonePlanGenerator : IIncrementalGenerator
         }
 
         return found;
+    }
+
+    /// <summary>
+    /// Finds a constructor value held one ownership boundary below the model.
+    /// </summary>
+    /// <remarks>
+    /// Composite models commonly accept values such as <c>generatorArchitecture</c> and
+    /// <c>criticArchitecture</c>, then retain them on <c>Generator.Architecture</c> and
+    /// <c>Critic.Architecture</c>. A direct member search sees only the parent's general
+    /// <c>Architecture</c> property and maps both parameters to it. The resulting clone is
+    /// constructible but structurally wrong. A one-level path whose concatenated member names
+    /// exactly equal the parameter name is stronger evidence than that direct suffix match.
+    /// </remarks>
+    private static string? FindNestedSource(INamedTypeSymbol type, IParameterSymbol parameter)
+    {
+        string parameterName = parameter.Name.Replace("_", string.Empty);
+        string? found = null;
+
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            foreach (var owner in current.GetMembers())
+            {
+                ITypeSymbol? ownerType = owner switch
+                {
+                    IPropertySymbol { IsStatic: false, IsIndexer: false } property
+                        when property.GetMethod is not null && IsCloneConstructionSource(property)
+                        => property.Type,
+                    IFieldSymbol { IsStatic: false, IsConst: false } field
+                        when IsCloneConstructionSource(field) => field.Type,
+                    _ => null,
+                };
+                if (ownerType is not INamedTypeSymbol namedOwner) continue;
+
+                string ownerName = owner.Name.TrimStart('_');
+                foreach (var nested in namedOwner.GetMembers())
+                {
+                    ITypeSymbol? nestedType = nested switch
+                    {
+                        IPropertySymbol { IsStatic: false, IsIndexer: false } property
+                            when property.GetMethod is not null => property.Type,
+                        IFieldSymbol { IsStatic: false, IsConst: false } field => field.Type,
+                        _ => null,
+                    };
+                    if (nestedType is null || !IsCarriedAs(nestedType, parameter.Type)) continue;
+
+                    string combined = ownerName + nested.Name.TrimStart('_');
+                    if (!string.Equals(combined, parameterName,
+                            System.StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    string path = owner.Name + "." + nested.Name;
+                    if (found is not null
+                        && !string.Equals(found, path, System.StringComparison.Ordinal))
+                        return null;
+                    found = path;
+                }
+            }
+
+            if (found is not null) return found;
+        }
+
+        return null;
     }
 
     /// <summary>

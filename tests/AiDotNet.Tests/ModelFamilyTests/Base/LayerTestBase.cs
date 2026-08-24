@@ -866,19 +866,39 @@ public abstract class LayerTestBase<T>
             var originalTensor = originalTensors[tensorIndex];
             var restoredTensor = restoredTensors[tensorIndex];
             Assert.Equal(originalTensor.Shape.ToArray(), restoredTensor.Shape.ToArray());
-            for (int i = 0; i < originalTensor.Length; i++)
+
+            // SparseTensor deliberately rejects flat indexing because a flat coordinate includes
+            // structural zeros that are not stored or trainable. Serialization still has to
+            // preserve both those zeros and the stored values, so compare a dense view here rather
+            // than weakening the check to the nnz payload alone.
+            var originalComparable = originalTensor is SparseTensor<T> originalSparse
+                ? originalSparse.ToDense()
+                : originalTensor;
+            var restoredComparable = restoredTensor is SparseTensor<T> restoredSparse
+                ? restoredSparse.ToDense()
+                : restoredTensor;
+            for (int i = 0; i < originalComparable.Length; i++)
             {
-                double originalValue = ToD(originalTensor[i]);
-                double restoredValue = ToD(restoredTensor[i]);
-                Assert.True(EqualityComparer<T>.Default.Equals(originalTensor[i], restoredTensor[i]),
+                double originalValue = ToD(originalComparable[i]);
+                double restoredValue = ToD(restoredComparable[i]);
+                Assert.True(EqualityComparer<T>.Default.Equals(
+                        originalComparable[i], restoredComparable[i]),
                     $"Trainable tensor {tensorIndex}[{i}] differs after serialization roundtrip: " +
                     $"original={originalValue:G17}, deserialized={restoredValue:G17}");
             }
         }
 
+        // Stateful layers advance on every forward. Compare both layers from their declared reset
+        // state; otherwise this assertion compares step 1 with step 2 and blames serialization for
+        // legitimate recurrent/spiking state progression.
+        layer.ResetState();
         var originalReplay = layer.Forward(input).Clone();
         for (int i = 0; i < originalOutput.Length; i++)
         {
+            if (EqualityComparer<T>.Default.Equals(originalOutput[i], originalReplay[i]))
+            {
+                continue;
+            }
             double originalValue = ToD(originalOutput[i]);
             double replayValue = ToD(originalReplay[i]);
             Assert.True(Math.Abs(originalValue - replayValue) < 1e-12,

@@ -1021,6 +1021,7 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
             byte[] state = Serialize();
             var clone = (NonLinearRegressionBase<T>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
             clone.Deserialize(state);
+            AiDotNet.Models.CloneEngine.RestoreMutableConstructorConfiguration(this, clone);
             return clone;
         }
     }

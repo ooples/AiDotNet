@@ -1,6 +1,7 @@
 using System.Globalization;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Models.Parameters;
 
@@ -418,7 +419,7 @@ public sealed class KeyedVectorCollectionParameterSource<T, TKey> : IParameterSo
 /// adding or re-inserting an unrelated key therefore cannot reorder an existing checkpoint.
 /// </remarks>
 public sealed class KeyedScalarCollectionParameterSource<T, TKey> :
-    IParameterSource<T>, IParameterLayoutSource
+    IParameterSource<T>, IParameterLayoutSource, IParameterTopologySource
     where TKey : notnull
 {
     private readonly Func<IDictionary<TKey, T>?> _get;
@@ -498,6 +499,36 @@ public sealed class KeyedScalarCollectionParameterSource<T, TKey> :
         if (values is null) return;
         for (int i = 0; i < entries.Count; i++) values[entries[i].Key] = parameters[i];
     }
+
+    /// <inheritdoc />
+    public void WriteParameterTopology(BinaryWriter writer)
+    {
+        if (writer is null) throw new ArgumentNullException(nameof(writer));
+        var values = _get();
+        writer.Write(values?.Count ?? 0);
+        if (values is null) return;
+        foreach (var key in values.Keys)
+            writer.Write(JsonConvert.SerializeObject(key));
+    }
+
+    /// <inheritdoc />
+    public void ReadParameterTopology(BinaryReader reader)
+    {
+        if (reader is null) throw new ArgumentNullException(nameof(reader));
+        int count = reader.ReadInt32();
+        if (count < 0) throw new InvalidDataException($"Keyed parameter topology has negative count {count}.");
+        var values = _get();
+        if (values is null && count != 0)
+            throw new InvalidDataException("Keyed parameter topology cannot be restored into a null dictionary.");
+        values?.Clear();
+        for (int i = 0; i < count; i++)
+        {
+            var key = JsonConvert.DeserializeObject<TKey>(reader.ReadString());
+            if (key is null)
+                throw new InvalidDataException($"Keyed parameter topology contains a null key at index {i}.");
+            values!.Add(key, default!);
+        }
+    }
 }
 
 /// <summary>A two-level scalar dictionary exposed in canonical outer- and inner-key order.</summary>
@@ -507,7 +538,7 @@ public sealed class KeyedScalarCollectionParameterSource<T, TKey> :
 /// tables round-trip without shifting later values onto a different state or action.
 /// </remarks>
 public sealed class NestedKeyedScalarCollectionParameterSource<T, TOuterKey, TInnerKey> :
-    IParameterSource<T>, IParameterLayoutSource
+    IParameterSource<T>, IParameterLayoutSource, IParameterTopologySource
     where TOuterKey : notnull
     where TInnerKey : notnull
 {
@@ -598,5 +629,55 @@ public sealed class NestedKeyedScalarCollectionParameterSource<T, TOuterKey, TIn
         if (values is null) return;
         for (int i = 0; i < entries.Count; i++)
             values[entries[i].OuterKey][entries[i].InnerKey] = parameters[i];
+    }
+
+    /// <inheritdoc />
+    public void WriteParameterTopology(BinaryWriter writer)
+    {
+        if (writer is null) throw new ArgumentNullException(nameof(writer));
+        var values = _get();
+        writer.Write(values?.Count ?? 0);
+        if (values is null) return;
+        foreach (var outer in values)
+        {
+            writer.Write(JsonConvert.SerializeObject(outer.Key));
+            writer.Write(outer.Value?.Count ?? 0);
+            if (outer.Value is null) continue;
+            foreach (var innerKey in outer.Value.Keys)
+                writer.Write(JsonConvert.SerializeObject(innerKey));
+        }
+    }
+
+    /// <inheritdoc />
+    public void ReadParameterTopology(BinaryReader reader)
+    {
+        if (reader is null) throw new ArgumentNullException(nameof(reader));
+        int outerCount = reader.ReadInt32();
+        if (outerCount < 0)
+            throw new InvalidDataException($"Nested parameter topology has negative outer count {outerCount}.");
+        var values = _get();
+        if (values is null && outerCount != 0)
+            throw new InvalidDataException("Nested parameter topology cannot be restored into a null dictionary.");
+        values?.Clear();
+        for (int outerIndex = 0; outerIndex < outerCount; outerIndex++)
+        {
+            var outerKey = JsonConvert.DeserializeObject<TOuterKey>(reader.ReadString());
+            if (outerKey is null)
+                throw new InvalidDataException($"Nested parameter topology contains a null outer key at index {outerIndex}.");
+            int innerCount = reader.ReadInt32();
+            if (innerCount < 0)
+                throw new InvalidDataException(
+                    $"Nested parameter topology has negative inner count {innerCount} at outer index {outerIndex}.");
+            var inner = new Dictionary<TInnerKey, T>();
+            for (int innerIndex = 0; innerIndex < innerCount; innerIndex++)
+            {
+                var innerKey = JsonConvert.DeserializeObject<TInnerKey>(reader.ReadString());
+                if (innerKey is null)
+                    throw new InvalidDataException(
+                        $"Nested parameter topology contains a null inner key at {outerIndex}/{innerIndex}.");
+                inner.Add(innerKey, default!);
+            }
+            values!.Add(outerKey, inner);
+        }
     }
 }

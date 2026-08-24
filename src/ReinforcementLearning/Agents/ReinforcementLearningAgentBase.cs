@@ -354,7 +354,7 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
         using var stream = new MemoryStream();
         using var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
 
-        writer.Write(AgentSerializationMagic);
+        writer.Write(AgentSerializationMagicV2);
         writer.Write(GetType().FullName ?? GetType().Name);
         writer.Write(parameters.Length);
         for (int i = 0; i < parameters.Length; i++)
@@ -362,6 +362,7 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
             writer.Write(Convert.ToDouble(parameters[i]));
         }
 
+        _parameterRegistry.WriteParameterTopologies(writer);
         DeclaredState.WriteAll(writer);
         writer.Flush();
         return stream.ToArray();
@@ -385,7 +386,7 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
         using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
 
         int magic = reader.ReadInt32();
-        if (magic != AgentSerializationMagic)
+        if (magic != AgentSerializationMagicV1 && magic != AgentSerializationMagicV2)
         {
             throw new InvalidDataException(
                 $"{GetType().Name}: payload is not an AiDotNet reinforcement-learning agent state block.");
@@ -411,6 +412,14 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
             parameters[i] = NumOps.FromDouble(reader.ReadDouble());
         }
 
+        // Keys and shapes are state, not values. Recreate them before generated state and the flat
+        // vector are restored so sparse/tabular sources expose the same slots as the checkpoint.
+        if (magic == AgentSerializationMagicV2)
+        {
+            _ = Components;
+            _parameterRegistry.ReadParameterTopologies(reader);
+        }
+
         // State can materialize variable-length storage and child components. Restore it before the
         // flat vector so SetParameters sees the saved structure and remains authoritative for values.
         if (reader.BaseStream.Position < reader.BaseStream.Length)
@@ -421,7 +430,8 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
         SetParameters(parameters);
     }
 
-    private const int AgentSerializationMagic = unchecked((int)0xA1D0A63E);
+    private const int AgentSerializationMagicV1 = unchecked((int)0xA1D0A63E);
+    private const int AgentSerializationMagicV2 = unchecked((int)0xA1D0A63F);
 
     /// <summary>
     /// Gets the agent's parameters.

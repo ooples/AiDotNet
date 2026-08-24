@@ -56,6 +56,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
     private const string ExtraLayersHook = "GetExtraTrainableLayers";
     private const string RebindLayerAliasesHook = "RebindLayerAliases";
     private const string AdditionalLayerGroupsHook = "GetGeneratedAdditionalLayerGroups";
+    private const string NestedNetworkLayerViewsHook = "GetGeneratedNestedNetworkLayerViews";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -137,6 +138,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
             {
                 var tensors = new List<string>();
                 var layerGroups = new List<string>();
+                var nestedNetworkLayerViews = new List<string>();
                 var additionalLayerGroups = new List<string>();
                 var layerAliasRebinders = new List<string>();
                 var layerAliasCopiers = new List<string>();
@@ -204,8 +206,11 @@ public class ModelParameterGenerator : IIncrementalGenerator
                             continue;
                         }
                         if (!emitLayers) continue;
-                        var acc = LayerAccessorFor(tf.Type, tf.Name, elem);
+                        var nestedNetworkLayers = NestedNetworkLayerAccessorFor(tf.Type, tf.Name, elem);
+                        var acc = nestedNetworkLayers ?? LayerAccessorFor(tf.Type, tf.Name, elem);
                         if (acc is not null) layerGroups.Add(acc);
+                        if (nestedNetworkLayers is not null)
+                            nestedNetworkLayerViews.Add(nestedNetworkLayers);
                     }
                     else if (member is IPropertySymbol tp)
                     {
@@ -269,8 +274,11 @@ public class ModelParameterGenerator : IIncrementalGenerator
                             }
                         }
                         if (classification.IsDeclared) continue;
-                        var acc = LayerAccessorFor(tp.Type, tp.Name, elem);
+                        var nestedNetworkLayers = NestedNetworkLayerAccessorFor(tp.Type, tp.Name, elem);
+                        var acc = nestedNetworkLayers ?? LayerAccessorFor(tp.Type, tp.Name, elem);
                         if (acc is not null) layerGroups.Add(acc);
+                        if (nestedNetworkLayers is not null)
+                            nestedNetworkLayerViews.Add(nestedNetworkLayers);
                     }
                 }
 
@@ -297,7 +305,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
                     context.AddSource(
                         HintName(classSymbol) + ".ModelExtraTensors.g.cs",
                         GenerateExtraTensorsSource(
-                            classSymbol, elem, tensors, layerGroups, layerAliasRebinders,
+                            classSymbol, elem, tensors, layerGroups, nestedNetworkLayerViews, layerAliasRebinders,
                             layerAliasCopiers, trainableTensorCopiers, additionalLayerGroups));
                 }
                 if (persistentFields.Count > 0)
@@ -488,6 +496,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
 
     private static string GenerateExtraTensorsSource(INamedTypeSymbol classSymbol, string elem,
                                                      List<string> tensors, List<string> layerGroups,
+                                                     List<string> nestedNetworkLayerViews,
                                                      List<string> layerAliasRebinders,
                                                      List<string> layerAliasCopiers,
                                                      List<string> trainableTensorCopiers,
@@ -573,6 +582,25 @@ public class ModelParameterGenerator : IIncrementalGenerator
                 sb.AppendLine($"        foreach (var __layer in {group})");
                 sb.AppendLine("        {");
                 sb.AppendLine($"            if (__layer is global::AiDotNet.NeuralNetworks.Layers.LayerBase<{elem}> __lb && __IsNew(__layer)) yield return __lb;");
+                sb.AppendLine("        }");
+            }
+            sb.AppendLine("    }");
+        }
+
+        if (nestedNetworkLayerViews.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("    /// <summary>Auto-generated live layer views owned by nested networks.</summary>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelParameterGenerator\", \"1.0.0\")]");
+            sb.AppendLine("    protected override global::System.Collections.Generic.IEnumerable<"
+                          + "global::AiDotNet.Interfaces.ILayer<" + elem + ">?> "
+                          + NestedNetworkLayerViewsHook + "()");
+            sb.AppendLine("    {");
+            foreach (var group in nestedNetworkLayerViews)
+            {
+                sb.AppendLine($"        foreach (var __layer in {group})");
+                sb.AppendLine("        {");
+                sb.AppendLine("            yield return __layer;");
                 sb.AppendLine("        }");
             }
             sb.AppendLine("    }");
@@ -674,6 +702,13 @@ public class ModelParameterGenerator : IIncrementalGenerator
     {
         var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
 
+        // A model helper may own a real layer graph without itself being a LayerBase. Detection
+        // backbones commonly encapsulate stages this way and expose the ownership boundary through
+        // a conventional zero-argument EnumerateLayers method. Consume that declaration just like a
+        // direct layer field so optimizer, checkpoint and clone surfaces all see one graph.
+        if (HasConventionalLayerEnumerator(bare, elem))
+            return $"{name}.EnumerateLayers()";
+
         // A sub-network: yield the layers it owns.
         for (var c = bare as INamedTypeSymbol; c is not null; c = c.BaseType)
         {
@@ -711,6 +746,14 @@ public class ModelParameterGenerator : IIncrementalGenerator
         }
         if (element is null) return null;
 
+        var concreteElement = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        if (HasConventionalLayerEnumerator(concreteElement, elem))
+        {
+            string elementName = concreteElement.ToDisplayString();
+            return $"({name} ?? (global::System.Collections.Generic.IEnumerable<{elementName}>)" +
+                   $"global::System.Array.Empty<{elementName}>()).SelectMany(__owner => __owner.EnumerateLayers())";
+        }
+
         // A collection of sub-networks owns a collection of layer collections. Flatten those in
         // the author's stable collection order so multi-scale networks and expert banks do not
         // disappear merely because the network boundary is one level deeper.
@@ -728,6 +771,49 @@ public class ModelParameterGenerator : IIncrementalGenerator
         if (!IsLayerOf(element, elem)) return null;
         var et = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
         return $"{name} ?? (global::System.Collections.Generic.IEnumerable<{et}>)global::System.Array.Empty<{et}>()";
+    }
+
+    /// <summary>Returns the live layer view for a nested network or network collection.</summary>
+    private static string? NestedNetworkLayerAccessorFor(ITypeSymbol type, string name, string elem)
+    {
+        var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        for (var current = bare as INamedTypeSymbol; current is not null; current = current.BaseType)
+        {
+            if (current.OriginalDefinition.ToDisplayString()
+                .StartsWith("AiDotNet.NeuralNetworks.NeuralNetworkBase<", System.StringComparison.Ordinal))
+                return $"EnumerateNestedNetworkLayers({name})";
+        }
+
+        ITypeSymbol? element = CollectionElementType(bare);
+        if (element is null) return null;
+        element = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        for (var current = element as INamedTypeSymbol; current is not null; current = current.BaseType)
+        {
+            if (!current.OriginalDefinition.ToDisplayString()
+                    .StartsWith("AiDotNet.NeuralNetworks.NeuralNetworkBase<", System.StringComparison.Ordinal))
+                continue;
+
+            string networkType = element.ToDisplayString();
+            return $"({name} ?? (global::System.Collections.Generic.IEnumerable<{networkType}>)"
+                   + $"global::System.Array.Empty<{networkType}>()).SelectMany(__n => EnumerateNestedNetworkLayers(__n))";
+        }
+
+        return null;
+    }
+
+    private static bool HasConventionalLayerEnumerator(ITypeSymbol type, string elem)
+    {
+        if (type is not INamedTypeSymbol named) return false;
+        foreach (var method in named.GetMembers("EnumerateLayers").OfType<IMethodSymbol>())
+        {
+            if (method.IsStatic || method.Parameters.Length != 0
+                || method.DeclaredAccessibility is not (Accessibility.Public or Accessibility.Internal))
+                continue;
+            var element = CollectionElementType(method.ReturnType)
+                ?.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+            if (element is not null && IsLayerOf(element, elem)) return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -982,6 +1068,11 @@ public class ModelParameterGenerator : IIncrementalGenerator
         var type = MemberType(member);
         if (type is null) return null;
         var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+
+        if (IsNeuralNetworkBase(bare))
+        {
+            return $"RebindNestedNetworkCanonicalLayerAliases({member.Name}, previousLayers, replacementLayers, nameof({member.Name}));";
+        }
 
         if (IsLayerOf(bare, elem))
         {

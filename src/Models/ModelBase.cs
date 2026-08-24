@@ -347,7 +347,13 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
         {
             byte[] state = Serialize();
             var copy = (ModelBase<T, TInput, TOutput>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
+            AiDotNet.Models.CloneEngine.PrepareParameterTopology(
+                this,
+                copy,
+                GetParameters().Length,
+                () => copy.GetParameters().Length);
             copy.Deserialize(state);
+            AiDotNet.Models.CloneEngine.RestoreMutableConstructorConfiguration(this, copy);
             return copy;
         }
     }

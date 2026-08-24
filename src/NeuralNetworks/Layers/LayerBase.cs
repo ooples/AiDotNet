@@ -803,7 +803,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             }
 
             var components = new List<DeclaredParameterComponent>();
-            if (Parameters.Length > 0)
+            if (Parameters.Length > 0 && !LegacyParametersAreDerivedSnapshot)
             {
                 components.Add(new DeclaredParameterComponent(
                     DeclaredParameterComponentKind.Legacy));
@@ -1411,6 +1411,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// trainable state, buffers, or parameter-bearing children.
     /// </summary>
     protected virtual bool IsDeclaredParameterFree => false;
+
+    /// <summary>
+    /// Declares that the inherited legacy <see cref="Parameters"/> vector is a cached flat view of
+    /// this layer's generated tensor and child-layer parameter graph, rather than additional owned
+    /// parameter storage.
+    /// </summary>
+    /// <remarks>
+    /// Some migrated composite layers historically assigned <c>Parameters = GetParameters()</c>
+    /// after constructing their children. Counting that snapshot as a legacy component as well as
+    /// walking the children publishes every child value twice. The parameter generator recognizes
+    /// that assignment and overrides this contract for the affected partial layer.
+    /// </remarks>
+    protected virtual bool LegacyParametersAreDerivedSnapshot => false;
 
     /// <summary>
     /// Computes this layer's own parameter width from declared shapes without allocating lazy

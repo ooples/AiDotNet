@@ -38,10 +38,22 @@ namespace AiDotNet.Attributes
     }
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)] public sealed class ScratchAttribute : Attribute { }
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)] public sealed class ExternalStateAttribute : Attribute { }
+    [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
+    public sealed class TensorLayoutAttribute : Attribute
+    {
+        public TensorLayoutAttribute(params AiDotNet.Enums.TensorAxis[] axes) { }
+        public AiDotNet.Enums.TensorLayoutDirection Direction { get; set; }
+        public bool BatchOptional { get; set; }
+    }
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)] public sealed class ParameterAliasAttribute : Attribute
     {
         public ParameterAliasAttribute(string target) { }
     }
+}
+namespace AiDotNet.Enums
+{
+    public enum TensorAxis { Batch, Channels, Depth, Height, Width, Features }
+    public enum TensorLayoutDirection { Input, Output }
 }
 namespace AiDotNet.Tensors.LinearAlgebra
 {
@@ -59,6 +71,9 @@ namespace AiDotNet.NeuralNetworks.Layers
 {
     public abstract class LayerBase<T>
     {
+        protected AiDotNet.Tensors.LinearAlgebra.Vector<T> Parameters = new();
+        public virtual AiDotNet.Tensors.LinearAlgebra.Vector<T> GetParameters() => Parameters;
+        protected virtual bool LegacyParametersAreDerivedSnapshot => false;
         protected void RegisterTrainableParameter(
             AiDotNet.Tensors.LinearAlgebra.Tensor<T> tensor,
             AiDotNet.Tensors.Engines.PersistentTensorRole role) { }
@@ -346,6 +361,82 @@ public class SecondGeneratedCoverageClone<T> : AiDotNet.NeuralNetworks.Layers.La
 
         Assert.Contains("new[] { \"ImageSize\" }", generated, StringComparison.Ordinal);
         Assert.DoesNotContain("new[] { \"=default\" }", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("Add(e, t, \"ImageSize\"", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ClonePlanGenerator_UsesEffectiveOptionalConfigurationStoredThroughCoalesce()
+    {
+        const string source = """
+            namespace AiDotNet.Interfaces
+            {
+                public interface IFullModel<TInput, TOutput> { }
+            }
+
+            namespace Example
+            {
+                public sealed class Settings { }
+                public sealed class ConfiguredModel : AiDotNet.Interfaces.IFullModel<int, int>
+                {
+                    private Settings Options { get; }
+                    public ConfiguredModel(Settings? options = null)
+                    {
+                        Options = options ?? new Settings();
+                    }
+                }
+            }
+            """;
+
+        string generated = Run(new AiDotNet.Generators.ClonePlanGenerator(), source);
+
+        Assert.Contains("new[] { \"Options\" }", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("new[] { \"=default\" }", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ClonePlanGenerator_MapsNamedNestedArchitectureBeforeGenericParentArchitecture()
+    {
+        const string source = """
+            namespace AiDotNet.Interfaces
+            {
+                public interface IFullModel<TInput, TOutput> { }
+            }
+
+            namespace Example
+            {
+                public sealed class Architecture { }
+                public sealed class Network
+                {
+                    public Architecture Architecture { get; } = new Architecture();
+                }
+
+                public sealed class CompositeModel : AiDotNet.Interfaces.IFullModel<int, int>
+                {
+                    public Architecture Architecture { get; } = new Architecture();
+                    public Network Generator { get; private set; } = new Network();
+                    public Network Critic { get; private set; } = new Network();
+
+                    public CompositeModel(
+                        Architecture generatorArchitecture,
+                        Architecture criticArchitecture)
+                    {
+                    }
+                }
+            }
+            """;
+
+        string generated = Run(new AiDotNet.Generators.ClonePlanGenerator(), source);
+
+        Assert.Contains(
+            "new[] { \"Generator.Architecture\", \"Critic.Architecture\" }",
+            generated,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "new[] { \"Architecture\", \"Architecture\" }",
+            generated,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("Add(e, t, \"Generator\"", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("Add(e, t, \"Critic\"", generated, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -494,6 +585,28 @@ public partial class CompositeLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBas
         string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
         Assert.Contains("HasDeclaredSubLayerStructure => true", generated, StringComparison.Ordinal);
         Assert.Contains("EnsureSubLayersRegistered", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LayerGenerator_MarksLegacyFlatParameterSnapshotsAsDerived()
+    {
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class Child<T> : AiDotNet.Interfaces.ILayer<T> { }
+[AutoParameters]
+public partial class LegacyComposite<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    private Child<T> _child = new();
+
+    public LegacyComposite()
+    {
+        Parameters = GetParameters();
+    }
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+
+        Assert.Contains("LegacyParametersAreDerivedSnapshot => true", generated, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1163,6 +1276,8 @@ public partial class CompositeNetwork<T> : AiDotNet.NeuralNetworks.NeuralNetwork
         string generated = Run(new AiDotNet.Generators.ModelParameterGenerator(), source);
         Assert.Contains("EnumerateNestedNetworkLayers(_child)", generated, StringComparison.Ordinal);
         Assert.Contains("EnumerateNestedNetworkTensors(_child)", generated, StringComparison.Ordinal);
+        Assert.Contains("GetGeneratedNestedNetworkLayerViews", generated, StringComparison.Ordinal);
+        Assert.Contains("RebindNestedNetworkCanonicalLayerAliases(_child", generated, StringComparison.Ordinal);
         Assert.DoesNotContain("_child?.Layers", generated, StringComparison.Ordinal);
     }
 
@@ -1281,6 +1396,61 @@ public partial class ConditionalExperts<T> : AiDotNet.NeuralNetworks.Layers.Laye
         Assert.Contains(
             $"if (UseExperts){System.Environment.NewLine}            foreach (var __componentTensor in global::AiDotNet.Models.Parameters.ParameterCollectionOrdering.PresentNonNull(_experts))",
             generated,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LayerGenerator_InfersInputDepthFromDeclaredChannelAxis()
+    {
+        const string source = @"
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+[TensorLayout(TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width, TensorAxis.Channels,
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
+[AutoParameters]
+public partial class ChannelsLastLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    private int _inputDepth = -1;
+    [TrainableParameter]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T> _weights = new();
+
+    private void Allocate()
+    {
+        _weights = Create([_inputDepth, 3]);
+    }
+
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T> Create(int[] shape) => new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+
+        Assert.Contains("InputShape[InputShape.Length - 1], 3", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("InputShape[0], 3", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ModelGenerator_DiscoversConventionalNestedLayerOwners()
+    {
+        const string source = @"
+using System.Collections.Generic;
+internal sealed class OwnedLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>, AiDotNet.Interfaces.ILayer<T> { }
+internal sealed class LayerBlock<T>
+{
+    private readonly OwnedLayer<T> _layer = new();
+    internal IEnumerable<OwnedLayer<T>> EnumerateLayers() { yield return _layer; }
+}
+public partial class EncapsulatedNetwork<T> : AiDotNet.NeuralNetworks.NeuralNetworkBase<T>
+{
+    private readonly LayerBlock<T> _stem = new();
+    private readonly List<LayerBlock<T>> _stages = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelParameterGenerator(), source);
+
+        Assert.Contains("_stem.EnumerateLayers()", generated, StringComparison.Ordinal);
+        Assert.Contains("SelectMany(__owner => __owner.EnumerateLayers())", generated,
             StringComparison.Ordinal);
     }
 }

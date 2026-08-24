@@ -37,6 +37,101 @@ public static class CloneEngine
     internal const string UseDefault = "=default";
 
     /// <summary>
+    /// Rebuilds cloneable fitted topology when a fresh configuration shell exposes a different
+    /// parameter surface from its trained source.
+    /// </summary>
+    /// <remarks>
+    /// The flat parameter vector carries values, not structure. A learned expression/tree can
+    /// therefore expose four scalar constants in the source and none in a fresh shell. Models that
+    /// already declare serializable state remain authoritative; this narrowly bridges only an
+    /// observed count mismatch, considers mutable cloneable fields, and keeps a candidate only when
+    /// it moves the destination toward the exact expected count. Scratch and buffer fields are not
+    /// topology and are excluded.
+    /// </remarks>
+    internal static void PrepareParameterTopology(
+        object source,
+        object destination,
+        int expectedParameterCount,
+        Func<int> getDestinationParameterCount)
+    {
+        if (source is null) throw new ArgumentNullException(nameof(source));
+        if (destination is null) throw new ArgumentNullException(nameof(destination));
+        if (getDestinationParameterCount is null)
+            throw new ArgumentNullException(nameof(getDestinationParameterCount));
+        if (source.GetType() != destination.GetType()) return;
+
+        int currentCount = getDestinationParameterCount();
+        if (currentCount == expectedParameterCount) return;
+
+        const BindingFlags Flags =
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
+        for (var current = source.GetType(); current is not null; current = current.BaseType)
+        {
+            foreach (var field in current.GetFields(Flags))
+            {
+                if (field.IsStatic || field.IsInitOnly || field.IsLiteral) continue;
+                if (field.GetCustomAttributesData().Any(attribute =>
+                        attribute.AttributeType.Name is "ScratchAttribute" or "BufferAttribute"))
+                    continue;
+
+                object? sourceValue = field.GetValue(source);
+                if (sourceValue is null) continue;
+
+                MethodInfo? cloneMethod = sourceValue.GetType().GetMethod(
+                    "Clone",
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
+                    binder: null,
+                    Type.EmptyTypes,
+                    modifiers: null);
+                if (cloneMethod is null
+                    || cloneMethod.ReturnType == typeof(void)
+                    || !field.FieldType.IsAssignableFrom(cloneMethod.ReturnType))
+                    continue;
+
+                object? duplicate;
+                try
+                {
+                    duplicate = cloneMethod.Invoke(sourceValue, null);
+                }
+                catch (Exception ex) when (ex is TargetInvocationException
+                                           or ArgumentException
+                                           or MethodAccessException)
+                {
+                    continue;
+                }
+
+                if (duplicate is null || ReferenceEquals(duplicate, sourceValue)) continue;
+
+                object? previousValue = field.GetValue(destination);
+                try
+                {
+                    field.SetValue(destination, duplicate);
+                    int candidateCount = getDestinationParameterCount();
+                    if (candidateCount == expectedParameterCount) return;
+
+                    if (Math.Abs((long)expectedParameterCount - candidateCount)
+                        < Math.Abs((long)expectedParameterCount - currentCount))
+                    {
+                        currentCount = candidateCount;
+                    }
+                    else
+                    {
+                        field.SetValue(destination, previousValue);
+                    }
+                }
+                catch (Exception ex) when (ex is ArgumentException
+                                           or FieldAccessException
+                                           or TargetInvocationException
+                                           or InvalidOperationException)
+                {
+                    try { field.SetValue(destination, previousValue); }
+                    catch (Exception) { /* best-effort topology candidate rollback */ }
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Creates a configuration copy of <paramref name="source"/>.
     /// </summary>
     /// <param name="source">The instance to copy.</param>
@@ -82,6 +177,47 @@ public static class CloneEngine
 
         Assign(type, clone, pending);
         return clone;
+    }
+
+    /// <summary>
+    /// Reapplies mutable options that are part of constructor state after learned-state restore.
+    /// </summary>
+    /// <remarks>
+    /// Some legacy base payloads deserialize their own options object in place or replace it with
+    /// the base view. A derived model can intentionally hide that view with a more specific,
+    /// read-only options member used by inference. Constructor replay creates the right independent
+    /// object; this method restores its generated option properties after the payload has restored
+    /// learned values, without teaching either base about a concrete model.
+    /// </remarks>
+    internal static void RestoreMutableConstructorConfiguration(object source, object destination)
+    {
+        if (source is null) throw new ArgumentNullException(nameof(source));
+        if (destination is null) throw new ArgumentNullException(nameof(destination));
+        if (source.GetType() != destination.GetType()) return;
+
+        var type = source.GetType();
+        var plan = CloneRegistry.GetPlan(type);
+        var restored = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var candidate in plan.ConstructorCandidates)
+        {
+            foreach (var member in candidate)
+            {
+                if (member == UseDefault || !restored.Add(member)) continue;
+                if (!TryReadMember(type, member, source, out object? sourceValue)
+                    || sourceValue is not ModelOptions)
+                    continue;
+                if (!TryReadMember(type, member, destination, out object? destinationValue)
+                    || destinationValue is not ModelOptions
+                    || destinationValue.GetType() != sourceValue.GetType())
+                    continue;
+
+                var optionPlan = CloneRegistry.GetPlan(sourceValue.GetType());
+                var pending = new List<(ClonePlanEntry Entry, object? Value)>(optionPlan.Entries.Count);
+                foreach (var entry in optionPlan.Entries)
+                    pending.Add((entry, entry.Property.GetValue(sourceValue)));
+                Assign(sourceValue.GetType(), destinationValue, pending);
+            }
+        }
     }
 
     /// <summary>
@@ -635,6 +771,23 @@ public static class CloneEngine
         const BindingFlags Flags =
             BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
 
+        // Generated plans may name a value at one ownership boundary, for example
+        // Generator.Architecture. Resolve each segment through the same inheritance-aware member
+        // lookup used for direct constructor state; no arbitrary method invocation is involved.
+        int separator = member.IndexOf('.');
+        if (separator >= 0)
+        {
+            string owner = member.Substring(0, separator);
+            string remainder = member.Substring(separator + 1);
+            if (!TryReadMember(type, owner, source, out object? nested) || nested is null)
+            {
+                value = null;
+                return false;
+            }
+
+            return TryReadMember(nested.GetType(), remainder, nested, out value);
+        }
+
         for (var current = type; current is not null; current = current.BaseType)
         {
             var property = current.GetProperty(member, Flags | BindingFlags.DeclaredOnly);
@@ -676,6 +829,10 @@ public static class CloneEngine
         if (member == UseDefault) return true;
 
         var trimmed = member.StartsWith("_", StringComparison.Ordinal) ? member.Substring(1) : member;
+        if (trimmed.IndexOf('.') >= 0)
+        {
+            trimmed = trimmed.Replace(".", string.Empty).Replace("_", string.Empty);
+        }
         if (string.Equals(parameter, trimmed, StringComparison.OrdinalIgnoreCase)) return true;
 
         // THE SUFFIX RULE, because the generator uses it when it sources the member. FindByNameSuffix

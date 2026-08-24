@@ -596,6 +596,89 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
     }
 
     /// <summary>
+    /// Writes the structural state required by variable-topology parameter sources.
+    /// </summary>
+    internal void WriteParameterTopologies(BinaryWriter writer)
+    {
+        if (writer is null) throw new ArgumentNullException(nameof(writer));
+
+        lock (_surfaceGate)
+        {
+            var ordered = OrderedEntries();
+            writer.Write(ordered.Count);
+            for (int i = 0; i < ordered.Count; i++)
+            {
+                writer.Write(ordered[i].StableId);
+                if (ordered[i].Source is not IParameterTopologySource topology)
+                {
+                    writer.Write(false);
+                    continue;
+                }
+
+                writer.Write(true);
+                using var payload = new MemoryStream();
+                using (var payloadWriter = new BinaryWriter(
+                           payload, Encoding.UTF8, leaveOpen: true))
+                {
+                    topology.WriteParameterTopology(payloadWriter);
+                    payloadWriter.Flush();
+                }
+                writer.Write(checked((int)payload.Length));
+                writer.Write(payload.GetBuffer(), 0, checked((int)payload.Length));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Restores variable parameter topology before a flat parameter vector is distributed.
+    /// </summary>
+    internal void ReadParameterTopologies(BinaryReader reader)
+    {
+        if (reader is null) throw new ArgumentNullException(nameof(reader));
+
+        lock (_surfaceGate)
+        {
+            var ordered = OrderedEntries();
+            int count = reader.ReadInt32();
+            if (count != ordered.Count)
+                throw new InvalidDataException(
+                    $"Parameter topology contains {count} components, but the live model declares {ordered.Count}.");
+
+            for (int i = 0; i < count; i++)
+            {
+                string stableId = reader.ReadString();
+                if (!string.Equals(stableId, ordered[i].StableId, StringComparison.Ordinal))
+                    throw new InvalidDataException(
+                        $"Parameter topology component {i} is '{stableId}', but the live model declares " +
+                        $"'{ordered[i].StableId}'.");
+
+                bool hasTopology = reader.ReadBoolean();
+                if (!hasTopology) continue;
+
+                int length = reader.ReadInt32();
+                if (length < 0)
+                    throw new InvalidDataException(
+                        $"Parameter topology component '{stableId}' has negative length {length}.");
+                byte[] payload = reader.ReadBytes(length);
+                if (payload.Length != length)
+                    throw new EndOfStreamException(
+                        $"Parameter topology component '{stableId}' ended before its declared length.");
+                if (ordered[i].Source is not IParameterTopologySource topology)
+                    throw new InvalidDataException(
+                        $"Parameter topology component '{stableId}' has saved structure, but the live " +
+                        "parameter source cannot restore structure.");
+
+                using var stream = new MemoryStream(payload, writable: false);
+                using var payloadReader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: false);
+                topology.ReadParameterTopology(payloadReader);
+                if (stream.Position != stream.Length)
+                    throw new InvalidDataException(
+                        $"Parameter topology component '{stableId}' did not consume its complete payload.");
+            }
+        }
+    }
+
+    /// <summary>
     /// Advances every generated or manually registered component to one common lifecycle boundary.
     /// </summary>
     public void PrepareParameterSurface(ParameterSurfaceIntent intent)
