@@ -43,8 +43,13 @@ jobs:
           dotnet-version: '10.0.x'
 
       # Build the shared library once so each sample reuses it instead of rebuilding.
+      # Restore separately, then serialize MSBuild: the shared project is large enough that
+      # concurrent child nodes can exhaust a 16 GB runner before any sample gets a chance to run.
+      - name: Restore shared AiDotNet library
+        run: dotnet restore src/AiDotNet.csproj
+
       - name: Build shared AiDotNet library
-        run: dotnet build src/AiDotNet.csproj -c Release
+        run: dotnet build src/AiDotNet.csproj -c Release --no-restore -m:1
 
       # Build + run each sample ONE AT A TIME, reclaiming its output before the next.
       # Every sample's bin/ copies the large AiDotNet dependency (~1.4 GB each), so

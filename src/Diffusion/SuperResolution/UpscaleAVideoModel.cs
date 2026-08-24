@@ -303,7 +303,6 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     /// StableVideoSR that expose the neural-network gradient accessor contract.
     /// </summary>
     protected override bool RetainTrainingGradientSurface => true;
-
     #endregion
 
     #region Constructor

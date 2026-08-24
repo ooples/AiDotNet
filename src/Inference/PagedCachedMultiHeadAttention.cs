@@ -60,20 +60,18 @@ public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAw
     private RotaryPositionalEncodingLayer<T>? _ropeLayer;
     private ALiBiPositionalBiasLayer<T>? _alibiLayer;
 
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _queryWeights;
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _keyWeights;
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _valueWeights;
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _outputWeights;
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
     private Tensor<T> _outputBias;
 
-    [Scratch]
     private Tensor<T>? _lastInput;
-    [Scratch]
     private Tensor<T>? _lastOutput;
     private int _currentPosition;
 
@@ -92,13 +90,9 @@ public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAw
     // Weight matrices as [inDim, outDim] tensors for the batched-GEMM projection path (Engine.TensorMatMul,
     // which routes to the optimized BLAS/GPU kernels). Built lazily from the Matrix weights and invalidated
     // alongside the float kernel-weight caches when the weights change.
-    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _wqTensor;
-    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _wkTensor;
-    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _wvTensor;
-    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _woTensor;
 
     internal bool EnableWeightOnlyQuantization { get; set; }
@@ -155,9 +149,6 @@ public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAw
     /// </summary>
     public double RoPETheta => _ropeLayer?.Theta ?? 10000.0;
 
-    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
-    private readonly int _sequenceLength;
-
     /// <param name="kvHeadCount">
     /// Number of key/value heads for grouped-query attention. 0 (the default) means "same as
     /// <paramref name="headCount"/>" — standard multi-head attention. When smaller, K/V project to
@@ -175,7 +166,6 @@ public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAw
             [sequenceLength, embeddingDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
-        _sequenceLength = sequenceLength;
         if (embeddingDimension % headCount != 0)
         {
             throw new ArgumentException(
