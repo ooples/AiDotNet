@@ -583,6 +583,71 @@ public partial class ConditionalLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerB
     }
 
     [Fact]
+    public async Task LayerGenerator_RoleOnlyParameter_EmitsShapeIndependentRestoreSlots()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public partial class RoleOnlyLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    [TrainableParameter(Role = 1)]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T> _weight = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+        Assert.Contains("DeclaredParameterTensors()", generated, StringComparison.Ordinal);
+        Assert.Contains("__declared.Add((_weight,", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("HasActiveDeclaredParameterShapes", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LayerGenerator_OptionalRoleOnlyParameter_DeclaresOnlyWhenPresent()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public partial class OptionalRoleOnlyLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    [TrainableParameter(Role = 1)]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T> _required = new();
+    [TrainableParameter(Role = 2, Optional = true)]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T> _optional = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+        Assert.Contains("__declared.Add((_required,", generated, StringComparison.Ordinal);
+        Assert.Contains("if (_optional.Length > 0)", generated, StringComparison.Ordinal);
+        Assert.Contains("__declared.Add((_optional,", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LayerGenerator_ConditionalOptionalParameter_UsesTheSameSingleEvaluationGuardForSlots()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public partial class ConditionalOptionalLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBase<T>
+{
+    public bool UseOptional { get; }
+    [TrainableParameter(Role = 1, Optional = true, Condition = nameof(UseOptional))]
+    private AiDotNet.Tensors.LinearAlgebra.Tensor<T> _optional = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
+        const string presence = "(UseOptional) && (_optional.Length > 0)";
+
+        Assert.Contains($"if ({presence}) __params.Add(_optional);", generated, StringComparison.Ordinal);
+
+        int declaredStart = generated.IndexOf("DeclaredParameterTensors()", StringComparison.Ordinal);
+        int declaredEnd = generated.IndexOf("return __declared;", declaredStart, StringComparison.Ordinal);
+        Assert.True(declaredStart >= 0 && declaredEnd > declaredStart);
+        string declaredSurface = generated.Substring(declaredStart, declaredEnd - declaredStart);
+
+        Assert.Contains($"if ({presence})", declaredSurface, StringComparison.Ordinal);
+        Assert.DoesNotContain("(UseOptional) && ((UseOptional)", declaredSurface, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task LayerGenerator_LowPrecisionBackingFlowsThroughLogicalParameterSurfaces()
     {
         await Task.Yield();

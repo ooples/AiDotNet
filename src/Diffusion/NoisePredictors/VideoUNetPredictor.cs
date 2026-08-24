@@ -75,7 +75,12 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// <remarks>Lazy weights, same reasoning as UNetNoisePredictor.</remarks>
     protected override void EnsureParametersReady()
     {
-        TriggerLazyShapeResolution();
+        // A concatenated image condition changes the entry convolution from C to C+conditionC.
+        // Resolve through that real public path; an unconditioned dummy would resize the lazy
+        // convolution back to C and make ParameterCount disagree with GetParameters by exactly the
+        // missing condition-channel kernel slice.
+        TriggerLazyShapeResolution(
+            includeImageConditioning: _supportsImageConditioning && _concatenateImageCondition);
     }
     /// <summary>
     /// Channel multipliers for each resolution level.
@@ -1925,14 +1930,15 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
             numClassEmbeddings: _numClassEmbeddings,
             architectureProfile: _architectureProfile);
 
-        bool sourceUsedVideo = _lazyShapeResolvedWithVideo;
-        bool sourceUsedTextConditioning = _lazyShapeResolvedWithTextConditioning;
-        bool sourceUsedImageConditioning = _lazyShapeResolvedWithImageConditioning;
-
         // Resolve the SOURCE's lazy layers so each source layer reports its real
         // parameter shape below. The source's resolving forward packs its OWN
         // (correct) weights, so the source stays self-consistent.
-        TriggerLazyShapeResolution();
+        TriggerLazyShapeResolution(
+            includeImageConditioning: _supportsImageConditioning && _concatenateImageCondition);
+
+        bool sourceUsedVideo = _lazyShapeResolvedWithVideo;
+        bool sourceUsedTextConditioning = _lazyShapeResolvedWithTextConditioning;
+        bool sourceUsedImageConditioning = _lazyShapeResolvedWithImageConditioning;
 
         // Materialize the clone with the same execution path, then copy values into its existing
         // tensors. This preserves layer-owned caches and avoids relying on SetParameters to infer

@@ -22,7 +22,7 @@ namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 public sealed class RgLruFamilyFusedCompiledTrainingTests
 {
     [Fact(Timeout = 120000)]
-    public async Task RecurrentGemma_LayerCapabilityRoutesFiniteEagerUpdates()
+    public async Task RecurrentGemma_FusedCompiledStepKeepsUpdatesFinite()
     {
         await Task.Yield();
         AssertAutomaticallyRoutedEagerUpdate(
@@ -33,7 +33,7 @@ public sealed class RgLruFamilyFusedCompiledTrainingTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task Griffin_LayerCapabilityRoutesFiniteEagerUpdates()
+    public async Task Griffin_FusedCompiledStepKeepsUpdatesFinite()
     {
         await Task.Yield();
         AssertAutomaticallyRoutedEagerUpdate(
@@ -45,7 +45,7 @@ public sealed class RgLruFamilyFusedCompiledTrainingTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task Hawk_LayerCapabilityRoutesFiniteEagerUpdates()
+    public async Task Hawk_FusedCompiledStepKeepsUpdatesFinite()
     {
         await Task.Yield();
         AssertAutomaticallyRoutedEagerUpdate(
@@ -90,12 +90,6 @@ public sealed class RgLruFamilyFusedCompiledTrainingTests
                 .OfType<RealGatedLinearRecurrenceLayer<double>>()
                 .ToArray();
             Assert.NotEmpty(recurrentLayers);
-            Assert.All(recurrentLayers, layer =>
-            {
-                var property = layer.GetType().GetCustomAttribute<LayerPropertyAttribute>(inherit: false);
-                Assert.NotNull(property);
-                Assert.False(property.SupportsFusedCompiledTraining);
-            });
 
             var input = new Tensor<double>([32]);
             for (int i = 0; i < input.Length; i++) input[i] = i % 128;
@@ -111,22 +105,28 @@ public sealed class RgLruFamilyFusedCompiledTrainingTests
             var parametersAfter = model.GetParameters().ToArray();
             var gradients = model.GetParameterGradients().ToArray();
 
-            Assert.Equal(0, CompiledTapeTrainingStep<double>.GetFusedStepCount());
+            Assert.True(
+                CompiledTapeTrainingStep<double>.GetFusedStepCount() > 0,
+                $"{modelName} did not exercise the fused compiled step. Every model must train "
+                + "through the fused path; an opt-out would hide the real defect instead of fixing it.");
             Assert.True(
                 parametersBefore.Where((value, index) => value != parametersAfter[index]).Any(),
-                $"{modelName}'s automatically selected eager step did not update a live parameter.");
+                $"{modelName}'s fused compiled step did not update a live parameter.");
             Assert.True(IsFinite(model.GetLastLoss()),
-                $"{modelName}'s automatically selected eager loss was not finite.");
+                $"{modelName}'s fused compiled loss was not finite.");
             Assert.All(parametersAfter, value => Assert.True(IsFinite(value),
                 $"{modelName} produced a non-finite parameter."));
             Assert.All(gradients, value => Assert.True(IsFinite(value),
                 $"{modelName} published a non-finite gradient."));
             Assert.Contains(gradients, value => value != 0.0);
 
-            // A second step proves this is stable routing, not a first-step fallback whose
-            // next call silently re-enters the compiled plan with stale recurrent state.
+            // A second step proves the compiled plan replays correctly against the live recurrent
+            // state rather than succeeding once and then drifting.
+            long afterFirst = CompiledTapeTrainingStep<double>.GetFusedStepCount();
             model.Train(input, target);
-            Assert.Equal(0, CompiledTapeTrainingStep<double>.GetFusedStepCount());
+            Assert.True(
+                CompiledTapeTrainingStep<double>.GetFusedStepCount() > afterFirst,
+                $"{modelName} stopped using the fused compiled step after the first update.");
             Assert.True(IsFinite(model.GetLastLoss()));
         }
         finally

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
-[LayerProperty(IsTrainable = true, IsStateful = true, SupportsFusedCompiledTraining = false,
+[LayerProperty(IsTrainable = true, IsStateful = true,
     Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
 // Shape-preserving at every accepted rank, and read from this layer's own forward rather than assumed:
 // ForwardTraced takes seqLen = Shape[rank-2] and modelDim = Shape[rank-1], so rank 2 is [Time, Features]

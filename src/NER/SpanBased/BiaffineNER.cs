@@ -79,13 +79,6 @@ namespace AiDotNet.NER.SpanBased;
     Authors = "Juntao Yu, Bernd Bohnet, Massimo Poesio")]
 public class BiaffineNER<T> : SpanBasedNERBase<T>
 {
-    /// <summary>
-    /// The biaffine scorer uses sliced category tensors and broadcasted span grids whose compiled
-    /// replay currently does not preserve the eager tape's parameter aliases. A fused step can
-    /// therefore update stale buffers and drive the live scorer parameters non-finite. Keep this
-    /// architecture on the eager tape until those operators have alias-safe compiled kernels.
-    /// </summary>
-    protected override bool SupportsFusedCompiledTraining => false;
 
     /// <summary>
     /// Creates a Biaffine-NER model in ONNX inference mode.

@@ -56,13 +56,6 @@ namespace AiDotNet.Document.OCR.TextDetection;
 [ResearchPaper("Shape Robust Text Detection with Progressive Scale Expansion Network", "https://doi.org/10.48550/arXiv.1903.12473", Year = 2019, Authors = "Wenhai Wang, Enze Xie, Xiang Li, Wenbo Hou, Tong Lu, Gang Yu, Shuai Shao")]
 public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 {
-    /// <summary>
-    /// PSENet's BatchNorm-heavy pyramid mutates running statistics during every forward. Replaying
-    /// a captured fused graph does not replay those state transitions against the live buffers, so
-    /// training and evaluation progressively normalize against different distributions. The eager
-    /// tape executes each stateful forward and is the correct path for this architecture.
-    /// </summary>
-    protected override bool SupportsFusedCompiledTraining => false;
 
     private readonly PSENetOptions _options;
 

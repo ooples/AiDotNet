@@ -144,6 +144,8 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _lastRecurrenceOutput;
     private Tensor<T>? _lastOutputGate;
     private Tensor<T>? _lastOutputGateRaw;
+    [Scratch]
+    private readonly List<Tensor<T>> _recurrenceInitialStates = [];
     private int[]? _originalInputShape;
 
     // Gradients
@@ -306,21 +308,30 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
         _lastValue = v;
 
         // Step 2: Gates
-        var betaRaw = Engine.Reshape(Engine.TensorAdd(
-            Engine.TensorMatMul(inputFlat, _betaWeights),
-            Engine.Reshape(_betaBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
+        var betaProjection = Engine.TensorMatMul(inputFlat, _betaWeights);
+        var betaBias = Engine.TensorBroadcastTo(
+            Engine.Reshape(_betaBias, new[] { 1, _numHeads }),
+            new[] { batchSize * seqLen, _numHeads });
+        var betaRaw = Engine.Reshape(
+            Engine.TensorAdd(betaProjection, betaBias), new[] { batchSize, seqLen, _numHeads });
         var beta = Engine.Sigmoid(betaRaw);
         _lastBeta = beta;
 
-        var alphaRaw = Engine.Reshape(Engine.TensorAdd(
-            Engine.TensorMatMul(inputFlat, _alphaWeights),
-            Engine.Reshape(_alphaBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
+        var alphaProjection = Engine.TensorMatMul(inputFlat, _alphaWeights);
+        var alphaBias = Engine.TensorBroadcastTo(
+            Engine.Reshape(_alphaBias, new[] { 1, _numHeads }),
+            new[] { batchSize * seqLen, _numHeads });
+        var alphaRaw = Engine.Reshape(
+            Engine.TensorAdd(alphaProjection, alphaBias), new[] { batchSize, seqLen, _numHeads });
         var alpha = Engine.Sigmoid(alphaRaw);
         _lastAlpha = alpha;
 
-        var gateRaw = Engine.Reshape(Engine.TensorAdd(
-            Engine.TensorMatMul(inputFlat, _outputGateWeights),
-            Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
+        var gateProjection = Engine.TensorMatMul(inputFlat, _outputGateWeights);
+        var gateBias = Engine.TensorBroadcastTo(
+            Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension }),
+            new[] { batchSize * seqLen, _modelDimension });
+        var gateRaw = Engine.Reshape(
+            Engine.TensorAdd(gateProjection, gateBias), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Swish(gateRaw);
         _lastOutputGate = gate;
         _lastOutputGateRaw = gateRaw;
@@ -339,7 +350,9 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
         // Step 6: Output projection
         var gatedFlat = Engine.Reshape(gatedOutput, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorMatMul(gatedFlat, _outputProjectionWeights);
-        var outBias = Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension });
+        var outBias = Engine.TensorBroadcastTo(
+            Engine.Reshape(_outputProjectionBias, new[] { 1, _modelDimension }),
+            new[] { batchSize * seqLen, _modelDimension });
         outputFlat = Engine.TensorAdd(outputFlat, outBias);
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
@@ -361,105 +374,129 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
     /// Computes Householder vectors from input for each timestep.
     /// Returns shape [batch * seqLen, numHouseholders, numHeads, headDim].
     /// </summary>
+    /// <remarks>
+    /// The projection does not depend on the head index at all - every head sees the same vector -
+    /// so this is one matmul per Householder index, tiled across heads. Built from Engine ops so
+    /// _householderWeights stays on the tape; the scalar loop this replaces severed it.
+    /// </remarks>
     private Tensor<T> ComputeHouseholderVectors(Tensor<T> inputFlat, int batchSize, int seqLen)
     {
         int total = batchSize * seqLen;
-        var projections = new List<Tensor<T>>(_numHouseholders);
+        var reflections = new Tensor<T>[_numHouseholders];
         for (int mi = 0; mi < _numHouseholders; mi++)
         {
-            // Keep the projection on the tape. The former scalar-indexing implementation filled a
-            // new tensor manually, severing both the input and Householder-weight gradient paths.
-            var weights = Engine.Reshape(
-                Engine.TensorSlice(_householderWeights,
-                    new[] { mi, 0, 0 }, new[] { 1, _modelDimension, _headDimension }),
-                new[] { _modelDimension, _headDimension });
-            // [B*T, headDim]. The weights have no head axis, so the tile below deliberately
-            // shares one projected reflection vector across all heads.
-            var projected = Engine.TensorMatMul(inputFlat, weights);
-            projections.Add(Engine.Reshape(
-                Engine.TensorTile(Engine.Reshape(projected,
-                    new[] { total, 1, 1, _headDimension }),
-                    new[] { 1, 1, _numHeads, 1 }),
-                new[] { total, 1, _numHeads, _headDimension }));
+            var weightSlice = Engine.TensorNarrow(_householderWeights, dim: 0, start: mi, length: 1);
+            var weightMatrix = Engine.Reshape(weightSlice, new[] { _modelDimension, _headDimension });
+            var projected = Engine.TensorMatMul(inputFlat, weightMatrix);
+            var perHead = Engine.TensorBroadcastTo(
+                Engine.Reshape(projected, new[] { total, 1, _headDimension }),
+                new[] { total, _numHeads, _headDimension });
+            reflections[mi] = Engine.Reshape(
+                perHead, new[] { total, 1, _numHeads, _headDimension });
         }
-        return Engine.TensorConcatenate(projections.ToArray(), axis: 1);
+
+        return Engine.TensorConcatenate(reflections, axis: 1);
     }
 
     /// <summary>
-    /// Gated DeltaProduct recurrence:
-    /// S_t = alpha_t * H_t * S_{t-1} + beta_t * v_t * k_t^T
-    /// O_t = S_t * q_t
+    /// Gated DeltaProduct recurrence: Householder-product transition, alpha gate, then delta update.
+    /// <code>
+    ///   S_t = alpha_t * (H_M ... H_1) * S_{t-1} + beta_t * v_t * k_t^T
+    ///   O_t = S_t * q_t                       where H_m = I - 2 u u^T / (||u||^2 + eps)
+    /// </code>
     /// </summary>
+    /// <remarks>
+    /// Written with Engine ops, mirroring the ungated <c>DeltaProductLayer</c> - which computes the
+    /// same recurrence and is already fully differentiable. The scalar loop this replaces was
+    /// detached from the tape, so q/k/v, both gates and the Householder weights (8 of 12 trainable
+    /// tensors) received no gradient and never learned. This layer has no Backward override, so the
+    /// tape was its only gradient path.
+    /// </remarks>
     private Tensor<T> GatedDeltaProductRecurrence(
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         Tensor<T> alpha, Tensor<T> beta,
         Tensor<T> hVecs, int batchSize, int seqLen)
     {
-        int headBatch = batchSize * _numHeads;
-        var qHeads = ToHeadMajor(q, batchSize, seqLen);
-        var kHeads = Engine.TensorMultiplyScalar(ToHeadMajor(k, batchSize, seqLen),
-            NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension)));
-        var vHeads = ToHeadMajor(v, batchSize, seqLen);
-        var alphaHeads = Engine.Reshape(Engine.TensorPermute(alpha, new[] { 0, 2, 1 }),
-            new[] { headBatch, seqLen, 1 });
-        var betaHeads = Engine.Reshape(Engine.TensorPermute(beta, new[] { 0, 2, 1 }),
-            new[] { headBatch, seqLen, 1 });
-        var state = Tensor<T>.CreateDefault(
-            new[] { headBatch, _headDimension, _headDimension }, NumOps.Zero);
-        var outputs = new List<Tensor<T>>(seqLen);
-        var two = NumOps.FromDouble(2.0);
-
-        for (int t = 0; t < seqLen; t++)
+        int batchHeads = batchSize * _numHeads;
+        var qHeads = Engine.Reshape(q, new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var kHeads = Engine.Reshape(k, new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var vHeads = Engine.Reshape(v, new[] { batchSize, seqLen, _numHeads, _headDimension });
+        var hByTime = Engine.Reshape(
+            hVecs,
+            new[] { batchSize, seqLen, _numHouseholders, _numHeads, _headDimension });
+        var initialState = new Tensor<T>(new[] { batchHeads, _headDimension, _headDimension });
+        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        if (tapeActive)
         {
-            // Compose each Householder reflection with engine operations so the tape sees the
-            // complete recurrence, including its dependence on every projected vector.
-            for (int mi = 0; mi < _numHouseholders; mi++)
-            {
-                // hVecs axis 0 is flattened as bi * seqLen + t, so derive every slice from
-                // that mapping. This also avoids recording and then discarding a dead slice.
-                var perBatch = new List<Tensor<T>>(batchSize);
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    perBatch.Add(Engine.TensorSlice(hVecs,
-                        new[] { bi * seqLen + t, mi, 0, 0 },
-                        new[] { 1, 1, _numHeads, _headDimension }));
-                }
-                var u = batchSize == 1
-                    ? perBatch[0]
-                    : Engine.TensorConcatenate(perBatch.ToArray(), 0);
-                var uCol = Engine.Reshape(u, new[] { headBatch, _headDimension, 1 });
-                var uRow = Engine.TensorPermute(uCol, new[] { 0, 2, 1 });
-                var normSq = Engine.BatchMatMul(uRow, uCol);
-                var denominator = Engine.TensorAddScalar(normSq, NumOps.FromDouble(1e-8));
-                // H S = S - u ((2 / ||u||^2) (u^T S)). This vector form is O(headDim^2)
-                // and avoids materializing and multiplying a full reflection matrix.
-                var projectedState = Engine.BatchMatMul(uRow, state);
-                var scaledProjection = Engine.TensorMultiply(
-                    projectedState,
-                    Engine.TensorDivide(Tensor<T>.CreateDefault(
-                        new[] { headBatch, 1, 1 }, two), denominator));
-                state = Engine.TensorSubtract(state, Engine.BatchMatMul(uCol, scaledProjection));
-            }
-
-            var alphaT = Engine.Reshape(Engine.TensorSliceAxis(alphaHeads, 1, t),
-                new[] { headBatch, 1, 1 });
-            state = Engine.TensorMultiply(state, alphaT);
-
-            var qCol = Engine.Reshape(Engine.TensorSliceAxis(qHeads, 1, t),
-                new[] { headBatch, _headDimension, 1 });
-            var kCol = Engine.Reshape(Engine.TensorSliceAxis(kHeads, 1, t),
-                new[] { headBatch, _headDimension, 1 });
-            var vCol = Engine.Reshape(Engine.TensorSliceAxis(vHeads, 1, t),
-                new[] { headBatch, _headDimension, 1 });
-            var betaT = Engine.Reshape(Engine.TensorSliceAxis(betaHeads, 1, t),
-                new[] { headBatch, 1, 1 });
-            state = Engine.TensorAdd(state, Engine.TensorMultiply(
-                Engine.BatchMatMul(vCol, Engine.TensorPermute(kCol, new[] { 0, 2, 1 })), betaT));
-            outputs.Add(Engine.Reshape(Engine.BatchMatMul(state, qCol),
-                new[] { headBatch, 1, _headDimension }));
+            // BatchMatMul saves this input for backward, so ownership must outlive Forward.
+            // ResetState/Dispose releases every state retained by an active tape.
+            _recurrenceInitialStates.Add(initialState);
         }
 
-        return FromHeadMajor(Engine.TensorConcatenate(outputs.ToArray(), 1), batchSize, seqLen);
+        Tensor<T> state = initialState;
+        var outputs = new Tensor<T>[seqLen];
+        T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
+        T two = NumOps.FromDouble(2.0);
+        T epsilon = NumOps.FromDouble(1e-8);
+        int[] stateShape = { batchHeads, _headDimension, _headDimension };
+
+        try
+        {
+            for (int t = 0; t < seqLen; t++)
+            {
+                for (int mi = 0; mi < _numHouseholders; mi++)
+                {
+                    var timeSlice = Engine.TensorNarrow(hByTime, dim: 1, start: t, length: 1);
+                    var reflectionSlice = Engine.TensorNarrow(timeSlice, dim: 2, start: mi, length: 1);
+                    var uColumn = Engine.Reshape(
+                        reflectionSlice, new[] { batchHeads, _headDimension, 1 });
+                    var uTranspose = Engine.TensorPermute(uColumn, new[] { 0, 2, 1 });
+                    var normSquared = Engine.ReduceSum(
+                        Engine.TensorMultiply(uColumn, uColumn), new[] { 1 }, keepDims: true);
+                    normSquared = Engine.TensorAddScalar(normSquared, epsilon);
+
+                    var projectedState = Engine.TensorBatchMatMul(uTranspose, state);
+                    var correction = Engine.TensorBatchMatMul(uColumn, projectedState);
+                    correction = Engine.TensorMultiplyScalar(correction, two);
+                    var normBroadcast = Engine.TensorBroadcastTo(normSquared, stateShape);
+                    correction = Engine.TensorDivide(correction, normBroadcast);
+                    state = Engine.TensorSubtract(state, correction);
+                }
+
+                var alphaSlice = Engine.TensorNarrow(alpha, dim: 1, start: t, length: 1);
+                var alphaScale = Engine.TensorBroadcastTo(
+                    Engine.Reshape(alphaSlice, new[] { batchHeads, 1, 1 }), stateShape);
+                state = Engine.TensorMultiply(state, alphaScale);
+
+                var keySlice = Engine.TensorNarrow(kHeads, dim: 1, start: t, length: 1);
+                var valueSlice = Engine.TensorNarrow(vHeads, dim: 1, start: t, length: 1);
+                var keyRow = Engine.Reshape(keySlice, new[] { batchHeads, 1, _headDimension });
+                keyRow = Engine.TensorMultiplyScalar(keyRow, keyScale);
+                var valueColumn = Engine.Reshape(valueSlice, new[] { batchHeads, _headDimension, 1 });
+                var update = Engine.TensorBatchMatMul(valueColumn, keyRow);
+                var betaSlice = Engine.TensorNarrow(beta, dim: 1, start: t, length: 1);
+                var betaScale = Engine.TensorBroadcastTo(
+                    Engine.Reshape(betaSlice, new[] { batchHeads, 1, 1 }), stateShape);
+                state = Engine.TensorAdd(state, Engine.TensorMultiply(update, betaScale));
+
+                var querySlice = Engine.TensorNarrow(qHeads, dim: 1, start: t, length: 1);
+                var queryColumn = Engine.Reshape(querySlice, new[] { batchHeads, _headDimension, 1 });
+                var outputColumn = Engine.TensorBatchMatMul(state, queryColumn);
+                outputs[t] = Engine.Reshape(
+                    outputColumn, new[] { batchSize, 1, _numHeads, _headDimension });
+            }
+
+            var outputHeads = Engine.TensorConcatenate(outputs, axis: 1);
+            return Engine.Reshape(outputHeads, new[] { batchSize, seqLen, _modelDimension });
+        }
+        finally
+        {
+            if (!tapeActive)
+            {
+                initialState.Dispose();
+            }
+        }
     }
 
     private Tensor<T> ToHeadMajor(Tensor<T> value, int batchSize, int seqLen) =>
@@ -473,6 +510,54 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
             Engine.Reshape(value, new[] { batchSize, _numHeads, seqLen, _headDimension }),
             new[] { 0, 2, 1, 3 }),
             new[] { batchSize, seqLen, _modelDimension });
+
+    /// <summary>
+    /// Computes input gradient contribution from Householder vectors.
+    /// </summary>
+    private Tensor<T> ComputeHouseholderInputGradient(
+        Tensor<T> dHVecs, int batchSize, int seqLen)
+    {
+        int total = batchSize * seqLen;
+        var dInput = TensorAllocator.Rent<T>(new[] { total, _modelDimension });
+
+        for (int mi = 0; mi < _numHouseholders; mi++)
+        {
+            for (int pos = 0; pos < total; pos++)
+            {
+                for (int hi = 0; hi < _numHeads; hi++)
+                {
+                    for (int d = 0; d < _headDimension; d++)
+                    {
+                        T dH = dHVecs[new[] { pos, mi, hi, d }];
+                        for (int j = 0; j < _modelDimension; j++)
+                        {
+                            dInput[new[] { pos, j }] = NumOps.Add(
+                                dInput[new[] { pos, j }],
+                                NumOps.Multiply(dH, _householderWeights[new[] { mi, j, d }]));
+                        }
+                    }
+                }
+            }
+        }
+
+        return dInput;
+    }
+
+    private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
+    {
+        var sig = Engine.Sigmoid(x);
+        var oneMinusSig = Engine.ScalarMinusTensor(NumOps.One, sig);
+        var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
+        var onePlusXSig = Engine.TensorAddScalar(xTimesOneMinusSig, NumOps.One);
+        return Engine.TensorMultiply(sig, onePlusXSig);
+    }
+
+    private Tensor<T> CreateOnesLike(Tensor<T> template)
+    {
+        var ones = new Tensor<T>(template._shape);
+        ones.Fill(NumOps.One);
+        return ones;
+    }
 
     #region Parameter Management
 
@@ -560,6 +645,7 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
+        DisposeRecurrenceInitialStates();
         _lastInput = null;
         _lastOutput = null;
         _lastQuery = null;
@@ -584,6 +670,27 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
         _outputGateBiasGradient = null;
         _outputProjectionWeightsGradient = null;
         _outputProjectionBiasGradient = null;
+    }
+
+    private void DisposeRecurrenceInitialStates()
+    {
+        foreach (var initialState in _recurrenceInitialStates)
+        {
+            initialState.Dispose();
+        }
+
+        _recurrenceInitialStates.Clear();
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            DisposeRecurrenceInitialStates();
+        }
+
+        base.Dispose(disposing);
     }
 
     #endregion

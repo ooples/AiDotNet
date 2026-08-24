@@ -1,4 +1,4 @@
-using AiDotNet.Enums;
+﻿using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.Attributes;
@@ -29,13 +29,6 @@ public sealed class LayerPropertyAttribute : Attribute
 
     /// <summary>Whether the layer is stateful across forward passes (RNN hidden state, running mean). Default: false.</summary>
     public bool IsStateful { get; set; }
-
-    /// <summary>
-    /// Whether a network containing this layer may use the fused compiled training plan. Default:
-    /// true. Set this to false for operations whose data-dependent control flow or mutable state
-    /// must be re-recorded by the eager autodiff tape on every optimizer step.
-    /// </summary>
-    public bool SupportsFusedCompiledTraining { get; set; } = true;
 
     /// <summary>Whether the layer normalizes input (LayerNorm, BatchNorm, etc.) so uniform-value inputs
     /// produce identical outputs regardless of the actual value. Default: false.</summary>

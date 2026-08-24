@@ -10477,41 +10477,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     private bool? _layersSupportFusedCompiledTraining;
 
-    private bool LayersSupportFusedCompiledTraining()
-    {
-        if (_layersSupportFusedCompiledTraining.HasValue)
-            return _layersSupportFusedCompiledTraining.Value;
-
-        bool supported = LayersSupportFusedCompiledTrainingRecursive(Layers);
-        if (supported)
-        {
-            // Extra trainable layers participate in the same optimizer graph as Layers, so their
-            // execution capability must participate in the routing decision too. OfType also
-            // drops the nullable hook's documented null entries without special-casing callers.
-            supported = LayersSupportFusedCompiledTrainingRecursive(
-                GetExtraTrainableLayers().OfType<ILayer<T>>());
-        }
-        _layersSupportFusedCompiledTraining = supported;
-        return supported;
-    }
-
-    private static bool LayersSupportFusedCompiledTrainingRecursive(IEnumerable<ILayer<T>> layers)
-    {
-        foreach (var layer in layers)
-        {
-            var property = layer.GetType().GetCustomAttribute<Attributes.LayerPropertyAttribute>(
-                inherit: false);
-            if (property is { SupportsFusedCompiledTraining: false })
-                return false;
-
-            var subLayers = layer.GetSubLayers();
-            if (subLayers.Count > 0 && !LayersSupportFusedCompiledTrainingRecursive(subLayers))
-                return false;
-        }
-
-        return true;
-    }
-
     /// <summary>
     /// Permanently opts this network instance out of standalone fused-optimizer
     /// compilation when a parent model owns a larger stateful training graph.
@@ -10783,7 +10748,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // (added as a #1328 workaround) was removed in #1331 once the
         // fused-compiled training path was fixed; the EnableCompilation
         // gate is now the single supported way to bypass fused training.
-        if (!SupportsFusedCompiledTraining || !LayersSupportFusedCompiledTraining() || _parentOwnedTrainingGraph)
+        if (!SupportsFusedCompiledTraining || _parentOwnedTrainingGraph)
             return EmitFusedMissAndFallback(
                 "model or composed layer opts out of fused compiled training (dynamic/stateful forward)");
         if (_fusedTrainingDisabled)
@@ -10937,7 +10902,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // non-persisting fused step then leaves it at 0.0 too (persisted == false),
                 // which is exactly the silent no-op we must catch — skipping it for all-zero
                 // init would commit the decoupled path unverified (ooples/AiDotNet#1822 review).
-                if (!persisted && !NumOps.IsNaN(lossValue))
+                // A NaN loss does not make a non-persisting compiled step safe. The old
+                // `&& !IsNaN(lossValue)` gate skipped the fallback, marked the plan verified,
+                // and committed a byte-for-byte no-op plan. Valid data that exposed a
+                // compiled-kernel numerical failure (RecurrentGemma's seeded 128-token
+                // regression fixture) therefore made Train() return successfully without
+                // changing a single parameter. Treat every non-persisting first step as an
+                // unsafe plan and retry it through the eager tape in this same Train() call.
+                if (!persisted)
                 {
                     if (_fusedTrainingCommitted)
                     {

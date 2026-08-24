@@ -57,13 +57,6 @@ namespace AiDotNet.Document.Analysis.TableDetection;
 [ResearchPaper("PubTables-1M: Towards Comprehensive Table Extraction from Unstructured Documents", "https://doi.org/10.48550/arXiv.2110.00061", Year = 2022, Authors = "Brandon Smock, Rohith Pesala, Robin Abraham")]
 public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor<T>
 {
-    /// <summary>
-    /// The DETR backbone combines mutable normalization state with learned object-query buffers.
-    /// Those live aliases are not stable under compile-once replay, especially when another model
-    /// invalidates the process-wide plan cache concurrently. Use the eager tape so each step reads
-    /// and updates this instance's actual state.
-    /// </summary>
-    protected override bool SupportsFusedCompiledTraining => false;
 
     private readonly TableTransformerOptions _options;
 
