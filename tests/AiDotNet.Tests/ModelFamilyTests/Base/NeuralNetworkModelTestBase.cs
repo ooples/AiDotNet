@@ -1515,7 +1515,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(EffectiveInputShape, rng);
-        var target = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
+        var target = MakeTargetWellPosedForLoss(
+            network,
+            CreateRandomTargetTensor(ShapeCheckedOutputShape, rng),
+            rng);
 
         int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);
         for (int i = 0; i < iterations; i++)
@@ -2881,7 +2884,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(EffectiveInputShape, rng);
-        var target = CreateRandomTargetTensor(ShapeCheckedOutputShape, rng);
+        var target = MakeTargetWellPosedForLoss(
+            network,
+            CreateRandomTargetTensor(ShapeCheckedOutputShape, rng),
+            rng);
 
         // Materialize lazy-initialized parameter tensors via a warmup
         // forward pass — see Training_ShouldChangeParameters for the

@@ -200,6 +200,8 @@ public class InferenceOptimizerTests
         }
 
         var baseline = model.Predict(input);
+        var clonedBaseline = model.Clone().Predict(input);
+        AssertTensorsClose(baseline, clonedBaseline, 1e-4f, "nested GQA decoder clone");
 
         var config = new InferenceOptimizationConfig
         {
@@ -323,6 +325,13 @@ public class InferenceOptimizerTests
         Assert.Contains(PagedAttentionHosts(optimized), l => l is PagedCachedMultiHeadAttention<float>);
         Assert.DoesNotContain(PagedAttentionHosts(optimized), l => l is GroupedQueryAttentionLayer<float>);
 
+        var sourceGqa = Assert.IsType<GroupedQueryAttentionLayer<float>>(
+            PagedAttentionHosts(model).Single(l => l is GroupedQueryAttentionLayer<float>));
+        var pagedGqa = Assert.IsType<PagedCachedMultiHeadAttention<float>>(
+            PagedAttentionHosts(optimized).Single(l => l is PagedCachedMultiHeadAttention<float>));
+        AssertParameterVectorsEqual(sourceGqa.GetParameters(), pagedGqa.GetParameters(), "paged GQA rewrite");
+        AssertParameterVectorsEqual(model.GetParameters(), optimized.GetParameters(), "paged model rewrite");
+
         var y = optimized.Predict(input);
         Assert.Equal(baseline.Shape.ToArray(), y.Shape.ToArray());
         for (int i = 0; i < y.Length; i++)
@@ -330,6 +339,59 @@ public class InferenceOptimizerTests
             Assert.True(Math.Abs(baseline[i] - y[i]) < 1e-3f,
                 $"Paged-GQA diverged from the original at {i}: {baseline[i]} vs {y[i]}");
         }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PagedGroupedQueryAttention_StatelessForward_MatchesSourceLayer(bool useRotaryEncoding)
+    {
+        const int seqLen = 4;
+        const int embDim = 8;
+        const int numHeads = 4;
+        const int numKVHeads = 2;
+
+        var source = new GroupedQueryAttentionLayer<float>(
+            sequenceLength: seqLen,
+            embeddingDimension: embDim,
+            numHeads: numHeads,
+            numKVHeads: numKVHeads,
+            activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>(),
+            useCausalMask: true);
+        var paged = new PagedCachedMultiHeadAttention<float>(
+            sequenceLength: seqLen,
+            embeddingDimension: embDim,
+            headCount: numHeads,
+            useCausalMask: true,
+            activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<float>(),
+            kvHeadCount: numKVHeads);
+
+        var parameters = source.GetParameters();
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            parameters[i] = ((i % 19) - 9) / 32.0f;
+        }
+        source.SetParameters(parameters);
+        paged.SetParameters(parameters);
+
+        if (useRotaryEncoding)
+        {
+            source.ConfigurePositionalEncoding(
+                PositionalEncodingType.Rotary, ropeTheta: 10000.0, maxSequenceLength: seqLen);
+            paged.ConfigurePositionalEncoding(
+                PositionalEncodingType.Rotary, ropeTheta: 10000.0, maxSequenceLength: seqLen);
+        }
+
+        var input = new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 1, seqLen, embDim });
+        for (int i = 0; i < input.Length; i++)
+        {
+            input[i] = ((i % 13) - 6) / 8.0f;
+        }
+
+        AssertParameterVectorsEqual(source.GetParameters(), paged.GetParameters(), "direct paged GQA rewrite");
+        AssertTensorsClose(
+            source.Forward(input), paged.Forward(input), 1e-3f,
+            useRotaryEncoding ? "paged GQA stateless RoPE" : "paged GQA stateless");
     }
 
     /// <summary>
@@ -349,6 +411,8 @@ public class InferenceOptimizerTests
         for (int i = 0; i < input.Length; i++) input[i] = ((i % 13) - 6) / 6.0f;
 
         var baseline = model.Predict(input);
+        var clonedBaseline = model.Clone().Predict(input);
+        AssertTensorsClose(baseline, clonedBaseline, 1e-4f, "nested GQA decoder clone");
 
         var config = new InferenceOptimizationConfig
         {
@@ -364,6 +428,13 @@ public class InferenceOptimizerTests
         Assert.True(anyApplied);
         Assert.Contains(PagedAttentionHosts(optimized), l => l is CachedGroupedQueryAttention<float>);
         Assert.DoesNotContain(PagedAttentionHosts(optimized), l => l is GroupedQueryAttentionLayer<float>);
+
+        var sourceGqa = Assert.IsType<GroupedQueryAttentionLayer<float>>(
+            PagedAttentionHosts(model).Single(l => l is GroupedQueryAttentionLayer<float>));
+        var cachedGqa = Assert.IsType<CachedGroupedQueryAttention<float>>(
+            PagedAttentionHosts(optimized).Single(l => l is CachedGroupedQueryAttention<float>));
+        AssertParameterVectorsEqual(sourceGqa.GetParameters(), cachedGqa.GetParameters(), "cached GQA rewrite");
+        AssertParameterVectorsEqual(model.GetParameters(), optimized.GetParameters(), "cached model rewrite");
 
         var y = optimized.Predict(input);
         Assert.Equal(baseline.Shape.ToArray(), y.Shape.ToArray());
@@ -446,6 +517,34 @@ public class InferenceOptimizerTests
         model.UpdateParameters(new AiDotNet.Tensors.LinearAlgebra.Vector<float>(deterministic));
 
         return model;
+    }
+
+    private static void AssertParameterVectorsEqual(
+        AiDotNet.Tensors.LinearAlgebra.Vector<float> expected,
+        AiDotNet.Tensors.LinearAlgebra.Vector<float> actual,
+        string operation)
+    {
+        Assert.True(expected.Length > 0, $"{operation} source unexpectedly exposed no parameters.");
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+        {
+            Assert.True(Math.Abs(expected[i] - actual[i]) < 1e-7f,
+                $"{operation} changed parameter {i}: {expected[i]} vs {actual[i]}");
+        }
+    }
+
+    private static void AssertTensorsClose(
+        AiDotNet.Tensors.LinearAlgebra.Tensor<float> expected,
+        AiDotNet.Tensors.LinearAlgebra.Tensor<float> actual,
+        float tolerance,
+        string operation)
+    {
+        Assert.Equal(expected.Shape.ToArray(), actual.Shape.ToArray());
+        for (int i = 0; i < expected.Length; i++)
+        {
+            Assert.True(Math.Abs(expected[i] - actual[i]) < tolerance,
+                $"{operation} changed output {i}: {expected[i]} vs {actual[i]}");
+        }
     }
 
     private static NeuralNetworkBase<float> CreateTinyGqaDecoder()

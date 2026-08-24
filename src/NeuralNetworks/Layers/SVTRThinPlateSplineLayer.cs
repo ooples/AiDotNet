@@ -152,7 +152,10 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
     {
         var convolution = new ConvolutionalLayer<T>(outputChannels, 3, 1, 1,
             new IdentityActivation<T>() as IActivationFunction<T>);
-        var normalization = new BatchNormalizationLayer<T>();
+        // The convolution's output width is known here. Eagerly size BatchNorm so a fresh
+        // checkpoint recipient exposes the same complete parameter manifest as a materialized
+        // donor; leaving it lazy deferred all 1,984 gamma/beta values until after their first use.
+        var normalization = new BatchNormalizationLayer<T>(outputChannels);
         var activation = new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>);
         _localizationLayers.Add(convolution);
         _localizationLayers.Add(normalization);
