@@ -87,6 +87,15 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
     }
 
     /// <summary>Creates a StableVideoSR model in native training mode.</summary>
+    /// <param name="architecture">The wrapper input/output architecture.</param>
+    /// <param name="options">StableVideoSR inference and training options.</param>
+    /// <param name="optimizer">Optional optimizer for wrapper-owned layers.</param>
+    /// <param name="conditioner">Optional text conditioner used by the default diffusion core.</param>
+    /// <param name="diffusionCore">
+    /// Optional architecture-compatible Upscale-A-Video core. When omitted, the released
+    /// paper-scale core is created. This injection point supports constrained deployments and
+    /// integration tests without changing any production defaults.
+    /// </param>
     public StableVideoSR(NeuralNetworkArchitecture<T> architecture, StableVideoSROptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         IConditioningModule<T>? conditioner = null,
@@ -218,7 +227,7 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
         {
             Layers.AddRange(Architecture.Layers);
         }
-        else
+        else if (_diffusionCore is null)
         {
             _diffusionCore = new UpscaleAVideoModel<T>(
                 conditioner: _conditioner, seed: Architecture.RandomSeed);
@@ -270,7 +279,6 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
             return _diffusionCore.GetLastTrainingParameterGradients();
         return base.GetParameterGradients();
     }
-
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
@@ -418,7 +426,6 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> Clone() => DeepCopy();
-
     #endregion
 
     #region Disposal

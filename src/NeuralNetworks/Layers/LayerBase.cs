@@ -1583,30 +1583,22 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     {
         var declared = DeclaredParameterShapes();
 
-        // NO DECLARATION means this layer cannot size itself yet -- it is still carrying the -1
-        // sentinel. That is not the same as having nothing to restore, and treating it that way is
-        // what dropped trained weights: a checkpoint holding real tensors was handed to a layer that
-        // shrugged, and the values went nowhere.
+        // NO SHAPE DECLARATION means this layer cannot validate geometry here. That includes both a
+        // shaped declaration waiting on a -1 sentinel and a role-only [TrainableParameter] whose
+        // dimensions are intentionally owned by the layer. Neither case means there are no slots:
+        // DeclaredParameterTensors is the shape-independent source of truth below.
         //
         // When the layer has no shape of its own to check against, the CHECKPOINT is authoritative.
         // This is the same contract as PyTorch's LazyModuleMixin, where loading a state_dict into a
         // lazy module infers the module's shape from the saved tensors rather than demanding the
         // module already know it. There is nothing to validate against here and nothing to gain by
         // refusing: the saved tensors are the only statement of truth in the room.
-        // GATED ON HasActiveDeclaredParameterShapes, and the distinction is the whole safety of this
-        // path. "Declares shapes that are not resolved yet" and "declares no shapes at all" both
-        // produce an empty list here, and only the first can be adopted safely.
-        //
-        // A layer that declares a shape is telling us its tensors are supposed to have a known
-        // geometry; when it cannot state that geometry yet, a non-empty tensor in the slot must
-        // have come from the restore, because construction had nothing to size it with. A layer
-        // that declares NO shape gives us no such guarantee: its constructor allocates real tensors
-        // eagerly, so a populated slot is ordinary construction, not a checkpoint. Adopting those
-        // returns true, which tells EnsureInitializationCore the layer is ready and skips
-        // initialization altogether -- and an uninitialized layer does not fail an assertion, it
-        // takes the test host down with it.
+        // The safety boundary is the caller, not HasActiveDeclaredParameterShapes:
+        // EnsureInitializationCore reaches this method only after a generated setter has rebound the
+        // trainable fields from an external parameter layout. Ordinary constructor tensors never set
+        // that signal, so an eagerly allocated layer still runs its normal initializer.
         if (declared is null || declared.Count == 0)
-            return HasActiveDeclaredParameterShapes && TryAdoptRestoredParametersUnresolved();
+            return TryAdoptRestoredParametersUnresolved();
 
         int supplied = 0, conforming = 0;
         for (int i = 0; i < declared.Count; i++)
