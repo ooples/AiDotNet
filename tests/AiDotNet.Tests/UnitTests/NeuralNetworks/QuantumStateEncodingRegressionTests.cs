@@ -139,14 +139,12 @@ public class QuantumStateEncodingRegressionTests
         Assert.Equal(1.0f, output.ToArray().Sum(), 4);
     }
 
-    [Fact]
+    [SkippableFact]
+    [Trait("Category", "GPU")]
     public void QuantumLayer_GpuPrescaling_MatchesCpuForZeroAndSmallestSubnormalRows()
     {
         using var gpu = new DirectGpuTensorEngine();
-        if (!gpu.IsGpuAvailable)
-        {
-            return;
-        }
+        Skip.IfNot(gpu.IsGpuAvailable, "Requires DirectGpu execution.");
 
         var savedEngine = AiDotNetEngine.Current;
         float[] cpuValues;
