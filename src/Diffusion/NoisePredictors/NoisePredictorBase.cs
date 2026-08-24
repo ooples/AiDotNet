@@ -703,8 +703,12 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
                     streamingEngaged = true;
                 }
 
-                ((AiDotNet.Models.Parameters.IParameterSurfaceLifecycle)lb)
-                    .PrepareParameterSurface(AiDotNet.Models.Parameters.ParameterSurfaceIntent.Read);
+                // LayerBase<T> declares IParameterSurfaceLifecycle in its base list, so the type
+                // test this replaces was always true (CodeQL: useless type test). The cast is still
+                // needed because LayerBase implements the member EXPLICITLY, which keeps it off the
+                // public surface.
+                ((AiDotNet.Models.Parameters.IParameterSurfaceLifecycle)lb).PrepareParameterSurface(
+                    AiDotNet.Models.Parameters.ParameterSurfaceIntent.Read);
             }
 
             // STATE slots, not trainable-only: this enumeration backs the flat vector and the chunk
