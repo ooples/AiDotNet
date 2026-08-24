@@ -1076,7 +1076,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // failure was the still-uncapped 50+200-step MoreData timeout.
         "ViTCoMer",
         // Diffusion family (Flux / ControlNet / video / point-cloud)
-        "CogVideoModel", "ControlNetFluxModel", "ControlNetPlusPlusFluxModel",
+        "CogVideoModel", "ControlNetFluxModel", "ControlNetPlusPlusFluxModel", "StableVideoSR",
         "FlowEditModel", "Flux2Model", "Flux2SchnellModel", "FluxInpaintingModel",
         "FluxSchnellModel", "PointEModel", "SenseFlowModel", "TransfusionModel",
         // StyDiff (arXiv:2308.07863): diffusion-based style transfer — UNet noise predictor
