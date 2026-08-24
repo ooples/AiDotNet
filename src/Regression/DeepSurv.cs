@@ -175,7 +175,6 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
-
     /// <summary>
     /// Trains the network on observed times, treating every observation as an event (uncensored).
     /// </summary>
@@ -873,7 +872,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         return (NumOps.Divide(loss, scale), gradients);
     }
 
- 
+
     /// <summary>
     /// Accumulated gradients for one backward pass, laid out to match the network's parameter lists.
     /// </summary>
