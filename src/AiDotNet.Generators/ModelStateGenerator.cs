@@ -294,6 +294,33 @@ public class ModelStateGenerator : IIncrementalGenerator
             members.Add(("$fittedInfrastructure", repair.ToString()));
         }
 
+        // Scratch caches are deliberately absent from persisted state, but a constructor can fill
+        // them from its fresh parameters before a restore replaces the authoritative fields. A
+        // conventional zero-argument Refresh*Cache(s) method is an existing declaration of how to
+        // rebuild those derived values. Register it after the parameter phase so clone/checkpoint
+        // restoration cannot leave the cache describing the constructor's discarded weights.
+        if (type.GetMembers().Any(member =>
+                !member.IsStatic
+                && member is IFieldSymbol or IPropertySymbol
+                && ParameterMemberSemanticModel.ClassifyWithRegistrations(member, registrations).Kind
+                    == ParameterMemberSemanticModel.Kind.Scratch))
+        {
+            foreach (var refresh in type.GetMembers().OfType<IMethodSymbol>()
+                         .Where(method => !method.IsStatic
+                                          && method.Parameters.Length == 0
+                                          && method.TypeParameters.Length == 0
+                                          && method.ReturnsVoid
+                                          && method.Name.StartsWith("Refresh", System.StringComparison.Ordinal)
+                                          && (method.Name.EndsWith("Cache", System.StringComparison.Ordinal)
+                                              || method.Name.EndsWith("Caches", System.StringComparison.Ordinal)))
+                         .OrderBy(method => method.Name, System.StringComparer.Ordinal))
+            {
+                string name = $"{type.Name}.$derivedCache.{refresh.Name}";
+                members.Add(($"$derivedCache.{refresh.Name}",
+                    $"state.DeclareAfterParameterRestore(\"{name}\", {refresh.Name});"));
+            }
+        }
+
         // A declaring type ALWAYS gets its Core method, even empty: its hand-written hook calls it
         // unconditionally, so omitting it would leave that call with no target.
         if (members.Count == 0 && !declaresHook && !emitSerializationSurface) return;
@@ -1122,7 +1149,9 @@ public class ModelStateGenerator : IIncrementalGenerator
     private static int StateRestorePriority(string call)
     {
         if (call.IndexOf(".DeclareOptions(", System.StringComparison.Ordinal) >= 0) return -100;
-        if (call.IndexOf(".DeclareAfterRestore(", System.StringComparison.Ordinal) >= 0) return 100;
+        if (call.IndexOf(".DeclareAfterRestore(", System.StringComparison.Ordinal) >= 0
+            || call.IndexOf(".DeclareAfterParameterRestore(", System.StringComparison.Ordinal) >= 0)
+            return 100;
         return 0;
     }
 

@@ -582,8 +582,8 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Reads input depth + spatial dims from input.Shape, allocates kernel + bias
-    /// tensors against the resolved <c>_inputDepth</c>, and locks input/output
+    /// Reads input depth + spatial dims from input.Shape, adopts conforming restored tensors or
+    /// allocates kernel + bias tensors against the resolved <c>_inputDepth</c>, and locks input/output
     /// shapes via <see cref="LayerBase{T}.ResolveShapes"/>. Output spatial dims
     /// follow the SubpixelConv contract: input H/W are upscaled by
     /// <c>_upscaleFactor</c> and the channel count is <c>_outputDepth</c>.
@@ -607,10 +607,21 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
 
         _inputDepth = inDepth;
 
-        // Allocate kernels/biases against the now-known channel count.
-        _kernels = AllocateLazyWeight([_outputDepth * _upscaleFactor * _upscaleFactor, _inputDepth, _kernelSize, _kernelSize]);
-        _biases = AllocateLazyWeight([_outputDepth * _upscaleFactor * _upscaleFactor]);
-        InitializeWeights();
+        int expandedDepth = _outputDepth * _upscaleFactor * _upscaleFactor;
+        int[] kernelShape = [expandedDepth, _inputDepth, _kernelSize, _kernelSize];
+        int[] biasShape = [expandedDepth];
+
+        // Deserialize/clone can rebind real tensors before the lazy input shape is known. Preserve
+        // that checkpoint when it conforms to the first input; ordinary construction still carries
+        // zero-sized placeholders and therefore takes the allocation/initialization branch.
+        bool hasRestoredParameters = HasExactShape(_kernels, kernelShape)
+            && HasExactShape(_biases, biasShape);
+        if (!hasRestoredParameters)
+        {
+            _kernels = AllocateLazyWeight(kernelShape);
+            _biases = AllocateLazyWeight(biasShape);
+            InitializeWeights();
+        }
 
         RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
@@ -627,6 +638,19 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
             _pendingParameters = null;
             SetParameters(pending);
         }
+    }
+
+    private static bool HasExactShape(Tensor<T>? tensor, int[] expected)
+    {
+        if (tensor is null || tensor.Length == 0 || tensor.Shape.Length != expected.Length)
+            return false;
+
+        for (int axis = 0; axis < expected.Length; axis++)
+        {
+            if (tensor.Shape[axis] != expected[axis]) return false;
+        }
+
+        return true;
     }
 
     /// <summary>

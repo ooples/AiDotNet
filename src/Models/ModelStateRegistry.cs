@@ -309,6 +309,22 @@ public sealed class ModelStateRegistry<T>
         Add(name, _ => { }, _ => restore());
     }
 
+    /// <summary>
+    /// Declares a deterministic repair that runs after the flat parameter vector has been restored.
+    /// </summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="restore">Rebuilds scratch state derived from restored parameters.</param>
+    /// <remarks>
+    /// This is the parameter-aware counterpart to <see cref="DeclareAfterRestore"/>. It is used for
+    /// derived caches such as matrix transposes: rebuilding them before the parameter phase would
+    /// cache the fresh constructor values and make a clone execute with stale data.
+    /// </remarks>
+    public void DeclareAfterParameterRestore(string name, Action restore)
+    {
+        if (restore is null) throw new ArgumentNullException(nameof(restore));
+        Add(name, _ => { }, _ => restore(), restoreAfterParameters: true);
+    }
+
     /// <summary>Declares a readonly list of vectors and restores its contents in place.</summary>
     public void DeclareInPlace(string name, Func<List<Vector<T>>?> get)
         => Declare(name, get, restored => RestoreCollectionInPlace(name, get, restored));

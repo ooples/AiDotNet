@@ -11654,7 +11654,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // non-persisting fused step then leaves it at 0.0 too (persisted == false),
                 // which is exactly the silent no-op we must catch — skipping it for all-zero
                 // init would commit the decoupled path unverified (ooples/AiDotNet#1822 review).
-                if (!persisted && !NumOps.IsNaN(lossValue))
+                // A NaN loss does not make a non-persisting compiled step safe. The old
+                // `&& !IsNaN(lossValue)` gate skipped the fallback, marked the plan verified,
+                // and committed a byte-for-byte no-op plan. Valid data that exposed a
+                // compiled-kernel numerical failure (RecurrentGemma's seeded 128-token
+                // regression fixture) therefore made Train() return successfully without
+                // changing a single parameter. Treat every non-persisting first step as an
+                // unsafe plan and retry it through the eager tape in this same Train() call.
+                if (!persisted)
                 {
                     if (_fusedTrainingCommitted)
                     {

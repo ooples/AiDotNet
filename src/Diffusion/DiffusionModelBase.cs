@@ -255,7 +255,6 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
         return _lastTrainingParameterGradients ?? throw new NotSupportedException(
             "No diffusion training gradients have been computed yet.");
     }
-
     /// <summary>
     /// Cached result of the reflection walk that discovers trainable parameter tensors.
     /// The walk was called per Train step, consuming a non-trivial amount of time on
@@ -1286,7 +1285,6 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     {
         _lastTrainingParameterGradients = null;
         _trainingGradientSurfaceUnavailable = false;
-
         // Copy-on-write: if this model shares weight tensors with a clone/parent, give it a private
         // copy before we mutate weights in place below, so the other model isn't corrupted.
         EnsureOwnWeights();
