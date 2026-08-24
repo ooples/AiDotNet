@@ -3964,11 +3964,17 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // to a finite-difference wall-clock budget so the check stays a bounded smoke test; a
         // hard elapsed break below is the backstop when even the reduced sweep runs long.
         const double GradCheckBudgetSeconds = 60.0;
+        // The wall the two optional phases below plan against. Named because it was written twice
+        // as a bare 105.0, and because it is a HARD deadline: the Fact's contract is 120 s, so
+        // anything that overruns this has ~15 s of slack before the test is killed rather than
+        // reporting what it managed to check.
+        const double GradCheckWallSeconds = 105.0;
         int budgetSamples = (int)(GradCheckBudgetSeconds / (2.0 * forwardSeconds));
         int samples = System.Math.Max(1, System.Math.Min(
             System.Math.Min(GradientCheckSampleCount, trainableScalarCount), budgetSamples));
         int stride = System.Math.Max(1, trainableScalarCount / samples);
 
+        double coordinateSweepStart = gradCheckClock.Elapsed.TotalSeconds;
         int checkedCount = 0, mismatches = 0, kinkCoordinates = 0;
         string firstFail = string.Empty;
         string firstKink = string.Empty;
@@ -4175,6 +4181,24 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         if (checkedCount == 0) return;   // every perturbation produced a NaN loss — inconclusive
 
+        // Price the rest of this test from what the sweep above ACTUALLY cost, not from a bare
+        // forward. Both budget gates below count forward passes and multiply by forwardSeconds, but
+        // a finite-difference probe is not a forward: GradientCheckLossPairAt also writes the
+        // perturbed vector back through UpdateParameters and restores it, which is
+        // O(theta.Length) -- 3,417,600 scalars on RecurrentGemma. Measured there, a probe cost
+        // ~0.15 s against a 0.027 s forward, so pricing the exhaustive localization below at
+        // forwardSeconds under-counted it by ~5.6x: the gate predicted 38 s for 45 coordinates x a
+        // 16-step ladder, the work took 108 s, and with no backstop inside that loop the Fact died
+        // on its 120 s timeout. (Instrumented: the coordinate sweep finished at 7.7 s and the phase
+        // after it ended at 117.5 s.) The sweep just ran `checkedCount` probes of exactly that
+        // shape, so its own elapsed time is the honest per-forward price to plan with.
+        double plannedForwardSeconds = forwardSeconds;
+        if (checkedCount > 0)
+        {
+            double sweepSeconds = gradCheckClock.Elapsed.TotalSeconds - coordinateSweepStart;
+            plannedForwardSeconds = System.Math.Max(forwardSeconds, sweepSeconds / (2.0 * checkedCount));
+        }
+
         if (kinkCoordinates > 0)
         {
             ReportGradientFinding(
@@ -4192,7 +4216,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         bool directionAgrees = true;
         string directionFailure = string.Empty;
         if (trainableSlots.Count > 0 &&
-            gradCheckClock.Elapsed.TotalSeconds + (8.0 * forwardSeconds) < 105.0)
+            gradCheckClock.Elapsed.TotalSeconds + (8.0 * plannedForwardSeconds) < GradCheckWallSeconds)
         {
             var direction = new List<(int FlatIndex, double Sign)>(trainableSlots.Count);
             foreach (var directionSlot in trainableSlots)
@@ -4347,11 +4371,21 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                     int localizedDetachmentCount = 0;
                     bool exhaustiveLocalizationRan = false;
                     if (gradCheckClock.Elapsed.TotalSeconds +
-                        (32.0 * direction.Count * forwardSeconds) < 105.0)
+                        (32.0 * direction.Count * plannedForwardSeconds) < GradCheckWallSeconds)
                     {
                         exhaustiveLocalizationRan = true;
                         foreach (var coordinate in direction)
                         {
+                            // Backstop, because an estimate can still be optimistic on a model
+                            // whose round-trip cost varies with the slot being touched. Abandoning
+                            // localization is a reported outcome; overrunning the Fact's timeout is
+                            // not, and it loses every result the test had already produced.
+                            if (gradCheckClock.Elapsed.TotalSeconds > GradCheckWallSeconds)
+                            {
+                                exhaustiveLocalizationRan = false;
+                                break;
+                            }
+
                             var ownerSlot = trainableSlots.First(slot =>
                                 coordinate.FlatIndex >= slot.Offset &&
                                 coordinate.FlatIndex < slot.Offset + slot.Length);
