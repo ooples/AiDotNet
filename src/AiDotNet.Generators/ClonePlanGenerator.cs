@@ -601,6 +601,15 @@ public class ClonePlanGenerator : IIncrementalGenerator
         {
             foreach (var owner in current.GetMembers())
             {
+                string ownerName = owner.Name.TrimStart('_');
+                if (ownerName.Length == 0
+                    || parameterName.Length <= ownerName.Length
+                    || !parameterName.StartsWith(ownerName, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string nestedName = parameterName.Substring(ownerName.Length);
                 ITypeSymbol? ownerType = owner switch
                 {
                     IPropertySymbol { IsStatic: false, IsIndexer: false } property
@@ -612,9 +621,14 @@ public class ClonePlanGenerator : IIncrementalGenerator
                 };
                 if (ownerType is not INamedTypeSymbol namedOwner) continue;
 
-                string ownerName = owner.Name.TrimStart('_');
                 foreach (var nested in namedOwner.GetMembers())
                 {
+                    if (!string.Equals(nested.Name.TrimStart('_'), nestedName,
+                            System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
                     ITypeSymbol? nestedType = nested switch
                     {
                         IPropertySymbol { IsStatic: false, IsIndexer: false } property
@@ -623,11 +637,6 @@ public class ClonePlanGenerator : IIncrementalGenerator
                         _ => null,
                     };
                     if (nestedType is null || !IsCarriedAs(nestedType, parameter.Type)) continue;
-
-                    string combined = ownerName + nested.Name.TrimStart('_');
-                    if (!string.Equals(combined, parameterName,
-                            System.StringComparison.OrdinalIgnoreCase))
-                        continue;
 
                     string path = owner.Name + "." + nested.Name;
                     if (found is not null

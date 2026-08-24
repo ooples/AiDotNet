@@ -102,6 +102,7 @@ public class ModelStateGenerator : IIncrementalGenerator
 
         var members = new List<(string Name, string Call)>();
         bool hasExplicitState = false;
+        bool hasScratchState = false;
         var registrations = ParameterMemberSemanticModel.GetRegistrationClassifications(type);
 
         foreach (var member in type.GetMembers())
@@ -163,6 +164,7 @@ public class ModelStateGenerator : IIncrementalGenerator
             // the exact runtime layout.
             var classification = ParameterMemberSemanticModel.ClassifyWithRegistrations(
                 member, registrations);
+            hasScratchState |= classification.Kind == ParameterMemberSemanticModel.Kind.Scratch;
             if (member is IFieldSymbol { IsReadOnly: true }
                 && !IsModelOptions(memberType)
                 && !IsSerializableModel(memberType)
@@ -299,11 +301,7 @@ public class ModelStateGenerator : IIncrementalGenerator
         // conventional zero-argument Refresh*Cache(s) method is an existing declaration of how to
         // rebuild those derived values. Register it after the parameter phase so clone/checkpoint
         // restoration cannot leave the cache describing the constructor's discarded weights.
-        if (type.GetMembers().Any(member =>
-                !member.IsStatic
-                && member is IFieldSymbol or IPropertySymbol
-                && ParameterMemberSemanticModel.ClassifyWithRegistrations(member, registrations).Kind
-                    == ParameterMemberSemanticModel.Kind.Scratch))
+        if (hasScratchState)
         {
             foreach (var refresh in type.GetMembers().OfType<IMethodSymbol>()
                          .Where(method => !method.IsStatic

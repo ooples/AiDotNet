@@ -629,11 +629,13 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                 && paramFields.Count == 0
                 && subLayerFields.Count == 0
                 && bufferFields.Count == 0;
-            bool legacyParametersAreDerivedSnapshot = HasDerivedLegacyParameterSnapshot(
-                compilation, classSymbol);
-
             if (paramFields.Count == 0 && subLayerFields.Count == 0 && bufferFields.Count == 0
                 && !emitParameterFreeContract) continue;
+
+            // Only a generated child-layer graph can duplicate a legacy flat snapshot. Keep this
+            // syntax/semantic inspection off the overwhelmingly common leaf-layer path.
+            bool legacyParametersAreDerivedSnapshot = subLayerFields.Count > 0
+                && HasDerivedLegacyParameterSnapshot(compilation, classSymbol);
 
             // Stable sort by Order, preserving declaration order for equal Order values.
             // List.Sort is not stable, so we use a secondary key (original index).
@@ -682,16 +684,25 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         foreach (var reference in classSymbol.DeclaringSyntaxReferences)
         {
             if (reference.GetSyntax() is not ClassDeclarationSyntax declaration) continue;
-            var semanticModel = compilation.GetSemanticModel(declaration.SyntaxTree);
 
             foreach (var assignment in declaration.DescendantNodes().OfType<AssignmentExpressionSyntax>())
             {
+                // Reject nearly every assignment syntactically before requesting Roslyn's semantic
+                // model. Asking it to bind every assignment in every generated layer dominated the
+                // solution build even though only a handful use this migration pattern.
                 if (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression)
-                    || semanticModel.GetSymbolInfo(assignment.Left).Symbol is not IFieldSymbol target
-                    || target.Name != "Parameters"
-                    || !IsOnTypeHierarchy(target.ContainingType, classSymbol)
+                    || !IsIdentifierOrMemberNamed(assignment.Left, "Parameters")
                     || assignment.Right is not InvocationExpressionSyntax invocation
                     || invocation.ArgumentList.Arguments.Count != 0
+                    || !IsIdentifierOrMemberNamed(invocation.Expression, "GetParameters"))
+                {
+                    continue;
+                }
+
+                var semanticModel = compilation.GetSemanticModel(declaration.SyntaxTree);
+                if (semanticModel.GetSymbolInfo(assignment.Left).Symbol is not IFieldSymbol target
+                    || target.Name != "Parameters"
+                    || !IsOnTypeHierarchy(target.ContainingType, classSymbol)
                     || semanticModel.GetSymbolInfo(invocation).Symbol is not IMethodSymbol method
                     || method.Name != "GetParameters"
                     || !IsOnTypeHierarchy(method.ContainingType, classSymbol))
@@ -705,6 +716,14 @@ public class TrainableParameterGenerator : IIncrementalGenerator
 
         return false;
     }
+
+    private static bool IsIdentifierOrMemberNamed(ExpressionSyntax expression, string name)
+        => expression switch
+        {
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == name,
+            MemberAccessExpressionSyntax member => member.Name.Identifier.ValueText == name,
+            _ => false,
+        };
 
     private static string GenerateSource(
         INamedTypeSymbol classSymbol,
