@@ -540,11 +540,35 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
     /// <summary>
     /// Number of optimizer steps needed by the train-vs-test relationship invariant. This is a
-    /// structural relationship check, not a convergence benchmark, so one real forward/backward/
-    /// update is sufficient. All fixtures inherit the same policy; model performance is measured
+    /// structural relationship check, not a convergence benchmark, so the budget stays at the
+    /// smallest number of steps that measures the relationship rather than the optimizer's
+    /// start-up transient. All fixtures inherit the same policy; model performance is measured
     /// separately by <see cref="ModelPerformanceCensus"/>.
     /// </summary>
-    protected virtual int TrainingErrorIterations => 1;
+    /// <remarks>
+    /// <para>
+    /// <b>Why three and not one.</b> A single step is not a neutral sample of the trajectory: it
+    /// is Adam's first update, which is close to <c>sign(g) * lr</c> and routinely overshoots
+    /// before the moment estimates settle. <see cref="ResolveConformanceTrainingIterations(long,
+    /// int)"/> already says so in its own budget note -- "three steps preserve the short recovery
+    /// trajectory after Adam's first-step transient" -- and this invariant was the one probe still
+    /// asking for one, so it sampled the trajectory exactly at its worst point.
+    /// </para>
+    /// <para>
+    /// MEASURED on ConvTransformer, whose loss goes init 1.1368 -> step 1 <b>3.7231</b> -> step 2
+    /// 1.3239 -> step 5 0.3342 -> step 40 0.3026 while the unseen-input reference barely moves
+    /// (1.0264 -> 1.1211 -> 1.0701 -> 0.3738 -> 0.3065). The model satisfies the invariant from
+    /// step 2 onward and converges normally; only the step-1 sample failed, and it read out as
+    /// "Model is not fitting training data" about a model that fits.
+    /// </para>
+    /// <para>
+    /// This costs almost nothing on the models that could time out. The conformance budget is
+    /// expressed in parameter-updates, so foundation-scale fixtures still resolve to exactly one
+    /// step regardless of what is requested here; the increase lands on the small and mid-sized
+    /// models, which are the fast ones.
+    /// </para>
+    /// </remarks>
+    protected virtual int TrainingErrorIterations => 3;
 
     /// <summary>
     /// Converts a requested repetition count into a model-independent conformance workload. The
@@ -2324,31 +2348,33 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         double trainMSE = MeasureLoss(network, network.Predict(input), target);
         var testInput = CreateRandomTensor(EffectiveInputShape, ModelTestHelpers.CreateSeededRandom(99));
-        // Use the SAME loss-domain projection as the training target. Calling only
-        // CreateRandomTargetTensor here still gives type-constrained families legal
-        // labels, but bypasses the second half of the shared contract: logits losses
-        // need one-hot distributions, BCE targets must be in [0, 1], and Born-rule
-        // heads need a probability distribution. Comparing a projected train target
-        // with a raw test target measures two different objectives and can even make
-        // cross-entropy negative, which manufactured the 18-model PR #2029 cluster.
+
+        // MEASURE BOTH SIDES AGAINST THE SAME TARGET. The invariant's claim is about the INPUT --
+        // a model should predict data it trained on at least as well as data it did not -- so the
+        // label has to be held fixed for the comparison to be about that claim. Drawing a second
+        // independent random target instead confounds it with which label each seed happened to
+        // pick, and for a logits head that confound is larger than the effect being measured.
         //
-        // DIFFERENT SEED from testInput. Both used 99, and because these are two FRESHLY seeded
-        // generators filled in the same sequential order, testTarget[i] == testInput[i] across the
-        // whole overlapping prefix — the "test target" was literally the test input.
+        // MEASURED on AudioGen: its two predictions are identical to four significant figures
+        // (min -2.124, max 2.102, sums 0.3012 vs 0.3008) and still scored train 4.512739 against
+        // test 0.287292 -- a 16x spread produced entirely by which class each RNG made hot, on a
+        // model whose loss falls monotonically 0.740 -> 0.183 and which is therefore fitting
+        // exactly as it should. The verdict was a coin flip on the label draw, and "Model is not
+        // fitting training data" was the wrong conclusion drawn from it.
         //
-        // That inverted the invariant. Training error was measured against an independent target,
-        // while test error was measured against the model's own input, so any near-identity model
-        // scored about zero on the test side by construction and was reported as fitting its
-        // training data worse than unseen data. All three failures were residual architectures that
-        // predict close to their input: AudioSuperResolution ends with `h = h + x`, LiteDVDNet is a
-        // residual denoiser whose head is damped to 1% at init, and FeedForwardNeuralNetwork's
-        // OutputShape [1] means the whole comparison rests on a single element.
+        // Holding the target fixed also makes the old seed-collision defect structurally
+        // impossible rather than merely fixed. Both sides once used seed 99, and because two
+        // freshly seeded generators fill in the same sequential order, testTarget[i] ==
+        // testInput[i] across the whole overlapping prefix -- the "test target" was literally the
+        // test input, so any near-identity model scored about zero on the test side by
+        // construction. Re-seeding to 100 fixed that instance; there is now only one target, so
+        // no seed relationship between target and input exists to get wrong again.
         //
-        // The train-side numbers were the honest ones all along: ~0.167 is E[(U-U')^2] for two
-        // independent uniforms, which is what an untrained model should score.
-        var testTarget = CreateLossCompatibleTarget(
-            network, ShapeCheckedOutputShape, ModelTestHelpers.CreateSeededRandom(100));
-        double testMSE = MeasureLoss(network, network.Predict(testInput), testTarget);
+        // This does not weaken the assertion. A model that fits its training input still scores
+        // lower on it than on an unseen one, which is the whole claim; a model that ignores its
+        // input scores equal on both and passes, which was already true and is now deterministic
+        // instead of decided by a label lottery.
+        double testMSE = MeasureLoss(network, network.Predict(testInput), target);
 
         if (!double.IsNaN(trainMSE) && !double.IsNaN(testMSE))
         {
@@ -3335,10 +3361,76 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// keeps <see cref="ComputeMSE"/> byte-identical, since this branch only triggers when the model's
     /// loss function is cross-entropy-with-logits.
     /// </summary>
+    /// <summary>
+    /// Cache of "does this concrete model define its own training-time forward pass", keyed by type
+    /// so the reflection walk happens once per model rather than once per invariant.
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, bool>
+        _declaresOwnTrainingForward = new();
+
+    /// <summary>
+    /// True when <c>Predict</c> returns something that is NOT in the declared loss function's
+    /// domain, so any generic <c>loss(Predict(x), target)</c> probe is measuring an objective the
+    /// model never optimizes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>The case this exists for.</b> Chronos is a tokenized forecaster: <c>TrainCore</c> takes
+    /// real-valued future values, quantizes them onto the context's scale, and supervises
+    /// vocabulary logits with cross-entropy (Ansari et al. 2024). Its <c>DefaultLossFunction</c>
+    /// therefore describes an <i>internal</i> token-space objective, while <c>Predict</c> returns
+    /// <i>detokenized forecasts</i> in the series' own units. Reading the loss to choose the
+    /// target's domain gets it backwards in both directions at once: the horizon axis is
+    /// one-hot-projected as though its 8 forecast steps were 8 classes, and cross-entropy is then
+    /// scored on real-valued forecasts. Measured on the generated fixture, that produced a
+    /// "training loss" of 384.375 from a model whose actual head emits logits in [-2.6, 2.6] and
+    /// whose final LayerNorm is working correctly -- the number was an artifact of the metric, not
+    /// a model that failed to fit.
+    /// </para>
+    /// <para>
+    /// <b>Why this condition and not a model list.</b> Overriding
+    /// <see cref="AiDotNet.Finance.Base.FinancialModelBase{T}.ForwardNativeForTraining"/> is a
+    /// model stating outright that its training forward differs from its inference forward, and
+    /// cross-entropy-with-logits is what makes the difference a change of <i>domain</i> rather than
+    /// just of shape. 31 models declare the override and exactly one -- Chronos -- also carries a
+    /// logits loss, so the pair identifies the situation structurally instead of by name, and a
+    /// future tokenized forecaster is covered the day it is written.
+    /// </para>
+    /// </remarks>
+    protected static bool PredictLeavesLossDomain(INeuralNetworkModel<T> network)
+    {
+        if (network is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn) return false;
+        if (nn.DefaultLossFunction is not AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)
+            return false;
+
+        return _declaresOwnTrainingForward.GetOrAdd(network.GetType(), static type =>
+        {
+            for (var t = type; t is not null; t = t.BaseType)
+            {
+                // The virtual itself lives on FinancialModelBase; declaring it there is the
+                // default, not an opt-in, so stop before it.
+                if (t.IsGenericType
+                    && t.GetGenericTypeDefinition() == typeof(AiDotNet.Finance.Base.FinancialModelBase<>))
+                    return false;
+
+                if (t.GetMethod(
+                        "ForwardNativeForTraining",
+                        System.Reflection.BindingFlags.Instance
+                            | System.Reflection.BindingFlags.NonPublic
+                            | System.Reflection.BindingFlags.Public
+                            | System.Reflection.BindingFlags.DeclaredOnly) is not null)
+                    return true;
+            }
+
+            return false;
+        });
+    }
+
     protected double MeasureLoss(INeuralNetworkModel<T> network, Tensor<T> output, Tensor<T> target)
     {
         if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
-            && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T> ce)
+            && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T> ce
+            && !PredictLeavesLossDomain(network))
         {
             if (output.Length == 0 || target.Length == 0) return double.NaN;
 
@@ -3517,7 +3609,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         if (target.Length > 0
             && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
-            && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)
+            && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>
+            && !PredictLeavesLossDomain(network))
         {
             var shape = target.Shape;
             int numClasses;
