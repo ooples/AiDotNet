@@ -1052,6 +1052,15 @@ public readonly struct LayerStateBag
     /// <remarks>Round-trip ("R") so a restored double is bit-identical to the saved one.</remarks>
     public static string Format(double value) => value.ToString("R", CultureInfo.InvariantCulture);
 
+    /// <summary>Formats a bool array as the comma-separated true/false text <see cref="BooleanArray"/> reads.</summary>
+    public static string Format(bool[]? value) => value is null
+        ? string.Empty
+        : string.Join(",", System.Linq.Enumerable.Select(value, b => b ? "true" : "false"));
+
+    /// <summary>Formats a string array as the NEWLINE-separated text <see cref="StringArray"/> reads.</summary>
+    /// <remarks>Newline, not comma, because the reader splits on it and a stored string may contain commas.</remarks>
+    public static string Format(string[]? value) => value is null ? string.Empty : string.Join("\n", value);
+
     /// <summary>Formats a double array as the comma-separated text <see cref="DoubleArray"/> reads.</summary>
     public static string Format(double[]? value) => value is null
         ? string.Empty

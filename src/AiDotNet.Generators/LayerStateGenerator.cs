@@ -521,7 +521,24 @@ public class LayerStateGenerator : IIncrementalGenerator
         if (IsCloneObject(type)) return ValueKind.CloneObject;
 
         // A pluggable strategy: record which implementation was used and rebuild that one.
+        // A COLLECTION OF LAYERS is clone state, and must be tested BEFORE the interface case.
+        // LayerStateBag already round-trips one end to end -- FormatCloneObject detects a layer
+        // collection and writes it via FormatLayerCollection, and CloneObject<T> reads back the
+        // "aidotnet-layer-list-v1:" prefix. Falling through to Component instead wrote the value
+        // with FormatType, i.e. the TYPE NAME only: HybridBlockScheduler's ILayer<T>[] was declined
+        // outright, and ParallelStreamsLayer's IEnumerable<ILayer<T>> was worse -- it got a factory
+        // and would have cloned "successfully" with its stream layers silently gone.
+        if (IsLayerCollection(type)) return ValueKind.CloneObject;
+
         if (type.TypeKind == TypeKind.Interface) return ValueKind.Component;
+
+        // The runtime has read BooleanArray/StringArray all along; Classify simply never routed
+        // to them, so a layer taking bool[] or string[] was declined as if the type were exotic.
+        if (type is IArrayTypeSymbol { Rank: 1 } bl && bl.ElementType.SpecialType == SpecialType.System_Boolean)
+            return ValueKind.BooleanArray;
+
+        if (type is IArrayTypeSymbol { Rank: 1 } st && st.ElementType.SpecialType == SpecialType.System_String)
+            return ValueKind.StringArray;
 
         if (type is IArrayTypeSymbol { Rank: 1 } dbl && dbl.ElementType.SpecialType == SpecialType.System_Double)
             return ValueKind.DoubleArray;
@@ -598,6 +615,25 @@ public class LayerStateGenerator : IIncrementalGenerator
     /// <summary>
     /// Whether the in-memory construction-object channel can make an independent structural copy.
     /// </summary>
+    /// <summary>An array or IEnumerable whose elements are layers, matching the runtime's
+    /// TryGetLayerCollection.</summary>
+    private static bool IsLayerCollection(ITypeSymbol type)
+    {
+        ITypeSymbol? element = type switch
+        {
+            IArrayTypeSymbol { Rank: 1 } a => a.ElementType,
+            INamedTypeSymbol { IsGenericType: true } n
+                when n.AllInterfaces.Any(i => i.ConstructedFrom.SpecialType
+                        == SpecialType.System_Collections_Generic_IEnumerable_T)
+                    || n.ConstructedFrom.SpecialType
+                        == SpecialType.System_Collections_Generic_IEnumerable_T
+                => n.TypeArguments.Length == 1 ? n.TypeArguments[0] : null,
+            _ => null,
+        };
+
+        return element is not null && IsCloneObject(element);
+    }
+
     private static bool IsCloneObject(ITypeSymbol type)
     {
         if (type.TypeKind == TypeKind.Delegate) return true;
@@ -1328,6 +1364,8 @@ public class LayerStateGenerator : IIncrementalGenerator
             (ValueKind.Boolean, true) => $"state.NullableBoolean(\"{p.Key}\")",
             (ValueKind.String, false) => $"state.String(\"{p.Key}\")",
             (ValueKind.String, true) => $"state.NullableString(\"{p.Key}\")",
+            (ValueKind.BooleanArray, _) => $"state.BooleanArray(\"{p.Key}\")",
+            (ValueKind.StringArray, _) => $"state.StringArray(\"{p.Key}\")",
             (ValueKind.DoubleArray, false) => $"state.DoubleArray(\"{p.Key}\")",
             (ValueKind.DoubleArray, true) => $"state.NullableDoubleArray(\"{p.Key}\")",
             (ValueKind.Int32Array, false) => $"state.Int32Array(\"{p.Key}\")",
@@ -1392,6 +1430,8 @@ public class LayerStateGenerator : IIncrementalGenerator
         Enum,
         Int32Array,
         DoubleArray,
+        BooleanArray,
+        StringArray,
         Int32Jagged,
         EnumArray,
         Component,
