@@ -105,35 +105,113 @@ public class VisionLanguageDocumentTests
         var image = CreateSmallImage(64);
         var tokens = CreateTokenIds(6);
 
-        model.SetTrainingMode(true);
+        model.SetTrainingMode(false);
 
         // Run one forward BEFORE snapshotting. The token table allocates lazily, so a count taken
         // first is short by its size and the comparison below would report a length change rather
         // than the weight movement it is actually testing.
-        var target = model.Predict(image, tokens);
-        var before = model.GetParameters();
-        var shape = new int[target.Rank];
-        for (int i = 0; i < target.Rank; i++) shape[i] = target.Shape[i];
+        var logits = model.Predict(image, tokens);
+        int nonFiniteLogits = logits.ToArray().Count(value => !IsFinite(value));
+        Assert.True(nonFiniteLogits == 0,
+            $"DocOwl produced {nonFiniteLogits}/{logits.Length} non-finite logits before training.");
+        var before = model.Layers[^1].GetParameters().ToArray();
+        Assert.True(before.Length > 0,
+            "DocOwl's token embedding exposed no parameters after its first multimodal forward.");
 
-        var shifted = new Tensor<double>(shape);
-        for (int i = 0; i < shifted.Length; i++)
-            shifted.Data.Span[i] = target.Data.Span[i] + 0.5;
+        // DocOwl trains with CrossEntropyWithLogitsLoss, so its dense target must contain one
+        // probability distribution per position. Adding a scalar to the logits (the old probe)
+        // produced an invalid CE target whose gradient could vanish depending on initialization.
+        // Select a different class from the current argmax at every position to guarantee a real,
+        // well-posed supervised signal without assuming a particular random initialization.
+        var target = CreateContrastingClassTarget(logits);
 
-        model.Train(image, tokens, shifted);
-
-        var after = model.GetParameters();
-        Assert.Equal(before.Length, after.Length);
-
-        bool moved = false;
-        for (int i = 0; i < before.Length && !moved; i++)
+        var analyticGradients = model.ComputeGradients(image, tokens, target);
+        int analyticNonFinite = analyticGradients.Count(value => !IsFinite(value));
+        int analyticNonZero = analyticGradients.Count(value => IsFinite(value) && value != 0.0);
+        var publishedGradients = model.GetParameterGradients();
+        Assert.Equal(analyticGradients.Length, publishedGradients.Length);
+        int tokenGradientOffset = publishedGradients.Length - before.Length;
+        var tokenGradients = publishedGradients.GetSubVector(tokenGradientOffset, before.Length);
+        int tokenNonFinite = tokenGradients.Count(value => !IsFinite(value));
+        int tokenNonZero = tokenGradients.Count(value => IsFinite(value) && value != 0.0);
+        if (analyticNonFinite > 0 || tokenNonFinite > 0 || tokenNonZero == 0)
         {
-            if (System.Math.Abs(before[i] - after[i]) > 1e-12) moved = true;
+            var layerDiagnostics = model.Layers.Select((layer, index) =>
+            {
+                var layerGradients = (layer as AiDotNet.NeuralNetworks.Layers.LayerBase<double>)?
+                    .ScatteredParameterGradients ?? layer.GetParameterGradients();
+                int nonFinite = layerGradients.Count(value => !IsFinite(value));
+                int nonZero = layerGradients.Count(value => IsFinite(value) && value != 0.0);
+                return $"{index}:{layer.GetType().Name}={nonZero} nonzero/{nonFinite} nonfinite/{layerGradients.Length}";
+            });
+            double maxAbsLogit = logits.ToArray().Max(value => System.Math.Abs(value));
+            Assert.Fail(
+                $"DocOwl's auxiliary-input gradient is invalid before the optimizer step: " +
+                $"loss={model.GetLastLoss():G17}, max |logit|={maxAbsLogit:G17}, " +
+                $"all nonzero={analyticNonZero}, all non-finite={analyticNonFinite}/{analyticGradients.Length}, " +
+                $"token nonzero={tokenNonZero}, token non-finite={tokenNonFinite}/{tokenGradients.Length}. " +
+                string.Join("; ", layerDiagnostics));
         }
 
-        Assert.True(moved,
-            "Training through the auxiliary-input overload left every parameter untouched, so the " +
-            "text path is not on the gradient tape.");
+        model.Train(image, tokens, target);
+
+        var after = model.Layers[^1].GetParameters().ToArray();
+        Assert.Equal(before.Length, after.Length);
+
+        double maxDelta = 0.0;
+        int nonFiniteParameters = 0;
+        for (int i = 0; i < before.Length; i++)
+        {
+            if (!IsFinite(after[i]))
+                nonFiniteParameters++;
+            else
+                maxDelta = System.Math.Max(maxDelta, System.Math.Abs(before[i] - after[i]));
+        }
+
+        var gradients = model.GetParameterGradients();
+        int nonFiniteGradients = 0;
+        int nonZeroGradients = 0;
+        for (int i = 0; i < gradients.Length; i++)
+        {
+            if (!IsFinite(gradients[i])) nonFiniteGradients++;
+            else if (gradients[i] != 0.0) nonZeroGradients++;
+        }
+
+        Assert.True(nonFiniteParameters == 0 && maxDelta > 1e-12,
+            "Training through the auxiliary-input overload left every token-embedding parameter " +
+            "untouched, so the text path is not on the gradient tape. " +
+            $"max |delta|={maxDelta:G17}, non-finite token parameters={nonFiniteParameters}, " +
+            $"published nonzero gradients={nonZeroGradients}/{gradients.Length}, " +
+            $"non-finite gradients={nonFiniteGradients}.");
     }
+
+    private static Tensor<double> CreateContrastingClassTarget(Tensor<double> logits)
+    {
+        var shape = logits.Shape.ToArray();
+        Assert.True(shape.Length > 0 && shape[^1] > 1,
+            $"DocOwl logits must expose a final class axis; got [{string.Join(",", shape)}].");
+
+        int classCount = shape[^1];
+        int positionCount = logits.Length / classCount;
+        var target = new Tensor<double>(shape);
+        for (int position = 0; position < positionCount; position++)
+        {
+            int offset = position * classCount;
+            int argmax = 0;
+            for (int classIndex = 1; classIndex < classCount; classIndex++)
+            {
+                if (logits[offset + classIndex] > logits[offset + argmax])
+                    argmax = classIndex;
+            }
+
+            target[offset + ((argmax + 1) % classCount)] = 1.0;
+        }
+
+        return target;
+    }
+
+    private static bool IsFinite(double value)
+        => !double.IsNaN(value) && !double.IsInfinity(value);
 
     private static bool Differs(Tensor<double> a, Tensor<double> b)
     {
