@@ -61,7 +61,7 @@ public sealed class SeACoBiasStageTrainingTests
 
         var biasTarget = model.CreateBiasTrainingTarget(labels, row => row == 0);
 
-        Assert.Equal(new[] { 2, 6 }, biasTarget.Shape);
+        Assert.Equal(new[] { 2, 6 }, biasTarget.Shape.ToArray());
         Assert.Equal(1.0, biasTarget[0, 3]);
         Assert.Equal(1.0, biasTarget[1, 2]);
         Assert.Equal(0.0, biasTarget[1, 5]);
