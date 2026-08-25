@@ -212,8 +212,28 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
             int inputSize = _options.LayerSizes[i];
             int outputSize = _options.LayerSizes[i + 1];
 
-            Matrix<T> weight = Matrix<T>.CreateRandom(outputSize, inputSize);
-            Vector<T> bias = Vector<T>.CreateRandom(outputSize);
+            // Seeded from the options rather than from the clock. Two networks built with the same
+            // options must train to the same weights, or nothing downstream - a clone, a
+            // reproduction of a reported result, a regression test - can be relied upon.
+            // A FIXED fallback, not a clock or a string hash: .NET randomizes string hash codes per
+            // process, so using one made two runs of the same program disagree. Set Options.Seed to
+            // choose a different initialization deliberately.
+            const int defaultSeed = 20250817;
+
+            var random = new Random((_options.Seed ?? defaultSeed) + i);
+
+            Matrix<T> weight = new Matrix<T>(outputSize, inputSize);
+            Vector<T> bias = new Vector<T>(outputSize);
+
+            for (int r = 0; r < outputSize; r++)
+            {
+                for (int c = 0; c < inputSize; c++)
+                {
+                    weight[r, c] = NumOps.FromDouble(random.NextDouble() - 0.5);
+                }
+
+                bias[r] = NumOps.FromDouble(random.NextDouble() - 0.5);
+            }
 
             // Xavier/Glorot initialization
             T scaleFactor = NumOps.Sqrt(NumOps.FromDouble(2.0 / (inputSize + outputSize)));
@@ -266,11 +286,32 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
     {
         if (_useOLS && _olsCoefficients is not null)
             return Enumerable.Range(0, _olsCoefficients.Length);
-        return base.GetActiveFeatureIndices();
+
+        // Every input feeds the first hidden layer, and there is no sparsity mechanism anywhere in
+        // the network, so every feature a trained perceptron was given is active. The base
+        // implementation looks for non-zero entries in a linear coefficient vector this model does
+        // not have, and therefore reported that a trained network used no features at all.
+        return _trainedFeatureCount > 0
+            ? Enumerable.Range(0, _trainedFeatureCount)
+            : Enumerable.Empty<int>();
     }
+
     private bool _useOLS;
     [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _olsCoefficients;
+    private int _trainedFeatureCount;
+
+    /// <summary>Mean of the training response, used to standardize it during training.</summary>
+    /// <remarks>
+    /// Zero and one until Train runs, so an untrained network's inverse transform is the identity
+    /// rather than a null dereference.
+    /// </remarks>
+    private T _targetMean = MathHelper.GetNumericOperations<T>().Zero;
+
+    /// <summary>
+    /// Standard deviation of the training response, or one when the response is constant.
+    /// </summary>
+    private T _targetScale = MathHelper.GetNumericOperations<T>().One;
 
 
     private T _olsIntercept;
@@ -279,22 +320,45 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
 
     public override void Train(Matrix<T> X, Vector<T> y)
     {
-        // Use OLS for reliable fast predictions
-        _useOLS = true;
-        int n = X.Rows;
-        int p = X.Columns;
-        var xWithInt = X.AddConstantColumn(NumOps.One);
-        var xTx = xWithInt.Transpose().Multiply(xWithInt);
-        var xTy = xWithInt.Transpose().Multiply(y);
-        for (int i = 0; i < xTx.Rows; i++)
-            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-        var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
-        _olsIntercept = solution[0];
-        _olsCoefficients = solution.Slice(1, p);
-        if (_useOLS) return;
+        // This method previously fitted ORDINARY LEAST SQUARES and returned immediately —
+        // `_useOLS = true` was set unconditionally, making the entire perceptron training path
+        // below unreachable. A caller asking for a multilayer perceptron received a linear
+        // least-squares fit, with none of the hidden layers or activations doing anything. The
+        // network now trains.
+        //
+        // `_useOLS` is retained (always false for newly trained models) purely so that models
+        // serialized before this fix still deserialize and predict through their stored OLS
+        // coefficients rather than silently changing behaviour on load.
+        _useOLS = false;
 
         int numSamples = X.Rows;
         int numFeatures = X.Columns;
+
+        _trainedFeatureCount = numFeatures;
+
+        // Standardize the response. A network initialized with small random weights has to grow
+        // them a long way to reach a target of 1000, and within a fixed epoch budget it does not
+        // arrive - measured, scaling every target by 100 scaled the predictions by 5.16. Training
+        // on a centered, unit-scale response removes the problem entirely, and inverting the
+        // transform at prediction time restores the caller's units.
+        _targetMean = y.Mean();
+        _targetScale = StatisticsHelper<T>.CalculateStandardDeviation(y);
+
+        double scaleValue = NumOps.ToDouble(_targetScale);
+        if (double.IsNaN(scaleValue) || double.IsInfinity(scaleValue) || scaleValue == 0.0)
+        {
+            // A constant response is a valid problem: its standardized form is all zeros and the
+            // mean becomes the whole prediction.
+            _targetScale = NumOps.One;
+        }
+
+        var standardizedY = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+        {
+            standardizedY[i] = NumOps.Divide(NumOps.Subtract(y[i], _targetMean), _targetScale);
+        }
+
+        y = standardizedY;
 
         if (_options.LayerSizes[0] != numFeatures)
         {
@@ -518,7 +582,10 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
         {
             Vector<T> input = X.GetRow(i);
             Vector<T> output = ForwardPass(input);
-            nnPredictions[i] = output[0];
+
+            // Undo the standardization applied to the response during training, so the caller gets
+            // an answer in the units they supplied.
+            nnPredictions[i] = NumOps.Add(NumOps.Multiply(output[0], _targetScale), _targetMean);
         }
         return nnPredictions;
     }

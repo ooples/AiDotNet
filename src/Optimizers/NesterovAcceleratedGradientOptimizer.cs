@@ -76,7 +76,6 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
     /// <summary>
     /// The velocity vector used in the NAG algorithm.
     /// </summary>
-    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _velocity;
 
     /// <summary>
@@ -105,6 +104,37 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
         NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())
+    {
+        _options = options ?? new NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>();
+
+        InitializeAdaptiveParameters();
+    }
+
+    /// <summary>
+    /// Creates a Nesterov accelerated gradient optimizer for minimizing a plain function, with no model attached.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use this with <see cref="GradientBasedOptimizerBase{T, TInput, TOutput}.Minimize(Vector{T}, Func{Vector{T}, ValueTuple{T, Vector{T}}}, int, T)"/>
+    /// when you want to minimize a mathematical function directly rather than train a model.
+    /// <see cref="Optimize"/> requires a model and is not available on an instance created
+    /// this way.
+    /// </para>
+    /// <para><b>For Beginners:</b> The constructor above asks for a model because it is set up
+    /// to tune that model against training data. If all you have is a formula you want to make
+    /// as small as possible, there is no model to hand over — use this factory instead.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The optimizer-specific options. If null, defaults are used.</param>
+    public static NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> CreateForFunction(
+        NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>? options = null)
+        => new(options);
+
+    /// <summary>
+    /// Backs <see cref="CreateForFunction"/>: the same setup with no model.
+    /// </summary>
+    private NesterovAcceleratedGradientOptimizer(NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>? options)
+        : base(null, options ?? new())
     {
         _options = options ?? new NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>();
 

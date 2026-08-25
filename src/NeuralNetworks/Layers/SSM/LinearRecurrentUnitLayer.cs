@@ -93,28 +93,28 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>, IShapeContract
 
     // Eigenvalue parameterization: lambda = exp(-exp(nu) + i * exp(theta))
     // nu (log magnitude): [stateDimension]
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _nu;
     // theta (phase): [stateDimension]
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _theta;
 
     // B input projection (complex): [stateDimension] real and imaginary parts
     // Maps scalar input per dimension to complex state
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _bReal;
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _bImag;
 
     // C output projection (complex): [stateDimension] real and imaginary parts
     // Maps complex state back to scalar output per dimension
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _cReal;
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _cImag;
 
     // D skip connection: [modelDimension]
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _dParam;
 
     // Input projection: [modelDimension, modelDimension]
@@ -615,6 +615,18 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>, IShapeContract
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
 
         // Register trainable parameters for tape-based autodiff
+        // Register trainable parameters for tape-based autodiff. The state-space core belongs here
+        // with the projections: UpdateParameters above applies gradients to every one of these, so
+        // they are trained on the legacy path, but registering only the projections made them
+        // invisible to the tape path -- which trains exclusively from registered parameters -- and to
+        // GetParameters/SetParameters, and therefore to serialization.
+        RegisterTrainableParameter(_nu, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_theta, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bReal, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bImag, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_cReal, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_cImag, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_dParam, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_inputProjectionWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_inputProjectionBias, PersistentTensorRole.Biases);
         RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);

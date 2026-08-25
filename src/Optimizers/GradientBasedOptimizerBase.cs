@@ -42,7 +42,7 @@ namespace AiDotNet.Optimizers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public abstract partial class GradientBasedOptimizerBase<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IGradientBasedOptimizer<T, TInput, TOutput>
+public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IGradientBasedOptimizer<T, TInput, TOutput>, IFunctionOptimizer<T>
 {
     /// <summary>
     /// Options specific to gradient-based optimization algorithms.
@@ -2480,6 +2480,202 @@ public abstract partial class GradientBasedOptimizerBase<T, TInput, TOutput> : O
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// This is the general-function entry point: it minimizes an arbitrary scalar objective over
+    /// a parameter vector, with no model, dataset, or training pipeline involved. It is the
+    /// counterpart of SciPy's <c>scipy.optimize.minimize</c>, and it reuses each optimizer's own
+    /// <see cref="Step(TapeStepContext{T})"/> update rule rather than reimplementing it — so
+    /// Adam-the-function-minimizer and Adam-the-model-trainer are the same code path and cannot
+    /// drift apart.
+    /// </para>
+    /// <para>
+    /// Each call is independent: <see cref="Reset"/> is invoked first, so accumulated state
+    /// (momentum buffers, adaptive moments, step counters used for bias correction) does not leak
+    /// from a previous minimization into this one. Two successive calls with the same arguments
+    /// therefore produce the same result.
+    /// </para>
+    /// <para>
+    /// Convergence is declared when the infinity norm of the gradient falls below
+    /// <paramref name="tolerance"/>, matching the criterion used by
+    /// <see cref="LBFGSOptimizer{T, TInput, TOutput}"/>.
+    /// </para>
+    /// <para><b>For Beginners:</b> Most of this library optimizes a model against training data.
+    /// Sometimes you instead have a plain mathematical function and you want the input that makes
+    /// it smallest — fitting a curve to measurements, calibrating a simulation, or finding the
+    /// cheapest configuration of something. This method does exactly that: you hand it a starting
+    /// guess and a function that reports both the value and the slope at any point, and it walks
+    /// downhill using whichever optimizer you created.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="initialParameters"/> or <paramref name="objectiveAndGradient"/>
+    /// is null.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="initialParameters"/> is empty, when
+    /// <paramref name="maxIterations"/> is not positive, or when the supplied gradient length does
+    /// not match the parameter length.
+    /// </exception>
+    public virtual Vector<T> Minimize(
+        Vector<T> initialParameters,
+        Func<Vector<T>, (T objective, Vector<T> gradient)> objectiveAndGradient,
+        int maxIterations,
+        T tolerance)
+    {
+        return Minimize(initialParameters, objectiveAndGradient, maxIterations, tolerance, projection: null);
+    }
+
+    /// <summary>
+    /// Minimizes a function subject to a feasible set, by projecting each iterate back onto that
+    /// set after every step.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is projected gradient descent. It is the standard way to impose simple constraints on
+    /// a smooth objective — a box (bounds on each variable), a norm ball, the probability simplex,
+    /// or a positivity requirement — without switching to a full constrained solver. It plays the
+    /// role that the <c>bounds=</c> argument plays in <c>scipy.optimize.minimize</c>, but is more
+    /// general: any set you can project onto is supported, not just a box.
+    /// </para>
+    /// <para>
+    /// The projection is applied after each parameter update, so every iterate the objective ever
+    /// sees is feasible. Convergence is still tested on the raw gradient, which is the correct
+    /// criterion for an interior optimum; at a constrained optimum the search will instead exhaust
+    /// <paramref name="maxIterations"/> while pinned to the boundary.
+    /// </para>
+    /// <para><b>For Beginners:</b> Sometimes an answer only makes sense inside a certain range — a
+    /// variance cannot be negative, a probability has to stay between 0 and 1, a physical length
+    /// has to stay positive. Left alone, the optimizer will happily step outside that range. A
+    /// projection is a rule that says "if you stepped outside, here is the nearest legal point" —
+    /// applied after every step, so the search stays where it is allowed to be.
+    /// </para>
+    /// </remarks>
+    /// <param name="initialParameters">Starting point for optimization.</param>
+    /// <param name="objectiveAndGradient">
+    /// Function that computes both the objective value and gradient at a given point.
+    /// </param>
+    /// <param name="maxIterations">Maximum number of optimization iterations.</param>
+    /// <param name="tolerance">Convergence tolerance on the infinity norm of the gradient.</param>
+    /// <param name="projection">
+    /// Maps any point to the nearest point of the feasible set, applied after each update. Pass
+    /// <c>null</c> for unconstrained minimization.
+    /// </param>
+    /// <returns>The optimized parameter vector.</returns>
+    public virtual Vector<T> Minimize(
+        Vector<T> initialParameters,
+        Func<Vector<T>, (T objective, Vector<T> gradient)> objectiveAndGradient,
+        int maxIterations,
+        T tolerance,
+        Func<Vector<T>, Vector<T>>? projection)
+    {
+        Guard.NotNull(initialParameters);
+        Guard.NotNull(objectiveAndGradient);
+
+        int parameterCount = initialParameters.Length;
+        if (parameterCount == 0)
+        {
+            throw new ArgumentException(
+                "Initial parameters must contain at least one element.",
+                nameof(initialParameters));
+        }
+
+        if (maxIterations <= 0)
+        {
+            throw new ArgumentException(
+                $"Maximum iterations must be positive, got {maxIterations}.",
+                nameof(maxIterations));
+        }
+
+        // A fresh minimization must not inherit momentum/moment state from a previous run.
+        Reset();
+
+        // Own the storage: FromVector wraps the caller's vector rather than copying it, so clone
+        // first to keep initialParameters unmodified while Step mutates the tensor in place.
+        var startingPoint = initialParameters.Clone();
+        if (projection is not null)
+        {
+            // The caller's starting guess is not required to be feasible; make it so before the
+            // objective ever sees it.
+            startingPoint = projection(startingPoint);
+            Guard.NotNull(startingPoint);
+            if (startingPoint.Length != parameterCount)
+            {
+                throw new ArgumentException(
+                    $"Projection returned a vector of length {startingPoint.Length}, " +
+                    $"but the parameter vector has length {parameterCount}.",
+                    nameof(projection));
+            }
+        }
+
+        var parameterTensor = Tensor<T>.FromVector(startingPoint);
+        var gradientTensor = new Tensor<T>([parameterCount]);
+
+        // Both collections are allocated once and reused across iterations: PrepareTapeState
+        // keys its O(1) fast path on the reference identity of the parameter list, and
+        // per-parameter optimizer state (Adam moments, momentum buffers) is keyed on the
+        // parameter tensor reference. Reallocating either would reset that state every step.
+        var parameters = new List<Tensor<T>>(1) { parameterTensor };
+        var gradients = new Dictionary<Tensor<T>, Tensor<T>> { [parameterTensor] = gradientTensor };
+
+        var reductionAxes = new[] { 0 };
+
+        for (int iteration = 0; iteration < maxIterations; iteration++)
+        {
+            var (objective, gradient) = objectiveAndGradient(parameterTensor.ToVector());
+
+            Guard.NotNull(gradient);
+            if (gradient.Length != parameterCount)
+            {
+                throw new ArgumentException(
+                    $"Gradient length ({gradient.Length}) must match parameter length ({parameterCount}).",
+                    nameof(objectiveAndGradient));
+            }
+
+            Engine.TensorCopy(Tensor<T>.FromVector(gradient), gradientTensor);
+
+            var stepContext = new TapeStepContext<T>(parameters, gradients, objective);
+            double objectiveValue = NumOps.ToDouble(objective);
+            if (double.IsNaN(objectiveValue) || double.IsInfinity(objectiveValue) ||
+                HasAnomalousTapeGradients(stepContext))
+            {
+                throw new ArithmeticException(
+                    $"Objective or gradient became non-finite at function-optimization iteration {iteration}.");
+            }
+
+            // Convergence on the infinity norm of the gradient.
+            var maxAbsoluteGradient = Engine.ReduceMax(
+                Engine.TensorAbs(gradientTensor), reductionAxes, keepDims: false);
+            if (!NumOps.GreaterThan(maxAbsoluteGradient[0], tolerance))
+            {
+                break;
+            }
+
+            Step(stepContext);
+
+            if (projection is not null)
+            {
+                // Step mutated the parameter tensor in place; project it back onto the feasible
+                // set and write the result into the same tensor so per-parameter optimizer state
+                // (keyed on the tensor reference) is preserved.
+                var projected = projection(parameterTensor.ToVector());
+                Guard.NotNull(projected);
+                if (projected.Length != parameterCount)
+                {
+                    throw new ArgumentException(
+                        $"Projection returned a vector of length {projected.Length}, " +
+                        $"but the parameter vector has length {parameterCount}.",
+                        nameof(projection));
+                }
+
+                Engine.TensorCopy(Tensor<T>.FromVector(projected), parameterTensor);
+            }
+        }
+
+        return parameterTensor.ToVector();
+    }
+
+    /// <inheritdoc />
     public abstract void Step(TapeStepContext<T> context);
 
     /// <inheritdoc />
@@ -3110,4 +3306,617 @@ public abstract partial class GradientBasedOptimizerBase<T, TInput, TOutput> : O
     }
 
     #endregion
+
+    /// <summary>
+    /// Everything a line search along one direction needs, gathered so both phases of the strong
+    /// Wolfe search can share it without a dozen parameters each.
+    /// </summary>
+    protected sealed class LineSearchProblem
+    {
+        public LineSearchProblem(
+            Vector<T> current,
+            Vector<T> direction,
+            T objectiveAtCurrent,
+            Func<Vector<T>, (T objective, Vector<T> gradient)> objectiveAndGradient,
+            Func<Vector<T>, Vector<T>>? projection,
+            int parameterCount,
+            double sufficientDecreaseConstant,
+            double curvatureConstant,
+            double valueAtZero,
+            double slopeAtZero)
+        {
+            Current = current;
+            Direction = direction;
+            ObjectiveAtCurrent = objectiveAtCurrent;
+            ObjectiveAndGradient = objectiveAndGradient;
+            Projection = projection;
+            ParameterCount = parameterCount;
+            SufficientDecreaseConstant = sufficientDecreaseConstant;
+            CurvatureConstant = curvatureConstant;
+            ValueAtZero = valueAtZero;
+            SlopeAtZero = slopeAtZero;
+        }
+
+        /// <summary>The point the search starts from.</summary>
+        public Vector<T> Current { get; }
+
+        /// <summary>The search direction, which must point downhill.</summary>
+        public Vector<T> Direction { get; }
+
+        /// <summary>The objective at <see cref="Current"/>.</summary>
+        public T ObjectiveAtCurrent { get; }
+
+        /// <summary>The caller's objective.</summary>
+        public Func<Vector<T>, (T objective, Vector<T> gradient)> ObjectiveAndGradient { get; }
+
+        /// <summary>Maps a trial point back into the feasible set, when there is one.</summary>
+        public Func<Vector<T>, Vector<T>>? Projection { get; }
+
+        /// <summary>How many variables the problem has.</summary>
+        public int ParameterCount { get; }
+
+        /// <summary>The constant c1 in the sufficient-decrease condition.</summary>
+        public double SufficientDecreaseConstant { get; }
+
+        /// <summary>The constant c2 in the Wolfe curvature condition.</summary>
+        public double CurvatureConstant { get; }
+
+        /// <summary>The objective where the search starts, as a plain double.</summary>
+        public double ValueAtZero { get; }
+
+        /// <summary>The slope along the direction at the start. Negative for a descent direction.</summary>
+        public double SlopeAtZero { get; }
+
+        /// <summary>Whether a trial step meets the sufficient-decrease condition.</summary>
+        public bool HasSufficientDecrease(double step, double value)
+            => value <= ValueAtZero + SufficientDecreaseConstant * step * SlopeAtZero;
+
+        /// <summary>Whether a trial step meets the strong Wolfe curvature condition.</summary>
+        public bool HasFlatEnoughSlope(double slope)
+            => Math.Abs(slope) <= -CurvatureConstant * SlopeAtZero;
+    }
+
+    /// <summary>One point along the search direction, with everything measured there.</summary>
+    protected readonly struct LineSearchTrial
+    {
+        public LineSearchTrial(Vector<T> point, T objective, Vector<T> gradient, double value, double slope)
+        {
+            Point = point;
+            Objective = objective;
+            Gradient = gradient;
+            Value = value;
+            Slope = slope;
+        }
+
+        /// <summary>The trial point.</summary>
+        public Vector<T> Point { get; }
+
+        /// <summary>The objective there.</summary>
+        public T Objective { get; }
+
+        /// <summary>The gradient there.</summary>
+        public Vector<T> Gradient { get; }
+
+        /// <summary>The objective as a plain double.</summary>
+        public double Value { get; }
+
+        /// <summary>The slope along the search direction here.</summary>
+        public double Slope { get; }
+
+        /// <summary>Whether the objective and slope here are real numbers.</summary>
+        public bool IsUsable
+            => !double.IsNaN(Value) && !double.IsInfinity(Value) && !double.IsNaN(Slope);
+    }
+
+    /// <summary>The step a line search settled on.</summary>
+    protected readonly struct LineSearchOutcome
+    {
+        public LineSearchOutcome(Vector<T> point, T objective, Vector<T>? gradient, bool satisfiedWolfe)
+        {
+            Point = point;
+            Objective = objective;
+            Gradient = gradient;
+            SatisfiedWolfe = satisfiedWolfe;
+        }
+
+        /// <summary>Where the step landed.</summary>
+        public Vector<T> Point { get; }
+
+        /// <summary>The objective there.</summary>
+        public T Objective { get; }
+
+        /// <summary>The gradient there, when the search happened to compute it.</summary>
+        public Vector<T>? Gradient { get; }
+
+        /// <summary>
+        /// Whether the step met the strong Wolfe conditions, which is what makes the resulting
+        /// correction pair sound without repair.
+        /// </summary>
+        public bool SatisfiedWolfe { get; }
+    }
+
+    /// <summary>Evaluates the objective a given distance along the search direction.</summary>
+    /// <param name="problem">The line search being run.</param>
+    /// <param name="step">How far along the direction to go.</param>
+    /// <returns>The trial point and everything measured there.</returns>
+    protected LineSearchTrial EvaluateAlong(LineSearchProblem problem, double step)
+    {
+        var point = ApplyProjection(
+            problem.Projection,
+            (Vector<T>)Engine.Add(
+                problem.Current,
+                (Vector<T>)Engine.Multiply(problem.Direction, NumOps.FromDouble(step))),
+            problem.ParameterCount);
+
+        var (objective, gradient) = problem.ObjectiveAndGradient(point);
+        Guard.NotNull(gradient);
+
+        double value = NumOps.ToDouble(objective);
+        double slope = gradient.Length == problem.Direction.Length
+            ? NumOps.ToDouble(gradient.DotProduct(problem.Direction))
+            : double.NaN;
+
+        return new LineSearchTrial(point, objective, gradient, value, slope);
+    }
+
+    /// <summary>
+    /// Finds a step length satisfying the strong Wolfe conditions, or reports that it could not.
+    /// </summary>
+    /// <param name="problem">The line search being run.</param>
+    /// <param name="observe">Called with every trial point, so the caller can keep the best seen.</param>
+    /// <returns>The accepted step, or <c>null</c> when none was found within the budget.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is the bracketing phase of Nocedal and Wright's Algorithm 3.5: start at a unit step —
+    /// the right first guess for a quasi-Newton direction — and double until a step is found to be
+    /// too long, at which point <see cref="ZoomLineSearch"/> refines the bracket.
+    /// </para>
+    /// <para>
+    /// The curvature half of the conditions is the part that matters to a quasi-Newton method. It
+    /// guarantees the resulting correction pair has positive curvature, which is the property
+    /// the curvature update depends on and which sufficient decrease alone does not provide.
+    /// </para>
+    /// </remarks>
+    protected LineSearchOutcome? StrongWolfeLineSearch(
+        LineSearchProblem problem, Action<Vector<T>, T> observe)
+    {
+        // A direction that does not point downhill has no acceptable step along it.
+        if (!(problem.SlopeAtZero < 0.0)) return null;
+
+        // The two conditions are only satisfiable together when c1 < c2 < 1.
+        if (!(problem.SufficientDecreaseConstant < problem.CurvatureConstant)) return null;
+
+        double maximumStep = GradientOptions.LineSearchMaxStep;
+        if (!(maximumStep > 0.0)) return null;
+
+        double previousStep = 0.0;
+        double previousValue = problem.ValueAtZero;
+        LineSearchTrial? previousTrial = null;
+
+        double step = Math.Min(1.0, maximumStep);
+
+        for (int attempt = 0; attempt < GradientOptions.LineSearchMaxSteps; attempt++)
+        {
+            var trial = EvaluateAlong(problem, step);
+            observe(trial.Point, trial.Objective);
+
+            if (!trial.IsUsable)
+            {
+                // Overflowed or left the domain, so any acceptable step is shorter than this one.
+                step = 0.5 * (previousStep + step);
+                if (!(step > previousStep)) return null;
+                continue;
+            }
+
+            bool overshot = !problem.HasSufficientDecrease(step, trial.Value)
+                || (previousTrial is not null && trial.Value >= previousValue);
+
+            if (overshot)
+            {
+                return ZoomLineSearch(problem, previousStep, previousValue, previousTrial, step, observe);
+            }
+
+            if (problem.HasFlatEnoughSlope(trial.Slope))
+            {
+                return new LineSearchOutcome(trial.Point, trial.Objective, trial.Gradient, true);
+            }
+
+            if (trial.Slope >= 0.0)
+            {
+                // The slope has turned uphill, so the acceptable step is back towards the last one.
+                return ZoomLineSearch(problem, step, trial.Value, trial, previousStep, observe);
+            }
+
+            if (step >= maximumStep)
+            {
+                // Still descending at the largest step allowed. Take it, and report that the
+                // curvature condition was never established so the pair still gets damped.
+                return new LineSearchOutcome(trial.Point, trial.Objective, trial.Gradient, false);
+            }
+
+            previousStep = step;
+            previousValue = trial.Value;
+            previousTrial = trial;
+            step = Math.Min(2.0 * step, maximumStep);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Narrows a bracket known to contain a step satisfying the strong Wolfe conditions.
+    /// </summary>
+    /// <param name="problem">The line search being run.</param>
+    /// <param name="low">The bracket end with the lower objective.</param>
+    /// <param name="valueAtLow">The objective at <paramref name="low"/>.</param>
+    /// <param name="trialAtLow">The measurement at <paramref name="low"/>, when there is one.</param>
+    /// <param name="high">The other bracket end. It may be the smaller step of the two.</param>
+    /// <param name="observe">Called with every trial point, so the caller can keep the best seen.</param>
+    /// <returns>The accepted step, or <c>null</c> when the bracket produced nothing usable.</returns>
+    /// <remarks>
+    /// Nocedal and Wright's Algorithm 3.6, by bisection. Twenty bisections narrow the bracket by a
+    /// factor of a million, which is far more than a quasi-Newton step normally needs.
+    /// </remarks>
+    protected LineSearchOutcome? ZoomLineSearch(
+        LineSearchProblem problem,
+        double low,
+        double valueAtLow,
+        LineSearchTrial? trialAtLow,
+        double high,
+        Action<Vector<T>, T> observe)
+    {
+        for (int attempt = 0; attempt < GradientOptions.LineSearchMaxZoomSteps; attempt++)
+        {
+            double step = 0.5 * (low + high);
+            if (!(step > 0.0) || step == low || step == high)
+            {
+                break;
+            }
+
+            var trial = EvaluateAlong(problem, step);
+            observe(trial.Point, trial.Objective);
+
+            if (!trial.IsUsable)
+            {
+                high = step;
+                continue;
+            }
+
+            if (!problem.HasSufficientDecrease(step, trial.Value) || trial.Value >= valueAtLow)
+            {
+                high = step;
+                continue;
+            }
+
+            if (problem.HasFlatEnoughSlope(trial.Slope))
+            {
+                return new LineSearchOutcome(trial.Point, trial.Objective, trial.Gradient, true);
+            }
+
+            if (trial.Slope * (high - low) >= 0.0)
+            {
+                high = low;
+            }
+
+            low = step;
+            valueAtLow = trial.Value;
+            trialAtLow = trial;
+        }
+
+        // The budget ran out. The best bracketed point is still a genuine improvement, so take it,
+        // reporting that the curvature condition was never established.
+        return trialAtLow is not null && trialAtLow.Value.Value < problem.ValueAtZero
+            ? new LineSearchOutcome(
+                trialAtLow.Value.Point, trialAtLow.Value.Objective, trialAtLow.Value.Gradient, false)
+            : null;
+    }
+
+    /// <summary>
+    /// Backtracking search on the sufficient-decrease condition alone.
+    /// </summary>
+    /// <param name="problem">The line search being run.</param>
+    /// <param name="observe">Called with every trial point, so the caller can keep the best seen.</param>
+    /// <returns>The accepted step, or <c>null</c> when every trial was rejected.</returns>
+    /// <remarks>
+    /// Nocedal and Wright's Algorithm 3.1. This is what runs when
+    /// <see cref="GradientBasedOptimizerOptions{T, TInput, TOutput}.UseStrongWolfeLineSearch"/> is turned
+    /// off, and what catches the cases where the Wolfe search cannot bracket an acceptable step.
+    /// </remarks>
+    protected LineSearchOutcome? BacktrackingLineSearch(
+        LineSearchProblem problem, Action<Vector<T>, T> observe)
+    {
+        if (!(problem.SlopeAtZero < 0.0)) return null;
+
+        double step = 1.0;
+        double contraction = GradientOptions.LineSearchContractionFactor;
+
+        for (int attempt = 0; attempt < GradientOptions.LineSearchMaxSteps; attempt++)
+        {
+            var trial = EvaluateAlong(problem, step);
+            observe(trial.Point, trial.Objective);
+
+            if (!trial.IsUsable)
+            {
+                step *= contraction;
+                continue;
+            }
+
+            if (problem.HasSufficientDecrease(step, trial.Value))
+            {
+                return new LineSearchOutcome(
+                    trial.Point, trial.Objective, trial.Gradient,
+                    satisfiedWolfe: problem.HasFlatEnoughSlope(trial.Slope));
+            }
+
+            step *= contraction;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Applies an optional feasible-set projection, validating that it preserves the vector length.
+    /// </summary>
+    protected static Vector<T> ApplyProjection(
+        Func<Vector<T>, Vector<T>>? projection,
+        Vector<T> point,
+        int parameterCount)
+    {
+        if (projection is null)
+        {
+            return point;
+        }
+
+        var projected = projection(point);
+        Guard.NotNull(projected);
+        if (projected.Length != parameterCount)
+        {
+            throw new ArgumentException(
+                $"Projection returned a vector of length {projected.Length}, " +
+                $"but the parameter vector has length {parameterCount}.",
+                nameof(projection));
+        }
+
+        return projected;
+    }
+
+    protected void EnsureFiniteEvaluation(T objective, Vector<T> gradient, int iteration, string methodName)
+    {
+        double objectiveValue = NumOps.ToDouble(objective);
+        if (double.IsNaN(objectiveValue) || double.IsInfinity(objectiveValue))
+        {
+            throw new ArithmeticException($"Objective became non-finite at {methodName} iteration {iteration}.");
+        }
+
+        for (int i = 0; i < gradient.Length; i++)
+        {
+            double value = NumOps.ToDouble(gradient[i]);
+            if (double.IsNaN(value) || double.IsInfinity(value))
+            {
+                throw new ArithmeticException(
+                    $"Gradient component {i} became non-finite at {methodName} iteration {iteration}.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns the infinity norm (largest absolute component) of a vector.
+    /// </summary>
+    protected T InfinityNorm(Vector<T> vector)
+    {
+        var absolute = Engine.TensorAbs(Tensor<T>.FromVector(vector));
+        return Engine.ReduceMax(absolute, [0], keepDims: false)[0];
+    }
+
+    /// <summary>
+    /// Supplies the search direction for <see cref="MinimizeWithLineSearch"/>, so the loop itself
+    /// can be shared between methods that differ only in how they choose where to go.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// BFGS, DFP and nonlinear conjugate gradient all take the same shape: pick a direction from
+    /// whatever they remember, line-search along it, then update what they remember from the step
+    /// that was actually taken. Only the middle of that sentence differs, so only the middle is
+    /// implemented per method.
+    /// </para>
+    /// </remarks>
+    protected interface ISearchDirectionRule
+    {
+        /// <summary>Discards everything remembered from a previous minimization.</summary>
+        /// <param name="parameterCount">How many variables this problem has.</param>
+        void Reset(int parameterCount);
+
+        /// <summary>The direction to search along from the current point.</summary>
+        /// <param name="gradient">The gradient there.</param>
+        /// <returns>A direction, which the caller checks for descent before using.</returns>
+        Vector<T> ComputeDirection(Vector<T> gradient);
+
+        /// <summary>Records the step that was taken and what it revealed about the surface.</summary>
+        /// <param name="step">The change in position.</param>
+        /// <param name="gradientChange">The change in gradient across it.</param>
+        /// <param name="gradient">The gradient at the new point.</param>
+        /// <param name="satisfiedWolfe">
+        /// Whether the accepted step met the strong Wolfe conditions, which is what guarantees the
+        /// pair carries positive curvature.
+        /// </param>
+        void Observe(
+            Vector<T> step, Vector<T> gradientChange, Vector<T> gradient, bool satisfiedWolfe);
+    }
+
+    /// <summary>
+    /// Minimizes a plain function by repeatedly choosing a direction and line-searching along it.
+    /// </summary>
+    /// <param name="initialParameters">Starting point.</param>
+    /// <param name="objectiveAndGradient">Returns the value and gradient at a point.</param>
+    /// <param name="maxIterations">How many directions to try before giving up.</param>
+    /// <param name="tolerance">Convergence tolerance on the infinity norm of the gradient.</param>
+    /// <param name="projection">Maps a point back into the feasible set, or null.</param>
+    /// <param name="directions">The method's own rule for choosing where to go.</param>
+    /// <param name="methodName">Used in the message when the objective goes non-finite.</param>
+    /// <returns>The best point found.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is the loop <see cref="LBFGSOptimizer{T, TInput, TOutput}"/> uses, generalised so that
+    /// BFGS, DFP and conjugate gradient get the same line search rather than inheriting the
+    /// step-per-iteration loop, which has none at all. That difference is worth a great deal:
+    /// measured on the chained Rosenbrock function to a gradient tolerance of 1e-8, BFGS without a
+    /// line search needed 1911 objective evaluations at five variables where L-BFGS with one
+    /// needed 84.
+    /// </para>
+    /// <para>
+    /// The accepted point's evaluation is carried into the next iteration, so the line search's
+    /// final trial is free rather than repeated.
+    /// </para>
+    /// </remarks>
+    protected Vector<T> MinimizeWithLineSearch(
+        Vector<T> initialParameters,
+        Func<Vector<T>, (T objective, Vector<T> gradient)> objectiveAndGradient,
+        int maxIterations,
+        T tolerance,
+        Func<Vector<T>, Vector<T>>? projection,
+        ISearchDirectionRule directions,
+        string methodName)
+    {
+        Guard.NotNull(initialParameters);
+        Guard.NotNull(objectiveAndGradient);
+        Guard.NotNull(directions);
+
+        int parameterCount = initialParameters.Length;
+        if (parameterCount == 0)
+        {
+            throw new ArgumentException(
+                "Initial parameters must contain at least one element.",
+                nameof(initialParameters));
+        }
+
+        if (maxIterations <= 0)
+        {
+            throw new ArgumentException(
+                $"Maximum iterations must be positive, got {maxIterations}.",
+                nameof(maxIterations));
+        }
+
+        Reset();
+        directions.Reset(parameterCount);
+
+        var current = ApplyProjection(projection, initialParameters.Clone(), parameterCount);
+        var bestPoint = current.Clone();
+        T bestObjective = NumOps.Zero;
+        bool hasBestObjective = false;
+
+        void Observe(Vector<T> point, T value)
+        {
+            double asDouble = NumOps.ToDouble(value);
+            if (double.IsNaN(asDouble) || double.IsInfinity(asDouble))
+            {
+                return;
+            }
+
+            if (!hasBestObjective || NumOps.LessThan(value, bestObjective))
+            {
+                bestObjective = value;
+                bestPoint = point.Clone();
+                hasBestObjective = true;
+            }
+        }
+
+        T carriedObjective = NumOps.Zero;
+        Vector<T>? carriedGradient = null;
+
+        for (int iteration = 0; iteration < maxIterations; iteration++)
+        {
+            T objective;
+            Vector<T> gradient;
+
+            if (carriedGradient is not null)
+            {
+                objective = carriedObjective;
+                gradient = carriedGradient;
+            }
+            else
+            {
+                (objective, gradient) = objectiveAndGradient(current);
+            }
+
+            Guard.NotNull(gradient);
+            if (gradient.Length != parameterCount)
+            {
+                throw new ArgumentException(
+                    $"Gradient length ({gradient.Length}) must match parameter length ({parameterCount}).",
+                    nameof(objectiveAndGradient));
+            }
+
+            EnsureFiniteEvaluation(objective, gradient, iteration, methodName);
+            Observe(current, objective);
+
+            if (!NumOps.GreaterThan(InfinityNorm(gradient), tolerance))
+            {
+                break;
+            }
+
+            var direction = directions.ComputeDirection(gradient);
+            Guard.NotNull(direction);
+
+            var directionalDerivative = gradient.DotProduct(direction);
+
+            // A rule that has accumulated a poor picture of the surface can propose an ascent
+            // direction. Steepest descent is always available and always correct.
+            if (!NumOps.LessThan(directionalDerivative, NumOps.Zero))
+            {
+                direction = (Vector<T>)Engine.Multiply(gradient, NumOps.Negate(NumOps.One));
+                directionalDerivative = NumOps.Negate(gradient.DotProduct(gradient));
+            }
+
+            var problem = new LineSearchProblem(
+                current, direction, objective,
+                objectiveAndGradient, projection, parameterCount,
+                GradientOptions.ArmijoConstant, GradientOptions.WolfeCurvatureConstant,
+                NumOps.ToDouble(objective), NumOps.ToDouble(directionalDerivative));
+
+            LineSearchOutcome? outcome = GradientOptions.UseStrongWolfeLineSearch
+                ? StrongWolfeLineSearch(problem, Observe)
+                : null;
+
+            outcome ??= BacktrackingLineSearch(problem, Observe);
+
+            if (outcome is null)
+            {
+                var fallbackPoint = ApplyProjection(
+                    projection,
+                    (Vector<T>)Engine.Add(
+                        current,
+                        (Vector<T>)Engine.Multiply(
+                            direction, NumOps.FromDouble(GradientOptions.LineSearchFallbackStep))),
+                    parameterCount);
+
+                var (fallbackObjective, fallbackGradient) = objectiveAndGradient(fallbackPoint);
+                EnsureFiniteEvaluation(fallbackObjective, fallbackGradient, iteration, methodName);
+                outcome = new LineSearchOutcome(
+                    fallbackPoint, fallbackObjective, fallbackGradient, satisfiedWolfe: false);
+            }
+
+            Observe(outcome.Value.Point, outcome.Value.Objective);
+
+            var step = (Vector<T>)Engine.Subtract(outcome.Value.Point, current);
+
+            var movedGradient = outcome.Value.Gradient;
+            if (movedGradient is null)
+            {
+                (_, movedGradient) = objectiveAndGradient(outcome.Value.Point);
+            }
+
+            directions.Observe(
+                step,
+                (Vector<T>)Engine.Subtract(movedGradient, gradient),
+                movedGradient,
+                outcome.Value.SatisfiedWolfe);
+
+            current = outcome.Value.Point;
+            carriedObjective = outcome.Value.Objective;
+            carriedGradient = movedGradient;
+        }
+
+        return bestPoint;
+    }
+
 }

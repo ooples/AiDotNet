@@ -533,6 +533,49 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Resolves input feature size from input.Shape[^1] on first forward.
     /// </summary>
+    /// <summary>
+    /// Rebuilds the weight matrix and biases when a deserialize supplies parameters before any
+    /// forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This layer is lazy in exactly one dimension: the output width is fixed at construction, and
+    /// the input width is learned from the first tensor it sees. A freshly constructed instance
+    /// therefore has no weights and reports a parameter count of zero, so a deserialize -- which
+    /// hands over a flat payload with no forward pass -- had nowhere to put the restored values.
+    /// <c>Serialize_Deserialize_ShouldPreserveBehavior</c> measured 40 parameters before the round
+    /// trip and 2 after.
+    /// </para>
+    /// <para>
+    /// The payload length recovers the missing dimension. The weights are
+    /// <c>[inputSize, outputSize]</c> and the biases <c>[1, outputSize]</c>, so
+    /// <c>total = inputSize · outputSize + outputSize</c> and therefore
+    /// <c>inputSize = (total − outputSize) / outputSize</c> — one unknown, one equation, exact
+    /// whenever that division comes out whole. A payload that does not divide evenly is not this
+    /// layer's, and is left alone rather than forced into a wrong shape.
+    /// </para>
+    /// </remarks>
+    protected override void EnsureParametersMaterialized()
+    {
+        if (_inputSize <= 0 && _outputSize > 0)
+        {
+            int payloadLength = DeferredParameterPayloadLength;
+            long remainder = (long)payloadLength - _outputSize;
+
+            if (payloadLength > 0
+                && remainder > 0
+                && remainder % _outputSize == 0
+                && remainder / _outputSize <= int.MaxValue)
+            {
+                _inputSize = (int)(remainder / _outputSize);
+                ResolveShapes(new[] { _inputSize }, new[] { _outputSize });
+                EnsureInitialized();
+            }
+        }
+
+        base.EnsureParametersMaterialized();
+    }
+
     protected override void OnFirstForward(Tensor<T> input)
     {
         int rank = input.Shape.Length;

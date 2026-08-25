@@ -224,6 +224,17 @@ public static class ModelHelper<T, TInput, TOutput>
             // Filter out-of-bounds indices rather than throwing, since models
             // like SymbolicRegression may produce coefficients beyond input features.
             var validIndices = indices.Where(i => i >= 0 && i < matrix.Columns).ToArray();
+
+            // A matrix with no rows still has well-defined columns — they are simply empty — but
+            // Matrix.GetColumn validates the ROW index (ValidateIndices(0, col)) before reading,
+            // so it throws IndexOutOfRangeException on any zero-row matrix even for a perfectly
+            // valid column. Return empty column vectors directly rather than letting a legitimate
+            // empty split surface as an index error from deep inside the optimizer.
+            if (matrix.Rows == 0)
+            {
+                return [.. validIndices.Select(_ => new Vector<T>(0))];
+            }
+
             return [.. validIndices.Select(i => matrix.GetColumn(i))];
         }
         else if (input is Tensor<T> tensor)

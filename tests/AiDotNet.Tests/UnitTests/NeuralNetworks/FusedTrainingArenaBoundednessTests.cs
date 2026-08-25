@@ -1,4 +1,4 @@
-// Regression test for the REAL #1624 OOM. The DEFAULT training route for a
+﻿// Regression test for the REAL #1624 OOM. The DEFAULT training route for a
 // float model with a plain Adam/SGD optimizer is the fused-optimizer path
 // (NeuralNetworkBase.TryTrainWithFusedOptimizer) — it returns before the eager
 // tape's per-step arena and, before the fix, opened NO arena of its own. So when
@@ -38,6 +38,22 @@ public class FusedTrainingArenaBoundednessTests
         return new Tensor<float>(data, shape);
     }
 
+    // SimCSE's first layer is EmbeddingLayer(vocabSize: 30522, ...) -- see
+    // LayerHelper.CreateDefaultSimCSELayers -- so its input is TOKEN IDS, not continuous
+    // features. Feeding Rand here made the model reject the very first step with
+    // InputContractViolationException ("EmbeddingLayer`1.input requires token indices in
+    // [0, 30522), but element 0 is 0.5"), so this test failed before reaching either of its
+    // assertions. Same deterministic, allocation-free pattern as Rand; only the domain differs.
+    private static Tensor<float> RandTokens(int[] shape, int seed, int vocabSize = 30522)
+    {
+        int n = 1;
+        foreach (var d in shape) n *= d;
+        var data = new float[n];
+        for (int i = 0; i < n; i++)
+            data[i] = (i * 7 + seed * 13) % vocabSize;
+        return new Tensor<float>(data, shape);
+    }
+
     [Fact]
     public void FusedTraining_UnderUnResetOuterArena_HeapPlateausInsteadOfClimbing()
     {
@@ -63,7 +79,9 @@ public class FusedTrainingArenaBoundednessTests
         // ForceOff guarantees we exercise the fused-optimizer path the fix touches.
         model.StreamingTraining = StreamingTrainingMode.ForceOff;
 
-        var input = Rand(new[] { 1, dim }, seed: 1);
+        // Token ids in for the embedding table; continuous target out, because SimCSE emits a
+        // [CLS] embedding of embeddingDimension (= dim) rather than vocabulary logits.
+        var input = RandTokens(new[] { 1, dim }, seed: 1);
         var target = Rand(new[] { 1, dim }, seed: 2);
 
         // The exact leak shape: ONE outer arena around the whole loop, never Reset().

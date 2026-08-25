@@ -122,7 +122,7 @@ public partial class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     {
         _olsIntercept = NumOps.Zero;
         _options = options ?? new NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>>();
-        _optimizer = _options.Optimizer ?? new AdamOptimizer<T, Matrix<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
+        _optimizer = _options.OptimizerFactory?.Invoke(this) ?? new AdamOptimizer<T, Matrix<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
         {
             InitialLearningRate = 0.001,
             Beta1 = 0.9,

@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -2392,6 +2392,62 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
             Vector<T>.FromMemory(Get("biasC").Data),
             Vector<T>.FromMemory(Get("biasO").Data)
         );
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// ooples/AiDotNet#1589. <see cref="ForwardTraced"/> already tolerates a stale
+    /// <c>_inputSize</c>, but only while the gate weights are still unallocated. Once a forward has
+    /// materialized them, a parameter vector encoding a different width reached
+    /// <c>LayerBase.SetParameters</c> and threw "Expected 672 parameters, but got 608" -- the shape
+    /// Clone produces when it carries a resolved width across and then hands over the source's
+    /// parameters.
+    /// </para>
+    /// <para>
+    /// Nothing is guessed: an LSTM holds <c>4 * (H*I + H*H + H)</c> values, so
+    /// <c>I = count / (4H) - H - 1</c>. The candidate is accepted only when it is positive AND its
+    /// recomputed total matches the payload exactly, so a genuinely wrong-sized vector still gets
+    /// the base class's error instead of being reshaped into silence. Only the four input-facing
+    /// gate weights depend on I; the recurrent weights and biases are functions of H alone.
+    /// </para>
+    /// </remarks>
+    protected override bool TryRebindForParameterCount(int parameterCount)
+    {
+        if (!_isInitialized || _inputSize <= 0 || _hiddenSize <= 0) return false;
+        if (CountParametersForInputWidth(_inputSize) == parameterCount) return false;
+
+        int perWidthStride = 4 * _hiddenSize;
+        if (parameterCount % perWidthStride != 0) return false;
+
+        int inferredWidth = parameterCount / perWidthStride - _hiddenSize - 1;
+        if (inferredWidth <= 0) return false;
+        if (CountParametersForInputWidth(inferredWidth) != parameterCount) return false;
+
+        _inputSize = inferredWidth;
+
+        RebindGateInputWeight(ref _weightsFi);
+        RebindGateInputWeight(ref _weightsIi);
+        RebindGateInputWeight(ref _weightsCi);
+        RebindGateInputWeight(ref _weightsOi);
+
+        // Gradients are keyed on the tensors just replaced, so anything held for the old width is
+        // now unreachable state of the wrong shape.
+        ClearGradients();
+        return true;
+    }
+
+    /// <summary>Total values this layer holds at <paramref name="inputWidth"/>.</summary>
+    private long CountParametersForInputWidth(int inputWidth) =>
+        4L * ((long)_hiddenSize * inputWidth
+              + (long)_hiddenSize * _hiddenSize
+              + _hiddenSize);
+
+    private void RebindGateInputWeight(ref Tensor<T> gateWeight)
+    {
+        var replacement = AllocateLazyWeight([_hiddenSize, _inputSize]);
+        ReplaceTrainableParameter(gateWeight, replacement, PersistentTensorRole.Weights);
+        gateWeight = replacement;
     }
 
     public override void ClearGradients()

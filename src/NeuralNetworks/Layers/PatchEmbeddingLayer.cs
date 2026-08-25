@@ -283,6 +283,28 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     /// would create 196 patches (14x14 grid), each represented by 768 numbers.
     /// </para>
     /// </remarks>
+    /// <inheritdoc />
+    /// <remarks>
+    /// This layer holds <c>patchSize^2 * channels * embeddingDim</c> projection weights plus
+    /// <c>embeddingDim</c> biases, so only the channel count is unknown before the first input.
+    /// Every achievable total is therefore <c>embeddingDim + k * (patchSize^2 * embeddingDim)</c>
+    /// for some whole <c>k &gt;= 1</c>, and anything else can be rejected immediately rather than
+    /// parked. At patchSize 4 / embeddingDim 32 the smallest achievable total is 544, so a
+    /// 10-element vector is impossible at any channel count.
+    /// </remarks>
+    protected override bool CanEverAcceptParameterCount(int parameterCount)
+    {
+        if (_expectedInputChannels > 0) return true;   // shape is known; the exact check applies
+
+        int perChannel = _patchSize * _patchSize * _embeddingDim;
+        if (perChannel <= 0) return true;
+
+        int weightValues = parameterCount - _embeddingDim;
+        return weightValues > 0
+            && weightValues % perChannel == 0
+            && weightValues / perChannel >= 1;
+    }
+
     public PatchEmbeddingLayer(
         int patchSize,
         int embeddingDim,

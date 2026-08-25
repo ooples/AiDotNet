@@ -606,6 +606,55 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
     /// Output dim per axis: (input - kernelSize + 2 * padding) / stride + 1.
     /// Input is NCHW: rank-3 [C,H,W] or rank-4 [B,C,H,W].
     /// </summary>
+    /// <summary>
+    /// Allocates the kernels from a parked restore payload when no forward has resolved the input depth.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A layer rebuilt from metadata knows its output depth, kernel size, stride and padding, but not
+    /// how many channels arrive — that resolves on the first forward. <c>SetParameters</c> therefore
+    /// parks the payload and waits. Nothing was ever going to arrive for a layer being restored rather
+    /// than run, so the values stayed parked and <c>GetParameters</c> answered an empty vector for a
+    /// layer that had just been handed 5136 numbers.
+    /// </para>
+    /// <para>
+    /// The wait is unnecessary here, because the input depth is recoverable from the payload length
+    /// alone: the layer holds <c>inputDepth·kernelSize²</c> depthwise weights, <c>outputDepth·inputDepth</c>
+    /// pointwise weights and <c>outputDepth</c> biases, so
+    /// <c>inputDepth = (total − outputDepth) / (kernelSize² + outputDepth)</c> — one unknown, one
+    /// equation, exact whenever that division comes out whole. The spatial extents stay unresolved,
+    /// which is correct: no weight in this layer depends on them, and a real forward still supplies them.
+    /// </para>
+    /// </remarks>
+    protected override void EnsureParametersMaterialized()
+    {
+        if (_inputDepth <= 0)
+        {
+            int payloadLength = DeferredParameterPayloadLength;
+            long perInputChannel = (long)_kernelSize * _kernelSize + _outputDepth;
+            long remainder = payloadLength - _outputDepth;
+
+            if (payloadLength > 0
+                && perInputChannel > 0
+                && remainder > 0
+                && remainder % perInputChannel == 0
+                && remainder / perInputChannel <= int.MaxValue)
+            {
+                _inputDepth = (int)(remainder / perInputChannel);
+
+                _depthwiseKernels = AllocateLazyWeight([_inputDepth, 1, _kernelSize, _kernelSize]);
+                _pointwiseKernels = AllocateLazyWeight([_outputDepth, _inputDepth, 1, 1]);
+                _biases = AllocateLazyWeight([_outputDepth]);
+                InitializeParameters();
+                RegisterTrainableParameter(_depthwiseKernels, PersistentTensorRole.Weights);
+                RegisterTrainableParameter(_pointwiseKernels, PersistentTensorRole.Weights);
+                RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+            }
+        }
+
+        base.EnsureParametersMaterialized();
+    }
+
     protected override void OnFirstForward(Tensor<T> input)
     {
         int rank = input.Shape.Length;

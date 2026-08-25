@@ -94,7 +94,6 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
         _initScale = options?.InitScale;
         _seed = options?.Seed;
         _rhoMax = options?.MaxPenalty ?? 1e+20;
-
         if (_maxRank <= 0)
             throw new ArgumentException("MaxRank must be greater than 0.");
         if (_innerIterations < 1)
@@ -162,7 +161,10 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
         T rhoT = NumOps.One;
         T alphaLag = NumOps.Zero;
         T prevH = NumOps.FromDouble(double.MaxValue);
-        var optimizer = new Optimizers.LBFGSFunctionOptimizer<T>();
+        // The library's L-BFGS optimizer, used here purely as a function minimizer (no model), so
+        // the inner solver and the model-training path share one implementation of the two-loop
+        // recursion and the Armijo line search.
+        var optimizer = Optimizers.LBFGSOptimizer<T, Tensor<T>, Tensor<T>>.CreateForFunction();
         int paramLen = 2 * d * rank;
 
         for (int outerIter = 0; outerIter < MaxIterations; outerIter++)

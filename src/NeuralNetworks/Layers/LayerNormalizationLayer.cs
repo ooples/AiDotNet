@@ -392,6 +392,43 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
         ResolveShapes(new[] { featureSize }, new[] { featureSize });
     }
 
+    /// <summary>
+    /// Rebuilds gamma and beta when a deserialize supplies parameters before any forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This layer is lazy: it learns its normalized width from the last axis of the first tensor it
+    /// sees, so a freshly constructed instance has no gamma or beta and reports a parameter count of
+    /// zero. Deserialize hands over a flat payload without a forward pass, so without this hook the
+    /// restored layer stays empty and every restored value is silently discarded --
+    /// <c>Serialize_Deserialize_ShouldPreserveBehavior</c> measured 8 parameters before the round
+    /// trip and 0 after.
+    /// </para>
+    /// <para>
+    /// The payload length determines the width on its own. Gamma and beta are both
+    /// <c>[featureSize]</c> and nothing else here is trainable, so
+    /// <c>featureSize = total / 2</c> — one unknown, one equation, exact whenever the total is even.
+    /// The resolution goes through <see cref="ResolveArchitectureFeatureSizeOnly"/> rather than a
+    /// speculative shape walk because a payload of this length IS an authoritative statement about
+    /// the width, not a projection.
+    /// </para>
+    /// </remarks>
+    protected override void EnsureParametersMaterialized()
+    {
+        if (!IsShapeResolved)
+        {
+            int payloadLength = DeferredParameterPayloadLength;
+
+            if (payloadLength > 0 && payloadLength % 2 == 0)
+            {
+                ResolveArchitectureFeatureSizeOnly(payloadLength / 2);
+                EnsureInitialized();
+            }
+        }
+
+        base.EnsureParametersMaterialized();
+    }
+
     /// <inheritdoc />
     protected override void EnsureInitialized()
     {

@@ -155,6 +155,50 @@ public partial class Mask2Former<T> : Common.PanopticSegmentationBase<T>
     }
 
     /// <summary>
+    /// Builds the optimizer used when the constructor was given none.
+    /// </summary>
+    /// <returns>AdamW configured from this model's options.</returns>
+    /// <remarks>
+    /// <para>
+    /// Without this override the base handed back a bare <c>AdamWOptimizer</c> on framework
+    /// defaults -- a 1e-3 learning rate and no gradient clipping -- while this class's own
+    /// constructor documentation promised "AdamW with weight decay 0.05". The documentation was
+    /// describing Cheng et al. 2022 (section 4); nothing applied it.
+    /// </para>
+    /// <para>
+    /// Measured on the model-family harness before this override, the model diverged in a SINGLE
+    /// step: loss 1.872619 -> 208.665359 over 40,974,916 parameters, with zero non-finite values.
+    /// That signature -- a large finite jump rather than a NaN -- is an overshoot, not a broken
+    /// gradient, which is what pointed at the step size rather than at the backward pass.
+    /// </para>
+    /// <para>
+    /// The clipping matters as much as the rate here. Mask2Former's loss uses HUNGARIAN MATCHING, a
+    /// discrete assignment, so a small parameter change can flip which prediction is matched to
+    /// which target and produce an abrupt gradient; clipping bounds what one such flip can do.
+    /// OneFormer, which shares this architecture and passes, wires exactly these three values.
+    /// </para>
+    /// </remarks>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+    {
+        if (_options.LearningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(_options.LearningRate), "Learning rate must be positive.");
+        if (_options.WeightDecay < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(_options.WeightDecay), "Weight decay cannot be negative.");
+        if (_options.MaxGradientNorm < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(_options.MaxGradientNorm), "Maximum gradient norm cannot be negative.");
+
+        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                EnableGradientClipping = _options.MaxGradientNorm > 0.0,
+                MaxGradientNorm = _options.MaxGradientNorm,
+            });
+    }
+
+    /// <summary>
     /// Initializes Mask2Former in ONNX (inference-only) mode.
     /// </summary>
     /// <param name="architecture">Neural network architecture configuration.</param>

@@ -25,7 +25,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IDerivativeFreeFunctionOptimizer<T>
 {
     /// <summary>
     /// The options specific to the CMA-ES optimization algorithm.
@@ -35,31 +35,26 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
     /// <summary>
     /// The current population of candidate solutions.
     /// </summary>
-    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _population;
 
     /// <summary>
     /// The mean of the current distribution.
     /// </summary>
-    [AiDotNet.Attributes.Buffer]
     private Vector<T> _mean;
 
     /// <summary>
     /// The covariance matrix of the distribution.
     /// </summary>
-    [AiDotNet.Attributes.Buffer]
     private Matrix<T> _C;
 
     /// <summary>
     /// Evolution path for covariance matrix adaptation.
     /// </summary>
-    [AiDotNet.Attributes.Buffer]
     private Vector<T> _pc;
 
     /// <summary>
     /// Evolution path for step-size adaptation.
     /// </summary>
-    [AiDotNet.Attributes.Buffer]
     private Vector<T> _ps;
 
     /// <summary>
@@ -480,4 +475,263 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
     {
         return _options;
     }
+
+    /// <summary>
+    /// Creates a CMA-ES optimizer for minimizing a plain function, with no model attached.
+    /// </summary>
+    /// <param name="options">The optimizer-specific options. If null, defaults are used.</param>
+    public static CMAESOptimizer<T, TInput, TOutput> CreateForFunction(
+        CMAESOptimizerOptions<T, TInput, TOutput>? options = null)
+        => new(options);
+
+    /// <summary>Backs <see cref="CreateForFunction"/>: the same setup with no model.</summary>
+    private CMAESOptimizer(CMAESOptimizerOptions<T, TInput, TOutput>? options)
+        : base(null, options ?? new())
+    {
+        _options = (CMAESOptimizerOptions<T, TInput, TOutput>)Options;
+        _population = Matrix<T>.Empty();
+        _mean = Vector<T>.Empty();
+        _C = Matrix<T>.Empty();
+        _pc = Vector<T>.Empty();
+        _ps = Vector<T>.Empty();
+        _sigma = NumOps.Zero;
+
+        InitializeAdaptiveParameters();
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// The covariance matrix adaptation evolution strategy of Hansen and Ostermeier
+    /// (<i>Evolutionary Computation</i> 9(2), 2001), with the constants from Hansen's 2016
+    /// tutorial. Each generation samples a population from a Gaussian, keeps the better half, and
+    /// moves the mean towards them - then adapts BOTH the covariance and the step size from the
+    /// path the mean has actually travelled.
+    /// </para>
+    /// <para>
+    /// The covariance is what makes this more than a random search: it learns the shape of the
+    /// surface, so on a badly conditioned problem it stretches its sampling along the valley
+    /// rather than across it. That is the same information a quasi-Newton method extracts from
+    /// gradients, obtained here from rankings alone - which is why CMA-ES is the method of choice
+    /// when the objective is a simulation with no derivative to be had.
+    /// </para>
+    /// <para>
+    /// The step size is controlled separately, by comparing the length of the conjugate evolution
+    /// path against how long a random walk would be. Longer than random means the steps agree with
+    /// each other and could afford to be bigger; shorter means they are cancelling.
+    /// </para>
+    /// <para>
+    /// <paramref name="tolerance"/> stops the run when the step size falls below it, the sampling
+    /// distribution having collapsed to a point.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Minimize(
+        Vector<T> initialParameters, Func<Vector<T>, T> objective, int maxIterations, T tolerance)
+    {
+        ValidateMinimizeArguments(initialParameters, objective, maxIterations);
+
+        var search = new DerivativeFreeSearch(objective, NumOps, initialParameters);
+        var random = CreateSearchRandom();
+
+        int n = initialParameters.Length;
+        int lambda = _options.PopulationSize > 0
+            ? Math.Max(4, _options.PopulationSize)
+            : 4 + (int)(3.0 * Math.Log(n));
+        int mu = Math.Max(1, lambda / 2);
+
+        // Rank-based recombination weights, log-decreasing so the best sample counts for most.
+        var weights = new double[mu];
+        double weightSum = 0.0;
+        for (int i = 0; i < mu; i++)
+        {
+            weights[i] = Math.Log(mu + 0.5) - Math.Log(i + 1.0);
+            weightSum += weights[i];
+        }
+
+        double squaredSum = 0.0;
+        for (int i = 0; i < mu; i++)
+        {
+            weights[i] /= weightSum;
+            squaredSum += weights[i] * weights[i];
+        }
+
+        double muEffective = 1.0 / squaredSum;
+
+        // Hansen's defaults: learning rates for the two evolution paths and the two covariance
+        // updates, all derived from the dimension and the effective selection mass.
+        double cSigma = (muEffective + 2.0) / (n + muEffective + 5.0);
+        double dSigma = 1.0
+            + 2.0 * Math.Max(0.0, Math.Sqrt((muEffective - 1.0) / (n + 1.0)) - 1.0) + cSigma;
+        double cc = (4.0 + muEffective / n) / (n + 4.0 + 2.0 * muEffective / n);
+        double c1 = 2.0 / ((n + 1.3) * (n + 1.3) + muEffective);
+        double cmu = Math.Min(
+            1.0 - c1,
+            2.0 * (muEffective - 2.0 + 1.0 / muEffective)
+                / ((n + 2.0) * (n + 2.0) + muEffective));
+
+        double expectedNorm = Math.Sqrt(n) * (1.0 - 1.0 / (4.0 * n) + 1.0 / (21.0 * n * n));
+
+        var mean = new double[n];
+        for (int i = 0; i < n; i++) mean[i] = Convert.ToDouble(initialParameters[i]);
+
+        double sigma = _options.InitialStepSize > 0 ? _options.InitialStepSize : 0.3;
+        double stop = Convert.ToDouble(tolerance);
+
+        var pathSigma = new double[n];
+        var pathC = new double[n];
+        var covariance = CmaIdentity(n);
+
+        for (int generation = 0; generation < maxIterations && sigma > stop; generation++)
+        {
+            var factor = CmaCholesky(covariance, n);
+
+            var draws = new double[lambda][];
+            var values = new double[lambda];
+
+            for (int k = 0; k < lambda; k++)
+            {
+                var z = new double[n];
+                for (int i = 0; i < n; i++) z[i] = NextGaussian(random);
+
+                var y = new double[n];
+                for (int i = 0; i < n; i++)
+                {
+                    double total = 0.0;
+                    for (int j = 0; j <= i; j++) total += factor[i, j] * z[j];
+                    y[i] = total;
+                }
+
+                var point = new Vector<T>(n);
+                for (int i = 0; i < n; i++)
+                {
+                    point[i] = NumOps.FromDouble(mean[i] + sigma * y[i]);
+                }
+
+                draws[k] = y;
+                values[k] = Convert.ToDouble(search.Evaluate(point));
+            }
+
+            var order = Enumerable.Range(0, lambda).OrderBy(k => values[k]).ToArray();
+
+            var weightedDraw = new double[n];
+            for (int i = 0; i < n; i++)
+            {
+                double drawTotal = 0.0;
+                for (int r = 0; r < mu; r++) drawTotal += weights[r] * draws[order[r]][i];
+
+                weightedDraw[i] = drawTotal;
+                mean[i] += sigma * drawTotal;
+            }
+
+            // The conjugate path needs C^(-1/2) times the mean shift; with the Cholesky factor
+            // that is a forward substitution against the weighted draw.
+            var conjugate = CmaForwardSolve(factor, weightedDraw, n);
+
+            double pathSigmaNorm = 0.0;
+            for (int i = 0; i < n; i++)
+            {
+                pathSigma[i] = (1.0 - cSigma) * pathSigma[i]
+                    + Math.Sqrt(cSigma * (2.0 - cSigma) * muEffective) * conjugate[i];
+
+                pathSigmaNorm += pathSigma[i] * pathSigma[i];
+            }
+
+            pathSigmaNorm = Math.Sqrt(pathSigmaNorm);
+
+            // The Heaviside switch stops a long path inflating the covariance just after the step
+            // size has grown, which would count the same evidence twice.
+            double heaviside =
+                pathSigmaNorm / Math.Sqrt(1.0 - Math.Pow(1.0 - cSigma, 2.0 * (generation + 1)))
+                    < (1.4 + 2.0 / (n + 1.0)) * expectedNorm ? 1.0 : 0.0;
+
+            for (int i = 0; i < n; i++)
+            {
+                pathC[i] = (1.0 - cc) * pathC[i]
+                    + heaviside * Math.Sqrt(cc * (2.0 - cc) * muEffective) * weightedDraw[i];
+            }
+
+            double decay = 1.0 - c1 - cmu + (1.0 - heaviside) * c1 * cc * (2.0 - cc);
+
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < n; j++)
+                {
+                    double rankMu = 0.0;
+                    for (int r = 0; r < mu; r++)
+                    {
+                        rankMu += weights[r] * draws[order[r]][i] * draws[order[r]][j];
+                    }
+
+                    covariance[i, j] = decay * covariance[i, j]
+                        + c1 * pathC[i] * pathC[j]
+                        + cmu * rankMu;
+                }
+            }
+
+            sigma *= Math.Exp((cSigma / dSigma) * (pathSigmaNorm / expectedNorm - 1.0));
+
+            if (double.IsNaN(sigma) || double.IsInfinity(sigma) || sigma <= 0.0) break;
+        }
+
+        return search.BestPoint;
+    }
+
+    /// <summary>An identity matrix as plain doubles, for the sampling arithmetic.</summary>
+    private static double[,] CmaIdentity(int n)
+    {
+        var identity = new double[n, n];
+        for (int i = 0; i < n; i++) identity[i, i] = 1.0;
+        return identity;
+    }
+
+    /// <summary>
+    /// The lower Cholesky factor, with a diagonal shift if the covariance has drifted out of
+    /// positive definiteness - which rounding will eventually cause on a long run.
+    /// </summary>
+    private static double[,] CmaCholesky(double[,] matrix, int n)
+    {
+        for (double shift = 0.0; ; shift = shift == 0.0 ? 1e-12 : shift * 100.0)
+        {
+            var factor = new double[n, n];
+            bool ok = true;
+
+            for (int i = 0; i < n && ok; i++)
+            {
+                for (int j = 0; j <= i; j++)
+                {
+                    double total = matrix[i, j] + (i == j ? shift : 0.0);
+                    for (int k = 0; k < j; k++) total -= factor[i, k] * factor[j, k];
+
+                    if (i == j)
+                    {
+                        if (total <= 0.0 || double.IsNaN(total)) { ok = false; break; }
+                        factor[i, j] = Math.Sqrt(total);
+                    }
+                    else
+                    {
+                        factor[i, j] = total / factor[j, j];
+                    }
+                }
+            }
+
+            if (ok) return factor;
+            if (shift > 1.0) return CmaIdentity(n);
+        }
+    }
+
+    /// <summary>Solves L z = y, which applies C^(-1/2) to y.</summary>
+    private static double[] CmaForwardSolve(double[,] factor, double[] target, int n)
+    {
+        var solution = new double[n];
+
+        for (int i = 0; i < n; i++)
+        {
+            double total = target[i];
+            for (int j = 0; j < i; j++) total -= factor[i, j] * solution[j];
+            solution[i] = factor[i, i] == 0.0 ? 0.0 : total / factor[i, i];
+        }
+
+        return solution;
+    }
+
 }

@@ -73,13 +73,19 @@ public static class SSMQuantizationHelper<T>
         // Quantize all parameters using min-max quantization
         var quantized = QuantizeVector(parameters, bitWidth);
 
-        // If protecting D parameter and this is a MambaBlock, restore D values
-        if (protectDParameter && layer is MambaBlock<T> mambaBlock)
-        {
-            RestoreDParameter(quantized, mambaBlock);
-        }
+        // Capture D BEFORE the write, then restore it through the block afterwards. The previous
+        // approach patched D inside the flat vector at an offset computed by hand from the layer's
+        // dimensions; that arithmetic disagreed with the parameter registry's real ordering, so it
+        // overwrote some other slice and left D quantized (a D of 1 came back as 0.94967109).
+        var protectedBlock = protectDParameter ? layer as MambaBlock<T> : null;
+        var originalD = protectedBlock?.GetDParameter();
 
         layer.SetParameters(quantized);
+
+        if (protectedBlock is not null && originalD is not null)
+        {
+            protectedBlock.SetDParameter(originalD);
+        }
     }
 
     /// <summary>
@@ -240,26 +246,4 @@ public static class SSMQuantizationHelper<T>
         return quantized;
     }
 
-    private static void RestoreDParameter(Vector<T> quantized, MambaBlock<T> block)
-    {
-        // The D parameter in MambaBlock is stored at a specific offset in the parameter vector.
-        // We need to find it and restore the original values.
-        var original = block.GetParameters();
-        var dParam = block.GetDParameter();
-
-        // Calculate the offset of D parameter in the flat parameter vector
-        // Order: inputProj weights+bias, conv weights+bias, xProj weights, dtProj weights+bias, aLog, D, outProj weights+bias
-        int innerDim = block.InnerDimension;
-        int offset = block.ModelDimension * (innerDim * 2) + (innerDim * 2) +  // input proj
-                      innerDim * block.ConvKernelSize + innerDim +               // conv
-                      innerDim * (block.DtRank + block.StateDimension * 2) +    // x_proj
-                      block.DtRank * innerDim + innerDim +                       // dt_proj
-                      innerDim * block.StateDimension;                           // a_log
-
-        // Restore D parameter values from original
-        for (int i = 0; i < dParam.Length; i++)
-        {
-            quantized[offset + i] = original[offset + i];
-        }
-    }
 }

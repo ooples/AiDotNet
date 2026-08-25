@@ -188,6 +188,25 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Every weight in this block is sized from constructor arguments, so the parameter surface is
+    /// fully known before the first forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>modelDimension</c>, <c>stateDimension</c>, <c>expandFactor</c>, <c>convKernelSize</c> and
+    /// <c>dtRank</c> all arrive in the constructor, and <c>GetParameters()</c> returns the full
+    /// count immediately — 8,544 values for <c>MambaBlock&lt;float&gt;(4, 32, 8)</c>.
+    /// </para>
+    /// <para>
+    /// Without this, <c>IsShapeResolved</c> stays false until a first input arrives and
+    /// <see cref="LayerBase{T}.SetParameters"/> treats the block as shape-DEFERRED: a wrong-length
+    /// vector is parked as a pending restore instead of being rejected. Loading mismatched weights
+    /// then fails silently at construction and surfaces much later, somewhere unrelated.
+    /// </para>
+    /// </remarks>
+    protected override bool ParametersAreConstructionSized => true;
+
+    /// <summary>
     /// Gets the model dimension (d_model) of this Mamba block.
     /// </summary>
     public int ModelDimension => _modelDimension;
@@ -802,6 +821,42 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
     /// Gets a copy of the D skip connection parameter for external inspection.
     /// </summary>
     public Tensor<T> GetDParameter() => _dParam.Clone();
+
+    /// <summary>
+    /// Overwrites the D (skip-connection) parameter in place.
+    /// </summary>
+    /// <param name="values">The replacement values; must match the current D length.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="values"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when the length does not match D.</exception>
+    /// <remarks>
+    /// <see cref="GetDParameter"/> returns a CLONE, so a caller holding it cannot write back through
+    /// it. Quantization needs to: D is the residual skip term in Gu and Dao's selective SSM, and
+    /// rounding it to 4 bits changes the layer's identity path, which is why
+    /// <c>SSMQuantizationHelper.QuantizeSSMLayer</c> offers to protect it.
+    ///
+    /// That protection previously worked by hand-computing D's offset into the flat parameter
+    /// vector from the layer's dimensions. The arithmetic did not match the registry's actual
+    /// ordering, so it restored the wrong slice and left D quantized anyway (1 came back as
+    /// 0.94967109). Going through the tensor removes the offset arithmetic entirely.
+    /// </remarks>
+    public void SetDParameter(Tensor<T> values)
+    {
+        if (values is null)
+        {
+            throw new ArgumentNullException(nameof(values));
+        }
+
+        if (values.Length != _dParam.Length)
+        {
+            throw new ArgumentException(
+                $"D has {_dParam.Length} values but {values.Length} were supplied.", nameof(values));
+        }
+
+        for (int i = 0; i < _dParam.Length; i++)
+        {
+            _dParam[i] = values[i];
+        }
+    }
 
     /// <summary>
     /// Gets the current hidden state from the last forward pass, if available.

@@ -34,9 +34,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new AttentionNetworkOptions { HiddenSize = 256, NumHeads = 8 };
-/// var model = new AttentionNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 10, 64 });
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     InputType.TwoDimensional, NeuralNetworkTaskType.Regression,
+///     inputHeight: 10, inputWidth: 64, outputSize: 4);
+///
+/// var options = new AttentionNetworkOptions { HeadCount = 8, EncoderBlockCount = 3 };
+/// var model = new AttentionNetwork&lt;float&gt;(architecture, sequenceLength: 10, embeddingSize: 64, options: options);
+///
+/// var input = Tensor&lt;float&gt;.Random(new[] { 10, 64 });   // (sequenceLength, embeddingSize)
 /// var output = model.Predict(input);
 /// </code>
 /// </example>
@@ -147,8 +152,18 @@ public partial class AttentionNetwork<T> : SequenceModelLayoutBase<T>, IAuxiliar
     /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The architecture describes a sequence of 32 elements, each already represented by a 64-wide
+    /// embedding, producing 128 outputs. Those three numbers agree with each other on purpose: the
+    /// declared input shape IS <c>(sequenceLength, embeddingSize)</c>. The previous default declared a
+    /// one-dimensional input of 128 alongside a 32-by-64 sequence, which is 2048 values, and nothing
+    /// reconciled the two.
+    /// </para>
+    /// </remarks>
     public AttentionNetwork()
-        : this(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 128, outputSize: 128),
+        : this(new NeuralNetworkArchitecture<T>(InputType.TwoDimensional, NeuralNetworkTaskType.Regression,
+                   inputHeight: 32, inputWidth: 64, outputSize: 128),
                sequenceLength: 32, embeddingSize: 64)
     {
     }
@@ -234,9 +249,92 @@ public partial class AttentionNetwork<T> : SequenceModelLayoutBase<T>, IAuxiliar
         }
         else
         {
-            // Use default layer configuration if no layers are provided
-            Layers.AddRange(LayerHelper<T>.CreateDefaultAttentionLayers(Architecture));
+            // Built here rather than by LayerHelper.CreateDefaultAttentionLayers, which cannot see
+            // this network's sequence length or embedding size. That helper reads everything it
+            // needs out of architecture.GetInputShape()[0] -- using the single number as the input
+            // size, the embedding VOCABULARY size and the sequence length at once -- and hard-codes
+            // a 128-wide embedding. Applied here it discarded the constructor's arguments entirely:
+            // a network asked for embeddingSize 32 got a 128-wide stack, and the vocabulary it
+            // inferred rejected every continuous input as an out-of-range token index. This network
+            // is documented as taking ALREADY-EMBEDDED input of shape (sequenceLength,
+            // embeddingSize) and takes no vocabulary parameter, so there is no token lookup to do.
+            Layers.AddRange(CreateDefaultEncoderStack());
         }
+    }
+
+    /// <summary>
+    /// Builds the default encoder stack from this network's own sequence length and embedding size.
+    /// </summary>
+    /// <returns>Positional encoding, the transformer encoder blocks, then the output projection.</returns>
+    /// <remarks>
+    /// <para>
+    /// The stack follows Vaswani et al. (2017), "Attention Is All You Need": sinusoidal positional
+    /// encoding added to the incoming embeddings (§3.5), then <see cref="AttentionNetworkOptions.EncoderBlockCount"/>
+    /// identical encoder blocks, each of which is multi-head self-attention and a position-wise
+    /// feed-forward network, both wrapped in residual connections and layer normalization (§3.1).
+    /// A dense projection produces the output the task asks for.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the default assembly line the network builds when you do not
+    /// hand it your own layers.
+    ///
+    /// 1. Positional encoding stamps each position in the sequence, because attention on its own has
+    ///    no notion of order -- without it, a shuffled sequence would look identical.
+    /// 2. Each encoder block lets every element look at every other element and then think about what
+    ///    it saw.
+    /// 3. The final dense layer turns the processed sequence into the answer -- class scores for a
+    ///    classification task, numbers for a regression one.
+    ///
+    /// There is no embedding lookup here: this network expects input that has ALREADY been turned into
+    /// vectors, which is what the <c>embeddingSize</c> you pass to the constructor describes.
+    /// </para>
+    /// </remarks>
+    private IEnumerable<ILayer<T>> CreateDefaultEncoderStack()
+    {
+        int headCount = ResolveHeadCount(_embeddingSize, _options.HeadCount);
+        int feedForwardDim = _embeddingSize * _options.FeedForwardExpansion;
+
+        yield return new InputLayer<T>([_sequenceLength, _embeddingSize]);
+
+        yield return new PositionalEncodingLayer<T>(_sequenceLength, _embeddingSize);
+
+        for (int i = 0; i < _options.EncoderBlockCount; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(headCount, feedForwardDim, _embeddingSize);
+        }
+
+        yield return new DenseLayer<T>(
+            Architecture.OutputSize,
+            NeuralNetworkHelper<T>.GetDefaultActivationFunction(Architecture.TaskType));
+    }
+
+    /// <summary>
+    /// Picks a head count that divides the embedding size.
+    /// </summary>
+    /// <param name="embeddingSize">The width of each element's representation.</param>
+    /// <param name="requested">The head count asked for in the options.</param>
+    /// <returns>The largest divisor of <paramref name="embeddingSize"/> not exceeding <paramref name="requested"/>.</returns>
+    /// <remarks>
+    /// <para>
+    /// Multi-head attention splits the embedding evenly across heads, so the head count must divide the
+    /// embedding size exactly; <see cref="TransformerEncoderLayer{T}"/> throws otherwise. Rather than
+    /// refuse to build for an embedding size that is not a multiple of eight, the default stack steps
+    /// down to the nearest head count that does divide it -- one head in the worst case, which is
+    /// ordinary single-head attention and still correct.
+    /// </para>
+    /// </remarks>
+    private static int ResolveHeadCount(int embeddingSize, int requested)
+    {
+        int upper = Math.Min(Math.Max(requested, 1), Math.Max(embeddingSize, 1));
+
+        for (int heads = upper; heads > 1; heads--)
+        {
+            if (embeddingSize % heads == 0)
+            {
+                return heads;
+            }
+        }
+
+        return 1;
     }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks

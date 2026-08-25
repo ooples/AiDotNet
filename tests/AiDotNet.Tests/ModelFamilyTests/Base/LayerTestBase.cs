@@ -867,41 +867,51 @@ public abstract class LayerTestBase<T>
             var restoredTensor = restoredTensors[tensorIndex];
             Assert.Equal(originalTensor.Shape.ToArray(), restoredTensor.Shape.ToArray());
 
-            // SparseTensor deliberately rejects flat indexing because a flat coordinate includes
-            // structural zeros that are not stored or trainable. Serialization still has to
-            // preserve both those zeros and the stored values, so compare a dense view here rather
-            // than weakening the check to the nnz payload alone.
-            var originalComparable = originalTensor is SparseTensor<T> originalSparse
-                ? originalSparse.ToDense()
-                : originalTensor;
-            var restoredComparable = restoredTensor is SparseTensor<T> restoredSparse
-                ? restoredSparse.ToDense()
-                : restoredTensor;
-            for (int i = 0; i < originalComparable.Length; i++)
+            // Sparse-storage tensors have no flat indexer: Tensor<T>.this[int] routes to
+            // TensorBase<T>.GetFlat, which throws "GetFlat is not supported on sparse tensors.
+            // Use SparseTensor-specific APIs or call ToDense() first." That is a deliberate API
+            // contract (a CSR/CSC store has no contiguous dense view), not a defect -- LayerBase
+            // itself detects the same case by type name and routes around it. SparseLinearLayer
+            // holds exactly such a tensor, so this loop crashed rather than compared. Densify
+            // first: the comparison is over identical values through a supported accessor, so
+            // nothing is weakened.
+            originalTensor = Densified(originalTensor);
+            restoredTensor = Densified(restoredTensor);
+
+            for (int i = 0; i < originalTensor.Length; i++)
             {
-                double originalValue = ToD(originalComparable[i]);
-                double restoredValue = ToD(restoredComparable[i]);
-                Assert.True(EqualityComparer<T>.Default.Equals(
-                        originalComparable[i], restoredComparable[i]),
+                double originalValue = ToD(originalTensor[i]);
+                double restoredValue = ToD(restoredTensor[i]);
+                Assert.True(EqualityComparer<T>.Default.Equals(originalTensor[i], restoredTensor[i]),
                     $"Trainable tensor {tensorIndex}[{i}] differs after serialization roundtrip: " +
                     $"original={originalValue:G17}, deserialized={restoredValue:G17}");
             }
         }
 
-        // Stateful layers advance on every forward. Compare both layers from their declared reset
-        // state; otherwise this assertion compares step 1 with step 2 and blames serialization for
-        // legitimate recurrent/spiking state progression.
+        // Reset before replaying, exactly as the deserialized layer is reset below. originalOutput
+        // was produced by a freshly constructed layer, so replaying WITHOUT a reset compares a
+        // fresh-state forward against an advanced-state one and a stateful layer fails whatever
+        // serialization did -- ReservoirLayer measured 0.14323286712169647 -> 0.53482985496520996
+        // and SpikingLayer's membrane potential crossed threshold, 0 -> 1. That is the layer being
+        // recurrent, not serialization mutating it, and the check could not tell the two apart.
+        // Resetting restores the like-for-like comparison; parameters are untouched by ResetState,
+        // so a serialization that really did perturb the weights still fails here.
         layer.ResetState();
         var originalReplay = layer.Forward(input).Clone();
         for (int i = 0; i < originalOutput.Length; i++)
         {
+            // Direct equality first, for the same reason the deserialized comparison below does it:
+            // Math.Abs(-inf - -inf) is NaN and NaN < 1e-12 is false, so two IDENTICAL infinities
+            // were reported as differing. ALiBiPositionalBiasLayer legitimately emits -inf at masked
+            // positions and failed with "before=-inf, after=-inf". NaN still fails, because == is
+            // false for NaN and a NaN output is a real defect rather than something to wave through.
             if (EqualityComparer<T>.Default.Equals(originalOutput[i], originalReplay[i]))
             {
                 continue;
             }
             double originalValue = ToD(originalOutput[i]);
             double replayValue = ToD(originalReplay[i]);
-            Assert.True(Math.Abs(originalValue - replayValue) < 1e-12,
+            Assert.True(originalValue == replayValue || Math.Abs(originalValue - replayValue) < 1e-12,
                 $"Serializing the layer changed its own output at [{i}]: " +
                 $"before={originalValue:G17}, after={replayValue:G17}");
         }
@@ -930,6 +940,19 @@ public abstract class LayerTestBase<T>
                 $"original={originalValue:G17}, deserialized={deserializedValue:G17}");
         }
     }
+
+    /// <summary>
+    /// Returns a flat-indexable view of <paramref name="tensor"/>, densifying CSR/CSC storage.
+    /// </summary>
+    /// <remarks>
+    /// <c>LayerBase.IsSparseTensor</c> sniffs the type name to avoid binding a production path to a
+    /// Tensors-side concrete type. A test can afford the direct reference, and a compile-checked
+    /// pattern match is the better tool here: <c>SparseTensor&lt;T&gt;</c> derives from
+    /// <c>Tensor&lt;T&gt;</c> and exposes <c>ToDense()</c>, so a rename breaks the build instead of
+    /// silently falling through to the throwing indexer.
+    /// </remarks>
+    private static Tensor<T> Densified(Tensor<T> tensor)
+        => tensor is AiDotNet.Tensors.LinearAlgebra.SparseTensor<T> sparse ? sparse.ToDense() : tensor;
 
     // =========================================================================
     // INVARIANT 10: ResetState doesn't break the layer

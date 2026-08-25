@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 
 namespace AiDotNet.Regression;
@@ -237,25 +237,11 @@ public partial class StepwiseRegression<T> : RegressionBase<T>
         ValidationHelper<T>.ValidateInputData(x, y);
         TrainingFeatureCount = x.Columns;
 
-        // Use OLS for reliable fast predictions
-        if (Options.UseIntercept)
-        {
-            var xWithInt = x.AddConstantColumn(NumOps.One);
-            var xTx = xWithInt.Transpose().Multiply(xWithInt);
-            var xTy = xWithInt.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-            var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
-            Intercept = solution[0];
-            Coefficients = solution.Slice(1, x.Columns);
-            return;
-        }
-        var xTx2 = x.Transpose().Multiply(x);
-        var xTy2 = x.Transpose().Multiply(y);
-        for (int i = 0; i < xTx2.Rows; i++)
-            xTx2[i, i] = NumOps.Add(xTx2[i, i], NumOps.FromDouble(1e-10));
-        Coefficients = SolveSystem(xTx2, xTy2);
-        if (Coefficients.Length > 0) return;
+        // This method previously fitted ORDINARY LEAST SQUARES and returned immediately. The
+        // guard that followed it was written as a condition but is always true for any real
+        // problem, so it acted as an unconditional return and left the real estimation below
+        // unreachable: callers received a plain linear least-squares fit from a model named for a
+        // different algorithm. The real estimation now runs.
 
         if (_options.Method == StepwiseMethod.Forward)
         {
@@ -275,7 +261,21 @@ public partial class StepwiseRegression<T> : RegressionBase<T>
         var finalRegression = new MultipleRegression<T>(Options, Regularization);
         finalRegression.Train(selectedX, y);
 
-        Coefficients = finalRegression.Coefficients;
+        // Scatter the fitted coefficients back into the ORIGINAL feature space, leaving zero for
+        // features selection rejected. The fitted vector is ordered by SELECTION order, not feature
+        // index — forward selection appends the strongest feature first, so it might be ordered
+        // [2, 0, 1]. Exposing it that way made Coefficients[j] mean "the j-th feature chosen"
+        // rather than "feature j", which is both a misleading public contract and an outright
+        // prediction bug: when selection kept every feature the lengths matched, so Predict's fast
+        // path applied those coefficients to the columns in their original order and paired every
+        // one with the wrong feature.
+        var expanded = new Vector<T>(x.Columns);
+        for (int i = 0; i < _selectedFeatures.Count; i++)
+        {
+            expanded[_selectedFeatures[i]] = finalRegression.Coefficients[i];
+        }
+
+        Coefficients = expanded;
         Intercept = finalRegression.Intercept;
     }
 
@@ -293,20 +293,18 @@ public partial class StepwiseRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        // OLS uses all features directly
-        if (Coefficients.Length == input.Columns)
-        {
-            return base.Predict(input);
-        }
-
-        if (_selectedFeatures.Count == 0 || Coefficients.Length == 0)
+        if (Coefficients.Length == 0)
         {
             return new Vector<T>(input.Rows);
         }
 
-        // Filter input to only use selected features
-        Matrix<T> filteredInput = input.GetColumns(_selectedFeatures);
-        return base.Predict(filteredInput);
+        // Coefficients are expressed in the ORIGINAL feature space, carrying zero for every feature
+        // selection rejected, so the full input is used directly and rejected features contribute
+        // nothing. This replaces a length-comparison heuristic that decided between the full input
+        // and a filtered one: when selection happened to keep every feature the lengths matched and
+        // the filtered branch was skipped, applying selection-ordered coefficients to
+        // original-ordered columns.
+        return base.Predict(input);
     }
 
     /// <summary>
@@ -340,12 +338,13 @@ public partial class StepwiseRegression<T> : RegressionBase<T>
 
         while (_selectedFeatures.Count < Math.Min(_options.MaxFeatures, x.Columns))
         {
-            var (bestFeature, bestScore) = EvaluateFeatures(x, y, remainingFeatures, true);
+            var (bestFeaturePosition, bestScore) = EvaluateFeatures(x, y, remainingFeatures, true);
 
-            if (bestFeature != -1)
+            if (bestFeaturePosition != -1)
             {
+                int bestFeature = remainingFeatures[bestFeaturePosition];
                 _selectedFeatures.Add(bestFeature);
-                remainingFeatures.Remove(bestFeature);
+                remainingFeatures.RemoveAt(bestFeaturePosition);
 
                 if (NumOps.LessThan(bestScore, NumOps.FromDouble(_options.MinImprovement)))
                 {

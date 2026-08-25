@@ -75,26 +75,26 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
 
     // A parameter stored as real/imaginary pairs: [innerDim, stateDim, 2]
     // A = a_real + i * a_imag, initialized with S4D-Lin: A_n = -1/2 + n*i
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _aReal;
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _aImag;
 
     // B projection: [modelDim, innerDim * stateDim] (complex, stored as real/imag pairs)
     // In S4D-Lin, B is typically initialized to ones.
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _bReal;
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _bImag;
 
     // C projection: [innerDim * stateDim, modelDim] (complex, learned)
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _cReal;
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _cImag;
 
     // D: [innerDim] (skip connection, real-valued)
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _dParam;
 
     // Input projection: [modelDim, innerDim]
@@ -114,7 +114,7 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Delta (discretization step size): [innerDim] (learned, stored as log for positivity)
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.ScaleParameters)]
     private Tensor<T> _logDelta;
 
     // Cached values for backward pass
@@ -1135,7 +1135,19 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
         _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
         _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
 
-        // Register trainable parameters for tape-based autodiff
+        // Register trainable parameters for tape-based autodiff. The state-space core belongs here
+        // with the projections: UpdateParameters above applies gradients to A, B, C, D and Delta, so
+        // they are trained on the legacy path, but registering only the projections made them
+        // invisible to the tape path -- which trains exclusively from registered parameters -- and to
+        // GetParameters/SetParameters, and therefore to serialization.
+        RegisterTrainableParameter(_aReal, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_aImag, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bReal, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bImag, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_cReal, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_cImag, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_dParam, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_logDelta, PersistentTensorRole.ScaleParameters);
         RegisterTrainableParameter(_inputProjectionWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_inputProjectionBias, PersistentTensorRole.Biases);
         RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);

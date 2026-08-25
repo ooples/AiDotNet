@@ -108,7 +108,20 @@ public partial class ACEStep<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     {
         _options = options ?? new ACEStepOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // ACEStepOptions.LearningRate was declared and then read by nothing, so the optimizer ran at
+        // AdamWOptimizerOptions' own default of 1e-3 -- ten times the rate this model documents and
+        // the rate ACE-Step trains its diffusion transformer at. That went unnoticed while the
+        // TransformerEncoderBlock's feed-forward projections were never materialized into the
+        // trainable set: with those weights sitting out, 1e-3 did not diverge. Once lazy sublayer
+        // materialization was reconnected the block's parameter count went 16,704 -> 33,280, the
+        // feed-forward weights started receiving updates, and five iterations at 1e-3 left the loss
+        // worse than the untrained baseline (6.371 against 4.836). Honour the configured rate.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }

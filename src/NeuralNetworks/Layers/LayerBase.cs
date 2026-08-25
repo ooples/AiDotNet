@@ -9474,4 +9474,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     #endregion
+
+    protected virtual void OnParameterValuesChanged()
+    {
+    }
+
+    /// <summary>Rebinds a lazy layer to the shape implied by a parameter count, if it can.</summary>
+    protected virtual bool TryRebindForParameterCount(int parameterCount) => false;
+
+    /// <summary>Whether this count is achievable at SOME input shape, checked while unresolved.</summary>
+    protected virtual bool CanEverAcceptParameterCount(int parameterCount) => true;
 }

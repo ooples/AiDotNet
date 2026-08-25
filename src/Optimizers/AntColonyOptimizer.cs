@@ -24,7 +24,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public partial class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public partial class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IDerivativeFreeFunctionOptimizer<T>
 {
     /// <summary>
     /// Options specific to the Ant Colony Optimization algorithm.
@@ -416,4 +416,172 @@ public partial class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, T
     {
         return _antColonyOptions;
     }
+
+    /// <summary>
+    /// Creates an ant colony optimizer for minimizing a plain function, with no model attached.
+    /// </summary>
+    /// <param name="options">The optimizer-specific options. If null, defaults are used.</param>
+    public static AntColonyOptimizer<T, TInput, TOutput> CreateForFunction(
+        AntColonyOptimizationOptions<T, TInput, TOutput>? options = null)
+        => new(options);
+
+    /// <summary>Backs <see cref="CreateForFunction"/>: the same setup with no model.</summary>
+    private AntColonyOptimizer(AntColonyOptimizationOptions<T, TInput, TOutput>? options)
+        : base(null, options ?? new())
+    {
+        _antColonyOptions = options ?? new AntColonyOptimizationOptions<T, TInput, TOutput>();
+        _currentPheromoneEvaporationRate = NumOps.Zero;
+        _currentPheromoneIntensity = NumOps.Zero;
+
+        InitializeAdaptiveParameters();
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// ACO-R, the extension of ant colony optimization to continuous domains (Socha and Dorigo,
+    /// <i>European Journal of Operational Research</i> 185, 2008). The discrete algorithm's
+    /// pheromone table becomes an ARCHIVE of the best solutions found, and an ant builds a new
+    /// solution by choosing one archived solution as a guide and sampling around it.
+    /// </para>
+    /// <para>
+    /// The width it samples with is the average distance from that guide to the rest of the
+    /// archive, so the colony contracts automatically as the archive converges - the same
+    /// self-scaling property differential evolution gets from its population, arrived at by a
+    /// different route.
+    /// </para>
+    /// <para>
+    /// Evaporation appears as the archive's fixed size: a new solution enters only by displacing
+    /// the worst, so old information leaves exactly as fast as new information arrives.
+    /// </para>
+    /// <para>
+    /// <paramref name="tolerance"/> stops the run once the archive's spread falls below it.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Minimize(
+        Vector<T> initialParameters, Func<Vector<T>, T> objective, int maxIterations, T tolerance)
+    {
+        ValidateMinimizeArguments(initialParameters, objective, maxIterations);
+
+        var search = new DerivativeFreeSearch(objective, NumOps, initialParameters);
+        var random = CreateSearchRandom();
+
+        int n = initialParameters.Length;
+        int ants = Math.Max(2, _antColonyOptions.AntCount);
+        int archiveSize = Math.Max(4, ants);
+
+        double stop = Convert.ToDouble(tolerance);
+
+        // The locality parameter q of Socha and Dorigo: small values concentrate the guide choice
+        // on the very best archived solutions, larger ones spread it out.
+        const double locality = 0.2;
+
+        // Socha and Dorigo's xi, which scales the sampling width against the archive's spread.
+        // Deliberately NOT the pheromone evaporation rate: that option governs the discrete
+        // algorithm's pheromone decay, a different quantity on a different scale, and using it
+        // here collapses the archive before it has explored anything.
+        const double widthScale = 0.85;
+
+        var archive = new List<(Vector<T> Point, double Value)>();
+
+        for (int k = 0; k < archiveSize; k++)
+        {
+            var point = new Vector<T>(n);
+            for (int i = 0; i < n; i++)
+            {
+                double offset = k == 0 ? 0.0 : NextGaussian(random);
+                point[i] = NumOps.Add(initialParameters[i], NumOps.FromDouble(offset));
+            }
+
+            archive.Add((point, Convert.ToDouble(search.Evaluate(point))));
+        }
+
+        archive.Sort((left, right) => left.Value.CompareTo(right.Value));
+
+        // Rank weights: a Gaussian over the rank, so the best archived solution guides most often.
+        var weights = new double[archiveSize];
+        double weightTotal = 0.0;
+
+        for (int rank = 0; rank < archiveSize; rank++)
+        {
+            double scale = locality * archiveSize;
+            weights[rank] = Math.Exp(-(rank * rank) / (2.0 * scale * scale))
+                / (scale * Math.Sqrt(2.0 * Math.PI));
+            weightTotal += weights[rank];
+        }
+
+        for (int iteration = 0; iteration < maxIterations; iteration++)
+        {
+            for (int ant = 0; ant < ants; ant++)
+            {
+                int guide = ChooseGuide(random, weights, weightTotal);
+                var candidate = new Vector<T>(n);
+
+                for (int i = 0; i < n; i++)
+                {
+                    // The sampling width is the mean distance from the guide to the rest of the
+                    // archive, so the colony narrows as the archive agrees.
+                    double spread = 0.0;
+                    for (int other = 0; other < archiveSize; other++)
+                    {
+                        spread += Math.Abs(Convert.ToDouble(
+                            NumOps.Subtract(archive[other].Point[i], archive[guide].Point[i])));
+                    }
+
+                    spread = widthScale * spread / Math.Max(1, archiveSize - 1);
+
+                    candidate[i] = NumOps.Add(
+                        archive[guide].Point[i], NumOps.FromDouble(spread * NextGaussian(random)));
+                }
+
+                double value = Convert.ToDouble(search.Evaluate(candidate));
+
+                if (value < archive[archiveSize - 1].Value)
+                {
+                    archive[archiveSize - 1] = (candidate, value);
+                    archive.Sort((left, right) => left.Value.CompareTo(right.Value));
+                }
+            }
+
+            if (ArchiveSpread(archive, n) < stop) break;
+        }
+
+        return search.BestPoint;
+    }
+
+    /// <summary>Picks an archived solution to guide an ant, by its rank weight.</summary>
+    private static int ChooseGuide(Random random, double[] weights, double total)
+    {
+        double target = random.NextDouble() * total;
+        double running = 0.0;
+
+        for (int rank = 0; rank < weights.Length; rank++)
+        {
+            running += weights[rank];
+            if (running >= target) return rank;
+        }
+
+        return weights.Length - 1;
+    }
+
+    /// <summary>The mean absolute deviation of the archive, coordinate by coordinate.</summary>
+    private double ArchiveSpread(List<(Vector<T> Point, double Value)> archive, int n)
+    {
+        double total = 0.0;
+
+        for (int i = 0; i < n; i++)
+        {
+            double mean = 0.0;
+            foreach (var entry in archive) mean += Convert.ToDouble(entry.Point[i]);
+            mean /= archive.Count;
+
+            foreach (var entry in archive)
+            {
+                total += Math.Abs(Convert.ToDouble(entry.Point[i]) - mean);
+            }
+        }
+
+        return total / (archive.Count * n);
+    }
+
 }

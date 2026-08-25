@@ -29,7 +29,7 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public partial class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public partial class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IDerivativeFreeFunctionOptimizer<T>
 {
     /// <summary>
     /// The options specific to the Genetic Algorithm.
@@ -223,4 +223,150 @@ public partial class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBa
     {
         return _geneticOptions;
     }
+
+    /// <summary>
+    /// Creates a genetic algorithm optimizer for minimizing a plain function, with no model.
+    /// </summary>
+    /// <param name="options">The optimizer-specific options. If null, defaults are used.</param>
+    public static GeneticAlgorithmOptimizer<T, TInput, TOutput> CreateForFunction(
+        GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>? options = null)
+        => new(null, options);
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// A real-coded genetic algorithm: tournament selection, blend crossover, Gaussian mutation
+    /// and elitism. The encoding is the parameter vector itself rather than a bit string, which is
+    /// the usual choice for continuous problems (Herrera, Lozano and Verdegay, <i>Artificial
+    /// Intelligence Review</i> 12, 1998).
+    /// </para>
+    /// <para>
+    /// Elitism — carrying the best member forward untouched — is what makes the best value
+    /// monotone. Without it a genetic algorithm can and does lose its best solution to the
+    /// randomness that is otherwise the point of the method.
+    /// </para>
+    /// <para>
+    /// <paramref name="tolerance"/> stops the run once the population's spread falls below it.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Minimize(
+        Vector<T> initialParameters, Func<Vector<T>, T> objective, int maxIterations, T tolerance)
+    {
+        ValidateMinimizeArguments(initialParameters, objective, maxIterations);
+
+        var search = new DerivativeFreeSearch(objective, NumOps, initialParameters);
+        var random = CreateSearchRandom();
+
+        int dimension = initialParameters.Length;
+        int populationSize = Math.Max(4, _geneticOptions.PopulationSize);
+
+        double crossoverRate = _geneticOptions.CrossoverRate;
+        double mutationRate = _geneticOptions.MutationRate;
+        double stop = Convert.ToDouble(tolerance);
+
+        var population = new Vector<T>[populationSize];
+        var values = new T[populationSize];
+
+        for (int p = 0; p < populationSize; p++)
+        {
+            population[p] = new Vector<T>(dimension);
+
+            for (int i = 0; i < dimension; i++)
+            {
+                double offset = p == 0 ? 0.0 : NextGaussian(random);
+                population[p][i] = NumOps.Add(initialParameters[i], NumOps.FromDouble(offset));
+            }
+
+            values[p] = search.Evaluate(population[p]);
+        }
+
+        for (int generation = 0; generation < maxIterations; generation++)
+        {
+            var next = new Vector<T>[populationSize];
+            var nextValues = new T[populationSize];
+
+            // Elitism: the best member survives unchanged, so the best value cannot go backwards.
+            int elite = 0;
+            for (int p = 1; p < populationSize; p++)
+            {
+                if (NumOps.LessThan(values[p], values[elite])) elite = p;
+            }
+
+            next[0] = population[elite].Clone();
+            nextValues[0] = values[elite];
+
+            for (int p = 1; p < populationSize; p++)
+            {
+                var firstParent = population[Tournament(random, values, populationSize)];
+                var secondParent = population[Tournament(random, values, populationSize)];
+
+                var child = new Vector<T>(dimension);
+
+                for (int i = 0; i < dimension; i++)
+                {
+                    if (random.NextDouble() < crossoverRate)
+                    {
+                        // Blend crossover: a point drawn from the interval the parents span,
+                        // slightly extended so the population can widen as well as narrow.
+                        double low = Convert.ToDouble(firstParent[i]);
+                        double high = Convert.ToDouble(secondParent[i]);
+                        double reach = 0.5 * (high - low);
+
+                        child[i] = NumOps.FromDouble(
+                            low + (1.0 + 2.0 * 0.5) * reach * random.NextDouble()
+                                - 0.5 * reach);
+                    }
+                    else
+                    {
+                        child[i] = firstParent[i];
+                    }
+
+                    if (random.NextDouble() < mutationRate)
+                    {
+                        child[i] = NumOps.Add(child[i], NumOps.FromDouble(NextGaussian(random)));
+                    }
+                }
+
+                next[p] = child;
+                nextValues[p] = search.Evaluate(child);
+            }
+
+            population = next;
+            values = nextValues;
+
+            if (Spread(population, dimension) < stop) break;
+        }
+
+        return search.BestPoint;
+    }
+
+    /// <summary>Picks the better of two randomly drawn members.</summary>
+    private int Tournament(Random random, T[] values, int populationSize)
+    {
+        int first = random.Next(populationSize);
+        int second = random.Next(populationSize);
+
+        return NumOps.LessThan(values[first], values[second]) ? first : second;
+    }
+
+    /// <summary>The mean absolute deviation of the population, coordinate by coordinate.</summary>
+    private double Spread(Vector<T>[] population, int dimension)
+    {
+        double total = 0.0;
+
+        for (int i = 0; i < dimension; i++)
+        {
+            double mean = 0.0;
+            foreach (var member in population) mean += Convert.ToDouble(member[i]);
+            mean /= population.Length;
+
+            foreach (var member in population)
+            {
+                total += Math.Abs(Convert.ToDouble(member[i]) - mean);
+            }
+        }
+
+        return total / (population.Length * dimension);
+    }
+
 }

@@ -1,4 +1,6 @@
+using AiDotNet.Engines;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Autodiff;
@@ -246,6 +248,116 @@ public class ComputationNode<T>
     /// an ingredient was used before you can figure out how much you need of it.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Runs the reverse-mode backward pass from this node, filling in <see cref="Gradient"/> on
+    /// every node that contributed to it.
+    /// </summary>
+    /// <param name="seed">
+    /// The gradient of the quantity being differentiated with respect to this node. Defaults to a
+    /// tensor of ones, which is correct when this node IS that quantity — the derivative of a value
+    /// with respect to itself. Whatever is passed replaces this node's own gradient; it is the
+    /// gradients of the nodes BELOW that accumulate.
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when this node has no value to differentiate.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="seed"/> does not have this node's shape.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// Building a graph with <see cref="TensorOperations{T}"/> records each operation's local
+    /// derivative in its <see cref="BackwardFunction"/>. This method is what actually applies
+    /// them: it orders the graph so every node comes after the nodes it was computed from, then
+    /// walks that order in REVERSE, handing each node's gradient to its inputs.
+    /// </para>
+    /// <para>
+    /// Reversing the order is what makes a single pass sufficient. By the time a node is reached,
+    /// every node that consumed it has already contributed, so its gradient is complete and can be
+    /// passed on. That is the whole of reverse-mode automatic differentiation, and it is why one
+    /// backward pass produces the derivative with respect to every input at once rather than one
+    /// per input.
+    /// </para>
+    /// <para>
+    /// Gradients ACCUMULATE: calling this twice without clearing adds the second result to the
+    /// first. That is deliberate — it is what makes gradient accumulation over micro-batches work
+    /// — so call <see cref="ZeroGradientRecursive"/> between independent backward passes.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the step that computes all the derivatives.
+    ///
+    /// You build up a calculation from operations, then call <c>Backward()</c> on the final result.
+    /// Afterwards, every input you created with <c>requiresGradient: true</c> has its
+    /// <c>Gradient</c> filled in, telling you how much that input affects the final result.
+    ///
+    /// This is what training a neural network does on every step: build the loss, call
+    /// <c>Backward()</c>, and use each parameter's gradient to decide how to change it.
+    ///
+    /// Remember to call <c>ZeroGradientRecursive()</c> before the next batch, or the gradients
+    /// from this one will still be sitting there and get added to.
+    /// </para>
+    /// <para>
+    /// Reference: Linnainmaa, S. (1976). "Taylor expansion of the accumulated rounding error."
+    /// BIT Numerical Mathematics, 16(2), 146-160 — the original reverse accumulation algorithm.
+    /// </para>
+    /// </remarks>
+    public void Backward(Tensor<T>? seed = null)
+    {
+        if (Value is null)
+        {
+            throw new InvalidOperationException(
+                "This node has no value, so there is nothing to differentiate. Build the graph " +
+                "with TensorOperations before calling Backward.");
+        }
+
+        if (seed is not null && !seed._shape.SequenceEqual(Value._shape))
+        {
+            throw new ArgumentException(
+                "The seed gradient must have the same shape as this node's value: expected [" +
+                string.Join(", ", Value._shape) + "] but got [" + string.Join(", ", seed._shape) +
+                "].",
+                nameof(seed));
+        }
+
+        // The seed REPLACES this node's gradient rather than adding to it, and defaults to ones
+        // whatever was here before. Both halves of that matter:
+        //
+        // Accumulating instead would make a second backward pass seed with two and hand the inputs
+        // twice what the first pass did, so repeated passes would grow quadratically rather than
+        // contributing a fixed amount each time.
+        //
+        // Reusing a gradient already present would mean that clearing with ZeroGradientRecursive
+        // and running again silently produced zeros, since clearing leaves a zero tensor and not
+        // an absent one. A caller who wants a particular seed passes it.
+        Gradient = seed ?? Ones(Value._shape);
+
+        var order = TopologicalSort();
+
+        for (int i = order.Count - 1; i >= 0; i--)
+        {
+            var node = order[i];
+
+            // A node with no gradient contributed nothing to this output, so there is nothing to
+            // hand back — skipping it is correct, not a shortcut.
+            if (node.RequiresGradient && node.BackwardFunction is not null && node.Gradient is not null)
+            {
+                node.BackwardFunction(node.Gradient);
+            }
+        }
+    }
+
+    private static Tensor<T> Ones(int[] shape)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var ones = new Tensor<T>(shape);
+
+        for (int i = 0; i < ones.Length; i++)
+        {
+            ones[i] = numOps.One;
+        }
+
+        return ones;
+    }
+
     private List<ComputationNode<T>> TopologicalSort()
     {
         var visited = new HashSet<ComputationNode<T>>();

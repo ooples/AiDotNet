@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
@@ -225,8 +225,6 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// </remarks>
     public override bool SupportsParameterInitialization => false;
 
-    private bool _useOLS;
-
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         if (_randomEffects.Count == 0)
@@ -234,29 +232,11 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
             throw new InvalidOperationException("At least one random effect must be specified. Use AddRandomIntercept() or AddRandomSlope().");
         }
 
-        // Use OLS for reliable predictions on standard regression data
+        // This method previously fitted ORDINARY LEAST SQUARES and returned immediately —
+        // `_useOLS = true` was set unconditionally, making the generalized mixed-effects estimation below
+        // unreachable. A caller asking for a generalized linear mixed model received a plain linear fit, so neither the link function nor the random effects had any effect.
+        // The real estimation now runs.
         TrainingFeatureCount = x.Columns;
-        _useOLS = true;
-        if (Options.UseIntercept)
-        {
-            var xWithInt = x.AddConstantColumn(NumOps.One);
-            var xTx = xWithInt.Transpose().Multiply(xWithInt);
-            var xTy = xWithInt.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-            var solution = SolveSystem(xTx, xTy);
-            Intercept = solution[0];
-            Coefficients = solution.Slice(1, x.Columns);
-        }
-        else
-        {
-            var xTx = x.Transpose().Multiply(x);
-            var xTy = x.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-            Coefficients = SolveSystem(xTx, xTy);
-        }
-        if (_useOLS) return;
 
         _nObservations = x.Rows;
         _nFixedParams = x.Columns - GetGroupingColumnCount();
@@ -281,9 +261,23 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         // Compute variance decomposition
         _varianceDecomposition = ComputeVarianceDecomposition();
 
-        // Set base class coefficients for prediction
-        Coefficients = _fixedEffects ?? new Vector<T>(_nFixedParams);
-        Intercept = NumOps.Zero;
+        // Surface the fitted parameters on the base class. The fixed-effects vector carries the
+        // intercept as its LAST entry (see ExtractFixedEffectsMatrix), so split it out rather than
+        // reporting an intercept of zero alongside a coefficient vector that secretly contains one.
+        if (_fixedEffects is not null && _fixedEffects.Length > 0)
+        {
+            int featureCount = _fixedEffects.Length - 1;
+            var coefficients = new Vector<T>(featureCount);
+            for (int j = 0; j < featureCount; j++) coefficients[j] = _fixedEffects[j];
+
+            Coefficients = coefficients;
+            Intercept = _fixedEffects[featureCount];
+        }
+        else
+        {
+            Coefficients = new Vector<T>(Math.Max(0, _nFixedParams - 1));
+            Intercept = NumOps.Zero;
+        }
     }
 
     /// <summary>
@@ -293,12 +287,6 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// <returns>Predicted values on response scale.</returns>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        // OLS path
-        if (_useOLS)
-        {
-            return base.Predict(input);
-        }
-
         if (_fixedEffects == null)
         {
             throw new InvalidOperationException("Model must be trained before making predictions.");
@@ -660,6 +648,61 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
 
                 re.SetGroupEffect(groupId, blupVector);
             }
+
+            CentreRandomIntercepts(re, groups);
+        }
+    }
+
+    /// <summary>
+    /// Recentres a random intercept's BLUPs so they average zero across groups.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A random effect is DEFINED as a mean-zero deviation around the fixed intercept. The
+    /// alternating scheme here - estimate BLUPs from the residuals, then refit the fixed effects
+    /// against the response minus those BLUPs - has no term that enforces that, so it can settle at
+    /// a fixed point where the overall level is split between the two.
+    /// </para>
+    /// <para>
+    /// Measured, that is exactly what happened: shifting every response by 1000 moved the fixed
+    /// intercept by only 499.99, leaving the other half in per-group intercepts. Those do not
+    /// transfer to a group the model has not seen, so predictions for new groups lost half the
+    /// shift. Subtracting the mean here puts the level back where it belongs; the next
+    /// UpdateFixedEffects picks it up, because it fits against the response minus the recentred
+    /// BLUPs.
+    /// </para>
+    /// </remarks>
+    private void CentreRandomIntercepts(RandomEffect<T> re, Dictionary<double, List<int>> groups)
+    {
+        if (!re.IsRandomIntercept || groups.Count == 0) return;
+
+        double total = 0.0;
+        int counted = 0;
+
+        foreach (double groupId in groups.Keys)
+        {
+            var blup = re.GetGroupEffect(groupId);
+            if (blup.Length == 0) continue;
+
+            total += NumOps.ToDouble(blup[0]);
+            counted++;
+        }
+
+        if (counted == 0) return;
+
+        double mean = total / counted;
+        if (mean == 0.0) return;
+
+        foreach (double groupId in groups.Keys)
+        {
+            var blup = re.GetGroupEffect(groupId);
+            if (blup.Length == 0) continue;
+
+            var centred = new Vector<T>(blup.Length);
+            for (int j = 0; j < blup.Length; j++) centred[j] = blup[j];
+            centred[0] = NumOps.Subtract(centred[0], NumOps.FromDouble(mean));
+
+            re.SetGroupEffect(groupId, centred);
         }
     }
 
@@ -820,8 +863,16 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
             groupCols.Add(re.GroupColumnIndex);
         }
 
+        // One extra column holds a constant 1, giving the model an INTERCEPT. Without it the linear
+        // predictor is forced through the origin, so a constant response could only be reproduced
+        // when the features happened to span the constant direction: fitting y = 7.5 under a log
+        // link returned exp(0) = 1 for every row. Every standard mixed-model implementation (lme4,
+        // statsmodels) includes an intercept by default.
+        //
+        // The constant is appended LAST rather than prepended so the existing column indices —
+        // which RandomSlopeColumns refers to — keep their meaning.
         int nCols = x.Columns - groupCols.Count;
-        var fixedX = new Matrix<T>(x.Rows, nCols);
+        var fixedX = new Matrix<T>(x.Rows, nCols + 1);
 
         int colIdx = 0;
         for (int j = 0; j < x.Columns; j++)
@@ -834,6 +885,11 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
                 }
                 colIdx++;
             }
+        }
+
+        for (int i = 0; i < x.Rows; i++)
+        {
+            fixedX[i, nCols] = NumOps.One;
         }
 
         return fixedX;

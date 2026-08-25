@@ -107,7 +107,7 @@ public class NeuralNetworkBaseResolveShapesTests
     }
 
     [Fact]
-    public async Task MixedCompositeManifest_PreservesConcreteSiblingsBesideDeferredChildren()
+    public async Task MixedCompositeManifest_ResolvesDeclaredChildrenBeforeValueMaterialization()
     {
         await Task.Yield();
         using var block = new TransformerEncoderBlock<double>(
@@ -116,18 +116,30 @@ public class NeuralNetworkBaseResolveShapesTests
             ffnDim: 48,
             dropoutRate: 0);
 
-        // Attention and normalization are construction-sized. The two Dense FFN children are
-        // honestly deferred until a real sequence shape reaches the block.
+        // Attention and normalization are construction-sized. The block also knows the exact
+        // feature widths of both Dense FFN children, so its [SubLayerInput] declarations can resolve
+        // their parameter geometry without allocating values or inventing a sequence dimension.
+        var shapeOnlyLayout = new AiDotNet.Models.Parameters.ParameterLayoutSnapshot(
+            block.GetParameterLayout());
+
+        Assert.Equal(
+            AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized,
+            shapeOnlyLayout.Readiness);
+        Assert.True(shapeOnlyLayout.ParameterCount > shapeOnlyLayout.MaterializedParameterCount);
+        Assert.Contains(shapeOnlyLayout.Slots, slot => slot.Readiness ==
+            AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized);
+
+        // Reading values is the explicit materialization boundary. It must bring up those resolved
+        // FFN slots and leave count, vector, and manifest describing the same complete surface.
         var parameters = block.GetParameters();
-        var layout = new AiDotNet.Models.Parameters.ParameterLayoutSnapshot(
+        var materializedLayout = new AiDotNet.Models.Parameters.ParameterLayoutSnapshot(
             block.GetParameterLayout());
 
         Assert.True(parameters.Length > 0);
-        Assert.Equal(AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred, layout.Readiness);
-        Assert.Equal(parameters.Length, layout.KnownParameterCount);
-        Assert.Contains(layout.Slots, slot => slot.Readiness ==
-            AiDotNet.Models.Parameters.ParameterReadiness.ShapeDeferred);
-        Assert.Contains(layout.Slots, slot => slot.ParameterCount > 0);
+        Assert.Equal(AiDotNet.Models.Parameters.ParameterReadiness.Materialized, materializedLayout.Readiness);
+        Assert.Equal(parameters.Length, materializedLayout.KnownParameterCount);
+        Assert.Equal(parameters.Length, materializedLayout.ParameterCount);
+        Assert.Equal(parameters.Length, block.ParameterCount);
     }
 
     [Fact]

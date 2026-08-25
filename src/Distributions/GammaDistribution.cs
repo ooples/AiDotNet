@@ -19,7 +19,7 @@ namespace AiDotNet.Distributions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class GammaDistribution<T> : DistributionBase<T>
+public class GammaDistribution<T> : DistributionBase<T>
 {
     private T _shape;  // α (alpha)
     private T _rate;   // β (beta)

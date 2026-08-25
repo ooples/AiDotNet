@@ -100,6 +100,21 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
     private ITimeSeriesModel<T> _timeSeriesModel;
 
     /// <summary>
+    /// The last <c>LagOrder</c> target values seen during training, oldest first.
+    /// </summary>
+    /// <remarks>
+    /// The design matrix uses lagged targets as features, which are unknown when predicting on new
+    /// data. These seed the recursive forecast so the first predicted rows have real history behind
+    /// them rather than zeros.
+    /// </remarks>
+    private List<T> _trainingTargetTail = [];
+
+    /// <summary>
+    /// Number of prepared training rows, used to continue trend and seasonal clocks at prediction.
+    /// </summary>
+    private int _trainingRowCount;
+
+    /// <summary>
     /// The regularization strategy used to prevent overfitting.
     /// </summary>
     /// <remarks>
@@ -188,31 +203,28 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
     {
         TrainingFeatureCount = x.Columns;
 
-        // Use OLS for reliable predictions on standard regression data
-        _useOLS = true;
-        if (Options.UseIntercept)
+        // This method previously fitted ORDINARY LEAST SQUARES on the raw design matrix and
+        // returned immediately — `_useOLS = true` was set unconditionally, making the lag
+        // construction, differencing and seasonal handling below unreachable. A caller asking for
+        // a time-series regression received a plain cross-sectional fit with no temporal structure
+        // whatsoever. The time-series path now runs.
+        //
+        // `_useOLS` is retained (always false for newly trained models) purely so that models
+        // serialized before this fix still deserialize and predict through their stored
+        // coefficients rather than silently changing behaviour on load.
+        _useOLS = false;
+
+        // Remember the tail of the training targets so prediction can seed its lag buffer with real
+        // history instead of zeros.
+        _trainingTargetTail = [];
+        for (int i = Math.Max(0, y.Length - Math.Max(_options.LagOrder, 1)); i < y.Length; i++)
         {
-            var xWithInt = x.AddConstantColumn(NumOps.One);
-            var xTx = xWithInt.Transpose().Multiply(xWithInt);
-            var xTy = xWithInt.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-            var solution = SolveSystem(xTx, xTy);
-            Intercept = solution[0];
-            Coefficients = solution.Slice(1, x.Columns);
+            _trainingTargetTail.Add(y[i]);
         }
-        else
-        {
-            var xTx = x.Transpose().Multiply(x);
-            var xTy = x.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-            Coefficients = SolveSystem(xTx, xTy);
-        }
-        if (_useOLS) return;
 
         // Prepare the data
         Matrix<T> preparedX = PrepareInputData(x, y);
+        _trainingRowCount = preparedX.Rows;
         Vector<T> preparedY = PrepareTargetData(y);
 
         // Train the time series model
@@ -492,10 +504,49 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
     /// </remarks>
     private void ExtractCoefficients()
     {
-        int originalFeatures = Coefficients.Length - (_options.LagOrder * (Coefficients.Length + 1) + (_options.IncludeTrend ? 1 : 0) + (_options.SeasonalPeriod > 0 ? _options.SeasonalPeriod - 1 : 0));
+        // The number of original features is known directly: it was recorded when training began.
+        //
+        // This previously computed
+        //     originalFeatures = Coefficients.Length - (LagOrder * (Coefficients.Length + 1) + ...)
+        // which is self-referential — Coefficients.Length appears on both sides — and is negative
+        // for any LagOrder >= 1. Take(negative) yields an empty sequence, so the model ended
+        // training with NO coefficients at all, which is why it reported no active features. The
+        // expression also read the base Coefficients property, which is never assigned from the
+        // fitted inner model, so there was nothing meaningful to trim in the first place.
+        //
+        // Prediction delegates to the inner time series model, so these coefficients are reporting
+        // surface (feature importance, active-feature queries) rather than the prediction path.
+        int originalFeatures = Math.Max(0, TrainingFeatureCount);
+        // Not every time series model exposes trainable parameters — ARIMA, for instance,
+        // implements IFullModel but not IParameterizable — so this tests for the capability rather
+        // than demanding it. Coefficients stay empty for such models, which is honest: there are no
+        // per-feature coefficients to report.
+        var fitted = _timeSeriesModel is IParameterizable<T, Matrix<T>, Vector<T>> parameterized
+            ? parameterized.GetParameters()
+            : Vector<T>.Empty();
 
-        // Remove trend and seasonal coefficients from the main Coefficients vector
-        Coefficients = new Vector<T>([.. Coefficients.Take(originalFeatures)]);
+        var extracted = new Vector<T>(originalFeatures);
+        for (int i = 0; i < originalFeatures && i < fitted.Length; i++)
+        {
+            extracted[i] = fitted[i];
+        }
+
+        Coefficients = extracted;
+    }
+
+    /// <summary>
+    /// Reports every input feature as active.
+    /// </summary>
+    /// <remarks>
+    /// Every input column is fed into the prepared design matrix — directly, and again as lagged
+    /// copies — so the model genuinely consumes all of them. Deriving activity from
+    /// <see cref="Coefficients"/> instead would report none whenever the configured inner model does
+    /// not expose per-feature parameters (ARIMA, for instance), which would misrepresent a model
+    /// that is using every feature it was given.
+    /// </remarks>
+    public override IEnumerable<int> GetActiveFeatureIndices()
+    {
+        return Enumerable.Range(0, Math.Max(0, TrainingFeatureCount));
     }
 
     /// <summary>
@@ -631,26 +682,97 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
             return base.Predict(input);
         }
 
-        // PrepareInputData adds trend and seasonal features to the input
-        // The lagged features reduce the row count by LagOrder
-        Matrix<T> preparedInput = PrepareInputData(input, new Vector<T>(input.Rows)); // Dummy y vector
-        Vector<T> corePredictions = _timeSeriesModel.Predict(preparedInput);
+        // The design matrix this model is fitted on includes LAGGED TARGET values as features (see
+        // PrepareInputData). Those are unknown at prediction time, and the previous implementation
+        // passed a dummy all-zero y vector — so every lagged-target column the model had learned to
+        // rely on arrived as zero, and the predictions were produced from a feature vector unlike
+        // anything seen in training. That mismatch, not the estimator, is what drove R-squared
+        // negative.
+        //
+        // The correct treatment is recursive (chained one-step-ahead) forecasting: seed the lag
+        // buffer with the tail of the training targets, predict one row at a time, and feed each
+        // prediction back in as the lagged target for the rows that follow. This is what a time
+        // series model does when asked to forecast beyond its training data.
+        var predictions = new Vector<T>(input.Rows);
+        if (input.Rows == 0) return predictions;
 
-        // Pad to match original input length — the first LagOrder rows have no lag data
-        if (corePredictions.Length < input.Rows)
+        int lagOrder = _options.LagOrder;
+        var recentTargets = new List<T>(Math.Max(lagOrder, 1));
+        for (int i = 0; i < lagOrder; i++)
         {
-            var fullPredictions = new Vector<T>(input.Rows);
-            int offset = input.Rows - corePredictions.Length;
-            // Fill leading positions with the first available prediction
-            T firstPred = corePredictions.Length > 0 ? corePredictions[0] : NumOps.Zero;
-            for (int i = 0; i < offset; i++)
-                fullPredictions[i] = firstPred;
-            for (int i = 0; i < corePredictions.Length; i++)
-                fullPredictions[offset + i] = corePredictions[i];
-            return fullPredictions;
+            // Seed from the end of the training targets when available, oldest first.
+            int seedIndex = _trainingTargetTail.Count - lagOrder + i;
+            recentTargets.Add(seedIndex >= 0 && seedIndex < _trainingTargetTail.Count
+                ? _trainingTargetTail[seedIndex]
+                : NumOps.Zero);
         }
 
-        return corePredictions;
+        for (int row = 0; row < input.Rows; row++)
+        {
+            var features = BuildPredictionRow(input, row, recentTargets);
+            var single = new Matrix<T>(1, features.Length);
+            for (int j = 0; j < features.Length; j++) single[0, j] = features[j];
+
+            var predicted = _timeSeriesModel.Predict(single);
+            predictions[row] = predicted.Length > 0 ? predicted[0] : NumOps.Zero;
+
+            if (lagOrder > 0)
+            {
+                recentTargets.Add(predictions[row]);
+                recentTargets.RemoveAt(0);
+            }
+        }
+
+        return predictions;
+    }
+
+    /// <summary>
+    /// Builds one prediction-time feature row in exactly the column order
+    /// <see cref="PrepareInputData"/> produces, taking lagged targets from the rolling buffer.
+    /// </summary>
+    /// <param name="input">The full input matrix.</param>
+    /// <param name="row">The row being predicted.</param>
+    /// <param name="recentTargets">The most recent target values, oldest first.</param>
+    private Vector<T> BuildPredictionRow(Matrix<T> input, int row, List<T> recentTargets)
+    {
+        int lagOrder = _options.LagOrder;
+        int laggedFeatures = lagOrder * (input.Columns + 1);
+        int trendFeatures = _options.IncludeTrend ? 1 : 0;
+        int seasonalFeatures = _options.SeasonalPeriod > 0 ? _options.SeasonalPeriod - 1 : 0;
+
+        var features = new Vector<T>(input.Columns + laggedFeatures + trendFeatures + seasonalFeatures);
+
+        int column = 0;
+        for (int j = 0; j < input.Columns; j++) features[column++] = input[row, j];
+
+        for (int lag = 1; lag <= lagOrder; lag++)
+        {
+            // Lagged predictors come from earlier rows of the input; before the start of the matrix
+            // the first row is repeated, which is the standard edge treatment.
+            int sourceRow = Math.Max(0, row - lag);
+            for (int j = 0; j < input.Columns; j++) features[column++] = input[sourceRow, j];
+
+            // recentTargets is oldest-first, so lag 1 is the last entry.
+            int bufferIndex = recentTargets.Count - lag;
+            features[column++] = bufferIndex >= 0 && bufferIndex < recentTargets.Count
+                ? recentTargets[bufferIndex]
+                : NumOps.Zero;
+        }
+
+        if (_options.IncludeTrend)
+        {
+            features[column++] = NumOps.FromDouble(_trainingRowCount + row + 1);
+        }
+
+        int seasonalClock = seasonalFeatures > 0
+            ? (_trainingRowCount + row + lagOrder) % _options.SeasonalPeriod
+            : 0;
+        for (int s = 1; s <= seasonalFeatures; s++)
+        {
+            features[column++] = seasonalClock == s ? NumOps.One : NumOps.Zero;
+        }
+
+        return features;
     }
 
     /// <summary>

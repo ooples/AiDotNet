@@ -37,6 +37,7 @@ public class PagedContextDecodeTests
         var pv = new float[p.Length];
         for (int i = 0; i < pv.Length; i++) pv[i] = (float)(rng.NextDouble() - 0.5) * 0.2f;
         layer.SetParameters(new Vector<float>(pv));
+        layer.SetTrainingMode(false);
 
         cache = PagedKVCache<float>.FromMemorySize(
             availableBytes: 64L * 1024 * 1024, numLayers: 1, numHeads: Heads, headDim: HeadDim, blockSize: 16);
@@ -124,6 +125,90 @@ public class PagedContextDecodeTests
         Assert.True(RelErr(interB, refB) < 1e-4, "sequence B corrupted by interleaving with A");
         // And the two sequences genuinely differ (the test isn't trivially passing on zeros).
         Assert.True(RelErr(refA, refB) > 1e-2, "sequences A and B should produce different outputs");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BatchedContextDecode_MatchesIndependentSequenceForwards()
+    {
+        await Task.Yield();
+        var layer = BuildLayer(out var cache);
+        var dataA = RandomSequence(333);
+        var dataB = RandomSequence(444);
+
+        void Prefill(long sequenceId, float[] data, int length)
+        {
+            Assert.True(cache.AllocateSequence(sequenceId, 0));
+            var prompt = new float[length * EmbDim];
+            Array.Copy(data, prompt, prompt.Length);
+            layer.ForwardWithContext(
+                new Tensor<float>(prompt, new[] { 1, length, EmbDim }),
+                new InferenceForwardContext(sequenceId, 0));
+        }
+
+        Prefill(3001, dataA, 3);
+        Prefill(3002, dataB, 2);
+        Prefill(4001, dataA, 3);
+        Prefill(4002, dataB, 2);
+
+        var nextA = new float[EmbDim];
+        var nextB = new float[EmbDim];
+        Array.Copy(dataA, 3 * EmbDim, nextA, 0, EmbDim);
+        Array.Copy(dataB, 2 * EmbDim, nextB, 0, EmbDim);
+
+        var referenceA = layer.ForwardWithContext(
+            new Tensor<float>(nextA, new[] { 1, 1, EmbDim }),
+            new InferenceForwardContext(3001, 3)).AsSpan().ToArray();
+        var referenceB = layer.ForwardWithContext(
+            new Tensor<float>(nextB, new[] { 1, 1, EmbDim }),
+            new InferenceForwardContext(3002, 2)).AsSpan().ToArray();
+
+        var batchedData = new float[2 * EmbDim];
+        Array.Copy(nextA, 0, batchedData, 0, EmbDim);
+        Array.Copy(nextB, 0, batchedData, EmbDim, EmbDim);
+        var batched = layer.ForwardWithContext(
+            new Tensor<float>(batchedData, new[] { 2, 1, EmbDim }),
+            new InferenceForwardContext(new long[] { 4001, 4002 }, new[] { 3, 2 })).AsSpan();
+
+        Assert.True(RelErr(batched[..EmbDim], referenceA) < 1e-4,
+            "batched row A must match its independent cached-sequence forward");
+        Assert.True(RelErr(batched.Slice(EmbDim, EmbDim), referenceB) < 1e-4,
+            "batched row B must match its independent cached-sequence forward");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParameterRestore_AfterWarmup_RefreshesProjectionCaches()
+    {
+        await Task.Yield();
+        var warmed = BuildLayer(out var warmedCache);
+        var warmupData = RandomSequence(555);
+        Assert.True(warmedCache.AllocateSequence(5001, 0));
+        _ = warmed.ForwardWithContext(
+            new Tensor<float>(warmupData, new[] { 1, SeqLen, EmbDim }),
+            new InferenceForwardContext(5001, 0));
+        warmedCache.FreeSequence(5001);
+
+        var rng = new Random(556);
+        var restoredValues = new float[warmed.GetParameters().Length];
+        for (int i = 0; i < restoredValues.Length; i++)
+            restoredValues[i] = (float)(rng.NextDouble() - 0.5) * 0.3f;
+        var restored = new Vector<float>(restoredValues);
+        warmed.SetParameters(restored);
+
+        var fresh = BuildLayer(out var freshCache);
+        fresh.SetParameters(restored);
+
+        var input = RandomSequence(557);
+        Assert.True(warmedCache.AllocateSequence(5002, 0));
+        Assert.True(freshCache.AllocateSequence(5003, 0));
+        var warmedOutput = warmed.ForwardWithContext(
+            new Tensor<float>(input, new[] { 1, SeqLen, EmbDim }),
+            new InferenceForwardContext(5002, 0));
+        var freshOutput = fresh.ForwardWithContext(
+            new Tensor<float>(input, new[] { 1, SeqLen, EmbDim }),
+            new InferenceForwardContext(5003, 0));
+
+        Assert.True(RelErr(warmedOutput.AsSpan(), freshOutput.AsSpan()) < 1e-5,
+            "restoring parameters after warmup must discard every derived projection cache");
     }
 
     [Fact(Timeout = 120000)]

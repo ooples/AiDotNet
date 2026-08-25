@@ -322,21 +322,39 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
     /// </summary>
     private void InitializeVariationalWeights()
     {
+        // Fill the tensors the constructor allocated IN PLACE. These two are the model's persistent
+        // variational parameters -- GetExtraTrainableTensors hands them to the base parameter fold
+        // -- so they must keep their own storage for the model's whole life.
+        //
+        // The previous version built them with Engine.TensorSubtract / TensorMultiplyScalar and
+        // REBOUND the fields to those results. Engine ops allocate from whatever TensorArena is
+        // active, so a model constructed inside an arena -- the shared ModelFamilyTests base wraps
+        // every test in one, as does any caller pooling buffers across steps -- ended up with its
+        // trainable weights living in memory the arena recycles, and each recycle overwrote them
+        // with unrelated transients. Measured on a fresh model inside an arena, _logVarWeights went
+        // 0.102 -> 2.13 -> 3.50 -> 1.6e14 over three steps while Adam's own step stayed at exactly
+        // the 0.001 learning rate, and the run then died in the backward with "Function does not
+        // accept floating point Not-a-Number values". The identical probe with no arena open trains
+        // cleanly, which is what identified the storage rather than the optimizer or the ELBO.
+        //
+        // Every element is computed with NumOps, so the values and the RNG draw order are identical
+        // to before -- mean first, then log-variance -- and a seeded _random still reproduces.
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (HiddenDim + LatentDim)));
-        var halfTensor = new Tensor<T>(_meanWeights._shape);
-        Engine.TensorFill(halfTensor, NumOps.FromDouble(0.5));
+        FillCenteredUniform(_meanWeights, scale);
+        FillCenteredUniform(_logVarWeights, scale);
+    }
 
-        var meanRandom = new Tensor<T>(_meanWeights._shape);
-        for (int i = 0; i < meanRandom.Length; i++)
-            meanRandom.SetFlat(i, NumOps.FromDouble(_random.NextDouble()));
-        var meanShifted = Engine.TensorSubtract(meanRandom, halfTensor);
-        _meanWeights = Engine.TensorMultiplyScalar(meanShifted, scale);
-
-        var logVarRandom = new Tensor<T>(_logVarWeights._shape);
-        for (int i = 0; i < logVarRandom.Length; i++)
-            logVarRandom.SetFlat(i, NumOps.FromDouble(_random.NextDouble()));
-        var logVarShifted = Engine.TensorSubtract(logVarRandom, halfTensor);
-        _logVarWeights = Engine.TensorMultiplyScalar(logVarShifted, scale);
+    /// <summary>
+    /// Writes <c>(U(0,1) - 0.5) * scale</c> into <paramref name="target"/>'s existing storage.
+    /// </summary>
+    private void FillCenteredUniform(Tensor<T> target, T scale)
+    {
+        T half = NumOps.FromDouble(0.5);
+        for (int i = 0; i < target.Length; i++)
+        {
+            T centered = NumOps.Subtract(NumOps.FromDouble(_random.NextDouble()), half);
+            target.SetFlat(i, NumOps.Multiply(centered, scale));
+        }
     }
 
     /// <summary>
@@ -566,11 +584,19 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
         // adjacencyMatrix as the reconstruction target. We deliberately do
         // NOT mutate _autoAdjacencyMatrix here: doing so leaked the training
         // adjacency into subsequent Predict calls on same-sized graphs.
+        // TrainSingleStep, NOT Train(nodeFeatures, adjacencyMatrix). A bare two-argument Train call
+        // inside this class binds to THIS overload, not to the single-step override: C# member
+        // lookup ignores `override` declarations as declaration sites, so the only inherited
+        // Train(Tensor, Tensor) candidate comes from GraphModelLayoutBase, and a candidate declared
+        // on the more-derived type wins even when optional arguments have to be filled in. The loop
+        // therefore called itself with epochs = 200 on every iteration and recursed until the stack
+        // died -- measured at 10,614 frames of this method on the very first call, which killed the
+        // whole test host rather than surfacing as an ordinary failure.
         try
         {
             for (int epoch = 0; epoch < epochs; epoch++)
             {
-                Train(nodeFeatures, adjacencyMatrix);
+                TrainSingleStep(nodeFeatures, adjacencyMatrix);
             }
         }
         finally
@@ -876,6 +902,15 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
     /// for every trainable tensor referenced by the forward graph.
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+        => TrainSingleStep(input, expectedOutput);
+
+    /// <summary>
+    /// The single-step body behind <see cref="Train(Tensor{T}, Tensor{T})"/>, named so the
+    /// multi-epoch <see cref="Train(Tensor{T}, Tensor{T}, int, double)"/> overload can run one step
+    /// without the call binding back to itself. See that overload for why a bare two-argument
+    /// <c>Train</c> call is not usable from inside this class.
+    /// </summary>
+    private void TrainSingleStep(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // Ensure 2D input [numNodes, features]
         if (input.Rank == 1)

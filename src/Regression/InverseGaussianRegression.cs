@@ -153,17 +153,11 @@ public partial class InverseGaussianRegression<T> : RegressionBase<T>
         ValidateInverseGaussianData(y);
         TrainingFeatureCount = x.Columns;
 
-        // Use OLS for reliable predictions on generic linear data
-        var xWithOls = x.AddConstantColumn(NumOps.One);
-        var xTxOls = xWithOls.Transpose().Multiply(xWithOls);
-        var xTyOls = xWithOls.Transpose().Multiply(y);
-        for (int i = 0; i < xTxOls.Rows; i++)
-            xTxOls[i, i] = NumOps.Add(xTxOls[i, i], NumOps.FromDouble(1e-10));
-        var olsSolution = SolveSystem(xTxOls, xTyOls);
-        Intercept = olsSolution[0];
-        Coefficients = olsSolution.Slice(1, x.Columns);
-        // OLS provides best fit for generic linear data; skip IRLS
-        if (Coefficients.Length > 0) return;
+        // This method previously fitted ORDINARY LEAST SQUARES and returned immediately. The
+        // guard that followed it was written as a condition but is always true for any real
+        // problem, so it acted as an unconditional return and left the real estimation below
+        // unreachable: callers received a plain linear least-squares fit from a model named for a
+        // different algorithm. The real estimation now runs.
 
         int numFeatures = x.Columns;
         int numSamples = x.Rows;

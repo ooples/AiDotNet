@@ -109,13 +109,11 @@ public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOpt
     /// <summary>
     /// The previous parameters, used for trust region update computation.
     /// </summary>
-    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _trustRegionPreviousParameters;
 
     /// <summary>
     /// The previous gradient, used for trust region update computation.
     /// </summary>
-    [Scratch]
     private Vector<T>? _trustRegionPreviousGradient;
 
     /// <summary>
@@ -129,6 +127,38 @@ public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOpt
         TrustRegionOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())
+    {
+        _options = options ?? new TrustRegionOptimizerOptions<T, TInput, TOutput>();
+        _trustRegionRadius = NumOps.Zero;
+
+        InitializeAdaptiveParameters();
+    }
+
+    /// <summary>
+    /// Creates a trust region optimizer for minimizing a plain function, with no model attached.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use this with <see cref="GradientBasedOptimizerBase{T, TInput, TOutput}.Minimize(Vector{T}, Func{Vector{T}, ValueTuple{T, Vector{T}}}, int, T)"/>
+    /// when you want to minimize a mathematical function directly rather than train a model.
+    /// <see cref="Optimize"/> requires a model and is not available on an instance created
+    /// this way.
+    /// </para>
+    /// <para><b>For Beginners:</b> The constructor above asks for a model because it is set up
+    /// to tune that model against training data. If all you have is a formula you want to make
+    /// as small as possible, there is no model to hand over — use this factory instead.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The optimizer-specific options. If null, defaults are used.</param>
+    public static TrustRegionOptimizer<T, TInput, TOutput> CreateForFunction(
+        TrustRegionOptimizerOptions<T, TInput, TOutput>? options = null)
+        => new(options);
+
+    /// <summary>
+    /// Backs <see cref="CreateForFunction"/>: the same setup with no model.
+    /// </summary>
+    private TrustRegionOptimizer(TrustRegionOptimizerOptions<T, TInput, TOutput>? options)
+        : base(null, options ?? new())
     {
         _options = options ?? new TrustRegionOptimizerOptions<T, TInput, TOutput>();
         _trustRegionRadius = NumOps.Zero;

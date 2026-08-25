@@ -318,13 +318,12 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>, IShapeContract
         // Engine ops. Doing this with scalar indexers would detach the result from the tape and
         // silently freeze every parameter feeding it.
 
-        // Stack the per-category [B, S, S] grids into [B, S, S, C].
-        for (int c = 0; c < C; c++)
-            categoryScores[c] = Engine.Reshape(categoryScores[c], [B, S, S, 1]);
-
-        var bilinearGrid = categoryScores.Length == 1
-            ? categoryScores[0]
-            : Engine.TensorConcatenate(categoryScores, axis: 3);          // [B, S, S, C]
+        // Stack the per-category [B, S, S] grids directly into [B, S, S, C]. This is a
+        // new category axis, not a concatenation of pre-existing singleton axes. Besides matching
+        // that geometry exactly, TensorStack writes every output slot; building singleton views and
+        // concatenating them could leave arena-rented output storage partially unwritten, allowing
+        // stale NaN/Inf values from an earlier tensor to leak into otherwise-finite initial logits.
+        var bilinearGrid = Engine.TensorStack(categoryScores, axis: 3);   // [B, S, S, C]
 
         // startTerm depends on the START index, so it repeats along j; endTerm depends on the
         // END index, so it repeats along i.

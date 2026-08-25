@@ -693,7 +693,26 @@ finally
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var layerSizes = Layers.Select(layer => layer.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0]).ToList();
+        // Resolve from the architecture's declared input shape first. Describing a model is a
+        // reasonable thing to do before running it, but on a network that has never seen an input
+        // every lazy layer still reports [?], and RequireConcrete threw rather than answering:
+        //
+        //     InvalidOperationException : Recording concrete layer geometry requires a fully
+        //     concrete shape, but this layer's shape is [?]
+        //
+        // The shape was available the whole time -- the base already knows how to walk the chain
+        // from Architecture without allocating weights or consuming RNG -- and this method simply
+        // never asked.
+        ResolveLazyLayerShapes();
+
+        // A layer whose shape is genuinely input-dependent still exists after the walk (the walk
+        // stops rather than guess past a layer it cannot follow). That is a fact about the model,
+        // not a failure to describe it, so it is reported as Dynamic instead of thrown over.
+        var layerSizes = Layers
+            .Select(layer => layer.GetOutputLayerShape().TryGetConcrete(out var concrete) && concrete!.Length > 0
+                ? concrete[0]
+                : LayerShape.Dynamic)
+            .ToList();
 
         return new ModelMetadata<T>
         {

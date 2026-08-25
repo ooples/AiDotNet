@@ -393,6 +393,7 @@ public sealed class ParameterLayoutSnapshot
         bool materialized = false;
         long declaredTotal = 0;
         long materializedTotal = 0;
+        long restorableTotal = 0;
         for (int i = 0; i < slots.Count; i++)
         {
             var slot = slots[i];
@@ -405,6 +406,8 @@ public sealed class ParameterLayoutSnapshot
             if (slot.ParameterCount.HasValue)
                 declaredTotal = checked(declaredTotal + slot.ParameterCount.Value);
             materializedTotal = checked(materializedTotal + slot.MaterializedParameterCount);
+            restorableTotal = checked(restorableTotal
+                + (slot.ParameterCount ?? slot.MaterializedParameterCount));
         }
 
         bool unresolved = shapeDeferred || fitDeferred
@@ -428,6 +431,7 @@ public sealed class ParameterLayoutSnapshot
         KnownParameterCount = declaredTotal;
         ParameterCount = unresolved ? null : declaredTotal;
         MaterializedParameterCount = materializedTotal;
+        RestorableParameterCount = restorableTotal;
         Fingerprint = ComputeFingerprint(immutableSlots);
         DeclaredLayoutFingerprint = ComputeFingerprint(immutableSlots, includeStorageReadiness: false);
     }
@@ -465,6 +469,17 @@ public sealed class ParameterLayoutSnapshot
     /// lazy storage. This value is always concrete, including for partially built graphs.
     /// </summary>
     public long MaterializedParameterCount { get; }
+
+    /// <summary>
+    /// The exact width an immediate flat parameter read is required to emit: every declared slot
+    /// whose shape is known, plus the live storage of slots whose remaining shape is still deferred.
+    /// </summary>
+    /// <remarks>
+    /// This is not generally <c>Max(KnownParameterCount, MaterializedParameterCount)</c>. A partially
+    /// deferred graph can contain disjoint groups of known lazy slots and already-materialized
+    /// deferred slots, and a flat read includes both groups.
+    /// </remarks>
+    public long RestorableParameterCount { get; }
 
     /// <summary>The version of the canonical manifest representation.</summary>
     public int SchemaVersion => CurrentSchemaVersion;

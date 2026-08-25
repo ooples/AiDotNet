@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
@@ -111,8 +111,53 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _olsCoefficients;
 
+    /// <summary>
+    /// Per-layer batch-normalization scale, one entry per hidden layer. Empty when
+    /// <see cref="DeepSurvOptions{T}.UseBatchNormalization"/> is false.
+    /// </summary>
+    private List<Vector<T>> _bnGamma = new List<Vector<T>>();
 
-    private T _olsIntercept;
+    /// <summary>
+    /// Per-layer batch-normalization shift, one entry per hidden layer.
+    /// </summary>
+    private List<Vector<T>> _bnBeta = new List<Vector<T>>();
+
+    /// <summary>
+    /// Running mean per hidden layer, accumulated during training and used at inference time.
+    /// </summary>
+    private List<Vector<T>> _bnRunningMean = new List<Vector<T>>();
+
+    /// <summary>
+    /// Running variance per hidden layer, accumulated during training and used at inference time.
+    /// </summary>
+    private List<Vector<T>> _bnRunningVariance = new List<Vector<T>>();
+
+    /// <summary>
+    /// The largest event time seen during training, used to bound the survival-time integration.
+    /// </summary>
+    private T _maxObservedTime;
+
+    /// <summary>
+    /// Per-feature training mean, used to standardize inputs before the first layer.
+    /// </summary>
+    private Vector<T>? _featureMean;
+
+    /// <summary>
+    /// Per-feature training standard deviation, used to standardize inputs before the first layer.
+    /// </summary>
+    private Vector<T>? _featureStd;
+
+    /// <summary>
+    /// Largest magnitude a risk score is allowed to reach before being exponentiated.
+    /// </summary>
+    /// <remarks>
+    /// The risk score is an unbounded linear output, and every use of it in this model goes through
+    /// <c>exp</c>: the partial likelihood, the Breslow baseline hazard, and the survival function. A score
+    /// of 750 overflows a double, which turns the cumulative hazard into infinity and then, once it is
+    /// subtracted from itself in the Breslow loop, into NaN. Clamping at the point of exponentiation keeps
+    /// every one of those finite. exp(20) is about 4.9e8, far beyond any meaningful hazard ratio.
+    /// </remarks>
+    private const double RiskScoreClamp = 20.0;
 
 
 
@@ -127,7 +172,7 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     public DeepSurv(DeepSurvOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(null, regularization)
     {
-        _olsIntercept = NumOps.Zero;
+        _maxObservedTime = NumOps.One;
         _options = options ?? new DeepSurvOptions<T>();
         _weights = [];
         _biases = [];
@@ -135,48 +180,133 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
-
-    /// <inheritdoc/>
+    /// <summary>
+    /// Trains the network on observed times, treating every observation as an event (uncensored).
+    /// </summary>
+    /// <param name="x">Feature matrix, one row per subject.</param>
+    /// <param name="y">Observed time to event for each subject. Must be positive.</param>
+    /// <remarks>
+    /// <para>
+    /// The general regression interface carries a single target vector, which cannot express censoring.
+    /// This overload therefore treats every observation as an observed event. Use
+    /// <see cref="TrainAsync(Matrix{T}, Vector{T}, Vector{T})"/> when some subjects are censored --
+    /// which, for real survival data, is the usual case.
+    /// </para>
+    /// <para><b>For Beginners:</b> Censoring means you stopped watching a subject before the event
+    /// happened, so all you know is that it survived at least that long. This method assumes you saw the
+    /// event for everyone. If some of your subjects were censored, use the three-argument version and pass
+    /// a 1 for observed events and a 0 for censored ones.
+    /// </para>
+    /// </remarks>
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
-        // For the standard regression interface, use OLS for reliable predictions
-        _useOLS = true;
-        _numFeatures = x.Columns;
-        InitializeNetwork();
-        int n = x.Rows;
+        var events = Vector<T>.CreateDefault(y.Length, NumOps.One);
+        await TrainAsync(x, y, events);
+    }
 
-        var xWithInt = x.AddColumn(Vector<T>.CreateDefault(n, NumOps.One));
-        var xTx = xWithInt.Transpose().Multiply(xWithInt);
-        var xTy = xWithInt.Transpose().Multiply(y);
-        for (int i = 0; i < xTx.Rows; i++)
-            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-        var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
-        _olsCoefficients = new Vector<T>(x.Columns);
-        for (int j = 0; j < x.Columns; j++)
-            _olsCoefficients[j] = solution[j];
-        _olsIntercept = solution[x.Columns];
+    /// <summary>
+    /// Trains the network on right-censored survival data by maximizing the Cox partial likelihood.
+    /// </summary>
+    /// <param name="x">Feature matrix, one row per subject.</param>
+    /// <param name="times">Observed time for each subject: the event time, or the censoring time.</param>
+    /// <param name="events">1 when the event was observed, 0 when the subject was censored.</param>
+    /// <remarks>
+    /// <para>
+    /// This is the training procedure from Katzman et al. (2018): a fully-connected network produces a
+    /// scalar risk score per subject, and the network is fitted by minimizing the negative Cox partial
+    /// log-likelihood. Optimization is mini-batch Adam with L2 weight decay and early stopping, using the
+    /// epoch, batch size, learning rate, regularization and patience settings already present on
+    /// <see cref="DeepSurvOptions{T}"/> -- every one of which was previously ignored, because this method
+    /// fitted ordinary least squares and returned before the network was ever used.
+    /// </para>
+    /// <para>
+    /// The risk set for each mini-batch is the batch itself, the standard mini-batch approximation to the
+    /// partial likelihood; with the default batch size of 32 and a smaller training set, the batch is the
+    /// full sample and the approximation is exact.
+    /// </para>
+    /// </remarks>
+    public async Task TrainAsync(Matrix<T> x, Vector<T> times, Vector<T> events)
+    {
+        ValidationHelper<T>.ValidateInputData(x, times);
+
+        if (events.Length != times.Length)
+        {
+            throw new ArgumentException(
+                $"The event indicator vector must have one entry per subject: got {events.Length} " +
+                $"indicators for {times.Length} observed times.",
+                nameof(events));
+        }
+
+        for (int i = 0; i < times.Length; i++)
+        {
+            if (!NumOps.GreaterThan(times[i], NumOps.Zero))
+            {
+                throw new ArgumentException(
+                    $"Survival times must be strictly positive; got {NumOps.ToDouble(times[i]):G6} at index {i}.",
+                    nameof(times));
+            }
+        }
+
+        bool anyEvent = false;
+        for (int i = 0; i < events.Length; i++)
+        {
+            if (NumOps.Compare(events[i], NumOps.One) == 0)
+            {
+                anyEvent = true;
+                break;
+            }
+        }
+
+        if (!anyEvent)
+        {
+            throw new ArgumentException(
+                "The Cox partial likelihood is defined by the observed events, but every subject is " +
+                "censored, so there is nothing to fit. Pass 1 in the event vector for subjects whose " +
+                "event was observed.",
+                nameof(events));
+        }
+
+        _numFeatures = x.Columns;
+        ComputeFeatureStandardization(x);
+        InitializeNetwork();
+
+        T maxTime = times[0];
+        for (int i = 1; i < times.Length; i++)
+        {
+            if (NumOps.GreaterThan(times[i], maxTime)) maxTime = times[i];
+        }
+        _maxObservedTime = maxTime;
+
+        await Task.Run(() => FitNetwork(x, times, events));
+
+        int[] sorted = GetSortedIndices(times);
+        ComputeBaselineHazard(x, times, events, sorted);
 
         await CalculateFeatureImportancesAsync(x.Columns);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Predicts the expected survival time for each subject.
+    /// </summary>
+    /// <param name="input">Feature matrix, one row per subject.</param>
+    /// <returns>Expected survival time for each subject, on the same scale as the training times.</returns>
+    /// <remarks>
+    /// <para>
+    /// The model was trained against observed times, so the general regression interface returns a time,
+    /// keeping <c>Predict</c> on the same scale as the <c>y</c> that was passed to <c>Train</c>. The
+    /// expectation is obtained by integrating the predicted survival curve, which is what lifelines'
+    /// <c>predict_expectation</c> reports; <see cref="PredictRiskScores"/> exposes the network's raw
+    /// linear predictor, and <see cref="PredictMedianSurvivalTime"/> the median, for callers who want those.
+    /// </para>
+    /// <para>
+    /// The expectation is preferred over the median here because the median is undefined whenever the
+    /// predicted survival curve never falls to 0.5 within the observed follow-up -- common for low-risk
+    /// subjects -- whereas the integral is always finite.
+    /// </para>
+    /// </remarks>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
-        if (_useOLS && _olsCoefficients is not null)
-        {
-            var predictions = new Vector<T>(input.Rows);
-            for (int i = 0; i < input.Rows; i++)
-            {
-                int len = Math.Min(input.Columns, _olsCoefficients.Length);
-                var row = new Vector<T>(len);
-                var coef = new Vector<T>(len);
-                for (int j = 0; j < len; j++) { row[j] = input[i, j]; coef[j] = _olsCoefficients[j]; }
-                predictions[i] = NumOps.Add(_olsIntercept, Engine.DotProduct(row, coef));
-            }
-            return await Task.FromResult(predictions);
-        }
-
-        return await Task.Run(() => PredictRiskScores(input));
+        return await Task.Run(() => PredictExpectedSurvivalTime(input));
     }
 
     /// <summary>
@@ -187,7 +317,7 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     public Vector<T> PredictRiskScores(Matrix<T> input)
     {
         var indices = Enumerable.Range(0, input.Rows).ToArray();
-        var (riskScores, _) = ForwardPass(input, indices);
+        var (riskScores, _) = ForwardPass(input, indices, training: false);
 
         var result = new Vector<T>(input.Rows);
         for (int i = 0; i < input.Rows; i++)
@@ -214,7 +344,7 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             // If baseline hazard not computed, use exponential model: S(t) = exp(-exp(risk) * t)
             for (int i = 0; i < input.Rows; i++)
             {
-                T expRisk = NumOps.Exp(riskScores[i]);
+                T expRisk = ClampedExpRisk(riskScores[i]);
                 for (int j = 0; j < times.Length; j++)
                 {
                     survivalProbs[i, j] = NumOps.Exp(NumOps.Negate(NumOps.Multiply(expRisk, times[j])));
@@ -226,7 +356,7 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             // Use baseline cumulative hazard: S(t) = exp(-H0(t) * exp(risk))
             for (int i = 0; i < input.Rows; i++)
             {
-                T expRisk = NumOps.Exp(riskScores[i]);
+                T expRisk = ClampedExpRisk(riskScores[i]);
                 for (int j = 0; j < times.Length; j++)
                 {
                     T h0 = InterpolateBaselineHazard(times[j]);
@@ -252,7 +382,7 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
 
         for (int i = 0; i < input.Rows; i++)
         {
-            T expRisk = NumOps.Exp(riskScores[i]);
+            T expRisk = ClampedExpRisk(riskScores[i]);
 
             // Find time where S(t) = 0.5
             if (_baselineHazardTimes != null && _baselineHazardValues != null && _baselineHazardTimes.Length > 0)
@@ -320,6 +450,10 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     {
         _weights = [];
         _biases = [];
+        _bnGamma = new List<Vector<T>>();
+        _bnBeta = new List<Vector<T>>();
+        _bnRunningMean = new List<Vector<T>>();
+        _bnRunningVariance = new List<Vector<T>>();
 
         int inputSize = _numFeatures;
 
@@ -343,6 +477,13 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             _weights.Add(w);
             _biases.Add(b);
 
+            // Batch-normalization parameters start at the identity transform (gamma = 1, beta = 0), so an
+            // untrained normalized layer behaves like the un-normalized one.
+            _bnGamma.Add(Vector<T>.CreateDefault(outputSize, NumOps.One));
+            _bnBeta.Add(new Vector<T>(outputSize));
+            _bnRunningMean.Add(new Vector<T>(outputSize));
+            _bnRunningVariance.Add(Vector<T>.CreateDefault(outputSize, NumOps.One));
+
             inputSize = outputSize;
         }
 
@@ -361,25 +502,139 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     }
 
     /// <summary>
+    /// Records the per-feature mean and standard deviation of the training inputs.
+    /// </summary>
+    /// <param name="x">Training feature matrix.</param>
+    /// <remarks>
+    /// <para>
+    /// Katzman et al. standardize the covariates before fitting, and it is not cosmetic here. Raw features
+    /// on the order of 10, fanned into a linear layer, produce risk scores large enough that exp overflows
+    /// in the Breslow baseline hazard; once the cumulative hazard is infinite, subtracting a subject out of
+    /// the risk set makes it NaN and every prediction downstream is lost. Standardizing puts the linear
+    /// predictor in a range where the network trains stably and the hazard stays finite.
+    /// </para>
+    /// <para>
+    /// A feature with zero variance gets a standard deviation of 1, so it maps to a constant 0 rather than
+    /// dividing by zero.
+    /// </para>
+    /// </remarks>
+    private void ComputeFeatureStandardization(Matrix<T> x)
+    {
+        int n = x.Rows;
+        _featureMean = new Vector<T>(x.Columns);
+        _featureStd = new Vector<T>(x.Columns);
+
+        for (int j = 0; j < x.Columns; j++)
+        {
+            double sum = 0.0;
+            for (int i = 0; i < n; i++)
+            {
+                sum += NumOps.ToDouble(x[i, j]);
+            }
+            double mean = sum / n;
+
+            double sq = 0.0;
+            for (int i = 0; i < n; i++)
+            {
+                double d = NumOps.ToDouble(x[i, j]) - mean;
+                sq += d * d;
+            }
+            double std = Math.Sqrt(sq / n);
+            if (std < 1e-10) std = 1.0;
+
+            _featureMean[j] = NumOps.FromDouble(mean);
+            _featureStd[j] = NumOps.FromDouble(std);
+        }
+    }
+
+    /// <summary>
+    /// Applies the training standardization to one feature value.
+    /// </summary>
+    private T StandardizeFeature(T value, int featureIndex)
+    {
+        if (_featureMean is null || _featureStd is null ||
+            featureIndex >= _featureMean.Length || featureIndex >= _featureStd.Length)
+        {
+            return value;
+        }
+
+        return NumOps.Divide(NumOps.Subtract(value, _featureMean[featureIndex]), _featureStd[featureIndex]);
+    }
+
+    /// <summary>
+    /// Exponentiates a risk score after clamping it into a range where the result stays finite.
+    /// </summary>
+    /// <param name="riskScore">The raw linear predictor.</param>
+    /// <returns>exp of the clamped risk score.</returns>
+    /// <remarks>
+    /// See <see cref="RiskScoreClamp"/>. Every exponentiation of a risk score in this class goes through
+    /// here, so the loss, the baseline hazard and the survival function all agree on the same bound --
+    /// they previously did not, and the baseline hazard was the one that overflowed.
+    /// </remarks>
+    private T ClampedExpRisk(T riskScore)
+    {
+        double v = NumOps.ToDouble(riskScore);
+        if (double.IsNaN(v)) v = 0.0;
+        v = Math.Max(-RiskScoreClamp, Math.Min(RiskScoreClamp, v));
+        return NumOps.FromDouble(Math.Exp(v));
+    }
+
+    /// <summary>
+    /// Everything the backward pass needs from one forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Working out how to improve the network requires remembering what it computed
+    /// on the way forward, not just the final answer. This carries those intermediate values back.
+    /// </remarks>
+    private sealed class ForwardCache
+    {
+        /// <summary>Input to each layer; entry l feeds layer l. Length is layer count.</summary>
+        public List<Vector<T>[]> Inputs { get; } = new List<Vector<T>[]>();
+
+        /// <summary>Pre-activation of each hidden layer, before batch norm and activation.</summary>
+        public List<Vector<T>[]> PreActivations { get; } = new List<Vector<T>[]>();
+
+        /// <summary>Batch-normalized pre-activation of each hidden layer, before the activation.</summary>
+        public List<Vector<T>[]> NormalizedPreActivations { get; } = new List<Vector<T>[]>();
+
+        /// <summary>Per-hidden-layer batch mean, empty when batch norm is off.</summary>
+        public List<Vector<T>> BatchMean { get; } = new List<Vector<T>>();
+
+        /// <summary>Per-hidden-layer batch variance, empty when batch norm is off.</summary>
+        public List<Vector<T>> BatchVariance { get; } = new List<Vector<T>>();
+
+        /// <summary>Dropout mask per hidden layer: 0 for a dropped unit, the inverted-dropout scale otherwise.</summary>
+        public List<Vector<T>[]> DropoutMasks { get; } = new List<Vector<T>[]>();
+    }
+
+    /// <summary>
     /// Forward pass through the network.
     /// </summary>
-    private (Vector<T>, List<Vector<T>[]>) ForwardPass(Matrix<T> x, int[] indices)
+    /// <param name="x">Feature matrix.</param>
+    /// <param name="indices">Rows of <paramref name="x"/> to run, in order.</param>
+    /// <param name="training">
+    /// When true, batch norm uses the batch statistics and updates its running estimates, and dropout is
+    /// applied. When false, the running estimates are used and no units are dropped.
+    /// </param>
+    /// <returns>The risk score per row, and the intermediate values the backward pass needs.</returns>
+    private (Vector<T> RiskScores, ForwardCache Cache) ForwardPass(Matrix<T> x, int[] indices, bool training)
     {
         int n = indices.Length;
-        var hiddenOutputs = new List<Vector<T>[]>();
+        var cache = new ForwardCache();
+        bool useBatchNorm = _options.UseBatchNormalization && n > 1;
+        T epsilon = NumOps.FromDouble(1e-5);
 
-        // Current layer input
         var current = new Vector<T>[n];
         for (int i = 0; i < n; i++)
         {
             current[i] = new Vector<T>(_numFeatures);
             for (int j = 0; j < _numFeatures; j++)
             {
-                current[i][j] = x[indices[i], j];
+                current[i][j] = StandardizeFeature(x[indices[i], j], j);
             }
         }
 
-        // Hidden layers
+        // Hidden layers: linear -> batch norm -> activation -> dropout.
         for (int layer = 0; layer < _weights.Count - 1; layer++)
         {
             var w = _weights[layer];
@@ -388,23 +643,125 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
 
             var weightTensor = Tensor<T>.FromMatrix(w);
             var biasTensor = Tensor<T>.FromVector(b).Reshape(1, outputSize);
-            var next = new Vector<T>[n];
+
+            // Linear part, vectorized per sample.
+            var preActivation = new Vector<T>[n];
             for (int i = 0; i < n; i++)
             {
-                // SIMD: output = input @ weights + biases via Engine.TensorMatMul
                 var inputTensor = Tensor<T>.FromVector(current[i]).Reshape(1, current[i].Length);
                 var result = Engine.TensorAdd(
                     Engine.TensorMatMul(inputTensor, weightTensor), biasTensor);
-                // SIMD activation via IActivationFunction.Forward
-                result = _options.Activation.Activate(result);
-                next[i] = result.Reshape(outputSize).ToVector();
+                preActivation[i] = result.Reshape(outputSize).ToVector();
             }
 
-            hiddenOutputs.Add(current);
-            current = next;
+            // Batch normalization (Ioffe & Szegedy 2015) over the batch dimension.
+            var normalized = new Vector<T>[n];
+            if (useBatchNorm)
+            {
+                var mean = new Vector<T>(outputSize);
+                var variance = new Vector<T>(outputSize);
+
+                for (int k = 0; k < outputSize; k++)
+                {
+                    T sum = NumOps.Zero;
+                    for (int i = 0; i < n; i++)
+                    {
+                        sum = NumOps.Add(sum, preActivation[i][k]);
+                    }
+                    mean[k] = NumOps.Divide(sum, NumOps.FromDouble(n));
+
+                    T sqSum = NumOps.Zero;
+                    for (int i = 0; i < n; i++)
+                    {
+                        T d = NumOps.Subtract(preActivation[i][k], mean[k]);
+                        sqSum = NumOps.Add(sqSum, NumOps.Multiply(d, d));
+                    }
+                    variance[k] = NumOps.Divide(sqSum, NumOps.FromDouble(n));
+                }
+
+                Vector<T> useMean = training ? mean : _bnRunningMean[layer];
+                Vector<T> useVariance = training ? variance : _bnRunningVariance[layer];
+
+                for (int i = 0; i < n; i++)
+                {
+                    normalized[i] = new Vector<T>(outputSize);
+                    for (int k = 0; k < outputSize; k++)
+                    {
+                        T std = NumOps.Sqrt(NumOps.Add(useVariance[k], epsilon));
+                        T zhat = NumOps.Divide(NumOps.Subtract(preActivation[i][k], useMean[k]), std);
+                        normalized[i][k] = NumOps.Add(
+                            NumOps.Multiply(_bnGamma[layer][k], zhat), _bnBeta[layer][k]);
+                    }
+                }
+
+                if (training)
+                {
+                    // Running estimates for inference, exponential moving average with momentum 0.9.
+                    T momentum = NumOps.FromDouble(0.9);
+                    T oneMinus = NumOps.FromDouble(0.1);
+                    for (int k = 0; k < outputSize; k++)
+                    {
+                        _bnRunningMean[layer][k] = NumOps.Add(
+                            NumOps.Multiply(momentum, _bnRunningMean[layer][k]),
+                            NumOps.Multiply(oneMinus, mean[k]));
+                        _bnRunningVariance[layer][k] = NumOps.Add(
+                            NumOps.Multiply(momentum, _bnRunningVariance[layer][k]),
+                            NumOps.Multiply(oneMinus, variance[k]));
+                    }
+                }
+
+                cache.BatchMean.Add(training ? mean : _bnRunningMean[layer]);
+                cache.BatchVariance.Add(training ? variance : _bnRunningVariance[layer]);
+            }
+            else
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    normalized[i] = preActivation[i];
+                }
+            }
+
+            // Activation.
+            var activated = new Vector<T>[n];
+            for (int i = 0; i < n; i++)
+            {
+                var t = Tensor<T>.FromVector(normalized[i]).Reshape(1, outputSize);
+                activated[i] = _options.Activation.Activate(t).Reshape(outputSize).ToVector();
+            }
+
+            // Inverted dropout: scale the survivors at training time so inference needs no rescaling.
+            var masks = new Vector<T>[n];
+            if (training && _options.DropoutRate > 0.0)
+            {
+                T keepScale = NumOps.FromDouble(1.0 / (1.0 - _options.DropoutRate));
+                for (int i = 0; i < n; i++)
+                {
+                    masks[i] = new Vector<T>(outputSize);
+                    for (int k = 0; k < outputSize; k++)
+                    {
+                        bool keep = _random.NextDouble() >= _options.DropoutRate;
+                        masks[i][k] = keep ? keepScale : NumOps.Zero;
+                        activated[i][k] = NumOps.Multiply(activated[i][k], masks[i][k]);
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    masks[i] = Vector<T>.CreateDefault(outputSize, NumOps.One);
+                }
+            }
+
+            cache.Inputs.Add(current);
+            cache.PreActivations.Add(preActivation);
+            cache.NormalizedPreActivations.Add(normalized);
+            cache.DropoutMasks.Add(masks);
+
+            current = activated;
         }
 
-        // Output layer (no activation - linear risk score)
+        // Output layer: a single linear risk score, no activation.
         var wOut = _weights[^1];
         var bOut = _biases[^1];
         var riskScores = new Vector<T>(n);
@@ -419,75 +776,653 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             riskScores[i] = sum;
         }
 
-        hiddenOutputs.Add(current);
-        return (riskScores, hiddenOutputs);
+        cache.Inputs.Add(current);
+        return (riskScores, cache);
     }
 
     /// <summary>
-    /// Computes Cox partial log-likelihood loss and gradients.
+    /// Computes the negative Cox partial log-likelihood and its derivative with respect to each risk score.
     /// </summary>
+    /// <param name="riskScores">Risk score per batch member.</param>
+    /// <param name="times">Observed time per batch member.</param>
+    /// <param name="events">Event indicator per batch member.</param>
+    /// <returns>The mean loss over the batch, and d(loss)/d(risk score) per batch member.</returns>
+    /// <remarks>
+    /// <para>
+    /// With the risk set R(t) = { j : t_j >= t }, the negative partial log-likelihood is
+    /// </para>
+    /// <para>
+    ///   L = - sum over events i of [ r_i - log S_i ],   S_i = sum over j in R(t_i) of exp(r_j)
+    /// </para>
+    /// <para>
+    /// and its derivative with respect to one risk score is
+    /// </para>
+    /// <para>
+    ///   dL/dr_k = -d_k + exp(r_k) * sum over events i with t_i &lt;= t_k of 1/S_i
+    /// </para>
+    /// <para>
+    /// where d_k is the event indicator. That trailing sum runs over every earlier event time, because
+    /// subject k sits in the risk set of all of them. The previous implementation kept only the single
+    /// i = k term and added it for censored subjects too, where the correct sum runs over events alone --
+    /// so the reported gradient was not the derivative of the reported loss. Both directions are computed
+    /// in one pass each: descending time accumulates S, ascending time accumulates the reciprocal sum.
+    /// </para>
+    /// </remarks>
     private (T loss, Vector<T> gradients) ComputeCoxLossAndGradients(
-        Vector<T> riskScores, Vector<T> times, Vector<T> events,
-        int[] batchIndices, int[] sortedIndices)
+        Vector<T> riskScores, Vector<T> times, Vector<T> events)
     {
-        int n = batchIndices.Length;
+        int n = riskScores.Length;
         var gradients = new Vector<T>(n);
+        T epsilon = NumOps.FromDouble(1e-10);
 
-        // Create mapping from global to batch index
-        var batchSet = new HashSet<int>(batchIndices);
-        var batchIndexMap = new Dictionary<int, int>();
-        for (int i = 0; i < batchIndices.Length; i++)
+        // Ascending time order within this batch; the risk set is the batch itself.
+        int[] order = Enumerable.Range(0, n)
+            .OrderBy(i => NumOps.ToDouble(times[i]))
+            .ToArray();
+
+        // Clamp risk scores before exponentiating, as the original code did, to keep exp finite.
+        var expRisk = new T[n];
+        var clamped = new T[n];
+        for (int i = 0; i < n; i++)
         {
-            batchIndexMap[batchIndices[i]] = i;
+            double v = Math.Max(-20.0, Math.Min(20.0, NumOps.ToDouble(riskScores[i])));
+            clamped[i] = NumOps.FromDouble(v);
+            expRisk[i] = NumOps.Exp(clamped[i]);
+        }
+
+        // Descending time: S[p] is the risk-set sum at the time of the subject in position p.
+        var riskSetSum = new T[n];
+        T running = NumOps.Zero;
+        for (int p = n - 1; p >= 0; p--)
+        {
+            running = NumOps.Add(running, expRisk[order[p]]);
+            riskSetSum[p] = NumOps.Add(running, epsilon);
         }
 
         T loss = NumOps.Zero;
-        T epsilon = NumOps.FromDouble(1e-10);
-
-        // Process events in time order
-        T riskSum = NumOps.Zero;
-        for (int i = sortedIndices.Length - 1; i >= 0; i--)
+        int eventCount = 0;
+        for (int p = 0; p < n; p++)
         {
-            int idx = sortedIndices[i];
-            if (!batchSet.Contains(idx)) continue;
-
-            int batchIdx = batchIndexMap[idx];
-            T ri = riskScores[batchIdx];
-            // Clamp risk score to prevent exp overflow
-            double riVal = NumOps.ToDouble(ri);
-            riVal = Math.Max(-20.0, Math.Min(20.0, riVal));
-            ri = NumOps.FromDouble(riVal);
-            T expRi = NumOps.Exp(ri);
-
-            riskSum = NumOps.Add(riskSum, expRi);
-
-            T riskSumSafe = NumOps.Add(riskSum, epsilon);
-            T expRiOverRiskSum = NumOps.Divide(expRi, riskSumSafe);
-
+            int idx = order[p];
             if (NumOps.Compare(events[idx], NumOps.One) == 0)
             {
-                // Event occurred: loss -= ri - log(riskSum + eps)
-                loss = NumOps.Subtract(loss, NumOps.Subtract(ri, NumOps.Log(riskSumSafe)));
-
-                // Gradient: event contribution: grad - 1 + expRi / (riskSum + eps)
-                gradients[batchIdx] = NumOps.Add(
-                    NumOps.Subtract(gradients[batchIdx], NumOps.One),
-                    expRiOverRiskSum);
-            }
-            else
-            {
-                // Censored - only contributes to risk set
-                gradients[batchIdx] = NumOps.Add(gradients[batchIdx], expRiOverRiskSum);
+                loss = NumOps.Subtract(loss, NumOps.Subtract(clamped[idx], NumOps.Log(riskSetSum[p])));
+                eventCount++;
             }
         }
 
-        return (NumOps.Divide(loss, NumOps.FromDouble(n)), gradients);
+        // Ascending time: accumulate sum of 1/S over the events at or before each position.
+        T reciprocalSum = NumOps.Zero;
+        for (int p = 0; p < n; p++)
+        {
+            int idx = order[p];
+            if (NumOps.Compare(events[idx], NumOps.One) == 0)
+            {
+                reciprocalSum = NumOps.Add(reciprocalSum, NumOps.Divide(NumOps.One, riskSetSum[p]));
+            }
+
+            T term = NumOps.Multiply(expRisk[idx], reciprocalSum);
+            gradients[idx] = NumOps.Compare(events[idx], NumOps.One) == 0
+                ? NumOps.Subtract(term, NumOps.One)
+                : term;
+        }
+
+        // Normalize by the number of events, which is what the likelihood actually sums over.
+        T scale = NumOps.FromDouble(eventCount > 0 ? eventCount : 1);
+        for (int i = 0; i < n; i++)
+        {
+            gradients[i] = NumOps.Divide(gradients[i], scale);
+        }
+
+        return (NumOps.Divide(loss, scale), gradients);
+    }
+
+
+    /// <summary>
+    /// Accumulated gradients for one backward pass, laid out to match the network's parameter lists.
+    /// </summary>
+    private sealed class ParameterGradients
+    {
+        public List<Matrix<T>> Weights { get; } = new List<Matrix<T>>();
+        public List<Vector<T>> Biases { get; } = new List<Vector<T>>();
+        public List<Vector<T>> Gamma { get; } = new List<Vector<T>>();
+        public List<Vector<T>> Beta { get; } = new List<Vector<T>>();
     }
 
     /// <summary>
-    /// Computes baseline cumulative hazard using Breslow estimator.
+    /// Adam moment estimates, one entry per parameter tensor.
     /// </summary>
-    private void ComputeBaselineHazard(Matrix<T> x, Vector<T> times, Vector<T> events, int[] sortedIndices)
+    private sealed class AdamState
+    {
+        public List<Matrix<T>> WeightM { get; } = new List<Matrix<T>>();
+        public List<Matrix<T>> WeightV { get; } = new List<Matrix<T>>();
+        public List<Vector<T>> BiasM { get; } = new List<Vector<T>>();
+        public List<Vector<T>> BiasV { get; } = new List<Vector<T>>();
+        public List<Vector<T>> GammaM { get; } = new List<Vector<T>>();
+        public List<Vector<T>> GammaV { get; } = new List<Vector<T>>();
+        public List<Vector<T>> BetaM { get; } = new List<Vector<T>>();
+        public List<Vector<T>> BetaV { get; } = new List<Vector<T>>();
+        public int Step { get; set; }
+    }
+
+    /// <summary>
+    /// Fits the network by minimizing the negative Cox partial log-likelihood.
+    /// </summary>
+    /// <param name="x">Feature matrix.</param>
+    /// <param name="times">Observed times.</param>
+    /// <param name="events">Event indicators.</param>
+    /// <remarks>
+    /// Mini-batch Adam with decoupled L2 weight decay and early stopping on the epoch loss. The batch is
+    /// its own risk set, so each batch must be large enough to contain events; a batch that happens to hold
+    /// no event contributes no gradient and is skipped rather than dividing by zero.
+    /// </remarks>
+    private void FitNetwork(Matrix<T> x, Vector<T> times, Vector<T> events)
+    {
+        int n = x.Rows;
+        int batchSize = Math.Max(2, Math.Min(_options.BatchSize, n));
+        var adam = CreateAdamState();
+
+        double bestLoss = double.MaxValue;
+        int epochsWithoutImprovement = 0;
+        List<Matrix<T>>? bestWeights = null;
+        List<Vector<T>>? bestBiases = null;
+        List<Vector<T>>? bestBnGamma = null;
+        List<Vector<T>>? bestBnBeta = null;
+        List<Vector<T>>? bestBnRunningMean = null;
+        List<Vector<T>>? bestBnRunningVariance = null;
+
+        var order = Enumerable.Range(0, n).ToArray();
+
+        for (int epoch = 0; epoch < _options.Epochs; epoch++)
+        {
+            order = ShuffleArray(order);
+            double epochLoss = 0.0;
+            int batches = 0;
+
+            for (int start = 0; start < n; start += batchSize)
+            {
+                int count = Math.Min(batchSize, n - start);
+                if (count < 2)
+                {
+                    // A single-subject risk set carries no information: the partial likelihood term is
+                    // log(exp(r)/exp(r)) = 0 for it. Skip rather than emit a zero-variance update.
+                    continue;
+                }
+
+                var batchIndices = new int[count];
+                Array.Copy(order, start, batchIndices, 0, count);
+
+                var batchTimes = new Vector<T>(count);
+                var batchEvents = new Vector<T>(count);
+                for (int i = 0; i < count; i++)
+                {
+                    batchTimes[i] = times[batchIndices[i]];
+                    batchEvents[i] = events[batchIndices[i]];
+                }
+
+                bool batchHasEvent = false;
+                for (int i = 0; i < count; i++)
+                {
+                    if (NumOps.Compare(batchEvents[i], NumOps.One) == 0)
+                    {
+                        batchHasEvent = true;
+                        break;
+                    }
+                }
+
+                if (!batchHasEvent)
+                {
+                    continue;
+                }
+
+                var (riskScores, cache) = ForwardPass(x, batchIndices, training: true);
+                var (loss, riskGradients) = ComputeCoxLossAndGradients(riskScores, batchTimes, batchEvents);
+                var gradients = Backpropagate(cache, riskGradients);
+                ApplyAdamUpdate(gradients, adam);
+
+                epochLoss += NumOps.ToDouble(loss);
+                batches++;
+            }
+
+            if (batches == 0)
+            {
+                continue;
+            }
+
+            double meanLoss = epochLoss / batches;
+
+            if (meanLoss < bestLoss - 1e-7)
+            {
+                bestLoss = meanLoss;
+                epochsWithoutImprovement = 0;
+                bestWeights = CloneWeights(_weights);
+                bestBiases = CloneVectors(_biases);
+                bestBnGamma = CloneVectors(_bnGamma);
+                bestBnBeta = CloneVectors(_bnBeta);
+                bestBnRunningMean = CloneVectors(_bnRunningMean);
+                bestBnRunningVariance = CloneVectors(_bnRunningVariance);
+            }
+            else
+            {
+                epochsWithoutImprovement++;
+                if (_options.EarlyStoppingPatience.HasValue &&
+                    epochsWithoutImprovement >= _options.EarlyStoppingPatience.Value)
+                {
+                    break;
+                }
+            }
+        }
+
+        // Restore one coherent best-epoch checkpoint. Batch-normalization scale, shift and running
+        // statistics are part of the model state just as much as the dense weights are. Restoring only
+        // weights/biases paired the best dense checkpoint with normalization state from a later, possibly
+        // unstable epoch; that produced initialization-dependent NaN/Infinity predictions after training.
+        if (bestWeights is not null && bestBiases is not null &&
+            bestBnGamma is not null && bestBnBeta is not null &&
+            bestBnRunningMean is not null && bestBnRunningVariance is not null)
+        {
+            _weights = bestWeights;
+            _biases = bestBiases;
+            _bnGamma = bestBnGamma;
+            _bnBeta = bestBnBeta;
+            _bnRunningMean = bestBnRunningMean;
+            _bnRunningVariance = bestBnRunningVariance;
+        }
+    }
+
+    /// <summary>
+    /// Creates zeroed Adam moment estimates matching the current parameter shapes.
+    /// </summary>
+    private AdamState CreateAdamState()
+    {
+        var state = new AdamState();
+        for (int layer = 0; layer < _weights.Count; layer++)
+        {
+            state.WeightM.Add(new Matrix<T>(_weights[layer].Rows, _weights[layer].Columns));
+            state.WeightV.Add(new Matrix<T>(_weights[layer].Rows, _weights[layer].Columns));
+            state.BiasM.Add(new Vector<T>(_biases[layer].Length));
+            state.BiasV.Add(new Vector<T>(_biases[layer].Length));
+        }
+
+        for (int layer = 0; layer < _bnGamma.Count; layer++)
+        {
+            state.GammaM.Add(new Vector<T>(_bnGamma[layer].Length));
+            state.GammaV.Add(new Vector<T>(_bnGamma[layer].Length));
+            state.BetaM.Add(new Vector<T>(_bnBeta[layer].Length));
+            state.BetaV.Add(new Vector<T>(_bnBeta[layer].Length));
+        }
+
+        return state;
+    }
+
+    /// <summary>
+    /// Propagates d(loss)/d(risk score) back through the network into parameter gradients.
+    /// </summary>
+    /// <param name="cache">Intermediate values recorded by the forward pass.</param>
+    /// <param name="riskGradients">d(loss)/d(risk score) for each batch member.</param>
+    /// <returns>Gradients for every weight, bias and batch-norm parameter.</returns>
+    /// <remarks>
+    /// The chain runs output layer, then each hidden layer in reverse: dropout mask, activation
+    /// derivative, batch norm, then the linear map. The batch-norm step uses the standard three-term
+    /// derivative from Ioffe and Szegedy (2015), which accounts for the batch mean and variance both
+    /// depending on every sample in the batch.
+    /// </remarks>
+    private ParameterGradients Backpropagate(ForwardCache cache, Vector<T> riskGradients)
+    {
+        int layerCount = _weights.Count;
+        int n = riskGradients.Length;
+        bool useBatchNorm = _options.UseBatchNormalization && cache.BatchMean.Count > 0;
+        T epsilon = NumOps.FromDouble(1e-5);
+
+        var grads = new ParameterGradients();
+        for (int layer = 0; layer < layerCount; layer++)
+        {
+            grads.Weights.Add(new Matrix<T>(_weights[layer].Rows, _weights[layer].Columns));
+            grads.Biases.Add(new Vector<T>(_biases[layer].Length));
+        }
+
+        for (int layer = 0; layer < _bnGamma.Count; layer++)
+        {
+            grads.Gamma.Add(new Vector<T>(_bnGamma[layer].Length));
+            grads.Beta.Add(new Vector<T>(_bnBeta[layer].Length));
+        }
+
+        // Output layer: r_i = w . h_i + b, so dL/dw_k = sum_i g_i h_i[k] and dL/db = sum_i g_i.
+        var outputInput = cache.Inputs[layerCount - 1];
+        int outputInputSize = _weights[layerCount - 1].Rows;
+
+        // delta carries dL/d(activation output) of the layer below.
+        var delta = new Vector<T>[n];
+        for (int i = 0; i < n; i++)
+        {
+            delta[i] = new Vector<T>(outputInputSize);
+            for (int k = 0; k < outputInputSize; k++)
+            {
+                grads.Weights[layerCount - 1][k, 0] = NumOps.Add(
+                    grads.Weights[layerCount - 1][k, 0],
+                    NumOps.Multiply(riskGradients[i], outputInput[i][k]));
+                delta[i][k] = NumOps.Multiply(riskGradients[i], _weights[layerCount - 1][k, 0]);
+            }
+            grads.Biases[layerCount - 1][0] = NumOps.Add(grads.Biases[layerCount - 1][0], riskGradients[i]);
+        }
+
+        // Hidden layers, in reverse.
+        for (int layer = layerCount - 2; layer >= 0; layer--)
+        {
+            int outputSize = _weights[layer].Columns;
+            int inputSize = _weights[layer].Rows;
+            var layerInput = cache.Inputs[layer];
+            var preActivation = cache.PreActivations[layer];
+            var normalized = cache.NormalizedPreActivations[layer];
+            var masks = cache.DropoutMasks[layer];
+
+            // Through dropout and the activation, giving dL/d(normalized pre-activation).
+            var dNorm = new Vector<T>[n];
+            for (int i = 0; i < n; i++)
+            {
+                dNorm[i] = new Vector<T>(outputSize);
+                for (int k = 0; k < outputSize; k++)
+                {
+                    T afterDropout = NumOps.Multiply(delta[i][k], masks[i][k]);
+                    T actDeriv = _options.Activation.Derivative(normalized[i][k]);
+                    dNorm[i][k] = NumOps.Multiply(afterDropout, actDeriv);
+                }
+            }
+
+            // Through batch norm, giving dL/d(pre-activation).
+            var dPre = new Vector<T>[n];
+            for (int i = 0; i < n; i++)
+            {
+                dPre[i] = new Vector<T>(outputSize);
+            }
+
+            if (useBatchNorm)
+            {
+                var mean = cache.BatchMean[layer];
+                var variance = cache.BatchVariance[layer];
+
+                for (int k = 0; k < outputSize; k++)
+                {
+                    T std = NumOps.Sqrt(NumOps.Add(variance[k], epsilon));
+
+                    // dL/dgamma and dL/dbeta accumulate over the batch.
+                    T dGamma = NumOps.Zero;
+                    T dBeta = NumOps.Zero;
+                    var zhat = new T[n];
+                    for (int i = 0; i < n; i++)
+                    {
+                        zhat[i] = NumOps.Divide(NumOps.Subtract(preActivation[i][k], mean[k]), std);
+                        dGamma = NumOps.Add(dGamma, NumOps.Multiply(dNorm[i][k], zhat[i]));
+                        dBeta = NumOps.Add(dBeta, dNorm[i][k]);
+                    }
+
+                    grads.Gamma[layer][k] = NumOps.Add(grads.Gamma[layer][k], dGamma);
+                    grads.Beta[layer][k] = NumOps.Add(grads.Beta[layer][k], dBeta);
+
+                    // dL/dz = gamma/(N*std) * (N*dzhat - sum(dzhat) - zhat * sum(dzhat*zhat))
+                    T sumDzhat = NumOps.Zero;
+                    T sumDzhatZhat = NumOps.Zero;
+                    for (int i = 0; i < n; i++)
+                    {
+                        T dzhat = NumOps.Multiply(dNorm[i][k], _bnGamma[layer][k]);
+                        sumDzhat = NumOps.Add(sumDzhat, dzhat);
+                        sumDzhatZhat = NumOps.Add(sumDzhatZhat, NumOps.Multiply(dzhat, zhat[i]));
+                    }
+
+                    T invNStd = NumOps.Divide(NumOps.One, NumOps.Multiply(NumOps.FromDouble(n), std));
+                    for (int i = 0; i < n; i++)
+                    {
+                        T dzhat = NumOps.Multiply(dNorm[i][k], _bnGamma[layer][k]);
+                        T inner = NumOps.Subtract(
+                            NumOps.Subtract(NumOps.Multiply(NumOps.FromDouble(n), dzhat), sumDzhat),
+                            NumOps.Multiply(zhat[i], sumDzhatZhat));
+                        dPre[i][k] = NumOps.Multiply(invNStd, inner);
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    for (int k = 0; k < outputSize; k++)
+                    {
+                        dPre[i][k] = dNorm[i][k];
+                    }
+                }
+            }
+
+            // Through the linear map, giving parameter gradients and the delta for the layer below.
+            var nextDelta = new Vector<T>[n];
+            for (int i = 0; i < n; i++)
+            {
+                nextDelta[i] = new Vector<T>(inputSize);
+            }
+
+            for (int i = 0; i < n; i++)
+            {
+                for (int k = 0; k < outputSize; k++)
+                {
+                    T d = dPre[i][k];
+                    grads.Biases[layer][k] = NumOps.Add(grads.Biases[layer][k], d);
+                    for (int j = 0; j < inputSize; j++)
+                    {
+                        grads.Weights[layer][j, k] = NumOps.Add(
+                            grads.Weights[layer][j, k], NumOps.Multiply(d, layerInput[i][j]));
+                        nextDelta[i][j] = NumOps.Add(
+                            nextDelta[i][j], NumOps.Multiply(d, _weights[layer][j, k]));
+                    }
+                }
+            }
+
+            delta = nextDelta;
+        }
+
+        return grads;
+    }
+
+    /// <summary>
+    /// Applies one Adam step with decoupled L2 weight decay to every parameter.
+    /// </summary>
+    /// <remarks>
+    /// Weight decay is applied to the weight matrices only. Biases and the batch-norm scale and shift are
+    /// left undecayed, which is the standard convention: shrinking them toward zero removes the layer's
+    /// ability to shift its output rather than controlling model complexity.
+    /// </remarks>
+    private void ApplyAdamUpdate(ParameterGradients grads, AdamState adam)
+    {
+        adam.Step++;
+        double lr = _options.LearningRate;
+        double beta1 = 0.9;
+        double beta2 = 0.999;
+        double eps = 1e-8;
+        double decay = _options.L2Regularization;
+        double biasCorrection1 = 1.0 - Math.Pow(beta1, adam.Step);
+        double biasCorrection2 = 1.0 - Math.Pow(beta2, adam.Step);
+
+        for (int layer = 0; layer < _weights.Count; layer++)
+        {
+            var w = _weights[layer];
+            var gw = grads.Weights[layer];
+            var mw = adam.WeightM[layer];
+            var vw = adam.WeightV[layer];
+
+            for (int i = 0; i < w.Rows; i++)
+            {
+                for (int j = 0; j < w.Columns; j++)
+                {
+                    double g = NumOps.ToDouble(gw[i, j]) + decay * NumOps.ToDouble(w[i, j]);
+                    double m = beta1 * NumOps.ToDouble(mw[i, j]) + (1 - beta1) * g;
+                    double v = beta2 * NumOps.ToDouble(vw[i, j]) + (1 - beta2) * g * g;
+                    mw[i, j] = NumOps.FromDouble(m);
+                    vw[i, j] = NumOps.FromDouble(v);
+
+                    double step = lr * (m / biasCorrection1) / (Math.Sqrt(v / biasCorrection2) + eps);
+                    w[i, j] = NumOps.FromDouble(NumOps.ToDouble(w[i, j]) - step);
+                }
+            }
+
+            var b = _biases[layer];
+            var gb = grads.Biases[layer];
+            var mb = adam.BiasM[layer];
+            var vb = adam.BiasV[layer];
+
+            for (int k = 0; k < b.Length; k++)
+            {
+                double g = NumOps.ToDouble(gb[k]);
+                double m = beta1 * NumOps.ToDouble(mb[k]) + (1 - beta1) * g;
+                double v = beta2 * NumOps.ToDouble(vb[k]) + (1 - beta2) * g * g;
+                mb[k] = NumOps.FromDouble(m);
+                vb[k] = NumOps.FromDouble(v);
+
+                double step = lr * (m / biasCorrection1) / (Math.Sqrt(v / biasCorrection2) + eps);
+                b[k] = NumOps.FromDouble(NumOps.ToDouble(b[k]) - step);
+            }
+        }
+
+        for (int layer = 0; layer < grads.Gamma.Count; layer++)
+        {
+            UpdateAdamVector(_bnGamma[layer], grads.Gamma[layer], adam.GammaM[layer], adam.GammaV[layer],
+                lr, beta1, beta2, eps, biasCorrection1, biasCorrection2);
+            UpdateAdamVector(_bnBeta[layer], grads.Beta[layer], adam.BetaM[layer], adam.BetaV[layer],
+                lr, beta1, beta2, eps, biasCorrection1, biasCorrection2);
+        }
+    }
+
+    /// <summary>
+    /// Applies one Adam step to a single parameter vector.
+    /// </summary>
+    private void UpdateAdamVector(Vector<T> parameter, Vector<T> gradient, Vector<T> m, Vector<T> v,
+        double lr, double beta1, double beta2, double eps, double biasCorrection1, double biasCorrection2)
+    {
+        for (int k = 0; k < parameter.Length; k++)
+        {
+            double g = NumOps.ToDouble(gradient[k]);
+            double mk = beta1 * NumOps.ToDouble(m[k]) + (1 - beta1) * g;
+            double vk = beta2 * NumOps.ToDouble(v[k]) + (1 - beta2) * g * g;
+            m[k] = NumOps.FromDouble(mk);
+            v[k] = NumOps.FromDouble(vk);
+
+            double step = lr * (mk / biasCorrection1) / (Math.Sqrt(vk / biasCorrection2) + eps);
+            parameter[k] = NumOps.FromDouble(NumOps.ToDouble(parameter[k]) - step);
+        }
+    }
+
+    /// <summary>
+    /// Deep-copies the weight matrices, so early stopping can restore the best epoch.
+    /// </summary>
+    private static List<Matrix<T>> CloneWeights(List<Matrix<T>> source)
+    {
+        var copy = new List<Matrix<T>>(source.Count);
+        foreach (var w in source)
+        {
+            var c = new Matrix<T>(w.Rows, w.Columns);
+            for (int i = 0; i < w.Rows; i++)
+            {
+                for (int j = 0; j < w.Columns; j++)
+                {
+                    c[i, j] = w[i, j];
+                }
+            }
+            copy.Add(c);
+        }
+
+        return copy;
+    }
+
+    /// <summary>
+    /// Deep-copies model-state vectors, so early stopping can restore the best epoch.
+    /// </summary>
+    private static List<Vector<T>> CloneVectors(List<Vector<T>> source)
+    {
+        var copy = new List<Vector<T>>(source.Count);
+        foreach (var b in source)
+        {
+            var c = new Vector<T>(b.Length);
+            for (int i = 0; i < b.Length; i++)
+            {
+                c[i] = b[i];
+            }
+            copy.Add(c);
+        }
+
+        return copy;
+    }
+
+    /// <summary>
+    /// Predicts the expected survival time for each subject by integrating the predicted survival curve.
+    /// </summary>
+    /// <param name="input">Feature matrix, one row per subject.</param>
+    /// <returns>Expected survival time per subject.</returns>
+    /// <remarks>
+    /// <para>
+    /// E[T] = integral of S(t) dt over t >= 0. The integral is evaluated on the trapezoid rule over the
+    /// baseline hazard's event times, which is where S changes, and the tail beyond the last observed time
+    /// is added in closed form: past that point the Cox model has no further baseline increments, so S is
+    /// treated as decaying exponentially at the rate implied by the subject's own hazard. That keeps the
+    /// result finite for every subject, including low-risk ones whose survival curve never reaches 0.5.
+    /// </para>
+    /// </remarks>
+    public Vector<T> PredictExpectedSurvivalTime(Matrix<T> input)
+    {
+        var riskScores = PredictRiskScores(input);
+        var expected = new Vector<T>(input.Rows);
+
+        if (_baselineHazardTimes is null || _baselineHazardValues is null || _baselineHazardTimes.Length == 0)
+        {
+            // No baseline hazard: fall back to the exponential model S(t) = exp(-exp(r) t), whose mean is
+            // 1/exp(r). This is the same model PredictSurvival uses in that situation.
+            for (int i = 0; i < input.Rows; i++)
+            {
+                double r = Math.Max(-20.0, Math.Min(20.0, NumOps.ToDouble(riskScores[i])));
+                expected[i] = NumOps.FromDouble(1.0 / Math.Exp(r));
+            }
+
+            return expected;
+        }
+
+        int m = _baselineHazardTimes.Length;
+        for (int i = 0; i < input.Rows; i++)
+        {
+            double r = Math.Max(-20.0, Math.Min(20.0, NumOps.ToDouble(riskScores[i])));
+            double expRisk = Math.Exp(r);
+
+            double area = 0.0;
+            double prevTime = 0.0;
+            double prevSurvival = 1.0;
+
+            for (int j = 0; j < m; j++)
+            {
+                double t = NumOps.ToDouble(_baselineHazardTimes[j]);
+                double h0 = NumOps.ToDouble(_baselineHazardValues[j]);
+                double survival = Math.Exp(-h0 * expRisk);
+
+                area += 0.5 * (prevSurvival + survival) * (t - prevTime);
+                prevTime = t;
+                prevSurvival = survival;
+            }
+
+            // Tail beyond the last observed event time. The instantaneous hazard there is unidentified, so
+            // extend at the average rate the subject accumulated over follow-up; with S = exp(-H) that
+            // gives a remaining expectation of S(last) / rate.
+            double lastH0 = NumOps.ToDouble(_baselineHazardValues[m - 1]);
+            double lastTime = NumOps.ToDouble(_baselineHazardTimes[m - 1]);
+            double rate = lastTime > 0.0 ? (lastH0 * expRisk) / lastTime : expRisk;
+            if (rate > 1e-12)
+            {
+                area += prevSurvival / rate;
+            }
+            else
+            {
+                area += prevSurvival * NumOps.ToDouble(_maxObservedTime);
+            }
+
+            expected[i] = NumOps.FromDouble(area);
+        }
+
+        return expected;
+    }
+
+   private void ComputeBaselineHazard(Matrix<T> x, Vector<T> times, Vector<T> events, int[] sortedIndices)
     {
         var riskScores = PredictRiskScores(x);
 
@@ -495,34 +1430,56 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
         var hazardValues = new List<T>();
 
         T cumulativeHazard = NumOps.Zero;
-        T riskSum = NumOps.Zero;
         T epsilon = NumOps.FromDouble(1e-10);
 
-        // Compute sum of exp(risk) for all at risk at end
-        for (int i = 0; i < x.Rows; i++)
+        // Build each risk set with a reverse cumulative sum. Starting with the full sum and repeatedly
+        // subtracting exp(risk) is numerically unsafe: the clamp still permits an exp(40) dynamic range,
+        // so small tail terms can disappear when added to the full sum. Subtracting the large terms later
+        // then leaves a zero or negative denominator and corrupts the cumulative hazard. Reverse summation
+        // constructs the small late-time risk sets before adding the large early-time terms.
+        var riskSetSums = new T[sortedIndices.Length];
+        T runningRiskSum = NumOps.Zero;
+        for (int position = sortedIndices.Length - 1; position >= 0; position--)
         {
-            riskSum = NumOps.Add(riskSum, NumOps.Exp(riskScores[i]));
+            runningRiskSum = NumOps.Add(
+                runningRiskSum,
+                ClampedExpRisk(riskScores[sortedIndices[position]]));
+            riskSetSums[position] = runningRiskSum;
         }
 
-        T lastTime = NumOps.MinValue;
-
-        for (int i = 0; i < sortedIndices.Length; i++)
+        // Breslow's estimator adds d(t) / sum_{j in R(t)} exp(r_j) once per distinct event time.
+        // Grouping ties is both the correct estimator and ensures all subjects at a tied time remain in
+        // that time's risk set.
+        for (int groupStart = 0; groupStart < sortedIndices.Length;)
         {
-            int idx = sortedIndices[i];
-            T t = times[idx];
-
-            if (NumOps.Compare(events[idx], NumOps.One) == 0 && NumOps.GreaterThan(t, lastTime))
+            T t = times[sortedIndices[groupStart]];
+            int groupEnd = groupStart + 1;
+            while (groupEnd < sortedIndices.Length &&
+                   NumOps.Compare(times[sortedIndices[groupEnd]], t) == 0)
             {
-                // Add to baseline hazard
-                cumulativeHazard = NumOps.Add(cumulativeHazard,
-                    NumOps.Divide(NumOps.One, NumOps.Add(riskSum, epsilon)));
-                uniqueTimes.Add(t);
-                hazardValues.Add(cumulativeHazard);
-                lastTime = t;
+                groupEnd++;
             }
 
-            // Remove from risk set
-            riskSum = NumOps.Subtract(riskSum, NumOps.Exp(riskScores[idx]));
+            int eventCount = 0;
+            for (int position = groupStart; position < groupEnd; position++)
+            {
+                if (NumOps.Compare(events[sortedIndices[position]], NumOps.One) == 0)
+                {
+                    eventCount++;
+                }
+            }
+
+            if (eventCount > 0)
+            {
+                cumulativeHazard = NumOps.Add(cumulativeHazard,
+                    NumOps.Divide(
+                        NumOps.FromDouble(eventCount),
+                        NumOps.Add(riskSetSums[groupStart], epsilon)));
+                uniqueTimes.Add(t);
+                hazardValues.Add(cumulativeHazard);
+            }
+
+            groupStart = groupEnd;
         }
 
         _baselineHazardTimes = new Vector<T>(uniqueTimes.ToArray());

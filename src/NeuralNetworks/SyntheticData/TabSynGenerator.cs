@@ -265,9 +265,10 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         {
             // For custom layers, mean/logvar heads take from last custom layer output
             // We assume the user has set up their layers to output the desired hidden size
-            int customLastOutputDim = latentDim;
-            _meanLayer = new FullyConnectedLayer<T>(latentDim, identity);
-            _logVarLayer = new FullyConnectedLayer<T>(latentDim, identity);
+            // From the last encoder hidden width to the latent width. lastEncHidden was
+            // already computed above and was previously discarded, which left both heads lazy.
+            _meanLayer = new FullyConnectedLayer<T>(lastEncHidden, latentDim, identity);
+            _logVarLayer = new FullyConnectedLayer<T>(lastEncHidden, latentDim, identity);
         }
         else
         {

@@ -61,6 +61,7 @@ namespace AiDotNet.Regression;
 [ResearchPaper("A Tutorial on Support Vector Regression", "https://doi.org/10.1023/B:STCO.0000035301.49549.88", Year = 2004, Authors = "Alex J. Smola, Bernhard Scholkopf")]
 public partial class SupportVectorRegression<T> : NonLinearRegressionBase<T>
 {
+    /// <inheritdoc/>
     /// <summary>
     /// Configuration options for the Support Vector Regression model.
     /// </summary>
@@ -186,20 +187,16 @@ public partial class SupportVectorRegression<T> : NonLinearRegressionBase<T>
 
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
-        // Use OLS for reliable regression predictions
-        _useOLS = true;
-        var xWithInt = x.AddConstantColumn(NumOps.One);
-        var xTx = xWithInt.Transpose().Multiply(xWithInt);
-        var xTy = xWithInt.Transpose().Multiply(y);
-        for (int i = 0; i < xTx.Rows; i++)
-            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-        var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
-        _olsIntercept = solution[0];
-        _olsCoefficients = solution.Slice(1, x.Columns);
-        SupportVectors = x;
-        Alphas = new Vector<T>(x.Rows); // empty alphas
-        B = NumOps.Zero;
-        if (_useOLS) return;
+        // This method previously fitted ORDINARY LEAST SQUARES and returned immediately —
+        // `_useOLS = true` was set unconditionally and the guard below it made the entire
+        // kernel/epsilon-tube/SMO implementation unreachable. A caller asking for support-vector
+        // regression received a linear least-squares fit: no kernel, no epsilon-insensitive loss,
+        // no support vectors. The real algorithm now runs.
+        //
+        // `_useOLS` is retained (always false for newly trained models) purely so that models
+        // serialized before this fix still deserialize and predict through their stored OLS
+        // coefficients rather than silently changing behaviour on load.
+        _useOLS = false;
 
         // Auto-scale gamma if using the default value of 1.0
         // Standard heuristic (scikit-learn 'scale'): gamma = 1 / (n_features * variance(X))
@@ -392,9 +389,8 @@ public partial class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     private void SequentialMinimalOptimization(Matrix<T> x, Vector<T> y)
     {
         int m = x.Rows;
-        Alphas = new Vector<T>(m);
 
-        // Precompute kernel matrix for efficiency
+        // Precompute the kernel matrix; SMO reads each entry many times.
         var K = new Matrix<T>(m, m);
         for (int ki = 0; ki < m; ki++)
             for (int kj = 0; kj <= ki; kj++)
@@ -403,189 +399,67 @@ public partial class SupportVectorRegression<T> : NonLinearRegressionBase<T>
                 K[kj, ki] = K[ki, kj]; // Kernel matrix is symmetric
             }
 
-        T epsilon = NumOps.FromDouble(_options.Epsilon);
-        T C = NumOps.FromDouble(_options.C);
-        T negC = NumOps.Negate(C);
-
-        // Initialize bias to mean of y
-        T sumY = NumOps.Zero;
-        for (int i = 0; i < m; i++)
-            sumY = NumOps.Add(sumY, y[i]);
-        B = NumOps.Divide(sumY, NumOps.FromDouble(m));
-
-        // SMO-style optimization
-        for (int iter = 0; iter < _options.MaxIterations; iter++)
+        // The epsilon-insensitive regression dual (Smola and Scholkopf, 2004; LIBSVM's formulation)
+        // uses TWO multipliers per training point, one for each side of the epsilon-tube:
+        //
+        //     minimize  ½·[a; a*]ᵀ[Q -Q; -Q Q][a; a*] + [eps - y; eps + y]ᵀ[a; a*]
+        //     subject to  sum(a) - sum(a*) = 0,   0 <= a, a* <= C
+        //
+        // Written with labels +1 for the first half and -1 for the second, that is exactly the
+        // shared solver's problem with Q_ij = y_i·y_j·K(point(i), point(j)).
+        //
+        // This replaces a hand-rolled loop that used a single signed multiplier in [-C, C] and
+        // updated it from prediction errors with a heuristic pair choice. That formulation cannot
+        // represent the epsilon-tube's two-sided structure exactly, and the loop shared none of its
+        // machinery with the classifier's copy of the same algorithm.
+        if (m > int.MaxValue / 2)
         {
-            int numChangedAlphas = 0;
-
-            for (int i = 0; i < m; i++)
-            {
-                // Compute prediction and error for sample i
-                var kRow = K.GetRow(i);
-                T fi = NumOps.Add(B, Engine.DotProduct(Alphas, kRow));
-                T Ei = NumOps.Subtract(fi, y[i]);
-
-                // Check KKT conditions
-                T yMinusEps = NumOps.Subtract(y[i], epsilon);
-                T yPlusEps = NumOps.Add(y[i], epsilon);
-                bool violatesKKT = (NumOps.LessThan(fi, yMinusEps) && NumOps.LessThan(Alphas[i], C)) ||
-                                   (NumOps.GreaterThan(fi, yPlusEps) && NumOps.GreaterThan(Alphas[i], negC));
-
-                if (!violatesKKT) continue;
-
-                // Select second alpha (j != i with largest |Ei - Ej|)
-                int j = (i + 1) % m;
-                T maxDiff = NumOps.Zero;
-                for (int k = 0; k < m; k++)
-                {
-                    if (k == i) continue;
-                    var kRowK = K.GetRow(k);
-                    T fk = NumOps.Add(B, Engine.DotProduct(Alphas, kRowK));
-                    T Ek = NumOps.Subtract(fk, y[k]);
-                    T diff = NumOps.Abs(NumOps.Subtract(Ei, Ek));
-                    if (NumOps.GreaterThan(diff, maxDiff))
-                    {
-                        maxDiff = diff;
-                        j = k;
-                    }
-                }
-
-                T Ej = NumOps.Subtract(
-                    NumOps.Add(B, Engine.DotProduct(K.GetRow(j), Alphas)),
-                    y[j]);
-
-                T oldAi = Alphas[i];
-                T oldAj = Alphas[j];
-
-                // Compute eta = 2*K(i,j) - K(i,i) - K(j,j)
-                T eta = NumOps.Subtract(
-                    NumOps.Subtract(NumOps.Multiply(NumOps.FromDouble(2), K[i, j]), K[i, i]),
-                    K[j, j]);
-
-                if (NumOps.GreaterThanOrEquals(eta, NumOps.Zero)) continue;
-
-                // Compute new alpha_j: for SVR, use error-based update
-                // alpha_j_new = alpha_j - (Ei - Ej) / eta
-                Alphas[j] = NumOps.Subtract(Alphas[j],
-                    NumOps.Divide(NumOps.Subtract(Ei, Ej), eta));
-
-                // Compute bounds for alpha_j
-                T sum = NumOps.Add(oldAi, oldAj);
-                T L = MathHelper.Max(negC, NumOps.Subtract(sum, C));
-                T H = MathHelper.Min(C, NumOps.Add(sum, C));
-                Alphas[j] = Clip(Alphas[j], L, H);
-
-                if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(Alphas[j], oldAj)), NumOps.FromDouble(1e-5)))
-                    continue;
-
-                // Update alpha_i to maintain sum constraint
-                Alphas[i] = NumOps.Add(oldAi, NumOps.Subtract(oldAj, Alphas[j]));
-                Alphas[i] = Clip(Alphas[i], negC, C);
-
-                // Update bias
-                T deltaAi = NumOps.Subtract(Alphas[i], oldAi);
-                T deltaAj = NumOps.Subtract(Alphas[j], oldAj);
-
-                T b1 = NumOps.Subtract(B, NumOps.Add(Ei,
-                    NumOps.Add(NumOps.Multiply(deltaAi, K[i, i]), NumOps.Multiply(deltaAj, K[i, j]))));
-                T b2 = NumOps.Subtract(B, NumOps.Add(Ej,
-                    NumOps.Add(NumOps.Multiply(deltaAi, K[i, j]), NumOps.Multiply(deltaAj, K[j, j]))));
-
-                if (NumOps.GreaterThan(Alphas[i], negC) && NumOps.LessThan(Alphas[i], C))
-                    B = b1;
-                else if (NumOps.GreaterThan(Alphas[j], negC) && NumOps.LessThan(Alphas[j], C))
-                    B = b2;
-                else
-                    B = NumOps.Divide(NumOps.Add(b1, b2), NumOps.FromDouble(2));
-
-                numChangedAlphas++;
-            }
-
-            if (numChangedAlphas == 0)
-                break;
+            throw new ArgumentOutOfRangeException(nameof(x), "SVR requires two dual variables per row; the training set is too large to index safely.");
         }
 
-        // Store all training data as support vectors
-        SupportVectors = x;
-    }
+        int total = 2 * m;
+        var labels = new Vector<T>(total);
+        var linear = new Vector<T>(total);
+        var upperBounds = new Vector<T>(total);
 
-    /// <summary>
-    /// Selects a second alpha coefficient to optimize along with the first one.
-    /// </summary>
-    /// <param name="i">The index of the first alpha coefficient.</param>
-    /// <param name="m">The total number of training examples.</param>
-    /// <returns>The index of the second alpha coefficient.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method randomly selects a second alpha coefficient that is different from the first one.
-    /// In more advanced implementations, heuristics can be used to select a second alpha that
-    /// maximizes the optimization step.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method finds a partner for training.
-    /// 
-    /// It's like choosing a different student to pair with the first student for a group project:
-    /// - You need two different students to work together
-    /// - The selection is random in this implementation
-    /// - More advanced versions could choose partners more strategically
-    /// 
-    /// This pairing approach is fundamental to the SMO algorithm, which always
-    /// optimizes two coefficients at a time.
-    /// </para>
-    /// </remarks>
-    private readonly Random _random = RandomHelper.CreateSecureRandom();
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+        T c = NumOps.FromDouble(_options.C);
 
-    private int SelectSecondAlpha(int i, int m)
-    {
-        int j;
-        do
+        for (int i = 0; i < m; i++)
         {
-            j = _random.Next(m);
-        } while (j == i);
+            labels[i] = NumOps.One;
+            labels[i + m] = NumOps.Negate(NumOps.One);
+            linear[i] = NumOps.Subtract(epsilon, y[i]);
+            linear[i + m] = NumOps.Add(epsilon, y[i]);
+            upperBounds[i] = c;
+            upperBounds[i + m] = c;
+        }
 
-        return j;
-    }
+        long requestedIterations = _options.MaxIterations > 0
+            ? (long)_options.MaxIterations * total
+            : 1_000_000L;
+        int iterationBudget = (int)Math.Min(requestedIterations, int.MaxValue);
 
-    /// <summary>
-    /// Computes the bounds for alpha coefficient optimization.
-    /// </summary>
-    /// <param name="yi">The target value for the first example.</param>
-    /// <param name="yj">The target value for the second example.</param>
-    /// <param name="ai">The current alpha value for the first example.</param>
-    /// <param name="aj">The current alpha value for the second example.</param>
-    /// <returns>A tuple containing the lower (L) and upper (H) bounds for the second alpha.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates the bounds within which the second alpha coefficient must lie
-    /// to satisfy the constraints of the SVR optimization problem. The bounds depend on:
-    /// - Whether the target values of the two examples are equal
-    /// - The current values of both alpha coefficients
-    /// - The regularization parameter C
-    /// </para>
-    /// <para><b>For Beginners:</b> This method sets limits for how much a value can change.
-    /// 
-    /// Think of it like setting boundaries for a negotiation:
-    /// - You need to keep the solution within certain limits
-    /// - These limits depend on the current values and the relationship between the two examples
-    /// - The C parameter sets the maximum possible value
-    /// - The calculations ensure the solution remains valid
-    /// 
-    /// These bounds help the algorithm make controlled adjustments that maintain
-    /// the mathematical constraints of the problem.
-    /// </para>
-    /// </remarks>
-    private (T L, T H) ComputeBounds(T yi, T yj, T ai, T aj)
-    {
-        // For SVR, alphas can be in [-C, C] to represent (alpha - alpha*)
-        // Maintain constraint: ai + aj = constant (sum of alphas)
-        T sum = NumOps.Add(ai, aj);
-        T C = NumOps.FromDouble(_options.C);
-        T negC = NumOps.Negate(C);
+        var solver = new AiDotNet.Solvers.QuadraticProgramming.SequentialMinimalOptimizationSolver<T>(
+            new SequentialMinimalOptimizationOptions
+            {
+                MaxIterations = iterationBudget,
+                Tolerance = _options.Tolerance,
+            });
 
-        // L = max(-C, sum - C), H = min(C, sum + C)
-        T L = MathHelper.Max(negC, NumOps.Subtract(sum, C));
-        T H = MathHelper.Min(C, NumOps.Add(sum, C));
+        var (dual, bias, _) = solver.Solve(
+            (a, b) => K[a, b], labels, linear, upperBounds, kernelIndex: i => i % m);
 
-        return (L, H);
+        // Collapse the two-sided multipliers back into the signed form the prediction path uses:
+        // f(x) = sum_i (a_i - a*_i)·K(x_i, x) + b.
+        var signedAlphas = new Vector<T>(m);
+        for (int i = 0; i < m; i++)
+        {
+            signedAlphas[i] = NumOps.Subtract(dual[i], dual[i + m]);
+        }
+
+        B = bias;
+        SetSupportVectorState(x, signedAlphas);
     }
 
     /// <summary>

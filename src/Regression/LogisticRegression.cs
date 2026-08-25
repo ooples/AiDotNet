@@ -134,7 +134,17 @@ public partial class LogisticRegression<T> : RegressionBase<T>
     /// </remarks>
     public override bool SupportsParameterInitialization => false;
 
-    private bool _useOLS;
+    /// <summary>
+    /// The two class labels the model was trained on, ascending. <see cref="Predict"/> returns the
+    /// probability of <c>ClassLabels[1]</c>, the higher of the two.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> If you trained on labels like -1 and +1, this remembers them, so you can tell
+    /// which of your own two categories the returned probability refers to. It is always the second one.
+    /// </remarks>
+    public IReadOnlyList<T> ClassLabels => _classLabels;
+
+    private List<T> _classLabels = new List<T>();
 
     public override void Train(Matrix<T> x, Vector<T> y)
     {
@@ -143,23 +153,29 @@ public partial class LogisticRegression<T> : RegressionBase<T>
         int n = x.Rows;
         int p = x.Columns;
 
-        // Detect continuous data (not binary 0/1 labels)
-        bool isBinary = y.All(v => NumOps.Equals(v, NumOps.Zero) || NumOps.Equals(v, NumOps.One));
-        if (!isBinary)
-        {
-            // Use OLS for continuous data since logistic regression can't regress
-            _useOLS = true;
-            var xWithInt = x.AddConstantColumn(NumOps.One);
-            var xTx = xWithInt.Transpose().Multiply(xWithInt);
-            var xTy = xWithInt.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
-            var solution = SolveSystem(xTx, xTy);
-            Intercept = solution[0]; // AddConstantColumn puts at index 0
-            Coefficients = solution.Slice(1, p);
-            TrainingFeatureCount = p;
-            return;
-        }
+        // A target that is not two classes is a caller error, not a cue to fit something else.
+        // This previously set `_useOLS = true` and fitted ordinary least squares, so the object
+        // reported Coefficients from a linear model while presenting as a logistic one -- and
+        // Predict skipped the sigmoid, returning unbounded values where a probability was promised.
+        // EncodeBinaryTarget accepts any two labels ({0,1}, {-1,1}, {1,2}, ...) and throws with a
+        // diagnostic naming the observed target otherwise.
+        var (encodedY, classes) = ValidationHelper<T>.EncodeBinaryTarget(y, nameof(LogisticRegression<T>));
+        _classLabels = classes;
+        y = encodedY;
+
+        // Fit on standardized features, then transform the coefficients back.
+        //
+        // Batch gradient ascent moves the intercept by at most LearningRate per iteration, so on raw
+        // features it cannot reach the intercept the fit requires. With features spanning [0,10] and a
+        // balanced split, that intercept is around -60; at the default learning rate of 0.01 over 1000
+        // iterations the intercept can travel about 5, and the coefficients end up absorbing the shortfall
+        // by turning NEGATIVE -- so the fitted model ran the response backwards in every feature. Centering
+        // and scaling puts the required intercept near zero and every coefficient on a comparable scale,
+        // which is exactly why standardization is the standing advice for gradient-based logistic
+        // regression. The back-transform at the end keeps Coefficients and Intercept meaningful on the
+        // caller's own scale, so nothing outside this method has to know.
+        var (featureMean, featureStd) = ComputeStandardization(x, p);
+        Matrix<T> xStandardized = Standardize(x, featureMean, featureStd);
 
         Coefficients = new Vector<T>(p);
         Intercept = NumOps.Zero;
@@ -169,10 +185,10 @@ public partial class LogisticRegression<T> : RegressionBase<T>
         T interceptLearningRate = NumOps.FromDouble(_options.LearningRate);
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
-            Vector<T> predictions = Predict(x);
+            Vector<T> predictions = Predict(xStandardized);
             Vector<T> errors = y.Subtract(predictions);
             // Calculate gradient: X^T * (y - predictions)
-            Matrix<T> xTranspose = x.Transpose();
+            Matrix<T> xTranspose = xStandardized.Transpose();
             Vector<T> gradient = xTranspose.Multiply(errors);
             // Apply regularization to the gradient (adds penalty term)
             if (Regularization != null)
@@ -193,6 +209,74 @@ public partial class LogisticRegression<T> : RegressionBase<T>
         {
             Coefficients = Regularization.Regularize(Coefficients);
         }
+
+        // Back to the caller's scale: a standardized fit b*(x - mu)/sigma + a is the same linear
+        // predictor as (b/sigma) * x + (a - sum(b * mu / sigma)).
+        var rescaled = new Vector<T>(p);
+        T interceptShift = NumOps.Zero;
+        for (int j = 0; j < p; j++)
+        {
+            rescaled[j] = NumOps.Divide(Coefficients[j], featureStd[j]);
+            interceptShift = NumOps.Add(interceptShift, NumOps.Multiply(rescaled[j], featureMean[j]));
+        }
+
+        Coefficients = rescaled;
+        Intercept = NumOps.Subtract(Intercept, interceptShift);
+        TrainingFeatureCount = p;
+    }
+
+    /// <summary>
+    /// Computes the per-feature mean and standard deviation used to standardize the design matrix.
+    /// </summary>
+    /// <param name="x">The design matrix.</param>
+    /// <param name="featureCount">Number of columns in <paramref name="x"/>.</param>
+    /// <returns>The per-feature mean and standard deviation; a constant column gets a deviation of 1.</returns>
+    private (Vector<T> Mean, Vector<T> Std) ComputeStandardization(Matrix<T> x, int featureCount)
+    {
+        var mean = new Vector<T>(featureCount);
+        var std = new Vector<T>(featureCount);
+        int n = x.Rows;
+
+        for (int j = 0; j < featureCount; j++)
+        {
+            double sum = 0.0;
+            for (int i = 0; i < n; i++)
+            {
+                sum += NumOps.ToDouble(x[i, j]);
+            }
+            double m = sum / n;
+
+            double sq = 0.0;
+            for (int i = 0; i < n; i++)
+            {
+                double d = NumOps.ToDouble(x[i, j]) - m;
+                sq += d * d;
+            }
+            double s = Math.Sqrt(sq / n);
+            if (s < 1e-10) s = 1.0;
+
+            mean[j] = NumOps.FromDouble(m);
+            std[j] = NumOps.FromDouble(s);
+        }
+
+        return (mean, std);
+    }
+
+    /// <summary>
+    /// Returns a copy of the design matrix with each column centered and scaled.
+    /// </summary>
+    private Matrix<T> Standardize(Matrix<T> x, Vector<T> mean, Vector<T> std)
+    {
+        var result = new Matrix<T>(x.Rows, x.Columns);
+        for (int i = 0; i < x.Rows; i++)
+        {
+            for (int j = 0; j < x.Columns; j++)
+            {
+                result[i, j] = NumOps.Divide(NumOps.Subtract(x[i, j], mean[j]), std[j]);
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -251,11 +335,6 @@ public partial class LogisticRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> x)
     {
-        if (_useOLS)
-        {
-            return base.Predict(x);
-        }
-
         Vector<T> scores = x.Multiply(Coefficients).Add(Intercept);
         return scores.Transform(Sigmoid);
     }

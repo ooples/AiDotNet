@@ -104,13 +104,11 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// Auxiliary vector used in the FTRL update rule.
     /// </summary>
-    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _z;
 
     /// <summary>
     /// Vector of accumulated squared gradients.
     /// </summary>
-    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _n;
 
     /// <summary>
@@ -121,7 +119,6 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// Stores the pre-update parameters for approximate reverse updates.
     /// </summary>
-    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _previousParameters;
 
     /// <summary>
@@ -150,6 +147,37 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         FTRLOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())
+    {
+        _options = options ?? new FTRLOptimizerOptions<T, TInput, TOutput>();
+
+        InitializeAdaptiveParameters();
+    }
+
+    /// <summary>
+    /// Creates an FTRL optimizer for minimizing a plain function, with no model attached.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use this with <see cref="GradientBasedOptimizerBase{T, TInput, TOutput}.Minimize(Vector{T}, Func{Vector{T}, ValueTuple{T, Vector{T}}}, int, T)"/>
+    /// when you want to minimize a mathematical function directly rather than train a model.
+    /// <see cref="Optimize"/> requires a model and is not available on an instance created
+    /// this way.
+    /// </para>
+    /// <para><b>For Beginners:</b> The constructor above asks for a model because it is set up
+    /// to tune that model against training data. If all you have is a formula you want to make
+    /// as small as possible, there is no model to hand over — use this factory instead.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The optimizer-specific options. If null, defaults are used.</param>
+    public static FTRLOptimizer<T, TInput, TOutput> CreateForFunction(
+        FTRLOptimizerOptions<T, TInput, TOutput>? options = null)
+        => new(options);
+
+    /// <summary>
+    /// Backs <see cref="CreateForFunction"/>: the same setup with no model.
+    /// </summary>
+    private FTRLOptimizer(FTRLOptimizerOptions<T, TInput, TOutput>? options)
+        : base(null, options ?? new())
     {
         _options = options ?? new FTRLOptimizerOptions<T, TInput, TOutput>();
 

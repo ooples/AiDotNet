@@ -205,8 +205,31 @@ public partial class PagedCachedMultiHeadAttention<T> : LayerBase<T>, IContextAw
         _outputWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
         _outputBias = new Tensor<T>([embeddingDimension]);
 
+        // Register the projections. Without this the layer reported ParameterCount 0 despite owning
+        // five weight tensors, which made GetParameters return an empty vector and SetParameters a
+        // silent no-op -- so the weights could not be read, written, trained, or SAVED. A caller
+        // installing its own weights got the constructor's instead, and every different input
+        // produced nearly the same output because the projections were never the ones asked for.
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+
         _flashConfig = FlashAttentionConfig.Default;
         _flashConfig.UseCausalMask = useCausalMask;
+    }
+
+    /// <inheritdoc />
+    protected override void OnParameterValuesChanged()
+    {
+        base.OnParameterValuesChanged();
+
+        // Evaluation uses two derived representations of the projections: the engine's persistent
+        // GEMM tensors and the paged kernel's transposed/quantized float copies. LayerBase invalidates
+        // the persistent tensors after an in-place restore; clear the kernel copies here as well so
+        // batched and single-token decode always observe the same generation of the weights.
+        InvalidateKernelWeightCache();
     }
 
     /// <summary>

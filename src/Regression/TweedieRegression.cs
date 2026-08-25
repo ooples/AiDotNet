@@ -162,16 +162,11 @@ public partial class TweedieRegression<T> : RegressionBase<T>
         ValidateTweedieData(y);
         TrainingFeatureCount = x.Columns;
 
-        // Use OLS for reliable predictions on generic linear data
-        var xWithOls = x.AddConstantColumn(NumOps.One);
-        var xTxOls = xWithOls.Transpose().Multiply(xWithOls);
-        var xTyOls = xWithOls.Transpose().Multiply(y);
-        for (int i = 0; i < xTxOls.Rows; i++)
-            xTxOls[i, i] = NumOps.Add(xTxOls[i, i], NumOps.FromDouble(1e-10));
-        var olsSolution = SolveSystem(xTxOls, xTyOls);
-        Intercept = olsSolution[0];
-        Coefficients = olsSolution.Slice(1, x.Columns);
-        if (Coefficients.Length > 0) return;
+        // This method previously fitted ORDINARY LEAST SQUARES and returned immediately. The
+        // guard that followed it was written as a condition but is always true for any real
+        // problem, so it acted as an unconditional return and left the real estimation below
+        // unreachable: callers received a plain linear least-squares fit from a model named for a
+        // different algorithm. The real estimation now runs.
 
         int numFeatures = x.Columns;
         int numSamples = x.Rows;
@@ -236,13 +231,19 @@ public partial class TweedieRegression<T> : RegressionBase<T>
                 newCoefficients = Regularization.Regularize(newCoefficients);
             }
 
-            if (HasConverged(currentCoefficients, newCoefficients))
-            {
-                break;
-            }
+            // Commit the update BEFORE testing convergence. Breaking first discarded the very
+            // iteration that converged, so the model kept the previous, worse coefficients — and
+            // when the first step was already small enough to satisfy the tolerance, it kept the
+            // all-zero initialization, leaving only the intercept and a negative R-squared.
+            bool converged = HasConverged(currentCoefficients, newCoefficients);
 
             Coefficients = new Vector<T>([.. newCoefficients.Take(numFeatures)]);
             Intercept = newCoefficients[numFeatures];
+
+            if (converged)
+            {
+                break;
+            }
         }
 
         // Estimate dispersion parameter using Pearson residuals
@@ -597,10 +598,16 @@ public partial class TweedieRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> x)
     {
-        // Use base linear prediction: X * Coefficients + Intercept
-        var predictions = x.Multiply(Coefficients);
-        for (int i = 0; i < predictions.Length; i++)
-            predictions[i] = NumOps.Add(predictions[i], Intercept);
-        return predictions;
+        // X * Coefficients + Intercept gives the LINEAR PREDICTOR eta, which lives on the link
+        // scale. The response is obtained by applying the inverse link — for the default log link,
+        // mu = exp(eta). Returning eta directly handed back log-scale numbers for a response-scale
+        // quantity, which is what drove R-squared sharply negative on positive data. The omission
+        // was invisible while an OLS short-circuit was fitting response-scale coefficients earlier
+        // in Train, so eta and mu happened to coincide.
+        var eta = x.Multiply(Coefficients);
+        for (int i = 0; i < eta.Length; i++)
+            eta[i] = NumOps.Add(eta[i], Intercept);
+
+        return ApplyInverseLink(eta);
     }
 }

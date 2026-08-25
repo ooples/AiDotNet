@@ -366,8 +366,18 @@ public class MbPAMechanismTests
             QuerySetX = probe.Query, QuerySetY = probe.QueryY,
         });
 
-        var first = adapted.Predict(probe.Query);
-        var second = adapted.Predict(probe.Query);
+        // ONE query row. OutputDimension here is 3, and MbPA deliberately refuses to pack a BATCH of
+        // multi-component predictions into a flat Vector<T> rather than silently truncating each to
+        // component 0 — AssembleOutput permits the single-row case and rejects the rest. Predicting
+        // all four rows was asking for exactly the truncation that guard exists to prevent.
+        //
+        // Batch size is incidental to what this test asserts: if theta_x leaked between calls, the
+        // second prediction would differ from the first at any batch size.
+        var single = new Matrix<double>(1, FeatureDim);
+        for (int j = 0; j < FeatureDim; j++) single[0, j] = probe.Query[0, j];
+
+        var first = adapted.Predict(single);
+        var second = adapted.Predict(single);
 
         Assert.Equal(first.Length, second.Length);
         for (int i = 0; i < first.Length; i++) Assert.Equal(first[i], second[i], 12);

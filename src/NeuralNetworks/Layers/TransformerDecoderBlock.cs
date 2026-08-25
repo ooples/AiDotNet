@@ -66,23 +66,20 @@ public partial class TransformerDecoderBlock<T> : LayerBase<T>, IShapeContract
     // wrappers are single-input by design and would silently break true cross-attention.
     [SubLayerInput("1, _hiddenSize")]
     private LayerBase<T> _selfAttention;
-    [SubLayerInput("1, _hiddenSize")]
+    [SubLayerInput("_hiddenSize")]
     private readonly LayerNormalizationLayer<T> _norm1;
     [SubLayerInput("1, _hiddenSize")]
     private readonly MultiHeadAttentionLayer<T> _crossAttention;
-    [SubLayerInput("1, _hiddenSize")]
+    [SubLayerInput("_hiddenSize")]
     private readonly LayerNormalizationLayer<T> _norm2;
-    [SubLayerInput("1, _hiddenSize")]
+    [SubLayerInput("_hiddenSize")]
     private LayerBase<T> _ffnUp;
-    [SubLayerInput("1, _ffnDim")]
+    [SubLayerInput("_ffnDim")]
     private LayerBase<T> _ffnDown;
-    [SubLayerInput("1, _hiddenSize")]
+    [SubLayerInput("_hiddenSize")]
     private readonly LayerNormalizationLayer<T> _norm3;
-    [SubLayerInput("1, _hiddenSize")]
     private readonly DropoutLayer<T>? _selfDropout;
-    [SubLayerInput("1, _hiddenSize")]
     private readonly DropoutLayer<T>? _crossDropout;
-    [SubLayerInput("1, _hiddenSize")]
     private readonly DropoutLayer<T>? _ffnDropout;
 
     public override bool SupportsTraining => true;
@@ -280,14 +277,6 @@ public partial class TransformerDecoderBlock<T> : LayerBase<T>, IShapeContract
 
     private LayerBase<T>[] Subs => new LayerBase<T>[]
         { _selfAttention, _norm1, _crossAttention, _norm2, _ffnUp, _ffnDown, _norm3 };
-
-    private void MaterializeLazySublayers()
-    {
-        bool wasTraining = IsTrainingMode;
-        SetTrainingMode(false);
-        try { _ = Forward(new Tensor<T>(new[] { 1, 2, _hiddenSize })); ResetState(); }
-        finally { SetTrainingMode(wasTraining); }
-    }
 
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()

@@ -104,6 +104,40 @@ public partial class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     }
 
     /// <summary>
+    /// Creates a DFP optimizer for minimizing a plain function, with no model attached.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use this with <see cref="GradientBasedOptimizerBase{T, TInput, TOutput}.Minimize(Vector{T}, Func{Vector{T}, ValueTuple{T, Vector{T}}}, int, T)"/>
+    /// when you want to minimize a mathematical function directly rather than train a model.
+    /// <see cref="Optimize"/> requires a model and is not available on an instance created
+    /// this way.
+    /// </para>
+    /// <para><b>For Beginners:</b> The constructor above asks for a model because it is set up
+    /// to tune that model against training data. If all you have is a formula you want to make
+    /// as small as possible, there is no model to hand over — use this factory instead.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The optimizer-specific options. If null, defaults are used.</param>
+    public static DFPOptimizer<T, TInput, TOutput> CreateForFunction(
+        DFPOptimizerOptions<T, TInput, TOutput>? options = null)
+        => new(options);
+
+    /// <summary>
+    /// Backs <see cref="CreateForFunction"/>: the same setup with no model.
+    /// </summary>
+    private DFPOptimizer(DFPOptimizerOptions<T, TInput, TOutput>? options)
+        : base(null, options ?? new())
+    {
+        _options = options ?? new DFPOptimizerOptions<T, TInput, TOutput>();
+        _previousGradient = Vector<T>.Empty();
+        _inverseHessian = Matrix<T>.Empty();
+        _adaptiveLearningRate = NumOps.Zero;
+
+        InitializeAdaptiveParameters();
+    }
+
+    /// <summary>
     /// Initializes the adaptive parameters used in the DFP algorithm.
     /// </summary>
     /// <remarks>
@@ -461,4 +495,119 @@ public partial class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
         var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
         context.SetFlatParameters(updated);
     }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// DFP is the older sibling of BFGS and updates the same inverse-Hessian estimate with a
+    /// different rank-two correction (Davidon 1959; Fletcher and Powell 1963):
+    /// <c>H + s s' / (y's) - H y y' H / (y' H y)</c>.
+    /// </para>
+    /// <para>
+    /// It is included for the same reason the textbooks include it: BFGS is the same idea with the
+    /// roles of the two corrections exchanged, and DFP is measurably less robust in practice —
+    /// which is the empirical result that made BFGS the default.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> Minimize(
+        Vector<T> initialParameters,
+        Func<Vector<T>, (T objective, Vector<T> gradient)> objectiveAndGradient,
+        int maxIterations,
+        T tolerance,
+        Func<Vector<T>, Vector<T>>? projection)
+        => MinimizeWithLineSearch(
+            initialParameters, objectiveAndGradient, maxIterations, tolerance, projection,
+            new DfpDirection(this), "DFP");
+
+    /// <summary>The DFP update of the inverse Hessian estimate, as a direction rule.</summary>
+    private sealed class DfpDirection : ISearchDirectionRule
+    {
+        private readonly DFPOptimizer<T, TInput, TOutput> _owner;
+        private T[,] _inverse = new T[0, 0];
+        private int _size;
+
+        public DfpDirection(DFPOptimizer<T, TInput, TOutput> owner) => _owner = owner;
+
+        public void Reset(int parameterCount)
+        {
+            _size = parameterCount;
+            _inverse = new T[parameterCount, parameterCount];
+
+            for (int i = 0; i < parameterCount; i++)
+            {
+                for (int j = 0; j < parameterCount; j++)
+                {
+                    _inverse[i, j] = i == j ? _owner.NumOps.One : _owner.NumOps.Zero;
+                }
+            }
+        }
+
+        public Vector<T> ComputeDirection(Vector<T> gradient)
+        {
+            var numOps = _owner.NumOps;
+            var direction = new Vector<T>(_size);
+
+            for (int i = 0; i < _size; i++)
+            {
+                T total = numOps.Zero;
+                for (int j = 0; j < _size; j++)
+                {
+                    total = numOps.Add(total, numOps.Multiply(_inverse[i, j], gradient[j]));
+                }
+
+                direction[i] = numOps.Negate(total);
+            }
+
+            return direction;
+        }
+
+        public void Observe(
+            Vector<T> step, Vector<T> gradientChange, Vector<T> gradient, bool satisfiedWolfe)
+        {
+            var numOps = _owner.NumOps;
+
+            T curvature = gradientChange.DotProduct(step);
+            if (!numOps.GreaterThan(curvature, numOps.FromDouble(1e-12)))
+            {
+                return;
+            }
+
+            // H y, and then y' H y.
+            var product = new T[_size];
+            T quadratic = numOps.Zero;
+
+            for (int i = 0; i < _size; i++)
+            {
+                T total = numOps.Zero;
+                for (int j = 0; j < _size; j++)
+                {
+                    total = numOps.Add(total, numOps.Multiply(_inverse[i, j], gradientChange[j]));
+                }
+
+                product[i] = total;
+                quadratic = numOps.Add(quadratic, numOps.Multiply(gradientChange[i], total));
+            }
+
+            if (!numOps.GreaterThan(quadratic, numOps.FromDouble(1e-12)))
+            {
+                return;
+            }
+
+            for (int i = 0; i < _size; i++)
+            {
+                for (int j = 0; j < _size; j++)
+                {
+                    T outer = numOps.Divide(
+                        numOps.Multiply(step[i], step[j]), curvature);
+
+                    T correction = numOps.Divide(
+                        numOps.Multiply(product[i], product[j]), quadratic);
+
+                    _inverse[i, j] = numOps.Subtract(
+                        numOps.Add(_inverse[i, j], outer), correction);
+                }
+            }
+        }
+    }
+
 }

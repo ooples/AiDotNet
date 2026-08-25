@@ -124,9 +124,9 @@ public partial class MesaNetLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Layer normalization parameters
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
     private Tensor<T> _lnGamma;
-    [AiDotNet.Attributes.TrainableParameter]
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
     private Tensor<T> _lnBeta;
 
     // Cached values for backward pass

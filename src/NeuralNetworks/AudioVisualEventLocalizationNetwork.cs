@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
-using AiDotNet.Enums;
+using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -74,6 +74,23 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
     private const int DEFAULT_EMBEDDING_DIM = 512;
     private const double DEFAULT_TEMPORAL_RESOLUTION = 0.1; // 100ms resolution
     private const int DEFAULT_NUM_CATEGORIES = 100;
+
+    /// <summary>
+    /// Number of patches each video frame is split into before the visual encoder sees it.
+    /// </summary>
+    /// <remarks>
+    /// The visual encoder is an attention stack, and attention needs a sequence to attend over. A
+    /// single flattened frame is one vector with nothing to compare against; splitting it into
+    /// patches gives the encoder the tokens it needs, exactly as in Dosovitskiy et al. (2021),
+    /// "An Image Is Worth 16x16 Words". Sixteen patches of 48 values preserves the 768-value budget
+    /// the visual input projection was already built for.
+    /// </remarks>
+    private const int VISUAL_PATCH_COUNT = 16;
+
+    /// <summary>
+    /// Number of values in each visual patch. <see cref="VISUAL_PATCH_COUNT"/> times this is 768.
+    /// </summary>
+    private const int VISUAL_PATCH_DIMENSION = 48;
 
     #endregion
 
@@ -375,9 +392,9 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
 
         foreach (var frame in frameList)
         {
-            // Flatten frame to expected input size
-            var flattened = FlattenFrame(frame, 768);
-            var frameTensor = Tensor<T>.FromVector(flattened);
+            // Split the frame into patches. FromVector would hand the encoder a rank-1 tensor, and
+            // the attention layers below it need a sequence axis to attend over.
+            var frameTensor = SplitFrameIntoPatches(frame);
 
             // Project to embedding dimension
             var projected = _visualInputProjection.Forward(frameTensor);
@@ -494,24 +511,83 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
         return result;
     }
 
+    /// <summary>
+    /// Splits a video frame into a sequence of patches the visual encoder can attend over.
+    /// </summary>
+    /// <param name="frame">One video frame, of any shape.</param>
+    /// <returns>A [<see cref="VISUAL_PATCH_COUNT"/>, <see cref="VISUAL_PATCH_DIMENSION"/>] tensor.</returns>
+    /// <remarks>
+    /// <para>
+    /// The frame's values are read in order, truncated or zero-padded to the fixed patch budget, and
+    /// laid out one patch per row. Fixing both dimensions matters: the visual input projection sizes
+    /// itself from the first tensor it sees, so a patch width that varied with the frame's resolution
+    /// would lock in one width and then reject every differently-sized frame afterwards.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> SplitFrameIntoPatches(Tensor<T> frame)
+    {
+        var flattened = FlattenFrame(frame, VISUAL_PATCH_COUNT * VISUAL_PATCH_DIMENSION);
+        var patches = new Tensor<T>(new[] { VISUAL_PATCH_COUNT, VISUAL_PATCH_DIMENSION });
+
+        for (int patch = 0; patch < VISUAL_PATCH_COUNT; patch++)
+        {
+            for (int i = 0; i < VISUAL_PATCH_DIMENSION; i++)
+            {
+                patches[patch, i] = flattened[patch * VISUAL_PATCH_DIMENSION + i];
+            }
+        }
+
+        return patches;
+    }
+
+    /// <summary>
+    /// Averages an encoder's output over its sequence axis, giving one embedding per stream.
+    /// </summary>
+    /// <param name="tensor">The encoder output, [steps, features] or a single [features] vector.</param>
+    /// <returns>A vector of at most <see cref="_embeddingDimension"/> features.</returns>
+    /// <remarks>
+    /// <para>
+    /// "Global average pooling" means averaging each feature across the sequence: feature <c>i</c> of
+    /// the result is the mean of feature <c>i</c> over every step. The previous implementation
+    /// flattened the tensor first and then averaged CONSECUTIVE runs of the flat buffer, which in
+    /// row-major order groups together several different features of the SAME step rather than one
+    /// feature across steps. That was invisible while the encoders produced rank-1 output, because a
+    /// single step makes the two readings coincide; it becomes wrong the moment there is a real
+    /// sequence to pool, which is now.
+    /// </para>
+    /// </remarks>
     private Vector<T> GlobalAveragePool(Tensor<T> tensor)
     {
+        if (tensor.Shape.Length < 2)
+        {
+            var flat = tensor.ToVector();
+            int width = Math.Min(_embeddingDimension, Math.Max(flat.Length, 1));
+            var single = new Vector<T>(width);
+
+            for (int i = 0; i < width && i < flat.Length; i++)
+            {
+                single[i] = flat[i];
+            }
+
+            return single;
+        }
+
+        int features = tensor.Shape[tensor.Shape.Length - 1];
+        int steps = tensor.Length / Math.Max(features, 1);
+        int outputSize = Math.Min(_embeddingDimension, features);
+
         var data = tensor.ToVector();
-        int outputSize = Math.Min(_embeddingDimension, data.Length);
         var result = new Vector<T>(outputSize);
 
-        int elementsPerOutput = Math.Max(1, data.Length / outputSize);
-        for (int i = 0; i < outputSize; i++)
+        for (int feature = 0; feature < outputSize; feature++)
         {
             T sum = _numOps.Zero;
-            int start = i * elementsPerOutput;
-            int end = Math.Min(start + elementsPerOutput, data.Length);
-
-            for (int j = start; j < end; j++)
+            for (int step = 0; step < steps; step++)
             {
-                sum = _numOps.Add(sum, data[j]);
+                sum = _numOps.Add(sum, data[step * features + feature]);
             }
-            result[i] = _numOps.Divide(sum, _numOps.FromDouble(end - start));
+
+            result[feature] = _numOps.Divide(sum, _numOps.FromDouble(steps));
         }
 
         return result;
