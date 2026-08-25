@@ -407,7 +407,10 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
         _gateBias = new Tensor<T>([outputDimension]);
     }
 
-    private int _outputDimension;
+    // protected, not private: the four GLU variants forward their constructor argument to this
+    // base parameter, and the generated state partial for a DERIVED layer reads it as
+    // `this._outputDimension`. Private would leave those layers with no factory at all.
+    protected int _outputDimension;
 
     /// <summary>
     /// Resolves input dimension on first forward and allocates linear/gate weight matrices.

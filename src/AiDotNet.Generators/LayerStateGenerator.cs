@@ -173,8 +173,15 @@ public class LayerStateGenerator : IIncrementalGenerator
             // nothing for them and leave the existing path in place. Emitting a partial factory
             // would trade a clear "no factory" for a call that cannot compile, and REPORTING it
             // would be a diagnostic against a layer whose author claimed nothing.
+            // Activations are EXCLUDED from `marked` above on purpose -- LayerBase supplies them
+            // through its ordered scalar/vector construction channel, not as component state. The
+            // completeness check must therefore excuse them too, or a constructor whose every other
+            // argument is stored is still declined for the one argument that was never meant to be
+            // counted. That declined CSPBlock, which stores all four of its ints, and surfaced only
+            // as "cannot be rebuilt: no generated factory" at clone time.
             if (marked.Count > 0
                 && ctor.Parameters.Any(p => !p.IsOptional
+                    && !IsActivation(p.Type, out _)
                     && !marked.Contains(p, SymbolEqualityComparer.Default)))
             {
                 return null;
@@ -667,6 +674,65 @@ public class LayerStateGenerator : IIncrementalGenerator
                         && IsNumericTypeParameter(numericProperty.Type, p.Type, type):
                     needsConvert = true;
                     return numericProperty.Name;
+            }
+        }
+
+
+        // FOLLOW `: base(...)`. A layer that forwards a constructor argument straight to a base
+        // constructor parameter IS restorable through the base's own declaration, but inference
+        // missed it on two counts: the names differ (SwiGLU's `outputSize` -> GatedLinearUnitLayer's
+        // `outputDimension`), and the loop above skips base members it cannot see. The name mapping
+        // is resolved here rather than by renaming the derived parameter, which would break callers
+        // written as `new SwiGLUFeedForwardLayer(outputSize: 64)`.
+        //
+        // ACCESSIBILITY IS STILL ENFORCED: the result is emitted as `this.<member>` inside the
+        // DERIVED type's generated partial, so returning a private base field would produce
+        // generated code that does not compile. Only members the derived type can actually read
+        // are accepted -- a private base field must be widened to protected at the base instead.
+        if (constructor.Initializer is { } baseInit
+            && baseInit.IsKind(SyntaxKind.BaseConstructorInitializer)
+            && semanticModel.GetSymbolInfo(baseInit).Symbol is IMethodSymbol baseCtor)
+        {
+            var forwarded = baseInit.ArgumentList.Arguments;
+            for (int i = 0; i < forwarded.Count; i++)
+            {
+                if (forwarded[i].Expression is not IdentifierNameSyntax forwardedId) continue;
+                if (!SymbolEqualityComparer.Default.Equals(
+                        semanticModel.GetSymbolInfo(forwardedId).Symbol, p)) continue;
+
+                IParameterSymbol? target = forwarded[i].NameColon is { } nameColon
+                    ? baseCtor.Parameters.FirstOrDefault(
+                        bp => bp.Name == nameColon.Name.Identifier.ValueText)
+                    : (i < baseCtor.Parameters.Length ? baseCtor.Parameters[i] : null);
+                if (target is null) continue;
+
+                var baseCandidates = new[]
+                {
+                    target.Name, "_" + target.Name, "m_" + target.Name,
+                    Pascal(target.Name), "_" + Pascal(target.Name)
+                };
+
+                for (var bt = baseCtor.ContainingType; bt is not null; bt = bt.BaseType)
+                {
+                    foreach (var name in baseCandidates)
+                    {
+                        foreach (var member in bt.GetMembers(name))
+                        {
+                            if (member.DeclaredAccessibility == Accessibility.Private) continue;
+
+                            switch (member)
+                            {
+                                case IFieldSymbol bf when SameType(bf.Type, p.Type):
+                                    memberIsNullable = IsNullableType(bf.Type);
+                                    return bf.Name;
+                                case IPropertySymbol { GetMethod: not null } bp2
+                                    when SameType(bp2.Type, p.Type):
+                                    memberIsNullable = IsNullableType(bp2.Type);
+                                    return bp2.Name;
+                            }
+                        }
+                    }
+                }
             }
         }
 

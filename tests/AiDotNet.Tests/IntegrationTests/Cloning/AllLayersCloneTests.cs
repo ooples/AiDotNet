@@ -241,7 +241,16 @@ public class AllLayersCloneTests
             .FirstOrDefault();
 
         var raw = attribute?.TestConstructorArgs;
-        if (string.IsNullOrWhiteSpace(raw)) return null;
+
+        // SYNTHESIZE when the layer declares no args. Requiring a hand-written
+        // [LayerProperty(TestConstructorArgs = ...)] per layer left 203 of 339 layers unconstructed
+        // and therefore unverified, while the sweep still reported green -- the skip bucket was
+        // counted but never asserted on. Deriving arguments from the constructor signature removes
+        // the per-layer declaration instead of adding 203 more of them.
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return TryConstructSynthesized(closed);
+        }
 
         var literals = raw!.Split(',').Select(s => s.Trim()).ToArray();
         if (literals.Any(l => !int.TryParse(l, NumberStyles.Integer, CultureInfo.InvariantCulture, out _)))
@@ -275,5 +284,61 @@ public class AllLayersCloneTests
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Builds a layer from its constructor signature alone, so coverage does not depend on each
+    /// layer author remembering to declare TestConstructorArgs. Only value-like required
+    /// parameters are synthesized; anything else falls through and the layer is reported, not
+    /// silently skipped.
+    /// </summary>
+    private static object? TryConstructSynthesized(Type closed)
+    {
+        foreach (var ctor in closed.GetConstructors().OrderBy(c => c.GetParameters().Length))
+        {
+            var parameters = ctor.GetParameters();
+            var args = new object?[parameters.Length];
+            bool usable = true;
+
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                var p = parameters[i];
+                if (p.IsOptional) { args[i] = Type.Missing; continue; }
+
+                var value = SynthesizeArgument(p.ParameterType);
+                if (value is null && p.ParameterType.IsValueType) { usable = false; break; }
+                args[i] = value;
+            }
+
+            if (!usable) continue;
+
+            try
+            {
+                return ctor.Invoke(BindingFlags.OptionalParamBinding, binder: null, args, culture: null);
+            }
+            catch (Exception)
+            {
+                // Try the next overload rather than declaring the layer unconstructible.
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Small, shape-compatible defaults for the parameter kinds layer constructors use.</summary>
+    private static object? SynthesizeArgument(Type t)
+    {
+        if (t == typeof(int)) return 4;
+        if (t == typeof(long)) return 4L;
+        if (t == typeof(bool)) return false;
+        if (t == typeof(double)) return 0.1d;
+        if (t == typeof(float)) return 0.1f;
+        if (t == typeof(string)) return "test";
+        if (t.IsEnum) return Enum.GetValues(t).Cast<object>().FirstOrDefault();
+        if (t == typeof(int[])) return new[] { 4, 4 };
+        if (t.IsArray) return Array.CreateInstance(t.GetElementType()!, 0);
+        // Reference types the layer treats as collaborators are left null; a constructor that
+        // genuinely requires one will throw and the next overload is tried.
+        return t.IsValueType ? Activator.CreateInstance(t) : null;
     }
 }
