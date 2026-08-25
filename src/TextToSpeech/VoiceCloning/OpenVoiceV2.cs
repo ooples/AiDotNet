@@ -81,17 +81,9 @@ public class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
     {
         _options = options ?? new OpenVoiceV2Options();
         _useNativeMode = true;
-        // Honour the model's public training configuration. Constructing AdamW bare used its
-        // framework default of 1e-3, ten times VoiceCloningOptions.LearningRate (1e-4), and the
-        // VITS/flow stack overshot a memorization target after a few otherwise healthy steps. Pass
-        // weight decay too, and keep adaptive scheduling off so the configured rate remains exact.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                UseAdaptiveLearningRate = false,
-            });
+        // Honor the model's paper-derived optimizer options rather than AdamW's generic defaults.
+        // The helper also keeps the released no-clipping policy consistent with the MeloTTS path.
+        _optimizer = optimizer ?? CreatePaperOptimizer();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -255,6 +247,23 @@ public class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
     /// <inheritdoc />
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
         => _optimizer ?? base.GetOrCreateBaseOptimizer();
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = _options.Beta1,
+                Beta2 = _options.Beta2,
+                Epsilon = _options.Epsilon,
+                WeightDecay = _options.WeightDecay,
+                UseAMSGrad = false,
+                UseAdaptiveBetas = false,
+                // MeloTTS/OpenVoice only records the gradient norm here; it does not
+                // clip the generator update in the released training loop.
+                EnableGradientClipping = false,
+            });
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

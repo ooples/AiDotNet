@@ -1206,13 +1206,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (TrainingInvariantsNotApplicable(network)) return;
         var input = CreateRandomTensor(EffectiveInputShape, rng);
         var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
+        target = ResolveTrainingObjectiveTarget(network, input, target);
 
         PrepareForSupervisedTrainingInvariant(network, input);
 
         // Measure initial loss (model's objective — MSE for most families, the model's own loss for
         // raw-logit cross-entropy LMs where MSE is meaningless; see MeasureLoss).
         var initialOutput = network.Predict(input);
-        double initialLoss = MeasureLoss(network, initialOutput, target);
+        double initialLoss = MeasureLoss(network, input, initialOutput, target);
 
         int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations * 3);
         for (int i = 0; i < iterations; i++)
@@ -1220,7 +1221,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         // Measure final loss
         var finalOutput = network.Predict(input);
-        double finalLoss = MeasureLoss(network, finalOutput, target);
+        double finalLoss = MeasureLoss(network, input, finalOutput, target);
 
         if (!double.IsNaN(initialLoss) && !double.IsNaN(finalLoss))
         {
@@ -2338,6 +2339,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         var input = CreateRandomTensor(EffectiveInputShape, rng1);
         var target = CreateLossCompatibleTarget(network1, ShapeCheckedOutputShape, rng1);
+        target = ResolveTrainingObjectiveTarget(network1, input, target);
         PrepareForSupervisedTrainingInvariant(network1, input);
         int longIters = ResolveConformanceTrainingIterations(network1, MoreDataLongIterations);
 
@@ -2359,11 +2361,11 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // initial), and what Google's ML Test Score recommends — assert on behaviour AFTER a
         // training budget, never per-step monotonicity. It is transient-immune by construction, so
         // it needs no per-model knowledge of where a given architecture stops oscillating.
-        double lossUntrained = MeasureLoss(network1, network1.Predict(input), target);
+        double lossUntrained = MeasureLoss(network1, input, network1.Predict(input), target);
 
         for (int i = 0; i < longIters; i++)
             network1.Train(input, target);
-        double lossTrained = MeasureLoss(network1, network1.Predict(input), target);
+        double lossTrained = MeasureLoss(network1, input, network1.Predict(input), target);
 
         double lossLong = lossTrained;
 
@@ -2452,12 +2454,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (!TrainingErrorInvariantApplicable) return;
         var input = CreateRandomTensor(EffectiveInputShape, rng);
         var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
+        target = ResolveTrainingObjectiveTarget(network, input, target);
 
         int iterations = ResolveConformanceTrainingIterations(network, TrainingErrorIterations);
         for (int i = 0; i < iterations; i++)
             network.Train(input, target);
 
-        double trainMSE = MeasureLoss(network, network.Predict(input), target);
+        double trainMSE = MeasureLoss(network, input, network.Predict(input), target);
         var testInput = CreateRandomTensor(EffectiveInputShape, ModelTestHelpers.CreateSeededRandom(99));
 
         // MEASURE BOTH SIDES AGAINST THE SAME TARGET. The invariant's claim is about the INPUT --
@@ -2485,7 +2488,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // lower on it than on an unseen one, which is the whole claim; a model that ignores its
         // input scores equal on both and passes, which was already true and is now deterministic
         // instead of decided by a label lottery.
-        double testMSE = MeasureLoss(network, network.Predict(testInput), target);
+        double testMSE = MeasureLoss(network, testInput, network.Predict(testInput), target);
 
         if (!double.IsNaN(trainMSE) && !double.IsNaN(testMSE))
         {
@@ -3242,7 +3245,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     private double MemorizationProbeLoss(
         INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target)
         => MemorizationTaskUsesDeterministicEvalLoss
-            ? MeasureLoss(network, network.Predict(input), target)
+            ? MeasureLoss(network, input, network.Predict(input), target)
             : ConvertToDouble(network.GetLastLoss());
 
     /// <summary>
@@ -3282,6 +3285,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // descent, so this invariant reported "loss did not strictly decrease" for a model that was
         // simply being given an unfittable objective.
         var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
+        target = ResolveTrainingObjectiveTarget(network, input, target);
         PrepareForSupervisedTrainingInvariant(network, input);
 
         // First step establishes the baseline loss. Keep the repeated-training portion inside a
@@ -3704,6 +3708,60 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         return ComputeMSE(output, target);
     }
+
+    /// <summary>
+    /// Measures the model-declared paper objective when the learner is not ordinary
+    /// supervised prediction; otherwise preserves the existing configured-loss oracle.
+    /// </summary>
+    protected double MeasureLoss(
+        INeuralNetworkModel<T> network,
+        Tensor<T> input,
+        Tensor<T> output,
+        Tensor<T> target)
+    {
+        if (network is ITrainingObjectiveProvider<T> objectiveProvider)
+        {
+            return MeasureDeclaredTrainingObjective(network, objectiveProvider, input, target);
+        }
+
+        return MeasureLoss(network, output, target);
+    }
+
+    /// <summary>
+    /// Measures a declared objective with stochastic training layers disabled while preserving the
+    /// caller's mode. Gradient checks call the provider directly and therefore retain training-mode
+    /// semantics; loss-trajectory invariants use this deterministic evaluation-mode measurement.
+    /// </summary>
+    private double MeasureDeclaredTrainingObjective(
+        INeuralNetworkModel<T> network,
+        ITrainingObjectiveProvider<T> objectiveProvider,
+        Tensor<T> input,
+        Tensor<T> target)
+    {
+        if (network is not NeuralNetworkBase<T> neuralNetwork)
+        {
+            return ConvertToDouble(objectiveProvider.EvaluateTrainingObjective(input, target));
+        }
+
+        bool previousTrainingMode = neuralNetwork.IsTrainingMode;
+        try
+        {
+            neuralNetwork.SetTrainingMode(false);
+            return ConvertToDouble(objectiveProvider.EvaluateTrainingObjective(input, target));
+        }
+        finally
+        {
+            neuralNetwork.SetTrainingMode(previousTrainingMode);
+        }
+    }
+
+    private static Tensor<T> ResolveTrainingObjectiveTarget(
+        INeuralNetworkModel<T> network,
+        Tensor<T> input,
+        Tensor<T> proposedTarget)
+        => network is ITrainingObjectiveProvider<T> objectiveProvider
+            ? objectiveProvider.ResolveTrainingTarget(input, proposedTarget)
+            : proposedTarget;
 
     /// <summary>
     /// Resolves the class axis once for both categorical target construction routes.
