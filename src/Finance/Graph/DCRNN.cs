@@ -232,7 +232,7 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         double[,]? adjacencyMatrix = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanAbsoluteErrorLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
@@ -244,8 +244,8 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         _options = options ?? new DCRNNOptions<T>();
         Options = _options;
-        _lossFunction = lossFunction ?? new MeanAbsoluteErrorLoss<T>();
-        _optimizer = optimizer ?? CreatePaperOptimizer();
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
         _forecastHorizon = _options.ForecastHorizon;
@@ -291,13 +291,13 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         double[,]? adjacencyMatrix = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanAbsoluteErrorLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         _useNativeMode = true;
         _options = options ?? new DCRNNOptions<T>();
         Options = _options;
-        _lossFunction = lossFunction ?? new MeanAbsoluteErrorLoss<T>();
-        _optimizer = optimizer ?? CreatePaperOptimizer();
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
         _forecastHorizon = _options.ForecastHorizon;
@@ -327,22 +327,6 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         {
             InitializeDefaultDiffusionMatrices();
         }
-    }
-
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
-    {
-        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                Epsilon = 1e-3,
-                UseAdaptiveLearningRate = false,
-                UseAdaptiveBetas = false,
-                UseAMSGrad = false,
-                EnableGradientClipping = true,
-                MaxGradientNorm = 5.0,
-            });
     }
 
     #endregion
@@ -605,12 +589,15 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        // Use the optimizer supplied to this model (or the paper-faithful
-        // default created above). Calling base.Train here silently selected
-        // NeuralNetworkBase's unrelated default optimizer and left
-        // _optimizer unused for the lifetime of the model.
-        TrainWithTape(input, target, _optimizer);
-        _trainingStep++;
+        // Issue #1166: the old body computed a loss + gradient and then
+        // called _optimizer.UpdateParameters(Layers) without a backward
+        // pass, so every layer's UpdateParameters threw "Backward pass
+        // must be called before updating parameters." Delegate to
+        // FinancialModelBase.Train — it routes through the tape-based
+        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
+        // tape.ComputeGradients + optimizer.Step) that every other
+        // NeuralNetworkBase subclass uses.
+        base.Train(input, target);
     }
 
     // UpdateParameters was an empty override, silently dropping every restore. The base

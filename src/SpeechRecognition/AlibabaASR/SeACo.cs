@@ -60,9 +60,26 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
         try
         {
             _currentTarget = target;
-            _activeHotwordIds = null;
+            Tensor<T> objectiveTarget = target;
+            if (_options.TrainingStage != SeACoTrainingStage.Backbone)
+            {
+                var positions = CreateHotwordPositions(
+                    target,
+                    RandomHelper.CreateSeededRandom(_options.Seed ?? HotwordSamplingSeed));
+                _activeHotwordIds = SampleHotwordIdsFromTarget(target, positions);
+                if (_options.TrainingStage == SeACoTrainingStage.Bias)
+                    objectiveTarget = CreateBiasTrainingTarget(target, positions);
+            }
+            else
+            {
+                _activeHotwordIds = null;
+            }
+
             var prediction = ForwardForTraining(input);
-            return LossFunction.ComputeTapeLoss(prediction, target).Data.Span[0];
+            var loss = _options.TrainingStage == SeACoTrainingStage.Bias
+                ? BiasStageLoss
+                : LossFunction;
+            return loss.ComputeTapeLoss(prediction, objectiveTarget).Data.Span[0];
         }
         finally
         {
@@ -73,6 +90,7 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
 
     private readonly SeACoOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
+    private static readonly AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T> BiasStageLoss = new();
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
@@ -218,13 +236,13 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
 
     /// <summary>Number of layers <c>CreateSeACoBiasLayers</c> is contracted to emit.</summary>
     /// <remarks>
-    /// ApplyHotwordBias indexes <c>biasStart</c> through <c>biasStart + 4</c> and CASTS positions +2
-    /// and +3 to <see cref="MultiHeadAttentionLayer{T}"/>. Those five reads are a contract with the
+    /// ApplyHotwordBias indexes the first five layers, casts positions +2 and +3 to
+    /// <see cref="MultiHeadAttentionLayer{T}"/>, and requires a final dense projection. Those reads are a contract with the
     /// factory that nothing checked: a factory change, or a layout this model does not support, showed
     /// up as an ArgumentOutOfRangeException or an InvalidCastException thrown from the middle of an
     /// inference call, naming an index rather than the mismatch. Checked once at construction instead.
     /// </remarks>
-    private const int SeACoBiasLayerCount = 5;
+    private const int SeACoBiasLayerCount = 6;
 
     /// <summary>
     /// Confirms the bias branch has the shape the hotword forward indexes into, before any inference
@@ -242,8 +260,8 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
         if (bias.Count < SeACoBiasLayerCount)
         {
             throw new InvalidOperationException(
-                $"SeACo's bias branch needs {SeACoBiasLayerCount} layers (embedding, LSTM, two " +
-                $"multi-head attentions, normalization) but {bias.Count} were supplied. Hotword " +
+                $"SeACo's bias branch needs at least {SeACoBiasLayerCount} layers (embedding, LSTM, " +
+                $"two multi-head attentions, normalization, output projection) but {bias.Count} were supplied. Hotword " +
                 "biasing cannot be applied to this layout.");
         }
 
@@ -253,6 +271,13 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
                 "SeACo's bias branch expects multi-head attention at bias positions 2 and 3 (the " +
                 $"decoder- and encoder-attending blocks), but found {bias[2].GetType().Name} and " +
                 $"{bias[3].GetType().Name}. Hotword biasing cannot be applied to this layout.");
+        }
+
+        if (bias[^1] is not DenseLayer<T>)
+        {
+            throw new InvalidOperationException(
+                $"SeACo's bias branch must end in a dense VocabSize + 1 output projection, but found " +
+                $"{bias[^1].GetType().Name}. Hotword biasing cannot be applied to this layout.");
         }
     }
 
@@ -267,6 +292,10 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
 
     /// <summary>Half-open range of Layers holding the bias branch.</summary>
     internal (int Start, int End) BiasLayerRange => (_backboneLayerCount, _backboneLayerCount + _biasLayerCount);
+
+    /// <summary>Number of flattened parameters owned by the Paraformer backbone.</summary>
+    internal long BackboneParameterCount
+        => Layers.Take(_backboneLayerCount).Sum(layer => layer.ParameterCount);
     /// <summary>
     /// Runs the ASR backbone. The bias branch is a PARALLEL module, not a continuation.
     /// </summary>
@@ -452,15 +481,28 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
                 var positions = SampleHotwordPositions(expected);
                 _activeHotwordIds = SampleHotwordIdsFromTarget(expected, positions);
                 if (_options.TrainingStage == SeACoTrainingStage.Bias)
-                    target = ApplyHotwordPositionMask(expected, positions);
+                    target = CreateBiasTrainingTarget(expected, positions);
             }
             else
             {
                 _activeHotwordIds = null;
             }
 
-            _currentTarget = target;
-            TrainWithTape(input, target, _optimizer);
+            // The GLM sampler is supervised by the transcription target, not by the bias
+            // branch's appended '#' class target.
+            _currentTarget = expected;
+
+            var savedLoss = LossFunction;
+            try
+            {
+                if (_options.TrainingStage == SeACoTrainingStage.Bias)
+                    LossFunction = BiasStageLoss;
+                TrainWithTape(input, target, _optimizer);
+            }
+            finally
+            {
+                LossFunction = savedLoss;
+            }
         }
         finally
         {
@@ -603,7 +645,8 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
         var attendD = (MultiHeadAttentionLayer<T>)Layers[biasStart + 2];
         var attendE = (MultiHeadAttentionLayer<T>)Layers[biasStart + 3];
         var norm = Layers[biasStart + 4];
-        var outLayer = Layers[BiasLayerRange.End - 1];
+        int biasEnd = BiasLayerRange.End;
+        var outLayer = Layers[biasEnd - 1];
 
         // Eq 2.
         var z = lstm.Forward(embedding.Forward(hotwordIds));
@@ -619,7 +662,13 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
 
         // Eq 4.
         var summed = Engine.TensorAdd(dPlus, ePlus);
-        return outLayer.Forward(norm.Forward(summed));
+        var biasHidden = norm.Forward(summed);
+        for (int i = biasStart + 5; i < biasEnd - 1; i++)
+        {
+            biasHidden = Layers[i].Forward(biasHidden);
+        }
+
+        return outLayer.Forward(biasHidden);
     }
 
     /// <summary>
@@ -655,6 +704,11 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
     /// </remarks>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
+        if (_options.TrainingStage == SeACoTrainingStage.Bias && HasBiasBranch)
+        {
+            return ForwardBiasBranchForTraining(input);
+        }
+
         int cifIndex = IndexOfCifLayer();
         if (cifIndex < 0 || _currentTarget is null || !HasBiasBranch)
         {
@@ -681,12 +735,63 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
 
         // ---- Pass 2: with gradient, from the decoder onward.
         var decoded = semantic;
-        for (int i = cifIndex + 1; i < _backboneLayerCount; i++)
+        int projectionIndex = _backboneLayerCount - 1;
+        for (int i = cifIndex + 1; i < projectionIndex; i++)
         {
             decoded = Layers[i].Forward(decoded);
         }
 
-        return decoded;
+        var pAsr = Layers[projectionIndex].Forward(decoded);
+        if (_options.TrainingStage == SeACoTrainingStage.Joint && _activeHotwordIds is not null)
+        {
+            var pBias = ApplyHotwordBias(decoded, acoustic, _activeHotwordIds);
+            return MergeBiasedProbabilities(pAsr, pBias);
+        }
+
+        return pAsr;
+    }
+
+    /// <summary>
+    /// Runs SeACo stage 2 with the trained Paraformer backbone detached from autodiff and
+    /// returns the bias branch's V+1 logits, including the appended '#' class.
+    /// </summary>
+    private Tensor<T> ForwardBiasBranchForTraining(Tensor<T> input)
+    {
+        if (_activeHotwordIds is null)
+            throw new InvalidOperationException("Bias-stage training requires sampled hotword ids.");
+
+        int cifIndex = IndexOfCifLayer();
+        if (cifIndex < 0)
+            throw new InvalidOperationException("Bias-stage training requires a Paraformer CIF layer.");
+
+        Tensor<T> hidden;
+        Tensor<T>? acoustic = null;
+        int projectionIndex = _backboneLayerCount - 1;
+        using (InferenceMode.Enter())
+        {
+            hidden = input;
+            for (int i = 0; i < projectionIndex; i++)
+            {
+                hidden = Layers[i].Forward(hidden);
+                if (i == cifIndex) acoustic = hidden;
+            }
+        }
+
+        // InferenceMode prevents new tape records, but its result tensors can still carry
+        // creator metadata from prior lazy-shape/evaluation forwards. Materialize fresh leaf
+        // tensors so stage-2 gradients end at D and E exactly as the paper's frozen backbone
+        // requires; sharing the values is correct, sharing the graph is not.
+        var detachedHidden = DetachFromAutodiff(hidden);
+        var detachedAcoustic = DetachFromAutodiff(acoustic ?? hidden);
+        return ApplyHotwordBias(detachedHidden, detachedAcoustic, _activeHotwordIds);
+    }
+
+    /// <summary>Copies a tensor's values into a fresh leaf with no autodiff creator.</summary>
+    private static Tensor<T> DetachFromAutodiff(Tensor<T> source)
+    {
+        var detached = new Tensor<T>(source.Shape.ToArray());
+        source.Data.Span.CopyTo(detached.Data.Span);
+        return detached;
     }
 
     /// <summary>Index of the CIF layer in the backbone, or -1 when absent.</summary>
@@ -733,8 +838,8 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
         int positions = acoustic.Rank > 1 ? acoustic.Shape[acoustic.Rank - 2] : 1;
         int width = acoustic.Shape[acoustic.Rank - 1];
 
-        int targetRows = target.Rank > 1 ? target.Shape[0] : 1;
-        int targetCols = target.Length / Math.Max(1, targetRows);
+        int targetCols = target.Rank > 1 ? target.Shape[^1] : target.Length;
+        int targetRows = target.Length / Math.Max(1, targetCols);
         int logitRows = Math.Max(1, pass1Logits.Length / Math.Max(1, vocab));
         int comparable = Math.Min(positions, Math.Min(targetRows, logitRows));
 
@@ -886,8 +991,8 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
     /// </remarks>
     private Tensor<T> SampleHotwordIdsFromTarget(Tensor<T> expected, Func<int, bool> isHotwordPosition)
     {
-        int positions = expected.Rank > 1 ? expected.Shape[0] : 1;
-        int cols = expected.Length / Math.Max(1, positions);
+        int cols = expected.Rank > 1 ? expected.Shape[^1] : expected.Length;
+        int positions = expected.Length / Math.Max(1, cols);
         int maxLen = Math.Max(1, _options.HotwordMaxLength);
         int maskId = _options.ResolveHotwordMaskTokenId();
 
@@ -939,8 +1044,13 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
     /// </para>
     /// </remarks>
     private Func<int, bool> SampleHotwordPositions(Tensor<T> expected)
+        => CreateHotwordPositions(expected, _hotwordRng);
+
+    /// <summary>Applies SeACo's r_b/r_u/span sampling recipe using the supplied generator.</summary>
+    private Func<int, bool> CreateHotwordPositions(Tensor<T> expected, Random rng)
     {
-        int positions = expected.Rank > 1 ? expected.Shape[0] : 1;
+        int cols = expected.Rank > 1 ? expected.Shape[^1] : expected.Length;
+        int positions = expected.Length / Math.Max(1, cols);
 
         // r_b: this batch may be inactive entirely, in which case the default <blank> hotword applies
         // and NO position is treated as a hotword.
@@ -951,7 +1061,6 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
         // admitted every step or none of them for the whole run -- and every admitted step then selected
         // the identical spans. SeACo's criterion depends on the sampling varying across steps; frozen,
         // the bias branch sees one fixed masking pattern and the ratio options do nothing.
-        var rng = _hotwordRng;
         if (rng.NextDouble() >= _options.HotwordBatchRatio)
         {
             return _ => false;
@@ -1007,26 +1116,30 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
     /// UNMASKED full-sequence CE (what this model used before) produces a loss surface the bias
     /// parameters cannot descend.
     /// </remarks>
-    internal Tensor<T> ApplyHotwordPositionMask(Tensor<T> labels, Func<int, bool> isHotwordPosition)
+    internal Tensor<T> CreateBiasTrainingTarget(Tensor<T> labels, Func<int, bool> isHotwordPosition)
     {
         if (labels is null) throw new ArgumentNullException(nameof(labels));
         if (isHotwordPosition is null) throw new ArgumentNullException(nameof(isHotwordPosition));
 
-        int rows = labels.Rank > 1 ? labels.Shape[0] : 1;
-        int cols = labels.Length / Math.Max(1, rows);
-        var masked = labels.Clone();
-        T maskValue = NumOps.FromDouble(_options.ResolveHotwordMaskTokenId());
+        int sourceCols = labels.Rank > 1 ? labels.Shape[^1] : labels.Length;
+        int rows = labels.Length / Math.Max(1, sourceCols);
+        int biasClasses = _options.VocabSize + 1;
+        var targetShape = labels.Shape.ToArray();
+        if (targetShape.Length == 0)
+            targetShape = new[] { biasClasses };
+        else
+            targetShape[^1] = biasClasses;
+        var target = new Tensor<T>(targetShape);
 
         for (int r = 0; r < rows; r++)
         {
-            if (isHotwordPosition(r)) continue;
-            for (int c = 0; c < cols; c++)
-            {
-                masked.Data.Span[(r * cols) + c] = maskValue;
-            }
+            int targetClass = isHotwordPosition(r)
+                ? Math.Min(ArgMaxRow(labels, r, sourceCols), _options.VocabSize - 1)
+                : _options.VocabSize;
+            target.Data.Span[(r * biasClasses) + targetClass] = NumOps.One;
         }
 
-        return masked;
+        return target;
     }
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

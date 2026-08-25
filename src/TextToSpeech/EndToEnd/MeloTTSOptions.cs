@@ -42,4 +42,16 @@ public class MeloTTSOptions : EndToEndTtsOptions
 
     /// <summary>AdamW numerical-stability epsilon used by the released MeloTTS recipe.</summary>
     public double Epsilon { get; set; } = 1e-9;
+
+    /// <summary>Validates the AdamW coefficients used by native MeloTTS training.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when a coefficient is non-finite or outside its valid range.</exception>
+    internal void ValidateTrainingOptions()
+    {
+        if (!double.IsFinite(Beta1) || Beta1 < 0 || Beta1 >= 1)
+            throw new ArgumentOutOfRangeException(nameof(Beta1), "Beta1 must be finite and in [0, 1).");
+        if (!double.IsFinite(Beta2) || Beta2 < 0 || Beta2 >= 1)
+            throw new ArgumentOutOfRangeException(nameof(Beta2), "Beta2 must be finite and in [0, 1).");
+        if (!double.IsFinite(Epsilon) || Epsilon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(Epsilon), "Epsilon must be finite and positive.");
+    }
 }

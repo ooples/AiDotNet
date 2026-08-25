@@ -550,7 +550,7 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        base.Train(input, expectedOutput);
+        TrainWithTape(input, expectedOutput, _optimizer);
     }
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()

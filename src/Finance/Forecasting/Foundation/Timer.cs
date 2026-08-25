@@ -535,7 +535,7 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
         // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
         // tape.ComputeGradients + optimizer.Step) that every other
         // NeuralNetworkBase subclass uses.
-        base.Train(input, target);
+        TrainWithTape(input, target, _optimizer);
     }
 
     /// <summary>

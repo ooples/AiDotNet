@@ -85,7 +85,6 @@ public class DCRNNOptions<T> : TimeSeriesRegressionOptions<T>
         NumDecoderLayers = other.NumDecoderLayers;
         DiffusionSteps = other.DiffusionSteps;
         DropoutRate = other.DropoutRate;
-        LearningRate = other.LearningRate;
         UseScheduledSampling = other.UseScheduledSampling;
         ScheduledSamplingDecaySteps = other.ScheduledSamplingDecaySteps;
         MinTeacherForcingRatio = other.MinTeacherForcingRatio;
@@ -195,15 +194,6 @@ public class DCRNNOptions<T> : TimeSeriesRegressionOptions<T>
     public double DropoutRate { get; set; } = 0.0;
 
     /// <summary>
-    /// Gets or sets the initial Adam learning rate.
-    /// </summary>
-    /// <value>
-    /// The initial rate, defaulting to <c>0.01</c> as used by the reference DCRNN
-    /// training configuration.
-    /// </value>
-    public double LearningRate { get; set; } = 0.01;
-
-    /// <summary>
     /// Gets or sets whether to use scheduled sampling during training.
     /// </summary>
     /// <value>True to use scheduled sampling; false otherwise. Default: true.</value>
@@ -218,13 +208,13 @@ public class DCRNNOptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the number of training steps for scheduled sampling decay.
     /// </summary>
-    /// <value>The inverse-sigmoid decay constant, defaulting to 3000.</value>
+    /// <value>The decay steps, defaulting to 2000.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> How many training steps it takes to transition
     /// from 100% teacher forcing to the minimum ratio. Uses inverse sigmoid decay.
     /// </para>
     /// </remarks>
-    public int ScheduledSamplingDecaySteps { get; set; } = 3000;
+    public int ScheduledSamplingDecaySteps { get; set; } = 2000;
 
     /// <summary>
     /// Gets or sets the minimum teacher forcing ratio.

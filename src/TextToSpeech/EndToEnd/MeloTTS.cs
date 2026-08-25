@@ -101,6 +101,7 @@ public class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options ?? new MeloTTSOptions();
+        _options.ValidateTrainingOptions();
         _useNativeMode = true;
         _optimizer = optimizer ?? CreatePaperOptimizer();
         base.SampleRate = _options.SampleRate;

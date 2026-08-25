@@ -648,6 +648,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // Only the memorization probe is affected; its other probes already pass.
             { "MusicTaggingTransformer", new WarmupIterationOverride(memorization: 12) },
 
+            // SeACo / Paraformer uses the GLM sampler from arXiv 2206.08317 section 2.3. Its
+            // target-substitution count changes with prediction error, so the real paper objective
+            // is intentionally non-monotonic at the first two steps (measured 36.429470 -> 37.064968).
+            // The existing 15-step trajectory clears that sampler transient; keep the same fixed
+            // example, recorded training loss, strict threshold, and zero tolerance, but judge the
+            // optimizer after the documented paper warm-up rather than at its second step.
+            { "SeACo", new WarmupIterationOverride(memorization: 15) },
+
             // VMamba includes dropout by default. Its first/final training-mode loss samples can
             // therefore reverse under an unlucky mask even while the fixed example is learning.
             // Measure the same fixed example in evaluation mode at both endpoints; the strict

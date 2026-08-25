@@ -3156,9 +3156,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </summary>
     private double MemorizationProbeLoss(
         INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target)
-        => network is ITrainingObjectiveProvider<T> objectiveProvider
-            ? ConvertToDouble(objectiveProvider.EvaluateTrainingObjective(input, target))
-            : MemorizationTaskUsesDeterministicEvalLoss
+        => MemorizationTaskUsesDeterministicEvalLoss
             ? MeasureLoss(network, input, network.Predict(input), target)
             : ConvertToDouble(network.GetLastLoss());
 
@@ -3465,10 +3463,38 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     {
         if (network is ITrainingObjectiveProvider<T> objectiveProvider)
         {
-            return ConvertToDouble(objectiveProvider.EvaluateTrainingObjective(input, target));
+            return MeasureDeclaredTrainingObjective(network, objectiveProvider, input, target);
         }
 
         return MeasureLoss(network, output, target);
+    }
+
+    /// <summary>
+    /// Measures a declared objective with stochastic training layers disabled while preserving the
+    /// caller's mode. Gradient checks call the provider directly and therefore retain training-mode
+    /// semantics; loss-trajectory invariants use this deterministic evaluation-mode measurement.
+    /// </summary>
+    private double MeasureDeclaredTrainingObjective(
+        INeuralNetworkModel<T> network,
+        ITrainingObjectiveProvider<T> objectiveProvider,
+        Tensor<T> input,
+        Tensor<T> target)
+    {
+        if (network is not NeuralNetworkBase<T> neuralNetwork)
+        {
+            return ConvertToDouble(objectiveProvider.EvaluateTrainingObjective(input, target));
+        }
+
+        bool previousTrainingMode = neuralNetwork.IsTrainingMode;
+        try
+        {
+            neuralNetwork.SetTrainingMode(false);
+            return ConvertToDouble(objectiveProvider.EvaluateTrainingObjective(input, target));
+        }
+        finally
+        {
+            neuralNetwork.SetTrainingMode(previousTrainingMode);
+        }
     }
 
     private static Tensor<T> ResolveTrainingObjectiveTarget(

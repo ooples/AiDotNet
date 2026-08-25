@@ -14,7 +14,7 @@ namespace AiDotNet.Interfaces;
 /// model-name allowlists or a second catalogue of paper-specific loss formulas.
 /// Implementations must be deterministic and must not update parameters.
 /// </remarks>
-public interface ITrainingObjectiveProvider<T>
+internal interface ITrainingObjectiveProvider<T>
 {
     /// <summary>Gets the kind of objective optimized by the model.</summary>
     TrainingObjectiveKind TrainingObjectiveKind { get; }

@@ -547,7 +547,9 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
         DifferentiableNeuralComputerOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            CreatePaperOptimizerOptions());
         _options = options ?? new DifferentiableNeuralComputerOptions();
         Options = _options;
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
