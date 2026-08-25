@@ -40,6 +40,12 @@ public static class ExpressionState
     /// </remarks>
     public static bool IsAllowed(Type type)
         => type.Assembly == typeof(ExpressionState).Assembly
+           // The framework's maths now lives in its own package. Checking a single assembly's
+           // identity stopped covering Tensor<T> when AiDotNet.Tensors was extracted, so a saved
+           // LambdaLayer expression -- whose whole job is transforming tensors -- was rejected on
+           // restore even though the layer had saved it happily. The boundary is unchanged in
+           // spirit: first-party framework types, never arbitrary ones.
+           || type.Assembly == typeof(AiDotNet.Tensors.LinearAlgebra.Tensor<double>).Assembly
            || type == typeof(Math)
            || type == typeof(MathF);
 
