@@ -63,8 +63,13 @@ public class AllLayersCloneTests
         // fired and the coverage figure below is measuring unresolved layers again.
         var forwarded = new List<string>();
 
+        // Per-layer timing: two cost fixes were guessed and both failed, so measure instead.
+        var timings = new List<(string Name, long Ms)>();
+        var layerClock = new System.Diagnostics.Stopwatch();
+
         foreach (var open in candidates)
         {
+            layerClock.Restart();
             Type closed;
             try
             {
@@ -73,6 +78,7 @@ public class AllLayersCloneTests
             catch (Exception)
             {
                 notConstructed.Add($"{open.Name}: constraints reject double");
+                timings.Add((open.Name, layerClock.ElapsedMilliseconds));
                 continue;
             }
 
@@ -80,6 +86,7 @@ public class AllLayersCloneTests
             if (instance is null)
             {
                 notConstructed.Add($"{open.Name}: no usable TestConstructorArgs");
+                timings.Add((open.Name, layerClock.ElapsedMilliseconds));
                 continue;
             }
 
@@ -109,7 +116,31 @@ public class AllLayersCloneTests
                     continue;
                 }
 
+                // A TYPE CHECK IS NOT A CLONE CHECK. Requiring only "non-null and the right type"
+                // passed clones that had lost their state entirely: a dense layer rebuilt with
+                // weights [64,1] instead of [64,784], or a composite whose child layers were
+                // persisted as a bare type name. Both are the right type and both are wrong.
+                //
+                // COUNT FIRST, and only materialise vectors for small layers. GetParameters()
+                // allocates the whole vector, and calling it twice for every one of 210 layers --
+                // several with millions of parameters -- ran this test past its own 600s timeout so
+                // it reported NOTHING. ParameterCount is a cheap property and already catches the
+                // case that matters most, a clone rebuilt at the wrong shape.
+                if (clone.ParameterCount != typed.ParameterCount)
+                {
+                    failed.Add($"{open.Name}: clone has {clone.ParameterCount} parameters, "
+                        + $"original has {typed.ParameterCount}");
+                    continue;
+                }
+
+                // VALUE COMPARISON DELIBERATELY OMITTED. GetParameters() materialises the whole
+                // vector, and calling it twice per layer across 210 layers ran this test past its
+                // own 600s timeout so it reported NOTHING AT ALL -- strictly worse than a narrower
+                // check that finishes. ParameterCount above is cheap and already catches the case
+                // that matters: a clone rebuilt at the wrong shape. Per-value comparison belongs in
+                // a focused test over a handful of representative layers, not a 339-layer sweep.
                 cloned.Add(open.Name);
+                timings.Add((open.Name, layerClock.ElapsedMilliseconds));
             }
             catch (Exception ex)
             {
@@ -145,6 +176,10 @@ public class AllLayersCloneTests
             $"not constructed    : {notConstructed.Count} (harness limit, not a clone result)",
             $"forwarded first    : {forwarded.Count} of {cloned.Count + failed.Count} attempted",
             string.Empty,
+            "slowest layers (ms):",
+            string.Join(Environment.NewLine, timings.OrderByDescending(x => x.Ms).Take(20)
+                .Select(x => $"  {x.Ms,7} {x.Name}")),
+            string.Empty,
         };
         report.AddRange(failed.Select(f => $"FAIL  {f}"));
         report.AddRange(notConstructed.Select(n => $"skip  {n}"));
@@ -159,6 +194,19 @@ public class AllLayersCloneTests
             failed.Count == 0,
             $"{failed.Count} constructed layer(s) failed cloning:{Environment.NewLine}"
                 + string.Join(Environment.NewLine, failed));
+
+        // THE BLIND SPOT, PINNED. A layer the harness cannot build has UNKNOWN clone behaviour,
+        // and counting it as a "harness limit" let this sweep report success while 203 of 339
+        // layers were never cloned at all -- failed.Count == 0 was trivially true. The bound only
+        // ever goes down: lower it when it drops, and a change that leaves MORE layers unverified
+        // fails here instead of surfacing as a clone bug three PRs later.
+        const int UnverifiedLayerBudget = 128;
+        Assert.True(
+            notConstructed.Count <= UnverifiedLayerBudget,
+            $"{notConstructed.Count} layers could not be constructed, budget is "
+                + $"{UnverifiedLayerBudget}. Their clone behaviour is unknown, so this sweep cannot "
+                + $"vouch for them:{Environment.NewLine}"
+                + string.Join(Environment.NewLine, notConstructed.Take(20)));
     }
 
     private static bool DerivesFromLayerBase(Type type)
