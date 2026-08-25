@@ -102,7 +102,7 @@ public class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         _options = options ?? new MeloTTSOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperOptimizer();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -214,6 +214,25 @@ public class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
             SetTrainingMode(false);
         }
     }
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = _options.Beta1,
+                Beta2 = _options.Beta2,
+                Epsilon = _options.Epsilon,
+                WeightDecay = _options.WeightDecay,
+                UseAMSGrad = false,
+                UseAdaptiveBetas = false,
+                EnableGradientClipping = false,
+            });
 
     /// <summary>
     /// Refuses parameter work on a disposed model, on every entry point rather than one.

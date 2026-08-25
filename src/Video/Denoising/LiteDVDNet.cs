@@ -102,14 +102,18 @@ public class LiteDVDNet<T> : VideoDenoisingBase<T>
     {
         _options = options ?? new LiteDVDNetOptions();
         _useNativeMode = true;
-        // The paper trains with "the ADAM algorithm with default hyperparameters" starting at 1e-3. The bare
-        // AdamWOptimizer(this) dropped the model's configured LearningRate entirely and ran at Adam's own
-        // default with no clipping — and, without a GetOrCreateBaseOptimizer override, the tape trainer never
-        // consulted this field at all. Fully user-overridable via the optimizer parameter and
+        // The paper trains with "the ADAM algorithm with default hyperparameters" starting at 1e-3. The old
+        // AdamW path changed that algorithm by adding decoupled weight decay; an earlier bare optimizer also
+        // dropped the model's configured rate. Fully user-overridable via the optimizer parameter and
         // LiteDVDNetOptions.LearningRate. (#1789)
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate, EnableGradientClipping = true, MaxGradientNorm = 1.0 });
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0,
+                UseAMSGrad = false,
+            });
         TemporalRadius = (_options.TemporalWindowSize - 1) / 2;
         InitializeLayers();
     }
@@ -232,12 +236,9 @@ public class LiteDVDNet<T> : VideoDenoisingBase<T>
     }
 
     /// <summary>
-    /// Routes TrainWithTape through the model's configured optimizer (default: AdamW at the denoiser-standard
-    /// <see cref="LiteDVDNetOptions.LearningRate"/> = 1e-4 with gradient clipping) instead of the base Adam 1e-3
-    /// default. 1e-3 explodes this deep conv architecture's loss (Training_ShouldReduceLoss saw 0.28 -> 150 even
-    /// with the base global gradient-norm clip); the 10x-smaller step converges. Simply setting the private
-    /// <c>_optimizer</c> field was inert until this override — the base trainer only consults
-    /// GetOrCreateBaseOptimizer(). Fully user-overridable via the constructor's optimizer parameter. (#1789)
+    /// Routes TrainWithTape through the model's configured optimizer. The default is the paper's Adam
+    /// optimizer at <see cref="LiteDVDNetOptions.LearningRate"/> = 1e-3, with gradient clipping for
+    /// numerical safety. It remains fully user-overridable through the constructor.
     /// </summary>
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
         => _optimizer ?? base.GetOrCreateBaseOptimizer();

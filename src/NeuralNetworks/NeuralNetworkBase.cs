@@ -14889,12 +14889,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
-    /// Evaluates the exact training objective without recording an autodiff graph.
+    /// Evaluates the deterministic form of the training objective without recording an autodiff graph.
     /// </summary>
     /// <remarks>
     /// Exposed internally for the generated conformance suite through <c>InternalsVisibleTo</c>.
     /// Keeping the numerical oracle here prevents the test assembly from reimplementing target
-    /// alignment, composite losses, or model-specific training-forward semantics.
+    /// alignment, composite losses, or model-specific training-forward semantics. The raw training
+    /// head is evaluated in inference mode so dropout masks and batch-normalization updates cannot
+    /// make two measurements of unchanged parameters disagree; the caller's mode is restored.
     /// </remarks>
     internal T EvaluateTrainingObjective(
         Tensor<T> input,
@@ -14902,8 +14904,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         ILossFunction<T>? lossFunction = null)
     {
         using var _ = new NoGradScope<T>();
-        var objective = BuildTrainingObjective(input, target, lossFunction);
-        return objective.Length > 0 ? objective[0] : NumOps.Zero;
+        bool previousTrainingMode = IsTrainingMode;
+        try
+        {
+            SetTrainingMode(false);
+            var trainingInput = ForwardForTrainingOwnsPublicInputPreparation()
+                ? input
+                : PrepareInputForTraining(input);
+            var prediction = ForwardForTraining(trainingInput);
+            target = AlignTargetToOutputShape(prediction, target);
+
+            var resolved = lossFunction ?? LossFunction;
+            var objective = resolved is LossFunctions.LossFunctionBase<T> tapeLoss
+                ? ApplyCompositeObjective(tapeLoss.ComputeTapeLoss(prediction, target), input)
+                : resolved.ComputeTapeLoss(prediction, target);
+            return objective.Length > 0 ? objective[0] : NumOps.Zero;
+        }
+        finally
+        {
+            SetTrainingMode(previousTrainingMode);
+        }
     }
 
     /// <summary>

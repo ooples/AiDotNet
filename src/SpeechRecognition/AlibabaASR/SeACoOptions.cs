@@ -80,7 +80,7 @@ public class SeACoOptions : ModelOptions
     public double LearningRate { get; set; } = 5e-4;
 
     /// <summary>
-    /// Which parameter group <c>Train</c> updates. Default: <see cref="SeACoTrainingStage.Joint"/>.
+    /// Which parameter group <c>Train</c> updates. Default: <see cref="SeACoTrainingStage.Backbone"/>.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -96,7 +96,7 @@ public class SeACoOptions : ModelOptions
     /// freeze exists to prevent.
     /// </para>
     /// </remarks>
-    public SeACoTrainingStage TrainingStage { get; set; } = SeACoTrainingStage.Joint;
+    public SeACoTrainingStage TrainingStage { get; set; } = SeACoTrainingStage.Backbone;
 
     /// <summary>
     /// Weight gamma on the cross-entropy term of Paraformer's objective,

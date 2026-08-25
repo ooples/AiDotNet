@@ -7603,7 +7603,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiLabelClassification, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "new AiDotNet.Audio.Classification.PANNsOptions { NumMels = 32, BaseChannels = 8, NumBlocks = 2, " +
-                    "EmbeddingDim = 16, DropoutRate = 0.0, LearningRate = 1e-4, " +
+                    "EmbeddingDim = 16, DropoutRate = 0.0, LearningRate = 1e-3, " +
                     "CustomLabels = new[] { \"a\", \"b\", \"c\", \"d\" } })";
             }
             else if (model.ClassName == "PANNsModel" && model.TypeParameterCount == 1)
@@ -8437,6 +8437,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "OpenVoiceV2" && model.TypeParameterCount == 1)
             {
+                // OpenVoice's deep VITS/flow/HiFi-GAN stack is initialization-sensitive. Keep the
+                // strict trajectory invariant order-independent across xUnit workers.
+                pinInitSeed = true;
                 // OpenVoice V2 (VITS) builds a 1-D conv encoder + normalizing flow + HiFi-GAN decoder
                 // whose first conv declares explicit input channels, so shape resolution propagates from
                 // that layer and the architecture dims are not load-bearing. A 1-D architecture keeps the

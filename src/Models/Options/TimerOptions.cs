@@ -84,7 +84,19 @@ public class TimerOptions<T> : TimeSeriesRegressionOptions<T>
         GenerationTemperature = other.GenerationTemperature;
         MaxContextLength = other.MaxContextLength;
         ModelSize = other.ModelSize;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+        LearningRateDecay = other.LearningRateDecay;
     }
+
+    /// <summary>Gets or sets the AdamW learning rate for downstream forecasting.</summary>
+    public double LearningRate { get; set; } = 3e-5;
+
+    /// <summary>Gets or sets the decoupled weight-decay coefficient.</summary>
+    public double WeightDecay { get; set; } = 0.01;
+
+    /// <summary>Gets or sets the paper's per-epoch exponential learning-rate decay.</summary>
+    public double LearningRateDecay { get; set; } = 0.5;
 
     /// <summary>
     /// Gets or sets the context length (input sequence length).

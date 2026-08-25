@@ -2,6 +2,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
 
@@ -53,6 +54,21 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
 {
     private readonly DifferentiableNeuralComputerOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+
+    /// <summary>
+    /// Creates the RMSProp recipe used by DeepMind's reference DNC training implementation.
+    /// </summary>
+    private static RootMeanSquarePropagationOptimizerOptions<T, Tensor<T>, Tensor<T>> CreatePaperOptimizerOptions()
+        => new()
+        {
+            InitialLearningRate = 1e-4,
+            UseAdaptiveLearningRate = false,
+            Decay = 0.9,
+            Epsilon = 1e-10,
+            EnableGradientClipping = true,
+            GradientClippingMethod = GradientClippingMethod.ByNorm,
+            MaxGradientNorm = 50.0,
+        };
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
@@ -450,7 +466,9 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
         DifferentiableNeuralComputerOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            CreatePaperOptimizerOptions());
         _options = options ?? new DifferentiableNeuralComputerOptions();
         Options = _options;
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);

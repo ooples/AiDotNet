@@ -90,9 +90,9 @@ public class BSVD<T> : VideoDenoisingBase<T>
     {
         _options = options ?? new BSVDOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = _options.LearningRate,
                 // Optimizer settings taken from the reference implementation's training config
@@ -104,7 +104,7 @@ public class BSVD<T> : VideoDenoisingBase<T>
                 // with the grad-norm bound it is what keeps the first iterations well-behaved.
                 Beta1 = _options.AdamBeta1,
                 Beta2 = _options.AdamBeta2,
-                WeightDecay = 0.0,
+                UseAdaptiveLearningRate = false,
                 EnableGradientClipping = true,
                 MaxGradientNorm = _options.GradientClipNorm
             });

@@ -43,8 +43,34 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SeACo-Paraformer: A Non-Autoregressive ASR System with Flexible and Effective Hot-Word Customization Ability", "https://arxiv.org/abs/2308.03266", Year = 2023, Authors = "An et al.")]
-public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
+
+    /// <inheritdoc />
+    public TrainingObjectiveKind TrainingObjectiveKind => TrainingObjectiveKind.MultiTask;
+
+    /// <inheritdoc />
+    public Tensor<T> ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    /// <inheritdoc />
+    public T EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        var savedTarget = _currentTarget;
+        var savedHotwords = _activeHotwordIds;
+        try
+        {
+            _currentTarget = target;
+            _activeHotwordIds = null;
+            var prediction = ForwardForTraining(input);
+            return LossFunction.ComputeTapeLoss(prediction, target).Data.Span[0];
+        }
+        finally
+        {
+            _currentTarget = savedTarget;
+            _activeHotwordIds = savedHotwords;
+        }
+    }
+
     private readonly SeACoOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public IReadOnlyList<string> SupportedLanguages { get; }
@@ -417,14 +443,21 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             // full-sequence CE (what this model did before the bias branch existed) asks them to
             // re-learn the entire transcription, which is why its loss surface moved 8x while the
             // parameters barely moved at all.
-            // Training ALWAYS runs with randomly sampled hotwords (§3.1 / §4.2), so the bias branch is
-            // in the forward and its parameters receive gradient. Inference remains governed by Eq 5.
-            var positions = SampleHotwordPositions(expected);
-            _activeHotwordIds = SampleHotwordIdsFromTarget(expected, positions);
-
-            var target = _options.TrainingStage == SeACoTrainingStage.Bias
-                ? ApplyHotwordPositionMask(expected, positions)
-                : expected;
+            // The paper's stage-1 backbone training has no bias branch. Sample and activate
+            // hotwords only for the bias/joint stages; otherwise the supposedly frozen branch
+            // still changes the forward objective even though its parameters cannot update.
+            var target = expected;
+            if (_options.TrainingStage != SeACoTrainingStage.Backbone)
+            {
+                var positions = SampleHotwordPositions(expected);
+                _activeHotwordIds = SampleHotwordIdsFromTarget(expected, positions);
+                if (_options.TrainingStage == SeACoTrainingStage.Bias)
+                    target = ApplyHotwordPositionMask(expected, positions);
+            }
+            else
+            {
+                _activeHotwordIds = null;
+            }
 
             _currentTarget = target;
             TrainWithTape(input, target, _optimizer);

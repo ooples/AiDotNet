@@ -61,6 +61,7 @@ public class SECBERTOptions<T> : ModelOptions
         NumLayers = other.NumLayers;
         NumClasses = other.NumClasses;
         DropoutRate = other.DropoutRate;
+        LearningRate = other.LearningRate;
         TaskType = other.TaskType;
     }
 
@@ -87,6 +88,12 @@ public class SECBERTOptions<T> : ModelOptions
 
     /// <summary>Dropout rate (default: 0.1).</summary>
     public double DropoutRate { get; set; } = 0.1;
+
+    /// <summary>
+    /// Adam learning rate used to fine-tune SEC-BERT. FiNER Table 7 reports 1e-5
+    /// for SEC-BERT, SEC-BERT-NUM, and SEC-BERT-SHAPE.
+    /// </summary>
+    public double LearningRate { get; set; } = 1e-5;
 
     /// <summary>
     /// Task type for the SEC-BERT model (default: Classification).
@@ -127,6 +134,8 @@ public class SECBERTOptions<T> : ModelOptions
             throw new ArgumentException("NumClasses must be at least 1.", nameof(NumClasses));
         if (DropoutRate < 0 || DropoutRate >= 1)
             throw new ArgumentException("DropoutRate must be between 0 (inclusive) and 1 (exclusive).", nameof(DropoutRate));
+        if (LearningRate <= 0)
+            throw new ArgumentException("LearningRate must be positive.", nameof(LearningRate));
         if (!Enum.IsDefined(typeof(FinancialNLPTaskType), TaskType))
             throw new ArgumentException("TaskType must be a valid FinancialNLPTaskType value.", nameof(TaskType));
     }
