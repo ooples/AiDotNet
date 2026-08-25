@@ -522,13 +522,24 @@ public partial class DeepBeliefNetwork<T> : VectorModelLayoutBase<T>
     public void PreTrain(Tensor<T> input, int epochsPerLayer = 50, double learningRate = 0.1)
     {
         T lr = NumOps.FromDouble(learningRate);
-        Tensor<T> currentInput = input;
+        // This implementation is a Bernoulli-Bernoulli RBM stack: the visible
+        // values used by its Gibbs chain are probabilities. Public DBN inputs
+        // are ordinary continuous tensors, so normalize the first layer's
+        // training data into [0, 1] rather than silently treating negative or
+        // arbitrarily-scaled values as Bernoulli probabilities. Outputs of
+        // every RBM are sigmoid probabilities and already satisfy the domain
+        // required by the next layer.
+        Tensor<T> currentInput = NormalizeBernoulliVisibleInput(input);
 
         foreach (var rbm in _rbmLayers)
         {
             for (int epoch = 0; epoch < epochsPerLayer; epoch++)
             {
-                rbm.TrainWithContrastiveDivergence(currentInput.ToVector(), lr, kSteps: 1);
+                // Preserve the batch axes. The old ToVector conversion flattened
+                // [batch, visible] into one oversized sample, making multi-sample
+                // pretraining fail its visible-width check and discarding the
+                // batch-averaged CD statistics the algorithm requires.
+                rbm.TrainWithContrastiveDivergence(currentInput, lr, kSteps: 1);
             }
 
             // Propagate the input through this just-pretrained RBM to
@@ -537,6 +548,45 @@ public partial class DeepBeliefNetwork<T> : VectorModelLayoutBase<T>
             // vectors h₁ are used as the 'data' for training the next RBM."
             currentInput = rbm.Forward(currentInput);
         }
+    }
+
+    private Tensor<T> NormalizeBernoulliVisibleInput(Tensor<T> input)
+    {
+        if (input.Length == 0)
+            throw new ArgumentException("Pre-training input must not be empty.", nameof(input));
+
+        double minimum = double.PositiveInfinity;
+        double maximum = double.NegativeInfinity;
+        for (int i = 0; i < input.Length; i++)
+        {
+            double value = NumOps.ToDouble(input[i]);
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                throw new ArgumentException(
+                    $"Pre-training input contains a non-finite value at index {i}.",
+                    nameof(input));
+            minimum = Math.Min(minimum, value);
+            maximum = Math.Max(maximum, value);
+        }
+
+        if (minimum >= 0.0 && maximum <= 1.0)
+            return input;
+
+        var normalized = new Tensor<T>(input._shape);
+        double range = maximum - minimum;
+        if (range <= double.Epsilon)
+        {
+            normalized.Fill(NumOps.FromDouble(0.5));
+            return normalized;
+        }
+
+        double inverseRange = 1.0 / range;
+        for (int i = 0; i < input.Length; i++)
+        {
+            double unitValue = (NumOps.ToDouble(input[i]) - minimum) * inverseRange;
+            normalized[i] = NumOps.FromDouble(unitValue);
+        }
+
+        return normalized;
     }
 
     /// <summary>

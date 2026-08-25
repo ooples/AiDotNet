@@ -41,6 +41,110 @@ public sealed class FusedOptimizerCollection { }
 public class FusedOptimizerIntegrationTests
 {
     /// <summary>
+    /// RG-LRU models must execute the fused compiled path and keep both their updates and replayed
+    /// recurrent graph finite. A zero fused-step count would let an eager fallback hide the defect.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task RecurrentGemma_RgLruUsesFiniteFusedCompiledTraining()
+    {
+        await Task.CompletedTask;
+
+        var originalOptions = TensorCodecOptions.Current;
+        bool originalForceFresh = AiDotNet.Tensors.Helpers.TensorPool.ForceFreshAllocations;
+        try
+        {
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+            AiDotNet.Tensors.Helpers.TensorPool.ForceFreshAllocations = false;
+            CompiledTapeTrainingStep<float>.Invalidate();
+            CompiledTapeTrainingStep<float>.ResetFusedStepCount();
+
+            var architecture = new NeuralNetworkArchitecture<float>(
+                InputType.OneDimensional,
+                NeuralNetworkTaskType.TextGeneration,
+                inputSize: 128,
+                outputSize: 4)
+            {
+                RandomSeed = 1
+            };
+            using var model = new FusedRecurrentGemmaTestModel(
+                architecture,
+                vocabSize: 4096);
+            model.StreamingTraining = StreamingTrainingMode.ForceOff;
+
+            Assert.Contains(model.Layers,
+                layer => layer is AiDotNet.NeuralNetworks.Layers.SSM.RealGatedLinearRecurrenceLayer<float>);
+
+            var input = new Tensor<float>(new[] { 32 });
+            for (int i = 0; i < input.Length; i++) input[i] = i + 1;
+
+            var prediction = model.Predict(input);
+            var target = new Tensor<float>(prediction.Shape.ToArray());
+            int rows = prediction.Length / 4096;
+            for (int row = 0; row < rows; row++)
+                target[row * 4096 + ((row * 127) % 4096)] = 1.0f;
+
+            var before = model.GetParameters();
+            model.Train(input, target);
+            var afterFirst = model.GetParameters();
+            var gradients = model.GetParameterGradients();
+
+            bool anyParameterChanged = false;
+            int nonFiniteParameters = 0;
+            int nonFiniteGradients = 0;
+            for (int i = 0; i < afterFirst.Length; i++)
+            {
+                if (before[i] != afterFirst[i]) anyParameterChanged = true;
+                if (float.IsNaN(afterFirst[i]) || float.IsInfinity(afterFirst[i])) nonFiniteParameters++;
+            }
+            for (int i = 0; i < gradients.Length; i++)
+                if (float.IsNaN(gradients[i]) || float.IsInfinity(gradients[i])) nonFiniteGradients++;
+
+            Assert.True(!float.IsNaN(model.GetLastLoss()) && !float.IsInfinity(model.GetLastLoss()),
+                $"The fused compiled step must have a finite loss; got {model.GetLastLoss()}.");
+            Assert.True(anyParameterChanged, "The fused compiled step did not update any parameter.");
+            Assert.Equal(0, nonFiniteParameters);
+            Assert.Equal(0, nonFiniteGradients);
+            long fusedStepsAfterFirstUpdate = CompiledTapeTrainingStep<float>.GetFusedStepCount();
+            Assert.True(fusedStepsAfterFirstUpdate > 0,
+                "RecurrentGemma fell back to eager training instead of executing its fused compiled step.");
+            Assert.False(model.FusedTrainingDisabled,
+                "RecurrentGemma disabled fused training after its first compiled update.");
+
+            model.Train(input, target);
+            var afterSecond = model.GetParameters();
+            var gradientsAfterSecond = model.GetParameterGradients();
+            bool secondUpdateChangedParameter = false;
+            int secondNonFiniteParameters = 0;
+            int secondNonFiniteGradients = 0;
+            for (int i = 0; i < afterSecond.Length; i++)
+            {
+                if (afterFirst[i] != afterSecond[i]) secondUpdateChangedParameter = true;
+                if (float.IsNaN(afterSecond[i]) || float.IsInfinity(afterSecond[i]))
+                    secondNonFiniteParameters++;
+            }
+            for (int i = 0; i < gradientsAfterSecond.Length; i++)
+                if (float.IsNaN(gradientsAfterSecond[i]) || float.IsInfinity(gradientsAfterSecond[i]))
+                    secondNonFiniteGradients++;
+
+            Assert.True(!float.IsNaN(model.GetLastLoss()) && !float.IsInfinity(model.GetLastLoss()));
+            Assert.True(secondUpdateChangedParameter,
+                "The replayed fused RG-LRU step did not update any parameter.");
+            Assert.Equal(0, secondNonFiniteParameters);
+            Assert.Equal(0, secondNonFiniteGradients);
+            Assert.True(CompiledTapeTrainingStep<float>.GetFusedStepCount() > fusedStepsAfterFirstUpdate,
+                "RecurrentGemma stopped using fused compiled training when replaying the RG-LRU graph.");
+            Assert.False(model.FusedTrainingDisabled,
+                "RecurrentGemma disabled fused training after replaying the compiled RG-LRU graph.");
+        }
+        finally
+        {
+            AiDotNet.Tensors.Helpers.TensorPool.ForceFreshAllocations = originalForceFresh;
+            TensorCodecOptions.SetCurrent(originalOptions);
+            CompiledTapeTrainingStep<float>.Invalidate();
+        }
+    }
+
+    /// <summary>
     /// With <see cref="TensorCodecOptions.EnableCompilation"/> true, <c>T=float</c>, and a plain
     /// Adam optimizer (no LR scheduler, no adaptive rates), <c>TryTrainWithFusedOptimizer</c>
     /// engages the compiled fused fwd+bwd+update kernel. Training must complete without
@@ -755,6 +859,18 @@ public class FusedOptimizerIntegrationTests
             if (Math.Abs(a[i] - b[i]) > tolerance) return true;
         }
         return false;
+    }
+
+    private sealed class FusedRecurrentGemmaTestModel : RecurrentGemmaLanguageModel<float>
+    {
+        public FusedRecurrentGemmaTestModel(
+            NeuralNetworkArchitecture<float> architecture,
+            int vocabSize)
+            : base(architecture, vocabSize: vocabSize)
+        {
+        }
+
+        public bool FusedTrainingDisabled => _fusedTrainingDisabled;
     }
 
     /// <summary>

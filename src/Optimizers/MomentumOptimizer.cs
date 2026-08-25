@@ -435,6 +435,22 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
     }
 
     /// <summary>
+    /// Resets the legacy vector, per-parameter tape, and device-resident velocity state.
+    /// </summary>
+    /// <remarks>
+    /// The base reset restores shared optimizer state, but momentum history belongs to this optimizer.
+    /// Retaining either store makes the first step of a restarted training run depend on the previous run.
+    /// </remarks>
+    public override void Reset()
+    {
+        base.Reset();
+        _velocity = null;
+        _tapeVelocity.Clear();
+        DisposeGpuState();
+        InitializeAdaptiveParameters();
+    }
+
+    /// <summary>
     /// Updates the adaptive parameters of the optimizer based on the current and previous optimization steps.
     /// </summary>
     /// <remarks>

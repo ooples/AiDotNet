@@ -332,7 +332,16 @@
          Measured on a developer machine running this suite: three orphaned backing.bin files totalling
          97 GB in %TEMP% from a single interrupted run. That filled the drive far enough that Windows
          began compressing files to reclaim space, which silently corrupted a Docker VHDX, since a
-         compressed virtual disk fails every write. -->
+         compressed virtual disk fails every write.
+
+         Bumped 0.128.0 to 0.129.2: 0.129.0 brought AiDotNet.Tensors #972's fused optimizer
+         non-finite gradient guard, #973's fused ABC recurrence kernel and #971's capability aware
+         GPU autocast/type parity. 0.129.0 alone regressed training: #972 skips a fused optimizer
+         step whose gradients are not finite, leaving every parameter unchanged, which surfaced as
+         RecurrentGemmaLanguageModelTests.Training_ShouldChangeParameters failing with "Parameters
+         did not change after training". 0.129.1 added the fused training corrections (#975, #977,
+         #978) that stop the gradients going non-finite. All four packages stay on the published
+         lockstep release. -->
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.129.2" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.129.2" />
     <PackageVersion Include="AiDotNet.Tensors" Version="0.129.2" />
