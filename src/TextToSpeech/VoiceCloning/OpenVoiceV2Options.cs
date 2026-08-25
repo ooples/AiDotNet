@@ -17,6 +17,11 @@ public class OpenVoiceV2Options : VoiceCloningOptions
 
         EncoderDim = other.EncoderDim;
         DecoderDim = other.DecoderDim;
+        LearningRate = other.LearningRate;
+        Beta1 = other.Beta1;
+        Beta2 = other.Beta2;
+        Epsilon = other.Epsilon;
+        WeightDecay = other.WeightDecay;
     }
 
     public OpenVoiceV2Options()
@@ -26,8 +31,20 @@ public class OpenVoiceV2Options : VoiceCloningOptions
         NumLLMLayers = 12;
         NumHeads = 8;
         DropoutRate = 0.1;
+        LearningRate = 3e-4;
+        WeightDecay = 0.01;
     }
 
     public int EncoderDim { get; set; } = 512;
     public int DecoderDim { get; set; } = 192;
+
+    /// <summary>First AdamW moment coefficient used by the released recipe.</summary>
+    public double Beta1 { get; set; } = 0.8;
+
+    /// <summary>Second AdamW moment coefficient used by the released recipe.</summary>
+    public double Beta2 { get; set; } = 0.99;
+
+    /// <summary>AdamW numerical-stability epsilon used by the released recipe.</summary>
+    public double Epsilon { get; set; } = 1e-9;
+
 }

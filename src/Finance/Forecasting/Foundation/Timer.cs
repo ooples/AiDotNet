@@ -329,7 +329,7 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperOptimizer();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _contextLength = options.ContextLength;
@@ -400,7 +400,7 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
 
         _useNativeMode = true;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperOptimizer();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _contextLength = options.ContextLength;
@@ -535,8 +535,33 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
         // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
         // tape.ComputeGradients + optimizer.Step) that every other
         // NeuralNetworkBase subclass uses.
-        base.Train(input, target);
+        TrainWithTape(input, target, _optimizer);
     }
+
+    /// <summary>
+    /// Creates Timer's paper-specified downstream forecasting optimizer.
+    /// </summary>
+    /// <remarks>
+    /// Liu et al. use AdamW with an initial 3e-5 learning rate for forecasting and
+    /// an epoch-level exponential decay factor of 0.5. The one-step Train API has no
+    /// epoch boundary, so the scheduler advances only when an epoch-aware optimizer
+    /// workflow raises that boundary; repeated Train calls keep the current epoch rate.
+    /// </remarks>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                UseAMSGrad = false,
+                UseAdaptiveBetas = false,
+                EnableGradientClipping = false,
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.ExponentialLRScheduler(
+                    _options.LearningRate,
+                    _options.LearningRateDecay),
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerEpoch
+            });
 
     /// <summary>
     /// Timer training-mode forward. The tape training flow would otherwise feed
@@ -591,7 +616,7 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var options = new TimerOptions<T>
+        var options = new TimerOptions<T>(_options)
         {
             ContextLength = _contextLength,
             ForecastHorizon = _forecastHorizon,
@@ -606,7 +631,7 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
             GenerationTemperature = _generationTemperature
         };
 
-        return new Timer<T>(Architecture, options, _numFeatures);
+        return new Timer<T>(Architecture, options, _numFeatures, _optimizer, _lossFunction);
     }
 
     /// <summary>

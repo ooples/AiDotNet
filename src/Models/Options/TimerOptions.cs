@@ -84,7 +84,34 @@ public class TimerOptions<T> : TimeSeriesRegressionOptions<T>
         GenerationTemperature = other.GenerationTemperature;
         MaxContextLength = other.MaxContextLength;
         ModelSize = other.ModelSize;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+        LearningRateDecay = other.LearningRateDecay;
     }
+
+    /// <summary>Gets or sets the AdamW learning rate for downstream forecasting.</summary>
+    /// <value>The optimizer step size, defaulting to <c>3e-5</c>.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This controls how far AdamW moves the parameters on each
+    /// update. The Timer downstream-forecasting recipe uses <c>3e-5</c>.</para>
+    /// </remarks>
+    public double LearningRate { get; set; } = 3e-5;
+
+    /// <summary>Gets or sets the decoupled weight-decay coefficient.</summary>
+    /// <value>The AdamW weight-decay coefficient, defaulting to <c>0.01</c>.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Weight decay gently discourages unnecessarily large
+    /// weights while the model is fine-tuned.</para>
+    /// </remarks>
+    public double WeightDecay { get; set; } = 0.01;
+
+    /// <summary>Gets or sets the paper's per-epoch exponential learning-rate decay.</summary>
+    /// <value>The per-epoch multiplier, defaulting to <c>0.5</c>.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> At an epoch boundary the learning rate is multiplied by
+    /// this value, matching Timer's downstream-forecasting recipe.</para>
+    /// </remarks>
+    public double LearningRateDecay { get; set; } = 0.5;
 
     /// <summary>
     /// Gets or sets the context length (input sequence length).
