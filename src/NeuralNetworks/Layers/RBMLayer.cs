@@ -708,6 +708,9 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     /// <param name="input">The input data vector.</param>
     /// <param name="learningRate">The learning rate for parameter updates.</param>
     /// <param name="kSteps">The number of Gibbs sampling steps (typically 1).</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="kSteps"/> is less than one.
+    /// </exception>
     /// <remarks>
     /// <para>
     /// This method implements the contrastive divergence (CD) algorithm for training the RBM.
@@ -734,14 +737,30 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     public void TrainWithContrastiveDivergence(Vector<T> input, T learningRate, int kSteps = 1)
     {
         // Delegate to tensor-based implementation
-        TrainWithContrastiveDivergenceTensor(new Tensor<T>([input.Length], input), learningRate, kSteps);
+        using var tensorInput = new Tensor<T>([input.Length], input);
+        TrainWithContrastiveDivergence(tensorInput, learningRate, kSteps);
     }
 
     /// <summary>
-    /// Tensor-based contrastive divergence training - no type conversions in hot path.
+    /// Trains the RBM with a tensor whose last axis is the visible-unit axis.
+    /// Leading axes are treated as batch axes and flattened for the CD statistics.
     /// </summary>
-    private void TrainWithContrastiveDivergenceTensor(Tensor<T> input, T learningRate, int kSteps = 1)
+    /// <param name="input">A rank-one sample or a batched tensor of visible activations.</param>
+    /// <param name="learningRate">Contrastive-divergence learning rate.</param>
+    /// <param name="kSteps">Number of Gibbs sampling steps.</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when <paramref name="kSteps"/> is less than one.
+    /// </exception>
+    internal void TrainWithContrastiveDivergence(Tensor<T> input, T learningRate, int kSteps = 1)
     {
+        if (kSteps < 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(kSteps),
+                kSteps,
+                "The number of Gibbs sampling steps must be at least one.");
+        }
+
         // Lazy-ctor guard: ContrastiveDivergence training reads _visibleUnits
         // and the weight matrices, so they need to be resolved+materialized.
         if (!IsShapeResolved) OnFirstForward(input);
@@ -793,18 +812,21 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
         var hiddenBiasDiff = Engine.TensorSubtract(h0Probs, hkProbs);
         var hiddenBiasGrad = Engine.ReduceSum(hiddenBiasDiff, new[] { 0 }, keepDims: false);
         var hiddenBiasDelta = Engine.TensorMultiplyScalar(hiddenBiasGrad, batchScale);
-        _hiddenBiases = Engine.TensorAdd(_hiddenBiases, hiddenBiasDelta);
+        Engine.TensorAddInPlace(_hiddenBiases, hiddenBiasDelta);
 
         var visibleBiasDiff = Engine.TensorSubtract(v0, vkProbs);
         var visibleBiasGrad = Engine.ReduceSum(visibleBiasDiff, new[] { 0 }, keepDims: false);
         var visibleBiasDelta = Engine.TensorMultiplyScalar(visibleBiasGrad, batchScale);
-        _visibleBiases = Engine.TensorAdd(_visibleBiases, visibleBiasDelta);
+        Engine.TensorAddInPlace(_visibleBiases, visibleBiasDelta);
 
         var positiveOuter = Engine.TensorMatMul(Engine.TensorTranspose(h0Probs), v0);
         var negativeOuter = Engine.TensorMatMul(Engine.TensorTranspose(hkProbs), vk);
         var weightGradient = Engine.TensorSubtract(positiveOuter, negativeOuter);
         var weightDelta = Engine.TensorMultiplyScalar(weightGradient, batchScale);
-        _weights = Engine.TensorAdd(_weights, weightDelta);
+        // Parameter registration and compiled plans retain these exact tensor
+        // identities. Replacing the field disconnects later optimizer updates
+        // from the tensors consumed by Forward.
+        Engine.TensorAddInPlace(_weights, weightDelta);
         // _weightsTCache invalidation removed — Forward no longer caches.
     }
 
@@ -1000,10 +1022,16 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
         // 1. Standard Backpropagation (Discriminative Fine-tuning)
         if (_weightsGradient != null && _visibleBiasesGradient != null && _hiddenBiasesGradient != null)
         {
-            _weights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(_weightsGradient, learningRate));
+            Engine.TensorSubtractInPlace(
+                _weights,
+                Engine.TensorMultiplyScalar(_weightsGradient, learningRate));
             // _weightsTCache invalidation removed — Forward no longer caches.
-            _visibleBiases = Engine.TensorSubtract(_visibleBiases, Engine.TensorMultiplyScalar(_visibleBiasesGradient, learningRate));
-            _hiddenBiases = Engine.TensorSubtract(_hiddenBiases, Engine.TensorMultiplyScalar(_hiddenBiasesGradient, learningRate));
+            Engine.TensorSubtractInPlace(
+                _visibleBiases,
+                Engine.TensorMultiplyScalar(_visibleBiasesGradient, learningRate));
+            Engine.TensorSubtractInPlace(
+                _hiddenBiases,
+                Engine.TensorMultiplyScalar(_hiddenBiasesGradient, learningRate));
             return;
         }
 
@@ -1018,17 +1046,17 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
             var negativeOuter = Engine.TensorMatMul(Engine.TensorTranspose(_reconstructedHidden), _reconstructedVisible);
             var weightGradient = Engine.TensorSubtract(positiveOuter, negativeOuter);
             var weightDelta = Engine.TensorMultiplyScalar(weightGradient, batchScale);
-            _weights = Engine.TensorAdd(_weights, weightDelta);
+            Engine.TensorAddInPlace(_weights, weightDelta);
 
             var hiddenBiasDiff = Engine.TensorSubtract(_lastHiddenOutput, _reconstructedHidden);
             var hiddenBiasGrad = Engine.ReduceSum(hiddenBiasDiff, new[] { 0 }, keepDims: false);
             var hiddenBiasDelta = Engine.TensorMultiplyScalar(hiddenBiasGrad, batchScale);
-            _hiddenBiases = Engine.TensorAdd(_hiddenBiases, hiddenBiasDelta);
+            Engine.TensorAddInPlace(_hiddenBiases, hiddenBiasDelta);
 
             var visibleBiasDiff = Engine.TensorSubtract(_lastVisibleInput, _reconstructedVisible);
             var visibleBiasGrad = Engine.ReduceSum(visibleBiasDiff, new[] { 0 }, keepDims: false);
             var visibleBiasDelta = Engine.TensorMultiplyScalar(visibleBiasGrad, batchScale);
-            _visibleBiases = Engine.TensorAdd(_visibleBiases, visibleBiasDelta);
+            Engine.TensorAddInPlace(_visibleBiases, visibleBiasDelta);
         }
     }
 

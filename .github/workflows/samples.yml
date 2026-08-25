@@ -4,11 +4,9 @@ name: Samples (build + run)
 # silently break the published examples (root cause of the "broken examples everywhere"
 # report: the samples were in no solution, so CI never built them). The build step
 # catches compile breakage; the run step catches runtime/crash regressions. Examples are
-# short, CPU-only, self-contained console apps (no datasets/models/GPU required).
+# short, CPU-only, self-contained console apps (no datasets/models/GPU required). This is a
+# pre-merge validation; repeating it on the identical master tree adds no coverage.
 on:
-  push:
-    branches: [ master ]
-    paths: [ 'samples/**', 'src/**', '.github/workflows/samples.yml' ]
   pull_request:
     paths: [ 'samples/**', 'src/**', '.github/workflows/samples.yml' ]
   workflow_dispatch:

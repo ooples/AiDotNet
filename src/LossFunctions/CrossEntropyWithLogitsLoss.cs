@@ -204,7 +204,12 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         // broadcasts for the gradient, then add a detached correction so the
         // forward value remains the stable engine LogSoftmax result.
         var stableForward = Engine.TensorLogSoftmax(logits, axis: normalizedAxis);
-        var maxLogit = Engine.ReduceMax(logits, new[] { normalizedAxis }, keepDims: true, out _);
+        // The maximum is only a numerical-stability shift. Log-softmax is invariant to that shift,
+        // so differentiating through ReduceMax adds a discontinuous argmax path that must cancel
+        // algebraically and can instead contaminate the entire backward pass at ties. Detaching it is
+        // the standard stable log-sum-exp construction and leaves the exact softmax-target gradient.
+        var reducedMax = Engine.ReduceMax(logits, new[] { normalizedAxis }, keepDims: true, out _);
+        var maxLogit = Engine.StopGradient(reducedMax);
         var shifted = Engine.TensorAdd(logits, Engine.TensorNegate(maxLogit));
         var expShifted = Engine.TensorExp(shifted);
         var sumExp = Engine.ReduceSum(expShifted, new[] { normalizedAxis }, keepDims: true);

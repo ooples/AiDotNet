@@ -615,6 +615,8 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
         {
             // TrainWithTape performs the backward pass and optimizer update. Applying the
             // hand-collected gradients again treated gradients as replacement parameter values.
+            // ForwardForTraining owns the same public-input transformation as PredictCore, which
+            // also keeps ComputeGradients and every other base-owned training diagnostic aligned.
             TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
@@ -665,7 +667,8 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
     protected override Tensor<T> Forward(Tensor<T> input) => RunMultimodal(input);
 
     /// <inheritdoc/>
-    public override Tensor<T> ForwardForTraining(Tensor<T> input) => RunMultimodal(input);
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        => RunMultimodal(PreprocessDocument(input));
 
     /// <summary>
     /// Runs the vision tower, then the text decoder over the visual tokens and -- when the caller

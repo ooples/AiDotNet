@@ -3,16 +3,9 @@ name: Docs Wiki (generate + gate)
 # Regenerates the auto-generated API reference wiki from the source XML doc comments, fails if
 # the committed wiki drifted from the source, and compile-checks every ```csharp example in the
 # website docs + wiki against the real AiDotNet assemblies. The wiki lives only in the Astro
-# website (the single canonical docs site); the legacy Jekyll docs/ tree was removed.
+# website (the single canonical docs site); the legacy Jekyll docs/ tree was removed. Validation
+# runs before merge; the website deployment workflow owns post-merge publication and smoke tests.
 on:
-  push:
-    branches: [master]
-    paths:
-      - 'src/**'
-      - 'website/src/content/docs/**'
-      - 'tools/WikiGenerator/**'
-      - 'tools/DocSnippetVerify/**'
-      - '.github/workflows/docs-wiki.yml'
   pull_request:
     paths:
       - 'src/**'
