@@ -111,7 +111,7 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
         }
 
         var o = options ?? new SAMOptions();
-        return new CompositeLoss<T>(
+        return new CompositeLossWithLogits<T>(
             (new FocalLoss<T>(gamma: o.FocalGamma, alpha: o.FocalAlpha), o.MaskFocalWeight),
             (new DiceLoss<T>(), o.MaskDiceWeight));
     }
@@ -138,7 +138,7 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
-    /// <param name="lossFunction">Loss function. Default for <paramref name="numClasses"/> == 1 is the paper's objective: a <see cref="CompositeLoss{T}"/> of <see cref="FocalLoss{T}"/> (gamma 2, alpha 0.25) and <see cref="DiceLoss{T}"/> in a 20:1 ratio (Kirillov et al. 2023, §3). Multi-class uses <see cref="CrossEntropyWithLogitsLoss{T}"/>.</param>
+    /// <param name="lossFunction">Loss function. Default for <paramref name="numClasses"/> == 1 is the paper's objective: a logits-aware <see cref="CompositeLossWithLogits{T}"/> of <see cref="FocalLoss{T}"/> (gamma 2, alpha 0.25) and <see cref="DiceLoss{T}"/> in a 20:1 ratio (Kirillov et al. 2023, §3). Multi-class uses <see cref="CrossEntropyWithLogitsLoss{T}"/>.</param>
     /// <param name="numClasses">Number of output mask classes (default: 1 for binary segmentation).</param>
     /// <param name="modelSize">ViT backbone size (default: ViTHuge — the original SAM default).</param>
     /// <param name="dropRate">Dropout rate (default: 0.1).</param>

@@ -44,7 +44,7 @@ public class CompositeLoss<T> : LossFunctionBase<T>
     /// Creates a composite loss from (loss, weight) pairs.
     /// </summary>
     /// <param name="terms">The loss terms and their absolute coefficients. Terms are <see cref="LossFunctionBase{T}"/> rather than <see cref="ILossFunction{T}"/> because the composite must forward <c>ComputeTapeLoss</c>, which the interface does not declare.</param>
-    /// <exception cref="ArgumentException">If any individual loss is null.</exception>
+    /// <exception cref="ArgumentException">If any individual loss is null or any weight is not finite.</exception>
     /// <remarks>
     /// A NULL OR EMPTY <paramref name="terms"/> IS NOT AN ERROR: it selects SAM's published mask
     /// objective, focal + dice in a 20:1 ratio, so a parameterless construction stays meaningful and
@@ -72,6 +72,8 @@ public class CompositeLoss<T> : LossFunctionBase<T>
         {
             if (terms[i].Loss is null)
                 throw new ArgumentException($"Loss term {i} is null.", nameof(terms));
+            if (double.IsNaN(terms[i].Weight) || double.IsInfinity(terms[i].Weight))
+                throw new ArgumentException($"Weight for loss term {i} must be finite.", nameof(terms));
             _losses[i] = terms[i].Loss;
             _weights[i] = NumOps.FromDouble(terms[i].Weight);
         }
