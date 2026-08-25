@@ -94,7 +94,9 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
 
     // CEMA parameters: complex-valued alpha = alpha_real + i * alpha_imag
     // Stored as real/imag pairs: [emaDimension] each
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _emaAlphaReal;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _emaAlphaImag;
 
     // EMA input projection: [modelDim, emaDimension]
@@ -114,7 +116,9 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _emaOutputBias;
 
     // Timestep normalization: [emaDimension] each
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
     private Tensor<T> _tsNormGamma;
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
     private Tensor<T> _tsNormBeta;
 
     // Q, K, V projections: [modelDim, modelDim]
@@ -884,6 +888,15 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
         RegisterTrainableParameter(_emaOutputWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_emaOutputBias, PersistentTensorRole.Biases);
         RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        // Register trainable parameters for tape-based autodiff. These belong here with the rest:
+        // UpdateParameters above applies gradients to every one of them, so they are trained on the
+        // legacy path, but leaving them unregistered made them invisible to the tape path -- which
+        // trains exclusively from registered parameters -- and to GetParameters/SetParameters, and
+        // therefore to serialization.
+        RegisterTrainableParameter(_emaAlphaReal, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_emaAlphaImag, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_tsNormGamma, PersistentTensorRole.NormalizationParams);
+        RegisterTrainableParameter(_tsNormBeta, PersistentTensorRole.NormalizationParams);
         RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_gateWeights, PersistentTensorRole.Weights);

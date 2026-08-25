@@ -362,7 +362,17 @@ internal class MBConvBlock<T>
             _expand = new ConvolutionalLayer<T>(hiddenDim, kernelSize: 1, stride: 1, padding: 0);
 
         int padding = (kernelSize - 1) / 2;
-        _depthwise = new ConvolutionalLayer<T>(hiddenDim, kernelSize: kernelSize, stride: stride, padding: padding);
+
+        // groups: hiddenDim. The field is named _depthwise and it was built dense, which is the
+        // MBConv block's entire economy thrown away: Tan and Le 2019 ("EfficientNet", section 3)
+        // inherit MobileNetV2's inverted residual, whose middle convolution is DEPTHWISE so the
+        // expanded hiddenDim channels cost hiddenDim*k*k weights rather than hiddenDim^2*k*k.
+        //
+        // Measured on B0, whose published size is 5.3M parameters: the backbone reported
+        // 160,765,424 -- thirty times too large -- because every MBConv block paid the square.
+        // ConvolutionalLayer has supported groups since #639; this call simply never passed it.
+        _depthwise = new ConvolutionalLayer<T>(
+            hiddenDim, kernelSize: kernelSize, stride: stride, padding: padding, groups: hiddenDim);
 
         if (useSE)
         {

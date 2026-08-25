@@ -70,27 +70,46 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
     private readonly object _materializeLock = new();
 
     // Q projection: [embDim, numHeads * headDim]
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(
+        Role = PersistentTensorRole.Weights,
+        Shape = "_embeddingDimension, _numHeads * _headDimension")]
     private Tensor<T> _queryWeights;
     // K projection: [embDim, numKVHeads * headDim] (smaller!)
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(
+        Role = PersistentTensorRole.Weights,
+        Shape = "_embeddingDimension, _numKVHeads * _headDimension")]
     private Tensor<T> _keyWeights;
     // V projection: [embDim, numKVHeads * headDim] (smaller!)
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(
+        Role = PersistentTensorRole.Weights,
+        Shape = "_embeddingDimension, _numKVHeads * _headDimension")]
     private Tensor<T> _valueWeights;
     // Output projection: [numHeads * headDim, embDim]
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(
+        Role = PersistentTensorRole.Weights,
+        Shape = "_numHeads * _headDimension, _embeddingDimension")]
     private Tensor<T> _outputWeights;
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(
+        Role = PersistentTensorRole.Biases,
+        Shape = "_embeddingDimension")]
     private Tensor<T> _outputBias;
     // Optional projection biases (StarCoder2-style attention). Zero-length when unused, so the parameter
     // layout is byte-identical to the bias-free default; Optional=true also omits them from the
     // source-generated trainable-parameter set when zero-sized.
-    [TrainableParameter(Role = PersistentTensorRole.Biases, Optional = true)]
+    [TrainableParameter(
+        Role = PersistentTensorRole.Biases,
+        Shape = "_numHeads * _headDimension",
+        Condition = nameof(_useProjectionBias))]
     private Tensor<T> _queryBias;
-    [TrainableParameter(Role = PersistentTensorRole.Biases, Optional = true)]
+    [TrainableParameter(
+        Role = PersistentTensorRole.Biases,
+        Shape = "_numKVHeads * _headDimension",
+        Condition = nameof(_useProjectionBias))]
     private Tensor<T> _keyBias;
-    [TrainableParameter(Role = PersistentTensorRole.Biases, Optional = true)]
+    [TrainableParameter(
+        Role = PersistentTensorRole.Biases,
+        Shape = "_numKVHeads * _headDimension",
+        Condition = nameof(_useProjectionBias))]
     private Tensor<T> _valueBias;
     private readonly bool _useProjectionBias;
 

@@ -20,7 +20,7 @@ namespace AiDotNet.Distributions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class LogNormalDistribution<T> : DistributionBase<T>
+public class LogNormalDistribution<T> : DistributionBase<T>
 {
     private T _mu;      // μ - mean of log(X)
     private T _sigma;   // σ - std dev of log(X)

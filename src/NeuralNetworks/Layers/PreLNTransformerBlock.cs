@@ -51,14 +51,20 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [AutoParameters]
 public partial class PreLNTransformerBlock<T> : LayerBase<T>, IShapeContract
 {
+    [SubLayerInput("_hiddenSize")]
     private readonly RMSNormalizationLayer<T> _norm1;
     // Non-readonly so the inference optimizer can swap the attention sublayer in place (e.g.
     // GroupedQueryAttentionLayer -> CachedGroupedQueryAttention for KV-cached decode) via ReplaceAttention,
     // the same contract TransformerEncoderBlock uses.
+    [SubLayerInput("1, _hiddenSize")]
     private LayerBase<T> _attention;
+    [SubLayerInput("_hiddenSize")]
     private readonly RMSNormalizationLayer<T> _norm2;
+    [SubLayerInput("_hiddenSize")]
     private readonly DenseLayer<T>? _ffnGate;
+    [SubLayerInput("_hiddenSize")]
     private readonly DenseLayer<T> _ffnUp;
+    [SubLayerInput("_ffnDim")]
     private readonly DenseLayer<T> _ffnDown;
     private readonly IActivationFunction<T> _ffnActivation;
     private readonly bool _gated;

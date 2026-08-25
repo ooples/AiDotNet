@@ -175,7 +175,13 @@ public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
         // way); the base's 512 fallback would otherwise invent a size this 3D model never uses.
         _height = architecture.InputHeight;
         _width = architecture.InputWidth;
-        _inChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 1;
+        // NOT architecture.InputDepth. For a ThreeDimensional architecture GetInputShape() is
+        // [InputDepth, InputHeight, InputWidth] -- three SPATIAL axes, no channel axis -- so
+        // InputDepth is the volume's DEPTH and reading it as a channel count conflates two
+        // unrelated quantities. Doing so pinned the stem to a 3-channel kernel for a 3-slice
+        // single-channel volume, and the first real forward reported
+        //     ArgumentException : Input channels (1) must match kernel in_channels (3).
+        _inChannels = _options.InputChannels;
         _dropRate = dropRate;
         (_channelDims, _depths, _stateDim) = ValidateAndCopyArchitectureOptions(_options);
         InitializeLayers();
@@ -199,7 +205,7 @@ public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
         _options = options ?? new SegMambaOptions(); Options = _options;
         _height = architecture.InputHeight;
         _width = architecture.InputWidth;
-        _inChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 1;
+        _inChannels = _options.InputChannels;
         _dropRate = 0;
         (_channelDims, _depths, _stateDim) = ValidateAndCopyArchitectureOptions(_options);
         InitializeLayers();
@@ -553,7 +559,11 @@ public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
         if (_nativeShapesResolved || !_useNativeMode || Layers.Count == 0 || _stem is null || _outConv is null)
             return;
 
-        int depth = Architecture.InputHeight;
+        // depth from InputDepth, not InputHeight. The height was being read twice and the depth
+        // axis never at all, so a volume declared 3 deep and 32 across was resolved as 32 deep --
+        // every convolution in the encoder sized for a volume ten times longer than the one that
+        // actually arrives.
+        int depth = Architecture.InputDepth;
         int height = Architecture.InputHeight;
         int width = Architecture.InputWidth;
         if (depth <= 0 || height <= 0 || width <= 0)

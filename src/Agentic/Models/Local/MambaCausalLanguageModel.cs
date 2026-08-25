@@ -36,7 +36,7 @@ public sealed class MambaCausalLanguageModel<T> : IIncrementalCausalLanguageMode
     /// Initializes a new KV-cached adapter over a Mamba language model.
     /// </summary>
     /// <param name="network">The trained Mamba model whose <c>Step</c> advances one token at a time.</param>
-    /// <param name="vocabularySize">The model's vocabulary size (the width of the one-hot input and logits).</param>
+    /// <param name="vocabularySize">The model's vocabulary size (the width of the returned logits).</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="network"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="vocabularySize"/> is not positive.</exception>
     public MambaCausalLanguageModel(MambaLanguageModel<T> network, int vocabularySize)
@@ -62,10 +62,13 @@ public sealed class MambaCausalLanguageModel<T> : IIncrementalCausalLanguageMode
             throw new ArgumentException("The context must contain at least one token.", nameof(tokenIds));
         }
 
-        var input = new Tensor<T>(new[] { 1, tokenIds.Count, VocabularySize });
+        // Token IDS, shape [1, seq] -- not a one-hot [1, seq, vocab]. MambaLanguageModel's first
+        // layer is EmbeddingLayer(vocab, modelDim), an id lookup, so a one-hot tensor was read as a
+        // length-vocab sequence and the model returned rank-4 logits ([1, seq, vocab, vocab]).
+        var input = new Tensor<T>(new[] { 1, tokenIds.Count });
         for (var position = 0; position < tokenIds.Count; position++)
         {
-            input[new[] { 0, position, ValidateToken(tokenIds[position]) }] = One;
+            input[new[] { 0, position }] = ToNumeric(ValidateToken(tokenIds[position]));
         }
 
         // The full forward resets the underlying network, so any incremental
@@ -126,11 +129,15 @@ public sealed class MambaCausalLanguageModel<T> : IIncrementalCausalLanguageMode
 
     private Vector<T> StepOne(int tokenId, MambaModelState<T> state)
     {
-        var token = new Tensor<T>(new[] { 1, 1, VocabularySize });
-        token[new[] { 0, 0, ValidateToken(tokenId) }] = One;
+        // One token id, shape [1, 1] -- the same representation StartSequence feeds Predict.
+        var token = new Tensor<T>(new[] { 1, 1 });
+        token[new[] { 0, 0 }] = ToNumeric(ValidateToken(tokenId));
         var output = _network.Step(token, state);
         return ExtractLastPositionLogits(output);
     }
+
+    /// <summary>Converts a token id into the tensor's numeric type.</summary>
+    private static T ToNumeric(int tokenId) => (T)Convert.ChangeType((double)tokenId, typeof(T));
 
     private int ValidateToken(int id)
     {

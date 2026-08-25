@@ -118,11 +118,82 @@ public class OptimizerOptionsCopyTests
                 continue;
             }
 
-            property.SetValue(options, value);
+            if (TrySet(options, property, value))
+            {
+                continue;
+            }
+
+            // The sweep offsets a value rather than picking a literal, which walks a range-validated
+            // property straight out of its range: ArmijoConstant must be strictly inside (0, 1) and the
+            // swept 1.5001 is not. Rejecting it is the setter working. Retry inside the range instead of
+            // letting the property drop out of the sweep, which would quietly stop verifying its copy.
+            var accepted = false;
+            foreach (var candidate in InRangeCandidates(property.PropertyType, current))
+            {
+                if (Equals(candidate, current)) continue;
+                if (TrySet(options, property, candidate)) { accepted = true; break; }
+            }
+
+            if (!accepted)
+            {
+                skipped.Add($"{property.Name} ({property.PropertyType.Name})");
+            }
         }
 
         unmutated = skipped;
         return options;
+    }
+
+    /// <summary>Assigns a property, reporting a validating setter's rejection rather than throwing.</summary>
+    private static bool TrySet(object? target, PropertyInfo property, object? value)
+    {
+        try
+        {
+            property.SetValue(target, value);
+            return true;
+        }
+        catch (TargetInvocationException exception) when (exception.InnerException is ArgumentException)
+        {
+            return false;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Values to try when a validating setter rejects the swept one.
+    /// </summary>
+    /// <remarks>
+    /// Every range-validated option in this hierarchy is a fraction, a probability, or a small positive
+    /// count, so halving the current value clears the upper bound while staying positive, and the fixed
+    /// fractions cover a property whose current value is zero.
+    /// </remarks>
+    private static IEnumerable<object> InRangeCandidates(Type type, object? current)
+    {
+        if (type == typeof(double) || type == typeof(double?))
+        {
+            double value = current as double? ?? 0.0;
+            yield return value / 2.0;
+            yield return (value + 1.0) / 2.0;
+            yield return 0.5;
+            yield return 0.25;
+            yield return 0.125;
+        }
+        else if (type == typeof(float) || type == typeof(float?))
+        {
+            float value = current as float? ?? 0f;
+            yield return value / 2f;
+            yield return 0.5f;
+            yield return 0.25f;
+        }
+        else if (type == typeof(int) || type == typeof(int?))
+        {
+            int value = current as int? ?? 0;
+            yield return value + 1;
+            yield return Math.Max(1, value - 1);
+        }
     }
 
     /// <summary>

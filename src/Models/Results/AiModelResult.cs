@@ -2706,6 +2706,25 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     private TOutput DispatchModelInference(TInput normalizedNewData)
     {
+        // JIT FIRST, AND ONLY WHEN IT WAS ASKED FOR. InferenceOptimizationConfig is defaulted to
+        // non-null in the builder (AiModelBuilder._inferenceOptimizationConfig), while
+        // JitCompiledFunction is non-null ONLY after an explicit ConfigureJitCompilation on a
+        // NeuralNetworkBase model. With the inference-optimization branch tested first, that branch
+        // matched for every neural model and returned before this one was ever consulted, so
+        // ConfigureJitCompilation was inert for precisely the models it targets -- including the
+        // value-stability guard below it, which never executed. An explicit request outranks a
+        // default, so the compiled plan is consulted first when one exists.
+        if (JitCompiledFunction != null && normalizedNewData is Tensor<T> jitInput)
+        {
+            var jitResult = JitCompiledFunction(new[] { jitInput });
+            if (jitResult != null && jitResult.Length > 0 && jitResult[0] is TOutput typedJitFirst)
+            {
+                return typedJitFirst;
+            }
+            // Fallback to model if JIT result is unexpected.
+            return PredictViaModelOrThrow(normalizedNewData);
+        }
+
         if (InferenceOptimizationConfig != null &&
             Model is NeuralNetworkBase<T> neuralModel &&
             normalizedNewData is Tensor<T> inputTensor)
@@ -2718,17 +2737,6 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 // Fallback to the wrapped model if type mismatch occurs.
                 return PredictViaModelOrThrow(normalizedNewData);
             }
-        }
-
-        if (JitCompiledFunction != null && normalizedNewData is Tensor<T> inputTensor2)
-        {
-            var jitResult = JitCompiledFunction(new[] { inputTensor2 });
-            if (jitResult != null && jitResult.Length > 0 && jitResult[0] is TOutput typedJit)
-            {
-                return typedJit;
-            }
-            // Fallback to model if JIT result is unexpected.
-            return PredictViaModelOrThrow(normalizedNewData);
         }
 
         return PredictViaModelOrThrow(normalizedNewData);

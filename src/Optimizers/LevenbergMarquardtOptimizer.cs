@@ -97,6 +97,38 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
     }
 
     /// <summary>
+    /// Creates a Levenberg-Marquardt optimizer for minimizing a plain function, with no model attached.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use this with <see cref="GradientBasedOptimizerBase{T, TInput, TOutput}.Minimize(Vector{T}, Func{Vector{T}, ValueTuple{T, Vector{T}}}, int, T)"/>
+    /// when you want to minimize a mathematical function directly rather than train a model.
+    /// <see cref="Optimize"/> requires a model and is not available on an instance created
+    /// this way.
+    /// </para>
+    /// <para><b>For Beginners:</b> The constructor above asks for a model because it is set up
+    /// to tune that model against training data. If all you have is a formula you want to make
+    /// as small as possible, there is no model to hand over — use this factory instead.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The optimizer-specific options. If null, defaults are used.</param>
+    public static LevenbergMarquardtOptimizer<T, TInput, TOutput> CreateForFunction(
+        LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>? options = null)
+        => new(options);
+
+    /// <summary>
+    /// Backs <see cref="CreateForFunction"/>: the same setup with no model.
+    /// </summary>
+    private LevenbergMarquardtOptimizer(LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>? options)
+        : base(null, options ?? new())
+    {
+        _options = options ?? new LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>();
+        _dampingFactor = NumOps.Zero;
+
+        InitializeAdaptiveParameters();
+    }
+
+    /// <summary>
     /// Initializes the adaptive parameters used by the optimizer.
     /// </summary>
     /// <remarks>

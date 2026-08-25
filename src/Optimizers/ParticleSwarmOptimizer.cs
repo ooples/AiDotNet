@@ -34,7 +34,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IDerivativeFreeFunctionOptimizer<T>
 {
     /// <summary>
     /// Random number generator for stochastic components of the algorithm.
@@ -339,4 +339,124 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
             _currentSocialWeight = reader.ReadDouble();
         }
     }
+
+    /// <summary>
+    /// Creates a particle swarm optimizer for minimizing a plain function, with no model.
+    /// </summary>
+    /// <param name="options">The optimizer-specific options. If null, defaults are used.</param>
+    public static ParticleSwarmOptimizer<T, TInput, TOutput> CreateForFunction(
+        ParticleSwarmOptimizationOptions<T, TInput, TOutput>? options = null)
+        => new(options);
+
+    /// <summary>Backs <see cref="CreateForFunction"/>: the same setup with no model.</summary>
+    private ParticleSwarmOptimizer(ParticleSwarmOptimizationOptions<T, TInput, TOutput>? options)
+        : base(null, options ?? new())
+    {
+        _random = RandomHelper.CreateSecureRandom();
+        _psoOptions = options ?? new ParticleSwarmOptimizationOptions<T, TInput, TOutput>();
+
+        InitializeAdaptiveParameters();
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// The canonical swarm of Kennedy and Eberhart (1995), with the constriction coefficients of
+    /// Clerc and Kennedy (2002) as defaults. Each particle is pulled towards its own best position
+    /// and towards the swarm's, with the pulls scaled by fresh random numbers every step:
+    /// </para>
+    /// <code>
+    /// v &lt;- w*v + c1*r1*(personalBest - x) + c2*r2*(globalBest - x)
+    /// x &lt;- x + v
+    /// </code>
+    /// <para>
+    /// The swarm is scattered around the starting point rather than over some arbitrary box,
+    /// because a plain function has no bounds to sample from and the caller's guess is the only
+    /// information about scale available.
+    /// </para>
+    /// <para>
+    /// <paramref name="tolerance"/> stops the run once the swarm's spread falls below it: at that
+    /// point every particle is in the same place and the remaining iterations cannot find anything
+    /// new.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Minimize(
+        Vector<T> initialParameters, Func<Vector<T>, T> objective, int maxIterations, T tolerance)
+    {
+        ValidateMinimizeArguments(initialParameters, objective, maxIterations);
+
+        var search = new DerivativeFreeSearch(objective, NumOps, initialParameters);
+        var random = CreateSearchRandom();
+
+        int dimension = initialParameters.Length;
+        int swarmSize = Math.Max(2, _psoOptions.SwarmSize);
+
+        double inertia = _psoOptions.InertiaWeight;
+        double cognitive = _psoOptions.CognitiveParameter;
+        double social = _psoOptions.SocialParameter;
+        double stop = Convert.ToDouble(tolerance);
+
+        var positions = new Vector<T>[swarmSize];
+        var velocities = new Vector<T>[swarmSize];
+        var personalBest = new Vector<T>[swarmSize];
+        var personalBestValue = new T[swarmSize];
+
+        for (int p = 0; p < swarmSize; p++)
+        {
+            positions[p] = new Vector<T>(dimension);
+            velocities[p] = new Vector<T>(dimension);
+
+            for (int i = 0; i < dimension; i++)
+            {
+                // The first particle starts exactly where the caller pointed, so the swarm can
+                // never be worse than the guess it was given.
+                double offset = p == 0 ? 0.0 : NextGaussian(random);
+                positions[p][i] = NumOps.Add(initialParameters[i], NumOps.FromDouble(offset));
+                velocities[p][i] = NumOps.FromDouble(0.1 * NextGaussian(random));
+            }
+
+            personalBest[p] = positions[p].Clone();
+            personalBestValue[p] = search.Evaluate(positions[p]);
+        }
+
+        for (int iteration = 0; iteration < maxIterations; iteration++)
+        {
+            var globalBest = search.BestPoint;
+
+            double spread = 0.0;
+
+            for (int p = 0; p < swarmSize; p++)
+            {
+                for (int i = 0; i < dimension; i++)
+                {
+                    double toPersonal = cognitive * random.NextDouble()
+                        * Convert.ToDouble(NumOps.Subtract(personalBest[p][i], positions[p][i]));
+
+                    double toGlobal = social * random.NextDouble()
+                        * Convert.ToDouble(NumOps.Subtract(globalBest[i], positions[p][i]));
+
+                    double updated =
+                        inertia * Convert.ToDouble(velocities[p][i]) + toPersonal + toGlobal;
+
+                    velocities[p][i] = NumOps.FromDouble(updated);
+                    positions[p][i] = NumOps.Add(positions[p][i], velocities[p][i]);
+
+                    spread += Math.Abs(updated);
+                }
+
+                T value = search.Evaluate(positions[p]);
+
+                if (NumOps.LessThan(value, personalBestValue[p]))
+                {
+                    personalBestValue[p] = value;
+                    personalBest[p] = positions[p].Clone();
+                }
+            }
+
+            if (spread / (swarmSize * dimension) < stop) break;
+        }
+
+        return search.BestPoint;
+    }
+
 }
