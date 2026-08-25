@@ -81,7 +81,18 @@ public class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
     {
         _options = options ?? new OpenVoiceV2Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // TtsModelOptions declares LearningRate (1e-4) and WeightDecay (0.01) and this model never
+        // passed either, so training ran at AdamWOptimizerOptions' generic 1e-3 -- ten times the
+        // documented rate -- and the option was unreachable no matter what a caller set. On the
+        // memorization task that overshoots from the first step: the loss ROSE, 0.862768 at step 1
+        // to 1.046356 at step 100.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay
+            });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

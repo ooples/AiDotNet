@@ -22,7 +22,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IDerivativeFreeFunctionOptimizer<T>
 {
     /// <summary>
     /// Configuration options specific to the Differential Evolution algorithm.
@@ -353,4 +353,154 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
 
         InitializeAdaptiveParameters();
     }
+
+    /// <summary>
+    /// Creates a differential evolution optimizer for minimizing a plain function, with no model.
+    /// </summary>
+    /// <param name="options">The optimizer-specific options. If null, defaults are used.</param>
+    public static DifferentialEvolutionOptimizer<T, TInput, TOutput> CreateForFunction(
+        DifferentialEvolutionOptions<T, TInput, TOutput>? options = null)
+        => new(options);
+
+    /// <summary>Backs <see cref="CreateForFunction"/>: the same setup with no model.</summary>
+    private DifferentialEvolutionOptimizer(DifferentialEvolutionOptions<T, TInput, TOutput>? options)
+        : base(null, options ?? new())
+    {
+        _deOptions = options ?? new DifferentialEvolutionOptions<T, TInput, TOutput>();
+        _currentCrossoverRate = NumOps.Zero;
+        _currentMutationRate = NumOps.Zero;
+
+        InitializeAdaptiveParameters();
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// DE/rand/1/bin, the classical scheme of Storn and Price (<i>Journal of Global
+    /// Optimization</i> 11, 1997). For each member of the population, three others are drawn at
+    /// random and combined into a mutant:
+    /// </para>
+    /// <code>
+    /// mutant = a + F*(b - c)
+    /// </code>
+    /// <para>
+    /// The mutant is then mixed with the original coordinate by coordinate, and replaces it only
+    /// if it is better. The step size is never chosen: it comes from the spread of the population
+    /// itself, which is why DE contracts automatically as it converges and needs no schedule.
+    /// </para>
+    /// <para>
+    /// <paramref name="tolerance"/> stops the run once the population's spread falls below it,
+    /// which is the natural convergence test for a method whose steps ARE that spread.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Minimize(
+        Vector<T> initialParameters, Func<Vector<T>, T> objective, int maxIterations, T tolerance)
+    {
+        ValidateMinimizeArguments(initialParameters, objective, maxIterations);
+
+        var search = new DerivativeFreeSearch(objective, NumOps, initialParameters);
+        var random = CreateSearchRandom();
+
+        int dimension = initialParameters.Length;
+        int populationSize = Math.Max(4, _deOptions.PopulationSize);
+
+        double differentialWeight = _deOptions.MutationRate;
+        double crossoverRate = _deOptions.CrossoverRate;
+        double stop = Convert.ToDouble(tolerance);
+
+        var population = new Vector<T>[populationSize];
+        var values = new T[populationSize];
+
+        for (int p = 0; p < populationSize; p++)
+        {
+            population[p] = new Vector<T>(dimension);
+
+            for (int i = 0; i < dimension; i++)
+            {
+                double offset = p == 0 ? 0.0 : NextGaussian(random);
+                population[p][i] = NumOps.Add(initialParameters[i], NumOps.FromDouble(offset));
+            }
+
+            values[p] = search.Evaluate(population[p]);
+        }
+
+        for (int generation = 0; generation < maxIterations; generation++)
+        {
+            for (int p = 0; p < populationSize; p++)
+            {
+                int first = PickOther(random, populationSize, p, -1, -1);
+                int second = PickOther(random, populationSize, p, first, -1);
+                int third = PickOther(random, populationSize, p, first, second);
+
+                // At least one coordinate always comes from the mutant, so the trial can never be
+                // an exact copy of the member it is meant to replace.
+                int forced = random.Next(dimension);
+                var trial = new Vector<T>(dimension);
+
+                for (int i = 0; i < dimension; i++)
+                {
+                    if (i == forced || random.NextDouble() < crossoverRate)
+                    {
+                        double difference = Convert.ToDouble(
+                            NumOps.Subtract(population[second][i], population[third][i]));
+
+                        trial[i] = NumOps.Add(
+                            population[first][i],
+                            NumOps.FromDouble(differentialWeight * difference));
+                    }
+                    else
+                    {
+                        trial[i] = population[p][i];
+                    }
+                }
+
+                T trialValue = search.Evaluate(trial);
+
+                if (NumOps.LessThan(trialValue, values[p]))
+                {
+                    population[p] = trial;
+                    values[p] = trialValue;
+                }
+            }
+
+            if (PopulationSpread(population, dimension) < stop) break;
+        }
+
+        return search.BestPoint;
+    }
+
+    /// <summary>Draws an index different from the ones already chosen.</summary>
+    private static int PickOther(Random random, int count, int self, int first, int second)
+    {
+        for (int attempt = 0; attempt < 100; attempt++)
+        {
+            int candidate = random.Next(count);
+            if (candidate != self && candidate != first && candidate != second) return candidate;
+        }
+
+        // With a population of four or more the loop above effectively always succeeds; this only
+        // exists so a pathological generator cannot hang the search.
+        return (self + 1) % count;
+    }
+
+    /// <summary>The mean absolute deviation of the population, coordinate by coordinate.</summary>
+    private double PopulationSpread(Vector<T>[] population, int dimension)
+    {
+        double total = 0.0;
+
+        for (int i = 0; i < dimension; i++)
+        {
+            double mean = 0.0;
+            foreach (var member in population) mean += Convert.ToDouble(member[i]);
+            mean /= population.Length;
+
+            foreach (var member in population)
+            {
+                total += Math.Abs(Convert.ToDouble(member[i]) - mean);
+            }
+        }
+
+        return total / (population.Length * dimension);
+    }
+
 }

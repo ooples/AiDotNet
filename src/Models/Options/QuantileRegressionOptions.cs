@@ -8,8 +8,8 @@ namespace AiDotNet.Models.Options;
 /// <para>
 /// Quantile Regression extends traditional regression methods by estimating conditional quantiles
 /// of the response variable. While standard regression estimates the conditional mean E(Y|X),
-/// Quantile Regression can estimate any conditional quantile Q(a|X) for a ? (0,1), including
-/// medians (a = 0.5) and other percentiles. This technique provides a more comprehensive view of the
+/// Quantile Regression can estimate any conditional quantile Q(α|X) for α ∈ (0,1), including
+/// medians (α = 0.5) and other percentiles. This technique provides a more comprehensive view of the
 /// relationship between variables, allowing for the analysis of the full conditional distribution.
 /// It is particularly valuable when the conditional distribution is non-Gaussian, skewed, or when
 /// outliers are present. Quantile Regression is also robust to heteroscedasticity (non-constant variance)
@@ -44,6 +44,32 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class QuantileRegressionOptions<T> : RegressionOptions<T>
 {
+    private double _quantile = 0.5;
+    private long _maximumDenseLinearProgramEntries = 50_000_000;
+    private SimplexSolverOptions _solverOptions = new();
+
+    /// <summary>
+    /// Initializes quantile-regression options with production-safe defaults.
+    /// </summary>
+    public QuantileRegressionOptions()
+    {
+    }
+
+    /// <summary>
+    /// Initializes an independent copy of another option set.
+    /// </summary>
+    /// <param name="other">The options to copy.</param>
+    public QuantileRegressionOptions(QuantileRegressionOptions<T> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+        Seed = other.Seed;
+        DecompositionMethod = other.DecompositionMethod;
+        UseIntercept = other.UseIntercept;
+        Quantile = other.Quantile;
+        SolverOptions = new SimplexSolverOptions(other.SolverOptions);
+        MaximumDenseLinearProgramEntries = other.MaximumDenseLinearProgramEntries;
+    }
+
     /// <summary>
     /// Gets or sets the quantile to be estimated by the regression model.
     /// </summary>
@@ -80,89 +106,54 @@ public class QuantileRegressionOptions<T> : RegressionOptions<T>
     /// has only a 1% chance of being exceeded - critical information for safety planning.
     /// </para>
     /// </remarks>
-    public double Quantile { get; set; } = 0.5; // Default to median regression
+    public double Quantile
+    {
+        get => _quantile;
+        set => _quantile = value > 0 && value < 1 && !double.IsNaN(value)
+            ? value
+            : throw new ArgumentOutOfRangeException(nameof(value), value, "Quantile must be finite and strictly between 0 and 1.");
+    }
 
     /// <summary>
-    /// Gets or sets the learning rate for the optimization algorithm.
+    /// Gets or sets the simplex solver configuration used by the exact linear-program formulation.
     /// </summary>
-    /// <value>The learning rate, defaulting to 0.01.</value>
+    /// <value>An independent simplex configuration, defaulting to the standard solver settings.</value>
     /// <remarks>
     /// <para>
-    /// The learning rate controls the step size in the gradient-based optimization process used to
-    /// estimate the quantile regression model. A smaller learning rate leads to more precise but slower
-    /// convergence, while a larger learning rate can speed up learning but risks overshooting the optimal
-    /// solution or causing instability. The appropriate learning rate depends on the scale and characteristics
-    /// of the data. If the algorithm fails to converge or produces poor results, adjusting this parameter
-    /// may help. For quantile regression, the optimization landscape can sometimes be less smooth than for
-    /// mean regression, potentially requiring a smaller learning rate for stable convergence.
+    /// Quantile regression is solved exactly as a linear program. These settings therefore describe
+    /// simplex pivots and numerical tolerance directly instead of exposing a misleading gradient-descent
+    /// learning rate.
     /// </para>
-    /// <para><b>For Beginners:</b> This setting controls how quickly the algorithm adjusts its predictions during training.
-    /// 
-    /// The default value of 0.01 means:
-    /// - The algorithm takes moderate-sized steps when improving its model
-    /// - It's a balance between learning speed and learning stability
-    /// 
-    /// Think of it like walking down a hill blindfolded:
-    /// - A small learning rate (like 0.001) means taking tiny, cautious steps
-    ///   - Safer but takes much longer to reach the bottom
-    /// - A large learning rate (like 0.1) means taking big, bold steps
-    ///   - Faster but you might trip or miss the lowest point entirely
-    /// 
-    /// You might want a smaller learning rate (like 0.001):
-    /// - When your model is unstable or oscillating during training
-    /// - When you need very precise results and have time for longer training
-    /// - When working with data that has very large or varied scales
-    /// 
-    /// You might want a larger learning rate (like 0.05):
-    /// - When training is taking too long
-    /// - When you're doing initial exploration
-    /// - When you have a lot of data and want faster convergence
-    /// 
-    /// Finding the right learning rate often requires experimentation - too small and training takes forever,
-    /// too large and the model might never find the best solution.
-    /// </para>
+    /// <para><b>For Beginners:</b> The defaults are appropriate for most data. Advanced users can
+    /// change how long the exact solver may work and how close to zero a number must be before it
+    /// is treated as numerical noise.</para>
     /// </remarks>
-    public double LearningRate { get; set; } = 0.01;
+    public SimplexSolverOptions SolverOptions
+    {
+        get => _solverOptions;
+        set => _solverOptions = value ?? throw new ArgumentNullException(nameof(value));
+    }
 
     /// <summary>
-    /// Gets or sets the maximum number of iterations for the optimization algorithm.
+    /// Gets or sets the maximum number of scalar entries allowed in the dense linear-program matrix.
     /// </summary>
-    /// <value>The maximum number of iterations, defaulting to 1000.</value>
+    /// <value>The entry budget, defaulting to 50,000,000 (about 400 MB for <c>double</c>).</value>
     /// <remarks>
     /// <para>
-    /// This parameter limits the number of iterations the optimization algorithm will perform when
-    /// fitting the quantile regression model. It serves as a stopping criterion to prevent excessive
-    /// computation time in cases where convergence is slow or not achieved. The algorithm may terminate
-    /// earlier if convergence is detected before reaching this limit. For simpler datasets or higher
-    /// learning rates, fewer iterations may be sufficient, while complex relationships or lower learning
-    /// rates might require more iterations to reach convergence. Monitoring the convergence behavior
-    /// can help in determining an appropriate value for this parameter.
+    /// The exact Koenker-Bassett formulation has <c>n</c> constraints and approximately <c>2n</c>
+    /// variables, so a dense representation grows quadratically with the row count. This explicit budget
+    /// prevents an accidental multi-gigabyte allocation and fails before memory pressure destabilizes the
+    /// process. Increase it only when the host has enough memory.
     /// </para>
-    /// <para><b>For Beginners:</b> This setting controls how many times the algorithm will try to improve its predictions before stopping.
-    /// 
-    /// The default value of 1000 means:
-    /// - The algorithm will make up to 1000 attempts to refine its model
-    /// - It might stop earlier if it determines the model isn't improving anymore
-    /// 
-    /// Think of it like a game where you're trying to guess a number:
-    /// - Each iteration is one guess
-    /// - After each guess, you get feedback to improve your next guess
-    /// - MaxIterations is like setting a limit: "I'll stop after 1000 guesses even if I haven't found the exact answer"
-    /// 
-    /// You might want more iterations (like 5000 or 10000):
-    /// - When your data is complex or has subtle patterns
-    /// - When using a very small learning rate
-    /// - When you need high precision and have the computational resources
-    /// 
-    /// You might want fewer iterations (like 500 or 100):
-    /// - When you need faster training times
-    /// - When you have simpler data relationships
-    /// - When you're doing exploratory analysis and don't need perfect results
-    /// - When you notice the model stops improving well before 1000 iterations
-    /// 
-    /// This setting helps prevent the model from training indefinitely, ensuring it eventually completes
-    /// even if it hasn't reached perfect convergence.
-    /// </para>
+    /// <para><b>For Beginners:</b> This is a memory safety rail. If a dataset is too large for the
+    /// exact dense solver, training explains the required size and stops cleanly instead of risking
+    /// an out-of-memory crash.</para>
     /// </remarks>
-    public int MaxIterations { get; set; } = 1000;
+    public long MaximumDenseLinearProgramEntries
+    {
+        get => _maximumDenseLinearProgramEntries;
+        set => _maximumDenseLinearProgramEntries = value > 0
+            ? value
+            : throw new ArgumentOutOfRangeException(nameof(value), value, "The dense linear-program entry budget must be positive.");
+    }
 }

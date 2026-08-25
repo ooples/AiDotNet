@@ -111,6 +111,19 @@ public class ProximalGradientDescentOptimizerOptions<T, TInput, TOutput> : Gradi
     /// Finding the right regularization strength often requires experimentation with different values.
     /// </para>
     /// </remarks>
+    /// <remarks>
+    /// <para>
+    /// This used to be declared, documented at length, and read by nothing: the proximal step came only
+    /// from <c>Regularization</c>, so an optimizer configured with a strength alone applied no shrinkage
+    /// at all. It is read now.
+    /// </para>
+    /// <para>
+    /// Null means "not set", which leaves <c>Regularization</c> exactly as configured. A non-null value
+    /// overrides that regularizer's strength instead. Nullable rather than a sentinel 0.0 so the two ways
+    /// of expressing a strength cannot contradict each other, and so that an explicit zero stays
+    /// distinguishable from "I never touched this".
+    /// </para>
+    /// </remarks>
     public double? RegularizationStrength { get; set; }
 
     /// <summary>

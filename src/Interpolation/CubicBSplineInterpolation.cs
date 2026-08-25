@@ -1,3 +1,5 @@
+using AiDotNet.DecompositionMethods.MatrixDecomposition;
+
 namespace AiDotNet.Interpolation;
 
 /// <summary>
@@ -110,7 +112,13 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
         T result = _numOps.Zero;
         for (int j = 0; j < 4; j++)
         {
-            result = _numOps.Add(result, _numOps.Multiply(basis[j], _coefficients[i - 3 + j]));
+            // Guarded because FindSpan clamps at the right-hand end, which can name a coefficient
+            // one past the last. Its basis value there is zero, so skipping it changes nothing
+            // except that it no longer indexes off the end of the vector.
+            int index = i - 3 + j;
+            if (index < 0 || index >= _coefficients.Length) continue;
+
+            result = _numOps.Add(result, _numOps.Multiply(basis[j], _coefficients[index]));
         }
 
         return result;
@@ -167,23 +175,41 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
     private Vector<T> CalculateCoefficients()
     {
         int n = _x.Length;
-        Matrix<T> A = new Matrix<T>(n, n);
+
+        // A cubic B-spline over this knot vector has (knots - degree - 1) = n + 2 basis functions,
+        // not n. The system was previously built square, which made it singular: LU reported a
+        // zero pivot rather than an answer.
+        int coefficientCount = _knots.Length - 4;
+
+        Matrix<T> A = new Matrix<T>(n, coefficientCount);
         Vector<T> b = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
-            Vector<T> basis = CalculateBasisFunctions(_x[i], FindSpan(_x[i]));
+            // The columns are indexed from the SPAN, not from the data index. Interpolate reads
+            // _coefficients[span - 3 + j], and the two have to agree; with this knot vector the
+            // span of x[i] is i + 3, so writing to i - 3 + j put every basis value three columns
+            // to the left of where it is later read.
+            int span = FindSpan(_x[i]);
+            Vector<T> basis = CalculateBasisFunctions(_x[i], span);
+
             for (int j = 0; j < 4; j++)
             {
-                if (i - 3 + j >= 0 && i - 3 + j < n)
+                int column = span - 3 + j;
+                if (column >= 0 && column < coefficientCount)
                 {
-                    A[i, i - 3 + j] = basis[j];
+                    A[i, column] = basis[j];
                 }
             }
+
             b[i] = _y[i];
         }
 
-        return MatrixSolutionHelper.SolveLinearSystem(A, b, _decompositionType);
+        // n equations in n + 2 unknowns: every spline through the data is a solution, and the
+        // pseudoinverse returns the one of smallest coefficient norm. That is a deliberate choice
+        // of end condition - the flattest interpolant available - and it is always defined, which
+        // a square solve of an underdetermined system is not.
+        return new SvdDecomposition<T>(A).Solve(b);
     }
 
     /// <summary>

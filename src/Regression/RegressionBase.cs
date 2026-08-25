@@ -1,5 +1,6 @@
 global using AiDotNet.Factories;
 using AiDotNet.Autodiff;
+using AiDotNet.Exceptions;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Parameters;
 using Newtonsoft.Json;
@@ -502,7 +503,7 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
                     var cholesky = new CholeskyDecomposition<T>(a);
                     return cholesky.Solve(b);
                 }
-                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or MatrixFactorizationException)
                 {
                     try
                     {
@@ -529,7 +530,7 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
 
                         return result;
                     }
-                    catch (Exception ex2) when (ex2 is ArgumentException or InvalidOperationException)
+                    catch (Exception ex2) when (ex2 is ArgumentException or InvalidOperationException or MatrixFactorizationException)
                     {
                         // Most robust fallback (handles singular/ill-conditioned matrices).
                         var svd = new SvdDecomposition<T>(a);
@@ -969,6 +970,20 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     /// </remarks>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
+        return CreateSerializedCopy();
+    }
+
+    /// <summary>
+    /// Creates an independent copy without dispatching through either public clone method.
+    /// </summary>
+    /// <remarks>
+    /// Keeping the shared implementation non-virtual prevents a derived implementation such as
+    /// <c>DeepCopy() =&gt; Clone()</c> from recursing when its <c>Clone()</c> fallback calls the base
+    /// implementation. Public serialization remains virtual so model-specific persisted state is
+    /// still included automatically.
+    /// </remarks>
+    private IFullModel<T, Matrix<T>, Vector<T>> CreateSerializedCopy()
+    {
         // In-memory clone — route through the PUBLIC virtual Serialize /
         // Deserialize path wrapped in InternalOperation so the persistence
         // guard does not treat this as a billable op. Subclasses (LogReg,
@@ -1032,8 +1047,7 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     /// </remarks>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
-        // By default, Clone behaves the same as DeepCopy
-        return DeepCopy();
+        return CreateSerializedCopy();
     }
 
     public virtual long ParameterCount

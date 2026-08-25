@@ -1236,6 +1236,31 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         bool throwOnFailure = _jitCompilationConfig.ThrowOnFailure;
         var jitConfig = _jitCompilationConfig;
 
+        // Trace-and-replay is only sound when the traced graph depends on the input VALUES rather
+        // than baking them in. NeuralNetworkBase.PredictCore documents the failure mode and avoids
+        // it by never routing Predict through PredictCompiled: "the compiled-plan cache in
+        // PredictCompiled binds to the trace-time input tensor reference and replay returns the
+        // first call's output for any subsequent call with the same shape but different values".
+        // A Transformer hits this immediately -- its first op gathers embedding rows using the token
+        // ids read out of the input, so the gather indices become graph constants and every later
+        // call replays the first input's logits. Measured on a V=256/d=64/L=2 Transformer, all three
+        // GetOrCompileInference overloads returned max pairwise L2 of EXACTLY 0 across 16 distinct
+        // inputs, including when SetInputs was called explicitly before Execute.
+        //
+        // Compiling here without checking would therefore return silently wrong predictions, so the
+        // wrapper verifies value-stability against the eager forward before it trusts a plan:
+        //
+        //   - until stability is established, every call answers from the eager forward, so a wrong
+        //     answer is never returned;
+        //   - the first time a caller supplies an input that DIFFERS from the traced one at the same
+        //     shape, the plan's output is compared against the eager output for that input;
+        //   - if they agree the plan is used from then on, which is the whole point of the feature;
+        //   - if they disagree the model is marked unstable, the discrepancy is traced, and the eager
+        //     path is used permanently.
+        //
+        // Warm-up therefore costs two eager forwards and one plan execution, once per model.
+        var stability = new JitValueStability<T>();
+
         return (inputs) =>
         {
             if (inputs is null || inputs.Length == 0)
@@ -1248,18 +1273,18 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             var input = inputs[0];
 
             // Each call applies the JIT config to this thread's TensorCodecOptions
-            // — request-pool workers don't inherit the thread-static state set on
+            // -- request-pool workers don't inherit the thread-static state set on
             // the builder thread.
             jitConfig.ApplyToTensorCodec();
 
             try
             {
-                var plan = cache.GetOrCompileInference(input, () =>
+                Func<Tensor<T>> traceForward = () =>
                 {
                     // Guard against nested-GraphMode. When the trace lambda invokes
                     // nnModel.Predict, any subclass still using the base default
                     // would re-enter PredictCompiled which opens a second GraphMode
-                    // scope — the inner compile would drop the outer trace's ops.
+                    // scope -- the inner compile would drop the outer trace's ops.
                     // Forcing EnableCompilation=false here makes PredictCompiled
                     // fall through to PredictEager, recording the ops into our
                     // outer trace instead.
@@ -1285,7 +1310,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     {
                         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
                         // Tensors 0.50.1 changed GetOrCompileInference from Action to
-                        // Func<Tensor<T>> — the tracer now binds the plan output to
+                        // Func<Tensor<T>> -- the tracer now binds the plan output to
                         // whatever the lambda returns, rather than inferring it from
                         // the last recorded op. Return the Predict result explicitly.
                         return nnModel.Predict(input);
@@ -1294,15 +1319,54 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     {
                         AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(savedOptions);
                     }
-                });
+                };
 
-                return new[] { plan.Execute() };
+                if (stability.IsKnownUnstable)
+                {
+                    return new[] { EagerPredict(nnModel, input) };
+                }
+
+                var plan = cache.GetOrCompileInference(input, traceForward);
+
+                if (stability.IsVerified)
+                {
+                    return new[] { plan.Execute() };
+                }
+
+                var eager = EagerPredict(nnModel, input);
+
+                // Nothing to compare against until an input that actually differs shows up: at the
+                // traced input a broken plan and a correct one agree by construction.
+                if (!stability.RecordAndCheckDiffers(input))
+                {
+                    return new[] { eager };
+                }
+
+                var replayed = plan.Execute();
+                double discrepancy = MaxAbsoluteDifference(replayed, eager);
+
+                if (discrepancy <= JitValueStabilityTolerance)
+                {
+                    stability.MarkVerified();
+                    return new[] { replayed };
+                }
+
+                stability.MarkUnstable();
+                System.Diagnostics.Trace.TraceWarning(
+                    $"JIT disabled for {nnModel.GetType().FullName}: the compiled plan is not " +
+                    $"value-stable. Replaying it on an input that differs from the traced one at " +
+                    $"shape [{string.Join(", ", input.Shape)}] disagreed with the eager forward by " +
+                    $"{discrepancy:E3}, which means the trace captured input values as constants " +
+                    "rather than as graph inputs. Falling back to eager inference permanently for " +
+                    "this model; predictions stay correct and the compilation speed-up is lost.");
+
+                return new[] { eager };
             }
             catch (Exception ex) when (!throwOnFailure)
             {
                 // Compilation blew up OR replay couldn't rebind inputs cleanly.
                 // Log via Trace so the failure is observable in production telemetry
-                // — silent fallback would make JIT regressions invisible until perf
+                // -- silent fallback would make JIT regressions invisible until perf
                 // surveys catch them. Then fall back to eager Predict so the call
                 // succeeds. Wrap the fallback in NoGradScope to match the trace's
                 // inference semantics (no tape recording during Predict). Next call
@@ -1312,10 +1376,94 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     $"JIT fallback for {nnModel.GetType().FullName} " +
                     $"with input shape [{string.Join(", ", input.Shape)}]: {ex.GetType().Name}: {ex.Message}");
 
-                using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-                return new[] { nnModel.Predict(input) };
+                return new[] { EagerPredict(nnModel, input) };
             }
         };
+    }
+
+    /// <summary>
+    /// How far a replayed plan may sit from the eager forward before it is judged not value-stable.
+    /// </summary>
+    /// <remarks>
+    /// Generous on purpose. A compiled plan legitimately reorders and fuses arithmetic, so it will
+    /// not be bit-identical to the eager forward; a plan that baked its input in as a constant is
+    /// wrong by the full spread between two different predictions, which is orders of magnitude
+    /// larger. There is no ambiguous middle ground to tune for.
+    /// </remarks>
+    private const double JitValueStabilityTolerance = 1e-3;
+
+    private static Tensor<T> EagerPredict(NeuralNetworks.NeuralNetworkBase<T> model, Tensor<T> input)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
+        return model.Predict(input);
+    }
+
+    private static double MaxAbsoluteDifference(Tensor<T> left, Tensor<T> right)
+    {
+        if (left.Length != right.Length) return double.PositiveInfinity;
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        double worst = 0.0;
+
+        for (int i = 0; i < left.Length; i++)
+        {
+            double difference = Math.Abs(ops.ToDouble(left[i]) - ops.ToDouble(right[i]));
+
+            if (difference > worst) worst = difference;
+        }
+
+        return worst;
+    }
+
+    /// <summary>
+    /// Tracks whether one model's compiled plan has been shown to respond to its input.
+    /// </summary>
+    /// <remarks>
+    /// Held per compiled function rather than globally: value-stability is a property of the traced
+    /// graph, so two models built by the same process can legitimately differ.
+    /// </remarks>
+    private sealed class JitValueStability<TValue>
+    {
+        private readonly object _gate = new object();
+        private TValue[]? _tracedValues;
+        private volatile bool _verified;
+        private volatile bool _unstable;
+
+        public bool IsVerified => _verified;
+
+        public bool IsKnownUnstable => _unstable;
+
+        /// <summary>
+        /// Remembers the first input seen, and reports whether this one differs from it.
+        /// </summary>
+        public bool RecordAndCheckDiffers(Tensor<TValue> input)
+        {
+            lock (_gate)
+            {
+                if (_tracedValues is null)
+                {
+                    _tracedValues = new TValue[input.Length];
+                    for (int i = 0; i < input.Length; i++) _tracedValues[i] = input[i];
+
+                    return false;
+                }
+
+                if (_tracedValues.Length != input.Length) return true;
+
+                var comparer = EqualityComparer<TValue>.Default;
+                for (int i = 0; i < input.Length; i++)
+                {
+                    if (!comparer.Equals(_tracedValues[i], input[i])) return true;
+                }
+
+                return false;
+            }
+        }
+
+        public void MarkVerified() => _verified = true;
+
+        public void MarkUnstable() => _unstable = true;
     }
 
     public async Task<AiModelResult<T, TInput, TOutput>> BuildAsync(CancellationToken cancellationToken)

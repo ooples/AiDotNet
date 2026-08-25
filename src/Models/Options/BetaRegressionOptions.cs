@@ -88,6 +88,29 @@ public class BetaRegressionOptions
     /// Gets or sets the random seed for reproducibility.
     /// </summary>
     public int? Seed { get; set; }
+
+    /// <summary>
+    /// When true, target values of exactly 0 or 1 are compressed into the open interval (0,1) using the
+    /// Smithson and Verkuilen (2006) transformation rather than being rejected. Defaults to false.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The Beta density is undefined at 0 and 1, so R's <c>betareg</c> and <c>statsmodels.BetaModel</c> both
+    /// reject a target that touches either boundary. Smithson, M. and Verkuilen, J. (2006), "A better lemon
+    /// squeezer? Maximum-likelihood regression with beta-distributed dependent variables", Psychological
+    /// Methods 11(1), 54-71, give the standard remedy: y' = (y(n-1) + 0.5)/n, which shrinks the sample toward
+    /// 0.5 by half an observation so both boundaries are cleared.
+    /// </para>
+    /// <para>
+    /// It is opt-in rather than automatic because it modifies the caller's data. Enabling it silently would be
+    /// the same class of hidden substitution that made this model fit least squares behind the caller's back.
+    /// </para>
+    /// <para><b>For Beginners:</b> Beta regression needs proportions strictly between 0 and 1. If your data
+    /// contains exact 0% or 100% observations, switch this on to apply a standard published adjustment that
+    /// nudges every value very slightly inward, instead of having to drop those rows.
+    /// </para>
+    /// </remarks>
+    public bool CompressBoundaryValues { get; set; }
 }
 
 /// <summary>

@@ -24,7 +24,7 @@ namespace AiDotNet.Distributions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class NegativeBinomialDistribution<T> : DistributionBase<T>
+public class NegativeBinomialDistribution<T> : DistributionBase<T>
 {
     private T _r;      // Number of successes (dispersion parameter)
     private T _prob;   // Probability of success

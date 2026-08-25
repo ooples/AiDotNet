@@ -95,9 +95,13 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
     // Trainable feature map MLP per head: phi(x) = W2 * GELU(W1 * x + b1) + b2
     // W1: [numHeads, headDim, hiddenDim], W2: [numHeads, hiddenDim, headDim]
     // b1: [numHeads, hiddenDim], b2: [numHeads, headDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _featureMapW1;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
     private Tensor<T> _featureMapB1;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _featureMapW2;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
     private Tensor<T> _featureMapB2;
 
     // Output gate: [modelDim, modelDim]
@@ -543,6 +547,15 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
 
         // Register trainable parameters for tape-based autodiff
         RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        // Register trainable parameters for tape-based autodiff. These belong here with the rest:
+        // UpdateParameters above applies gradients to every one of them, so they are trained on the
+        // legacy path, but leaving them unregistered made them invisible to the tape path -- which
+        // trains exclusively from registered parameters -- and to GetParameters/SetParameters, and
+        // therefore to serialization.
+        RegisterTrainableParameter(_featureMapW1, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_featureMapB1, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_featureMapW2, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_featureMapB2, PersistentTensorRole.Biases);
         RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputGateWeights, PersistentTensorRole.Weights);

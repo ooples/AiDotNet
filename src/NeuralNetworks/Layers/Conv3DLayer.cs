@@ -1012,6 +1012,16 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
             biasArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
         _biases = new Tensor<T>(biasArray, _biases._shape);
+
+        // Re-register the freshly-created tensors as trainable parameters. Deserialize replaces the
+        // field references outright, so without this the registry either stays empty -- a lazily
+        // constructed layer has never registered anything, and GetParameters() then reports zero
+        // parameters and silently discards every restored weight -- or still points at the tensors
+        // from a prior forward, so optimizers and tape training update dead references while Forward
+        // reads the new ones. ConvolutionalLayer does the same for the 2-D case.
+        ClearRegisteredParameters();
+        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     #endregion

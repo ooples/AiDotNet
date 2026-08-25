@@ -24,7 +24,7 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IDerivativeFreeFunctionOptimizer<T>
 {
     /// <summary>
     /// The options specific to the Nelder-Mead optimizer.
@@ -86,6 +86,34 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     }
 
     /// <summary>
+    /// Initializes a new instance of the NelderMeadOptimizer class for minimizing a plain function,
+    /// with no model attached.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use this overload with <see cref="Minimize"/> when you want to minimize a mathematical
+    /// function directly rather than train a model. <see cref="Optimize"/> requires a model and is
+    /// not available on an instance created this way.
+    /// </para>
+    /// <para><b>For Beginners:</b> The other constructor asks for a model because it is set up to
+    /// tune that model against training data. If all you have is a formula you want to make as
+    /// small as possible, there is no model to hand over — use this constructor instead.
+    /// </para>
+    /// </remarks>
+    /// <param name="options">The Nelder-Mead-specific optimization options.</param>
+    public NelderMeadOptimizer(NelderMeadOptimizerOptions<T, TInput, TOutput>? options = null)
+        : base(null, options ?? new())
+    {
+        _options = options ?? new NelderMeadOptimizerOptions<T, TInput, TOutput>();
+        _alpha = NumOps.Zero;
+        _beta = NumOps.Zero;
+        _gamma = NumOps.Zero;
+        _delta = NumOps.Zero;
+
+        InitializeAdaptiveParameters();
+    }
+
+    /// <summary>
     /// Initializes the adaptive parameters for the Nelder-Mead optimizer.
     /// </summary>
     /// <remarks>
@@ -108,6 +136,385 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
         _iteration = 0;
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Minimizes an arbitrary scalar objective with no model, dataset, or training pipeline
+    /// involved — the gradient-free counterpart of SciPy's
+    /// <c>scipy.optimize.minimize(method='Nelder-Mead')</c>. This runs the same simplex search
+    /// that <see cref="Optimize"/> uses, so the function path and the model-training path cannot
+    /// drift apart.
+    /// </para>
+    /// <para>
+    /// The initial simplex is built from <paramref name="initialParameters"/> using the standard
+    /// construction (Lagarias et al. 1998, and MATLAB's <c>fminsearch</c>): the starting point
+    /// plus one vertex per dimension, each perturbing a single coordinate by
+    /// <see cref="NelderMeadOptimizerOptions{T, TInput, TOutput}.InitialSimplexStep"/> relative to
+    /// its magnitude, or by
+    /// <see cref="NelderMeadOptimizerOptions{T, TInput, TOutput}.ZeroCoordinateSimplexStep"/> when
+    /// the coordinate is zero.
+    /// </para>
+    /// <para>
+    /// The search stops when the spread of objective values across the simplex falls below
+    /// <paramref name="tolerance"/>, or when <paramref name="maxIterations"/> is reached.
+    /// </para>
+    /// <para><b>For Beginners:</b> Give this a starting guess and a function that scores any point,
+    /// and it finds the point with the lowest score. It never asks for a derivative — it just
+    /// keeps a cluster of trial points, throws away the worst one each round, and moves the
+    /// cluster downhill. That makes it usable on functions with kinks, noise, or no formula at
+    /// all (a simulation, a backtest, a black box).
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="initialParameters"/> or <paramref name="objective"/> is null.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="initialParameters"/> is empty or
+    /// <paramref name="maxIterations"/> is not positive.
+    /// </exception>
+    public Vector<T> Minimize(
+        Vector<T> initialParameters,
+        Func<Vector<T>, T> objective,
+        int maxIterations,
+        T tolerance)
+    {
+        Guard.NotNull(initialParameters);
+        Guard.NotNull(objective);
+
+        int n = initialParameters.Length;
+        if (n == 0)
+        {
+            throw new ArgumentException(
+                "Initial parameters must contain at least one element.",
+                nameof(initialParameters));
+        }
+
+        if (maxIterations <= 0)
+        {
+            throw new ArgumentException(
+                $"Maximum iterations must be positive, got {maxIterations}.",
+                nameof(maxIterations));
+        }
+
+        InitializeAdaptiveParameters();
+
+        return RunSimplexSearch<object?>(
+            BuildInitialSimplex(initialParameters),
+            point => (objective(point), null),
+            maxIterations,
+            tolerance);
+    }
+
+    /// <summary>
+    /// Builds the standard Nelder-Mead initial simplex around a single starting point.
+    /// </summary>
+    /// <param name="start">The starting point, which becomes the first vertex.</param>
+    /// <returns>A simplex of <c>n + 1</c> vertices, where <c>n</c> is the dimension.</returns>
+    private List<Vector<T>> BuildInitialSimplex(Vector<T> start)
+    {
+        int n = start.Length;
+        var simplex = new List<Vector<T>>(n + 1) { start.Clone() };
+
+        var relativeStep = NumOps.FromDouble(_options.InitialSimplexStep);
+        var zeroStep = NumOps.FromDouble(_options.ZeroCoordinateSimplexStep);
+        var zeroThreshold = NumOps.FromDouble(_options.ZeroCoordinateThreshold);
+
+        for (int i = 0; i < n; i++)
+        {
+            var vertex = start.Clone();
+            bool coordinateIsEffectivelyZero =
+                NumOps.LessThanOrEquals(NumOps.Abs(start[i]), zeroThreshold);
+            vertex[i] = coordinateIsEffectivelyZero
+                ? NumOps.Add(start[i], zeroStep)
+                : NumOps.Add(start[i], NumOps.Multiply(relativeStep, start[i]));
+            simplex.Add(vertex);
+        }
+
+        return simplex;
+    }
+
+    /// <summary>
+    /// Runs the Nelder-Mead simplex search over a vector space.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the single implementation of the algorithm, shared by <see cref="Minimize"/> and
+    /// <see cref="Optimize"/>. It follows the standard formulation (Nelder and Mead 1965, with
+    /// the convergence analysis and inside/outside contraction distinction of Lagarias, Reeds,
+    /// Wright and Wright 1998): reflect the worst vertex through the centroid of the rest, expand
+    /// when reflection produced a new best, contract when it did not beat the second-worst, and
+    /// shrink the whole simplex toward the best vertex when contraction also fails.
+    /// </para>
+    /// <para>
+    /// The objective is always a <b>minimization</b> objective here — lower is better. Callers
+    /// working with a fitness score where higher is better must negate before calling.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TEval">
+    /// Caller-defined payload carried alongside each objective value. <see cref="Optimize"/> uses
+    /// it to keep the full <c>OptimizationStepData</c> for each evaluated vertex, so the model
+    /// path never has to re-evaluate a point just to recover its bookkeeping.
+    /// </typeparam>
+    /// <param name="simplex">The initial simplex; mutated in place.</param>
+    /// <param name="objective">
+    /// The scalar objective to minimize, returning the value and an optional payload.
+    /// </param>
+    /// <param name="maxIterations">Maximum number of simplex iterations.</param>
+    /// <param name="tolerance">
+    /// Convergence threshold on the spread of objective values across the simplex.
+    /// </param>
+    /// <param name="onIteration">
+    /// Optional per-iteration callback receiving the iteration index, the current best vertex, its
+    /// objective value and its payload. Returning <c>true</c> stops the search (used by
+    /// <see cref="Optimize"/> for history tracking and early stopping).
+    /// </param>
+    /// <returns>The best vertex found.</returns>
+    private Vector<T> RunSimplexSearch<TEval>(
+        List<Vector<T>> simplex,
+        Func<Vector<T>, (T value, TEval evaluation)> objective,
+        int maxIterations,
+        T tolerance,
+        Func<int, Vector<T>, T, TEval, bool>? onIteration = null)
+    {
+        if (simplex.Count < 2)
+        {
+            throw new ArgumentException(
+                "A Nelder-Mead simplex must contain at least two vertices.", nameof(simplex));
+        }
+
+        int n = simplex.Count - 1;
+        if (simplex[0].Length != n || simplex[0].Length == 0)
+        {
+            throw new ArgumentException(
+                $"A simplex with {simplex.Count} vertices must use non-empty vectors of length {n}.",
+                nameof(simplex));
+        }
+        for (int i = 1; i < simplex.Count; i++)
+        {
+            if (simplex[i].Length != n)
+            {
+                throw new ArgumentException(
+                    $"Simplex vertex {i} has length {simplex[i].Length}; expected {n}.",
+                    nameof(simplex));
+            }
+        }
+
+        var values = new List<T>(simplex.Count);
+        var evaluations = new List<TEval>(simplex.Count);
+        for (int i = 0; i < simplex.Count; i++)
+        {
+            var (value, evaluation) = objective(simplex[i]);
+            values.Add(value);
+            evaluations.Add(evaluation);
+        }
+
+        SortSimplex(simplex, values, evaluations);
+        var previousBest = values[0];
+
+        // A non-positive tolerance disables the simplex-spread criterion entirely. Optimize() uses
+        // that to stop on its own fitness-progress and early-stopping rules instead. Without this
+        // guard a zero tolerance still terminates whenever the spread is exactly zero — which it is
+        // when every initial vertex happens to score the same — so the search would return before
+        // recording a single iteration.
+        bool useSpreadTolerance = NumOps.GreaterThan(tolerance, NumOps.Zero);
+
+        for (int iteration = 0; iteration < maxIterations; iteration++)
+        {
+            _iteration++;
+
+            // Converged when every vertex agrees on the objective to within tolerance. The test is
+            // relative to the current best value (with tolerance itself as the additive floor so a
+            // best value of zero still terminates), which makes it scale-invariant: the same
+            // tolerance behaves identically whether objective values are near 1e-6 or near 1e6.
+            if (useSpreadTolerance)
+            {
+                var spread = NumOps.Abs(NumOps.Subtract(values[n], values[0]));
+                var threshold = NumOps.Multiply(tolerance, NumOps.Add(NumOps.Abs(values[0]), tolerance));
+                if (NumOps.LessThanOrEquals(spread, threshold))
+                {
+                    break;
+                }
+            }
+
+            var centroid = CalculateCentroid(simplex, n);
+            var worst = simplex[n];
+
+            // Reflection: xr = centroid + alpha * (centroid - worst)
+            var reflected = Combine(centroid, Subtract(centroid, worst), _alpha);
+            var (reflectedValue, reflectedEvaluation) = objective(reflected);
+
+            if (NumOps.LessThan(reflectedValue, values[0]))
+            {
+                // Reflection produced a new best — try going further in the same direction.
+                // xe = centroid + gamma * (xr - centroid)
+                var expanded = Combine(centroid, Subtract(reflected, centroid), _gamma);
+                var (expandedValue, expandedEvaluation) = objective(expanded);
+
+                bool takeExpanded = NumOps.LessThan(expandedValue, reflectedValue);
+                simplex[n] = takeExpanded ? expanded : reflected;
+                values[n] = takeExpanded ? expandedValue : reflectedValue;
+                evaluations[n] = takeExpanded ? expandedEvaluation : reflectedEvaluation;
+            }
+            else if (NumOps.LessThan(reflectedValue, values[n - 1]))
+            {
+                // Better than the second-worst but not a new best: accept the reflection as-is.
+                simplex[n] = reflected;
+                values[n] = reflectedValue;
+                evaluations[n] = reflectedEvaluation;
+            }
+            else if (NumOps.LessThan(reflectedValue, values[n]))
+            {
+                // Outside contraction: xoc = centroid + beta * (xr - centroid)
+                var contracted = Combine(centroid, Subtract(reflected, centroid), _beta);
+                var (contractedValue, contractedEvaluation) = objective(contracted);
+
+                if (NumOps.LessThanOrEquals(contractedValue, reflectedValue))
+                {
+                    simplex[n] = contracted;
+                    values[n] = contractedValue;
+                    evaluations[n] = contractedEvaluation;
+                }
+                else
+                {
+                    ShrinkSimplex(simplex, values, evaluations, objective);
+                }
+            }
+            else
+            {
+                // Inside contraction: xic = centroid + beta * (worst - centroid)
+                var contracted = Combine(centroid, Subtract(worst, centroid), _beta);
+                var (contractedValue, contractedEvaluation) = objective(contracted);
+
+                if (NumOps.LessThan(contractedValue, values[n]))
+                {
+                    simplex[n] = contracted;
+                    values[n] = contractedValue;
+                    evaluations[n] = contractedEvaluation;
+                }
+                else
+                {
+                    ShrinkSimplex(simplex, values, evaluations, objective);
+                }
+            }
+
+            SortSimplex(simplex, values, evaluations);
+
+            AdaptCoefficients(NumOps.Subtract(previousBest, values[0]));
+            previousBest = values[0];
+
+            if (onIteration is not null && onIteration(iteration, simplex[0], values[0], evaluations[0]))
+            {
+                break;
+            }
+        }
+
+        return simplex[0];
+    }
+
+    /// <summary>
+    /// Sorts the simplex with its cached objective values and payloads together, best (lowest) first.
+    /// </summary>
+    private void SortSimplex<TEval>(List<Vector<T>> simplex, List<T> values, List<TEval> evaluations)
+    {
+        // Insertion sort: the simplex is small (n + 1 vertices) and is already nearly sorted on
+        // every iteration after the first, so this beats allocating a new ordered sequence.
+        for (int i = 1; i < simplex.Count; i++)
+        {
+            var vertex = simplex[i];
+            var value = values[i];
+            var evaluation = evaluations[i];
+            int j = i - 1;
+            while (j >= 0 && NumOps.GreaterThan(values[j], value))
+            {
+                simplex[j + 1] = simplex[j];
+                values[j + 1] = values[j];
+                evaluations[j + 1] = evaluations[j];
+                j--;
+            }
+            simplex[j + 1] = vertex;
+            values[j + 1] = value;
+            evaluations[j + 1] = evaluation;
+        }
+    }
+
+    /// <summary>
+    /// Shrinks every vertex except the best toward the best vertex, re-evaluating each.
+    /// </summary>
+    private void ShrinkSimplex<TEval>(
+        List<Vector<T>> simplex,
+        List<T> values,
+        List<TEval> evaluations,
+        Func<Vector<T>, (T value, TEval evaluation)> objective)
+    {
+        var best = simplex[0];
+        for (int i = 1; i < simplex.Count; i++)
+        {
+            // xi = best + delta * (xi - best)
+            simplex[i] = Combine(best, Subtract(simplex[i], best), _delta);
+            var (value, evaluation) = objective(simplex[i]);
+            values[i] = value;
+            evaluations[i] = evaluation;
+        }
+    }
+
+    /// <summary>
+    /// Computes the centroid of the simplex excluding its worst vertex.
+    /// </summary>
+    /// <param name="simplex">The current simplex, sorted best-first.</param>
+    /// <param name="n">The dimension of the search space (the worst vertex is at index n).</param>
+    private Vector<T> CalculateCentroid(List<Vector<T>> simplex, int n)
+    {
+        var sum = new Vector<T>(simplex[0].Length);
+        for (int i = 0; i < n; i++)
+        {
+            sum = (Vector<T>)Engine.Add(sum, simplex[i]);
+        }
+
+        return (Vector<T>)Engine.Multiply(sum, NumOps.Divide(NumOps.One, NumOps.FromDouble(n)));
+    }
+
+    /// <summary>
+    /// Returns <c>left - right</c> elementwise.
+    /// </summary>
+    private Vector<T> Subtract(Vector<T> left, Vector<T> right)
+    {
+        return (Vector<T>)Engine.Subtract(left, right);
+    }
+
+    /// <summary>
+    /// Returns <c>origin + scale * direction</c> elementwise.
+    /// </summary>
+    private Vector<T> Combine(Vector<T> origin, Vector<T> direction, T scale)
+    {
+        return (Vector<T>)Engine.Add(origin, (Vector<T>)Engine.Multiply(direction, scale));
+    }
+
+    /// <summary>
+    /// Applies the adaptive-coefficient update shared by both search entry points.
+    /// </summary>
+    /// <param name="improvement">
+    /// How much the best objective value improved this iteration (positive means it got better).
+    /// </param>
+    private void AdaptCoefficients(T improvement)
+    {
+        if (!_options.UseAdaptiveParameters)
+        {
+            return;
+        }
+
+        var adaptationRate = NumOps.FromDouble(_options.AdaptationRate);
+
+        _alpha = NumOps.Add(_alpha, NumOps.Multiply(adaptationRate, improvement));
+        _beta = NumOps.Add(_beta, NumOps.Multiply(adaptationRate, improvement));
+        _gamma = NumOps.Add(_gamma, NumOps.Multiply(adaptationRate, improvement));
+        _delta = NumOps.Add(_delta, NumOps.Multiply(adaptationRate, improvement));
+
+        _alpha = MathHelper.Clamp(_alpha, NumOps.FromDouble(_options.MinAlpha), NumOps.FromDouble(_options.MaxAlpha));
+        _beta = MathHelper.Clamp(_beta, NumOps.FromDouble(_options.MinBeta), NumOps.FromDouble(_options.MaxBeta));
+        _gamma = MathHelper.Clamp(_gamma, NumOps.FromDouble(_options.MinGamma), NumOps.FromDouble(_options.MaxGamma));
+        _delta = MathHelper.Clamp(_delta, NumOps.FromDouble(_options.MinDelta), NumOps.FromDouble(_options.MaxDelta));
+    }
+
     /// <summary>
     /// Performs the optimization process using the Nelder-Mead algorithm.
     /// </summary>
@@ -128,59 +535,56 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
-        var n = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
-        var simplex = InitializeSimplex(inputData.XTrain, n);
-        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
-        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
-
         InitializeAdaptiveParameters();
 
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
+        // The simplex lives in parameter space. A template individual supplies the model shape so
+        // any vertex vector can be turned back into a model for evaluation.
+        var template = InterfaceGuard.Parameterizable(SpawnIndividual(inputData.XTrain));
+        var templateParameters = template.GetParameters();
+        int n = templateParameters.Length;
+        if (n == 0)
         {
-            _iteration++;
+            throw new InvalidOperationException(
+                "Nelder-Mead requires a model with at least one optimizable parameter.");
+        }
 
-            // Sort simplex points by fitness
-            simplex = [.. simplex.OrderBy(p => EvaluateSolution(p, inputData).FitnessScore)];
-
-            var centroid = CalculateCentroid(simplex, n);
-            var reflected = Reflect(simplex[n], centroid);
-            var reflectedStepData = EvaluateSolution(reflected, inputData);
-
-            if (NumOps.GreaterThan(reflectedStepData.FitnessScore, EvaluateSolution(simplex[0], inputData).FitnessScore) &&
-                NumOps.LessThan(reflectedStepData.FitnessScore, EvaluateSolution(simplex[n - 1], inputData).FitnessScore))
+        var simplex = new List<Vector<T>>(n + 1) { templateParameters };
+        for (int i = 0; i < n; i++)
+        {
+            var vertex = InterfaceGuard.Parameterizable(SpawnIndividual(inputData.XTrain)).GetParameters();
+            if (vertex.Length != n)
             {
-                simplex[n] = reflected;
+                throw new InvalidOperationException(
+                    $"Spawned Nelder-Mead vertex {i + 1} has {vertex.Length} parameters; expected {n}.");
             }
-            else if (NumOps.GreaterThan(reflectedStepData.FitnessScore, EvaluateSolution(simplex[0], inputData).FitnessScore))
-            {
-                var expanded = Expand(centroid, reflected);
-                var expandedStepData = EvaluateSolution(expanded, inputData);
+            simplex.Add(vertex);
+        }
 
-                simplex[n] = NumOps.GreaterThan(expandedStepData.FitnessScore, reflectedStepData.FitnessScore) ? expanded : reflected;
-            }
-            else
-            {
-                var contracted = Contract(simplex[n], centroid);
-                var contractedStepData = EvaluateSolution(contracted, inputData);
+        // RunSimplexSearch always minimizes, so a higher-is-better fitness score is negated on the
+        // way in. Previously this optimizer compared raw fitness with hardcoded GreaterThan /
+        // LessThan, which assumed a direction the configured IFitnessCalculator does not have to
+        // agree with, and inverted the expansion branch for either direction.
+        bool higherIsBetter = FitnessCalculator.IsHigherScoreBetter;
 
-                if (NumOps.GreaterThan(contractedStepData.FitnessScore, EvaluateSolution(simplex[n], inputData).FitnessScore))
-                {
-                    simplex[n] = contracted;
-                }
-                else
-                {
-                    Shrink(simplex);
-                }
-            }
+        (T value, OptimizationStepData<T, TInput, TOutput> evaluation) Objective(Vector<T> point)
+        {
+            var stepData = EvaluateSolution(template.WithParameters(point), inputData);
+            var value = higherIsBetter ? NumOps.Negate(stepData.FitnessScore) : stepData.FitnessScore;
+            return (value, stepData);
+        }
 
-            var currentStepData = EvaluateSolution(simplex[0], inputData);
+        var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
+        var tolerance = NumOps.FromDouble(_options.Tolerance);
+
+        bool OnIteration(int iteration, Vector<T> best, T bestValue, OptimizationStepData<T, TInput, TOutput> currentStepData)
+        {
             UpdateBestSolution(currentStepData, ref bestStepData);
-
             UpdateAdaptiveParameters(currentStepData, previousStepData);
 
             if (UpdateIterationHistoryAndCheckEarlyStopping(iteration, bestStepData))
             {
-                return CreateOptimizationResult(bestStepData, inputData);
+                return true;
             }
 
             // Check convergence against previousStepData (per-iteration progress),
@@ -189,252 +593,24 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
             // would always be 0 < tolerance and the optimiser would exit after
             // the first iteration. Issue #1340 / PR #1351 fix swept across the
             // optimizer suite.
-            if (iteration > 0 && NumOps.LessThan(NumOps.Abs(NumOps.Subtract(previousStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
+            if (iteration > 0 &&
+                NumOps.LessThan(
+                    NumOps.Abs(NumOps.Subtract(previousStepData.FitnessScore, currentStepData.FitnessScore)),
+                    tolerance))
             {
-                return CreateOptimizationResult(bestStepData, inputData);
+                return true;
             }
 
             previousStepData = currentStepData;
+            return false;
         }
+
+        // The simplex-spread tolerance is disabled here (zero) because this path stops on the
+        // fitness-progress and early-stopping criteria above, which is what the optimizer suite's
+        // iteration-history contract expects.
+        RunSimplexSearch(simplex, Objective, _options.MaxIterations, NumOps.Zero, OnIteration);
 
         return CreateOptimizationResult(bestStepData, inputData);
-    }
-
-    /// <summary>
-    /// Initializes the simplex for the Nelder-Mead algorithm.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method creates the initial set of points (simplex) for the optimization process.
-    /// It generates n+1 random solutions, where n is the number of dimensions.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like choosing the starting positions for your team of explorers on the landscape.
-    /// You're placing them at different random spots to begin their search.
-    /// </para>
-    /// </remarks>
-    /// <param name="n">The number of dimensions (variables) in the optimization problem.</param>
-    /// <returns>A list of initial solutions forming the simplex.</returns>
-    private List<IFullModel<T, TInput, TOutput>> InitializeSimplex(TInput input, int n)
-    {
-        var simplex = new List<IFullModel<T, TInput, TOutput>>();
-        for (int i = 0; i <= n; i++)
-        {
-            simplex.Add(SpawnIndividual(input));
-        }
-
-        return simplex;
-    }
-
-    /// <summary>
-    /// Calculates the centroid of the simplex, excluding the worst point.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method computes the average position of all points in the simplex except the worst one.
-    /// The centroid is used as a reference point for reflection, expansion, and contraction operations.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// Imagine your explorers (except the one at the highest point) all throwing ropes to each other and pulling until they meet at a central point.
-    /// This central point is the centroid, which helps guide the next move.
-    /// </para>
-    /// </remarks>
-    /// <param name="simplex">The current simplex (list of solution points).</param>
-    /// <param name="n">The number of dimensions (variables) in the optimization problem.</param>
-    /// <returns>A symbolic model representing the centroid of the simplex.</returns>
-    private IFullModel<T, TInput, TOutput> CalculateCentroid(List<IFullModel<T, TInput, TOutput>> simplex, int n)
-    {
-        // === Vectorized Centroid Calculation using IEngine (Phase B: US-GPU-015) ===
-        // centroid = sum(simplex points excluding worst) / (simplex.Count - 1)
-
-        var templateModel = simplex[0];
-        var templateParams = InterfaceGuard.Parameterizable(templateModel).GetParameters();
-        var centroidCoefficients = new Vector<T>(templateParams.Length);
-
-        // Sum all parameters vectorized (exclude worst point: last simplex entry)
-        int pointCount = simplex.Count - 1;
-        for (int i = 0; i < pointCount; i++)
-        {
-            centroidCoefficients = (Vector<T>)Engine.Add(centroidCoefficients, InterfaceGuard.Parameterizable(simplex[i]).GetParameters());
-        }
-
-        // Vectorized division by number of points to get the average
-        var pointCountScalar = NumOps.FromDouble(pointCount);
-        centroidCoefficients = (Vector<T>)Engine.Divide(centroidCoefficients, pointCountScalar);
-
-        // Create a new model with the centroid parameters using WithParameters
-        return InterfaceGuard.Parameterizable(templateModel).WithParameters(centroidCoefficients);
-    }
-
-    /// <summary>
-    /// Performs the reflection operation in the Nelder-Mead algorithm.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method reflects the worst point through the centroid of the remaining points.
-    /// It's used to move away from the worst solution in the simplex.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// Imagine the worst explorer jumping over the center point, landing on the opposite side.
-    /// This helps the team move away from bad areas.
-    /// </para>
-    /// </remarks>
-    /// <param name="worst">The worst point in the simplex.</param>
-    /// <param name="centroid">The centroid of the simplex (excluding the worst point).</param>
-    /// <returns>A new point that is the reflection of the worst point through the centroid.</returns>
-    private IFullModel<T, TInput, TOutput> Reflect(IFullModel<T, TInput, TOutput> worst, IFullModel<T, TInput, TOutput> centroid)
-    {
-        // Vectorized: result = centroid + alpha * (centroid - worst)
-        var centroidParams = InterfaceGuard.Parameterizable(centroid).GetParameters();
-        var worstParams = InterfaceGuard.Parameterizable(worst).GetParameters();
-        var alphaVec = Engine.Fill<T>(centroidParams.Length, _alpha);
-
-        var diff = (Vector<T>)Engine.Subtract(centroidParams, worstParams);
-        var scaled = (Vector<T>)Engine.Multiply(diff, alphaVec);
-        var result = (Vector<T>)Engine.Add(centroidParams, scaled);
-
-        return InterfaceGuard.Parameterizable(centroid).WithParameters(result);
-    }
-
-    /// <summary>
-    /// Performs the expansion operation in the Nelder-Mead algorithm.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method expands the reflected point further away from the centroid.
-    /// It's used when the reflected point is the best so far, to explore even further in that direction.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// If the reflected explorer found a good spot, this is like telling them to keep going even further in that direction.
-    /// </para>
-    /// </remarks>
-    /// <param name="centroid">The centroid of the simplex.</param>
-    /// <param name="reflected">The reflected point.</param>
-    /// <returns>A new point that is an expansion of the reflected point away from the centroid.</returns>
-    private IFullModel<T, TInput, TOutput> Expand(IFullModel<T, TInput, TOutput> centroid, IFullModel<T, TInput, TOutput> reflected)
-    {
-        return PerformVectorOperation(centroid, reflected, _gamma, (a, b, c) => NumOps.Add(a, NumOps.Multiply(c, NumOps.Subtract(b, a))));
-    }
-
-    /// <summary>
-    /// Performs the contraction operation in the Nelder-Mead algorithm.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method contracts the worst point towards the centroid.
-    /// It's used when the reflected point isn't better than the second worst point.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// If the reflected explorer didn't find a good spot, this is like calling them back halfway towards the group.
-    /// </para>
-    /// </remarks>
-    /// <param name="worst">The worst point in the simplex.</param>
-    /// <param name="centroid">The centroid of the simplex.</param>
-    /// <returns>A new point that is a contraction of the worst point towards the centroid.</returns>
-    private IFullModel<T, TInput, TOutput> Contract(IFullModel<T, TInput, TOutput> worst, IFullModel<T, TInput, TOutput> centroid)
-    {
-        // Vectorized: result = centroid + beta * (worst - centroid)
-        var centroidParams = InterfaceGuard.Parameterizable(centroid).GetParameters();
-        var worstParams = InterfaceGuard.Parameterizable(worst).GetParameters();
-        var betaVec = Engine.Fill<T>(centroidParams.Length, _beta);
-
-        var diff = (Vector<T>)Engine.Subtract(worstParams, centroidParams);
-        var scaled = (Vector<T>)Engine.Multiply(diff, betaVec);
-        var result = (Vector<T>)Engine.Add(centroidParams, scaled);
-
-        return InterfaceGuard.Parameterizable(centroid).WithParameters(result);
-    }
-
-    /// <summary>
-    /// Performs the shrink operation in the Nelder-Mead algorithm.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method shrinks all points (except the best) towards the best point.
-    /// It's used when contraction fails to produce a better point.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// If none of the other moves worked well, this is like telling all explorers (except the best one) to move halfway towards the best explorer's position.
-    /// </para>
-    /// </remarks>
-    /// <param name="simplex">The current simplex (list of solution points).</param>
-    private void Shrink(List<IFullModel<T, TInput, TOutput>> simplex)
-    {
-        var best = simplex[0];
-        var bestParams = InterfaceGuard.Parameterizable(best).GetParameters();
-        var deltaVec = Engine.Fill<T>(bestParams.Length, _delta);
-
-        for (int i = 1; i < simplex.Count; i++)
-        {
-            // Vectorized: result = best + delta * (simplex[i] - best)
-            var currentParams = InterfaceGuard.Parameterizable(simplex[i]).GetParameters();
-            var diff = (Vector<T>)Engine.Subtract(currentParams, bestParams);
-            var scaled = (Vector<T>)Engine.Multiply(diff, deltaVec);
-            var result = (Vector<T>)Engine.Add(bestParams, scaled);
-
-            simplex[i] = InterfaceGuard.Parameterizable(best).WithParameters(result);
-        }
-    }
-
-    /// <summary>
-    /// Performs a vector operation on two symbolic models.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method applies a specified operation to each corresponding pair of coefficients in two symbolic models.
-    /// It's used as a helper method for reflection, expansion, contraction, and shrinkage operations.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like having a rule for how to combine the positions of two explorers to find a new position.
-    /// </para>
-    /// </remarks>
-    /// <param name="a">The first symbolic model.</param>
-    /// <param name="b">The second symbolic model.</param>
-    /// <param name="factor">A factor used in the operation.</param>
-    /// <param name="operation">The operation to perform on each pair of coefficients.</param>
-    /// <returns>A new symbolic model resulting from the vector operation.</returns>
-    private IFullModel<T, TInput, TOutput> PerformVectorOperation(IFullModel<T, TInput, TOutput> a, IFullModel<T, TInput, TOutput> b, T factor, Func<T, T, T, T> operation)
-    {
-        // === Vectorized Vector Operation using IEngine (Phase B: US-GPU-015) ===
-        // Most Nelder-Mead operations follow pattern: a + factor * (a - b) or a + factor * (b - a)
-        // Vectorizing the common pattern while keeping backward compatibility
-
-        var parametersA = InterfaceGuard.Parameterizable(a).GetParameters();
-        var parametersB = InterfaceGuard.Parameterizable(b).GetParameters();
-
-        // Check if this is the common pattern: a + factor * (a - b)
-        // Validate across the whole vector to avoid degenerate mis-detections
-        bool matchesPattern1 = parametersA.Length > 0;
-        for (int i = 0; i < parametersA.Length && matchesPattern1; i++)
-        {
-            var testResult = operation(parametersA[i], parametersB[i], factor);
-            var expectedPattern1 = NumOps.Add(
-                parametersA[i],
-                NumOps.Multiply(factor, NumOps.Subtract(parametersA[i], parametersB[i])));
-
-            if (!NumOps.Equals(testResult, expectedPattern1))
-            {
-                matchesPattern1 = false;
-            }
-        }
-
-        if (matchesPattern1)
-        {
-            // Vectorized: result = a + factor * (a - b)
-            var diff = (Vector<T>)Engine.Subtract(parametersA, parametersB);
-            var scaled = (Vector<T>)Engine.Multiply(diff, factor);
-            var newCoefficients = (Vector<T>)Engine.Add(parametersA, scaled);
-            return InterfaceGuard.Parameterizable(a).WithParameters(newCoefficients);
-        }
-
-        // Fall back to element-wise for custom operations
-        var result = new Vector<T>(parametersA.Length);
-        for (int i = 0; i < parametersA.Length; i++)
-        {
-            result[i] = operation(parametersA[i], parametersB[i], factor);
-        }
-
-        return InterfaceGuard.Parameterizable(a).WithParameters(result);
     }
 
     /// <summary>
@@ -453,23 +629,12 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// <param name="previousStepData">The previous optimization step data.</param>
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
+        // The Nelder-Mead coefficients themselves are adapted once per simplex iteration inside
+        // RunSimplexSearch (see AdaptCoefficients), which is the single implementation shared by
+        // Optimize and Minimize. Adapting them again here would apply the update twice per
+        // iteration on the model path. This override remains so the base class's own adaptive
+        // state (learning rate, momentum schedule) still advances.
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
-
-        if (_options.UseAdaptiveParameters)
-        {
-            var improvement = NumOps.Subtract(currentStepData.FitnessScore, previousStepData.FitnessScore);
-            var adaptationRate = NumOps.FromDouble(_options.AdaptationRate);
-
-            _alpha = NumOps.Add(_alpha, NumOps.Multiply(adaptationRate, improvement));
-            _beta = NumOps.Add(_beta, NumOps.Multiply(adaptationRate, improvement));
-            _gamma = NumOps.Add(_gamma, NumOps.Multiply(adaptationRate, improvement));
-            _delta = NumOps.Add(_delta, NumOps.Multiply(adaptationRate, improvement));
-
-            _alpha = MathHelper.Clamp(_alpha, NumOps.FromDouble(_options.MinAlpha), NumOps.FromDouble(_options.MaxAlpha));
-            _beta = MathHelper.Clamp(_beta, NumOps.FromDouble(_options.MinBeta), NumOps.FromDouble(_options.MaxBeta));
-            _gamma = MathHelper.Clamp(_gamma, NumOps.FromDouble(_options.MinGamma), NumOps.FromDouble(_options.MaxGamma));
-            _delta = MathHelper.Clamp(_delta, NumOps.FromDouble(_options.MinDelta), NumOps.FromDouble(_options.MaxDelta));
-        }
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -1484,6 +1484,17 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
                 || _biasReshaped4D is null
                 || _biasReshaped4DVersion != _biases.Version)
             {
+                // Reshape returns a VIEW over the bias's storage, and a streaming-allocated
+                // weight has none until it is paged in: the tensor carries its shape while its
+                // backing store is empty, so the view constructor throws "View exceeds storage
+                // bounds: index range [0, 7] outside storage [0, -1]". The kernel above does not hit
+                // this because Engine.Conv2D is a compute op and materializes what it reads; a view
+                // op does not. Page the bias in first.
+                if (_biases.Lifetime == WeightLifetime.Streaming)
+                {
+                    WeightRegistry.Materialize(_biases);
+                }
+
                 _biasReshaped4D = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
                 _biasReshaped4DSource = _biases;
                 _biasReshaped4DVersion = _biases.Version;

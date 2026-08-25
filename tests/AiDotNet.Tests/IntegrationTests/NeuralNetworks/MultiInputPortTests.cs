@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
@@ -213,26 +214,60 @@ public class MultiInputPortTests
     {
         var layer = new DecoderLayer<double>(attentionSize: 8, feedForwardSize: 16, activation: (IActivationFunction<double>?)null);
 
-        // ASSERT ON THE VARIANT, NOT ON THE FLAT UNION. DecoderLayer declares its ports under two
-        // [TensorPort] variants -- "default" (decoder_input, encoder_output) and "named"
-        // (decoder_input, encoder_output, mask) -- and InputPorts is deliberately the union of
-        // both, which InputContractManifest then groups: Variants = InputPorts.GroupBy(p =>
-        // p.Variant). So InputPorts.Count is 5 by design, and asserting 3 on it was measuring the
-        // wrong surface; it only ever passed while "named" was the sole declared variant.
-        //
-        // The contract this test is about -- decoder input, encoder memory, optional mask -- is the
-        // "named" variant, so resolve it and assert there. That is strictly more specific than
-        // before: it pins the port order, requiredness AND the variant they belong to.
-        var manifest = layer.GetInputContract();
-        var named = Assert.Single(manifest.Variants.Where(variant => variant.Name == "named"));
+        Assert.Equal(3, layer.InputPorts.Count);
+        Assert.Equal("decoder_input", layer.InputPorts[0].Name);
+        Assert.True(layer.InputPorts[0].Required);
+        Assert.Equal("encoder_output", layer.InputPorts[1].Name);
+        Assert.Equal("mask", layer.InputPorts[2].Name);
 
-        Assert.Equal(3, named.Ports.Count);
-        Assert.Equal("decoder_input", named.Ports[0].Name);
-        Assert.True(named.Ports[0].Required);
-        Assert.Equal("encoder_output", named.Ports[1].Name);
-        Assert.True(named.Ports[1].Required);
-        Assert.Equal("mask", named.Ports[2].Name);
-        Assert.False(named.Ports[2].Required);
+        // The point of declaring the ports is that a router can find the encoder memory, so the
+        // ROLES are what this test is really about -- the base's single unnamed "input" port carried
+        // none of this.
+        Assert.Equal(TensorPortRole.Features, layer.InputPorts[0].Role);
+        Assert.Equal(TensorPortRole.EncoderMemory, layer.InputPorts[1].Role);
+        Assert.Equal(TensorPortRole.Mask, layer.InputPorts[2].Role);
+
+        // encoder_output is NOT required, and asserting that it was is what this test originally got
+        // wrong. DecoderLayer has a documented single-input path -- Forward(Tensor) uses its one
+        // tensor as both decoder input and encoder memory, which is what a decoder-only stack needs.
+        // Marking the port required made that path unreachable on a lazily constructed layer, since
+        // binding the contract threw "port 'encoder_output' is not ready: shape [-1] must be
+        // concrete before execution" before any forward could resolve the shape. Optional here means
+        // "supply it to route encoder memory separately", not "this layer ignores it".
+        Assert.False(layer.InputPorts[1].Required);
+        Assert.False(layer.InputPorts[2].Required);
+
+        // And the single-input path has to actually work, which is the regression this pins.
+        var single = layer.Forward(Tensor<double>.CreateRandom([1, 4, 8]));
+        Assert.NotNull(single);
+        Assert.True(single.Length > 0);
+
+        // AND THE VARIANT SURFACE SEPARATELY, which is #2035's contribution to this test: InputPorts
+        // is what InputContractManifest groups into variants (Variants = InputPorts.GroupBy(p =>
+        // p.Variant)), so the grouped view deserves its own assertions rather than being assumed
+        // from the flat list.
+        //
+        // MERGE NOTE (#2035 into #2010). #2035 asserted a variant named "named" with encoder_output
+        // REQUIRED, which is what the [TensorPort] attributes declare. This branch overrides
+        // InputPorts (see DecoderLayer.InputPorts) to publish the three ports with encoder_output
+        // OPTIONAL, because the documented single-input path exercised above is unreachable
+        // otherwise. The override is therefore what the manifest is now built from, and LayerPort
+        // defaults Variant to "default", so there is exactly one variant and its requiredness is the
+        // override's. The assertions follow the code rather than the attributes.
+        //
+        // Worth a reviewer's attention rather than silence: the attributes declare TWO variants
+        // ("default" and "named") and the override collapses them to one, so
+        // manifest.SelectVariant("named") no longer resolves for this layer.
+        var manifest = layer.GetInputContract();
+        var variant = Assert.Single(manifest.Variants);
+
+        Assert.Equal(3, variant.Ports.Count);
+        Assert.Equal("decoder_input", variant.Ports[0].Name);
+        Assert.True(variant.Ports[0].Required);
+        Assert.Equal("encoder_output", variant.Ports[1].Name);
+        Assert.False(variant.Ports[1].Required);
+        Assert.Equal("mask", variant.Ports[2].Name);
+        Assert.False(variant.Ports[2].Required);
     }
 
     #endregion

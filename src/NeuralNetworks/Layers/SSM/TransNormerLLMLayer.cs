@@ -87,13 +87,17 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _valueWeights;
 
     // RMSNorm parameters for Q and K: [numHeads, headDim]
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
     private Tensor<T> _queryNormScale;
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
     private Tensor<T> _keyNormScale;
 
     // Per-head decay parameters (gammas): [numHeads]
+    [TrainableParameter(Role = PersistentTensorRole.ScaleParameters)]
     private Tensor<T> _gammas;
 
     // Output RMSNorm: [numHeads, headDim]
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
     private Tensor<T> _outputNormScale;
 
     // Output gate: [modelDim, modelDim]

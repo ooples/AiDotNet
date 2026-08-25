@@ -258,27 +258,6 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
         _ffnDropout?.SetTrainingMode(isTraining);
     }
 
-    /// <summary>
-    /// Runs a dummy forward at the known hidden size to force the lazy Dense FFN
-    /// sublayers to allocate their weights, so <see cref="ParameterCount"/> reflects
-    /// the full block. Used by <see cref="SetParameters"/> during deserialization.
-    /// </summary>
-    private void MaterializeLazySublayers()
-    {
-        bool wasTraining = IsTrainingMode;
-        SetTrainingMode(false);
-        try
-        {
-            var dummy = new Tensor<T>(new[] { 1, 2, _hiddenSize });
-            _ = Forward(dummy);
-            ResetState();
-        }
-        finally
-        {
-            SetTrainingMode(wasTraining);
-        }
-    }
-
     private static void SetSubParams(LayerBase<T> layer, Vector<T> source, ref int offset)
     {
         int count = (int)layer.ParameterCount;

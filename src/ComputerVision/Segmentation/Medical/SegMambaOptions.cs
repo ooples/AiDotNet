@@ -26,7 +26,26 @@ public class SegMambaOptions : NeuralNetworkOptions
         ChannelDimensions = other.ChannelDimensions.ToArray();
         StageDepths = other.StageDepths.ToArray();
         StateDimension = other.StateDimension;
+        InputChannels = other.InputChannels;
     }
+
+    /// <summary>
+    /// Gets or sets how many channels each input volume carries. Default is 1.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A three-dimensional architecture describes its input as <c>[InputDepth, InputHeight,
+    /// InputWidth]</c> — three SPATIAL axes and no channel axis at all — so the channel count of a
+    /// volume cannot be read off it. One is the right default for the medical scans SegMamba targets:
+    /// CT and single-sequence MRI are single-channel. Raise it for multi-modal input, such as the four
+    /// co-registered MRI sequences of the BraTS benchmark the paper evaluates on.
+    /// </para>
+    /// <para><b>For Beginners:</b> A colour photo has three channels — red, green and blue — stacked
+    /// at every pixel. A CT scan has one number per voxel, so one channel. This is that count, and it
+    /// is separate from the DEPTH of the volume, which is how many slices the scan contains.
+    /// </para>
+    /// </remarks>
+    public int InputChannels { get; set; } = 1;
 
     /// <summary>
     /// Gets or sets the feature width of each encoder stage.

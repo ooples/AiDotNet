@@ -31,6 +31,19 @@ namespace AiDotNet.Interfaces;
 public interface IModelCache<T, TInput, TOutput>
 {
     /// <summary>
+    /// Creates an empty cache with the same configuration as this instance.
+    /// </summary>
+    /// <returns>
+    /// A distinct cache instance that preserves configuration but shares no mutable cached entries.
+    /// </returns>
+    /// <remarks>
+    /// Option and optimizer copies call this method so their training runs cannot read, overwrite, or
+    /// clear one another's cached state. Custom caches retain full control over which immutable
+    /// configuration is carried into the new instance.
+    /// </remarks>
+    IModelCache<T, TInput, TOutput> CreateEmptyCopy();
+
+    /// <summary>
     /// Retrieves previously cached optimization step data associated with the specified key.
     /// </summary>
     /// <remarks>

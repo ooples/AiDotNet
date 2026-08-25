@@ -143,6 +143,15 @@ public sealed class MbPAEpisodicMemory<T>
             }
         }
 
+        // The selection heap is a MAX-heap, so kept[0] is the FARTHEST of the k nearest and the
+        // rest are in heap order, not sorted. Emitting it as-is returned neighbours worst-first:
+        // with squared distances of 1 and 3 the caller got weights 0.25, 0.75 instead of
+        // 0.75, 0.25, and "the k nearest" arrived in the opposite order to its name.
+        //
+        // The kernel weights are computed per entry, so the SET of weights was right and only the
+        // pairing with keys was wrong — which is why this survived: every weight still summed to 1.
+        kept.Sort(static (left, right) => left.DistanceSquared.CompareTo(right.DistanceSquared));
+
         for (int i = 0; i < take; i++) distances[i] = kept[i];
 
         var kernels = new double[take];

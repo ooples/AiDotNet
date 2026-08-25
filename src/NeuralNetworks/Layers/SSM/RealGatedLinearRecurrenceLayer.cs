@@ -149,6 +149,18 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeCon
     public override bool SupportsTraining => true;
 
     /// <summary>
+    /// Every weight is sized from constructor arguments, so the parameter surface is known before
+    /// the first forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <c>GetParameters()</c> already returns 5,280 values for <c>RealGatedLinearRecurrenceLayer<float>(4, 32)</c>. Without this,
+    /// <c>IsShapeResolved</c> stays false and <see cref="LayerBase{T}.SetParameters"/> treats the
+    /// layer as shape-DEFERRED, parking a wrong-length vector as a pending restore instead of
+    /// rejecting it -- so mismatched weights fail silently and surface later somewhere unrelated.
+    /// </remarks>
+    protected override bool ParametersAreConstructionSized => true;
+
+    /// <summary>
     /// Gets the model dimension (input/output width).
     /// </summary>
     public int ModelDimension => _modelDimension;

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
@@ -79,6 +80,16 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
                 for (int i = 0; i < Coefficients.Length; i++) Coefficients[i] = value[i];
             }));
     }
+    /// <summary>
+    /// Relative singular-value tolerance used by the rank-revealing SVD fallback.
+    /// </summary>
+    /// <remarks>
+    /// The fixed multiplier is a deliberate double-precision policy: combined with
+    /// <c>max(rows, columns) * sigmaMax</c>, it rejects numerically meaningless singular directions
+    /// while preserving useful rank for the small and moderately conditioned systems targeted here.
+    /// </remarks>
+    private const double PseudoInverseTolerance = 1e-12;
+
     /// <summary>
     /// Gets the vector of coefficients used by the model.
     /// </summary>
@@ -460,16 +471,20 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             Matrix<T> XTranspose = X.Transpose();
             Matrix<T> XTX = XTranspose * X;
 
-            // Check if XTX is singular (not invertible)
-            if (!XTX.IsInvertible())
+            // Normal equations are fast for a full-rank system. When rank deficient, use a
+            // scale-aware truncated SVD of X itself. Unlike an absolute ridge on X^T·X, this is
+            // invariant to feature scale and returns the actual Moore-Penrose minimum-norm fit.
+            Vector<T> newCoefficients;
+            if (XTX.IsInvertible())
             {
-                throw new InvalidOperationException("The matrix X^T * X is not invertible. " +
-                    "This can happen when features are linearly dependent or when there are more features than data points.");
+                Matrix<T> XTXInverse = XTX.Inverse();
+                Matrix<T> XTY = XTranspose * Matrix<T>.FromVector(y);
+                newCoefficients = (XTXInverse * XTY).GetColumn(0);
             }
-
-            Matrix<T> XTXInverse = XTX.Inverse();
-            Matrix<T> XTY = XTranspose * Matrix<T>.FromVector(y);
-            Vector<T> newCoefficients = (XTXInverse * XTY).GetColumn(0);
+            else
+            {
+                newCoefficients = SolveMinimumNorm(X, y);
+            }
 
             // Update the coefficients
             for (int i = 0; i < FeatureCount; i++)
@@ -484,6 +499,36 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
         {
             throw new InvalidOperationException("Failed to train the model using linear regression. Consider adding regularization or using a different training method.", ex);
         }
+    }
+
+    private Vector<T> SolveMinimumNorm(Matrix<T> matrix, Vector<T> target)
+    {
+        var svd = new SvdDecomposition<T>(matrix);
+        T sigmaMax = NumOps.Zero;
+        for (int i = 0; i < svd.S.Length; i++)
+        {
+            if (NumOps.GreaterThan(svd.S[i], sigmaMax))
+            {
+                sigmaMax = svd.S[i];
+            }
+        }
+
+        T tolerance = NumOps.Multiply(
+            NumOps.FromDouble(Math.Max(matrix.Rows, matrix.Columns) * PseudoInverseTolerance),
+            sigmaMax);
+        var solution = new Vector<T>(matrix.Columns);
+        for (int i = 0; i < svd.S.Length; i++)
+        {
+            if (!NumOps.GreaterThan(svd.S[i], tolerance))
+            {
+                continue;
+            }
+
+            T component = NumOps.Divide(svd.U.GetColumn(i).DotProduct(target), svd.S[i]);
+            solution = solution.Add(svd.Vt.GetRow(i).Multiply(component));
+        }
+
+        return solution;
     }
 
     /// <summary>

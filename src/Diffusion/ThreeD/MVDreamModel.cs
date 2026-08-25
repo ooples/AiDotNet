@@ -1304,13 +1304,34 @@ public class MultiViewUNet<T> : IParameterSource<T>
         var clonedAttention = new MultiViewAttention<T>(channels: _baseChannels * 4, numViews: _numViews);
         clonedAttention.SetParameters(_mvAttention.GetParameters());
 
+        var clonedBaseUNet = (UNetNoisePredictor<T>)_baseUNet.Clone();
+
+        // The attention block above is copied by value; the base U-Net must be too. Its own Clone
+        // deliberately leaves an UNMATERIALIZED predictor lazy, which is right for the paper-scale
+        // models that share that method and is not sufficient here: two lazy predictors each draw
+        // their own weights the first time they are read, so the "clone" silently becomes a
+        // different model. Measured on MultiViewUNet(baseChannels: 4), both sides report 96,140
+        // parameters and 93,040 of them differ, starting at index 0.
+        //
+        // Confined to this type ON PURPOSE. Making UNetNoisePredictor.Clone resolve instead fixes
+        // this and breaks four other tests, because they clone a predictor that must stay lazy:
+        // StableDiffusion15Model_Clone_PreservesLazyParameterCount times out at 120 s and
+        // DDPMModelTests.Clone_ReturnsNewInstance throws OutOfMemoryException out of Vector<T>'s
+        // constructor. Nothing but MVDream builds a MultiViewUNet, so scoping the copy here leaves
+        // those models exactly as they were.
+        //
+        // Chunks rather than the flat GetParameters/SetParameters pair: MVDream's real geometry is
+        // baseChannels 320, and the chunk stream is the path built to move that much weight without
+        // allocating a second copy of the whole surface.
+        clonedBaseUNet.SetParameterChunks(_baseUNet.GetParameterChunks());
+
         return new MultiViewUNet<T>(
             _inputChannels,
             _outputChannels,
             _baseChannels,
             _numViews,
             _contextDim,
-            (UNetNoisePredictor<T>)_baseUNet.Clone(),
+            clonedBaseUNet,
             clonedAttention);
     }
 
