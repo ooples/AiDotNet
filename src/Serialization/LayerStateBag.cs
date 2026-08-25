@@ -797,6 +797,24 @@ public readonly struct LayerStateBag
     // a constructor is handed a plausible wrong argument. They are used by the out-of-assembly
     // factory registry, where the constructor cannot be named at compile time.
 
+    /// <summary>Reads a value that carries its own state via <see cref="ILayerStatePersistable"/>.</summary>
+    /// <typeparam name="TState">The implementing type; needs a public parameterless constructor.</typeparam>
+    /// <param name="key">The metadata key.</param>
+    /// <remarks>
+    /// The generic escape hatch: a type that implements the contract round-trips with no generator
+    /// change, which is the point -- every other value kind here had to be taught individually.
+    /// </remarks>
+    public TState PersistableState<TState>(string key)
+        where TState : ILayerStatePersistable, new()
+    {
+        if (!TryRaw(key, out var v)) throw Missing(key, typeof(TState).Name);
+        if (v is TState already) return already;
+
+        var state = new TState();
+        state.LoadState(AsText(v));
+        return state;
+    }
+
     /// <summary>Reads a required double array, stored comma-separated.</summary>
     /// <param name="key">The metadata key.</param>
     /// <returns>The stored value.</returns>

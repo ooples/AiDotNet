@@ -395,6 +395,14 @@ public class LayerStateGenerator : IIncrementalGenerator
                 info.BackingMember = FindBackingMember(
                     type, p, ctx.SemanticModel, syntax,
                     out var needsConvert, out var memberIsNullable);
+                info.OwnerName = ctor.ContainingType.Name;
+                if (p.Type is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1 } exprType
+                    && exprType.ConstructedFrom.ToDisplayString(UnqualifiedGenerics)
+                        == "System.Linq.Expressions.Expression")
+                {
+                    info.DelegateFqn = exprType.TypeArguments[0]
+                        .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                }
                 info.NeedsConvert = needsConvert;
                 info.IsNullable = IsNullableType(p.Type);
                 info.BackingMemberIsNullable = memberIsNullable;
@@ -412,6 +420,7 @@ public class LayerStateGenerator : IIncrementalGenerator
                 info.IsActivation = true;
                 info.IsVectorActivation = vector;
                 info.NumericTypeName = NumericTypeNameOf(ctor.ContainingType);
+                info.OwnerName = ctor.ContainingType.Name;
                 if (p.IsOptional) info.DefaultExpression = RenderDefault(p);
 
                 // Prefer the constructor argument's own stored member when one exists. Composite
@@ -518,6 +527,23 @@ public class LayerStateGenerator : IIncrementalGenerator
         // be cloned recursively (not returned as aliases), while delegates are immutable callable
         // construction state. Classify these before the general interface component case so an
         // ILayer<T> parameter cannot quietly reuse the source child.
+        // An expression TREE is the function as data, and AiDotNet.Serialization.ExpressionState
+        // already saves and loads one against a host-approved method allowlist, rejecting anything
+        // else BEFORE Compile() is called. It was written for exactly this and wired to nothing:
+        // LambdaLayer stores Expression<Func<Tensor<T>,Tensor<T>>> deliberately ("the tree is what
+        // lets a closure survive a save without naming a method") and still got no clone factory.
+        if (type is INamedTypeSymbol { IsGenericType: true } expr
+            && expr.ConstructedFrom.ToDisplayString(UnqualifiedGenerics)
+                == "System.Linq.Expressions.Expression")
+        {
+            return ValueKind.Expression;
+        }
+
+        // THE EXTENSION POINT. Asked before the built-in kinds so a type can override how it is
+        // carried, and asked as ONE question so a novel state type needs no generator change at
+        // all -- which is the whole reason it exists.
+        if (ImplementsPersistableState(type)) return ValueKind.PersistableState;
+
         if (IsCloneObject(type)) return ValueKind.CloneObject;
 
         // A pluggable strategy: record which implementation was used and rebuild that one.
@@ -633,6 +659,12 @@ public class LayerStateGenerator : IIncrementalGenerator
 
         return element is not null && IsCloneObject(element);
     }
+
+    /// <summary>Whether the type opts into ILayerStatePersistable.</summary>
+    private static bool ImplementsPersistableState(ITypeSymbol type)
+        => type is INamedTypeSymbol named
+            && named.AllInterfaces.Any(i => i.ToDisplayString(UnqualifiedGenerics)
+                == "AiDotNet.Serialization.ILayerStatePersistable");
 
     private static bool IsCloneObject(ITypeSymbol type)
     {
@@ -1098,6 +1130,19 @@ public class LayerStateGenerator : IIncrementalGenerator
                 continue;
             }
 
+            if (p.Kind == ValueKind.PersistableState)
+            {
+                sb.AppendLine($"        if (this.{p.BackingMember} is not null)");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            __metadata[\"{p.Key}\"] = this.{p.BackingMember}.SaveState();");
+                sb.AppendLine("        }");
+                continue;
+            }
+            if (p.Kind == ValueKind.Expression)
+            {
+                sb.AppendLine($"        __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.ExpressionState.Save(this.{p.BackingMember});");
+                continue;
+            }
             if (p.Kind == ValueKind.EnumArray)
             {
                 sb.AppendLine($"        __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.FormatEnumArray(this.{p.BackingMember});");
@@ -1364,6 +1409,11 @@ public class LayerStateGenerator : IIncrementalGenerator
             (ValueKind.Boolean, true) => $"state.NullableBoolean(\"{p.Key}\")",
             (ValueKind.String, false) => $"state.String(\"{p.Key}\")",
             (ValueKind.String, true) => $"state.NullableString(\"{p.Key}\")",
+            (ValueKind.PersistableState, _) =>
+                $"state.PersistableState<{p.TypeFqn.TrimEnd('?')}>(\"{p.Key}\")",
+            (ValueKind.Expression, _) =>
+                $"global::AiDotNet.Serialization.ExpressionState.Load<{p.DelegateFqn}>("
+                    + $"state.String(\"{p.Key}\"), \"{p.OwnerName}\", \"{p.Key}\")",
             (ValueKind.BooleanArray, _) => $"state.BooleanArray(\"{p.Key}\")",
             (ValueKind.StringArray, _) => $"state.StringArray(\"{p.Key}\")",
             (ValueKind.DoubleArray, false) => $"state.DoubleArray(\"{p.Key}\")",
@@ -1432,6 +1482,8 @@ public class LayerStateGenerator : IIncrementalGenerator
         DoubleArray,
         BooleanArray,
         StringArray,
+        Expression,
+        PersistableState,
         Int32Jagged,
         EnumArray,
         Component,
@@ -1581,6 +1633,10 @@ public class LayerStateGenerator : IIncrementalGenerator
         // QuantizedDenseLayer : LayerBase<float> has no T, so emitting
         // IVectorActivationFunction<T> for it produced generated code that would not compile.
         public string NumericTypeName = "T";
+        // For ValueKind.Expression: the TDelegate of Expression<TDelegate>, and the owning layer
+        // name that ExpressionState.Load reports in its rejection message.
+        public string DelegateFqn = string.Empty;
+        public string OwnerName = string.Empty;
         /// <summary>Whether this activation has an exact constructor-argument backing member.</summary>
         public bool UseBackedActivation;
         /// <summary>Zero-based position among scalar or vector activation constructor slots.</summary>
