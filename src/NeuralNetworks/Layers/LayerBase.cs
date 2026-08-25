@@ -7235,7 +7235,29 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// <summary>Distributes a validated vector through the ordered component manifest.</summary>
     private void ApplyConcreteParameterVector(Vector<T> parameters)
     {
-        int index = 0;
+        int index = ApplyParametersFrom(parameters, 0);
+
+        if (index != parameters.Length)
+            throw new InvalidOperationException(
+                $"{GetType().Name} consumed {index} of {parameters.Length} parameter values.");
+    }
+
+    /// <summary>Writes a slice of <paramref name="source"/> into this layer and its children.</summary>
+    /// <param name="source">The full parameter vector being applied.</param>
+    /// <param name="offset">Where this layer's values begin.</param>
+    /// <returns>The offset just past the values this layer consumed.</returns>
+    /// <remarks>
+    /// The mirror of <see cref="FillParameters"/>, and added for the same reason. The write path
+    /// used to materialise a Vector slice for every child and hand it to that child's
+    /// SetParameters, which materialised slices for ITS children in turn -- re-copying every
+    /// scalar once per level of nesting, exactly the shape FillParameters documents having been
+    /// rewritten to avoid on the read side. Measured on VAEDecoder (31.5M parameters, 240 MB per
+    /// vector): SetParameters allocated 648 MB, 2.7x its payload, and cloning the layer ran the
+    /// contract sweep out of memory. Recursing over the shared source with an offset copies each
+    /// scalar once.
+    /// </remarks>
+    private int ApplyParametersFrom(Vector<T> source, int offset)
+    {
         var components = GetOrderedParameterComponents();
         for (int componentIndex = 0; componentIndex < components.Length; componentIndex++)
         {
@@ -7243,7 +7265,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             if (component.Kind == DeclaredParameterComponentKind.Legacy)
             {
                 var own = new Vector<T>(Parameters.Length);
-                for (int j = 0; j < own.Length; j++) own[j] = parameters[index++];
+                for (int j = 0; j < own.Length; j++) own[j] = source[offset++];
                 Parameters = own;
                 continue;
             }
@@ -7253,26 +7275,32 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             {
                 int count = ParameterComponentScalarCount(component);
                 for (int j = 0; j < count; j++)
-                    WriteParameterComponentScalar(component, j, parameters[index++]);
+                    WriteParameterComponentScalar(component, j, source[offset++]);
                 continue;
             }
 
             var subLayer = component.Layer;
             if (subLayer is null || IsSubLayerParameterFrozen(subLayer)) continue;
-            int take = subLayer is LayerBase<T> layerBase
-                ? layerBase.FillParameters(null, 0)
-                : subLayer.GetParameters().Length;
+
+            if (subLayer is LayerBase<T> layerBase)
+            {
+                // No slice: the child reads the same vector at its own offset.
+                offset = layerBase.ApplyParametersFrom(source, offset);
+                continue;
+            }
+
+            // A non-LayerBase ILayer only exposes SetParameters(Vector<T>), so its slice must
+            // still be materialised. Bounded by that one child rather than the whole subtree.
+            int take = subLayer.GetParameters().Length;
             if (take <= 0) continue;
             var slice = new Vector<T>(take);
-            for (int j = 0; j < take; j++) slice[j] = parameters[index++];
+            for (int j = 0; j < take; j++) slice[j] = source[offset++];
             subLayer.SetParameters(slice);
         }
 
-        if (index != parameters.Length)
-            throw new InvalidOperationException(
-                $"{GetType().Name} consumed {index} of {parameters.Length} parameter values.");
-
+        // Bumped per layer, as it was when each child went through its own SetParameters.
         BumpParameterEpoch();
+        return offset;
     }
 
     /// <summary>
