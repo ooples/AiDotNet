@@ -93,10 +93,14 @@ public partial class InputLayer<T> : LayerBase<T>, IShapeContract
     /// The layer is automatically set up to pass data through without changing it.
     /// </para>
     /// </remarks>
+    /// <summary>Construction state: kept so the generated clone factory can rebuild this layer.</summary>
+    private readonly int _inputSize;
+
     public InputLayer(
         int inputSize)
         : base([inputSize], [inputSize], new IdentityActivation<T>() as IActivationFunction<T>)
     {
+        _inputSize = inputSize;
     }
 
     /// <summary>

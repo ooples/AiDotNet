@@ -730,6 +730,23 @@ public readonly struct LayerStateBag
         public int GetHashCode(object obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
     }
 
+    /// <summary>Reads a nullable double array while distinguishing null from an empty array.</summary>
+    public double[]? NullableDoubleArray(string key)
+    {
+        string? text = NullableText(key, "a comma-separated list of numbers or null");
+        if (text is null) return null;
+        if (text.Length == 0) return [];
+
+        var parts = text.Split([',', ' '], StringSplitOptions.RemoveEmptyEntries);
+        var result = new double[parts.Length];
+        for (int i = 0; i < parts.Length; i++)
+        {
+            if (!double.TryParse(parts[i], NumberStyles.Float, CultureInfo.InvariantCulture, out result[i]))
+                throw Unparseable(key, text, "a comma-separated list of numbers or null");
+        }
+        return result;
+    }
+
     /// <summary>Reads a required integer array, stored comma-separated.</summary>
     /// <param name="key">The metadata key.</param>
     /// <returns>The stored value.</returns>
@@ -1034,6 +1051,11 @@ public readonly struct LayerStateBag
     /// <inheritdoc cref="Format(int)"/>
     /// <remarks>Round-trip ("R") so a restored double is bit-identical to the saved one.</remarks>
     public static string Format(double value) => value.ToString("R", CultureInfo.InvariantCulture);
+
+    /// <summary>Formats a double array as the comma-separated text <see cref="DoubleArray"/> reads.</summary>
+    public static string Format(double[]? value) => value is null
+        ? string.Empty
+        : string.Join(",", System.Linq.Enumerable.Select(value, d => d.ToString("R", CultureInfo.InvariantCulture)));
 
     /// <inheritdoc cref="Format(int)"/>
     public static string Format(float value) => value.ToString("R", CultureInfo.InvariantCulture);

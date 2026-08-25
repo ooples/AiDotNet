@@ -181,9 +181,13 @@ internal sealed partial class DeepARGaussianHead<T> : DeepARDistributionHead<T>,
         };
     }
 
+    /// <summary>Construction state: kept so the generated clone factory can rebuild this layer.</summary>
+    private readonly int _hiddenSize;
+
     public DeepARGaussianHead(int hiddenSize, int seed = 12345)
         : base(hiddenSize, outputDim: 1)
     {
+        _hiddenSize = hiddenSize;
         var random = RandomHelper.CreateSeededRandom(seed);
         (_meanW, _meanB) = AddProjection(1, random);
         (_scaleW, _scaleB) = AddProjection(1, random);
@@ -285,9 +289,13 @@ internal sealed partial class DeepARStudentTHead<T> : DeepARDistributionHead<T>,
         };
     }
 
+    /// <summary>Construction state: kept so the generated clone factory can rebuild this layer.</summary>
+    private readonly int _hiddenSize;
+
     public DeepARStudentTHead(int hiddenSize, double degreesOfFreedom, int seed = 12345)
         : base(hiddenSize, outputDim: 1)
     {
+        _hiddenSize = hiddenSize;
         // ν must exceed 2 for a finite variance (so predictive std is defined). Clamp defensively.
         _nu = degreesOfFreedom > 2.0001 ? degreesOfFreedom : 2.0001;
         var random = RandomHelper.CreateSeededRandom(seed);
@@ -407,9 +415,13 @@ internal sealed partial class DeepARSplineHead<T> : DeepARDistributionHead<T>, I
         };
     }
 
+    /// <summary>Construction state: kept so the generated clone factory can rebuild this layer.</summary>
+    private readonly int _hiddenSize;
+
     public DeepARSplineHead(int hiddenSize, int seed = 12345)
         : base(hiddenSize, outputDim: Grid.Length)
     {
+        _hiddenSize = hiddenSize;
         var random = RandomHelper.CreateSeededRandom(seed);
         (_knotW, _knotB) = AddProjection(Grid.Length, random);
     }

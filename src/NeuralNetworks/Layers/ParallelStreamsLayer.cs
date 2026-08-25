@@ -197,6 +197,18 @@ public partial class ParallelStreamsLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentException">Thrown when <paramref name="inputSize"/> is odd.</exception>
+    /// <summary>Construction state: kept so the generated clone factory can rebuild this layer.</summary>
+    private readonly int _streamAOutputSize;
+
+    /// <summary>Construction state: kept so the generated clone factory can rebuild this layer.</summary>
+    private readonly int _streamBOutputSize;
+
+    /// <summary>Construction state: kept so the generated clone factory can rebuild this layer.</summary>
+    private readonly IEnumerable<ILayer<T>> _streamALayers;
+
+    /// <summary>Construction state: kept so the generated clone factory can rebuild this layer.</summary>
+    private readonly IEnumerable<ILayer<T>> _streamBLayers;
+
     public ParallelStreamsLayer(
         int inputSize,
         int streamAOutputSize,
@@ -205,6 +217,10 @@ public partial class ParallelStreamsLayer<T> : LayerBase<T>, IShapeContract
         IEnumerable<ILayer<T>> streamBLayers)
         : base([inputSize], [streamAOutputSize + streamBOutputSize])
     {
+        _streamBLayers = streamBLayers;
+        _streamALayers = streamALayers;
+        _streamBOutputSize = streamBOutputSize;
+        _streamAOutputSize = streamAOutputSize;
         // Fail fast at the boundary on bad inputs so misuse surfaces here, not deep in
         // the forward pass where the error message would be cryptic shape mismatches.
         if (inputSize <= 0)

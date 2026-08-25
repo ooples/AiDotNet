@@ -94,6 +94,14 @@ public class LayerStateGenerator : IIncrementalGenerator
             + "this generator exists to replace; give the layer a single type parameter or exclude it",
         "AiDotNet.Serialization", DiagnosticSeverity.Warning, true);
 
+    // TEMPORARY-DIAGNOSTIC (keep if it proves its worth): a layer that gets no factory, no clone
+    // and no message is exactly the invisible-coverage failure this generator exists to remove.
+    private static readonly DiagnosticDescriptor FactoryDeclined = new(
+        "ADN0064",
+        "Layer declined a generated clone factory",
+        "'{0}' gets no generated factory: {1}. It will fail to clone with 'cannot be rebuilt'.",
+        "AiDotNet.Serialization", DiagnosticSeverity.Warning, true);
+
     private static readonly DiagnosticDescriptor HandWrittenMetadata = new(
         "ADN0054",
         "Hand-written GetMetadata may drift from [LayerState]",
@@ -128,6 +136,16 @@ public class LayerStateGenerator : IIncrementalGenerator
     {
         var syntax = (ConstructorDeclarationSyntax)ctx.Node;
         if (ctx.SemanticModel.GetDeclaredSymbol(syntax) is not IMethodSymbol ctor) return null;
+
+        // A constructor that delegates with `: this(...)` holds no construction state of its own --
+        // the target does. Analysing it anyway made SetAbstractionLayer's single-scale overload
+        // report `searchRadius` as unbacked even after it was reduced to a pure delegation to the
+        // multi-scale constructor, which is the one that stores everything.
+        if (syntax.Initializer is { } selfInit
+            && selfInit.IsKind(SyntaxKind.ThisConstructorInitializer))
+        {
+            return null;
+        }
 
         var marked = ctor.Parameters.Where(HasStateAttribute).ToList();
 
@@ -184,6 +202,24 @@ public class LayerStateGenerator : IIncrementalGenerator
                     && !IsActivation(p.Type, out _)
                     && !marked.Contains(p, SymbolEqualityComparer.Default)))
             {
+                if (DerivesFromLayerBase(ctor.ContainingType)
+                    && !ctor.ContainingType.IsAbstract
+                    && ctor.ContainingType.TypeKind == TypeKind.Class
+                    && !ctor.ContainingType.IsRecord)
+                {
+                    return new LayerModel
+                {
+                    TypeName = ctor.ContainingType.Name,
+                    Location = new SourceSpan(syntax.Identifier.GetLocation()),
+                    Diagnostics =
+                    {
+                        new PendingDiagnostic(
+                            FactoryDeclined, new SourceSpan(syntax.Identifier.GetLocation()),
+                            ctor.ContainingType.Name, "required parameter '" + ctor.Parameters.First(q => !q.IsOptional && !IsActivation(q.Type, out _) && !marked.Contains(q, SymbolEqualityComparer.Default)).Name + "' has no backing member the derived type can read"),
+                    },
+                };
+                }
+
                 return null;
             }
         }
@@ -198,9 +234,40 @@ public class LayerStateGenerator : IIncrementalGenerator
             }
         }
 
+        // ACTIVATION-ONLY CONSTRUCTORS ARE REBUILDABLE. ActivationLayer's only argument is its
+        // activation, which is excluded from `marked` on purpose because LayerBase supplies it
+        // through the ordered construction channel. Declining for "nothing restorable" confused
+        // an empty state set with an unrebuildable layer: there is simply no state BEYOND the
+        // activation, and the channel already carries that.
+        bool activationOnly = marked.Count == 0
+            && ctor.Parameters.Length > 0
+            && ctor.Parameters.All(q => q.IsOptional || IsActivation(q.Type, out _))
+            && ctor.Parameters.Any(q => IsActivation(q.Type, out _));
+
         // A constructor with nothing restorable is still declined: emitting a factory that cannot
         // rebuild the layer would replace a clear "no factory" with a silent wrong reconstruction.
-        if (marked.Count == 0) return null;
+        if (marked.Count == 0 && !activationOnly)
+        {
+                if (DerivesFromLayerBase(ctor.ContainingType)
+                    && !ctor.ContainingType.IsAbstract
+                    && ctor.ContainingType.TypeKind == TypeKind.Class
+                    && !ctor.ContainingType.IsRecord)
+                {
+                    return new LayerModel
+                {
+                    TypeName = ctor.ContainingType.Name,
+                    Location = new SourceSpan(syntax.Identifier.GetLocation()),
+                    Diagnostics =
+                    {
+                        new PendingDiagnostic(
+                            FactoryDeclined, new SourceSpan(syntax.Identifier.GetLocation()),
+                            ctor.ContainingType.Name, "no constructor parameter resolves to restorable state"),
+                    },
+                };
+                }
+
+                return null;
+            }
 
         var inferredState = new HashSet<string>(marked.Select(p => p.Name), System.StringComparer.Ordinal);
 
@@ -344,6 +411,7 @@ public class LayerStateGenerator : IIncrementalGenerator
             {
                 info.IsActivation = true;
                 info.IsVectorActivation = vector;
+                info.NumericTypeName = NumericTypeNameOf(ctor.ContainingType);
                 if (p.IsOptional) info.DefaultExpression = RenderDefault(p);
 
                 // Prefer the constructor argument's own stored member when one exists. Composite
@@ -454,6 +522,9 @@ public class LayerStateGenerator : IIncrementalGenerator
 
         // A pluggable strategy: record which implementation was used and rebuild that one.
         if (type.TypeKind == TypeKind.Interface) return ValueKind.Component;
+
+        if (type is IArrayTypeSymbol { Rank: 1 } dbl && dbl.ElementType.SpecialType == SpecialType.System_Double)
+            return ValueKind.DoubleArray;
 
         if (type is IArrayTypeSymbol { Rank: 1 } arr && arr.ElementType.SpecialType == SpecialType.System_Int32)
             return ValueKind.Int32Array;
@@ -612,10 +683,10 @@ public class LayerStateGenerator : IIncrementalGenerator
 
                     switch (member)
                     {
-                        case IFieldSymbol f when SameType(f.Type, p.Type):
+                        case IFieldSymbol f when MemberCanHold(f.Type, p.Type):
                             memberIsNullable = IsNullableType(f.Type);
                             return f.Name;
-                        case IPropertySymbol { GetMethod: not null } prop when SameType(prop.Type, p.Type):
+                        case IPropertySymbol { GetMethod: not null } prop when MemberCanHold(prop.Type, p.Type):
                             memberIsNullable = IsNullableType(prop.Type);
                             return prop.Name;
 
@@ -767,6 +838,37 @@ public class LayerStateGenerator : IIncrementalGenerator
         return parameter.SpecialType is SpecialType.System_Double
             or SpecialType.System_Single
             or SpecialType.System_Int32;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="memberType"/> can hold a value of <paramref name="paramType"/>.
+    /// </summary>
+    /// <remarks>
+    /// Strict symbol equality is too narrow for layer-valued state. DenseLoRAAdapter has an
+    /// overload taking <c>LayerBase&lt;T&gt; baseLayer</c> while LoRAAdapterBase stores it in
+    /// <c>protected readonly ILayer&lt;T&gt; _baseLayer</c> -- a perfectly ordinary widening that
+    /// left the layer with no factory at all. Restoration records the CONCRETE type and the read
+    /// is typed by the parameter, so a member declared as a base class or implemented interface
+    /// of the parameter is a correct home for it. Kept to clone/component kinds: numeric and
+    /// array kinds still require an exact match.
+    /// </remarks>
+    private static bool MemberCanHold(ITypeSymbol memberType, ITypeSymbol paramType)
+    {
+        if (SameType(memberType, paramType)) return true;
+        if (!IsCloneObject(paramType) && paramType.TypeKind != TypeKind.Interface) return false;
+
+        var target = Unwrap(memberType).WithNullableAnnotation(NullableAnnotation.None);
+        var source = Unwrap(paramType).WithNullableAnnotation(NullableAnnotation.None);
+
+        for (var b = (source as INamedTypeSymbol)?.BaseType; b is not null; b = b.BaseType)
+        {
+            if (SymbolEqualityComparer.Default.Equals(
+                    b.WithNullableAnnotation(NullableAnnotation.None), target))
+                return true;
+        }
+
+        return source.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(
+            i.WithNullableAnnotation(NullableAnnotation.None), target));
     }
 
     private static bool SameType(ITypeSymbol a, ITypeSymbol b)
@@ -1178,8 +1280,8 @@ public class LayerStateGenerator : IIncrementalGenerator
         if (p.IsActivation)
         {
             var iface = p.IsVectorActivation
-                ? "global::AiDotNet.Interfaces.IVectorActivationFunction<T>"
-                : "global::AiDotNet.Interfaces.IActivationFunction<T>";
+                ? $"global::AiDotNet.Interfaces.IVectorActivationFunction<{p.NumericTypeName}>"
+                : $"global::AiDotNet.Interfaces.IActivationFunction<{p.NumericTypeName}>";
             var source = p.IsVectorActivation ? "vectorActivation" : "scalarActivation";
             var kind = p.IsVectorActivation ? "vector" : "scalar";
             var key = $"__aidotnet_{kind}_activation_{p.ActivationIndex}";
@@ -1226,6 +1328,8 @@ public class LayerStateGenerator : IIncrementalGenerator
             (ValueKind.Boolean, true) => $"state.NullableBoolean(\"{p.Key}\")",
             (ValueKind.String, false) => $"state.String(\"{p.Key}\")",
             (ValueKind.String, true) => $"state.NullableString(\"{p.Key}\")",
+            (ValueKind.DoubleArray, false) => $"state.DoubleArray(\"{p.Key}\")",
+            (ValueKind.DoubleArray, true) => $"state.NullableDoubleArray(\"{p.Key}\")",
             (ValueKind.Int32Array, false) => $"state.Int32Array(\"{p.Key}\")",
             (ValueKind.Int32Array, true) => $"state.NullableInt32Array(\"{p.Key}\")",
             (ValueKind.Int32Jagged, _) => $"state.Int32Jagged(\"{p.Key}\")",
@@ -1287,6 +1391,7 @@ public class LayerStateGenerator : IIncrementalGenerator
         String,
         Enum,
         Int32Array,
+        DoubleArray,
         Int32Jagged,
         EnumArray,
         Component,
@@ -1303,6 +1408,21 @@ public class LayerStateGenerator : IIncrementalGenerator
     }
 
     /// <summary>True when the type derives from AiDotNet's LayerBase.</summary>
+    /// <summary>The numeric type a layer is closed over: "T" when generic, else e.g. "float".</summary>
+    private static string NumericTypeNameOf(INamedTypeSymbol type)
+    {
+        if (type.TypeParameters.Length > 0) return "T";
+        for (var b = type.BaseType; b is not null; b = b.BaseType)
+        {
+            if (b.ConstructedFrom.ToDisplayString(UnqualifiedGenerics) == "AiDotNet.NeuralNetworks.Layers.LayerBase"
+                && b.TypeArguments.Length == 1)
+            {
+                return b.TypeArguments[0].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            }
+        }
+        return "T";
+    }
+
     private static bool DerivesFromLayerBase(INamedTypeSymbol type)
     {
         for (var b = type.BaseType; b is not null; b = b.BaseType)
@@ -1417,6 +1537,10 @@ public class LayerStateGenerator : IIncrementalGenerator
         public bool IsOptionalState;
         public bool IsActivation;
         public bool IsVectorActivation;
+        // "T" for a generic layer; the CONCRETE type for a non-generic one.
+        // QuantizedDenseLayer : LayerBase<float> has no T, so emitting
+        // IVectorActivationFunction<T> for it produced generated code that would not compile.
+        public string NumericTypeName = "T";
         /// <summary>Whether this activation has an exact constructor-argument backing member.</summary>
         public bool UseBackedActivation;
         /// <summary>Zero-based position among scalar or vector activation constructor slots.</summary>

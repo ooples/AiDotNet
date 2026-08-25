@@ -1030,6 +1030,15 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
 
     private readonly int _numPoints;
     private readonly int _inputChannels;
+    /// <summary>Construction state: kept so the generated clone factory can rebuild this layer.</summary>
+    private readonly double[] _radii;
+
+    /// <summary>Construction state: kept so the generated clone factory can rebuild this layer.</summary>
+    private readonly int[][] _mlpDimensions;
+
+    /// <summary>Construction state: kept so the generated clone factory can rebuild this layer.</summary>
+    private readonly int[] _neighborSamples;
+
     private readonly List<ScaleBranch> _branches;
 
     /// <summary>
@@ -1060,30 +1069,24 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
     public Tensor<T>? LastCentroidPositions => _lastCentroidPositions;
     public int OutputChannels => _outputChannels;
 
+    /// <summary>Single-scale construction, expressed as the one-branch case of the multi-scale form.</summary>
+    /// <remarks>
+    /// Delegating rather than duplicating leaves exactly ONE constructor holding construction
+    /// state, which is what lets the clone factory rebuild this layer: two constructors describing
+    /// the same layer with different parameter types (double vs double[], int[] vs int[][]) cannot
+    /// both be backed by one set of fields, and the generator declined the layer entirely.
+    /// Behaviour is unchanged -- for a single branch CalculateOutputChannels([mlp]) == mlp[^1],
+    /// the extra array validations pass trivially, and the branch list and output channels are
+    /// built identically.
+    /// </remarks>
     public SetAbstractionLayer(
         int numPoints,
         double searchRadius,
         int inputChannels,
         int[] mlpDimensions,
         int neighborSamples)
-        : base([0, inputChannels], [0, mlpDimensions[^1]])
+        : this(numPoints, [searchRadius], inputChannels, [mlpDimensions], [neighborSamples])
     {
-        if (numPoints <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(numPoints), "Number of points must be positive.");
-        }
-        if (inputChannels < 3)
-        {
-            throw new ArgumentOutOfRangeException(nameof(inputChannels), "InputChannels must be at least 3.");
-        }
-
-        _numPoints = numPoints;
-        _inputChannels = inputChannels;
-        _branches = [new ScaleBranch(searchRadius, neighborSamples, inputChannels, mlpDimensions)];
-        _outputChannels = _branches[0].OutputChannels;
-
-        RegisterBranchLayers();
-        Parameters = GetParameters();
     }
 
     public SetAbstractionLayer(
@@ -1115,6 +1118,9 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
             throw new ArgumentException("NeighborSamples must match the number of radii.", nameof(neighborSamples));
         }
 
+        _radii = radii;
+        _mlpDimensions = mlpDimensions;
+        _neighborSamples = neighborSamples;
         _numPoints = numPoints;
         _inputChannels = inputChannels;
         _branches = [];
