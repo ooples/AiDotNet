@@ -32,6 +32,8 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
+    private double _powellDampingFactor = 0.2;
+
     /// <summary>
     /// Initializes a new instance of the LBFGSOptimizerOptions class with appropriate defaults.
     /// </summary>
@@ -44,8 +46,10 @@ public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// <param name="other">The options instance to copy.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
     /// <remarks>
+    /// <para>
     /// Reference-typed collaborators are shared rather than duplicated — see
     /// <see cref="GradientBasedOptimizerOptions{T, TInput, TOutput}"/>'s copy helper for what that means.
+    /// </para>
     /// </remarks>
     public LBFGSOptimizerOptions(LBFGSOptimizerOptions<T, TInput, TOutput> other)
     {
@@ -56,6 +60,8 @@ public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
         MemorySize = other.MemorySize;
         UseLineSearch = other.UseLineSearch;
         MaxLineSearchIterations = other.MaxLineSearchIterations;
+        MinimumCurvature = other.MinimumCurvature;
+        PowellDampingFactor = other.PowellDampingFactor;
         InitialLearningRate = other.InitialLearningRate;
         // `new` shadows of the base properties: CopyInheritedPropertiesFrom copies the BASE ones and
         // leaves these at their defaults, so they have to be named here.
@@ -104,6 +110,59 @@ public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// Generally, values between 3 and 20 are common, with diminishing returns as you increase beyond that.</para>
     /// </remarks>
     public int MemorySize { get; set; } = 10;
+
+    /// <summary>
+    /// Gets or sets the smallest curvature value for which a correction pair is stored in memory.
+    /// </summary>
+    /// <value>The minimum curvature, defaulting to 1e-10.</value>
+    /// <remarks>
+    /// <para>
+    /// L-BFGS stores pairs <c>(s, y)</c> where <c>s</c> is the change in position and <c>y</c> the
+    /// change in gradient. The approximation is only valid while the curvature condition
+    /// <c>sᵀy &gt; 0</c> holds; a pair violating it makes the implied inverse-Hessian indefinite,
+    /// so the two-loop recursion can return an ascent direction, and a near-zero <c>sᵀy</c> makes
+    /// its divisions blow up. Pairs whose curvature does not exceed this threshold are discarded
+    /// (Nocedal and Wright, "Numerical Optimization", section 6.1).
+    /// </para>
+    /// <para><b>For Beginners:</b> The optimizer speeds itself up by remembering how the slope
+    /// changed as it moved. Some of those observations are useless or actively misleading — the
+    /// ones where the slope barely changed, or changed the wrong way. This setting is the bar an
+    /// observation has to clear before it is worth remembering.
+    /// </para>
+    /// </remarks>
+    public double MinimumCurvature { get; set; } = 1e-10;
+
+    /// <summary>
+    /// Gets or sets the fraction of the model curvature that a damped correction pair must retain.
+    /// </summary>
+    /// <value>The Powell damping factor, defaulting to 0.2.</value>
+    /// <remarks>
+    /// <para>
+    /// On a nonconvex objective the curvature condition <c>sᵀy &gt; 0</c> is frequently violated, and
+    /// simply discarding those pairs starves the memory until L-BFGS degenerates into steepest
+    /// descent. Powell's damped update repairs the pair instead: it replaces <c>y</c> with a blend
+    /// of <c>y</c> and <c>Bs</c> chosen so that <c>sᵀy ≥ factor · sᵀBs</c> holds by construction
+    /// (Powell, 1978; Nocedal and Wright, "Numerical Optimization", Procedure 18.2). The classical
+    /// value is 0.2.
+    /// </para>
+    /// <para>
+    /// Setting this to zero disables damping, restoring the plain skip-the-pair behaviour governed
+    /// by <see cref="MinimumCurvature"/> alone.
+    /// </para>
+    /// <para><b>For Beginners:</b> The optimizer learns the shape of the surface from how the slope
+    /// changed between steps. On a bumpy, non-bowl-shaped surface some of those observations imply
+    /// an impossible shape. Throwing them all away leaves the optimizer knowing nothing; this
+    /// setting instead nudges each bad observation to the nearest sensible one and keeps it.
+    /// </para>
+    /// </remarks>
+    public double PowellDampingFactor
+    {
+        get => _powellDampingFactor;
+        set => _powellDampingFactor = value >= 0 && value <= 1 && !double.IsNaN(value)
+            ? value
+            : throw new ArgumentOutOfRangeException(
+                nameof(value), value, "PowellDampingFactor must be between 0 and 1 inclusive.");
+    }
 
     /// <summary>
     /// Gets or sets whether each step is checked against the Armijo sufficient-decrease condition and

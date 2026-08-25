@@ -22,7 +22,7 @@ namespace AiDotNet.Distributions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class WeibullDistribution<T> : DistributionBase<T>
+public class WeibullDistribution<T> : DistributionBase<T>
 {
     private T _shape;  // k
     private T _scale;  // λ

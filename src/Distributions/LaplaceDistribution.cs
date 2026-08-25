@@ -20,7 +20,7 @@ namespace AiDotNet.Distributions;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class LaplaceDistribution<T> : DistributionBase<T>
+public class LaplaceDistribution<T> : DistributionBase<T>
 {
     private T _location;  // μ
     private T _scale;     // b

@@ -116,8 +116,6 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
     /// over a long sequence (256 * 1e9 = 2.56e11 &lt;&lt; float.MaxValue).</summary>
     private const double IllegalTransitionPenalty = -1e9;
 
-    private bool _isInitialized;
-
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -413,7 +411,6 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
         _endScores = new Tensor<T>([_numClasses]);
 
         InitializeParameters();
-        _isInitialized = true;
     }
 
     /// <summary>
@@ -440,11 +437,11 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
         _startScores = new Tensor<T>([_numClasses]);
         _endScores = new Tensor<T>([_numClasses]);
 
-        // Parameters do not depend on sequenceLength, so initialize
-        // eagerly. _isInitialized stays false so EnsureInitialized's
-        // sequenceLength validation runs once on first forward.
+        // Parameters do not depend on sequenceLength, so initialize eagerly. The layer is then
+        // fully initialized as far as its parameters are concerned; only InputShape and
+        // OutputShape stay unresolved until the first forward, which IsShapeResolved reports
+        // separately.
         InitializeParameters();
-        _isInitialized = false;
     }
 
     /// <summary>
@@ -485,7 +482,6 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
         _endScores = new Tensor<T>([_numClasses]);
 
         InitializeParameters();
-        _isInitialized = true;
     }
 
     /// <summary>
@@ -509,7 +505,6 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
         _endScores = new Tensor<T>([_numClasses]);
 
         InitializeParameters();
-        _isInitialized = false;
     }
 
     /// <inheritdoc />
@@ -550,20 +545,20 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
     /// </remarks>
     protected override void EnsureInitialized()
     {
-        if (_isInitialized) return;
-
-        // Deliberately NO sequence-length precondition here, unlike the sibling lazy layers
-        // (RBFLayer, RBMLayer, ObliviousDecisionTreeLayer, PrimaryCapsuleLayer, DigitCapsuleLayer).
-        // Those allocate their parameter tensors against a dimension that only the first input
-        // reveals, so running before OnFirstForward would size them wrongly. This layer does not:
-        // the transition matrix and the start/end scores are [numClasses, numClasses] and
-        // [numClasses], all known at construction and already allocated and initialized by the
-        // lazy ctor. Nothing below reads _sequenceLength.
+        // Nothing is deferred here. Every parameter this layer owns - the transition matrix and
+        // the start and end scores - is sized by numClasses alone and allocated in the
+        // constructor, including the lazy one.
         //
-        // Requiring it anyway made ParameterCount and GetParameters() throw before the first
-        // forward, even though the parameters they report exist and are final from construction --
-        // which is precisely what the remarks above promise.
-        _isInitialized = true;
+        // This previously threw unless the sequence length had been resolved, which conflated two
+        // unrelated questions: "are my parameters materialized" and "do I know how long the input
+        // sequence is". GetParameters reaches here through EnsureParametersMaterialized and asks
+        // only the first, so reading a lazily-constructed CRF's parameters before its first
+        // forward threw instead of returning the parameters that were sitting there all along.
+        //
+        // The sequence length is still required before a forward pass, and is resolved by
+        // OnFirstForward, which every forward goes through - so nothing is left unguarded.
+        //
+        // There is deliberately nothing to do here.
     }
 
     /// <summary>

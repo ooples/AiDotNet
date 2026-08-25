@@ -157,39 +157,58 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
             }
         }
 
-        // Solve assignment using simplified greedy approach
-        // (Full Hungarian algorithm would be more optimal but complex)
-        var predIndices = new List<int>();
-        var gtIndices = new List<int>();
-        var usedPred = new HashSet<int>();
-        var usedGt = new HashSet<int>();
-
-        // Greedy matching: assign lowest cost pairs first
-        var assignments = new List<(int Pred, int Gt, double Cost)>();
-        for (int i = 0; i < numPred; i++)
+        // Solve the assignment optimally with the Hungarian algorithm.
+        //
+        // DETR (Carion et al., 2020) defines its loss through the OPTIMAL bipartite matching between
+        // predictions and ground-truth boxes — the permutation minimizing the total matching cost.
+        // This previously used a greedy approximation (sort all pairs by cost, take them in order),
+        // which is not the same matching: committing early to a locally cheap pair can force an
+        // expensive one later, and the gap is unbounded. Because the matching decides which
+        // prediction is supervised by which target, a different matching produces a different loss
+        // and therefore a different trained model, so the approximation was a deviation from the
+        // paper rather than an implementation detail.
+        //
+        // Ground truth indexes the ROWS so that every ground-truth box is matched (there are always
+        // at least as many object queries as boxes in DETR); surplus predictions stay unmatched and
+        // are supervised as "no object" by the caller.
+        var cost = new Matrix<double>(numGt, numPred);
+        for (int j = 0; j < numGt; j++)
         {
-            for (int j = 0; j < numGt; j++)
-            {
-                assignments.Add((i, j, costMatrix[i, j]));
-            }
+            for (int i = 0; i < numPred; i++) cost[j, i] = costMatrix[i, j];
         }
 
-        assignments.Sort((a, b) => a.Cost.CompareTo(b.Cost));
+        var assignment = new AiDotNet.Solvers.Assignment.LinearAssignmentSolver<double>().Solve(cost);
 
-        foreach (var (pred, gt, _) in assignments)
+        var predIndices = new List<int>(numGt);
+        var gtIndices = new List<int>(numGt);
+        for (int j = 0; j < numGt; j++)
         {
-            if (!usedPred.Contains(pred) && !usedGt.Contains(gt))
-            {
-                predIndices.Add(pred);
-                gtIndices.Add(gt);
-                usedPred.Add(pred);
-                usedGt.Add(gt);
+            int predictionIndex = assignment[j];
+            if (predictionIndex < 0) continue;
 
-                if (gtIndices.Count >= numGt) break;
-            }
+            predIndices.Add(predictionIndex);
+            gtIndices.Add(j);
         }
 
         return (predIndices.ToArray(), gtIndices.ToArray());
+    }
+
+    /// <summary>
+    /// Mean absolute error built from engine ops, used when the inputs are not in DETR's structured
+    /// prediction layout so that the tape loss agrees with the vector
+    /// <see cref="CalculateLoss(Vector{T}, Vector{T})"/> overload and remains differentiable.
+    /// </summary>
+    private Tensor<T> ComputeMeanAbsoluteErrorTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        var aligned = EnsureTargetMatchesPredicted(predicted, target);
+        var difference = Engine.TensorSubtract(predicted, aligned);
+        var magnitude = Engine.TensorAbs(difference);
+
+        var allAxes = Enumerable.Range(0, magnitude.Shape.Length).ToArray();
+        var total = Engine.ReduceSum(magnitude, allAxes, keepDims: false);
+
+        return Engine.TensorMultiplyScalar(
+            total, NumOps.FromDouble(1.0 / Math.Max(1, predicted.Length)));
     }
 
     /// <summary>
@@ -401,30 +420,40 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
     /// </remarks>
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
-        // LossFunctionExtensions routes the vector compatibility API through this
-        // differentiable tensor overload using rank-1 tensors. Preserve the documented
-        // vector contract (mean L1) instead of indexing those tensors as structured DETR
-        // batches. This branch deliberately uses engine operations so ComputeGradient
-        // remains tape-tracked all the way back to the caller's prediction vector.
-        if (predicted.Rank == 1 || target.Rank == 1)
+        // Inputs that are not in DETR's structured layout cannot be Hungarian-matched — there are
+        // no boxes or class logits to match. Previously this path fell through to the "no matched
+        // pairs" branch below and returned a FRESHLY CONSTRUCTED zero tensor, which is not attached
+        // to the gradient tape: the loss reported a non-zero value through CalculateLoss while its
+        // gradient was identically zero, so a model training against it would never move. Fall back
+        // to the same mean-absolute-error that the vector CalculateLoss overload documents itself as
+        // computing, built from engine ops so the tape can differentiate it.
+        bool hasDetrLayout =
+            predicted.Shape.Length == 3 &&
+            predicted.Shape[2] == _numClasses + 4 &&
+            target.Shape.Length == 3 &&
+            target.Shape[0] == predicted.Shape[0] &&
+            target.Shape[2] >= 5;
+
+        if (!hasDetrLayout)
         {
-            if (predicted.Rank != 1 || target.Rank != 1)
-                throw new ArgumentException(
-                    "DETR vector compatibility loss requires both inputs to be rank-1 tensors.");
-            if (predicted.Shape[0] != target.Shape[0])
-                throw new ArgumentException(
-                    $"DETR vector compatibility loss requires equal lengths, got {predicted.Shape[0]} and {target.Shape[0]}.");
+            bool sameElementwiseShape = predicted.Shape.Length == target.Shape.Length;
+            for (int axis = 0; axis < predicted.Shape.Length && sameElementwiseShape; axis++)
+            {
+                sameElementwiseShape = predicted.Shape[axis] == target.Shape[axis];
+            }
 
-            var vectorDiff = Engine.TensorSubtract(predicted, target);
-            return Engine.ReduceMean(
-                Engine.TensorAbs(vectorDiff),
-                new[] { 0 },
-                keepDims: false);
-        }
+            if (sameElementwiseShape)
+            {
+                return ComputeMeanAbsoluteErrorTapeLoss(predicted, target);
+            }
 
-        if (predicted.Rank != 3 || target.Rank != 3)
             throw new ArgumentException(
-                "DETR set loss requires rank-3 predicted and target tensors.");
+                $"DETR tape loss requires predicted shape [batch, queries, {_numClasses + 4}] and " +
+                "target shape [the same batch, objects, at least 5], or identical shapes for the " +
+                $"element-wise fallback. Received predicted [{string.Join(", ", predicted.Shape)}] " +
+                $"and target [{string.Join(", ", target.Shape)}].",
+                nameof(target));
+        }
 
         int batch = predicted.Shape[0];
         int numQueries = predicted.Shape[1];
@@ -449,9 +478,13 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
 
         if (matchedPredBoxIndices.Count == 0)
         {
-            // No matched pairs — return zero loss
-            var zero = new Tensor<T>(new T[] { NumOps.Zero }, new[] { 1 });
-            return Engine.ReduceSum(zero, new[] { 0 }, keepDims: false);
+            // An image with no ground-truth objects contributes no matching loss, but the result
+            // must still be attached to the tape: a detached constant would make the whole batch's
+            // gradient vanish rather than merely contributing nothing to it. Scaling the prediction
+            // by zero keeps the graph connected and the value at zero.
+            var scaled = Engine.TensorMultiplyScalar(predicted, NumOps.Zero);
+            var allAxes = Enumerable.Range(0, scaled.Shape.Length).ToArray();
+            return Engine.ReduceSum(scaled, allAxes, keepDims: false);
         }
 
         // Step 2: Compute differentiable losses on matched pairs using engine ops

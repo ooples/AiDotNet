@@ -40,13 +40,20 @@ public sealed partial class TimeSformerBlockLayer<T> : LayerBase<T>, IShapeContr
     private readonly int _ffnDim;
     private readonly int _configuredFrames;
 
+    [SubLayerInput("_hiddenSize")]
     private readonly LayerNormalizationLayer<T> _temporalNorm;
+    [SubLayerInput("1, _hiddenSize")]
     private readonly MultiHeadAttentionLayer<T> _temporalAttention;
+    [SubLayerInput("_hiddenSize")]
     private readonly LayerNormalizationLayer<T> _spatialNorm;
+    [SubLayerInput("1, _hiddenSize")]
     private readonly MultiHeadAttentionLayer<T> _spatialAttention;
+    [SubLayerInput("_hiddenSize")]
     private readonly LayerNormalizationLayer<T> _ffnNorm;
     private readonly IActivationFunction<T> _ffnActivation;
+    [SubLayerInput("_hiddenSize")]
     private readonly DenseLayer<T> _ffnUp;
+    [SubLayerInput("_ffnDim")]
     private readonly DenseLayer<T> _ffnDown;
 
     public override bool SupportsTraining => true;
@@ -156,23 +163,6 @@ public sealed partial class TimeSformerBlockLayer<T> : LayerBase<T>, IShapeContr
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         return Forward(input, _configuredFrames);
-    }
-
-    private void MaterializeLazySublayers()
-    {
-        bool wasTraining = IsTrainingMode;
-        SetTrainingMode(false);
-        try
-        {
-            int frames = Math.Max(1, _configuredFrames);
-            var dummy = new Tensor<T>([1, frames + 1, _hiddenSize]);
-            _ = Forward(dummy, frames);
-            ResetState();
-        }
-        finally
-        {
-            SetTrainingMode(wasTraining);
-        }
     }
 
     public override Vector<T> GetParameterGradients() =>

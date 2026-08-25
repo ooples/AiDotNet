@@ -704,6 +704,26 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     private static object? _resolvingParametersFor;
 
     /// <summary>
+    /// The predictor whose streaming-engagement decision is currently being made on this thread,
+    /// or null. Same shape and reason as <see cref="_resolvingParametersFor"/>, for the second
+    /// cycle through this heuristic:
+    /// <para>
+    /// ParameterCount -&gt; EnumerateParameterValueSlots -&gt; MaybeEngageWeightStreaming -&gt;
+    /// ParameterCount.
+    /// </para>
+    /// <para>
+    /// EnumerateParameterValueSlots guards its own call with a LOCAL flag, which a nested
+    /// enumeration re-creates as false, so the local guard cannot see the outer call. The
+    /// _streamingEngaged flag cannot break it either: the re-entry happens while the engagement
+    /// decision is still being made, which is precisely when nothing has engaged yet. Like the
+    /// resolution guard, this overflowed the stack instead of failing a test, so it aborted the
+    /// whole run with no failing test named.
+    /// </para>
+    /// </summary>
+    [ThreadStatic]
+    private static object? _decidingStreamingEngagementFor;
+
+    /// <summary>
     /// Calls <see cref="EnsureParametersReady"/>, but returns immediately if this same predictor is
     /// already resolving on this thread.
     /// </summary>
@@ -1078,6 +1098,25 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     {
         if (System.Threading.Volatile.Read(ref _streamingEngaged) != 0) return;
 
+        // Re-entry guard. Reading ParameterCount below walks EnumerateParameterValueSlots, which
+        // calls back into this method; returning early is correct rather than merely safe, because
+        // the outer call is already deciding and the inner one has nothing to add.
+        if (ReferenceEquals(_decidingStreamingEngagementFor, this)) return;
+
+        object? previousDeciding = _decidingStreamingEngagementFor;
+        _decidingStreamingEngagementFor = this;
+        try
+        {
+            MaybeEngageWeightStreamingCore();
+        }
+        finally
+        {
+            _decidingStreamingEngagementFor = previousDeciding;
+        }
+    }
+
+    private void MaybeEngageWeightStreamingCore()
+    {
         long threshold = StreamingThresholdOverride ?? DefaultStreamingThresholdParams;
         if (ParameterCount <= threshold) return;
 

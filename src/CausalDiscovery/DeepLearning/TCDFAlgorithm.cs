@@ -56,13 +56,36 @@ public class TCDFAlgorithm<T> : DeepCausalBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTimeSeries => true;
+    private readonly int _seed;
+    private readonly double _attentionLearningRateMultiplier;
 
-    private readonly int? _seed;
-
+    /// <summary>
+    /// Seed used when the caller does not supply one, so that a run is reproducible by default.
+    /// </summary>
+    /// <remarks>
+    /// Previously this fell back to an unseeded secure RNG, which made the model nondeterministic
+    /// and its generated model-family tests flaky: the identical test binary produced 13 failures
+    /// in one run and 8 in the next over the same 42 tests, which makes regression detection on
+    /// this path impossible. Callers still override via the options' Seed property. Matches the
+    /// fixed-seed convention already used by DAGMANonlinear in this module.
+    /// </remarks>
+    private const int DefaultRandomSeed = 42;
     public TCDFAlgorithm(CausalDiscoveryOptions? options = null)
     {
+        // TCDF's attention path needs a larger nominal step than the shared deep-causal default.
+        // ApplyDeepOptions still gives an explicitly configured LearningRate full precedence.
+        LearningRate = 0.05;
         ApplyDeepOptions(options);
-        _seed = options?.Seed;
+        _seed = options?.Seed ?? DefaultRandomSeed;
+        _attentionLearningRateMultiplier = options?.TCdfAttentionLearningRateMultiplier ?? 100.0;
+        if (double.IsNaN(_attentionLearningRateMultiplier) ||
+            double.IsInfinity(_attentionLearningRateMultiplier) ||
+            _attentionLearningRateMultiplier <= 0)
+        {
+            throw new ArgumentException(
+                "TCdfAttentionLearningRateMultiplier must be a positive finite value.",
+                nameof(options));
+        }
     }
 
     /// <inheritdoc/>
@@ -81,9 +104,7 @@ public class TCDFAlgorithm<T> : DeepCausalBase<T>
         // dominant input variable.
         var standardised = StandardiseColumnsLocal(data);
 
-        var rng = _seed.HasValue
-            ? Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed.Value)
-            : Tensors.Helpers.RandomHelper.CreateSecureRandom();
+        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed);
         T scale = NumOps.FromDouble(Math.Sqrt(2.0 / kernelSize));
         var cov = ComputeCovarianceMatrix(standardised);
         T eps = NumOps.FromDouble(1e-10);
@@ -108,21 +129,18 @@ public class TCDFAlgorithm<T> : DeepCausalBase<T>
         // because the attention-logit gradient chains a softmax Jacobian
         // (≤ 1/d at uniform init) and a sigmoid derivative (≤ 0.25). For
         // d=4 the chained dampening drops the effective step by ~64×, so
-        // the default 1e-3 LR leaves the attention frozen at the uniform
-        // prior for the entire 100-epoch budget. Use a fixed, higher
-        // baseline LR for both filters and attention so the network can
-        // actually break the symmetric init within the test budget. The
-        // attention path gets an extra d² boost on top to compensate for
-        // its longer derivative chain.
-        T lr = NumOps.FromDouble(Math.Max(LearningRate, 0.05));
+        // TCDF therefore uses a documented 0.05 default while still honoring the caller's
+        // LearningRate exactly. The attention path gets a configurable d² boost on top to
+        // compensate for its longer derivative chain.
+        T lr = NumOps.FromDouble(LearningRate);
         // Attention LR boost: the chained softmax + sigmoid + per-sample
         // averaging through residual = (pred-y)/n leaves the per-epoch
         // logit step at O(1/(d²·n²)) relative to the dAttn magnitude.
         // For (d=4, n=200) the boost needed to break uniform init within
         // a 100-epoch budget is roughly d²·n / (effective Adam EMA).
-        // Empirically d²·100 = 1600 produces healthy concentration on the
-        // 200-sample noisy fixture; smaller boosts leave P at 0.25 ± 0.01.
-        T attentionLr = NumOps.Multiply(lr, NumOps.FromDouble(d * d * 100));
+        T attentionLr = NumOps.Multiply(
+            lr,
+            NumOps.FromDouble(d * d * _attentionLearningRateMultiplier));
         int trainSamples = n - kernelSize;
 
         for (int epoch = 0; epoch < MaxEpochs; epoch++)

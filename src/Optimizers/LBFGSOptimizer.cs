@@ -124,6 +124,14 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     private Vector<T>? _lbfgsPreviousGradient;
 
     /// <summary>
+    /// The scaling γ = sᵀy / yᵀy of the most recently accepted correction pair. It defines the
+    /// scaled-identity Hessian model B ≈ (1/γ)·I that Powell damping measures curvature against,
+    /// and matches the initial scaling the two-loop recursion applies. Starts at 1, which is the
+    /// conventional choice before any curvature information exists.
+    /// </summary>
+    private T _lbfgsInverseHessianScale;
+
+    /// <summary>
     /// Reused scalar coefficients for the two-loop recursion.
     /// </summary>
     private T[] _twoLoopAlphas = Array.Empty<T>();
@@ -143,6 +151,40 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         _options = options ?? new LBFGSOptimizerOptions<T, TInput, TOutput>();
         _s = new List<Vector<T>>();
         _y = new List<Vector<T>>();
+        _lbfgsInverseHessianScale = NumOps.One;
+
+        InitializeAdaptiveParameters();
+    }
+
+    /// <summary>
+    /// Creates an L-BFGS optimizer for minimizing a plain function, with no model attached.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use this overload with <see cref="Minimize(Vector{T}, Func{Vector{T}, ValueTuple{T, Vector{T}}}, int, T)"/>
+    /// when you want to minimize a mathematical function directly rather than train a model.
+    /// <see cref="Optimize"/> requires a model and is not available on an instance created this way.
+    /// </para>
+    /// <para><b>For Beginners:</b> The other constructor asks for a model because it is set up to
+    /// tune that model against training data. If all you have is a formula you want to make as
+    /// small as possible, there is no model to hand over — use this factory instead.
+    /// </para>
+    /// <para><b>Breaking change:</b> The former public options-only constructor was replaced by
+    /// this named factory because passing <c>null</c> to <c>new LBFGSOptimizer(...)</c> was ambiguous with the
+    /// model-based constructor.</para>
+    /// </remarks>
+    /// <param name="options">The L-BFGS-specific optimization options.</param>
+    public static LBFGSOptimizer<T, TInput, TOutput> CreateForFunction(
+        LBFGSOptimizerOptions<T, TInput, TOutput>? options = null)
+        => new(options);
+
+    private LBFGSOptimizer(LBFGSOptimizerOptions<T, TInput, TOutput>? options)
+        : base(null, options ?? new())
+    {
+        _options = options ?? new LBFGSOptimizerOptions<T, TInput, TOutput>();
+        _s = new List<Vector<T>>();
+        _y = new List<Vector<T>>();
+        _lbfgsInverseHessianScale = NumOps.One;
 
         InitializeAdaptiveParameters();
     }
@@ -158,6 +200,14 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         _iteration = 0;
         _lbfgsPreviousParameters = null;
         _lbfgsPreviousGradient = null;
+
+        // The curvature memory describes a specific objective surface at specific parameter values.
+        // Carrying it into a fresh run would build search directions from correction pairs that
+        // belong to the previous problem. Optimize() used to clear these itself, which left every
+        // other reset path (Reset, a second Minimize call) reusing stale pairs.
+        _s.Clear();
+        _y.Clear();
+        _lbfgsInverseHessianScale = NumOps.One;
     }
 
     /// <summary>
@@ -181,8 +231,7 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-        _s.Clear();
-        _y.Clear();
+        // InitializeAdaptiveParameters clears the curvature memory.
         InitializeAdaptiveParameters();
 
         Vector<T> previousGradient = Vector<T>.Empty();
@@ -242,6 +291,192 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// </remarks>
     /// <param name="gradient">The current gradient.</param>
     /// <returns>The calculated search direction.</returns>
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// L-BFGS overrides the base implementation because it is not a fixed-step-rule optimizer: it
+    /// proposes a search direction from its curvature memory and then performs a <b>line search</b>
+    /// to decide how far along that direction to move. The base implementation drives
+    /// <see cref="Step(TapeStepContext{T})"/>, which can only line-search when the context supports
+    /// re-evaluation — and a context built from a plain <c>(f, ∇f)</c> closure cannot, because
+    /// re-evaluation is defined in terms of a tensor forward/loss pair. This override does the line
+    /// search directly against the caller's objective, while reusing the same two-loop recursion
+    /// (<see cref="CalculateDirection"/>) and curvature memory
+    /// (<see cref="UpdateLBFGSMemory"/>) as the model-training path.
+    /// </para>
+    /// <para>
+    /// Steps are accepted on the Armijo sufficient-decrease condition, backtracking by
+    /// <see cref="LBFGSOptimizerOptions{T, TInput, TOutput}.LineSearchContractionFactor"/> up to
+    /// <see cref="LBFGSOptimizerOptions{T, TInput, TOutput}.LineSearchMaxSteps"/> times
+    /// (Nocedal and Wright, "Numerical Optimization", Algorithms 3.1 and 7.4).
+    /// </para>
+    /// <para><b>For Beginners:</b> L-BFGS is usually the best choice on this list for a smooth
+    /// function of a few dozen variables. It remembers how the slope changed over its last several
+    /// steps and uses that to guess the shape of the surface, which lets it aim much better than
+    /// plain gradient descent — and then it checks its guess by trying the step before committing
+    /// to it.
+    /// </para>
+    /// </remarks>
+    public override Vector<T> Minimize(
+        Vector<T> initialParameters,
+        Func<Vector<T>, (T objective, Vector<T> gradient)> objectiveAndGradient,
+        int maxIterations,
+        T tolerance,
+        Func<Vector<T>, Vector<T>>? projection)
+    {
+        Guard.NotNull(initialParameters);
+        Guard.NotNull(objectiveAndGradient);
+
+        int parameterCount = initialParameters.Length;
+        if (parameterCount == 0)
+        {
+            throw new ArgumentException(
+                "Initial parameters must contain at least one element.",
+                nameof(initialParameters));
+        }
+
+        if (maxIterations <= 0)
+        {
+            throw new ArgumentException(
+                $"Maximum iterations must be positive, got {maxIterations}.",
+                nameof(maxIterations));
+        }
+
+        // A fresh minimization must not inherit curvature pairs from a previous run.
+        Reset();
+
+        var current = ApplyProjection(projection, initialParameters.Clone(), parameterCount);
+        var bestPoint = current.Clone();
+        T bestObjective = NumOps.Zero;
+        bool hasBestObjective = false;
+
+        void Observe(Vector<T> point, T value)
+        {
+            double asDouble = NumOps.ToDouble(value);
+            if (double.IsNaN(asDouble) || double.IsInfinity(asDouble))
+            {
+                return;
+            }
+
+            if (!hasBestObjective || NumOps.LessThan(value, bestObjective))
+            {
+                bestObjective = value;
+                bestPoint = point.Clone();
+                hasBestObjective = true;
+            }
+        }
+
+        Vector<T>? previousPoint = null;
+        Vector<T>? previousGradient = null;
+        bool previousStepSatisfiedWolfe = false;
+
+        // The accepted point's evaluation IS the next iteration's evaluation, so carrying it
+        // forward makes the line search's final trial free rather than an extra call.
+        T carriedObjective = NumOps.Zero;
+        Vector<T>? carriedGradient = null;
+
+        for (int iteration = 0; iteration < maxIterations; iteration++)
+        {
+            T objective;
+            Vector<T> gradient;
+
+            if (carriedGradient is not null)
+            {
+                objective = carriedObjective;
+                gradient = carriedGradient;
+            }
+            else
+            {
+                (objective, gradient) = objectiveAndGradient(current);
+            }
+
+            Guard.NotNull(gradient);
+            if (gradient.Length != parameterCount)
+            {
+                throw new ArgumentException(
+                    $"Gradient length ({gradient.Length}) must match parameter length ({parameterCount}).",
+                    nameof(objectiveAndGradient));
+            }
+
+            EnsureFiniteEvaluation(objective, gradient, iteration, "L-BFGS");
+            Observe(current, objective);
+
+            if (!NumOps.GreaterThan(InfinityNorm(gradient), tolerance))
+            {
+                break;
+            }
+
+            // Record the correction pair for the step just completed. Both endpoints come from
+            // consecutive iterations, which is what the two-loop recursion assumes. A step that met
+            // the strong Wolfe curvature condition already guarantees positive curvature, so
+            // damping it would distort information already known to be sound.
+            if (previousPoint is not null && previousGradient is not null)
+            {
+                UpdateLBFGSMemory(
+                    previousPoint, current, gradient, previousGradient,
+                    skipDamping: previousStepSatisfiedWolfe);
+            }
+
+            var direction = CalculateDirection(gradient);
+            var directionalDerivative = gradient.DotProduct(direction);
+
+            // The curvature guard in UpdateLBFGSMemory makes an ascent direction unlikely, but a
+            // memory built from an ill-conditioned surface can still produce one. Fall back to
+            // steepest descent rather than line-searching uphill, which would fail every trial and
+            // waste the whole iteration.
+            if (!NumOps.LessThan(directionalDerivative, NumOps.Zero))
+            {
+                direction = (Vector<T>)Engine.Multiply(gradient, NumOps.Negate(NumOps.One));
+                directionalDerivative = NumOps.Negate(gradient.DotProduct(gradient));
+            }
+
+            var problem = new LineSearchProblem(
+                current, direction, objective,
+                objectiveAndGradient, projection, parameterCount,
+                _options.ArmijoConstant, _options.WolfeCurvatureConstant,
+                NumOps.ToDouble(objective), NumOps.ToDouble(directionalDerivative));
+
+            LineSearchOutcome? outcome = _options.UseStrongWolfeLineSearch
+                ? StrongWolfeLineSearch(problem, Observe)
+                : null;
+
+            outcome ??= BacktrackingLineSearch(problem, Observe);
+
+            if (outcome is null)
+            {
+                // Neither search found a usable step. Take a deliberately tiny one along the descent
+                // direction rather than stalling, so the curvature memory can refresh.
+                var fallbackPoint = ApplyProjection(
+                    projection,
+                    (Vector<T>)Engine.Add(
+                        current,
+                        (Vector<T>)Engine.Multiply(
+                            direction, NumOps.FromDouble(_options.LineSearchFallbackStep))),
+                    parameterCount);
+
+                var (fallbackObjective, fallbackGradient) = objectiveAndGradient(fallbackPoint);
+                EnsureFiniteEvaluation(fallbackObjective, fallbackGradient, iteration, "L-BFGS");
+                outcome = new LineSearchOutcome(
+                    fallbackPoint, fallbackObjective, fallbackGradient, satisfiedWolfe: false);
+            }
+
+            Observe(outcome.Value.Point, outcome.Value.Objective);
+
+            previousPoint = current;
+            previousGradient = gradient;
+            previousStepSatisfiedWolfe = outcome.Value.SatisfiedWolfe;
+
+            current = outcome.Value.Point;
+            carriedObjective = outcome.Value.Objective;
+            carriedGradient = outcome.Value.Gradient;
+        }
+
+        return bestPoint;
+    }
+
+
+
+
     private Vector<T> CalculateDirection(Vector<T> gradient)
     {
         // === Partially Vectorized L-BFGS Two-Loop Recursion using IEngine (Phase B: US-GPU-015) ===
@@ -313,13 +548,83 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     }
 
     /// <summary>
+    /// Applies Powell's damped update so the correction pair satisfies the curvature condition.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Given the step <c>s</c> and gradient change <c>y</c>, this returns
+    /// <c>r = θ·y + (1 − θ)·B·s</c> where <c>θ</c> is the largest value in <c>(0, 1]</c> for which
+    /// <c>sᵀr ≥ factor · sᵀBs</c>. When the pair already satisfies the condition, <c>θ = 1</c> and
+    /// <c>y</c> is returned unchanged, so damping costs nothing on well-behaved problems.
+    /// </para>
+    /// <para>
+    /// L-BFGS never forms the Hessian approximation <c>B</c> explicitly, so this uses the same
+    /// scaled-identity model the two-loop recursion itself starts from,
+    /// <c>B ≈ (1/γ)·I</c> with <c>γ = sᵀy / yᵀy</c> taken from the most recently accepted pair
+    /// (1 before any pair exists). That is the standard approximation for damping a limited-memory
+    /// method, and it is exact for the first update.
+    /// </para>
+    /// </remarks>
+    /// <param name="s">The step taken, <c>x_{k+1} − x_k</c>.</param>
+    /// <param name="y">The gradient change, <c>∇f(x_{k+1}) − ∇f(x_k)</c>.</param>
+    /// <returns>The damped gradient change to store, or <paramref name="y"/> when no damping is needed.</returns>
+    private Vector<T> ApplyPowellDamping(Vector<T> s, Vector<T> y)
+    {
+        var dampingFactor = NumOps.FromDouble(_options.PowellDampingFactor);
+        if (!NumOps.GreaterThan(dampingFactor, NumOps.Zero))
+        {
+            return y;
+        }
+
+        // sᵀBs under the B ≈ (1/γ)·I model.
+        T sDotS = s.DotProduct(s);
+        if (!NumOps.GreaterThan(sDotS, NumOps.Zero))
+        {
+            // A zero step carries no curvature information; leave it to the caller's threshold.
+            return y;
+        }
+
+        T sBs = NumOps.Divide(sDotS, _lbfgsInverseHessianScale);
+        T sDotY = s.DotProduct(y);
+        T required = NumOps.Multiply(dampingFactor, sBs);
+
+        if (!NumOps.LessThan(sDotY, required))
+        {
+            return y;
+        }
+
+        // θ = (1 − factor)·sᵀBs / (sᵀBs − sᵀy). The denominator is positive here because
+        // sᵀy < factor·sᵀBs ≤ sᵀBs for factor in (0, 1].
+        T denominator = NumOps.Subtract(sBs, sDotY);
+        if (!NumOps.GreaterThan(denominator, NumOps.Zero))
+        {
+            return y;
+        }
+
+        T theta = NumOps.Divide(
+            NumOps.Multiply(NumOps.Subtract(NumOps.One, dampingFactor), sBs), denominator);
+
+        // r = θ·y + (1 − θ)·B·s, with B·s = s / γ.
+        var scaledStep = (Vector<T>)Engine.Multiply(
+            s, NumOps.Divide(NumOps.One, _lbfgsInverseHessianScale));
+
+        return (Vector<T>)Engine.Add(
+            (Vector<T>)Engine.Multiply(y, theta),
+            (Vector<T>)Engine.Multiply(scaledStep, NumOps.Subtract(NumOps.One, theta)));
+    }
+
+    /// <summary>
     /// Updates the L-BFGS memory with the latest step information.
     /// </summary>
     /// <param name="oldSolution">The previous solution vector.</param>
     /// <param name="newSolution">The current solution vector.</param>
     /// <param name="gradient">The current gradient.</param>
     /// <param name="previousGradient">The previous gradient.</param>
-    private void UpdateLBFGSMemory(Vector<T> oldSolution, Vector<T> newSolution, Vector<T> gradient, Vector<T> previousGradient)
+    /// <param name="skipDamping">
+    /// When true the pair is stored exactly as measured. Set this only when the step is known to
+    /// have satisfied the Wolfe curvature condition, which already guarantees positive curvature.
+    /// </param>
+    private void UpdateLBFGSMemory(Vector<T> oldSolution, Vector<T> newSolution, Vector<T> gradient, Vector<T> previousGradient, bool skipDamping = false)
     {
         // === Vectorized Memory Update using IEngine (Phase B: US-GPU-015) ===
         // s = new_solution - old_solution
@@ -333,6 +638,35 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
         var s = (Vector<T>)Engine.Subtract(newSolution, oldSolution);
         var y = (Vector<T>)Engine.Subtract(gradient, previousGradient);
+
+        // Curvature condition: only pairs with s·y > 0 keep the implied inverse-Hessian positive
+        // definite. Storing a pair that violates it lets CalculateDirection return an ascent
+        // direction, and a near-zero s·y makes its divisions (alpha, gamma, beta) blow up — the
+        // division by s·y at the top of the two-loop recursion is unguarded.
+        // See Nocedal and Wright, "Numerical Optimization", section 6.1.
+        //
+        // Simply DISCARDING violating pairs is wrong for a nonconvex objective, where the condition
+        // fails routinely: the memory starves and L-BFGS silently degrades into steepest descent.
+        // Measured on this repo's NOTEARS suites (nonconvex augmented-Lagrangian subproblems),
+        // discard-only raised failures across the Linear/Nonlinear/LowRank families from 11 to 17.
+        // Powell's damped update repairs the pair instead of dropping it, blending y toward Bs until
+        // the curvature condition holds by construction (Powell, 1978; Nocedal and Wright,
+        // Procedure 18.2).
+        // Damping repairs a pair that would otherwise be unusable. A Wolfe step needs no repair,
+        // and repairing it anyway costs the method its superlinear convergence.
+        if (!skipDamping)
+        {
+            y = ApplyPowellDamping(s, y);
+        }
+
+        if (!NumOps.GreaterThan(s.DotProduct(y), NumOps.FromDouble(_options.MinimumCurvature)))
+        {
+            return;
+        }
+
+        // Remember the scaling implied by the accepted pair; it is the B0 = (1/gamma)·I model that
+        // the next damping step measures curvature against.
+        _lbfgsInverseHessianScale = NumOps.Divide(s.DotProduct(y), y.DotProduct(y));
 
         if (_s.Count >= _options.MemorySize)
         {
@@ -598,15 +932,20 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
             writer.Write(optionsJson);
 
             writer.Write(_iteration);
+            writer.Write(NumOps.ToDouble(_lbfgsInverseHessianScale));
             writer.Write(_s.Count);
             foreach (var vector in _s)
             {
-                writer.Write(vector.Serialize());
+                byte[] vectorData = vector.Serialize();
+                writer.Write(vectorData.Length);
+                writer.Write(vectorData);
             }
             writer.Write(_y.Count);
             foreach (var vector in _y)
             {
-                writer.Write(vector.Serialize());
+                byte[] vectorData = vector.Serialize();
+                writer.Write(vectorData.Length);
+                writer.Write(vectorData);
             }
 
             return ms.ToArray();
@@ -642,6 +981,7 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             _iteration = reader.ReadInt32();
+            _lbfgsInverseHessianScale = NumOps.FromDouble(reader.ReadDouble());
 
             int sCount = reader.ReadInt32();
             _s = new List<Vector<T>>(sCount);

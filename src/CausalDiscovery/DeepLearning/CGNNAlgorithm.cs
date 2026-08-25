@@ -52,13 +52,23 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsNonlinear => true;
+    private readonly int _seed;
 
-    private readonly int? _seed;
-
+    /// <summary>
+    /// Seed used when the caller does not supply one, so that a run is reproducible by default.
+    /// </summary>
+    /// <remarks>
+    /// Previously this fell back to an unseeded secure RNG, which made the model nondeterministic
+    /// and its generated model-family tests flaky: the identical test binary produced 13 failures
+    /// in one run and 8 in the next over the same 42 tests, which makes regression detection on
+    /// this path impossible. Callers still override via the options' Seed property. Matches the
+    /// fixed-seed convention already used by DAGMANonlinear in this module.
+    /// </remarks>
+    private const int DefaultRandomSeed = 42;
     public CGNNAlgorithm(CausalDiscoveryOptions? options = null)
     {
         ApplyDeepOptions(options);
-        _seed = options?.Seed;
+        _seed = options?.Seed ?? DefaultRandomSeed;
     }
 
     /// <inheritdoc/>
@@ -71,14 +81,11 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
 
         var cov = ComputeCovarianceMatrix(data);
         var corr = CovarianceToCorrelation(cov);
-        var rng = _seed.HasValue
-            ? Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed.Value)
-            : Tensors.Helpers.RandomHelper.CreateSecureRandom();
+        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed);
         T corrThreshold = NumOps.FromDouble(EdgeThreshold);
         T eps = NumOps.FromDouble(1e-10);
 
-        var candidateEdges = new double[d, d];
-        var sourceScore = new double[d];
+        var candidates = new List<(int From, int To, T Weight, double Confidence)>();
 
         // For each pair with significant correlation, determine direction via MMD
         for (int i = 0; i < d; i++)
@@ -93,47 +100,70 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
                 T mmdJI = TrainAndComputeMMD(data, j, i, h, n, rng);
 
                 // Direction with lower MMD wins
-                T varFrom, olsWeight;
                 int from, to;
                 if (NumOps.GreaterThan(mmdJI, mmdIJ))
                 {
-                    // i→j
-                    from = i;
-                    to = j;
-                    varFrom = cov[i, i];
+                    (from, to) = (i, j);
                 }
                 else
                 {
-                    // j→i
-                    from = j;
-                    to = i;
-                    varFrom = cov[j, j];
+                    (from, to) = (j, i);
                 }
 
+                T varFrom = cov[from, from];
                 if (!NumOps.GreaterThan(varFrom, eps)) continue;
 
-                olsWeight = NumOps.Divide(cov[from, to], varFrom);
+                T olsWeight = NumOps.Divide(cov[from, to], varFrom);
                 if (!NumOps.GreaterThan(NumOps.Abs(olsWeight), NumOps.FromDouble(0.1))) continue;
 
-                candidateEdges[from, to] = NumOps.ToDouble(olsWeight);
-
-                // Pairwise MMD orientation rules out only two-cycles; three or more individually
-                // preferred directions can still form a directed cycle. Accumulate the confidence
-                // of every accepted orientation into a global source ordering, then retain only
-                // edges that agree with that ordering. This preserves the strongest pairwise MMD
-                // evidence while making the public graph a DAG by construction.
-                double confidence = Math.Max(
-                    Math.Abs(NumOps.ToDouble(mmdJI) - NumOps.ToDouble(mmdIJ)),
-                    1e-12);
-                sourceScore[from] += confidence;
-                sourceScore[to] -= confidence;
+                double confidence = Math.Abs(NumOps.ToDouble(mmdIJ) - NumOps.ToDouble(mmdJI));
+                if (double.IsNaN(confidence) || double.IsInfinity(confidence)) confidence = 0.0;
+                candidates.Add((from, to, olsWeight, confidence));
             }
 
-        var acyclicEdges = ProjectToDag(candidateEdges, d, sourceScore);
+        // Pairwise MMD preferences are local: three individually preferred directions can still form
+        // A->B->C->A. CGNN's output contract is a DAG, so assemble the graph globally in descending
+        // orientation confidence and omit a weaker edge when it would close a directed cycle. The
+        // deterministic tie-break also makes equal-score projections reproducible.
+        candidates.Sort((a, b) =>
+        {
+            int byConfidence = b.Confidence.CompareTo(a.Confidence);
+            if (byConfidence != 0) return byConfidence;
+            int byFrom = a.From.CompareTo(b.From);
+            return byFrom != 0 ? byFrom : a.To.CompareTo(b.To);
+        });
+
         var result = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                result[i, j] = NumOps.FromDouble(acyclicEdges[i, j]);
+
+        bool CreatesCycle(int from, int to)
+        {
+            var seen = new bool[d];
+            var pending = new Stack<int>();
+            pending.Push(to);
+
+            while (pending.Count > 0)
+            {
+                int node = pending.Pop();
+                if (node == from) return true;
+                if (seen[node]) continue;
+
+                seen[node] = true;
+                for (int next = 0; next < d; next++)
+                {
+                    if (next != node && NumOps.GreaterThan(NumOps.Abs(result[node, next]), eps))
+                        pending.Push(next);
+                }
+
+            }
+
+            return false;
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (!CreatesCycle(candidate.From, candidate.To))
+                result[candidate.From, candidate.To] = candidate.Weight;
+        }
 
         return result;
     }

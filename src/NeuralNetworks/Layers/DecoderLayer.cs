@@ -308,6 +308,24 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
             // and resolve it explicitly below using ff1's resolved output dim.
             if (object.ReferenceEquals(sub, _feedForward2)) continue;
 
+            // LayerNormalizationLayer deliberately IGNORES a speculative ResolveShapesOnly walk --
+            // it returns without resolving and without throwing, because a chain-level walk is only
+            // a projection and a custom forward need not follow the public Layers list. The parent's
+            // try/catch below cannot notice that, since there is no exception to catch: the call
+            // looks like it succeeded while doing nothing. The three norms then stayed at their -1
+            // sentinel reporting 0 parameters each, so a cold Deserialize built a layer holding 204
+            // parameters for a checkpoint carrying 228 -- exactly the 3 x 8 the norms should have
+            // contributed -- and SetParameters refused the payload.
+            //
+            // This layer's topology DOES fix their width, so the authoritative entry point is the
+            // right one: all three normalize the residual stream, which is InputSize wide (ff2 maps
+            // back to InputSize before norm3). That is a declaration, not a guess.
+            if (sub is LayerNormalizationLayer<T> normalization)
+            {
+                normalization.ResolveArchitectureFeatureSizeOnly(inputSize);
+                continue;
+            }
+
             if (sub is LayerBase<T> lb && !lb.IsShapeResolved)
             {
                 // Try the [seq, features] shape first; if the sub-layer
@@ -733,6 +751,46 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
         _norm2.ResetState();
         _norm3.ResetState();
     }
+
+    /// <summary>
+    /// Declares the three inputs a transformer decoder block reads.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>decoder_input</c> is the sequence being generated, <c>encoder_output</c> is the memory the
+    /// cross-attention sub-layer attends into, and <c>mask</c> is the optional causal mask that stops
+    /// a position from seeing the future (Vaswani et al. 2017, §3.1 and §3.2.3).
+    /// </para>
+    /// <para>
+    /// <see cref="ForwardTracedPorts"/> already reads exactly these three names. Without this
+    /// declaration the layer inherited the base's single unnamed "input" port, so it consumed a
+    /// three-port contract while advertising a one-port one -- anything routing by declared ports
+    /// would wire only the decoder stream and silently drop the encoder memory.
+    /// </para>
+    /// </remarks>
+    private IReadOnlyList<LayerPort>? _decoderInputPortsCache;
+
+    /// <summary>
+    /// The three named inputs <see cref="ForwardTracedPorts"/> reads, so that anything routing by
+    /// declared ports wires the encoder memory instead of silently dropping it.
+    /// </summary>
+    /// <remarks>
+    /// Only <c>decoder_input</c> is required. <c>encoder_output</c> is optional because this layer
+    /// has a documented single-input path -- <see cref="Forward(Tensor{T})"/> uses the one tensor it
+    /// is given as both the decoder input and the encoder memory, which is what a decoder-only stack
+    /// needs. Declaring the port as required made that path unreachable: a lazily constructed layer
+    /// has no concrete shape yet, so binding the contract threw
+    /// "port 'encoder_output' is not ready: shape [-1] must be concrete before execution" before any
+    /// forward could resolve it. Optional here means "supply it to route encoder memory separately",
+    /// not "this layer ignores it".
+    /// </remarks>
+    public override IReadOnlyList<LayerPort> InputPorts =>
+        _decoderInputPortsCache ??=
+        [
+            new LayerPort("decoder_input", GetInputShape(), Role: TensorPortRole.Features),
+            new LayerPort("encoder_output", GetInputShape(), Required: false, Role: TensorPortRole.EncoderMemory),
+            new LayerPort("mask", GetInputShape(), Required: false, Role: TensorPortRole.Mask),
+        ];
 
     /// <summary>
     /// Named multi-input forward pass.

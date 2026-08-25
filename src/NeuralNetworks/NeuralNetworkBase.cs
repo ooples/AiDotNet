@@ -2404,10 +2404,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             if (layout.DeclaredParameterCount.HasValue)
                 return layout.DeclaredParameterCount.Value;
 
-            // Unknown slots contribute no invented width. KnownParameterCount retains independently
-            // resolved declarations; MaterializedParameterCount retains any real storage already
-            // owned by a partially deferred graph.
-            return Math.Max(layout.KnownParameterCount, layout.MaterializedParameterCount);
+            // Unknown slots contribute no invented width. A partially deferred graph can still own
+            // live values in those unknown slots while different, shape-resolved slots are waiting
+            // to materialize. GetParameters emits BOTH groups, so taking the larger aggregate loses
+            // one disjoint subtotal (ConformerFP lost 384 values; InternImage lost 59,392).
+            return layout.RestorableParameterCount;
         }
     }
 
@@ -2633,7 +2634,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         _fusedTrainingDisabled = false;
         _fusedTrainingCommitted = false;
         _fusedPersistenceVerified = false;
-        _layersSupportFusedCompiledTraining = null;
     }
 
     /// <summary>
@@ -3339,6 +3339,43 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             var expectedNoBatch = new int[expectedShape.Length - 1];
             Array.Copy(expectedShape, 1, expectedNoBatch, 0, expectedNoBatch.Length);
             if (ShapesMatchKnownDimensions(expectedNoBatch, actualShape))
+                return true;
+        }
+
+        // The mirror image of the two blocks above, and the case they left out. Those strip a
+        // CONCRETE leading dim off the longer side, and license the strip by requiring the SHORTER
+        // side to lead with a wildcard. But the wildcard can just as easily sit on the longer side:
+        //
+        //   MultiHeadAttentionLayer.GetOutputShape() == [-1, -1, 16]   (rank 3, "any batch, any seq")
+        //   SequenceTokenSliceLayer.GetInputShape()  == [8, 16]        (rank 2, resolved per-sample)
+        //
+        // which is what a chain looks like once a real forward has resolved the downstream layer's
+        // per-sample shape while the upstream layer keeps its batch-agnostic declaration. Neither
+        // block fires -- one needs the longer side's leading dim >= 1, and it is -1 -- so DeepCopy
+        // re-running the validator on an already-forwarded chain rejected a chain it had accepted at
+        // construction time (HarmonicEngine PR #149).
+        //
+        // Stripping a leading dim that is ITSELF a wildcard is the safest form of this strip, not a
+        // looser one: "-1" IS the declaration that any batch is accepted. It cannot bless the
+        // [32, 32] vs [3, 32, 32] pair the comment above rightly worries about, because 3 is
+        // concrete and this branch only strips a dim that is not.
+        if (expectedShape.Length == actualShape.Length + 1
+            && expectedShape.Length > 0
+            && expectedShape[0] <= 0)
+        {
+            var expectedNoWildcardBatch = new int[expectedShape.Length - 1];
+            Array.Copy(expectedShape, 1, expectedNoWildcardBatch, 0, expectedNoWildcardBatch.Length);
+            if (ShapesMatchKnownDimensions(expectedNoWildcardBatch, actualShape))
+                return true;
+        }
+
+        if (actualShape.Length == expectedShape.Length + 1
+            && actualShape.Length > 0
+            && actualShape[0] <= 0)
+        {
+            var actualNoWildcardBatch = new int[actualShape.Length - 1];
+            Array.Copy(actualShape, 1, actualNoWildcardBatch, 0, actualNoWildcardBatch.Length);
+            if (ShapesMatchKnownDimensions(expectedShape, actualNoWildcardBatch))
                 return true;
         }
 
@@ -7909,7 +7946,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             long paramCount;
             try
             {
-                paramCount = PlanningParameterCount;
+                // Both truths, because they answer different questions. PlanningParameterCount is
+                // the manifest's allocation-free view of what is declared or materialized;
+                // ParameterCount is the model's OWN public declaration, which a subclass may
+                // override to report a size the manifest cannot express -- foundation models
+                // routinely do. Consulting only the manifest meant such an override was invisible
+                // here, so a model declaring 50 B parameters never crossed a 10 B threshold and
+                // silently ran eager. Taking the greater keeps the manifest's answer whenever it is
+                // the larger one, so no model loses streaming it already got.
+                //
+                // ParameterCount is read exactly ONCE, and only on this branch -- a model whose
+                // structural estimate already cleared the threshold still pays no parameter walk at
+                // all. ParameterLayoutNotReadyException derives from InvalidOperationException, so a
+                // shape-deferred model is handled by the existing catch below and simply retries.
+                paramCount = Math.Max(PlanningParameterCount, ParameterCount);
             }
             catch (Exception ex) when (
                 ex is InvalidOperationException ||
@@ -10470,14 +10520,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected virtual bool SupportsFusedCompiledTraining => true;
 
     /// <summary>
-    /// Cached aggregate of the declarative fused-training capability on every layer in this
-    /// network, including nested sub-layers. This keeps graph-routing policy in the shared base:
-    /// a model that composes an eager-only layer automatically gets the required graph break and
-    /// model authors do not have to repeat a <see cref="SupportsFusedCompiledTraining"/> override.
-    /// </summary>
-    private bool? _layersSupportFusedCompiledTraining;
-
-    /// <summary>
     /// Permanently opts this network instance out of standalone fused-optimizer
     /// compilation when a parent model owns a larger stateful training graph.
     /// Unlike <see cref="_fusedTrainingDisabled"/>, this architectural graph-break
@@ -10750,7 +10792,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // gate is now the single supported way to bypass fused training.
         if (!SupportsFusedCompiledTraining || _parentOwnedTrainingGraph)
             return EmitFusedMissAndFallback(
-                "model or composed layer opts out of fused compiled training (dynamic/stateful forward)");
+                "model opts out of fused compiled training (dynamic/stateful forward)");
         if (_fusedTrainingDisabled)
             return EmitFusedMissAndFallback("fused path sticky-disabled from prior fallback");
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)

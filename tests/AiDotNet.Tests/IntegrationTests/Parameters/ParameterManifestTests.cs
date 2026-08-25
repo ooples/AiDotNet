@@ -389,6 +389,26 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public void LayoutSnapshot_RestorableCountAddsKnownAndLiveDeferredSlots()
+    {
+        var snapshot = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "known-lazy", ParameterSlotRole.Trainable,
+                ParameterReadiness.ShapeResolvedUnmaterialized, 12),
+            new ParameterSlotDescriptor(
+                "live-deferred", ParameterSlotRole.Trainable,
+                ParameterReadiness.ShapeDeferred, null,
+                materializedParameterCount: 3)
+        });
+
+        Assert.Null(snapshot.DeclaredParameterCount);
+        Assert.Equal(12, snapshot.KnownParameterCount);
+        Assert.Equal(3, snapshot.MaterializedParameterCount);
+        Assert.Equal(15, snapshot.RestorableParameterCount);
+    }
+
+    [Fact]
     public async Task LayoutFingerprint_ChangesWhenCheckpointOwnershipOrCountChanges()
     {
         await Task.Yield();

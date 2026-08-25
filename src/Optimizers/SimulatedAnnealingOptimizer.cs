@@ -28,7 +28,7 @@ using Newtonsoft.Json;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IDerivativeFreeFunctionOptimizer<T>
 {
     /// <summary>
     /// Random number generator for stochastic decision-making.
@@ -569,4 +569,83 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
             _currentTemperature = NumOps.FromDouble(reader.ReadDouble());
         }
     }
+
+    /// <summary>
+    /// Creates a simulated annealing optimizer for minimizing a plain function, with no model.
+    /// </summary>
+    /// <param name="options">The optimizer-specific options. If null, defaults are used.</param>
+    public static SimulatedAnnealingOptimizer<T, TInput, TOutput> CreateForFunction(
+        SimulatedAnnealingOptions<T, TInput, TOutput>? options = null)
+        => new(options);
+
+    /// <summary>Backs <see cref="CreateForFunction"/>: the same setup with no model.</summary>
+    private SimulatedAnnealingOptimizer(SimulatedAnnealingOptions<T, TInput, TOutput>? options)
+        : base(null, options ?? new())
+    {
+        _random = RandomHelper.CreateSecureRandom();
+        _saOptions = options ?? new SimulatedAnnealingOptions<T, TInput, TOutput>();
+        _currentTemperature = NumOps.FromDouble(_saOptions.InitialTemperature);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Metropolis annealing (Kirkpatrick, Gelatt and Vecchi, <i>Science</i> 220, 1983). Each step
+    /// proposes a Gaussian perturbation and accepts it outright when it improves, or with
+    /// probability <c>exp(-delta/temperature)</c> when it does not. The temperature falls
+    /// geometrically, so early on almost anything is accepted and late on almost nothing is.
+    /// </para>
+    /// <para>
+    /// Accepting worse points is the entire method, and it is what lets annealing leave a basin
+    /// that a descent method could never escape (Lesson 1.3's problem). It is also why the best
+    /// point has to be tracked separately from the current one: the search deliberately does not
+    /// end where it was best.
+    /// </para>
+    /// <para>
+    /// <paramref name="tolerance"/> stops the run once the temperature falls below it, since at
+    /// that point the method has become a very slow hill-climber and further cooling changes
+    /// nothing.
+    /// </para>
+    /// </remarks>
+    public Vector<T> Minimize(
+        Vector<T> initialParameters, Func<Vector<T>, T> objective, int maxIterations, T tolerance)
+    {
+        ValidateMinimizeArguments(initialParameters, objective, maxIterations);
+
+        var search = new DerivativeFreeSearch(objective, NumOps, initialParameters);
+        var random = CreateSearchRandom();
+
+        var current = initialParameters.Clone();
+        T currentValue = search.BestValue;
+
+        double temperature = _saOptions.InitialTemperature;
+        double floor = Math.Max(_saOptions.MinTemperature, Convert.ToDouble(tolerance));
+        double stepScale = _saOptions.NeighborGenerationRange;
+
+        for (int iteration = 0; iteration < maxIterations && temperature > floor; iteration++)
+        {
+            var candidate = new Vector<T>(current.Length);
+            for (int i = 0; i < current.Length; i++)
+            {
+                candidate[i] = NumOps.Add(
+                    current[i], NumOps.FromDouble(stepScale * NextGaussian(random)));
+            }
+
+            T candidateValue = search.Evaluate(candidate);
+            double delta = Convert.ToDouble(candidateValue) - Convert.ToDouble(currentValue);
+
+            // Downhill is always taken; uphill is taken with a probability that shrinks as the
+            // temperature falls. Without the second clause this is a random-restart hill climb.
+            if (delta <= 0.0 || random.NextDouble() < Math.Exp(-delta / temperature))
+            {
+                current = candidate;
+                currentValue = candidateValue;
+            }
+
+            temperature *= _saOptions.CoolingRate;
+        }
+
+        return search.BestPoint;
+    }
+
 }

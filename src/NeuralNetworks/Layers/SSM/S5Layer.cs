@@ -87,23 +87,31 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
 
     // Diagonal A stored as real/imaginary pairs: [stateDim]
     // Lambda = a_real + i * a_imag, initialized with HiPPO-LegS: Lambda_n = -1/2 + n*pi*i
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _aReal;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _aImag;
 
     // B input matrix (complex, after V^{-1} transformation): [stateDim, modelDim] real/imag
     // Maps H-dimensional input to N-dimensional complex state
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _bReal;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _bImag;
 
     // C output matrix (complex): [modelDim, stateDim] real/imag
     // Maps N-dimensional complex state to H-dimensional real output via Re(C * x)
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _cReal;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _cImag;
 
     // D skip connection: [modelDim]
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _dParam;
 
     // Discretization step size: [stateDim] (stored as log for positivity)
+    [TrainableParameter(Role = PersistentTensorRole.ScaleParameters)]
     private Tensor<T> _logDelta;
 
     // Input projection: [modelDim, modelDim]
@@ -932,6 +940,19 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
             Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
 
         // Register trainable parameters for tape-based autodiff
+        // Register trainable parameters for tape-based autodiff. The state-space core belongs here
+        // with the projections: UpdateParameters above applies gradients to every one of these, so
+        // they are trained on the legacy path, but registering only the projections made them
+        // invisible to the tape path -- which trains exclusively from registered parameters -- and to
+        // GetParameters/SetParameters, and therefore to serialization.
+        RegisterTrainableParameter(_aReal, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_aImag, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bReal, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bImag, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_cReal, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_cImag, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_dParam, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_logDelta, PersistentTensorRole.ScaleParameters);
         RegisterTrainableParameter(_inputProjectionWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_inputProjectionBias, PersistentTensorRole.Biases);
         RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);

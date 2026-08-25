@@ -191,7 +191,6 @@ public class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
     /// on net471, which this project still targets.
     /// </remarks>
     private const double NearestBelowOne = 0.99999999999999989;
-
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);

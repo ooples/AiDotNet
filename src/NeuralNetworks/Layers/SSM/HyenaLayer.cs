@@ -84,16 +84,22 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
 
     // Input projections: (order + 1) projections, each [modelDim, modelDim]
     // Index 0 = value projection (v), indices 1..order = gate projections (x_1..x_N)
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T>[] _inputProjectionWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
     private Tensor<T>[] _inputProjectionBiases;
 
     // Implicit filter network: one small MLP per convolution (order MLPs total)
     // Each MLP: input(1) -> hidden(filterDim) -> output(modelDim)
     // Layer 1: [1, filterDim]  (positional encoding -> hidden)
     // Layer 2: [filterDim, modelDim] (hidden -> filter value per dimension)
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T>[] _filterWeights1;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
     private Tensor<T>[] _filterBiases1;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T>[] _filterWeights2;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
     private Tensor<T>[] _filterBiases2;
 
     // Output projection: [modelDim, modelDim]
@@ -509,6 +515,13 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
             Engine.TensorMultiplyScalar(_outputProjectionBiasGradient, negLR));
 
         // Register trainable parameters for tape-based autodiff
+        // The array-held projections and filter MLPs are NOT registered by hand here. Their
+        // [TrainableParameter] attributes give TrainableParameterGenerator the whole surface via
+        // ParameterCollectionKind.Array, and an explicit loop would defeat that: the generator's
+        // HasUnmappableRegistration treats an INDEXED argument as unmappable and then declines to
+        // emit GetTrainableParameters/SetTrainableParameters at all. Writing those loops shrank the
+        // generated partial from a full surface to a bare AppendDeclaredParameterComponents and
+        // turned the round trip into "HyenaLayer has 0 registered parameters but received 16".
         RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
 

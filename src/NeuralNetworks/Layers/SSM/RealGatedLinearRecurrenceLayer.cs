@@ -2,6 +2,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Compilation;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -146,6 +147,18 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeCon
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Every weight is sized from constructor arguments, so the parameter surface is known before
+    /// the first forward pass.
+    /// </summary>
+    /// <remarks>
+    /// <c>GetParameters()</c> already returns 5,280 values for <c>RealGatedLinearRecurrenceLayer<float>(4, 32)</c>. Without this,
+    /// <c>IsShapeResolved</c> stays false and <see cref="LayerBase{T}.SetParameters"/> treats the
+    /// layer as shape-DEFERRED, parking a wrong-length vector as a pending restore instead of
+    /// rejecting it -- so mismatched weights fail silently and surface later somewhere unrelated.
+    /// </remarks>
+    protected override bool ParametersAreConstructionSized => true;
 
     /// <summary>
     /// Gets the model dimension (input/output width).
@@ -406,23 +419,85 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeCon
             Engine.TensorMultiply(Engine.Softplus(_decayParam), negativeC));
         var transition = Engine.TensorExp(logTransition);
 
-        // RgLruScanForward defines its effective transition as
-        // recurrenceStream * sigmoid(-decay). With a zero decay vector the
-        // internal factor is exactly 1/2, so passing 2*a_t implements the
-        // Griffin transition exactly while retaining one analytic BPTT node.
-        var twos = Tensor<T>.CreateDefault(
-            new[] { batchSize, seqLen, _recurrenceDimension }, NumOps.FromDouble(2.0));
-        var zeroDecay = new Tensor<T>(new[] { _recurrenceDimension });
-        var output = Engine.RgLruScanForward(
-            value,
-            Engine.TensorMultiply(transition, twos),
-            inpGate,
-            zeroDecay);
+        Tensor<T> output;
+        if (GraphMode.IsActive)
+        {
+            // AiDotNet.Tensors 0.129.2 records ordinary tensor primitives in GraphMode, but its
+            // fused RgLruScanForward implementation currently records only on the eager gradient
+            // tape. Calling it while a compiled graph is being traced turns its result into an
+            // uninitialized graph leaf, so replay feeds pool contents into the output projection
+            // and the fused step falls back with non-finite loss or gradients.
+            //
+            // Express the same recurrence with recorded primitives while tracing. The complete
+            // forward/backward/optimizer step remains compiled; only the scan is decomposed until
+            // the tensor engine can record its fused kernel as a lazy graph node.
+            output = GatedRecurrenceForwardCompiled(
+                value, transition, inpGate, batchSize, seqLen);
+            _lastHiddenStates = null;
+            _lastDecayFactors = null;
+        }
+        else
+        {
+            // RgLruScanForward defines its effective transition as
+            // recurrenceStream * sigmoid(-decay). With a zero decay vector the
+            // internal factor is exactly 1/2, so passing 2*a_t implements the
+            // Griffin transition exactly while retaining one analytic BPTT node.
+            var twos = Tensor<T>.CreateDefault(
+                new[] { batchSize, seqLen, _recurrenceDimension }, NumOps.FromDouble(2.0));
+            var zeroDecay = new Tensor<T>(new[] { _recurrenceDimension });
+            var recurrenceStream = Engine.TensorMultiply(transition, twos);
+            output = Engine.RgLruScanForward(value, recurrenceStream, inpGate, zeroDecay);
 
-        var initial = new Tensor<T>(new[] { batchSize, 1, _recurrenceDimension });
-        _lastHiddenStates = Engine.TensorConcatenate(new[] { initial, output }, axis: 1);
-        _lastDecayFactors = transition;
+            var initial = new Tensor<T>(new[] { batchSize, 1, _recurrenceDimension });
+            _lastHiddenStates = Engine.TensorConcatenate(new[] { initial, output }, axis: 1);
+            _lastDecayFactors = transition;
+        }
+
         return output;
+    }
+
+    /// <summary>
+    /// Records the RG-LRU recurrence as ordinary graph operations for compiled training.
+    /// </summary>
+    private Tensor<T> GatedRecurrenceForwardCompiled(
+        Tensor<T> value, Tensor<T> transition, Tensor<T> inpGate,
+        int batchSize, int seqLen)
+    {
+        var hiddenByTime = new Tensor<T>[seqLen];
+        var hidden = new Tensor<T>(new[] { batchSize, _recurrenceDimension });
+        var ones = Tensor<T>.CreateDefault(
+            new[] { batchSize, _recurrenceDimension }, NumOps.One);
+
+        // Griffin clips the derivative of sqrt(1-a^2) to 1000. Flooring its argument at 1e-6
+        // provides the same finite upper bound when float rounding makes a exactly one.
+        var magnitudeFloor = Tensor<T>.CreateDefault(
+            new[] { batchSize, _recurrenceDimension }, NumOps.FromDouble(1e-6));
+
+        for (int t = 0; t < seqLen; t++)
+        {
+            var valueAtTime = Engine.Reshape(
+                Engine.TensorNarrow(value, 1, t, 1),
+                new[] { batchSize, _recurrenceDimension });
+            var transitionAtTime = Engine.Reshape(
+                Engine.TensorNarrow(transition, 1, t, 1),
+                new[] { batchSize, _recurrenceDimension });
+            var inputGateAtTime = Engine.Reshape(
+                Engine.TensorNarrow(inpGate, 1, t, 1),
+                new[] { batchSize, _recurrenceDimension });
+
+            var oneMinusTransitionSquared = Engine.TensorSubtract(
+                ones, Engine.TensorSquare(transitionAtTime));
+            var inputScale = Engine.TensorSqrt(
+                Engine.TensorMax(oneMinusTransitionSquared, magnitudeFloor));
+            var gatedValue = Engine.TensorMultiply(inputGateAtTime, valueAtTime);
+            hidden = Engine.TensorAdd(
+                Engine.TensorMultiply(transitionAtTime, hidden),
+                Engine.TensorMultiply(inputScale, gatedValue));
+            hiddenByTime[t] = Engine.Reshape(
+                hidden, new[] { batchSize, 1, _recurrenceDimension });
+        }
+
+        return Engine.TensorConcatenate(hiddenByTime, axis: 1);
     }
 
     #region Parameter Management

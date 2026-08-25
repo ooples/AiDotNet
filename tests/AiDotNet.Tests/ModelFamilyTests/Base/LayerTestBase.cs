@@ -866,6 +866,18 @@ public abstract class LayerTestBase<T>
             var originalTensor = originalTensors[tensorIndex];
             var restoredTensor = restoredTensors[tensorIndex];
             Assert.Equal(originalTensor.Shape.ToArray(), restoredTensor.Shape.ToArray());
+
+            // Sparse-storage tensors have no flat indexer: Tensor<T>.this[int] routes to
+            // TensorBase<T>.GetFlat, which throws "GetFlat is not supported on sparse tensors.
+            // Use SparseTensor-specific APIs or call ToDense() first." That is a deliberate API
+            // contract (a CSR/CSC store has no contiguous dense view), not a defect -- LayerBase
+            // itself detects the same case by type name and routes around it. SparseLinearLayer
+            // holds exactly such a tensor, so this loop crashed rather than compared. Densify
+            // first: the comparison is over identical values through a supported accessor, so
+            // nothing is weakened.
+            originalTensor = Densified(originalTensor);
+            restoredTensor = Densified(restoredTensor);
+
             for (int i = 0; i < originalTensor.Length; i++)
             {
                 double originalValue = ToD(originalTensor[i]);
@@ -892,9 +904,17 @@ public abstract class LayerTestBase<T>
         var originalReplay = layer.Forward(input).Clone();
         for (int i = 0; i < originalOutput.Length; i++)
         {
+            // Direct equality first, for the same reason the deserialized comparison below does it:
+            // Math.Abs(-inf - -inf) is NaN and NaN < 1e-12 is false, so two IDENTICAL infinities
+            // were reported as differing. ALiBiPositionalBiasLayer legitimately emits -inf at masked
+            // positions and failed with "before=-inf, after=-inf". NaN still fails, because == is
+            // false for NaN and a NaN output is a real defect rather than something to wave through.
+            if (EqualityComparer<T>.Default.Equals(originalOutput[i], originalReplay[i]))
+            {
+                continue;
+            }
             double originalValue = ToD(originalOutput[i]);
             double replayValue = ToD(originalReplay[i]);
-
             Assert.False(double.IsNaN(originalValue) || double.IsNaN(replayValue),
                 $"Serializing the layer produced NaN at [{i}]: " +
                 $"before={originalValue:G17}, after={replayValue:G17}");
@@ -949,6 +969,19 @@ public abstract class LayerTestBase<T>
                 $"original={originalValue:G17}, deserialized={deserializedValue:G17}");
         }
     }
+
+    /// <summary>
+    /// Returns a flat-indexable view of <paramref name="tensor"/>, densifying CSR/CSC storage.
+    /// </summary>
+    /// <remarks>
+    /// <c>LayerBase.IsSparseTensor</c> sniffs the type name to avoid binding a production path to a
+    /// Tensors-side concrete type. A test can afford the direct reference, and a compile-checked
+    /// pattern match is the better tool here: <c>SparseTensor&lt;T&gt;</c> derives from
+    /// <c>Tensor&lt;T&gt;</c> and exposes <c>ToDense()</c>, so a rename breaks the build instead of
+    /// silently falling through to the throwing indexer.
+    /// </remarks>
+    private static Tensor<T> Densified(Tensor<T> tensor)
+        => tensor is AiDotNet.Tensors.LinearAlgebra.SparseTensor<T> sparse ? sparse.ToDense() : tensor;
 
     // =========================================================================
     // INVARIANT 10: ResetState doesn't break the layer

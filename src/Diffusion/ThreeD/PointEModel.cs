@@ -169,6 +169,16 @@ public partial class PointEModel<T> : ThreeDDiffusionModelBase<T>
     /// <summary>
     /// The image generator for the first stage (optional).
     /// </summary>
+    /// <remarks>
+    /// Conditional, not merely nullable (AIDN090). Two-stage generation is opt-in, so a caller that
+    /// supplies no image generator leaves this null for the model's whole life. Without the
+    /// declaration the generated component registers with the default <c>Construction</c>
+    /// availability, and <c>ParameterComponentRegistry</c> reads a null Construction component as
+    /// <c>ShapeDeferred</c> — an unresolved trainable shape. That made <c>ParameterCount</c> throw
+    /// <c>ParameterLayoutNotReadyException</c> on every default-constructed PointE model even though
+    /// the other 81 slots were fully resolved.
+    /// </remarks>
+    [TrainableParameter(Optional = true)]
     private readonly ILatentDiffusionModel<T>? _imageGenerator;
 
     /// <summary>

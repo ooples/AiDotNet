@@ -191,6 +191,18 @@ public partial class CachedMultiHeadAttention<T> : LayerBase<T>, IShapeContract
         _outputWeights = new Tensor<T>([embeddingDimension, embeddingDimension]);
         _outputBias = new Tensor<T>([embeddingDimension]);
 
+        // Register the projections, or the layer reports ParameterCount 0 despite owning five
+        // weight tensors: GetParameters returns an empty vector, SetParameters is a silent no-op,
+        // and the weights can be neither trained nor saved. InferenceOptimizer rewrites a
+        // MultiHeadAttention into this layer and copies the weights across with exactly that
+        // round-trip, so the rewritten layer kept its own initialization and diverged from the
+        // original it was supposed to reproduce.
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+
         InitializeParameters();
     }
 

@@ -83,11 +83,13 @@ public class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
         _useNativeMode = true;
         // Honour the model's public training configuration. Constructing AdamW bare used its
         // framework default of 1e-3, ten times VoiceCloningOptions.LearningRate (1e-4), and the
-        // VITS/flow stack overshot a memorization target after a few otherwise healthy steps.
+        // VITS/flow stack overshot a memorization target after a few otherwise healthy steps. Pass
+        // weight decay too, and keep adaptive scheduling off so the configured rate remains exact.
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
                 UseAdaptiveLearningRate = false,
             });
         base.SampleRate = _options.SampleRate;

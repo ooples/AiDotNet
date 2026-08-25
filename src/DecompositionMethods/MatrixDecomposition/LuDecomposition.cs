@@ -1,6 +1,7 @@
 global using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Exceptions;
 
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 
@@ -164,6 +165,8 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
                 }
             }
 
+            EnsureUsablePivot(pivotValue, k);
+
             // VECTORIZED: Use Engine.SwapRows for efficient row swapping
             if (pivotRow != k)
             {
@@ -189,6 +192,8 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
                 Engine.SetRow(A, i, updated);
             }
         }
+
+        if (n > 0) EnsureUsablePivot(A[n - 1, n - 1], n - 1);
 
         // Extract U matrix from the modified A (upper triangular part)
         // L already has the multipliers stored during elimination, just set diagonal to 1
@@ -249,6 +254,8 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
                 }
             }
 
+            EnsureUsablePivot(pivotValue, k);
+
             // VECTORIZED: Use Engine.SwapRows for efficient row swapping
             if (pivotRow != k)
             {
@@ -281,6 +288,8 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
                 Engine.SetRow(A, i, updated);
             }
         }
+
+        if (n > 0) EnsureUsablePivot(A[n - 1, n - 1], n - 1);
 
         // Extract U matrix from the modified A (upper triangular part)
         // L already has the multipliers stored during elimination, just set diagonal to 1
@@ -567,9 +576,9 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
 
             T rhs = NumOps.Subtract(b[i], sum);
             T diag = L[i, i];
-            if (NumOps.Equals(diag, NumOps.Zero))
+            if (!IsUsablePivot(diag))
             {
-                throw new InvalidOperationException("Lower triangular factor is singular.");
+                throw new MatrixFactorizationException("The lower triangular factor is singular.");
             }
             y[i] = NumOps.Divide(rhs, diag);
         }
@@ -617,10 +626,32 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
                 sum = rowVec.DotProduct(xVec);
             }
 
-            x[i] = NumOps.Divide(NumOps.Subtract(y[i], sum), U[i, i]);
+            T pivot = U[i, i];
+            if (!IsUsablePivot(pivot))
+            {
+                throw new MatrixFactorizationException(
+                    $"The upper triangular factor has an invalid pivot at index {i}.");
+            }
+
+            x[i] = NumOps.Divide(NumOps.Subtract(y[i], sum), pivot);
         }
 
         return x;
+    }
+
+    private void EnsureUsablePivot(T pivot, int index)
+    {
+        if (!IsUsablePivot(pivot))
+        {
+            throw new MatrixFactorizationException(
+                $"LU factorization encountered a zero or non-finite pivot at index {index}.");
+        }
+    }
+
+    private bool IsUsablePivot(T pivot)
+    {
+        double value = NumOps.ToDouble(pivot);
+        return !double.IsNaN(value) && !double.IsInfinity(value) && !NumOps.Equals(pivot, NumOps.Zero);
     }
 
     /// <summary>

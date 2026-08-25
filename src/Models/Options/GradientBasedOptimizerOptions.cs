@@ -29,6 +29,46 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorithmOptions<T, TInput, TOutput>
 {
+    private double _armijoConstant = 1e-4;
+    private double _lineSearchContractionFactor = 0.5;
+    private double _wolfeCurvatureConstant = 0.9;
+
+    /// <summary>Creates gradient optimizer options with the documented defaults.</summary>
+    public GradientBasedOptimizerOptions()
+    {
+    }
+
+    /// <summary>Copies every shared and gradient-specific optimizer setting.</summary>
+    /// <param name="other">The options to copy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public GradientBasedOptimizerOptions(GradientBasedOptimizerOptions<T, TInput, TOutput> other)
+        : base(other)
+    {
+        GradientCache = other.GradientCache;
+        _lossFunction = other._lossFunction;
+        LossFunctionExplicitlySet = other.LossFunctionExplicitlySet;
+        Regularization = other.Regularization;
+        DataSampler = other.DataSampler;
+        ShuffleData = other.ShuffleData;
+        DropLastBatch = other.DropLastBatch;
+        RandomSeed = other.RandomSeed;
+        EnableGradientClipping = other.EnableGradientClipping;
+        GradientClippingMethod = other.GradientClippingMethod;
+        MaxGradientNorm = other.MaxGradientNorm;
+        MaxGradientValue = other.MaxGradientValue;
+        LearningRateScheduler = other.LearningRateScheduler;
+        SchedulerStepMode = other.SchedulerStepMode;
+        UseTrainingLossAsFitness = other.UseTrainingLossAsFitness;
+        LineSearchMaxSteps = other.LineSearchMaxSteps;
+        ArmijoConstant = other.ArmijoConstant;
+        LineSearchContractionFactor = other.LineSearchContractionFactor;
+        LineSearchFallbackStep = other.LineSearchFallbackStep;
+        UseStrongWolfeLineSearch = other.UseStrongWolfeLineSearch;
+        WolfeCurvatureConstant = other.WolfeCurvatureConstant;
+        LineSearchMaxZoomSteps = other.LineSearchMaxZoomSteps;
+        LineSearchMaxStep = other.LineSearchMaxStep;
+    }
+
     /// <summary>
     /// Copies every settable option inherited by a concrete gradient optimizer.
     /// </summary>
@@ -104,6 +144,20 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
         LearningRateScheduler = other.LearningRateScheduler;
         SchedulerStepMode = other.SchedulerStepMode;
         UseTrainingLossAsFitness = other.UseTrainingLossAsFitness;
+
+        // The line-search settings belong here for the same reason as everything above: a concrete
+        // optimizer's copy constructor calls this and nothing else, so anything omitted is silently
+        // reset to its default in the copy. They were absent while this helper and the settings
+        // themselves were added on separate branches -- the helper could not name properties that did
+        // not exist yet, and each side was complete on its own.
+        LineSearchMaxSteps = other.LineSearchMaxSteps;
+        ArmijoConstant = other.ArmijoConstant;
+        LineSearchContractionFactor = other.LineSearchContractionFactor;
+        LineSearchFallbackStep = other.LineSearchFallbackStep;
+        UseStrongWolfeLineSearch = other.UseStrongWolfeLineSearch;
+        WolfeCurvatureConstant = other.WolfeCurvatureConstant;
+        LineSearchMaxZoomSteps = other.LineSearchMaxZoomSteps;
+        LineSearchMaxStep = other.LineSearchMaxStep;
     }
 
     /// <summary>
@@ -392,6 +446,189 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
     /// </para>
     /// </remarks>
     public bool UseTrainingLossAsFitness { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the maximum number of backtracking steps in the line search.
+    /// </summary>
+    /// <value>The maximum line search steps, defaulting to 20.</value>
+    /// <remarks>
+    /// <para>
+    /// An optimizer proposes a search direction and then asks "how far along it should I actually go?".
+    /// The line search starts at a full step and repeatedly shrinks it until the Armijo
+    /// sufficient-decrease condition holds. This caps how many shrinks are attempted before the
+    /// search gives up and takes <see cref="LineSearchFallbackStep"/> instead. With the default
+    /// contraction factor of 0.5, twenty steps reduce the trial step to about one millionth of
+    /// the original.
+    /// </para>
+    /// <para><b>For Beginners:</b> The optimizer works out which way is downhill, then has to
+    /// decide how big a stride to take. It tries a big stride first; if that overshoots and lands
+    /// somewhere worse, it halves the stride and tries again. This is how many times it is allowed
+    /// to halve before giving up on that direction.
+    /// </para>
+    /// </remarks>
+    public int LineSearchMaxSteps { get; set; } = 20;
+
+    /// <summary>
+    /// Gets or sets the Armijo sufficient-decrease constant used by the line search.
+    /// </summary>
+    /// <value>The Armijo constant, defaulting to 1e-4.</value>
+    /// <remarks>
+    /// <para>
+    /// A trial step is accepted when
+    /// <c>f(x + step·d) &lt;= f(x) + ArmijoConstant · step · ∇f(x)ᵀd</c>. This is the standard
+    /// Armijo condition (Nocedal and Wright, "Numerical Optimization", Algorithm 3.1); 1e-4 is the
+    /// conventional value. It must lie strictly between 0 and 1.
+    /// </para>
+    /// <para><b>For Beginners:</b> A step is only worth taking if it actually improves things by a
+    /// meaningful amount, not just by a hair. This setting says how much improvement counts as
+    /// "meaningful", measured against how much the slope promised. The small default means the
+    /// optimizer is easy to satisfy, which is usually what you want — being fussy here just makes
+    /// it shrink the step more often for little gain.
+    /// </para>
+    /// </remarks>
+    public double ArmijoConstant
+    {
+        get => _armijoConstant;
+        set => _armijoConstant = value > 0 && value < 1 && !double.IsNaN(value)
+            ? value
+            : throw new ArgumentOutOfRangeException(
+                nameof(value), value, "ArmijoConstant must be strictly between 0 and 1.");
+    }
+
+    /// <summary>
+    /// Gets or sets the factor by which the trial step is shrunk on each line search backtrack.
+    /// </summary>
+    /// <value>The contraction factor, defaulting to 0.5 (halving).</value>
+    /// <remarks>
+    /// <para>
+    /// Must lie strictly between 0 and 1. Smaller values shrink the step aggressively and reach an
+    /// acceptable step in fewer evaluations at the cost of possibly overshooting past a good one;
+    /// values closer to 1 search the step length more finely but need more objective evaluations.
+    /// </para>
+    /// <para><b>For Beginners:</b> When a stride turns out to be too big, this is the fraction it
+    /// gets multiplied by to produce the next attempt. The default halves it each time.
+    /// </para>
+    /// </remarks>
+    public double LineSearchContractionFactor
+    {
+        get => _lineSearchContractionFactor;
+        set => _lineSearchContractionFactor = value > 0 && value < 1 && !double.IsNaN(value)
+            ? value
+            : throw new ArgumentOutOfRangeException(
+                nameof(value), value, "LineSearchContractionFactor must be strictly between 0 and 1.");
+    }
+
+    /// <summary>
+    /// Gets or sets the step length used when the line search fails to find an acceptable step.
+    /// </summary>
+    /// <value>The fallback step, defaulting to 1e-4.</value>
+    /// <remarks>
+    /// <para>
+    /// When no trial step satisfies the Armijo condition within
+    /// <see cref="LineSearchMaxSteps"/> backtracks, the optimizer takes this small step along the
+    /// search direction rather than stalling. Because the direction is guaranteed to be a descent
+    /// direction, a sufficiently small step still makes progress, and continuing lets the curvature
+    /// memory refresh on the next iteration.
+    /// </para>
+    /// <para><b>For Beginners:</b> If every stride length the optimizer tried was unsatisfying, it
+    /// takes one deliberately tiny step rather than stopping dead. Standing still would leave it
+    /// stuck forever; a tiny step at least changes the situation.
+    /// </para>
+    /// </remarks>
+    public double LineSearchFallbackStep { get; set; } = 1e-4;
+
+    /// <summary>
+    /// Gets or sets whether the function-minimization line search enforces the strong Wolfe
+    /// conditions rather than sufficient decrease alone.
+    /// </summary>
+    /// <value><c>true</c> by default.</value>
+    /// <remarks>
+    /// <para>
+    /// The quasi-Newton methods as published assume the step length satisfies the Wolfe
+    /// conditions — sufficient decrease <i>and</i> a curvature condition on the directional
+    /// derivative (Nocedal and Wright, "Numerical Optimization", Algorithms 3.5 and 3.6). The
+    /// curvature condition is what makes <c>sᵀy &gt; 0</c> hold automatically, which is exactly
+    /// the property a correction pair needs. Accepting a step on sufficient decrease alone leaves
+    /// that property unenforced, so the pairs must be repaired instead — and repairing them
+    /// distorts the curvature information enough to cost the method its superlinear convergence.
+    /// </para>
+    /// <para>
+    /// Measured on the chained Rosenbrock function to a gradient tolerance of 1e-6: 7997 objective
+    /// evaluations at five variables with damping and sufficient decrease alone, against 107 with
+    /// the strong Wolfe search. The gap widens with the number of variables.
+    /// </para>
+    /// <para>
+    /// Set this to <c>false</c> to restore the sufficient-decrease backtracking search governed by
+    /// <see cref="ArmijoConstant"/>, <see cref="LineSearchContractionFactor"/> and
+    /// <see cref="LineSearchFallbackStep"/>. That search is also the fallback when the Wolfe search
+    /// exhausts its own budget without bracketing an acceptable step.
+    /// </para>
+    /// <para><b>For Beginners:</b> Before committing to a stride, the optimizer tries it. Checking
+    /// only "did this get me lower?" is not enough — a stride can lower the value while landing
+    /// somewhere that teaches the optimizer nothing about the surface's shape. The extra check asks
+    /// "and has the slope flattened out enough?", which is what makes the step worth learning from.
+    /// </para>
+    /// </remarks>
+    public bool UseStrongWolfeLineSearch { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the curvature constant <c>c2</c> in the strong Wolfe conditions.
+    /// </summary>
+    /// <value>The curvature constant, defaulting to 0.9.</value>
+    /// <remarks>
+    /// <para>
+    /// A step is accepted when <c>|∇f(x + αd)ᵀd| ≤ c2 · |∇f(x)ᵀd|</c>. Must lie strictly between
+    /// <see cref="ArmijoConstant"/> and 1; 0.9 is the value Nocedal and Wright recommend for
+    /// quasi-Newton methods, and 0.1 the one they recommend for nonlinear conjugate gradient.
+    /// </para>
+    /// <para><b>For Beginners:</b> How much flatter the slope has to become before the stride
+    /// counts as far enough. Smaller values demand a more careful search and cost more evaluations
+    /// per step; the default is deliberately permissive because quasi-Newton methods aim well
+    /// enough that a fussy search rarely pays for itself.
+    /// </para>
+    /// </remarks>
+    public double WolfeCurvatureConstant
+    {
+        get => _wolfeCurvatureConstant;
+        set => _wolfeCurvatureConstant = value > 0 && value < 1 && !double.IsNaN(value)
+            ? value
+            : throw new ArgumentOutOfRangeException(
+                nameof(value), value, "WolfeCurvatureConstant must be strictly between 0 and 1.");
+    }
+
+    /// <summary>
+    /// Gets or sets how many refinement steps the strong Wolfe search may take once it has
+    /// bracketed an acceptable step length.
+    /// </summary>
+    /// <value>The maximum number of zoom steps, defaulting to 20.</value>
+    /// <remarks>
+    /// <para>
+    /// This bounds the <c>zoom</c> phase of Nocedal and Wright's Algorithm 3.6. Twenty bisections
+    /// narrow the bracket by a factor of a million, which is far more than a quasi-Newton step
+    /// normally needs; the bound exists so a pathological objective cannot make the search run
+    /// forever.
+    /// </para>
+    /// <para><b>For Beginners:</b> Once the optimizer knows the right stride lies between two
+    /// lengths, this is how many times it may halve that range while closing in.
+    /// </para>
+    /// </remarks>
+    public int LineSearchMaxZoomSteps { get; set; } = 20;
+
+    /// <summary>
+    /// Gets or sets the largest step length the strong Wolfe search will consider.
+    /// </summary>
+    /// <value>The maximum step, defaulting to 1e10.</value>
+    /// <remarks>
+    /// <para>
+    /// The bracketing phase doubles the trial step until it finds one that is too long. On a
+    /// function that decreases without bound along the search direction, that doubling would run
+    /// until it overflowed; this caps it instead.
+    /// </para>
+    /// <para><b>For Beginners:</b> An upper limit on how far the optimizer will consider striding
+    /// in one go, so that a function with no bottom cannot send it to infinity.
+    /// </para>
+    /// </remarks>
+    public double LineSearchMaxStep { get; set; } = 1e10;
 }
 
 /// <summary>

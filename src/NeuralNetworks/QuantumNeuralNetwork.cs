@@ -441,6 +441,8 @@ public class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
 
         for (int i = 0; i < flatInput.Length; i++)
         {
+            // Stable signed L2 normalization keeps the state finite for negative and very large
+            // inputs while preserving unit norm. Scaling first avoids overflow in the norm.
             var scaled = NumOps.Divide(flatInput[i], maxMagnitude);
             var amplitude = NumOps.Divide(scaled, scaledNorm);
             quantumState[i] = new Complex<T>(amplitude, NumOps.Zero);

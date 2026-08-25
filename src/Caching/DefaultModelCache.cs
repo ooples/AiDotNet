@@ -88,6 +88,12 @@ public class DefaultModelCache<T, TInput, TOutput> : IModelCache<T, TInput, TOut
         _enabled = enabled;
     }
 
+    /// <inheritdoc />
+    public IModelCache<T, TInput, TOutput> CreateEmptyCopy()
+    {
+        return new DefaultModelCache<T, TInput, TOutput>(Capacity, EvictionPolicy, Enabled);
+    }
+
     /// <summary>
     /// Removes all cached optimization step data from the cache.
     /// </summary>

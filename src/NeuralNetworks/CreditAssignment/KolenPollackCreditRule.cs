@@ -98,11 +98,17 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Kolen-Pollack works by driving the feedback matrices toward the transpose of the forward ones;
-    /// whether that is actually happening is invisible from the loss curve alone, and a rule that has
-    /// stopped aligning trains without ever failing. This is how a caller sees the two matrices and
-    /// measures the angle between them. Internal rather than public so the credit-rule surface stays
-    /// small.
+    /// Kolen-Pollack works by driving each feedback matrix toward its forward weight; whether that is
+    /// actually happening is invisible from the loss curve alone, and a rule that has stopped aligning
+    /// trains without ever failing — which is exactly what this rule did before the shape guard in
+    /// <see cref="ApplyObservedForwardUpdates"/> was corrected. This is how a caller sees the two
+    /// matrices and measures the angle between them. Internal rather than public so the credit-rule
+    /// surface stays small.
+    /// </para>
+    /// <para>
+    /// Both matrices are <c>[outFeatures, inFeatures]</c>, so <c>Forward[r, c]</c> is the element
+    /// <c>Feedback[r, c]</c> is chasing and the two can be compared entry by entry. They are handed
+    /// back exactly as stored; no transpose is involved anywhere in this rule.
     /// </para>
     /// <para>
     /// DIAGNOSTIC ONLY, NOT PER-STEP. Every call clones two matrices per trainable layer, so calling
@@ -144,26 +150,35 @@ internal sealed class KolenPollackCreditRule<T> : CreditRuleBase<T>
             Matrix<T> b = feedback[j]!;
             Matrix<T>? previous = _previousForwardWeights[j];
 
+            // B AND W HAVE THE SAME ORIENTATION, both [outFeatures, inFeatures]. EnsureFeedback
+            // declares B_j that way -- confirmed by delta.Multiply(b) mapping [B, outFeatures] to
+            // [B, inFeatures] -- and ICreditLayer.Weights hands back W_j the same way round.
+            //
+            // The guard here used to demand the opposite (b.Rows == current.Columns &&
+            // b.Columns == current.Rows), on the stated premise that W_j is [inFeatures,
+            // outFeatures]. That premise is wrong, and the consequence was total: for the MLP
+            // measured below, current is 3x16 and b is 3x16, so the guard compared 3 against 16,
+            // failed, and the feedback matrices WERE NEVER UPDATED. Kolen-Pollack silently
+            // degenerated into fixed-feedback Feedback Alignment -- the exact thing it exists to
+            // improve on -- and nothing reported it, because a rule that has stopped learning its
+            // feedback still trains. Only a square layer (inFeatures == outFeatures) passed the
+            // guard at all, and there the transposed indexing below then accumulated the TRANSPOSE
+            // of the intended increment, so B could not converge to W in that case either.
+            //
+            // Measured on FullyConnected(16 -> 3), weight decay 0.25, after a uniform +0.125 shift
+            // of every forward weight: B[0,0] came back at 0.5428111443976317, its value BEFORE the
+            // shift, unchanged to the last digit. With the guard and the indexing corrected it
+            // reaches 0.42818514609183833 -- B + increment - decay * (B - W), which is the rule.
             if (previous is not null &&
                 previous.Rows == current.Rows && previous.Columns == current.Columns &&
-                b.Rows == current.Columns && b.Columns == current.Rows)
+                b.Rows == current.Rows && b.Columns == current.Columns)
             {
-                // THE FORWARD MATRIX IS INDEXED TRANSPOSED, because B and W have opposite
-                // orientations. EnsureFeedback declares B_j as [outFeatures, inFeatures] -- confirmed
-                // by delta.Multiply(b) mapping [B, outFeatures] to [B, inFeatures] -- so W_j is
-                // [inFeatures, outFeatures]. Reading current[row, column] with B-shaped indices threw
-                // IndexOutOfRangeException whenever inFeatures != outFeatures, and when they were
-                // equal it raised nothing and accumulated the TRANSPOSE of the intended increment:
-                // Kolen-Pollack needs B to converge to W, so the rule quietly stopped aligning.
-                //
-                // The shape guard above previously compared previous against current only, never
-                // either against b, so it could not catch this. It does now.
                 for (int row = 0; row < b.Rows; row++)
                 {
                     for (int column = 0; column < b.Columns; column++)
                     {
-                        T forwardIncrement = ops.Subtract(current[column, row], previous[column, row]);
-                        T alignmentError = ops.Subtract(b[row, column], previous[column, row]);
+                        T forwardIncrement = ops.Subtract(current[row, column], previous[row, column]);
+                        T alignmentError = ops.Subtract(b[row, column], previous[row, column]);
                         b[row, column] = ops.Subtract(
                             ops.Add(b[row, column], ops.Multiply(updateScale, forwardIncrement)),
                             ops.Multiply(decay, alignmentError));

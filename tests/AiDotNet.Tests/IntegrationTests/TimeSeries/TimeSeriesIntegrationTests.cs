@@ -225,6 +225,40 @@ public class TimeSeriesIntegrationTests
         Assert.NotNull(model);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task StateSpaceModel_DifferentStateAndObservationSizes_Trains()
+    {
+        await Task.Yield();
+
+        var model = new StateSpaceModel<double>(new StateSpaceModelOptions<double>
+        {
+            StateSize = 2,
+            ObservationSize = 1,
+            MaxIterations = 2,
+        });
+        var x = new Matrix<double>(20, 1);
+        var y = new Vector<double>(20);
+        for (int i = 0; i < 20; i++)
+        {
+            x[i, 0] = i;
+            y[i] = 2.0 + 0.25 * i;
+        }
+
+        model.Train(x, y);
+
+        var predictions = model.Predict(x);
+
+        Assert.Equal(20, predictions.Length);
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            Assert.True(!double.IsNaN(predictions[i]) && !double.IsInfinity(predictions[i]), $"Prediction[{i}] is {predictions[i]}.");
+        }
+
+        double meanAbsoluteError = Enumerable.Range(0, predictions.Length)
+            .Average(i => Math.Abs(predictions[i] - y[i]));
+        Assert.True(meanAbsoluteError < 1.0, $"Mean absolute error {meanAbsoluteError} is too large.");
+    }
+
     #endregion
 
     #region VectorAutoRegressionModel Tests

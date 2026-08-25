@@ -91,6 +91,16 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
+    /// <remarks>
+    /// The layer's only learned parameter -- the variational rotation angles of the circuit, which
+    /// <c>UpdateParameters</c> moves by gradient descent. Declared here because nothing else
+    /// registered them: the class is marked <c>[AutoParameters]</c>, but that attribute is a
+    /// migration MARKER and its own documentation states it "does not classify fields". Without a
+    /// declaration the angles were outside <c>GetParameters</c> and outside the checkpoint, so a
+    /// trained QuantumLayer reloaded as a freshly randomized circuit -- measured as a perturbation
+    /// of 0.25 coming back 2.656 away from what was written.
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _rotationAngles;
     private Tensor<T> _angleGradients;
 

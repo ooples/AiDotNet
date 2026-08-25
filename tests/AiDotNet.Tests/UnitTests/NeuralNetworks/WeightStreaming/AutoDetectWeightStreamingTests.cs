@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Threading;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -95,7 +95,7 @@ public class AutoDetectWeightStreamingTests
         // we're under threshold and leave streaming disabled.
         var net = new FixedParamCountNetwork(fixedCount: 1_000_000_000L);
         net.SetThresholdForTest(10_000_000_000L);
-        net.TryAutoEnableWeightStreaming();
+        net.TryAutoEnableWeightStreaming(isTrainingOverride: false);
         Assert.False(net.WeightStreamingAutoDetected,
             "1B-param model should be below the 10B threshold and stay eager.");
         Assert.False(net.IsWeightStreamingActive,
@@ -113,7 +113,7 @@ public class AutoDetectWeightStreamingTests
         // silently pass.
         var net = new FixedParamCountNetwork(fixedCount: 50_000_000_000L);
         net.SetThresholdForTest(10_000_000_000L);
-        net.TryAutoEnableWeightStreaming();
+        net.TryAutoEnableWeightStreaming(isTrainingOverride: false);
         Assert.True(net.WeightStreamingAutoDetected,
             "50B-param model with 10B threshold should auto-engage streaming.");
         Assert.True(net.IsWeightStreamingActive,
@@ -131,7 +131,7 @@ public class AutoDetectWeightStreamingTests
         var net = new FixedParamCountNetwork(fixedCount: 50_000_000_000L);
         net.SetThresholdForTest(10_000_000_000L);
         net.DisableAutoStreaming();
-        net.TryAutoEnableWeightStreaming();
+        net.TryAutoEnableWeightStreaming(isTrainingOverride: false);
         Assert.False(net.WeightStreamingAutoDetected,
             "DisableAutoStreaming must veto auto-detect even when ParameterCount " +
             "exceeds the threshold — that's the whole point of the opt-out.");
@@ -170,7 +170,7 @@ public class AutoDetectWeightStreamingTests
         // reasons before we got here).
         long readsBeforeAutoDetect = net.ParameterCountReadCount;
 
-        net.TryAutoEnableWeightStreaming();
+        net.TryAutoEnableWeightStreaming(isTrainingOverride: false);
         long readsAfterFirstCall = net.ParameterCountReadCount;
         long firstCallDelta = readsAfterFirstCall - readsBeforeAutoDetect;
         Assert.True(firstCallDelta >= 1,
@@ -180,9 +180,9 @@ public class AutoDetectWeightStreamingTests
             "50B-param model with 10B threshold should engage on the first call.");
 
         // Subsequent calls must short-circuit BEFORE reading ParameterCount.
-        net.TryAutoEnableWeightStreaming();
-        net.TryAutoEnableWeightStreaming();
-        net.TryAutoEnableWeightStreaming();
+        net.TryAutoEnableWeightStreaming(isTrainingOverride: false);
+        net.TryAutoEnableWeightStreaming(isTrainingOverride: false);
+        net.TryAutoEnableWeightStreaming(isTrainingOverride: false);
         long totalReadsAfter4Calls = net.ParameterCountReadCount;
         long subsequentDelta = totalReadsAfter4Calls - readsAfterFirstCall;
 
@@ -202,7 +202,7 @@ public class AutoDetectWeightStreamingTests
         // models to call later when their state is ready.
         var net = new ThrowingParamCountNetwork();
         // No throw expected.
-        net.TryAutoEnableWeightStreaming();
+        net.TryAutoEnableWeightStreaming(isTrainingOverride: false);
         Assert.False(net.WeightStreamingAutoDetected);
     }
 
@@ -232,7 +232,7 @@ public class AutoDetectWeightStreamingTests
         var net = new StructuralEstimateNetwork();
         net.SetThresholdForTest(10_000_000_000L);
 
-        net.TryAutoEnableWeightStreaming();
+        net.TryAutoEnableWeightStreaming(isTrainingOverride: false);
 
         Assert.True(net.WeightStreamingAutoDetected);
         Assert.True(net.IsWeightStreamingActive);

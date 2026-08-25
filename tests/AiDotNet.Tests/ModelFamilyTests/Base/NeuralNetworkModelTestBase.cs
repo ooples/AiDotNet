@@ -1684,9 +1684,11 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
 
         long declared = network.ParameterCount;
-        var declaredLayout = network is NeuralNetworkBase<T> declaredNetwork
-            ? declaredNetwork.ParameterLayout
-            : null;
+        var declaredNetwork = network as NeuralNetworkBase<T>;
+        var declaredLayout = declaredNetwork?.ParameterLayout;
+        long[]? declaredLayerCounts = declaredNetwork?.Layers
+            .Select(layer => layer.ParameterCount)
+            .ToArray();
         // No NotSupportedException exemption. It used to say some models "deliberately do not
         // expose a flat parameter vector" and round-trip through WriteParameters instead. That
         // was never a design decision, only unfinished plumbing: PyTorch has no module that
@@ -1694,21 +1696,23 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // the detection backbones, the necks, ConvTasNet, MATCHA, Nougat -- and a sweep of src/
         // now finds ZERO surfaces whose body is only a throw. Nothing may refuse.
         int actual = network.GetParameters().Length;
-        var materializedLayout = network is NeuralNetworkBase<T> materializedNetwork
-            ? materializedNetwork.ParameterLayout
-            : null;
+        var materializedLayout = declaredNetwork?.ParameterLayout;
 
         // A model whose parameters are not sized yet legitimately reports 0 from BOTH surfaces;
         // that is consistent, so it is not what this invariant is about.
         if (declared == 0 && actual == 0) return;
 
         string layoutTransition = DescribeLayoutTransition(declaredLayout, materializedLayout);
+        string layerTransition = declared == actual
+            ? "none"
+            : DescribeLayerTransition(declaredNetwork, declaredLayerCounts);
         Assert.True(declared == actual,
             $"{network.GetType().FullName}: ParameterCount reports {declared} but GetParameters() " +
             $"returned {actual} values (difference {declared - actual}). The two must describe the " +
             "same tensors — SetParameters pairs them by length, so a mismatch means a saved " +
             "parameter vector cannot be restored and the model silently keeps its initial weights. " +
             $"Manifest transition: {layoutTransition}. " +
+            $"Layer transition: {layerTransition}. " +
             "The usual causes are a layer that resolves its shape without allocating, a count " +
             "computed for weights that do not exist yet, or sub-layers the recursive walk cannot " +
             "reach (children held in a List need RegisterSubLayer).");
@@ -1738,7 +1742,41 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             }
 
             return changes.Count == 0
-                ? $"no slot changed ({before.Readiness}, {before.ParameterCount?.ToString() ?? "deferred"})"
+                ? $"no slot changed ({before.Readiness}, declared "
+                    + $"{before.ParameterCount?.ToString() ?? "deferred"}, known "
+                    + $"{before.KnownParameterCount}, live {before.MaterializedParameterCount}, "
+                    + $"restorable {before.RestorableParameterCount})"
+                : string.Join("; ", changes.Take(12))
+                    + $" (before totals: known {before.KnownParameterCount}, live "
+                    + $"{before.MaterializedParameterCount}, restorable {before.RestorableParameterCount})";
+        }
+
+        static string DescribeLayerTransition(
+            NeuralNetworkBase<T>? model,
+            IReadOnlyList<long>? before)
+        {
+            if (model is null || before is null || before.Count != model.Layers.Count)
+                return "not available for this model type";
+
+            var changes = new List<string>();
+            for (int i = 0; i < model.Layers.Count; i++)
+            {
+                var layer = model.Layers[i];
+                int vectorLength = layer.GetParameters().Length;
+                long manifestLength = layer is AiDotNet.Models.Parameters.IParameterLayoutSource source
+                    ? source.GetParameterLayout().Sum(slot =>
+                        slot.ParameterCount ?? slot.MaterializedParameterCount)
+                    : before[i];
+                if (before[i] != vectorLength || manifestLength != vectorLength)
+                {
+                    changes.Add(
+                        $"layers/{i:D8} {layer.GetType().Name}: count {before[i]}, "
+                        + $"manifest {manifestLength}, vector {vectorLength}");
+                }
+            }
+
+            return changes.Count == 0
+                ? $"no per-layer count/vector changes (layer subtotal {before.Sum()})"
                 : string.Join("; ", changes.Take(12));
         }
     }
@@ -3915,16 +3953,6 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     protected virtual int GradientCheckSampleCount => 12;
 
     /// <summary>
-    /// Wall-clock ceiling, measured on the gradient check's own clock, past which the exhaustive
-    /// one-coordinate-per-slot LOCALIZATION sweep stops and reports how far it got. Mirrors the
-    /// ceiling its admitting pre-gate already estimates against, but is checked against the REAL
-    /// elapsed time on every coordinate — the pre-gate alone cannot bound a sweep whose per-forward
-    /// price turns out higher than the single cold sample it was quoted from. Leaves head-room under
-    /// the 120 s <c>[Fact(Timeout)]</c> for the remaining coordinate plus teardown.
-    /// </summary>
-    private const double GradCheckLocalizationDeadlineSeconds = 105.0;
-
-    /// <summary>
     /// Exception types that represent a documented, EXPECTED gradcheck skip: lazy parameters not yet
     /// materialized, a custom-forward model whose gradient path is not yet routed through
     /// <c>ComputeGradients</c>, or a model whose flat <c>GetParameters</c>/<c>UpdateParameters</c>
@@ -3992,6 +4020,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     public async Task Gradients_MatchFiniteDifference()
     {
         await Task.Yield();
+
+        // TensorArena's persistent backing-array pool is process-wide, so a serial model-family shard
+        // can still carry large rentals from several earlier fixtures into this test. RecurrentGemma's
+        // check takes about seven seconds in a clean process but exceeded its 120-second execution budget
+        // after the preceding PR-regression models had populated that shared pool. Clear only disposed
+        // arenas at this test boundary; the new arena below still exercises the normal pooled path during
+        // the analytical and numerical gradient calculation, and the assertion/budget remain unchanged.
+        TensorArena.ClearPersistentPool();
         using var _arena = TensorArena.Create();
         // A GREEN RESULT MUST NOT LOOK THE SAME AS AN UNRUN ONE. The gate defaults to false by
         // design -- broad enablement is the separate #1872 rollout -- but a bare  made
@@ -4187,11 +4223,17 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // to a finite-difference wall-clock budget so the check stays a bounded smoke test; a
         // hard elapsed break below is the backstop when even the reduced sweep runs long.
         const double GradCheckBudgetSeconds = 60.0;
+        // The wall the two optional phases below plan against. Named because it was written twice
+        // as a bare 105.0, and because it is a HARD deadline: the Fact's contract is 120 s, so
+        // anything that overruns this has ~15 s of slack before the test is killed rather than
+        // reporting what it managed to check.
+        const double GradCheckWallSeconds = 105.0;
         int budgetSamples = (int)(GradCheckBudgetSeconds / (2.0 * forwardSeconds));
         int samples = System.Math.Max(1, System.Math.Min(
             System.Math.Min(GradientCheckSampleCount, trainableScalarCount), budgetSamples));
         int stride = System.Math.Max(1, trainableScalarCount / samples);
 
+        double coordinateSweepStart = gradCheckClock.Elapsed.TotalSeconds;
         int checkedCount = 0, mismatches = 0, kinkCoordinates = 0;
         string firstFail = string.Empty;
         string firstKink = string.Empty;
@@ -4399,6 +4441,24 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         if (checkedCount == 0) return;   // every perturbation produced a NaN loss — inconclusive
 
+        // Price the rest of this test from what the sweep above ACTUALLY cost, not from a bare
+        // forward. Both budget gates below count forward passes and multiply by forwardSeconds, but
+        // a finite-difference probe is not a forward: GradientCheckLossPairAt also writes the
+        // perturbed vector back through UpdateParameters and restores it, which is
+        // O(theta.Length) -- 3,417,600 scalars on RecurrentGemma. Measured there, a probe cost
+        // ~0.15 s against a 0.027 s forward, so pricing the exhaustive localization below at
+        // forwardSeconds under-counted it by ~5.6x: the gate predicted 38 s for 45 coordinates x a
+        // 16-step ladder, the work took 108 s, and with no backstop inside that loop the Fact died
+        // on its 120 s timeout. (Instrumented: the coordinate sweep finished at 7.7 s and the phase
+        // after it ended at 117.5 s.) The sweep just ran `checkedCount` probes of exactly that
+        // shape, so its own elapsed time is the honest per-forward price to plan with.
+        double plannedForwardSeconds = forwardSeconds;
+        if (checkedCount > 0)
+        {
+            double sweepSeconds = gradCheckClock.Elapsed.TotalSeconds - coordinateSweepStart;
+            plannedForwardSeconds = System.Math.Max(forwardSeconds, sweepSeconds / (2.0 * checkedCount));
+        }
+
         if (kinkCoordinates > 0)
         {
             ReportGradientFinding(
@@ -4416,7 +4476,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         bool directionAgrees = true;
         string directionFailure = string.Empty;
         if (trainableSlots.Count > 0 &&
-            gradCheckClock.Elapsed.TotalSeconds + (8.0 * forwardSeconds) < 105.0)
+            gradCheckClock.Elapsed.TotalSeconds + (8.0 * plannedForwardSeconds) < GradCheckWallSeconds)
         {
             var direction = new List<(int FlatIndex, double Sign)>(trainableSlots.Count);
             foreach (var directionSlot in trainableSlots)
@@ -4571,34 +4631,17 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                     int localizedDetachmentCount = 0;
                     bool exhaustiveLocalizationRan = false;
                     if (gradCheckClock.Elapsed.TotalSeconds +
-                        (32.0 * direction.Count * forwardSeconds) < GradCheckLocalizationDeadlineSeconds)
+                        (32.0 * direction.Count * plannedForwardSeconds) < GradCheckWallSeconds)
                     {
                         exhaustiveLocalizationRan = true;
                         bool localizationBudgetExceeded = false;
                         foreach (var coordinate in direction)
                         {
-                            // THE PRE-GATE ABOVE IS AN ESTIMATE, AND AN ESTIMATE IS NOT A BUDGET.
-                            // It admits this block when 32 forwards per coordinate — priced at the
-                            // forwardSeconds sampled ONCE, cold, before the sample loop — appear to
-                            // fit. Nothing re-checked the real clock afterwards, so when that price
-                            // is optimistic the block still walked every coordinate to completion
-                            // and blew the 120 s [Fact(Timeout)] above.
-                            //
-                            // MEASURED on RecurrentGemma (fp32, instrumented): the test reached the
-                            // end of the sample loop at 7.5 s and never reached the end of the
-                            // method, timing out at 120 s in three consecutive class runs while
-                            // every other test in the class stayed healthy (memorization 38 s,
-                            // training-step 13 s, remainder under 4 s). Isolated, the same test
-                            // finishes in 8 s — the estimate is simply cheaper than the reality it
-                            // is standing in for.
-                            //
-                            // Re-checking the actual elapsed time each coordinate turns the
-                            // all-or-nothing gate into a genuine cap: localization runs for as many
-                            // coordinates as the budget really affords and then falls back to the
-                            // documented NOT-RUN path below, which reports the shortfall instead of
-                            // judging on a partial sweep. A timeout diagnoses nothing; a bounded
-                            // sweep that says how far it got diagnoses something.
-                            if (gradCheckClock.Elapsed.TotalSeconds > GradCheckLocalizationDeadlineSeconds)
+                            // Backstop, because an estimate can still be optimistic on a model
+                            // whose round-trip cost varies with the slot being touched. Abandoning
+                            // localization is a reported outcome; overrunning the Fact's timeout is
+                            // not, and it loses every result the test had already produced.
+                            if (gradCheckClock.Elapsed.TotalSeconds > GradCheckWallSeconds)
                             {
                                 exhaustiveLocalizationRan = false;
                                 break;
@@ -4632,8 +4675,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                                 // clock before every pair and reserve its measured cost; checking
                                 // only once per coordinate still allowed a single 16-pair ladder
                                 // to run past the Fact deadline.
-                                if (gradCheckClock.Elapsed.TotalSeconds + (2.0 * forwardSeconds) >=
-                                    GradCheckLocalizationDeadlineSeconds)
+                                if (gradCheckClock.Elapsed.TotalSeconds + (2.0 * plannedForwardSeconds) >=
+                                    GradCheckWallSeconds)
                                 {
                                     exhaustiveLocalizationRan = false;
                                     localizationBudgetExceeded = true;
