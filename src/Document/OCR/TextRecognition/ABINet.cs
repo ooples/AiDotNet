@@ -55,9 +55,25 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Read Like Humans: Autonomous, Bidirectional and Iterative Language Modeling for Scene Text Recognition", "https://doi.org/10.48550/arXiv.2103.06495", Year = 2021, Authors = "Shancheng Fang, Hongtao Xie, Yuxin Wang, Zhendong Mao, Yongdong Zhang")]
-public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
+public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     private readonly ABINetOptions _options;
+
+    /// <inheritdoc/>
+    public TrainingObjectiveKind TrainingObjectiveKind => TrainingObjectiveKind.MultiTask;
+
+    /// <inheritdoc/>
+    public Tensor<T> ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    /// <inheritdoc/>
+    public T EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        var trainingPrediction = ForwardForTraining(PreprocessTextImage(input));
+        var trainingTarget = _branched
+            ? Engine.TensorConcatenate(new[] { target, target, target }, axis: 0)
+            : target;
+        return LossFunction.ComputeTapeLoss(trainingPrediction, trainingTarget).Data.Span[0];
+    }
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;

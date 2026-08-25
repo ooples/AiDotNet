@@ -26,8 +26,24 @@ namespace AiDotNet.Audio.Classification;
 /// - Common feature extraction
 /// </para>
 /// </remarks>
-public abstract class AudioClassifierBase<T> : AudioNeuralNetworkBase<T>
+public abstract class AudioClassifierBase<T> : AudioNeuralNetworkBase<T>,
+    AiDotNet.Interfaces.ITrainingObjectiveProvider<T>
 {
+    AiDotNet.Enums.TrainingObjectiveKind
+        AiDotNet.Interfaces.ITrainingObjectiveProvider<T>.TrainingObjectiveKind
+        => AiDotNet.Enums.TrainingObjectiveKind.Supervised;
+
+    AiDotNet.Tensors.LinearAlgebra.Tensor<T>
+        AiDotNet.Interfaces.ITrainingObjectiveProvider<T>.ResolveTrainingTarget(
+            AiDotNet.Tensors.LinearAlgebra.Tensor<T> input,
+            AiDotNet.Tensors.LinearAlgebra.Tensor<T> proposedTarget)
+        => proposedTarget;
+
+    T AiDotNet.Interfaces.ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(
+        AiDotNet.Tensors.LinearAlgebra.Tensor<T> input,
+        AiDotNet.Tensors.LinearAlgebra.Tensor<T> target)
+        => base.EvaluateTrainingObjective(input, target);
+
     /// <summary>
     /// Gets the list of class labels this model can classify.
     /// </summary>

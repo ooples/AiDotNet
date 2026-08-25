@@ -307,7 +307,7 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
         {
             session = new InferenceSession(onnxModelPath);
             OnnxSession = session;
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizer = optimizer ?? CreatePaperOptimizer();
             _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
             InitializeLayers();
         }
@@ -386,7 +386,7 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
         _useInstanceNormalization = useInstanceNormalization;
         _dropout = dropout;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperOptimizer();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         InitializeLayers();
@@ -550,8 +550,17 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        base.Train(input, expectedOutput);
+        TrainWithTape(input, expectedOutput, _optimizer);
     }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
+        => new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                UseAMSGrad = false,
+            });
 
     /// <summary>
     /// Training-mode forward: calls <see cref="Forward"/> directly so

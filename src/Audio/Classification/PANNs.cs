@@ -106,7 +106,12 @@ public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
             this,
             new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = _options.LearningRate
+                // Kong et al.'s released AudioSet trainer uses ordinary Adam at 1e-3 and does not
+                // apply a global-norm clipping pass. AdamOptimizerOptions enables clipping as a
+                // library-wide transformer safety default, so disable that extra policy here.
+                InitialLearningRate = _options.LearningRate,
+                UseAdaptiveLearningRate = false,
+                EnableGradientClipping = false,
             });
         base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
         ClassLabels = _options.CustomLabels ?? AudioSetLabels;

@@ -14745,12 +14745,31 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (!TryDetachBorrowedCanonicalLayers(copyBase, out string detachFailure))
             return RejectCandidate(detachFailure);
 
-        // Build the destination's architecture-known lazy structure before the reflection walk.
-        // This is shape-only readiness: it creates composite children without flattening or copying
-        // their weights. Doing it after CollectTrainableLayers is too late—the source then exposes
-        // runtime-created children that the fresh clone does not yet have, and the count mismatch
-        // rejects COW and sends the model through an eager serializer that only owns Layers.
-        copyBase.ResolveLazyLayerShapes();
+        // Establish the source's canonical trainable manifest before snapshotting either reflection
+        // graph. Enumerating the manifest is allowed to cross a lazy layer's value boundary; doing it
+        // after CollectTrainableLayers left that earlier snapshot stale (zero visible child tensors
+        // versus a now-materialized manifest). The coverage comparison below then rejected an
+        // otherwise valid clone and fell into eager serialization with a topology the reader could
+        // not reproduce.
+        long manifestedTrainableCount = 0;
+        foreach (var chunk in GetParameterStateChunks())
+        {
+            if (chunk.Role == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)
+                manifestedTrainableCount = checked(manifestedTrainableCount + chunk.Tensor.Length);
+        }
+
+        // Build the destination's architecture-known lazy structure only when its current graph does
+        // not already match the source. Shape resolution can create composite children even when the
+        // source intentionally remains at its constructor-only topology (Timer's untouched
+        // TransformerEncoderLayer is one example). Resolving the destination unconditionally made a
+        // six-node source compare against an eleven-node clone and forced the eager serializer. The
+        // inverse case is the one that needs help: a runtime-ready source already exposes children
+        // that the fresh destination has not created yet. Probe both graphs first and cross the
+        // destination's shape boundary only for that structural mismatch.
+        var sourceReadinessLayers = AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<T>(this);
+        var destinationReadinessLayers = AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<T>(copyBase);
+        if (sourceReadinessLayers.Count != destinationReadinessLayers.Count)
+            copyBase.ResolveLazyLayerShapes();
 
         // Shape/readiness work above can replace a nested network's layers. Reconcile both parent
         // views once more before the reflection walk establishes the 1:1 COW correspondence.
@@ -14865,12 +14884,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         for (int i = 0; i < srcStandaloneTensors.Count; i++)
         {
             walkedParamCount += srcStandaloneTensors[i].Length;
-        }
-        long manifestedTrainableCount = 0;
-        foreach (var chunk in GetParameterStateChunks())
-        {
-            if (chunk.Role == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)
-                manifestedTrainableCount = checked(manifestedTrainableCount + chunk.Tensor.Length);
         }
         if (walkedParamCount != manifestedTrainableCount)
         {
@@ -16675,15 +16688,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // consistent mode. In particular, an inference-first model may have read-only quantized
         // streaming snapshots that must be promoted before its weights participate in backward.
         var prediction = ForwardPreparedForTraining(input);
-        target = AlignTargetToOutputShape(prediction, target);
+        return ComputeObjectiveFromPrediction(input, prediction, target, lossFunction);
+    }
 
+    /// <summary>
+    /// Applies the common target-alignment, loss-resolution, and composite-objective policy
+    /// to an already-computed training prediction.
+    /// </summary>
+    private Tensor<T> ComputeObjectiveFromPrediction(
+        Tensor<T> input,
+        Tensor<T> prediction,
+        Tensor<T> target,
+        ILossFunction<T>? lossFunction)
+    {
+        var alignedTarget = AlignTargetToOutputShape(prediction, target);
         var resolved = lossFunction ?? LossFunction;
-        if (resolved is LossFunctions.LossFunctionBase<T> tapeLoss)
-        {
-            return ApplyCompositeObjective(tapeLoss.ComputeTapeLoss(prediction, target), input);
-        }
-
-        return resolved.ComputeTapeLoss(prediction, target);
+        return resolved is LossFunctions.LossFunctionBase<T> tapeLoss
+            ? ApplyCompositeObjective(tapeLoss.ComputeTapeLoss(prediction, alignedTarget), input)
+            : resolved.ComputeTapeLoss(prediction, alignedTarget);
     }
 
     /// <summary>
@@ -16692,7 +16714,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <remarks>
     /// Exposed internally for the generated conformance suite through <c>InternalsVisibleTo</c>.
     /// Keeping the numerical oracle here prevents the test assembly from reimplementing target
-    /// alignment, composite losses, or model-specific training-forward semantics.
+    /// alignment, composite losses, or model-specific training-forward semantics. Evaluation keeps
+    /// the caller's current training mode so the numerical objective has exactly the same forward
+    /// semantics as the objective differentiated by <see cref="BuildTrainingObjective"/>.
     /// </remarks>
     internal T EvaluateTrainingObjective(
         Tensor<T> input,
@@ -16700,7 +16724,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         ILossFunction<T>? lossFunction = null)
     {
         using var _ = new NoGradScope<T>();
-        var objective = BuildTrainingObjective(input, target, lossFunction);
+        var trainingInput = ForwardForTrainingOwnsPublicInputPreparation()
+            ? input
+            : PrepareInputForTraining(input);
+        var prediction = ForwardForTraining(trainingInput);
+        var objective = ComputeObjectiveFromPrediction(input, prediction, target, lossFunction);
         return objective.Length > 0 ? objective[0] : NumOps.Zero;
     }
 
