@@ -303,6 +303,33 @@ public class InitializationIntegrationTests
 
     #endregion
 
+    #region Parallel Chunk Boundary Tests
+
+    [Theory]
+    [InlineData(int.MaxValue - (1 << 18) + 1, 8191)]
+    [InlineData(int.MaxValue - (1 << 18) + 2, 8192)]
+    [InlineData(int.MaxValue, 8192)]
+    public void ParallelChunkCount_NearIntMax_DoesNotOverflow(int length, int expected)
+    {
+        Assert.Equal(expected, InitializationStrategyBase<double>.GetParallelChunkCount(length));
+    }
+
+    [Fact]
+    public void ParallelChunkEnd_FinalChunkNearIntMax_IsCappedWithoutOverflow()
+    {
+        int length = int.MaxValue;
+        int chunkCount = InitializationStrategyBase<double>.GetParallelChunkCount(length);
+        int chunkStart = (chunkCount - 1)
+            * InitializationStrategyBase<double>.ParallelInitializationThreshold;
+
+        int chunkEnd = InitializationStrategyBase<double>.GetParallelChunkEnd(chunkStart, length);
+
+        Assert.Equal(int.MaxValue, chunkEnd);
+        Assert.Equal((1 << 18) - 1, chunkEnd - chunkStart);
+    }
+
+    #endregion
+
     #region InitializationStrategies Factory Tests
 
     [Fact(Timeout = 120000)]
