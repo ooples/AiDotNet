@@ -1,5 +1,7 @@
 name: Build & SonarCloud
 
+permissions: read-all
+
 # Primary build workflow - other workflows depend on this.
 # Runs on ubuntu-latest; net471 targets cross-compile via the modern .NET SDK's
 # auto-included reference assembly pack (no Windows runner required).

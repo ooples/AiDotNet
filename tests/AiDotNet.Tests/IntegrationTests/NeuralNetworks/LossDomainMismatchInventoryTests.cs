@@ -56,14 +56,21 @@ public sealed class LossDomainMismatchInventoryTests
     [Fact]
     public void Chronos_StillDeclaresItsOwnTrainingForward()
     {
+        var declared = typeof(Chronos<double>).GetMethod(TrainingForwardName, DeclaredMembers);
+
         Assert.True(
-            typeof(Chronos<double>).GetMethod(TrainingForwardName, DeclaredMembers) is not null,
+            declared is not null,
             $"Chronos no longer declares its own {TrainingForwardName}. That override is what marks "
             + "its training forward (vocabulary logits) as a different domain from its inference "
             + "forward (detokenized forecasts). Without it PredictLeavesLossDomain returns false and "
             + "the generic invariants resume scoring cross-entropy-with-logits against real-valued "
             + "forecasts. If the override was removed deliberately, the condition needs rewriting "
             + "rather than deleting.");
+
+        Assert.True(declared!.IsVirtual,
+            $"Chronos declares {TrainingForwardName}, but it is not virtual and therefore cannot "
+            + "replace the training path dispatched by FinancialModelBase.");
+        Assert.Same(typeof(FinancialModelBase<double>), declared.GetBaseDefinition().DeclaringType);
     }
 
     /// <summary>
