@@ -55,6 +55,8 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
     /// <inheritdoc />
     public T EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
     {
+        EnsureBiasStageIsSupported();
+
         var savedTarget = _currentTarget;
         var savedHotwords = _activeHotwordIds;
         try
@@ -290,6 +292,17 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
     /// <summary>Whether a real backbone/bias partition is available for staged training.</summary>
     internal bool HasBiasBranch => _biasLayerCount > 0;
 
+    /// <summary>Rejects paper stage-2 training when no validated bias branch is present.</summary>
+    private void EnsureBiasStageIsSupported()
+    {
+        if (_options.TrainingStage == SeACoTrainingStage.Bias && !HasBiasBranch)
+        {
+            throw new InvalidOperationException(
+                "Bias-stage training requires the native SeACo bias branch. " +
+                "Caller-supplied Architecture.Layers does not define a validated backbone/bias partition.");
+        }
+    }
+
     /// <summary>Half-open range of Layers holding the bias branch.</summary>
     internal (int Start, int End) BiasLayerRange => (_backboneLayerCount, _backboneLayerCount + _biasLayerCount);
 
@@ -367,7 +380,7 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
     private Tensor<T> MergeBiasedProbabilities(Tensor<T> pAsr, Tensor<T> pBias)
     {
         int vocab = _options.VocabSize;
-        int noBias = vocab;                       // appended '#' slot
+        int noBias = _options.ResolveHotwordMaskTokenId();                       // configured '#' no-bias slot
         int rowsAsr = Math.Max(1, pAsr.Length / Math.Max(1, vocab));
         int rowsBias = Math.Max(1, pBias.Length / Math.Max(1, vocab + 1));
 
@@ -461,6 +474,7 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
+        EnsureBiasStageIsSupported();
 
         SetTrainingMode(true);
         var frozen = FreezeForStage(_options.TrainingStage);
@@ -1135,7 +1149,7 @@ public class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITraini
         {
             int targetClass = isHotwordPosition(r)
                 ? Math.Min(ArgMaxRow(labels, r, sourceCols), _options.VocabSize - 1)
-                : _options.VocabSize;
+                : _options.ResolveHotwordMaskTokenId();
             target.Data.Span[(r * biasClasses) + targetClass] = NumOps.One;
         }
 

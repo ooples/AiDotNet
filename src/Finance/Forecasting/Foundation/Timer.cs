@@ -616,7 +616,7 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var options = new TimerOptions<T>
+        var options = new TimerOptions<T>(_options)
         {
             ContextLength = _contextLength,
             ForecastHorizon = _forecastHorizon,
@@ -631,7 +631,7 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
             GenerationTemperature = _generationTemperature
         };
 
-        return new Timer<T>(Architecture, options, _numFeatures);
+        return new Timer<T>(Architecture, options, _numFeatures, _optimizer, _lossFunction);
     }
 
     /// <summary>

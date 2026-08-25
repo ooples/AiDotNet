@@ -47,11 +47,11 @@ public class MeloTTSOptions : EndToEndTtsOptions
     /// <exception cref="ArgumentOutOfRangeException">Thrown when a coefficient is non-finite or outside its valid range.</exception>
     internal void ValidateTrainingOptions()
     {
-        if (!double.IsFinite(Beta1) || Beta1 < 0 || Beta1 >= 1)
+        if (double.IsNaN(Beta1) || double.IsInfinity(Beta1) || Beta1 < 0 || Beta1 >= 1)
             throw new ArgumentOutOfRangeException(nameof(Beta1), "Beta1 must be finite and in [0, 1).");
-        if (!double.IsFinite(Beta2) || Beta2 < 0 || Beta2 >= 1)
+        if (double.IsNaN(Beta2) || double.IsInfinity(Beta2) || Beta2 < 0 || Beta2 >= 1)
             throw new ArgumentOutOfRangeException(nameof(Beta2), "Beta2 must be finite and in [0, 1).");
-        if (!double.IsFinite(Epsilon) || Epsilon <= 0)
+        if (double.IsNaN(Epsilon) || double.IsInfinity(Epsilon) || Epsilon <= 0)
             throw new ArgumentOutOfRangeException(nameof(Epsilon), "Epsilon must be finite and positive.");
     }
 }

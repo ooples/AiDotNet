@@ -87,7 +87,11 @@ public class SeACoOptions : ModelOptions
     /// <summary>
     /// Which parameter group <c>Train</c> updates. Default: <see cref="SeACoTrainingStage.Backbone"/>.
     /// </summary>
+    /// <value>The stage whose parameter group is updated by <c>Train</c>.</value>
     /// <remarks>
+    /// <para><b>For Beginners:</b> Train the backbone first. Then select
+    /// <see cref="SeACoTrainingStage.Bias"/> to teach hotword customization without changing the
+    /// recognizer.</para>
     /// <para>
     /// SeACo-Paraformer (Shi et al., arXiv 2308.03266, §3) trains the ASR backbone first, then FREEZES
     /// it and trains only the bias parameters, "separate from the ASR training". Select
@@ -140,7 +144,19 @@ public class SeACoOptions : ModelOptions
     /// <summary>
     /// Resolves the '#' no-bias token id, defaulting to the appended slot at <see cref="VocabSize"/>.
     /// </summary>
-    internal int ResolveHotwordMaskTokenId() => HotwordMaskTokenId ?? VocabSize;
+    internal int ResolveHotwordMaskTokenId()
+    {
+        int tokenId = HotwordMaskTokenId ?? VocabSize;
+        if (tokenId < 0 || tokenId > VocabSize)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(HotwordMaskTokenId),
+                tokenId,
+                $"HotwordMaskTokenId must identify one of the {VocabSize + 1} bias-output classes.");
+        }
+
+        return tokenId;
+    }
 
     /// <summary>
     /// Depth of SeACo's bias (hotword) encoder. Default: 1.

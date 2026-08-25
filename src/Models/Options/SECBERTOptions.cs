@@ -137,7 +137,7 @@ public class SECBERTOptions<T> : ModelOptions
             throw new ArgumentException("NumClasses must be at least 1.", nameof(NumClasses));
         if (DropoutRate < 0 || DropoutRate >= 1)
             throw new ArgumentException("DropoutRate must be between 0 (inclusive) and 1 (exclusive).", nameof(DropoutRate));
-        if (!double.IsFinite(LearningRate) || LearningRate <= 0)
+        if (double.IsNaN(LearningRate) || double.IsInfinity(LearningRate) || LearningRate <= 0)
             throw new ArgumentException("LearningRate must be finite and positive.", nameof(LearningRate));
         if (!Enum.IsDefined(typeof(FinancialNLPTaskType), TaskType))
             throw new ArgumentException("TaskType must be a valid FinancialNLPTaskType value.", nameof(TaskType));

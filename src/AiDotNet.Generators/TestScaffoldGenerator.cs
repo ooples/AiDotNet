@@ -3928,7 +3928,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // that layer derive deterministic child seeds, so its first compiled/eager AdamW step
         // cannot depend on process-global RNG timing (AIDOTNET_QUIET previously changed the
         // observed 0.0 -> 0.916590 trajectory into a passing one merely by shifting startup).
-        bool pinInitSeed = model.ClassName is "TemplateNER" or "WavLMSER";
+        // SeACo's paper GLM sampler also needs a stable weight draw: its strict memorization probe
+        // passes alone but can reach NaN after sibling fixtures advance the shared initializer.
+        // Pinning construction changes no objective, optimizer, step budget, or assertion.
+        bool pinInitSeed = model.ClassName is "TemplateNER" or "WavLMSER" or "SeACo";
         const string smokeAdamWOptimizer =
             "new AiDotNet.Optimizers.AdamWOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null, " +
             "new AiDotNet.Models.Options.AdamWOptimizerOptions<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>> " +
