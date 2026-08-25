@@ -82,10 +82,17 @@ public class AllLayersCloneTests
                 continue;
             }
 
-            var instance = TryConstruct(closed);
+            var instance = TryConstruct(closed, out var constructionError);
             if (instance is null)
             {
-                notConstructed.Add($"{open.Name}: no usable TestConstructorArgs");
+                // Distinguish "cannot be built" from "ran out of memory building it". VAEEncoder
+                // was reported as having no usable arguments when the truth was that VAEDecoder had
+                // just exhausted the heap in the same process -- a misleading label on a real
+                // resource failure, which is the same class of silent mislabel this sweep exists
+                // to remove.
+                notConstructed.Add(constructionError is OutOfMemoryException
+                    ? $"{open.Name}: OUT OF MEMORY during construction"
+                    : $"{open.Name}: no usable TestConstructorArgs");
                 timings.Add((open.Name, layerClock.ElapsedMilliseconds));
                 continue;
             }
@@ -282,8 +289,9 @@ public class AllLayersCloneTests
         return false;
     }
 
-    private static object? TryConstruct(Type closed)
+    private static object? TryConstruct(Type closed, out Exception? constructionError)
     {
+        constructionError = null;
         var attribute = closed.GetCustomAttributes(inherit: false)
             .OfType<LayerPropertyAttribute>()
             .FirstOrDefault();
@@ -297,7 +305,7 @@ public class AllLayersCloneTests
         // the per-layer declaration instead of adding 203 more of them.
         if (string.IsNullOrWhiteSpace(raw))
         {
-            return TryConstructSynthesized(closed);
+            return TryConstructSynthesized(closed, out constructionError);
         }
 
         var literals = raw!.Split(',').Select(s => s.Trim()).ToArray();
@@ -325,9 +333,11 @@ public class AllLayersCloneTests
             {
                 return ctor.Invoke(BindingFlags.OptionalParamBinding, binder: null, args, culture: null);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Try the next overload rather than declaring the layer unconstructible.
+                // Remembered so the skip reason can say WHY -- an OutOfMemoryException is a
+                // resource failure, not a layer that cannot be described.
+                constructionError = ex;
             }
         }
 
@@ -340,8 +350,9 @@ public class AllLayersCloneTests
     /// parameters are synthesized; anything else falls through and the layer is reported, not
     /// silently skipped.
     /// </summary>
-    private static object? TryConstructSynthesized(Type closed)
+    private static object? TryConstructSynthesized(Type closed, out Exception? constructionError)
     {
+        constructionError = null;
         foreach (var ctor in closed.GetConstructors().OrderBy(c => c.GetParameters().Length))
         {
             var parameters = ctor.GetParameters();
@@ -364,9 +375,11 @@ public class AllLayersCloneTests
             {
                 return ctor.Invoke(BindingFlags.OptionalParamBinding, binder: null, args, culture: null);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Try the next overload rather than declaring the layer unconstructible.
+                // Remembered so the skip reason can say WHY -- an OutOfMemoryException is a
+                // resource failure, not a layer that cannot be described.
+                constructionError = ex;
             }
         }
 
