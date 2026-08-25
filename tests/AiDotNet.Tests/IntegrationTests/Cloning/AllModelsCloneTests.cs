@@ -230,6 +230,19 @@ public class AllModelsCloneTests
 
         report.AddRange(budgetExceeded.Select(t => $"LIMIT {t}"));
         System.IO.File.WriteAllLines(ReportPath, report);
+
+        // THE SWEEP NOW FAILS WHEN A MODEL FAILS TO CLONE. Until now this test had no assertion at
+        // all: it collected failures, wrote them to a report, and returned green regardless, so a
+        // model that could not be cloned was recorded and ignored. That made it documentation
+        // rather than regression proof -- the same state the layer sweep was in before it was
+        // fixed, and the reason its own comment warns about a 'measurement-only assertion'.
+        //
+        // No budget and no allowlist here, deliberately: every entry is a model that cannot be
+        // copied, which is the defect this whole surface exists to prevent.
+        Assert.True(
+            failed.Count == 0,
+            $"{failed.Count} model(s) failed cloning in shard {shard}:{Environment.NewLine}"
+                + string.Join(Environment.NewLine, failed));
     }
 
     /// <summary>Constructs, copies and checks one model. Returns null when it cloned cleanly.</summary>
