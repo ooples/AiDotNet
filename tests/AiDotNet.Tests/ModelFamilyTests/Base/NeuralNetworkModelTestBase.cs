@@ -562,10 +562,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// "Model is not fitting training data" about a model that fits.
     /// </para>
     /// <para>
-    /// This costs almost nothing on the models that could time out. The conformance budget is
-    /// expressed in parameter-updates, so foundation-scale fixtures still resolve to exactly one
-    /// step regardless of what is requested here; the increase lands on the small and mid-sized
-    /// models, which are the fast ones.
+    /// <b>The budget's one-step floor is left alone on purpose.</b> Raising it so that no fixture
+    /// is ever sampled at step 1 is the theoretically right shape and is not affordable: the
+    /// conformance budget bounds parameter-updates, not wall-clock, so doubling the heaviest
+    /// fixtures' work pushed METER, MaskDINO, TOTO, ViLT and XLMRoBERTaNER past the 120 s gate --
+    /// measured both as a floor added on top of three steps and as a uniform two. Foundation-scale
+    /// models therefore still resolve to a single step and keep whatever step-1 noise comes with
+    /// it; the increase here lands only on the small and mid-sized models, which are the fast ones.
     /// </para>
     /// </remarks>
     protected virtual int TrainingErrorIterations => 3;
@@ -3727,22 +3730,50 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         bool bornRule = nn.DefaultLossFunction is AiDotNet.LossFunctions.BornRuleMseLoss<T>;
         double totalMass = 0.0;
 
+        // SCAN, THEN ASSERT ONCE. This used to call Assert per element with an INTERPOLATED
+        // message argument, so every passing element still paid for a string allocation and a
+        // "G17" double format -- the message is built eagerly at the call site whether or not the
+        // assertion fails. It is the same shape this file already rejected for the one-hot builder
+        // ("16384 xUnit assertion calls" for a dense [1, C, 128, 128] target), and this helper runs
+        // on eight invariants across every generated fixture rather than one.
+        //
+        // Remembering the FIRST offending index reproduces the old reporting exactly -- the old
+        // loop threw on its first bad element too -- and a non-finite value still short-circuits
+        // the domain checks for that element rather than feeding a NaN into totalMass.
+        int nonFiniteIndex = -1, outOfRangeIndex = -1, negativeIndex = -1;
+        double nonFiniteValue = 0.0, outOfRangeValue = 0.0, negativeValue = 0.0;
+
         for (int i = 0; i < target.Length; i++)
         {
             double value = ConvertToDouble(target[i]);
-            Assert.True(IsFinite(value),
-                $"Loss-compatible target[{i}] is non-finite: {value:G17}.");
+            if (!IsFinite(value))
+            {
+                if (nonFiniteIndex < 0) { nonFiniteIndex = i; nonFiniteValue = value; }
+                continue;
+            }
+
             if (binaryCrossEntropy)
             {
-                Assert.InRange(value, 0.0, 1.0);
+                if ((value < 0.0 || value > 1.0) && outOfRangeIndex < 0)
+                {
+                    outOfRangeIndex = i;
+                    outOfRangeValue = value;
+                }
             }
             else if (bornRule)
             {
-                Assert.True(value >= 0.0,
-                    $"Born-rule target[{i}] must be non-negative; got {value:G17}.");
+                if (value < 0.0 && negativeIndex < 0) { negativeIndex = i; negativeValue = value; }
                 totalMass += value;
             }
         }
+
+        Assert.True(nonFiniteIndex < 0,
+            $"Loss-compatible target[{nonFiniteIndex}] is non-finite: {nonFiniteValue:G17}.");
+        Assert.True(outOfRangeIndex < 0,
+            $"Binary-cross-entropy target[{outOfRangeIndex}] must lie in [0, 1]; got "
+            + $"{outOfRangeValue:G17}.");
+        Assert.True(negativeIndex < 0,
+            $"Born-rule target[{negativeIndex}] must be non-negative; got {negativeValue:G17}.");
 
         if (bornRule && target.Length > 0)
         {

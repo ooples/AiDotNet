@@ -74,9 +74,15 @@ public sealed class LossDomainMismatchInventoryTests
     [Fact]
     public void DeclaringTheTrainingForward_IsCommonEnoughThatTheLossHalfIsLoadBearing()
     {
+        // Walk the base chain by GENERIC TYPE DEFINITION. Assembly.GetTypes() hands back open
+        // definitions (Chronos`1, not Chronos<double>), and
+        // typeof(FinancialModelBase<double>).IsAssignableFrom(Chronos`1) is false for every one of
+        // them -- an earlier revision of this test used exactly that and counted 0 models, which is
+        // what its own assertion caught. The production condition in PredictLeavesLossDomain is not
+        // affected: it inspects a CLOSED runtime type off a live instance.
         var declaringModels = typeof(FinancialModelBase<double>).Assembly
             .GetTypes()
-            .Where(type => typeof(FinancialModelBase<double>).IsAssignableFrom(type))
+            .Where(DerivesFromFinancialModelBase)
             .Where(type => type.GetMethod(TrainingForwardName, DeclaredMembers) is not null)
             .ToArray();
 
@@ -85,5 +91,19 @@ public sealed class LossDomainMismatchInventoryTests
             + ". The two-part condition exists because the override on its own is widespread and "
             + "does not imply a change of loss domain; if that is no longer true, the simpler "
             + "condition should replace it deliberately.");
+    }
+
+    private static bool DerivesFromFinancialModelBase(Type type)
+    {
+        for (var t = type.BaseType; t is not null; t = t.BaseType)
+        {
+            if (t.IsGenericType
+                && t.GetGenericTypeDefinition() == typeof(FinancialModelBase<>))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
