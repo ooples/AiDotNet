@@ -13,6 +13,10 @@ on:
     # `github.event.pull_request.draft != true`, so without this event type a draft→ready
     # transition never re-triggers them and the PR is left with no Build/Tests run.
     types: [opened, synchronize, reopened, ready_for_review]
+  # Merge-queue compatibility: when the repository enables a queue, this is the authoritative
+  # final candidate containing the latest target branch plus every PR ahead of this one.
+  merge_group:
+    types: [checks_requested]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -31,49 +35,9 @@ on:
     - cron: '0 8 * * 1'
 
 concurrency:
-  # For PR events: group by PR number; cancel-in-progress is FALSE (see the
-  # cancel-in-progress note below) so an in-progress test-shard run completes
-  # rather than being cancelled mid-matrix by a rapid synchronize / reopen.
-  #
-  # For push events (master / main): group by ref ONLY (no SHA suffix) AND
-  # cancel-in-progress=true so a newer master commit supersedes the prior
-  # in-flight run. Rationale:
-  #
-  #  - A release is typically a sequence of merges to master; only the latest
-  #    tip needs a green signal. Letting the prior master run finish before
-  #    starting the next one just wastes 45min of CI compute on a SHA nobody
-  #    is going to be on.
-  #
-  #  - With a 49-shard test matrix and the GitHub free-tier 20-concurrent-job
-  #    cap, the prior per-SHA grouping (commit 1906d05f4 — `format('{0}-{1}',
-  #    github.ref, github.sha)`) stacked every dependabot bump's full matrix
-  #    in the FIFO ahead of PR runs and starved them: 2026-06-08 we observed
-  #    11 queued master runs holding ~700 matrix jobs ahead of 4 PR runs that
-  #    couldn't dispatch a single matrix job for 3+ hours.
-  #
-  # The motivation given for that per-SHA revert (`PR #1318 not seeing a
-  # green signal under the prior cancel-in-progress=true pattern`) is most
-  # plausibly explained by PR #1318 checking an INTERMEDIATE master SHA's
-  # status — those signals do get lost under cancel-in-progress=true. But
-  # the LATEST master tip's signal is always preserved (the freshly-triggered
-  # run for the new commit completes and posts), which is what every
-  # downstream check (branch-protection, PR mergeability, release tagging)
-  # actually consumes. The intermediate-SHA loss is acceptable.
+  # Keep only the newest run for a PR, merge-group ref, or protected branch. A master push
+  # normally reuses its exact-tree PR artifacts, so it no longer queues another test matrix.
   group: build-${{ github.event.pull_request.number || github.ref }}
-  # cancel-in-progress is TRUE for ALL events (push AND pull_request). Only the latest
-  # commit on a branch/PR needs a green signal; letting a superseded 49-shard run keep
-  # executing just burns CI on a SHA nobody is on. With the GitHub free-tier 20-concurrent
-  # cap, NOT cancelling meant every synchronize/master push stacked another full matrix in
-  # the queue (≤1 in-progress + ≤1 pending PER PR, times many open PRs + master, saturated
-  # the pool for hours — the queue was so backed up that fresh runs sat pending with 0 jobs
-  # dispatched). Cancelling the in-flight run the moment a newer commit arrives frees the
-  # pool immediately, so the CURRENT tip's run actually gets runners.
-  #
-  # Trade-off accepted: a mid-matrix cancel marks that (now-stale) run's in-flight shards
-  # cancelled, and GitHub reports a cancelled required check as failing — but that is the
-  # SUPERSEDED SHA, not the head. The freshly-triggered run for the new tip is the
-  # authoritative signal every downstream check (branch protection, mergeability) consumes;
-  # its shards run to completion because nothing newer supersedes it.
   cancel-in-progress: true
 
 env:
@@ -121,8 +85,121 @@ env:
   DOTNET_GCConserveMemory: 9
 
 jobs:
+  # A normal master push immediately follows a PR validation of the same source tree. Locate that
+  # run and prove the tree identity before reusing any result. If the push was direct, the prior run
+  # was cancelled/stale, its artifacts expired, or the trees differ, run_id remains empty and every
+  # expensive validation job below falls back to running normally.
+  validation-source:
+    name: Resolve certified PR validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      run_id: ${{ steps.resolve.outputs.run_id }}
+      pr_number: ${{ steps.resolve.outputs.pr_number }}
+      tested_sha: ${{ steps.resolve.outputs.tested_sha }}
+      reuse: ${{ steps.resolve.outputs.reuse }}
+
+    steps:
+      - name: Resolve exact-tree PR run
+        id: resolve
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+
+          # Empty output is deliberately the safe default: downstream jobs perform full CI.
+          {
+            echo 'run_id='
+            echo 'pr_number='
+            echo 'tested_sha='
+            echo 'reuse=false'
+          } >> "$GITHUB_OUTPUT"
+
+          if ! pulls_json=$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls"); then
+            echo '::warning::Could not resolve a PR for this push; full CI will run.'
+            exit 0
+          fi
+
+          pr_json=$(jq -c --arg sha "$GITHUB_SHA" '
+            [.[] | select(.merged_at != null)]
+            | sort_by(.merged_at) | reverse
+            | ((map(select(.merge_commit_sha == $sha)) + .)[0] // empty)
+          ' <<< "$pulls_json")
+          if [ -z "$pr_json" ]; then
+            echo 'No merged PR is associated with this commit; full CI will run.'
+            exit 0
+          fi
+
+          pr_number=$(jq -r '.number' <<< "$pr_json")
+          head_sha=$(jq -r '.head.sha' <<< "$pr_json")
+          master_tree=$(gh api "repos/${GITHUB_REPOSITORY}/git/commits/${GITHUB_SHA}" --jq '.tree.sha' 2>/dev/null || true)
+          if [ -z "$head_sha" ] || [ -z "$master_tree" ]; then
+            echo '::warning::Could not resolve the merged PR head or master tree; full CI will run.'
+            exit 0
+          fi
+
+          if ! runs_json=$(gh api --method GET \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/sonarcloud.yml/runs" \
+            -f event=pull_request -f head_sha="$head_sha" -f status=completed -f per_page=20); then
+            echo '::warning::Could not list prior PR runs; full CI will run.'
+            exit 0
+          fi
+
+          # A red test ledger may still be an accepted improvement over baseline, so failure is a
+          # usable completed conclusion. Cancelled/timed-out runs are never reusable.
+          while IFS= read -r run_id; do
+            [ -n "$run_id" ] || continue
+            artifacts_json=$(gh api --paginate --slurp \
+              "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts?per_page=100" 2>/dev/null || true)
+            [ -n "$artifacts_json" ] || continue
+
+            analysis_id=$(jq -r --arg expected "ci-test-analysis-${head_sha}" '
+              [.[] | .artifacts[]? | select(.expired == false and .name == $expected)]
+              | sort_by(.created_at) | reverse | .[0].id // empty
+            ' <<< "$artifacts_json")
+            coverage_count=$(jq '[.[] | .artifacts[]? | select(.expired == false and (.name | startswith("coverage-")))] | length' <<< "$artifacts_json")
+            if [ -z "$analysis_id" ] || [ "$coverage_count" -eq 0 ]; then
+              continue
+            fi
+
+            archive="$RUNNER_TEMP/ci-test-analysis-${run_id}.zip"
+            if ! gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${analysis_id}/zip" > "$archive"; then
+              continue
+            fi
+            entry=$(unzip -Z1 "$archive" | awk '/(^|\/)ci-test-analysis\.json$/ { print; exit }')
+            [ -n "$entry" ] || continue
+            tested_sha=$(unzip -p "$archive" "$entry" | jq -r '.source.commitSha // empty')
+            [ -n "$tested_sha" ] || continue
+            tested_tree=$(gh api "repos/${GITHUB_REPOSITORY}/git/commits/${tested_sha}" --jq '.tree.sha' 2>/dev/null || true)
+
+            if [ -n "$tested_tree" ] && [ "$tested_tree" = "$master_tree" ]; then
+              {
+                echo "run_id=$run_id"
+                echo "pr_number=$pr_number"
+                echo "tested_sha=$tested_sha"
+                echo 'reuse=true'
+              } >> "$GITHUB_OUTPUT"
+              echo "Reusing PR #${pr_number} run ${run_id}; tested tree ${tested_tree} exactly matches master." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          done < <(jq -r '
+            .workflow_runs[]
+            | select(.conclusion == "success" or .conclusion == "failure")
+            | .id
+          ' <<< "$runs_json")
+
+          echo "No complete exact-tree validation artifact was found for PR #${pr_number}; full CI will run." >> "$GITHUB_STEP_SUMMARY"
+
   # CodeQL runs on Ubuntu with net10.0 only - parallel with SonarCloud
-  # Runs on PRs, pushes to master/main, and weekly schedule for security analysis
+  # Runs on PRs, merge groups, pushes to master/main, and the weekly security schedule.
   codeql:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
@@ -317,13 +394,13 @@ jobs:
   test-net10-sharded:
     name: Tests (net10.0) - ${{ matrix.shard.name }}
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, validation-source]
     # Floats per shard: a shard may declare `timeout: <minutes>` to raise its own ceiling, and
     # everything that does not keeps the 45-minute default. Serialized heavy shards run on one or
     # two cores by design, so a shard that had to be split to survive its memory envelope must not
     # then be killed by a clock tuned for the parallel ones.
     timeout-minutes: ${{ matrix.shard.timeout || 45 }}
-    if: "${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ (github.event_name != 'push' || needs.validation-source.outputs.reuse != 'true') && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     strategy:
       fail-fast: false
       matrix:
@@ -1637,6 +1714,7 @@ jobs:
   parameter-enumeration-sweep:
     name: Parameter sweep (${{ matrix.label }})
     runs-on: ubuntu-latest
+    needs: validation-source
     # LEAST PRIVILEGE, DECLARED. With no permissions block this job inherited the workflow
     # or repository default token scope, which on a repository defaulting to read/write hands
     # a job that only checks out, builds and uploads an artifact the ability to push commits.
@@ -1655,7 +1733,7 @@ jobs:
     # entirely -- on a push github.head_ref is empty, so this job ran on release
     # commits while every other job skipped, building the whole solution and
     # holding a runner for up to 60 minutes to do it.
-    if: "${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ (github.event_name != 'push' || needs.validation-source.outputs.reuse != 'true') && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     # NO continue-on-error. It made the guards below decorative: the step printed
     # `::error::Sweep harness failed to START` and exited 1, and the job was marked
     # green anyway -- the loud failure those guards promise could never be heard.
@@ -1827,7 +1905,7 @@ jobs:
   model-shape-conformance-windows:
     name: Model shape conformance (offset ${{ matrix.offset }})
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, validation-source]
     permissions:
       contents: read
     # WHY THIS REMAINS SHARDED. The conformance sweep checks every model's declared shape contract
@@ -1840,7 +1918,7 @@ jobs:
     # every concrete contract runs in a bounded child process and must agree with Predict. That makes
     # a window containing only honest declines valid while preserving strict failure for a mismatch,
     # crash, timeout, or unconstructable claimed contract.
-    if: "${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ (github.event_name != 'push' || needs.validation-source.outputs.reuse != 'true') && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     strategy:
       fail-fast: false
       matrix:
@@ -1970,22 +2048,25 @@ jobs:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      actions: read
+      contents: read
     # always() is load-bearing, not cosmetic. Without it a single red shard fails the
     # test-net10-sharded matrix, Actions SKIPS this job for having a failed `needs`, and because
     # "SonarCloud Analysis" is the ONLY required status check in the `Main` ruleset, a skipped
     # check leaves the gate unsatisfied and every PR reads BLOCKED. That made "all 158 shards
     # green" the de facto merge bar via a `needs:` edge rather than a stated policy.
     #
-    # SonarCloud is code-quality analysis, not a test gate. It consumes coverage by artifact
-    # pattern (coverage-<sha>-*), and those artifacts are uploaded whether a shard passed or
-    # failed, so it needs the tests to have RUN, not to have PASSED. Test outcomes are gated
-    # explicitly by the `ci-gate` job at the end of this file instead.
+    # SonarCloud is code-quality analysis, not a test gate. It consumes coverage from either this
+    # validation or an exact-tree certified PR run, and those artifacts are uploaded whether a
+    # shard passed or failed. Test outcomes are gated explicitly by `ci-gate` below.
     #
     # The build IS still required: without its artifacts the analysis would be meaningless.
     if: "${{ always() && needs.build.result == 'success' && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
       - build
       - test-net10-sharded
+      - validation-source
 
     steps:
       - name: Set up JDK 17
@@ -2034,10 +2115,22 @@ jobs:
           New-Item -Path ${{ runner.temp }}/scanner -ItemType Directory -Force
           dotnet tool update dotnet-sonarscanner --tool-path ${{ runner.temp }}/scanner
 
-      - name: Download coverage artifacts
+      - name: Download current-run coverage artifacts
+        if: needs.validation-source.outputs.reuse != 'true'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
         with:
           pattern: coverage-${{ github.sha }}-*
+          path: TestResults
+          merge-multiple: true
+
+      - name: Download certified PR coverage artifacts
+        if: needs.validation-source.outputs.reuse == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ needs.validation-source.outputs.run_id }}
+          pattern: coverage-*
           path: TestResults
           merge-multiple: true
 
@@ -2109,10 +2202,10 @@ jobs:
 
   # Artifact size analysis
   size-check:
-    if: "${{ !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ (github.event_name != 'push' || needs.validation-source.outputs.reuse != 'true') && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     name: Artifact Size Check
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, validation-source]
     timeout-minutes: 10
 
     steps:
@@ -2175,9 +2268,10 @@ jobs:
     name: Test analysis (aggregate)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    if: "${{ always() && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ always() && (github.event_name != 'push' || needs.validation-source.outputs.reuse != 'true') && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
       - test-net10-sharded
+      - validation-source
     permissions:
       actions: read
       contents: read
@@ -2291,6 +2385,56 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
+          # The PR head remains queryable after merge, whereas refs/pull/*/merge is temporary.
+          # A master-push promotion below also publishes the same report under the landed SHA.
+          name: ci-test-analysis-${{ github.event.pull_request.head.sha || github.sha }}
+          path: TestAnalysis/
+          if-no-files-found: error
+          retention-days: 90
+
+  # Preserve the certified PR ledger as the master baseline without rerunning 100+ test shards.
+  # This job is reachable only after validation-source proves that the PR-tested and landed Git
+  # trees are identical; direct or otherwise unverifiable pushes execute ci-test-analysis instead.
+  promote-ci-test-analysis:
+    name: Publish certified test baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: "${{ always() && github.event_name == 'push' && needs.validation-source.outputs.reuse == 'true' }}"
+    needs:
+      - validation-source
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - name: Download certified PR analysis
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ needs.validation-source.outputs.run_id }}
+          pattern: ci-test-analysis-*
+          path: TestAnalysis
+          merge-multiple: true
+
+      - name: Record promotion provenance
+        shell: bash
+        env:
+          SOURCE_RUN_ID: ${{ needs.validation-source.outputs.run_id }}
+          SOURCE_PR: ${{ needs.validation-source.outputs.pr_number }}
+          TESTED_SHA: ${{ needs.validation-source.outputs.tested_sha }}
+        run: |
+          jq -n \
+            --arg masterSha "$GITHUB_SHA" \
+            --arg testedSha "$TESTED_SHA" \
+            --arg sourceRunId "$SOURCE_RUN_ID" \
+            --arg sourcePr "$SOURCE_PR" \
+            '{masterSha: $masterSha, testedSha: $testedSha, sourceRunId: $sourceRunId, sourcePr: $sourcePr}' \
+            > TestAnalysis/promotion.json
+
+      - name: Upload master-keyed analysis
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
           name: ci-test-analysis-${{ github.sha }}
           path: TestAnalysis/
           if-no-files-found: error
@@ -2314,9 +2458,11 @@ jobs:
     timeout-minutes: 5
     if: "${{ always() && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
+      - validation-source
       - build
       - test-net10-sharded
       - ci-test-analysis
+      - promote-ci-test-analysis
       - sonarcloud
 
     steps:
@@ -2325,25 +2471,45 @@ jobs:
           BUILD_RESULT: ${{ needs.build.result }}
           TESTS_RESULT: ${{ needs.test-net10-sharded.result }}
           ANALYSIS_RESULT: ${{ needs.ci-test-analysis.result }}
+          PROMOTION_RESULT: ${{ needs.promote-ci-test-analysis.result }}
           SONAR_RESULT: ${{ needs.sonarcloud.result }}
+          SOURCE_RESULT: ${{ needs.validation-source.result }}
+          REUSED_VALIDATION: ${{ needs.validation-source.outputs.reuse }}
         run: |
           set -euo pipefail
 
-          echo "## CI Gate" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Job | Result |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| build | $BUILD_RESULT |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| test-net10-sharded | $TESTS_RESULT |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| ci-test-analysis | $ANALYSIS_RESULT |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| sonarcloud | $SONAR_RESULT |" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## CI Gate"
+            echo ""
+            if [ "$REUSED_VALIDATION" = "true" ]; then
+              echo "Mode: certified PR results reused for an identical master tree."
+            else
+              echo "Mode: full validation executed for this commit."
+            fi
+            echo ""
+            echo "| Job | Result |"
+            echo "|---|---|"
+            echo "| validation-source | $SOURCE_RESULT |"
+            echo "| build | $BUILD_RESULT |"
+            echo "| test-net10-sharded | $TESTS_RESULT |"
+            echo "| ci-test-analysis | $ANALYSIS_RESULT |"
+            echo "| promote-ci-test-analysis | $PROMOTION_RESULT |"
+            echo "| sonarcloud | $SONAR_RESULT |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
           failed=0
-          for pair in "build:$BUILD_RESULT" "test-net10-sharded:$TESTS_RESULT" "ci-test-analysis:$ANALYSIS_RESULT" "sonarcloud:$SONAR_RESULT"; do
+          required=("validation-source:$SOURCE_RESULT" "build:$BUILD_RESULT" "sonarcloud:$SONAR_RESULT")
+          if [ "$REUSED_VALIDATION" = "true" ]; then
+            required+=("promote-ci-test-analysis:$PROMOTION_RESULT")
+          else
+            required+=("test-net10-sharded:$TESTS_RESULT" "ci-test-analysis:$ANALYSIS_RESULT")
+          fi
+
+          for pair in "${required[@]}"; do
             job="${pair%%:*}"
             result="${pair#*:}"
-            # 'skipped' is deliberately NOT accepted: it is exactly how this gate used to fail
-            # open, and a check that passes because it never ran is worse than no check.
+            # Skipped work is excluded only in certified-reuse mode above. Every job selected for
+            # the active mode must report success; a skipped required job still fails closed.
             if [ "$result" != "success" ]; then
               echo "::error title=CI Gate::Required job '$job' reported '$result' (expected 'success')."
               failed=1
