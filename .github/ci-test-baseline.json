@@ -1,0 +1,894 @@
+{
+    "schemaVersion":  1,
+    "source":  {
+                   "repository":  "ooples/AiDotNet",
+                   "commitSha":  "052ff51f177e497ed1b4a322ce3f3c854fffa4b1",
+                   "mergeCommitSha":  "9b158c7e7adfb0f1000973c7e9c0c027bddf155d",
+                   "pullRequest":  2028,
+                   "runUrl":  "https://github.com/ooples/AiDotNet/actions/runs/32329133890"
+               },
+    "summary":  {
+                    "trxFiles":  108,
+                    "totalTests":  67056,
+                    "executedTests":  66991,
+                    "passedTests":  66770,
+                    "failedResultRecords":  221,
+                    "uniqueFailedTests":  218,
+                    "uniqueFailedMethods":  218,
+                    "skippedTests":  0,
+                    "notExecutedTests":  65,
+                    "failedShards":  53,
+                    "missingResultShards":  2,
+                    "unparseableTrxFiles":  0
+                },
+    "shards":  [
+                   {
+                       "name":  "Integration - Serial Perf",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "Integration C - ComputerVision",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "Integration H-L",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "Integration M",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "Integration N-O",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "Integration P-Q",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "Integration R",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "Integration S",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Diffusion A-C",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Diffusion D-I",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Diffusion J-K",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Diffusion M Motion-MZ",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Diffusion N-R",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Diffusion Stable",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Diffusion Step-Sync",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Diffusion T-Z",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers A",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers B",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers C",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers D-F",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers H-I",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers J-L",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers M A-Medi",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers M MedS-Meta",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers M MetaV-Mu",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers N-O",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers P A,C,I,L,N,P",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers P E,H,O,R,S,U,W,Y",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers Q-R1",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers R2-SAI",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers SAL-SAM",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers SAN-Sig",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers Sil-Sq",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers St-Sy",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers T A-Tac",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers T Tem-Tri",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers U",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers Video",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers Vi-VM",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers Vo-VR",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers W",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - Generated Layers Y-Z",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - NeuralNetworks A-F",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - NeuralNetworks G-L",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - NeuralNetworks M-N",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - NeuralNetworks O-R",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - NeuralNetworks S",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "ModelFamily - TimeSeries/Activation/Loss",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "Other - Playground",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "Unit - 03c4 Diffusion Contracts S",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "Unit - 05 Helpers/Inference/Interpretability",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "Unit - 07 Logging/Loss/Meta/Mixed/Compression",
+                       "conclusion":  "failure"
+                   },
+                   {
+                       "name":  "Unit - 13 Remaining (ActiveLearning/Agents/CL/Physics/etc.)",
+                       "conclusion":  "failure"
+                   }
+               ],
+    "failures":  [
+                     {
+                         "identity":  "AiDotNet.Tests.IntegrationTests.Inference.InferenceSessionIntegrationTests::AiDotNet.Tests.IntegrationTests.Inference.InferenceSessionIntegrationTests.BeginInferenceSession_SequencesAreIndependent"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.IntegrationTests.MetaLearning.MetaLearningCoverageIntegrationTests::AiDotNet.Tests.IntegrationTests.MetaLearning.MetaLearningCoverageIntegrationTests.MetaLearnerBase_AccessorsAndFallback_AreCovered"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.IntegrationTests.NeuralNetworks.CoreLayersIntegrationTests::AiDotNet.Tests.IntegrationTests.NeuralNetworks.CoreLayersIntegrationTests.DepthwiseSeparableConvolutionalLayer_Metadata_SurvivesCloneReconstruction"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.IntegrationTests.NeuralNetworks.CreditRuleFacadeTrainingTests::AiDotNet.Tests.IntegrationTests.NeuralNetworks.CreditRuleFacadeTrainingTests.KolenPollack_AppliesSameForwardIncrement_AndContractsAlignmentError"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.IntegrationTests.NeuralNetworks.MultiInputPortTests::AiDotNet.Tests.IntegrationTests.NeuralNetworks.MultiInputPortTests.DecoderLayer_InputPorts_DeclaresDecoderEncoderMask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.IntegrationTests.NeuralNetworks.TransformerTrainPathReproIssue1227And1228Tests::AiDotNet.Tests.IntegrationTests.NeuralNetworks.TransformerTrainPathReproIssue1227And1228Tests.Issue1228_TransformerTrain_CpuToWallRatio"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.IntegrationTests.Optimizers.Issue1296LargeXTrainBatchingTests::AiDotNet.Tests.IntegrationTests.Optimizers.Issue1296LargeXTrainBatchingTests.GradientAccumulation_MatchesFullBatchGradient_OnOneStep"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.IntegrationTests.Parameters.AutomaticParameterOwnershipTests::AiDotNet.Tests.IntegrationTests.Parameters.AutomaticParameterOwnershipTests.SelfSupervisedAliasesAndOwnershipRoles_AreRepresentedExactlyOnce"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.IntegrationTests.ReinforcementLearning.DeepAgentsIntegrationTests::AiDotNet.Tests.IntegrationTests.ReinforcementLearning.DeepAgentsIntegrationTests.ActorCriticAgents_RunBasicWorkflow"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticTabularGeneratorIntegrationTests::AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticTabularGeneratorIntegrationTests.PATEGANGenerator_FitAndGenerate_ProducesValidOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticTabularGeneratorIntegrationTests::AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticTabularGeneratorIntegrationTests.PATEGANGenerator_SaveLoad_PreservesAuxiliaryNetworks"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticTabularGeneratorIntegrationTests::AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticTabularGeneratorIntegrationTests.TabDDPMGenerator_FitAndGenerate_ProducesValidOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticTabularGeneratorIntegrationTests::AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticTabularGeneratorIntegrationTests.TabDDPMGenerator_SaveLoad_PreservesAuxiliaryNetworks"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticTabularGeneratorIntegrationTests::AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticTabularGeneratorIntegrationTests.TabSynGenerator_FitAndGenerate_ProducesValidOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticTabularGeneratorIntegrationTests::AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticTabularGeneratorIntegrationTests.TabSynGenerator_SaveLoad_PreservesAuxiliaryNetworks"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Diffusion.ControlNetQRModelTests::AiDotNet.Tests.ModelFamilyTests.Diffusion.ControlNetQRModelTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Diffusion.DreamFusionModelTests::AiDotNet.Tests.ModelFamilyTests.Diffusion.DreamFusionModelTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Diffusion.EasyConsistencyModelTests::AiDotNet.Tests.ModelFamilyTests.Diffusion.EasyConsistencyModelTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Diffusion.InstantStyleModelTests::AiDotNet.Tests.ModelFamilyTests.Diffusion.InstantStyleModelTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Diffusion.KLoRAStyleModelTests::AiDotNet.Tests.ModelFamilyTests.Diffusion.KLoRAStyleModelTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Diffusion.MultiStepConsistencyModelTests::AiDotNet.Tests.ModelFamilyTests.Diffusion.MultiStepConsistencyModelTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Diffusion.Pix2PixZeroModelTests::AiDotNet.Tests.ModelFamilyTests.Diffusion.Pix2PixZeroModelTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Diffusion.StableCascadeModelTests::AiDotNet.Tests.ModelFamilyTests.Diffusion.StableCascadeModelTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Diffusion.StyDiffModelTests::AiDotNet.Tests.ModelFamilyTests.Diffusion.StyDiffModelTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Diffusion.StyleAlignedModelTests::AiDotNet.Tests.ModelFamilyTests.Diffusion.StyleAlignedModelTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Diffusion.TLoRAModelTests::AiDotNet.Tests.ModelFamilyTests.Diffusion.TLoRAModelTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Diffusion.TSDSRModelTests::AiDotNet.Tests.ModelFamilyTests.Diffusion.TSDSRModelTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.ABCLayerTests::AiDotNet.Tests.ModelFamilyTests.Generated.ABCLayerTests.Serialize_Deserialize_ShouldPreserveBehavior"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.ABCNetTests::AiDotNet.Tests.ModelFamilyTests.Generated.ABCNetTests.DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.ABINetTests::AiDotNet.Tests.ModelFamilyTests.Generated.ABINetTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.ABINetTests::AiDotNet.Tests.ModelFamilyTests.Generated.ABINetTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.ALiBiPositionalBiasLayerTests::AiDotNet.Tests.ModelFamilyTests.Generated.ALiBiPositionalBiasLayerTests.Serialize_Deserialize_ShouldPreserveBehavior"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.ASTModelTests::AiDotNet.Tests.ModelFamilyTests.Generated.ASTModelTests.NamedLayerActivations_ShouldBeNonEmpty"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.AudioEventDetectorTests::AiDotNet.Tests.ModelFamilyTests.Generated.AudioEventDetectorTests.DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.AudioGenModelTests::AiDotNet.Tests.ModelFamilyTests.Generated.AudioGenModelTests.Clone_AfterTraining_ShouldPreserveLearnedWeights"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.AudioGenModelTests::AiDotNet.Tests.ModelFamilyTests.Generated.AudioGenModelTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.AudioGenModelTests::AiDotNet.Tests.ModelFamilyTests.Generated.AudioGenModelTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.BasicBlockTests::AiDotNet.Tests.ModelFamilyTests.Generated.BasicBlockTests.Serialize_Deserialize_ShouldPreserveBehavior"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.BatchNormalizationLayerTests::AiDotNet.Tests.ModelFamilyTests.Generated.BatchNormalizationLayerTests.Serialize_Deserialize_ShouldPreserveBehavior"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.BiaffineNERTests::AiDotNet.Tests.ModelFamilyTests.Generated.BiaffineNERTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.BiaffineNERTests::AiDotNet.Tests.ModelFamilyTests.Generated.BiaffineNERTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.BiaffineNERTests::AiDotNet.Tests.ModelFamilyTests.Generated.BiaffineNERTests.ParameterGradientAccessor_IsPopulatedOrExplicitlyUnsupported"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.BottleneckBlockTests::AiDotNet.Tests.ModelFamilyTests.Generated.BottleneckBlockTests.Serialize_Deserialize_ShouldPreserveBehavior"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.BSVDTests::AiDotNet.Tests.ModelFamilyTests.Generated.BSVDTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.BSVDTests::AiDotNet.Tests.ModelFamilyTests.Generated.BSVDTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.CLAPModelTests::AiDotNet.Tests.ModelFamilyTests.Generated.CLAPModelTests.NamedLayerActivations_ShouldBeNonEmpty"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.ConformerFPTests::AiDotNet.Tests.ModelFamilyTests.Generated.ConformerFPTests.ParameterCount_ShouldMatchGetParameters"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.ConvTransformerTests::AiDotNet.Tests.ModelFamilyTests.Generated.ConvTransformerTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.CRNNEventDetectorTests::AiDotNet.Tests.ModelFamilyTests.Generated.CRNNEventDetectorTests.DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.CutieTests::AiDotNet.Tests.ModelFamilyTests.Generated.CutieTests.Clone_AfterTraining_ShouldPreserveLearnedWeights"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.CutieTests::AiDotNet.Tests.ModelFamilyTests.Generated.CutieTests.DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.CutieTests::AiDotNet.Tests.ModelFamilyTests.Generated.CutieTests.ForwardPass_ShouldBeFinite_AfterTraining"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.CutieTests::AiDotNet.Tests.ModelFamilyTests.Generated.CutieTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.DACTests::AiDotNet.Tests.ModelFamilyTests.Generated.DACTests.DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.DACTests::AiDotNet.Tests.ModelFamilyTests.Generated.DACTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.DACTests::AiDotNet.Tests.ModelFamilyTests.Generated.DACTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.DCRNNTests::AiDotNet.Tests.ModelFamilyTests.Generated.DCRNNTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.DemucsNoiseTests::AiDotNet.Tests.ModelFamilyTests.Generated.DemucsNoiseTests.Gradients_MatchFiniteDifference"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.DemucsNoiseTests::AiDotNet.Tests.ModelFamilyTests.Generated.DemucsNoiseTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.DenseBlockLayerTests::AiDotNet.Tests.ModelFamilyTests.Generated.DenseBlockLayerTests.Serialize_Deserialize_ShouldPreserveBehavior"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.DenseBlockTests::AiDotNet.Tests.ModelFamilyTests.Generated.DenseBlockTests.Serialize_Deserialize_ShouldPreserveBehavior"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.DiffCutSegmentationTests::AiDotNet.Tests.ModelFamilyTests.Generated.DiffCutSegmentationTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.EfficientConformerTests::AiDotNet.Tests.ModelFamilyTests.Generated.EfficientConformerTests.TrainingError_ShouldNotExceedTestError"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.EfficientSAMTests::AiDotNet.Tests.ModelFamilyTests.Generated.EfficientSAMTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.EfficientTAMTests::AiDotNet.Tests.ModelFamilyTests.Generated.EfficientTAMTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.ExperienceReplayTests::AiDotNet.Tests.ModelFamilyTests.Generated.ExperienceReplayTests.ComputeLoss_IncreasesWithMoreTasks"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.FDYSEDTests::AiDotNet.Tests.ModelFamilyTests.Generated.FDYSEDTests.DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.FEDformerTests::AiDotNet.Tests.ModelFamilyTests.Generated.FEDformerTests.TrainingError_ShouldNotExceedTestError"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.FloRNNTests::AiDotNet.Tests.ModelFamilyTests.Generated.FloRNNTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.FlowStateTests::AiDotNet.Tests.ModelFamilyTests.Generated.FlowStateTests.Gradients_MatchFiniteDifference"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.FreGradTests::AiDotNet.Tests.ModelFamilyTests.Generated.FreGradTests.Gradients_MatchFiniteDifference"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.HamiltonianNeuralNetworkTests::AiDotNet.Tests.ModelFamilyTests.Generated.HamiltonianNeuralNetworkTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.HamiltonianNeuralNetworkTests::AiDotNet.Tests.ModelFamilyTests.Generated.HamiltonianNeuralNetworkTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.HedgehogLayerTests::AiDotNet.Tests.ModelFamilyTests.Generated.HedgehogLayerTests.Serialize_Deserialize_ShouldPreserveBehavior"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.HyenaLayerTests::AiDotNet.Tests.ModelFamilyTests.Generated.HyenaLayerTests.Serialize_Deserialize_ShouldPreserveBehavior"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.InvertedResidualBlockTests::AiDotNet.Tests.ModelFamilyTests.Generated.InvertedResidualBlockTests.Serialize_Deserialize_ShouldPreserveBehavior"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.KeywordSpottingTests::AiDotNet.Tests.ModelFamilyTests.Generated.KeywordSpottingTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.KokoroTests::AiDotNet.Tests.ModelFamilyTests.Generated.KokoroTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.KokoroTests::AiDotNet.Tests.ModelFamilyTests.Generated.KokoroTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.KyutaiMoshiTests::AiDotNet.Tests.ModelFamilyTests.Generated.KyutaiMoshiTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.LinearRecurrentUnitLayerTests::AiDotNet.Tests.ModelFamilyTests.Generated.LinearRecurrentUnitLayerTests.Serialize_Deserialize_ShouldPreserveBehavior"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.LiteDVDNetTests::AiDotNet.Tests.ModelFamilyTests.Generated.LiteDVDNetTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.LiteDVDNetTests::AiDotNet.Tests.ModelFamilyTests.Generated.LiteDVDNetTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.Mask2FormerTests::AiDotNet.Tests.ModelFamilyTests.Generated.Mask2FormerTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.Mask2FormerTests::AiDotNet.Tests.ModelFamilyTests.Generated.Mask2FormerTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.MedCLIPTests::AiDotNet.Tests.ModelFamilyTests.Generated.MedCLIPTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.MedSegDiffV2Tests::AiDotNet.Tests.ModelFamilyTests.Generated.MedSegDiffV2Tests.TrainingStep_ShouldDependOnTheTarget"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.MegalodonLayerTests::AiDotNet.Tests.ModelFamilyTests.Generated.MegalodonLayerTests.Serialize_Deserialize_ShouldPreserveBehavior"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.MeloTTSTests::AiDotNet.Tests.ModelFamilyTests.Generated.MeloTTSTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.MultiLatentAttentionLayerTests::AiDotNet.Tests.ModelFamilyTests.Generated.MultiLatentAttentionLayerTests.TapeGradient_ShouldMatchNumericalGradient"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.NBEATSFinanceTests::AiDotNet.Tests.ModelFamilyTests.Generated.NBEATSFinanceTests.TrainingError_ShouldNotExceedTestError"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.NeuralVaRTests::AiDotNet.Tests.ModelFamilyTests.Generated.NeuralVaRTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.NeuralVaRTests::AiDotNet.Tests.ModelFamilyTests.Generated.NeuralVaRTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.NougatTests::AiDotNet.Tests.ModelFamilyTests.Generated.NougatTests.Clone_AfterTraining_ShouldPreserveLearnedWeights"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.NougatTests::AiDotNet.Tests.ModelFamilyTests.Generated.NougatTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.PANNsTests::AiDotNet.Tests.ModelFamilyTests.Generated.PANNsTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.PANNsTests::AiDotNet.Tests.ModelFamilyTests.Generated.PANNsTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.ParallelWaveGANTests::AiDotNet.Tests.ModelFamilyTests.Generated.ParallelWaveGANTests.Gradients_MatchFiniteDifference"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.Pix2StructTests::AiDotNet.Tests.ModelFamilyTests.Generated.Pix2StructTests.Clone_AfterTraining_ShouldPreserveLearnedWeights"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.Pix2StructTests::AiDotNet.Tests.ModelFamilyTests.Generated.Pix2StructTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.PixelLMTests::AiDotNet.Tests.ModelFamilyTests.Generated.PixelLMTests.TrainingStep_ShouldDependOnTheTarget"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.PointNetPlusPlusTests::AiDotNet.Tests.ModelFamilyTests.Generated.PointNetPlusPlusTests.Clone_AfterTraining_ShouldPreserveLearnedWeights"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.PointNetPlusPlusTests::AiDotNet.Tests.ModelFamilyTests.Generated.PointNetPlusPlusTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.ProDiffTests::AiDotNet.Tests.ModelFamilyTests.Generated.ProDiffTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.RecurrentGemmaLanguageModelTests::AiDotNet.Tests.ModelFamilyTests.Generated.RecurrentGemmaLanguageModelTests.Clone_AfterTraining_ShouldPreserveLearnedWeights"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.RecurrentGemmaLanguageModelTests::AiDotNet.Tests.ModelFamilyTests.Generated.RecurrentGemmaLanguageModelTests.ForwardPass_ShouldBeFinite_AfterTraining"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.RecurrentGemmaLanguageModelTests::AiDotNet.Tests.ModelFamilyTests.Generated.RecurrentGemmaLanguageModelTests.GradientFlow_ShouldBeNonZeroAndFinite"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.RecurrentGemmaLanguageModelTests::AiDotNet.Tests.ModelFamilyTests.Generated.RecurrentGemmaLanguageModelTests.Gradients_MatchFiniteDifference"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.RecurrentGemmaLanguageModelTests::AiDotNet.Tests.ModelFamilyTests.Generated.RecurrentGemmaLanguageModelTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.RecurrentGemmaLanguageModelTests::AiDotNet.Tests.ModelFamilyTests.Generated.RecurrentGemmaLanguageModelTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.RecurrentGemmaLanguageModelTests::AiDotNet.Tests.ModelFamilyTests.Generated.RecurrentGemmaLanguageModelTests.OptimizerStep_ParamL2_DoesNotExplode"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.RecurrentGemmaLanguageModelTests::AiDotNet.Tests.ModelFamilyTests.Generated.RecurrentGemmaLanguageModelTests.ParameterGradientAccessor_IsPopulatedOrExplicitlyUnsupported"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.ReservoirLayerTests::AiDotNet.Tests.ModelFamilyTests.Generated.ReservoirLayerTests.Serialize_Deserialize_ShouldPreserveBehavior"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.RoomImpulseResponseTests::AiDotNet.Tests.ModelFamilyTests.Generated.RoomImpulseResponseTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.RoomImpulseResponseTests::AiDotNet.Tests.ModelFamilyTests.Generated.RoomImpulseResponseTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.S4DLayerTests::AiDotNet.Tests.ModelFamilyTests.Generated.S4DLayerTests.Serialize_Deserialize_ShouldPreserveBehavior"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.S5LayerTests::AiDotNet.Tests.ModelFamilyTests.Generated.S5LayerTests.Serialize_Deserialize_ShouldPreserveBehavior"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.SAMHQTests::AiDotNet.Tests.ModelFamilyTests.Generated.SAMHQTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.SAMTests::AiDotNet.Tests.ModelFamilyTests.Generated.SAMTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.SeACoTests::AiDotNet.Tests.ModelFamilyTests.Generated.SeACoTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.SeACoTests::AiDotNet.Tests.ModelFamilyTests.Generated.SeACoTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.SECBERTTests::AiDotNet.Tests.ModelFamilyTests.Generated.SECBERTTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.SECBERTTests::AiDotNet.Tests.ModelFamilyTests.Generated.SECBERTTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.SegGPTTests::AiDotNet.Tests.ModelFamilyTests.Generated.SegGPTTests.TrainingStep_ShouldDependOnTheTarget"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.SileroVadTests::AiDotNet.Tests.ModelFamilyTests.Generated.SileroVadTests.TrainingError_ShouldNotExceedTestError"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.SparseLinearLayerTests::AiDotNet.Tests.ModelFamilyTests.Generated.SparseLinearLayerTests.Serialize_Deserialize_ShouldPreserveBehavior"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.SpatialPoolerLayerTests::AiDotNet.Tests.ModelFamilyTests.Generated.SpatialPoolerLayerTests.Serialize_Deserialize_ShouldPreserveBehavior"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.SpeechEmotionRecognizerTests::AiDotNet.Tests.ModelFamilyTests.Generated.SpeechEmotionRecognizerTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.SpeechT5Tests::AiDotNet.Tests.ModelFamilyTests.Generated.SpeechT5Tests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.SpikingLayerTests::AiDotNet.Tests.ModelFamilyTests.Generated.SpikingLayerTests.Serialize_Deserialize_ShouldPreserveBehavior"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.SpyNetLayerTests::AiDotNet.Tests.ModelFamilyTests.Generated.SpyNetLayerTests.TapeGradient_ShouldMatchNumericalGradient"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.SqueezeformerTests::AiDotNet.Tests.ModelFamilyTests.Generated.SqueezeformerTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.TabNetTests::AiDotNet.Tests.ModelFamilyTests.Generated.TabNetTests.TrainingStep_ShouldDependOnTheTarget"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.TabTransformerGenGeneratorTests::AiDotNet.Tests.ModelFamilyTests.Generated.TabTransformerGenGeneratorTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.TabTransformerTests::AiDotNet.Tests.ModelFamilyTests.Generated.TabTransformerTests.Gradients_MatchFiniteDifference"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.Tacotron2Tests::AiDotNet.Tests.ModelFamilyTests.Generated.Tacotron2Tests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.TimeGANGeneratorTests::AiDotNet.Tests.ModelFamilyTests.Generated.TimeGANGeneratorTests.NamedLayerActivations_ShouldBeNonEmpty"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.TimerTests::AiDotNet.Tests.ModelFamilyTests.Generated.TimerTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.TimerTests::AiDotNet.Tests.ModelFamilyTests.Generated.TimerTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.TOTEMTests::AiDotNet.Tests.ModelFamilyTests.Generated.TOTEMTests.Gradients_MatchFiniteDifference"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.TOTEMTests::AiDotNet.Tests.ModelFamilyTests.Generated.TOTEMTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.TOTOTests::AiDotNet.Tests.ModelFamilyTests.Generated.TOTOTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.TOTOTests::AiDotNet.Tests.ModelFamilyTests.Generated.TOTOTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.TOTOTests::AiDotNet.Tests.ModelFamilyTests.Generated.TOTOTests.TrainingError_ShouldNotExceedTestError"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.TransitionLayerTests::AiDotNet.Tests.ModelFamilyTests.Generated.TransitionLayerTests.Serialize_Deserialize_ShouldPreserveBehavior"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.UNITERTests::AiDotNet.Tests.ModelFamilyTests.Generated.UNITERTests.TrainingError_ShouldNotExceedTestError"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.VideoLLaMA2Tests::AiDotNet.Tests.ModelFamilyTests.Generated.VideoLLaMA2Tests.Gradients_MatchFiniteDifference"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.VideoLLaMA2Tests::AiDotNet.Tests.ModelFamilyTests.Generated.VideoLLaMA2Tests.ParameterCount_ShouldMatchGetParameters"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.VideoLLaMA2Tests::AiDotNet.Tests.ModelFamilyTests.Generated.VideoLLaMA2Tests.Parameters_CountShouldMatchVector_AfterForward"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.VinVLTests::AiDotNet.Tests.ModelFamilyTests.Generated.VinVLTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.VinVLTests::AiDotNet.Tests.ModelFamilyTests.Generated.VinVLTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.VisionMambaTests::AiDotNet.Tests.ModelFamilyTests.Generated.VisionMambaTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.VisionMambaTests::AiDotNet.Tests.ModelFamilyTests.Generated.VisionMambaTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.VisionTSTests::AiDotNet.Tests.ModelFamilyTests.Generated.VisionTSTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.VisionTSTests::AiDotNet.Tests.ModelFamilyTests.Generated.VisionTSTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.VisionTSTests::AiDotNet.Tests.ModelFamilyTests.Generated.VisionTSTests.TrainingError_ShouldNotExceedTestError"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.ViTAdapterTests::AiDotNet.Tests.ModelFamilyTests.Generated.ViTAdapterTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.ViTAdapterTests::AiDotNet.Tests.ModelFamilyTests.Generated.ViTAdapterTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.VITS2Tests::AiDotNet.Tests.ModelFamilyTests.Generated.VITS2Tests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.VITSTests::AiDotNet.Tests.ModelFamilyTests.Generated.VITSTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.VMambaTests::AiDotNet.Tests.ModelFamilyTests.Generated.VMambaTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.VMambaTests::AiDotNet.Tests.ModelFamilyTests.Generated.VMambaTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.VoxLingua107IdentifierTests::AiDotNet.Tests.ModelFamilyTests.Generated.VoxLingua107IdentifierTests.SilenceIn_NearSilenceOut"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.Wav2SmallTests::AiDotNet.Tests.ModelFamilyTests.Generated.Wav2SmallTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.WaveGlowTests::AiDotNet.Tests.ModelFamilyTests.Generated.WaveGlowTests.Gradients_MatchFiniteDifference"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.WaveRNNTests::AiDotNet.Tests.ModelFamilyTests.Generated.WaveRNNTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.WGANGPTests::AiDotNet.Tests.ModelFamilyTests.Generated.WGANGPTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.WGANGPTests::AiDotNet.Tests.ModelFamilyTests.Generated.WGANGPTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.Generated.YourTTSTests::AiDotNet.Tests.ModelFamilyTests.Generated.YourTTSTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.ACEStepTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.ACEStepTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.AdversarialImageEvaluatorTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.AdversarialImageEvaluatorTests.TrainingStep_ShouldDependOnTheTarget"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.AudioVisualEventLocalizationNetworkTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.AudioVisualEventLocalizationNetworkTests.Clone_AfterTraining_ShouldPreserveLearnedWeights"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.DeepBeliefNetworkTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.DeepBeliefNetworkTests.DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.DifferentiableNeuralComputerTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.DifferentiableNeuralComputerTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.DifferentiableNeuralComputerTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.DifferentiableNeuralComputerTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.EchoStateNetworkTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.EchoStateNetworkTests.NamedLayerActivations_ShouldBeNonEmpty"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.GraphGenerationModelTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.GraphGenerationModelTests.Clone_AfterTraining_ShouldPreserveLearnedWeights"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.GraphGenerationModelTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.GraphGenerationModelTests.DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.GraphGenerationModelTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.GraphGenerationModelTests.ForwardPass_ShouldBeFinite_AfterTraining"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.GraphGenerationModelTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.GraphGenerationModelTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.GraphGenerationModelTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.GraphGenerationModelTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.GraphGenerationModelTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.GraphGenerationModelTests.Training_ShouldChangeParameters"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.GraphGenerationModelTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.GraphGenerationModelTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.InternImageTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.InternImageTests.Clone_AfterTraining_ShouldPreserveLearnedWeights"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.InternImageTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.InternImageTests.ParameterCount_ShouldMatchGetParameters"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.LiquidStateMachineTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.LiquidStateMachineTests.Clone_AfterTraining_ShouldPreserveLearnedWeights"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.LiquidStateMachineTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.LiquidStateMachineTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.LiquidStateMachineTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.LiquidStateMachineTests.TrainingStep_ShouldDependOnTheTarget"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.NEATTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.NEATTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.NEATTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.NEATTests.TrainingError_ShouldNotExceedTestError"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.OctonionNeuralNetworkTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.OctonionNeuralNetworkTests.TrainingError_ShouldNotExceedTestError"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.QuantumNeuralNetworkTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.QuantumNeuralNetworkTests.Clone_AfterTraining_ShouldPreserveLearnedWeights"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.QuantumNeuralNetworkTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.QuantumNeuralNetworkTests.Clone_ShouldProduceIdenticalOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.QuantumNeuralNetworkTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.QuantumNeuralNetworkTests.ForwardPass_ShouldBeFinite_AfterTraining"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.QuantumNeuralNetworkTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.QuantumNeuralNetworkTests.ForwardPass_ShouldProduceFiniteOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.QuantumNeuralNetworkTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.QuantumNeuralNetworkTests.GradientFlow_ShouldBeNonZeroAndFinite"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.QuantumNeuralNetworkTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.QuantumNeuralNetworkTests.LossStrictlyDecreasesOnMemorizationTask"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.QuantumNeuralNetworkTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.QuantumNeuralNetworkTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.QuantumNeuralNetworkTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.QuantumNeuralNetworkTests.ParameterGradientAccessor_IsPopulatedOrExplicitlyUnsupported"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.QuantumNeuralNetworkTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.QuantumNeuralNetworkTests.ScaledInput_ShouldChangeOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.QuantumNeuralNetworkTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.QuantumNeuralNetworkTests.Training_ShouldChangeParameters"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.RadialBasisFunctionNetworkTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.RadialBasisFunctionNetworkTests.ScaledInput_ShouldChangeOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.ResidualNeuralNetworkTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.ResidualNeuralNetworkTests.MoreData_ShouldNotDegrade"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.ResidualNeuralNetworkTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.ResidualNeuralNetworkTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.RestrictedBoltzmannMachineTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.RestrictedBoltzmannMachineTests.Training_ShouldReduceLoss"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.SelfOrganizingMapTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.SelfOrganizingMapTests.ScaledInput_ShouldChangeOutput"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.SiameseNetworkTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.SiameseNetworkTests.TrainingError_ShouldNotExceedTestError"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.SparseNeuralNetworkTests::AiDotNet.Tests.ModelFamilyTests.NeuralNetworks.SparseNeuralNetworkTests.SubLayers_ShouldAllBeReachable"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.ModelFamilyTests.TimeSeries.LSTMVAETests::AiDotNet.Tests.ModelFamilyTests.TimeSeries.LSTMVAETests.Builder_R2ShouldBePositive"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.Playground.PlaygroundExampleCompilationTests::AiDotNet.Tests.Playground.PlaygroundExampleCompilationTests.AllPlaygroundExamples_ShouldCompile"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.UnitTests.Diffusion.Models.DiffusionModelContractTests::AiDotNet.Tests.UnitTests.Diffusion.Models.DiffusionModelContractTests.SoraModel_HasPaperFaithfulComponents"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.UnitTests.Inference.InferenceOptimizerTests::AiDotNet.Tests.UnitTests.Inference.InferenceOptimizerTests.InferenceOptimizer_CachedGroupedQueryAttention_RewrittenForward_MatchesOriginal"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.UnitTests.Inference.InferenceOptimizerTests::AiDotNet.Tests.UnitTests.Inference.InferenceOptimizerTests.InferenceOptimizer_PagedGroupedQueryAttention_MatchesOriginal_AndEnablesPagedCache"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.UnitTests.Inference.PagedContextDecodeTests::AiDotNet.Tests.UnitTests.Inference.PagedContextDecodeTests.InterleavedSequences_DoNotCorruptEachOther"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.UnitTests.MetaLearning.MbPAMechanismTests::AiDotNet.Tests.UnitTests.MetaLearning.MbPAMechanismTests.AdaptedModel_PredictsWithoutRetainingAnyAdaptation"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.UnitTests.MetaLearning.MbPAMechanismTests::AiDotNet.Tests.UnitTests.MetaLearning.MbPAMechanismTests.Retrieval_RanksByEuclideanDistance_AndReturnsTheKNearest"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.UnitTests.MetaLearning.MbPAMechanismTests::AiDotNet.Tests.UnitTests.MetaLearning.MbPAMechanismTests.RetrievalWeights_AreTheInverseSquaredDistanceKernel_NotASoftmax"
+                     },
+                     {
+                         "identity":  "AiDotNet.Tests.UnitTests.PaperFidelity.CensusPaperFidelityContractTests::AiDotNet.Tests.UnitTests.PaperFidelity.CensusPaperFidelityContractTests.SvtrTps_ReleasedInitializationUsesDistinctSourceAndTargetMargins"
+                     }
+                 ]
+}

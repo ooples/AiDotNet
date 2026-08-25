@@ -92,6 +92,12 @@ public class LossCompatibleTargetProjectionTests
 
     private sealed class ProjectionProbe : NeuralNetworkModelTestBase<float>
     {
+        // This harness deliberately exercises a dense categorical public target even though its
+        // minimal architecture is otherwise tagged as regression. The shared base now distinguishes
+        // public target encoding from an internal loss, so state the test's target contract explicitly.
+        protected override ExternalTargetEncodingKind ExternalTargetEncoding
+            => ExternalTargetEncodingKind.DenseClassProbabilities;
+
         protected override INeuralNetworkModel<float> CreateNetwork()
             => CreateBornRuleNetwork();
 

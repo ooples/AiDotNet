@@ -424,13 +424,13 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeCon
         {
             // AiDotNet.Tensors 0.129.2 records ordinary tensor primitives in GraphMode, but its
             // fused RgLruScanForward implementation currently records only on the eager gradient
-            // tape. Calling it while a compiled graph is being traced turns its result into an
-            // uninitialized graph leaf, so replay feeds pool contents into the output projection
-            // and the fused step falls back with non-finite loss or gradients.
+            // tape. Calling it while a compiled graph is being traced therefore turns its result
+            // into an uninitialized graph leaf. The compiled replay then feeds pool contents into
+            // the output projection, producing NaN loss/gradients and an eager fallback.
             //
-            // Express the same recurrence with recorded primitives while tracing. The complete
-            // forward/backward/optimizer step remains compiled; only the scan is decomposed until
-            // the tensor engine can record its fused kernel as a lazy graph node.
+            // Keep the recurrence on the compiled graph by expressing the same RG-LRU update with
+            // recorded primitives. This is still part of the fused forward/backward/optimizer plan;
+            // only the scan is decomposed until the tensor engine can record it as one lazy node.
             output = GatedRecurrenceForwardCompiled(
                 value, transition, inpGate, batchSize, seqLen);
             _lastHiddenStates = null;
@@ -447,12 +447,10 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeCon
             var zeroDecay = new Tensor<T>(new[] { _recurrenceDimension });
             var recurrenceStream = Engine.TensorMultiply(transition, twos);
             output = Engine.RgLruScanForward(value, recurrenceStream, inpGate, zeroDecay);
-
             var initial = new Tensor<T>(new[] { batchSize, 1, _recurrenceDimension });
             _lastHiddenStates = Engine.TensorConcatenate(new[] { initial, output }, axis: 1);
             _lastDecayFactors = transition;
         }
-
         return output;
     }
 
@@ -468,8 +466,9 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeCon
         var ones = Tensor<T>.CreateDefault(
             new[] { batchSize, _recurrenceDimension }, NumOps.One);
 
-        // Griffin clips the derivative of sqrt(1-a^2) to 1000. Flooring its argument at 1e-6
-        // provides the same finite upper bound when float rounding makes a exactly one.
+        // The paper clips the derivative of sqrt(1-a^2) to 1000. A floor of 1e-6
+        // gives the decomposed graph the same finite upper bound at the branch point
+        // and prevents float rounding of a to exactly one from creating 1/sqrt(0).
         var magnitudeFloor = Tensor<T>.CreateDefault(
             new[] { batchSize, _recurrenceDimension }, NumOps.FromDouble(1e-6));
 

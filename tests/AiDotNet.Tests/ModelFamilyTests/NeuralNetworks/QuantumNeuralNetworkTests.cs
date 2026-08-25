@@ -14,6 +14,13 @@ public class QuantumNeuralNetworkTests : NeuralNetworkModelTestBase<float>
     protected override int[] InputShape => [128];
     protected override int[] OutputShape => [1];
 
+    // QuantumNeuralNetwork trains BornRuleMseLoss on raw amplitudes, then Predict applies the
+    // Born rule and exposes probabilities. Feeding those probabilities back into BornRuleMseLoss
+    // squares them a second time and measures a different, sometimes non-finite quantity. The
+    // shared training invariants therefore compare the public probabilities directly to their
+    // public targets.
+    protected override bool ConfiguredLossAcceptsPublicPrediction => false;
+
     protected override INeuralNetworkModel<float> CreateNetwork()
         => new QuantumNeuralNetwork<float>();
 
