@@ -126,10 +126,11 @@ jobs:
   codeql:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
-    # The traced net10 build takes about 31 minutes on this generated-source-heavy PR and
-    # CodeQL analysis was still running when the 45-minute job ceiling cancelled it. Give
-    # extraction, SARIF generation, and upload a measured 15-minute margin.
-    timeout-minutes: 60
+    # The traced net10 build takes about 31 minutes on generated-source-heavy PRs. The #2032
+    # analysis was still running when the 60-minute ceiling cancelled it, while master's #2026
+    # baseline completed in 57:48. Give extraction, SARIF generation, and upload enough margin
+    # for normal hosted-runner variance without hiding a genuinely hung job.
+    timeout-minutes: 75
     if: "${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     permissions:
       contents: read

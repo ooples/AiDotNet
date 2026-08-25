@@ -2653,7 +2653,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         _fusedTrainingDisabled = false;
         _fusedTrainingCommitted = false;
         _fusedPersistenceVerified = false;
-        _layersSupportFusedCompiledTraining = null;
     }
 
     /// <summary>
@@ -10511,41 +10510,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected virtual bool SupportsFusedCompiledTraining => true;
 
     /// <summary>
-    /// Cached aggregate of the declarative fused-training capability on every layer in this
-    /// network, including nested sub-layers. This keeps graph-routing policy in the shared base:
-    /// a model that composes an eager-only layer automatically gets the required graph break and
-    /// model authors do not have to repeat a <see cref="SupportsFusedCompiledTraining"/> override.
-    /// </summary>
-    private bool? _layersSupportFusedCompiledTraining;
-
-    private bool LayersSupportFusedCompiledTraining()
-    {
-        if (_layersSupportFusedCompiledTraining.HasValue)
-            return _layersSupportFusedCompiledTraining.Value;
-
-        bool supported = LayersSupportFusedCompiledTrainingRecursive(Layers);
-        _layersSupportFusedCompiledTraining = supported;
-        return supported;
-    }
-
-    private static bool LayersSupportFusedCompiledTrainingRecursive(IEnumerable<ILayer<T>> layers)
-    {
-        foreach (var layer in layers)
-        {
-            var property = layer.GetType().GetCustomAttribute<Attributes.LayerPropertyAttribute>(
-                inherit: false);
-            if (property is { SupportsFusedCompiledTraining: false })
-                return false;
-
-            var subLayers = layer.GetSubLayers();
-            if (subLayers.Count > 0 && !LayersSupportFusedCompiledTrainingRecursive(subLayers))
-                return false;
-        }
-
-        return true;
-    }
-
-    /// <summary>
     /// Permanently opts this network instance out of standalone fused-optimizer
     /// compilation when a parent model owns a larger stateful training graph.
     /// Unlike <see cref="_fusedTrainingDisabled"/>, this architectural graph-break
@@ -10816,9 +10780,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // (added as a #1328 workaround) was removed in #1331 once the
         // fused-compiled training path was fixed; the EnableCompilation
         // gate is now the single supported way to bypass fused training.
-        if (!SupportsFusedCompiledTraining || !LayersSupportFusedCompiledTraining() || _parentOwnedTrainingGraph)
+        if (!SupportsFusedCompiledTraining || _parentOwnedTrainingGraph)
             return EmitFusedMissAndFallback(
-                "model or composed layer opts out of fused compiled training (dynamic/stateful forward)");
+                "model opts out of fused compiled training (dynamic/stateful forward)");
         if (_fusedTrainingDisabled)
             return EmitFusedMissAndFallback("fused path sticky-disabled from prior fallback");
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)

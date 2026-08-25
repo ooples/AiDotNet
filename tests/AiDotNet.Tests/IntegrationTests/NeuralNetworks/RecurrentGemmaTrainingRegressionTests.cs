@@ -9,7 +9,7 @@ using Xunit;
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
 /// <summary>
-/// End-to-end regression coverage for RecurrentGemma training and compiled-step fallback.
+/// End-to-end regression coverage for RecurrentGemma training and compiled-step execution.
 /// </summary>
 public sealed class RecurrentGemmaTrainingRegressionTests
 {
@@ -60,7 +60,7 @@ public sealed class RecurrentGemmaTrainingRegressionTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task GeneratedFixture_FirstCompiledStepFallsBackAndChangesFiniteParameters()
+    public async Task GeneratedFixture_CompiledStepChangesFiniteParameters()
     {
         var harness = new GeneratedFixtureHarness();
         await harness.InitializeAsync();
@@ -82,7 +82,7 @@ public sealed class RecurrentGemmaTrainingRegressionTests
 
                 Assert.True(
                     AiDotNet.Training.CompiledTapeTrainingStep<float>.GetFusedStepCount() > 0,
-                    "The regression case must exercise the compiled optimizer before fallback.");
+                    "The regression case must exercise the compiled optimizer.");
                 Assert.Equal(before.Length, after.Length);
                 Assert.All(after, value => Assert.True(IsFinite(value),
                     $"Training produced a non-finite parameter: {value}."));
@@ -104,7 +104,7 @@ public sealed class RecurrentGemmaTrainingRegressionTests
             new RecurrentGemmaLanguageModel<float>(
                 new NeuralNetworkArchitecture<float>(
                     inputType: InputType.OneDimensional,
-                    taskType: NeuralNetworkTaskType.Regression,
+                    taskType: NeuralNetworkTaskType.TextGeneration,
                     inputSize: 128,
                     outputSize: 4),
                 vocabSize: 4096);
