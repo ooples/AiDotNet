@@ -97,6 +97,8 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     private DenseLayer<T>? _inputProjection;
     private List<GRULayer<T>> _encoderGRUs;
     private List<GRULayer<T>> _decoderGRUs;
+    private List<DiffusionConvolutionalGRULayer<T>> _encoderDCGRUs;
+    private List<DiffusionConvolutionalGRULayer<T>> _decoderDCGRUs;
     private DenseLayer<T>? _outputLayer;
     #endregion
 
@@ -133,6 +135,9 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
+    /// <summary>Uses the configured DCRNN Adam recipe in the shared tape trainer.</summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+
     private int _sequenceLength;
     private int _forecastHorizon;
     private int _numNodes;
@@ -143,6 +148,7 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     private int _diffusionSteps;
     private int _numSamples;
     private int _trainingStep;
+    private Tensor<T>? _teacherForcingTarget;
     #endregion
 
     #region IForecastingModel Properties
@@ -260,9 +266,13 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         _trainingStep = 0;
 
         _adjacencyMatrix = adjacencyMatrix;
-        _random = RandomHelper.CreateSecureRandom();
+        _random = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
         _encoderGRUs = new List<GRULayer<T>>();
         _decoderGRUs = new List<GRULayer<T>>();
+        _encoderDCGRUs = new List<DiffusionConvolutionalGRULayer<T>>();
+        _decoderDCGRUs = new List<DiffusionConvolutionalGRULayer<T>>();
         _forwardPowers = new List<double[,]>();
         _backwardPowers = new List<double[,]>();
 
@@ -313,14 +323,17 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         _trainingStep = 0;
 
         _adjacencyMatrix = adjacencyMatrix;
-        _random = RandomHelper.CreateSecureRandom();
+        _random = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
         _encoderGRUs = new List<GRULayer<T>>();
         _decoderGRUs = new List<GRULayer<T>>();
+        _encoderDCGRUs = new List<DiffusionConvolutionalGRULayer<T>>();
+        _decoderDCGRUs = new List<DiffusionConvolutionalGRULayer<T>>();
         _forwardPowers = new List<double[,]>();
         _backwardPowers = new List<double[,]>();
 
-        InitializeLayers();
-
+        // DCGRU layers own graph-support constants, so build the random walks first.
         if (adjacencyMatrix is not null)
         {
             InitializeDiffusionMatrices(adjacencyMatrix);
@@ -329,6 +342,8 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         {
             InitializeDefaultDiffusionMatrices();
         }
+
+        InitializeLayers();
     }
 
 
@@ -382,7 +397,10 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
                 numEncoderLayers: _numEncoderLayers,
                 numDecoderLayers: _numDecoderLayers,
                 forecastHorizon: _forecastHorizon,
-                diffusionSteps: _diffusionSteps));
+                diffusionSteps: _options.MaxDiffusionStep,
+                forwardTransition: _forwardDiffusion,
+                backwardTransition: _backwardDiffusion,
+                filterType: _options.FilterType));
 
             ExtractLayerReferences();
         }
@@ -400,17 +418,26 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     {
         _encoderGRUs = new List<GRULayer<T>>();
         _decoderGRUs = new List<GRULayer<T>>();
+        _encoderDCGRUs = new List<DiffusionConvolutionalGRULayer<T>>();
+        _decoderDCGRUs = new List<DiffusionConvolutionalGRULayer<T>>();
 
+        var denseLayers = new List<DenseLayer<T>>();
         int gruCount = 0;
+        int dcgruCount = 0;
 
         foreach (var layer in Layers)
         {
             if (layer is DenseLayer<T> dense)
             {
-                if (_inputProjection is null)
-                    _inputProjection = dense;
+                denseLayers.Add(dense);
+            }
+            else if (layer is DiffusionConvolutionalGRULayer<T> dcgru)
+            {
+                dcgruCount++;
+                if (dcgruCount <= _numEncoderLayers)
+                    _encoderDCGRUs.Add(dcgru);
                 else
-                    _outputLayer = dense;
+                    _decoderDCGRUs.Add(dcgru);
             }
             else if (layer is GRULayer<T> gru)
             {
@@ -421,6 +448,9 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
                     _decoderGRUs.Add(gru);
             }
         }
+
+        _outputLayer = denseLayers.LastOrDefault();
+        _inputProjection = dcgruCount == 0 ? denseLayers.FirstOrDefault() : null;
     }
 
     /// <summary>
@@ -548,6 +578,16 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
             _forwardPowers.Add((double[,])currentF.Clone());
             _backwardPowers.Add((double[,])currentB.Clone());
         }
+        RebindDiffusionSupports();
+    }
+
+    private void RebindDiffusionSupports()
+    {
+        if (_forwardDiffusion is null || _backwardDiffusion is null)
+            return;
+
+        foreach (var layer in _encoderDCGRUs.Concat(_decoderDCGRUs))
+            layer.SetDiffusionMatrices(_forwardDiffusion, _backwardDiffusion);
     }
 
     /// <summary>
@@ -563,13 +603,14 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     {
         base.ValidateCustomLayers(layers);
 
-        int gruCount = layers.Count(l => l is GRULayer<T>);
+        int gruCount = layers.Count(layer =>
+            layer is GRULayer<T> or DiffusionConvolutionalGRULayer<T>);
         int expectedGrus = _numEncoderLayers + _numDecoderLayers;
 
         if (gruCount < expectedGrus)
         {
             throw new ArgumentException(
-                $"DCRNN requires at least {expectedGrus} GRU layers " +
+                $"DCRNN requires at least {expectedGrus} recurrent layers " +
                 $"({_numEncoderLayers} encoder + {_numDecoderLayers} decoder), " +
                 $"but only {gruCount} were provided.");
         }
@@ -592,6 +633,21 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
+    }
+
+    /// <inheritdoc />
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode || _encoderDCGRUs.Count == 0)
+            return base.GetNamedLayerActivations(input);
+
+        // A seq2seq decoder is initialized from encoder states; it is not the next member of a
+        // sequential fold. Report the activation at the model graph boundary, as the base fallback
+        // does for other non-sequential architectures.
+        return new Dictionary<string, Tensor<T>>
+        {
+            ["DCRNN_Seq2SeqForecast"] = ForwardPaperArchitecture(input),
+        };
     }
 
     /// <summary>
@@ -622,19 +678,19 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
-        base.Train(input, target);
+        _teacherForcingTarget = target;
+        try
+        {
+            // FinancialModelBase routes through TrainWithTape and now receives this model's
+            // configured paper Adam optimizer through TrainingOptimizer.
+            base.Train(input, target);
+            _trainingStep++;
+        }
+        finally
+        {
+            _teacherForcingTarget = null;
+        }
     }
-
-    // UpdateParameters was an empty override, silently dropping every restore. The base
-    // distributes the vector over the declared enumeration.
     /// <summary>
     /// Gets metadata about the DCRNN model.
     /// </summary>
@@ -913,6 +969,8 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
+        if (_encoderDCGRUs.Count > 0)
+            return ForwardPaperArchitecture(input);
         // Paper-faithful per-node DCRNN (Li et al. 2018): organize the input as
         // [numNodes, seqLen, numFeatures] with numNodes as the batch dimension, so
         // every GRULayer is a per-node DCGRU and every DenseLayer a per-node MLP, all
@@ -963,6 +1021,85 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         }
 
         return current;
+    }
+
+    private Tensor<T> ForwardPaperArchitecture(Tensor<T> input)
+    {
+        if (_outputLayer is null
+            || _encoderDCGRUs.Count != _numEncoderLayers
+            || _decoderDCGRUs.Count != _numDecoderLayers)
+        {
+            throw new InvalidOperationException(
+                "The paper DCRNN path requires complete encoder, decoder, and output layers.");
+        }
+
+        var current = NormalizePaperInput(input);
+        var encoderStates = new List<Tensor<T>>(_encoderDCGRUs.Count);
+
+        foreach (var encoder in _encoderDCGRUs)
+        {
+            current = encoder.Forward(current);
+            encoderStates.Add(encoder.LastState
+                ?? throw new InvalidOperationException("DCGRU encoder did not produce a final state."));
+        }
+
+        var decoderStates = new List<Tensor<T>>(_decoderDCGRUs.Count);
+        for (int layer = 0; layer < _decoderDCGRUs.Count; layer++)
+        {
+            // The reference architecture uses equal-depth stacks. Retain the deepest available
+            // encoder context for a custom decoder that contains additional layers.
+            decoderStates.Add(encoderStates[Math.Min(layer, encoderStates.Count - 1)]);
+        }
+
+        var decoderInput = Tensor<T>.CreateDefault([_numNodes, 1], NumOps.Zero);
+        var predictions = new List<Tensor<T>>(_forecastHorizon);
+        double teacherForcingRatio = GetTeacherForcingRatio();
+        bool hasTeacherTarget = _teacherForcingTarget is not null
+            && _teacherForcingTarget.Rank == 2
+            && _teacherForcingTarget.Shape[0] == _numNodes
+            && _teacherForcingTarget.Shape[1] >= _forecastHorizon;
+
+        for (int step = 0; step < _forecastHorizon; step++)
+        {
+            var layerInput = decoderInput;
+            for (int layer = 0; layer < _decoderDCGRUs.Count; layer++)
+            {
+                var state = _decoderDCGRUs[layer].ForwardStep(layerInput, decoderStates[layer]);
+                decoderStates[layer] = state;
+                layerInput = state;
+            }
+
+            var prediction = _outputLayer.Forward(layerInput);
+            predictions.Add(prediction);
+
+            bool useTeacher = hasTeacherTarget && _random.NextDouble() < teacherForcingRatio;
+            decoderInput = useTeacher
+                ? Engine.TensorNarrow(_teacherForcingTarget!, 1, step, 1)
+                : prediction;
+        }
+
+        return Engine.TensorConcatenate(predictions.ToArray(), axis: 1);
+    }
+
+    private Tensor<T> NormalizePaperInput(Tensor<T> input)
+    {
+        if (input.Rank == 3
+            && input.Shape[0] == _numNodes
+            && input.Shape[2] == _numFeatures)
+        {
+            return input;
+        }
+
+        int valuesPerStep = _numNodes * _numFeatures;
+        if (valuesPerStep > 0 && input.Length % valuesPerStep == 0)
+        {
+            int sequenceLength = input.Length / valuesPerStep;
+            return Engine.Reshape(input, [_numNodes, sequenceLength, _numFeatures]);
+        }
+
+        throw new ArgumentException(
+            $"DCRNN input must contain {_numNodes} nodes with {_numFeatures} features per step.",
+            nameof(input));
     }
 
     /// <summary>
@@ -1387,6 +1524,8 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
             OnnxSession?.Dispose();
             _encoderGRUs.Clear();
             _decoderGRUs.Clear();
+            _encoderDCGRUs.Clear();
+            _decoderDCGRUs.Clear();
             _forwardPowers.Clear();
             _backwardPowers.Clear();
         }

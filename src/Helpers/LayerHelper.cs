@@ -16872,54 +16872,52 @@ public static class LayerHelper<T>
         int numEncoderLayers = 2,
         int numDecoderLayers = 2,
         int forecastHorizon = 12,
-        int diffusionSteps = 2)
+        int diffusionSteps = 2,
+        double[,]? forwardTransition = null,
+        double[,]? backwardTransition = null,
+        string filterType = "dual_random_walk")
     {
-        // Paper-faithful DCRNN (Li et al. 2018): weights are SHARED across nodes.
-        // The model runs these layers on a [numNodes, seqLen, hiddenDim] tensor
-        // (numNodes as the batch dim), so each DenseLayer is a per-node MLP and each
-        // GRULayer a per-node DCGRU — O(hiddenDim^2) params, not the old
-        // numNodes*hiddenDim-wide flattened denses (~1B params at numNodes=207 that
-        // OOM-crashed the optimizer). Spatial diffusion is applied in the forward.
+        _ = architecture;
+        _ = forecastHorizon;
 
-        // === Input Embedding === (per node+step: numFeatures -> hiddenDim)
-        yield return new DenseLayer<T>(
-            outputSize: hiddenDimension,
-            activationFunction: null);
+        bool useBackwardSupport = string.Equals(
+            filterType,
+            "dual_random_walk",
+            StringComparison.OrdinalIgnoreCase);
 
-        // === Encoder DCGRU Layers ===
-        for (int i = 0; i < numEncoderLayers; i++)
+        // Li et al. use a stacked DCGRU encoder. The first cell consumes the per-node
+        // measurements; higher cells consume the preceding hidden sequence.
+        for (int layer = 0; layer < numEncoderLayers; layer++)
         {
-            yield return new GRULayer<T>(
+            yield return new DiffusionConvolutionalGRULayer<T>(
+                inputSize: layer == 0 ? numFeatures : hiddenDimension,
                 hiddenSize: hiddenDimension,
-                returnSequences: true,
-                activation: (IActivationFunction<T>?)null,
-                recurrentActivation: null);
-
-            yield return new DenseLayer<T>(
-                outputSize: hiddenDimension,
-                activationFunction: new ReLUActivation<T>());
+                numNodes: numNodes,
+                maxDiffusionStep: diffusionSteps,
+                forwardTransition: forwardTransition,
+                backwardTransition: backwardTransition,
+                useBackwardSupport: useBackwardSupport);
         }
 
-        // === Decoder DCGRU Layers ===
-        for (int i = 0; i < numDecoderLayers; i++)
+        // The decoder starts with a scalar GO symbol / previous scalar forecast at each
+        // node. Its hidden states are initialized from the corresponding encoder layers.
+        for (int layer = 0; layer < numDecoderLayers; layer++)
         {
-            yield return new GRULayer<T>(
+            yield return new DiffusionConvolutionalGRULayer<T>(
+                inputSize: layer == 0 ? 1 : hiddenDimension,
                 hiddenSize: hiddenDimension,
-                returnSequences: true,
-                activation: (IActivationFunction<T>?)null,
-                recurrentActivation: null);
-
-            yield return new DenseLayer<T>(
-                outputSize: hiddenDimension,
-                activationFunction: new ReLUActivation<T>());
+                numNodes: numNodes,
+                maxDiffusionStep: diffusionSteps,
+                forwardTransition: forwardTransition,
+                backwardTransition: backwardTransition,
+                useBackwardSupport: useBackwardSupport);
         }
 
-        // === Output Projection === (per node: hiddenDim -> forecastHorizon)
+        // The reference supervisor projects every decoder step to one traffic value.
         yield return new DenseLayer<T>(
-            outputSize: forecastHorizon,
+            outputSize: 1,
             activationFunction: null);
     }
-
     /// <summary>
     /// Creates default layers for RelationalGCN (Relational Graph Convolutional Network).
     /// </summary>
