@@ -777,6 +777,48 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     private int _orderedParameterComponentsEpoch = -1;
     private int _orderedParameterComponentsOwnLength = -1;
 
+    /// <summary>
+    /// Drops a component snapshot that still points at placeholders replaced by a materializer.
+    /// </summary>
+    /// <remarks>
+    /// Generated manifests read parameter fields by reference. A deferred layer can replace its
+    /// zero-sized fields in an override of <see cref="EnsureParametersMaterialized"/> before that
+    /// override chains into this base class, so the process-wide epoch cannot observe the change.
+    /// Comparing the generated declarations with the cached component references here keeps the
+    /// cache on the common unchanged path while making the value walk see the newly installed
+    /// tensors. Runtime registrations and generated setters already invalidate through the epoch.
+    /// </remarks>
+    private void InvalidateReboundDeclaredParameterComponents()
+    {
+        var cached = System.Threading.Volatile.Read(ref _orderedParameterComponents);
+        if (cached is null) return;
+
+        var declared = DeclaredParameterShapes();
+        if (declared is null || declared.Count == 0) return;
+
+        for (int declaredIndex = 0; declaredIndex < declared.Count; declaredIndex++)
+        {
+            var tensor = declared[declaredIndex].Tensor;
+            if (tensor is null) continue;
+
+            bool found = false;
+            for (int componentIndex = 0; componentIndex < cached.Length; componentIndex++)
+            {
+                if (cached[componentIndex].Kind == DeclaredParameterComponentKind.Trainable
+                    && ReferenceEquals(cached[componentIndex].Tensor, tensor))
+                {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (found) continue;
+
+            System.Threading.Volatile.Write(ref _orderedParameterComponents, null);
+            return;
+        }
+    }
+
     private DeclaredParameterComponent[] GetOrderedParameterComponents()
     {
         int epoch = ParameterSurfaceEpoch;
@@ -2032,6 +2074,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     protected virtual void EnsureParametersMaterialized()
     {
         EnsureOwnParametersMaterialized();
+        InvalidateReboundDeclaredParameterComponents();
 
         // Then the children, because a composite's parameter surface IS its children's:
         // ParameterCount, GetParameters and SetParameters all fold GetSubLayers(). Materializing
