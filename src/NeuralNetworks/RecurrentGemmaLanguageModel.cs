@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
@@ -38,6 +39,7 @@ namespace AiDotNet.NeuralNetworks;
 public class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly RecurrentGemmaOptions _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly int _vocabSize;
     private readonly int _modelDimension;
     private readonly int _numLayers;
@@ -67,7 +69,8 @@ public class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
         int numLayers = 4,
         int maxSeqLength = 512,
         ILossFunction<T>? lossFunction = null,
-        RecurrentGemmaOptions? options = null)
+        RecurrentGemmaOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture,
             // The recurrent Gemma LM head emits raw logits. Use the paper-faithful
             // fused log-softmax/NLL objective rather than categorical CE, which expects
@@ -80,6 +83,7 @@ public class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
         _modelDimension = modelDimension;
         _numLayers = numLayers;
         _maxSeqLength = maxSeqLength;
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         InitializeLayers();
     }
 
@@ -98,6 +102,33 @@ public class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
             Layers.AddRange(LayerHelper<T>.CreateRecurrentGemmaLayers(
                 _vocabSize, _modelDimension, _numLayers, _maxSeqLength));
         }
+
+        // RecurrentGemma, Section 2: "multiply the input embeddings by a constant equal to the square
+        // root of model width." Set on the embedding only -- the paper states the constant is not
+        // applied to the output, so the LM head is left alone. EmbeddingLayer already implements the
+        // scaling (Vaswani et al. 2017 Section 3.4); it just defaults to off.
+        if (_options.ScaleEmbeddingsBySqrtWidth)
+        {
+            var embedding = Layers.OfType<EmbeddingLayer<T>>().FirstOrDefault();
+
+            // Say so, rather than doing nothing. The option is only reachable through an
+            // EmbeddingLayer, so with a caller-supplied architecture that has none -- pre-embedded
+            // inputs, or a custom layer stack -- asking for the scaling used to be accepted and then
+            // silently skipped. The model then trained WITHOUT the sqrt(d_model) factor the paper
+            // requires while reporting the option as enabled, which is exactly the kind of quiet
+            // substitution that only shows up as slightly-wrong convergence much later.
+            if (embedding is null)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(RecurrentGemmaOptions.ScaleEmbeddingsBySqrtWidth)} is enabled, but this " +
+                    $"model has no {nameof(EmbeddingLayer<T>)} to apply it to. RecurrentGemma applies " +
+                    "the sqrt(model width) constant to the input embeddings (Section 2), so the option " +
+                    "cannot be honoured by any other layer. Either supply an architecture that includes " +
+                    "an embedding layer, or leave the option off if the inputs are already embedded.");
+            }
+
+            embedding.ScaleBySqrtDimension = true;
+        }
     }
 
     #endregion
@@ -105,28 +136,61 @@ public class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
     #region NeuralNetworkBase Overrides
 
     /// <summary>
-    /// RecurrentGemma is Griffin (Botev et al. 2024 builds directly on De et al. 2024), so its stack
-    /// is the same EmbeddingLayer + RealGatedLinearRecurrenceLayer + LayerNormalization + LM head that
-    /// Griffin and Hawk use, and the RG-LRU carries a data-dependent hidden state through a timestep
-    /// recurrence. That stateful loop cannot be captured once and safely replayed by the static
-    /// fused-training plan; use the eager tape so every step records the current recurrence and the
-    /// optimizer receives the true finite gradients.
+    /// Uses the constructor-selected optimizer, as the Griffin and Hawk siblings do.
     /// </summary>
     /// <remarks>
-    /// Every other recurrent/SSM model in this namespace already declares this — Griffin, Hawk,
-    /// GatedDeltaNet, GLA, NeuralTuringMachine, DifferentiableNeuralComputer — and RecurrentGemma was
-    /// the one that inherited the <c>true</c> default. The cost was not subtle: training through the
-    /// compiled plan took every one of its 3,417,600 parameters to NaN on the FIRST step, which then
-    /// failed eight of its model-family invariants at once (ForwardPass_ShouldBeFinite_AfterTraining,
-    /// GradientFlow_ShouldBeNonZeroAndFinite, OptimizerStep_ParamL2_DoesNotExplode,
-    /// ParameterGradientAccessor, MoreData_ShouldNotDegrade, Clone_AfterTraining, Gradients_Match-
-    /// FiniteDifference and LossStrictlyDecreasesOnMemorizationTask). The eager forward and the loss
-    /// were finite throughout — only the fused path produced the NaN, which is why the failure looked
-    /// order-dependent: the compiled-plan cache is <c>[ThreadStatic]</c>, so what a shard ran first
-    /// decided whether a stale same-shape plan was waiting (the #1643 root cause).
+    /// Without this the model fell through to the base default, so none of the training configuration
+    /// its options describe reached the optimizer at all.
     /// </remarks>
-    protected override bool SupportsFusedCompiledTraining => false;
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer;
 
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+    {
+        // Validated HERE, at the boundary where the caller's numbers turn into an optimizer. Neither
+        // AdamWOptimizerOptions nor AdamWOptimizer range-checks any of these, so a negative or NaN
+        // learning rate, or a beta at/above 1, was accepted and produced silently invalid training --
+        // NaN moments, or a bias correction dividing by zero. The failure surfaced much later as a
+        // non-finite loss with nothing pointing back at the option that caused it.
+        AiDotNet.Validation.Guard.Positive(_options.LearningRate);
+        AiDotNet.Validation.Guard.NonNegative(_options.WeightDecay);
+        AiDotNet.Validation.Guard.Positive(_options.Epsilon);
+
+        // Half-open [0, 1): Adam's bias correction divides by (1 - beta^t), so beta == 1 is a division
+        // by zero on the first step, and the running averages never decay.
+        AiDotNet.Validation.Guard.InRange(_options.Beta1, 0.0, NearestBelowOne);
+        AiDotNet.Validation.Guard.InRange(_options.Beta2, 0.0, NearestBelowOne);
+
+        // Only meaningful when clipping is on; an unset default must not be rejected.
+        if (_options.EnableGradientClipping)
+            AiDotNet.Validation.Guard.Positive(_options.MaxGradientNorm);
+
+        return new AiDotNet.Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                Beta1 = _options.Beta1,
+                Beta2 = _options.Beta2,
+                Epsilon = _options.Epsilon,
+                EnableGradientClipping = _options.EnableGradientClipping,
+                MaxGradientNorm = _options.MaxGradientNorm
+            });
+    }
+
+    /// <summary>
+    /// The largest double strictly below 1, used as the inclusive upper bound for the Adam betas.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="AiDotNet.Validation.Guard.InRange(double, double, double, string?)"/> is inclusive on
+    /// both ends, and the betas need a half-open [0, 1). Bounding at the representable neighbour below
+    /// 1 expresses that exactly, rather than rejecting at some arbitrary epsilon short of it.
+    ///
+    /// Written as a literal rather than <c>Math.BitDecrement(1.0)</c> because that API does not exist
+    /// on net471, which this project still targets.
+    /// </remarks>
+    private const double NearestBelowOne = 0.99999999999999989;
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);

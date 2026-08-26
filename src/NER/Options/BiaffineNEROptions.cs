@@ -43,18 +43,28 @@ public class BiaffineNEROptions : SpanBasedNEROptions
         UseNegativeSampling = false;
     }
 
-    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <summary>Initializes a new instance by copying shared span options.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
-    public BiaffineNEROptions(BiaffineNEROptions other)
+    public BiaffineNEROptions(SpanBasedNEROptions other)
         : base(other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
 
-        BiLstmHiddenSize = other.BiLstmHiddenSize;
-        BiLstmLayers = other.BiLstmLayers;
-        BiLstmDropout = other.BiLstmDropout;
-        EmbeddingsDropout = other.EmbeddingsDropout;
+        if (other is BiaffineNEROptions biaffine)
+        {
+            BiLstmHiddenSize = biaffine.BiLstmHiddenSize;
+            BiLstmLayers = biaffine.BiLstmLayers;
+            BiLstmDropout = biaffine.BiLstmDropout;
+            EmbeddingsDropout = biaffine.EmbeddingsDropout;
+        }
+    }
+
+    /// <summary>Initializes a new instance by copying another Biaffine-NER options instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    public BiaffineNEROptions(BiaffineNEROptions other)
+        : this((SpanBasedNEROptions)other)
+    {
     }
 
     /// <summary>

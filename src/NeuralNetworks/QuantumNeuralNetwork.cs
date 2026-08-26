@@ -389,32 +389,74 @@ public class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
             ? processedInput.Reshape([processedInput.Length])
             : processedInput;
 
+        if (flatInput.Length == 0)
+            throw new ArgumentException("Quantum state input must contain at least one value.", nameof(input));
+
+        // AMPLITUDE ENCODING, NORMALIZED. This previously took Sqrt of the raw feature value, which
+        // is only defined when every feature is non-negative AND already sums to one. Neither holds
+        // for a general input: a single negative feature makes Sqrt return NaN, and that NaN then
+        // flows through every layer into the Born-rule measurement below, so the network emitted NaN
+        // for ordinary inputs (issue N1 — non-finite training). It also produced states whose
+        // probabilities did not sum to one, which is not a valid quantum state at all.
+        //
+        // The standard construction is to normalise the feature vector to unit L2 norm and use it
+        // directly as the amplitudes — this is what Qiskit's `initialize` and PennyLane's
+        // `AmplitudeEmbedding` do. It is total on real inputs (no NaN for any finite vector), keeps
+        // the sign information that Sqrt discarded, and guarantees sum |psi_i|^2 == 1, so
+        // MeasureQuantumState returns a genuine probability distribution.
+        // Scale by the largest magnitude before squaring. Squaring a finite float/double near its
+        // maximum can overflow even though the input itself is valid; normalizing by that overflowed
+        // norm collapses every amplitude to zero. The scaled values are bounded by one, so both the
+        // accumulation and the final two-step division remain finite.
+        var maxMagnitude = NumOps.Zero;
+        for (int i = 0; i < flatInput.Length; i++)
+        {
+            var value = flatInput[i];
+            if (NumOps.IsNaN(value) || NumOps.IsInfinity(value))
+            {
+                throw new ArgumentException(
+                    $"Quantum state input contains a non-finite value at index {i}.",
+                    nameof(input));
+            }
+
+            var magnitude = NumOps.Abs(value);
+            if (NumOps.GreaterThan(magnitude, maxMagnitude)) maxMagnitude = magnitude;
+        }
+
+        // A zero vector has no direction to encode. The neutral state is
+        // the uniform superposition, which is normalised and finite; dividing by the zero norm would
+        // reintroduce the NaN this method exists to avoid.
+        if (!NumOps.GreaterThan(maxMagnitude, NumOps.Zero))
+            return CreateUniformQuantumState(flatInput.Length);
+
+        var scaledSumOfSquares = NumOps.Zero;
+        for (int i = 0; i < flatInput.Length; i++)
+        {
+            var scaled = NumOps.Divide(flatInput[i], maxMagnitude);
+            scaledSumOfSquares = NumOps.Add(scaledSumOfSquares, NumOps.Multiply(scaled, scaled));
+        }
+
+        var scaledNorm = NumOps.Sqrt(scaledSumOfSquares);
         var quantumState = new Tensor<Complex<T>>([flatInput.Length]);
 
         for (int i = 0; i < flatInput.Length; i++)
         {
-            // Signed amplitude encoding: psi_i = sign(x_i) * sqrt(|x_i|).
-            //
-            // A bare NumOps.Sqrt(x_i) is NaN for every negative x_i, and PredictCore feeds the
-            // result straight through the layer chain, so ONE negative feature turned the whole
-            // prediction into NaN. That is not a corner case: the model-family suite's random
-            // input is signed, and every QuantumNeuralNetwork invariant that reads an output
-            // failed on it — ForwardPass_ShouldProduceFiniteOutput reported "Output[0] is NaN",
-            // and ScaledInput_ShouldChangeOutput reported "output didn't change" only because
-            // NaN != NaN makes two different NaN outputs compare as unchanged.
-            //
-            // Taking the root of the magnitude and carrying the sign keeps the Born-rule round
-            // trip this class is built on — MeasureQuantumState returns |psi_i|^2, which is
-            // |x_i| — and is EXACTLY the previous expression wherever the old one was defined,
-            // i.e. for every x_i >= 0. An amplitude is allowed to be negative; only its squared
-            // magnitude is a probability, so the sign costs nothing physically and is what makes
-            // two inputs differing only in sign encode to different states.
-            bool isNegative = NumOps.LessThan(flatInput[i], NumOps.Zero);
-            var magnitude = NumOps.Sqrt(isNegative ? NumOps.Negate(flatInput[i]) : flatInput[i]);
-            var amplitude = isNegative ? NumOps.Negate(magnitude) : magnitude;
+            // Stable signed L2 normalization keeps the state finite for negative and very large
+            // inputs while preserving unit norm. Scaling first avoids overflow in the norm.
+            var scaled = NumOps.Divide(flatInput[i], maxMagnitude);
+            var amplitude = NumOps.Divide(scaled, scaledNorm);
             quantumState[i] = new Complex<T>(amplitude, NumOps.Zero);
         }
 
+        return quantumState;
+    }
+
+    private Tensor<Complex<T>> CreateUniformQuantumState(int length)
+    {
+        var quantumState = new Tensor<Complex<T>>([length]);
+        var uniform = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(length)));
+        for (int i = 0; i < length; i++)
+            quantumState[i] = new Complex<T>(uniform, NumOps.Zero);
         return quantumState;
     }
 
