@@ -1,5 +1,7 @@
 name: Build & SonarCloud
 
+permissions: read-all
+
 # Primary build workflow - other workflows depend on this.
 # Runs on ubuntu-latest; net471 targets cross-compile via the modern .NET SDK's
 # auto-included reference assembly pack (no Windows runner required).
@@ -395,11 +397,12 @@ jobs:
     name: Tests (net10.0) - ${{ matrix.shard.name }}
     runs-on: ubuntu-latest
     needs: [build, validation-source]
-    # Floats per shard: a shard may declare `timeout: <minutes>` to raise its own ceiling, and
-    # everything that does not keeps the 45-minute default. Serialized heavy shards run on one or
-    # two cores by design, so a shard that had to be split to survive its memory envelope must not
-    # then be killed by a clock tuned for the parallel ones.
-    timeout-minutes: ${{ matrix.shard.timeout || 45 }}
+    # A shard may raise its own ceiling; the default also reserves five minutes beyond the
+    # historical cap for the targeted PR-new retry performed by the regression analyzer.
+    timeout-minutes: ${{ matrix.shard.timeout || 50 }}
+    permissions:
+      actions: read
+      contents: read
     if: "${{ (github.event_name != 'push' || needs.validation-source.outputs.reuse != 'true') && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     strategy:
       fail-fast: false
@@ -1299,6 +1302,7 @@ jobs:
         run: dotnet restore ${{ matrix.shard.project }}
 
       - name: Run tests (sharded) with coverage
+        id: shard-tests
         # pwsh (PowerShell Core) is pre-installed on ubuntu-latest runners and runs
         # the existing scripts cross-platform without a rewrite.
         shell: pwsh
@@ -1676,6 +1680,118 @@ jobs:
         shell: pwsh
         run: .github/scripts/report-slow-tests.ps1
 
+      # Retry only failures absent from the exact master ledger. Known baseline failures are not
+      # rerun, so this adds seconds for ordinary flakes instead of doubling every red shard. Both
+      # TRX attempts are uploaded; the aggregate policy requires an explicit retry pass before it
+      # discounts the first result.
+      - name: Resolve exact baseline for targeted retry
+        if: always() && steps.shard-tests.outcome == 'failure' && github.event_name == 'pull_request'
+        id: retry-baseline
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHARD_NAME: ${{ matrix.shard.name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          $slug = $env:SHARD_NAME -replace '[\\/:*?"<>|\s-]+', '_'
+          ./.github/scripts/find-test-baseline.ps1 `
+            -BaseSha $env:BASE_SHA `
+            -Repository $env:REPOSITORY `
+            -ShardSlug $slug
+
+      - name: Download compact retry baseline ledger
+        if: always() && steps.retry-baseline.outputs.baseline_mode == 'ledger'
+        id: retry-ledger-download
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          name: ${{ steps.retry-baseline.outputs.baseline_artifact_name }}
+          path: retry-baseline-ledger
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.retry-baseline.outputs.baseline_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download legacy retry baseline shard TRX
+        if: always() && steps.retry-baseline.outputs.baseline_mode == 'trx'
+        id: retry-trx-download
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          name: ${{ steps.retry-baseline.outputs.baseline_artifact_name }}
+          path: retry-baseline-results
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.retry-baseline.outputs.baseline_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Select PR-new failures for targeted retry
+        if: >-
+          always() && steps.retry-baseline.outcome == 'success' &&
+          ((steps.retry-baseline.outputs.baseline_mode == 'ledger' && steps.retry-ledger-download.outcome == 'success') ||
+          (steps.retry-baseline.outputs.baseline_mode == 'trx' && steps.retry-trx-download.outcome == 'success'))
+        id: retry-candidates
+        shell: pwsh
+        env:
+          BASELINE_MODE: ${{ steps.retry-baseline.outputs.baseline_mode }}
+        run: |
+          $arguments = @{
+            CurrentResultsPath = 'TestResults'
+            OutputFile = 'TestResults/rerun-candidates.json'
+          }
+          if ($env:BASELINE_MODE -eq 'ledger') {
+            $ledger = Get-ChildItem retry-baseline-ledger -Recurse -Filter ledger.json | Select-Object -First 1
+            if (-not $ledger) { throw 'Downloaded retry baseline contains no ledger.json.' }
+            $arguments.BaselineLedgerPath = $ledger.FullName
+          } else {
+            $arguments.BaselineResultsPath = 'retry-baseline-results'
+          }
+          ./.github/scripts/find-pr-new-failures.ps1 @arguments
+
+      - name: Rerun PR-new failures once
+        if: always() && steps.retry-candidates.outputs.rerun_count != '0' && steps.retry-candidates.outcome == 'success'
+        id: retry-new-failures
+        continue-on-error: true
+        shell: pwsh
+        env:
+          SHARD_NAME: ${{ matrix.shard.name }}
+          SHARD_PROJECT: ${{ matrix.shard.project }}
+          SHARD_FRAMEWORK: ${{ matrix.shard.framework }}
+          RETRY_FILTER: ${{ steps.retry-candidates.outputs.filter }}
+        run: |
+          $slug = $env:SHARD_NAME -replace '[\\/:*?"<>|\s-]+', '_'
+          $results = "TestResults/$slug/retry"
+          New-Item -Path $results -ItemType Directory -Force | Out-Null
+          $retryArgs = @(
+            'test', $env:SHARD_PROJECT,
+            '--no-build', '--no-restore',
+            '--configuration', 'Release',
+            '--framework', $env:SHARD_FRAMEWORK,
+            '--filter', $env:RETRY_FILTER,
+            '--results-directory', $results,
+            '--logger', 'trx;LogFileName=rerun-new-failures.trx',
+            '--', 'xunit.parallelizeAssembly=false', 'xunit.parallelizeTestCollections=false'
+          )
+          & dotnet @retryArgs
+          exit $LASTEXITCODE
+
+      - name: Record shard outcome
+        if: always()
+        shell: pwsh
+        run: |
+          # A TRX cannot identify a shard whose host died before flushing results. Keep a tiny
+          # always-produced envelope beside it so the aggregate report can distinguish an empty
+          # green shard from a missing/incomplete one and retain the human-readable matrix name.
+          $slug = "${{ matrix.shard.name }}" -replace '[\\/:*?"<>|\s-]+', '_'
+          New-Item -Path TestResults -ItemType Directory -Force | Out-Null
+          [PSCustomObject]@{
+            shard = "${{ matrix.shard.name }}"
+            slug = $slug
+            sha = "${{ github.sha }}"
+            runId = "${{ github.run_id }}"
+            runAttempt = "${{ github.run_attempt }}"
+            testStepOutcome = "${{ steps.shard-tests.outcome }}"
+            rerunCandidateCount = "${{ steps.retry-candidates.outputs.rerun_count }}"
+            rerunStepOutcome = "${{ steps.retry-new-failures.outcome }}"
+          } | ConvertTo-Json | Set-Content TestResults/shard-metadata.json -Encoding utf8
+
       - name: Set artifact name
         if: always()
         shell: pwsh
@@ -1694,7 +1810,9 @@ jobs:
           path: |
             TestResults/**/coverage.opencover.xml
             TestResults/**/*.trx
-          if-no-files-found: ignore
+            TestResults/shard-metadata.json
+            TestResults/rerun-candidates.json
+          if-no-files-found: error
 
       # Keep the aggregate diagnostic input small. Downloading every coverage XML merely to inspect
       # TRX results makes the final reporter needlessly slow and expensive, while this artifact also
@@ -2043,6 +2161,211 @@ jobs:
             TestResults/
           if-no-files-found: error
           retention-days: 14
+
+  # Aggregate every shard's TRX into one durable outcome ledger and one static status check.
+  # Pull requests compare against the exact base SHA's master ledger. During rollout, when that
+  # master run predates compact ledgers, the resolver downloads its legacy TRX artifacts once.
+  test-regression-analysis:
+    name: Test regression analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: "${{ always() && (github.event_name != 'push' || needs.validation-source.outputs.reuse != 'true') && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    needs:
+      - build
+      - test-net10-sharded
+      - validation-source
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      verdict_enforced: ${{ steps.analyze.outputs.verdict_enforced }}
+
+    steps:
+      - name: Checkout code and baseline commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify TRX analyzer
+        shell: pwsh
+        run: ./.github/scripts/test-regression-analysis.tests.ps1
+
+      - name: Download current shard results
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        continue-on-error: true
+        with:
+          pattern: coverage-${{ github.sha }}-*
+          path: current-test-results
+          merge-multiple: false
+
+      - name: Determine comparison base
+        id: comparison
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          DISPATCH_PR: ${{ inputs.pr_number }}
+        run: |
+          $baseSha = $env:EVENT_BASE_SHA
+          if (-not $baseSha -and $env:EVENT_NAME -eq 'workflow_dispatch' -and $env:DISPATCH_PR) {
+            $baseSha = gh api "repos/${{ github.repository }}/pulls/$($env:DISPATCH_PR)" --jq '.base.sha'
+            if ($LASTEXITCODE -ne 0) { throw 'Could not resolve workflow_dispatch PR base SHA.' }
+          }
+          $compare = [bool]$baseSha
+          echo "compare=$($compare.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          echo "base_sha=$baseSha" >> $env:GITHUB_OUTPUT
+
+      - name: Find exact master baseline run
+        if: steps.comparison.outputs.compare == 'true'
+        id: baseline
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ steps.comparison.outputs.base_sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          "baseline_available=true" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          try {
+            & ./.github/scripts/find-test-baseline.ps1 `
+              -BaseSha $env:BASE_SHA `
+              -Repository $env:REPOSITORY
+          }
+          catch {
+            $message = $_.Exception.Message
+            "baseline_available=false" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+            Write-Warning "Exact baseline is temporarily unavailable: $message"
+            @"
+          ## Regression baseline unavailable
+
+          The exact baseline for ``$($env:BASE_SHA)`` could not be resolved. This run still emits
+          a current test inventory, but the comparison policy is not enforced: $message
+          "@ | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+          }
+
+      - name: Download compact baseline ledger
+        if: steps.baseline.outputs.baseline_available == 'true' && steps.baseline.outputs.baseline_mode == 'ledger'
+        id: baseline-ledger-download
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          name: test-outcome-ledger-${{ steps.baseline.outputs.baseline_sha }}
+          path: baseline-ledger
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.baseline.outputs.baseline_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download promoted baseline provenance
+        if: steps.baseline.outputs.baseline_available == 'true' && steps.baseline.outputs.baseline_mode == 'promoted'
+        id: promoted-analysis-download
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          name: ci-test-analysis-${{ steps.baseline.outputs.baseline_sha }}
+          path: promoted-baseline-analysis
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.baseline.outputs.baseline_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Resolve promoted baseline source
+        if: steps.baseline.outputs.baseline_available == 'true' && steps.baseline.outputs.baseline_mode == 'promoted' && steps.promoted-analysis-download.outcome == 'success'
+        id: promoted-baseline
+        shell: pwsh
+        run: |
+          $promotion = Get-ChildItem promoted-baseline-analysis -Recurse -Filter promotion.json |
+            Select-Object -First 1
+          if (-not $promotion) {
+            throw 'Promoted baseline artifact contains no promotion.json provenance.'
+          }
+          $provenance = Get-Content -LiteralPath $promotion.FullName -Raw | ConvertFrom-Json
+          if (-not $provenance.sourceRunId -or -not $provenance.testedSha) {
+            throw 'promotion.json must contain sourceRunId and testedSha.'
+          }
+          "source_run_id=$($provenance.sourceRunId)" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          "tested_sha=$($provenance.testedSha)" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+
+      - name: Download promoted source TRX artifacts
+        if: steps.baseline.outputs.baseline_available == 'true' && steps.baseline.outputs.baseline_mode == 'promoted' && steps.promoted-baseline.outcome == 'success'
+        id: promoted-trx-download
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          pattern: coverage-${{ steps.promoted-baseline.outputs.tested_sha }}-*
+          path: promoted-baseline-test-results
+          merge-multiple: false
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.promoted-baseline.outputs.source_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download legacy baseline TRX artifacts
+        if: steps.baseline.outputs.baseline_available == 'true' && steps.baseline.outputs.baseline_mode == 'trx'
+        id: baseline-trx-download
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          pattern: coverage-${{ steps.baseline.outputs.baseline_sha }}-*
+          path: baseline-test-results
+          merge-multiple: false
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.baseline.outputs.baseline_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Build final test report and enforce regression policy
+        id: analyze
+        shell: pwsh
+        env:
+          CURRENT_SHA: ${{ github.sha }}
+          COMPARE: ${{ steps.comparison.outputs.compare }}
+          BASE_SHA: ${{ steps.comparison.outputs.base_sha }}
+          BASELINE_AVAILABLE: ${{ steps.baseline.outputs.baseline_available }}
+          BASELINE_MODE: ${{ steps.baseline.outputs.baseline_mode }}
+          LEDGER_DOWNLOAD_OUTCOME: ${{ steps.baseline-ledger-download.outcome }}
+          TRX_DOWNLOAD_OUTCOME: ${{ steps.baseline-trx-download.outcome }}
+          PROMOTED_TRX_DOWNLOAD_OUTCOME: ${{ steps.promoted-trx-download.outcome }}
+        run: |
+          $arguments = @{
+            CurrentResultsPath = 'current-test-results'
+            OutputDirectory = 'test-regression-analysis'
+            CurrentSha = $env:CURRENT_SHA
+            RepositoryPath = '.'
+            ApprovedShardChangesPath = '.github/test-shard-changes.json'
+          }
+          $ledger = Get-ChildItem baseline-ledger -Recurse -Filter ledger.json -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          $legacyTrx = @(Get-ChildItem baseline-test-results -Recurse -Filter '*.trx' -File -ErrorAction SilentlyContinue)
+          $promotedTrx = @(Get-ChildItem promoted-baseline-test-results -Recurse -Filter '*.trx' -File -ErrorAction SilentlyContinue)
+          $baselineReady = $env:COMPARE -eq 'true' -and $env:BASELINE_AVAILABLE -eq 'true' -and (
+            ($env:BASELINE_MODE -eq 'ledger' -and $env:LEDGER_DOWNLOAD_OUTCOME -eq 'success' -and $null -ne $ledger) -or
+            ($env:BASELINE_MODE -eq 'trx' -and $env:TRX_DOWNLOAD_OUTCOME -eq 'success' -and $legacyTrx.Count -gt 0) -or
+            ($env:BASELINE_MODE -eq 'promoted' -and $env:PROMOTED_TRX_DOWNLOAD_OUTCOME -eq 'success' -and $promotedTrx.Count -gt 0))
+          if ($baselineReady) {
+            $arguments.BaselineSha = $env:BASE_SHA
+            $arguments.FailOnPolicy = $true
+            if ($env:BASELINE_MODE -eq 'ledger') {
+              $arguments.BaselineLedgerPath = $ledger.FullName
+            } elseif ($env:BASELINE_MODE -eq 'promoted') {
+              $arguments.BaselineResultsPath = 'promoted-baseline-test-results'
+            } else {
+              $arguments.BaselineResultsPath = 'baseline-test-results'
+            }
+          } elseif ($env:COMPARE -eq 'true') {
+            $message = "Exact baseline comparison is unavailable (mode '$($env:BASELINE_MODE)', ledger download '$($env:LEDGER_DOWNLOAD_OUTCOME)', TRX download '$($env:TRX_DOWNLOAD_OUTCOME)', promoted TRX download '$($env:PROMOTED_TRX_DOWNLOAD_OUTCOME)')."
+            Write-Warning $message
+            "`n> [!WARNING]`n> $message The current inventory is still published, but no regression verdict is claimed.`n" |
+              Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+          }
+          "verdict_enforced=$($baselineReady.ToString().ToLowerInvariant())" |
+            Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          ./.github/scripts/test-regression-analysis.ps1 @arguments
+
+      - name: Upload final TRX ledger and comparison report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: test-outcome-ledger-${{ github.sha }}
+          path: test-regression-analysis/
+          if-no-files-found: error
+          retention-days: 90
 
   sonarcloud:
     name: SonarCloud Analysis
@@ -2417,6 +2740,16 @@ jobs:
           path: TestAnalysis
           merge-multiple: true
 
+      - name: Download certified PR outcome ledger
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ needs.validation-source.outputs.run_id }}
+          pattern: test-outcome-ledger-*
+          path: TestOutcomeLedger
+          merge-multiple: true
+
       - name: Record promotion provenance
         shell: bash
         env:
@@ -2437,6 +2770,14 @@ jobs:
         with:
           name: ci-test-analysis-${{ github.sha }}
           path: TestAnalysis/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload master-keyed outcome ledger
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: test-outcome-ledger-${{ github.sha }}
+          path: TestOutcomeLedger/
           if-no-files-found: error
           retention-days: 90
 
@@ -2461,6 +2802,7 @@ jobs:
       - validation-source
       - build
       - test-net10-sharded
+      - test-regression-analysis
       - ci-test-analysis
       - promote-ci-test-analysis
       - sonarcloud
@@ -2470,7 +2812,9 @@ jobs:
         env:
           BUILD_RESULT: ${{ needs.build.result }}
           TESTS_RESULT: ${{ needs.test-net10-sharded.result }}
-          ANALYSIS_RESULT: ${{ needs.ci-test-analysis.result }}
+          REGRESSION_ANALYSIS_RESULT: ${{ needs.test-regression-analysis.result }}
+          VERDICT_ENFORCED: ${{ needs.test-regression-analysis.outputs.verdict_enforced }}
+          AGGREGATE_ANALYSIS_RESULT: ${{ needs.ci-test-analysis.result }}
           PROMOTION_RESULT: ${{ needs.promote-ci-test-analysis.result }}
           SONAR_RESULT: ${{ needs.sonarcloud.result }}
           SOURCE_RESULT: ${{ needs.validation-source.result }}
@@ -2492,7 +2836,9 @@ jobs:
             echo "| validation-source | $SOURCE_RESULT |"
             echo "| build | $BUILD_RESULT |"
             echo "| test-net10-sharded | $TESTS_RESULT |"
-            echo "| ci-test-analysis | $ANALYSIS_RESULT |"
+            echo "| test-regression-analysis | $REGRESSION_ANALYSIS_RESULT |"
+            echo "| regression verdict enforced | ${VERDICT_ENFORCED:-false} |"
+            echo "| ci-test-analysis | $AGGREGATE_ANALYSIS_RESULT |"
             echo "| promote-ci-test-analysis | $PROMOTION_RESULT |"
             echo "| sonarcloud | $SONAR_RESULT |"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -2502,7 +2848,14 @@ jobs:
           if [ "$REUSED_VALIDATION" = "true" ]; then
             required+=("promote-ci-test-analysis:$PROMOTION_RESULT")
           else
-            required+=("test-net10-sharded:$TESTS_RESULT" "ci-test-analysis:$ANALYSIS_RESULT")
+            # The exact-base regression analyzer is authoritative when it could recover the
+            # baseline ledger. This lets known master failures remain informational while still
+            # failing on PR-new unique failures. If the exact baseline is unavailable, require the
+            # raw shard matrix as the fail-closed fallback.
+            required+=("test-regression-analysis:$REGRESSION_ANALYSIS_RESULT" "ci-test-analysis:$AGGREGATE_ANALYSIS_RESULT")
+            if [ "$VERDICT_ENFORCED" != "true" ]; then
+              required+=("test-net10-sharded:$TESTS_RESULT")
+            fi
           fi
 
           for pair in "${required[@]}"; do

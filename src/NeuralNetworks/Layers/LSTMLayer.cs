@@ -956,6 +956,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
 
         _isInitialized = false;
     }
+
 
     /// <summary>
     /// Resolves <see cref="_inputSize"/> from <c>input.Shape[^1]</c> and propagates the

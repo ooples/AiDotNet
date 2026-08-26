@@ -33,6 +33,15 @@ public class MbPAMechanismTests
         return v;
     }
 
+    private static Matrix<double> FirstRows(Matrix<double> source, int count)
+    {
+        var result = new Matrix<double>(count, source.Columns);
+        for (int i = 0; i < count; i++)
+            for (int j = 0; j < source.Columns; j++)
+                result[i, j] = source[i, j];
+        return result;
+    }
+
     // ---------------------------------------------------------------- memory
 
     [Fact]
@@ -366,18 +375,12 @@ public class MbPAMechanismTests
             QuerySetX = probe.Query, QuerySetY = probe.QueryY,
         });
 
-        // ONE query row. OutputDimension here is 3, and MbPA deliberately refuses to pack a BATCH of
-        // multi-component predictions into a flat Vector<T> rather than silently truncating each to
-        // component 0 — AssembleOutput permits the single-row case and rejects the rest. Predicting
-        // all four rows was asking for exactly the truncation that guard exists to prevent.
-        //
-        // Batch size is incidental to what this test asserts: if theta_x leaked between calls, the
-        // second prediction would differ from the first at any batch size.
-        var single = new Matrix<double>(1, FeatureDim);
-        for (int j = 0; j < FeatureDim; j++) single[0, j] = probe.Query[0, j];
-
-        var first = adapted.Predict(single);
-        var second = adapted.Predict(single);
+        // Vector<T> can represent one multi-component prediction, so keep this transience probe on
+        // one query row. Batched multi-component vector output has no row shape and is covered by the
+        // explicit rejection test below.
+        var oneRow = FirstRows(probe.Query, 1);
+        var first = adapted.Predict(oneRow);
+        var second = adapted.Predict(oneRow);
 
         Assert.Equal(first.Length, second.Length);
         for (int i = 0; i < first.Length; i++) Assert.Equal(first[i], second[i], 12);
@@ -386,6 +389,24 @@ public class MbPAMechanismTests
         var headAfter = algorithm.OutputParameters;
         Assert.All(Enumerable.Range(0, headAfter.Length),
             i => Assert.False(double.IsNaN(headAfter[i])));
+    }
+
+    [Fact]
+    public void AdaptedModel_VectorOutputRejectsTwoRowsOfThreeComponents()
+    {
+        var algorithm = BuildAlgorithm(out var probe);
+        var adapted = algorithm.Adapt(new MetaLearningTask<double, Matrix<double>, Vector<double>>
+        {
+            SupportSetX = probe.Support, SupportSetY = probe.SupportY,
+            QuerySetX = probe.Query, QuerySetY = probe.QueryY,
+        });
+
+        var twoRows = FirstRows(probe.Query, 2);
+        var exception = Assert.Throws<NotSupportedException>(() => adapted.Predict(twoRows));
+
+        Assert.Contains("2 predictions", exception.Message);
+        Assert.Contains("3 components", exception.Message);
+        Assert.Contains("Matrix<T> or Tensor<T>", exception.Message);
     }
 
     [Fact]

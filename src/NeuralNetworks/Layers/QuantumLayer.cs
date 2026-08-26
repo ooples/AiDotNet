@@ -255,15 +255,42 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
 
         var imagState = new Tensor<T>(realState._shape);
 
+        // Prescale each row by its largest magnitude before squaring. This scale cancels out of
+        // the final normalization, but keeps finite values near T.MaxValue from overflowing the
+        // sum of squares and collapsing the entire state to zero.
+        using var absoluteRealState = Engine.TensorAbs(realState);
+        var maxMagnitude = Engine.ReduceMax(absoluteRealState, [1], keepDims: true, out _);
+        var positiveMagnitude = Engine.TensorGreaterThan(maxMagnitude, NumOps.Zero);
+        var unitMagnitude = new Tensor<T>(maxMagnitude.Shape.ToArray());
+        unitMagnitude.Fill(NumOps.One);
+        var safeMaxMagnitude = Engine.TensorWhere(positiveMagnitude, maxMagnitude, unitMagnitude);
+        var maxMagnitudeExpanded = Engine.TensorRepeatElements(safeMaxMagnitude, dimension, axis: 1);
+        var scaledRealState = Engine.TensorDivide(realState, maxMagnitudeExpanded);
+        var scaledImagState = Engine.TensorDivide(imagState, maxMagnitudeExpanded);
+
         // Normalize each batch item: divide by sqrt(sum(|state|^2) + eps)
-        var magnitudeSquared = Engine.ComplexMagnitudeSquared(realState, imagState);
+        //
+        // The Sqrt was missing. ReduceSum gives sum(|state|^2) — the SQUARED L2 norm — and dividing
+        // the amplitudes by that instead of by the norm leaves a state of length 1/||state||, not 1.
+        // The Born-rule convention this layer documents (and that the QNN fixture relies on) requires
+        // ||psi||_2 == 1. The error compounds: at the default 128-feature input the squared norm is
+        // roughly 128x the norm, and the network stacks TWO quantum layers, so the amplitudes are
+        // crushed by orders of magnitude before the output head ever sees them. That is why the
+        // quantum model produced ~1e-4 outputs whose gradients underflowed to zero
+        // (Training_ShouldChangeParameters, GradientFlow_ShouldBeNonZeroAndFinite) and why
+        // perturbing the input direction moved the output by less than the comparison tolerance
+        // (ScaledInput_ShouldChangeOutput).
+        //
+        // The epsilon stays INSIDE the Sqrt so the denominator is still strictly positive for a
+        // zero state, which is what keeps this total rather than trading a scale bug for a NaN.
+        var magnitudeSquared = Engine.ComplexMagnitudeSquared(scaledRealState, scaledImagState);
         var normPerBatch = Engine.ReduceSum(magnitudeSquared, [1], keepDims: true);
         var epsilonTensor = new Tensor<T>(normPerBatch._shape);
         epsilonTensor.Fill(NumOps.FromDouble(1e-10));
-        var safeDenom = Engine.TensorAdd(normPerBatch, epsilonTensor);
+        var safeDenom = Engine.TensorSqrt(Engine.TensorAdd(normPerBatch, epsilonTensor));
         var denomExpanded = Engine.TensorRepeatElements(safeDenom, dimension, axis: 1);
-        var normalizedReal = Engine.TensorDivide(realState, denomExpanded);
-        var normalizedImag = Engine.TensorDivide(imagState, denomExpanded);
+        var normalizedReal = Engine.TensorDivide(scaledRealState, denomExpanded);
+        var normalizedImag = Engine.TensorDivide(scaledImagState, denomExpanded);
 
         // Reshape to [dimension, batch] for complex matmul
         var normalizedRealT = Engine.TensorTranspose(normalizedReal);
@@ -331,18 +358,8 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
 
         int dimension = 1 << _numQubits; // State dimension = 2^numQubits
 
-        // Track all allocated buffers for exception safety
-        IGpuBuffer? circuitRealBuffer = null;
-        IGpuBuffer? circuitImagBuffer = null;
-        IGpuBuffer? stateRealBuffer = null;
-        IGpuBuffer? stateImagBuffer = null;
-        IGpuBuffer? squaredBuffer = null;
-        IGpuBuffer? normSqBuffer = null;
-        IGpuBuffer? normSqClampedBuffer = null;
-        IGpuBuffer? normBuffer = null;
-        IGpuBuffer? invNormBuffer = null;
-        IGpuBuffer? resultRealBuffer = null;
-        IGpuBuffer? resultImagBuffer = null;
+        // The output buffer transfers ownership to the returned tensor on success. Every other
+        // temporary is a lexical using below, so exceptions cannot leak GPU allocations.
         IGpuBuffer? probabilitiesBuffer = null;
 
         try
@@ -359,60 +376,100 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
                     circuitImagFlat[idx] = NumOps.ToFloat(_quantumCircuit[i, j].Imaginary);
                 }
             }
-            var circuitReal = backend.AllocateBuffer(circuitRealFlat);
-            circuitRealBuffer = circuitReal;
-            var circuitImag = backend.AllocateBuffer(circuitImagFlat);
-            circuitImagBuffer = circuitImag;
+            using var circuitReal = backend.AllocateBuffer(circuitRealFlat);
+            using var circuitImag = backend.AllocateBuffer(circuitImagFlat);
 
             // GPU-only state initialization: pad input and L2 normalize per batch
             // Allocate state buffers on GPU
-            var stateReal = backend.AllocateBuffer(batchSize * dimension);
-            stateRealBuffer = stateReal;
-            var stateImag = backend.AllocateBuffer(batchSize * dimension);
-            stateImagBuffer = stateImag;
+            using var stateReal = backend.AllocateBuffer(batchSize * dimension);
+            using var stateImag = backend.AllocateBuffer(batchSize * dimension);
 
             // Zero the buffers (padding with zeros)
             backend.Fill(stateReal, 0.0f, batchSize * dimension);
             backend.Fill(stateImag, 0.0f, batchSize * dimension);
 
-            // Copy input data with padding using strided copy
+            // Copy input data while preserving each row's padding/truncation. OpenCL 0.129.0
+            // exposes Copy2DStrided but does not register its kernel, so invoking it throws before
+            // normalization. The offset-copy primitive is supported by every direct backend and
+            // keeps this path GPU-resident.
             int copyWidth = Math.Min(inputDim, dimension);
-            backend.Copy2DStrided(input.Buffer, stateReal, batchSize, copyWidth, dimension, 0);
+            if (inputDim == dimension)
+            {
+                backend.Copy(input.Buffer, stateReal, batchSize * dimension);
+            }
+            else
+            {
+                for (int batch = 0; batch < batchSize; batch++)
+                {
+                    backend.Copy(
+                        input.Buffer, batch * inputDim,
+                        stateReal, batch * dimension,
+                        copyWidth);
+                }
+            }
+
+            // Prescale by the per-row maximum before squaring, matching ForwardTraced. Stay on the
+            // direct backend here: the generic TensorAbs path can materialize a CPU tensor, which
+            // MaxAxisGpu correctly refuses to consume as a GPU buffer.
+            using var absoluteState = backend.AllocateBuffer(batchSize * dimension);
+            backend.Abs(stateReal, absoluteState, batchSize * dimension);
+            using var maxMagnitude = backend.AllocateBuffer(batchSize);
+            backend.MaxAxis(absoluteState, maxMagnitude, batchSize, dimension);
+            // Substitute 1 -- not a tiny floor -- for a row whose maximum is zero, matching the
+            // CPU's TensorWhere(max > 0, max, 1) exactly. A floor of float.Epsilon looks safer and
+            // is the opposite: CL_FP_DENORM is *optional* in OpenCL, so a conforming device may
+            // flush subnormals in arithmetic, turning the floor back into 0. Reciprocal(0) is then
+            // +Inf and every all-zero row comes back 0 * Inf = NaN -- on any input, not just an
+            // exotic one. A normal-valued sentinel cannot degrade that way on any device.
+            using var zeroMagnitude = backend.AllocateBuffer(batchSize);
+            backend.Fill(zeroMagnitude, 0f, batchSize);
+            using var positiveMagnitude = backend.AllocateBuffer(batchSize);
+            backend.GreaterThan(maxMagnitude, zeroMagnitude, positiveMagnitude, batchSize);
+            using var unitMagnitude = backend.AllocateBuffer(batchSize);
+            backend.Fill(unitMagnitude, 1f, batchSize);
+            using var safeMaxMagnitude = backend.AllocateBuffer(batchSize);
+            backend.Where(
+                positiveMagnitude, maxMagnitude, unitMagnitude, safeMaxMagnitude, batchSize);
+
+            // Reciprocal of a very small *normal* max still overflows to Inf even though the row
+            // is finite (1/1.2e-38 > float.MaxValue). Factor 1/max into two finite 1/sqrt(max)
+            // multiplies so no intermediate becomes Inf.
+            using var sqrtSafeMaxMagnitude = backend.AllocateBuffer(batchSize);
+            backend.Sqrt(safeMaxMagnitude, sqrtSafeMaxMagnitude, batchSize);
+            using var inverseSqrtMaxMagnitude = backend.AllocateBuffer(batchSize);
+            backend.Reciprocal(sqrtSafeMaxMagnitude, inverseSqrtMaxMagnitude, batchSize);
+            backend.BroadcastMultiplyFirstAxis(
+                stateReal, inverseSqrtMaxMagnitude, stateReal, batchSize, dimension);
+            backend.BroadcastMultiplyFirstAxis(
+                stateReal, inverseSqrtMaxMagnitude, stateReal, batchSize, dimension);
 
             // L2 normalize each batch element on GPU
             // Step 1: Square the values
-            var squared = backend.AllocateBuffer(batchSize * dimension);
-            squaredBuffer = squared;
+            using var squared = backend.AllocateBuffer(batchSize * dimension);
             backend.Multiply(stateReal, stateReal, squared, batchSize * dimension);
 
             // Step 2: Sum per batch to get sum of squares
-            var normSq = backend.AllocateBuffer(batchSize);
-            normSqBuffer = normSq;
+            using var normSq = backend.AllocateBuffer(batchSize);
             backend.SumAxis(squared, normSq, batchSize, dimension);
 
-            // Step 3: Clamp to avoid division by zero (add epsilon)
-            var normSqClamped = backend.AllocateBuffer(batchSize);
-            normSqClampedBuffer = normSqClamped;
-            backend.Clamp(normSq, normSqClamped, 1e-10f, float.MaxValue, batchSize);
+            // Step 3: Add epsilon before the square root, matching ForwardTraced exactly.
+            using var normSqRegularized = backend.AllocateBuffer(batchSize);
+            backend.AddScalar(normSq, normSqRegularized, 1e-10f, batchSize);
 
             // Step 4: Sqrt to get L2 norm
-            var norm = backend.AllocateBuffer(batchSize);
-            normBuffer = norm;
-            backend.Sqrt(normSqClamped, norm, batchSize);
+            using var norm = backend.AllocateBuffer(batchSize);
+            backend.Sqrt(normSqRegularized, norm, batchSize);
 
             // Step 5: Reciprocal to get 1/norm
-            var invNorm = backend.AllocateBuffer(batchSize);
-            invNormBuffer = invNorm;
+            using var invNorm = backend.AllocateBuffer(batchSize);
             backend.Reciprocal(norm, invNorm, batchSize);
 
             // Step 6: Broadcast multiply to normalize each row
             backend.BroadcastMultiplyFirstAxis(stateReal, invNorm, stateReal, batchSize, dimension);
 
             // Allocate output state buffers
-            var resultReal = backend.AllocateBuffer(batchSize * dimension);
-            resultRealBuffer = resultReal;
-            var resultImag = backend.AllocateBuffer(batchSize * dimension);
-            resultImagBuffer = resultImag;
+            using var resultReal = backend.AllocateBuffer(batchSize * dimension);
+            using var resultImag = backend.AllocateBuffer(batchSize * dimension);
 
             // Apply quantum circuit: complex matrix multiplication
             backend.ComplexMatVec(
@@ -455,18 +512,6 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
         }
         finally
         {
-            // Dispose all intermediate buffers (not the output which was transferred)
-            circuitRealBuffer?.Dispose();
-            circuitImagBuffer?.Dispose();
-            stateRealBuffer?.Dispose();
-            stateImagBuffer?.Dispose();
-            squaredBuffer?.Dispose();
-            normSqBuffer?.Dispose();
-            normSqClampedBuffer?.Dispose();
-            normBuffer?.Dispose();
-            invNormBuffer?.Dispose();
-            resultRealBuffer?.Dispose();
-            resultImagBuffer?.Dispose();
             probabilitiesBuffer?.Dispose(); // Only disposed on exception (null on success)
         }
     }

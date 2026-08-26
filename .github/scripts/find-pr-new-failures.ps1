@@ -16,7 +16,9 @@ param(
     [string] $BaselineResultsPath,
     [string] $BaselineLedgerPath,
     [Parameter(Mandatory = $true)]
-    [string] $OutputFile
+    [string] $OutputFile,
+    [ValidateRange(1, [int]::MaxValue)]
+    [int] $MaxRerunMethods = 40
 )
 
 $ErrorActionPreference = 'Stop'
@@ -65,6 +67,15 @@ function Set-ActionOutput {
     if ($env:GITHUB_OUTPUT) { Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "$Name=$Value" }
 }
 
+function ConvertTo-VSTestFilterValue {
+    param([string] $Value)
+
+    # VSTest reserves these characters inside filter values. Escape them so a parameterized
+    # display name or generated method cannot turn one retry candidate into a different filter.
+    # Commas are intentionally left alone: they are not operators in the filter grammar.
+    return [regex]::Replace($Value, '([\\()!&|=~])', '\$1')
+}
+
 if (-not (Test-Path -LiteralPath $CurrentResultsPath)) {
     throw "Current result directory not found: $CurrentResultsPath"
 }
@@ -93,7 +104,15 @@ $candidates = @($current |
     Where-Object { $_.outcome -eq 'Failed' -and -not $baselineFailures.Contains([string] $_.identity) } |
     Sort-Object identity -Unique)
 $methods = @($candidates.fullyQualifiedName | Where-Object { $_ } | Sort-Object -Unique)
-$filterParts = @($methods | ForEach-Object { "FullyQualifiedName=$_" })
+$retrySkipped = $methods.Count -gt $MaxRerunMethods
+$retrySkipReason = if ($retrySkipped) {
+    "The $($methods.Count) PR-new failing methods exceed the targeted retry cap of $MaxRerunMethods."
+} else { $null }
+$filterParts = if ($retrySkipped) {
+    @()
+} else {
+    @($methods | ForEach-Object { "FullyQualifiedName~$(ConvertTo-VSTestFilterValue $_)" })
+}
 $filter = $filterParts -join '|'
 
 $outputParent = Split-Path -Parent $OutputFile
@@ -101,8 +120,11 @@ if ($outputParent) { New-Item -Path $outputParent -ItemType Directory -Force | O
 [PSCustomObject]@{
     candidateCount = $candidates.Count
     methodCount = $methods.Count
+    maxRerunMethods = $MaxRerunMethods
+    retrySkipped = $retrySkipped
+    retrySkipReason = $retrySkipReason
     candidates = $candidates
 } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $OutputFile -Encoding utf8
 
-Set-ActionOutput 'rerun_count' ([string] $methods.Count)
+Set-ActionOutput 'rerun_count' ([string] $(if ($retrySkipped) { 0 } else { $methods.Count }))
 Set-ActionOutput 'filter' $filter

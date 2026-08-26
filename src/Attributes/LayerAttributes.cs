@@ -1,4 +1,4 @@
-using AiDotNet.Enums;
+﻿using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.Attributes;

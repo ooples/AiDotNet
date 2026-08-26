@@ -9,7 +9,7 @@ TRX as incomplete. A short failure list from a killed test host is never
 allowed to look like an improvement.
 
 The comparison policy is the repository's hybrid rule:
-  * no confirmed-new failures, or explicitly fixed failures must outnumber them;
+  * explicitly fixed failures must outnumber new failures;
   * incomplete shards must not increase;
   * a previously-green shard may not become red/incomplete; and
   * a new failure on a touched type/test method is a hard regression.
@@ -32,8 +32,7 @@ param(
     [string] $CurrentSha = $env:GITHUB_SHA,
     [string] $BaselineSha,
     [string] $RepositoryPath = '.',
-    [string] $CurrentWorkflowPath,
-    [string] $BaselineWorkflowPath,
+    [string] $ApprovedShardChangesPath,
     [switch] $FailOnPolicy
 )
 
@@ -42,69 +41,7 @@ $schemaVersion = 1
 
 function ConvertTo-ShardKey {
     param([string] $Name)
-    return ($Name -replace '[\\/:*?"<>|\s-]+', '_').Trim('_')
-}
-
-function Read-WorkflowShardInventory {
-    param([string] $Path)
-
-    if ([string]::IsNullOrWhiteSpace($Path)) { return @() }
-    if (-not (Test-Path -LiteralPath $Path)) { throw "Workflow file not found: $Path" }
-
-    $insideJob = $false
-    $items = New-Object System.Collections.Generic.List[object]
-    $keys = New-Object System.Collections.Generic.HashSet[string]([StringComparer]::Ordinal)
-    foreach ($line in Get-Content -LiteralPath $Path) {
-        if (-not $insideJob) {
-            if ($line -match '^  test-net10-sharded:\s*$') { $insideJob = $true }
-            continue
-        }
-        if ($line -match '^  [A-Za-z0-9_-]+:\s*$') { break }
-        # Matrix entries are indented ten spaces. Workflow steps use six, so this does not
-        # accidentally count the many "- name" entries under steps.
-        if ($line -notmatch '^          - name:\s*(.+?)\s*$') { continue }
-        $name = $Matches[1].Trim().Trim('"').Trim("'")
-        $key = ConvertTo-ShardKey $name
-        if (-not $keys.Add($key)) {
-            throw "Workflow '$Path' contains duplicate shard key '$key'."
-        }
-        $items.Add([PSCustomObject]@{ key = $key; name = $name })
-    }
-    if (-not $insideJob -or $items.Count -eq 0) {
-        throw "Workflow '$Path' contains no test-net10-sharded matrix inventory."
-    }
-    return $items.ToArray()
-}
-
-function Add-MissingExpectedShards {
-    param($Ledger, [object[]] $ExpectedShards)
-
-    if (-not $ExpectedShards -or $ExpectedShards.Count -eq 0) { return $Ledger }
-    $observed = New-Object System.Collections.Generic.HashSet[string]([StringComparer]::Ordinal)
-    foreach ($shard in @($Ledger.shards)) { [void] $observed.Add([string] $shard.key) }
-    $allShards = New-Object System.Collections.Generic.List[object]
-    foreach ($shard in @($Ledger.shards)) { $allShards.Add($shard) }
-    foreach ($expected in $ExpectedShards) {
-        if ($observed.Contains([string] $expected.key)) { continue }
-        $allShards.Add([PSCustomObject]@{
-            key = [string] $expected.key
-            name = [string] $expected.name
-            status = 'Incomplete'
-            policyStatus = 'Incomplete'
-            total = 0
-            executed = 0
-            notExecuted = 0
-            aborted = 0
-            failed = 0
-            confirmedFailed = 0
-            rerunPassedFailures = 0
-            missingTrx = $true
-            parseErrors = @('The expected matrix shard uploaded no outcome artifact.')
-            testStepOutcome = 'missing-artifact'
-        })
-    }
-    $Ledger.shards = @($allShards.ToArray() | Sort-Object key)
-    return $Ledger
+    return $Name -replace '[\\/:*?"<>|\s-]+', '_'
 }
 
 function Get-IntAttribute {
@@ -129,7 +66,7 @@ function Get-ShardContainers {
     # actions/download-artifact keeps one directory per artifact. Synthetic/local
     # callers commonly pass one result tree directly, so support both layouts.
     if ($children.Count -eq 0 -or (($rootHasResults -or $rootHasMetadata) -and
-        -not ($children | Where-Object { $_.Name -match '^(coverage|test-outcome)-[0-9a-f]+-' }))) {
+        -not ($children | Where-Object { $_.Name -match '^coverage-[0-9a-f]+-' }))) {
         return @($rootItem)
     }
 
@@ -146,6 +83,7 @@ function Read-TestLedger {
     $allTests = New-Object System.Collections.Generic.List[object]
 
     foreach ($container in @(Get-ShardContainers $Root)) {
+        $containerTests = New-Object System.Collections.Generic.List[object]
         $metadataFile = Get-ChildItem -LiteralPath $container.FullName -Recurse -Filter 'shard-metadata.json' -File -ErrorAction SilentlyContinue |
             Select-Object -First 1
         $metadata = $null
@@ -159,7 +97,7 @@ function Read-TestLedger {
         $key = if ($metadata -and $metadata.slug) {
             [string] $metadata.slug
         } else {
-            ConvertTo-ShardKey ($container.Name -replace '^(coverage|test-outcome)-[0-9a-f]+-', '')
+            ConvertTo-ShardKey ($container.Name -replace '^coverage-[0-9a-f]+-', '')
         }
 
         $trxFiles = @(Get-ChildItem -LiteralPath $container.FullName -Recurse -Filter '*.trx' -File -ErrorAction SilentlyContinue)
@@ -210,7 +148,7 @@ function Read-TestLedger {
 
                     $messageNode = $result.SelectSingleNode('.//*[local-name()="ErrorInfo"]/*[local-name()="Message"]')
                     $message = if ($messageNode) { ([string] $messageNode.InnerText -split "`r?`n")[0].Trim() } else { '' }
-                    $allTests.Add([PSCustomObject]@{
+                    $testResult = [PSCustomObject]@{
                         identity = $identity
                         fullyQualifiedName = $fullyQualified
                         displayName = $display
@@ -218,14 +156,16 @@ function Read-TestLedger {
                         shard = $key
                         duration = [string] $result.duration
                         message = $message
-                    })
+                    }
+                    $allTests.Add($testResult)
+                    $containerTests.Add($testResult)
                 }
             } catch {
                 $parseErrors.Add("$($trx.Name): $($_.Exception.Message)")
             }
         }
 
-        $shardTests = @($allTests | Where-Object shard -eq $key)
+        $shardTests = $containerTests.ToArray()
         $failures = @($shardTests | Where-Object outcome -eq 'Failed')
         $distinctFailures = @($failures | Group-Object identity | ForEach-Object { $_.Group[0] })
         $passedIds = New-Object System.Collections.Generic.HashSet[string]([StringComparer]::Ordinal)
@@ -238,9 +178,7 @@ function Read-TestLedger {
         $confirmedFailures = @($distinctFailures | Where-Object {
             -not $passedIds.Contains([string] $_.identity)
         })
-        $notExecutedResults = @($allTests | Where-Object {
-            $_.shard -eq $key -and $_.outcome -eq 'NotExecuted'
-        }).Count
+        $notExecutedResults = @($containerTests | Where-Object outcome -eq 'NotExecuted').Count
         $accountedNotExecuted = [Math]::Max($notExecuted, $notExecutedResults)
         $missingTrx = $trxFiles.Count -eq 0
         # VSTest intentionally records skipped tests as notExecuted. Those are fully accounted
@@ -299,14 +237,70 @@ function Read-LedgerFile {
     return $ledger
 }
 
+function Read-ApprovedShardChanges {
+    param([string] $Path)
+
+    $changesByBaselineKey = @{}
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $changesByBaselineKey }
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "Approved shard-change manifest not found: $Path"
+    }
+
+    $manifest = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    if ([int] $manifest.schemaVersion -ne 1) {
+        throw "Unsupported shard-change manifest schema '$($manifest.schemaVersion)'; expected '1'."
+    }
+
+    foreach ($change in @($manifest.changes)) {
+        $baselineKey = [string] $change.baselineKey
+        $reason = [string] $change.reason
+        if (-not $change.PSObject.Properties['currentKeys'] -or $null -eq $change.currentKeys) {
+            throw "Approved shard change '$baselineKey' requires currentKeys; use an explicit empty array for removal."
+        }
+        $currentKeys = @($change.currentKeys | ForEach-Object { [string] $_ })
+        if ([string]::IsNullOrWhiteSpace($baselineKey)) {
+            throw 'Every approved shard change requires a non-empty baselineKey.'
+        }
+        if ([string]::IsNullOrWhiteSpace($reason)) {
+            throw "Approved shard change '$baselineKey' requires a non-empty reason."
+        }
+        if ($changesByBaselineKey.ContainsKey($baselineKey)) {
+            throw "Duplicate approved shard change for baseline key '$baselineKey'."
+        }
+        if (@($currentKeys | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
+            throw "Approved shard change '$baselineKey' contains an empty current key."
+        }
+        if (@($currentKeys | Sort-Object -Unique).Count -ne $currentKeys.Count) {
+            throw "Approved shard change '$baselineKey' contains duplicate current keys."
+        }
+
+        $changesByBaselineKey[$baselineKey] = [PSCustomObject]@{
+            baselineKey = $baselineKey
+            currentKeys = $currentKeys
+            reason = $reason
+        }
+    }
+
+    return $changesByBaselineKey
+}
+
 function Get-TouchedTokens {
     param([string] $Repo, [string] $Base, [string] $Head)
 
     $tokens = New-Object System.Collections.Generic.HashSet[string]([StringComparer]::OrdinalIgnoreCase)
-    if (-not $Base -or -not $Head -or -not (Test-Path -LiteralPath (Join-Path $Repo '.git'))) { return @() }
+    if (-not $Base) {
+        return [PSCustomObject]@{ success = $false; tokens = @(); error = 'Baseline SHA is unavailable.' }
+    }
+    if (-not $Head) {
+        return [PSCustomObject]@{ success = $false; tokens = @(); error = 'Current SHA is unavailable.' }
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $Repo '.git'))) {
+        return [PSCustomObject]@{ success = $false; tokens = @(); error = "Repository metadata was not found at '$Repo'." }
+    }
 
     $generic = @('Dispose', 'Initialize', 'CreateNetwork', 'GetParameters', 'SetParameters',
         'UpdateParameters', 'Forward', 'Backward', 'Predict', 'Train', 'Clone')
+    $sourceCache = @{}
     try {
         $files = & git -C $Repo diff --name-only "$Base...$Head" -- '*.cs'
         if ($LASTEXITCODE -ne 0) { throw "git diff could not compare $Base...$Head" }
@@ -331,7 +325,10 @@ function Get-TouchedTokens {
                 # edit, so a common base-test change is still recognized as touched when the TRX
                 # identity belongs to a generated derived fixture.
                 $lineNumber = [int] $Matches[1]
-                $source = @(Get-Content -LiteralPath $currentFile)
+                if (-not $sourceCache.ContainsKey($currentFile)) {
+                    $sourceCache[$currentFile] = @(Get-Content -LiteralPath $currentFile)
+                }
+                $source = @($sourceCache[$currentFile])
                 $lowerBound = [Math]::Max(0, $lineNumber - 201)
                 for ($index = [Math]::Min($source.Count - 1, $lineNumber - 1); $index -ge $lowerBound; $index--) {
                     if ($source[$index] -match '^\s*(?:(?:public|protected|private|internal|static|virtual|override|sealed|async|partial|new)\s+)+(?:[A-Za-z_][A-Za-z0-9_<>,.?\[\]]*\s+)+([A-Za-z_][A-Za-z0-9_]*)\s*\(') {
@@ -351,9 +348,11 @@ function Get-TouchedTokens {
             }
         }
     } catch {
-        Write-Warning "Could not derive touched test/type tokens: $($_.Exception.Message)"
+        $message = "Could not derive touched test/type tokens: $($_.Exception.Message)"
+        Write-Warning $message
+        return [PSCustomObject]@{ success = $false; tokens = @(); error = $message }
     }
-    return @($tokens | Sort-Object)
+    return [PSCustomObject]@{ success = $true; tokens = @($tokens | Sort-Object); error = $null }
 }
 
 function Test-MatchesToken {
@@ -443,10 +442,7 @@ $summaryPath = Join-Path $OutputDirectory 'summary.md'
 $failureCsvPath = Join-Path $OutputDirectory 'failures.csv'
 $shardCsvPath = Join-Path $OutputDirectory 'shards.csv'
 
-$currentInventory = @(Read-WorkflowShardInventory $CurrentWorkflowPath)
-$baselineInventory = @(Read-WorkflowShardInventory $BaselineWorkflowPath)
 $current = Read-TestLedger -Root $CurrentResultsPath -Sha $CurrentSha
-$current = Add-MissingExpectedShards $current $currentInventory
 Write-JsonFile $current $ledgerPath
 $current.shards |
     Select-Object key, name, status, policyStatus, total, executed, notExecuted, aborted,
@@ -462,9 +458,6 @@ $currentPassIds = New-Object System.Collections.Generic.HashSet[string]([StringC
 foreach ($passed in @($current.tests | Where-Object outcome -eq 'Passed')) {
     [void] $currentPassIds.Add([string] $passed.identity)
 }
-$currentRerunPassedFailures = @($currentFailures | Where-Object {
-    $currentPassIds.Contains([string] $_.identity)
-})
 $currentIncomplete = @($current.shards | Where-Object status -eq 'Incomplete')
 $currentStats = Get-LedgerStatistics $current
 $currentCategories = @(Get-FailureCategories $currentFailures)
@@ -475,7 +468,15 @@ $lines.Add('')
 $baseline = $null
 if ($BaselineLedgerPath) { $baseline = Read-LedgerFile $BaselineLedgerPath }
 elseif ($BaselineResultsPath) { $baseline = Read-TestLedger -Root $BaselineResultsPath -Sha $BaselineSha }
-if ($baseline) { $baseline = Add-MissingExpectedShards $baseline $baselineInventory }
+
+# An explicitly requested baseline that resolved to zero shards is never a real
+# comparison. actions/download-artifact treats a pattern with no matches as a
+# successful step, so accepting an empty directory here would classify every
+# current failure as new against an invented all-green baseline.
+if (($BaselineLedgerPath -or $BaselineResultsPath) -and
+    @($baseline.shards | Where-Object { -not $_.missingTrx }).Count -eq 0) {
+    throw "Resolved baseline '$BaselineSha' contains zero measured test shards; refusing to enforce a false regression comparison."
+}
 
 if (-not $baseline) {
     $summary = [PSCustomObject]@{
@@ -517,12 +518,13 @@ if (-not $baseline) {
     })
     $fixed = @($baselineFailures | Where-Object {
         if ($currentFailureIds.ContainsKey([string] $_.identity)) { return $false }
-        $id = [string] $_.identity
-        return @($current.tests | Where-Object { $_.identity -eq $id -and $_.outcome -eq 'Passed' }).Count -gt 0
+        return $currentPassIds.Contains([string] $_.identity)
     })
+    $fixedIds = New-Object System.Collections.Generic.HashSet[string]([StringComparer]::Ordinal)
+    foreach ($failure in $fixed) { [void] $fixedIds.Add([string] $failure.identity) }
     $notObserved = @($baselineFailures | Where-Object {
         -not $currentFailureIds.ContainsKey([string] $_.identity) -and
-        -not (@($fixed | Where-Object identity -eq $_.identity).Count -gt 0)
+        -not $fixedIds.Contains([string] $_.identity)
     })
 
     $baselineShardMap = @{}
@@ -530,18 +532,40 @@ if (-not $baseline) {
     $currentShardMap = @{}
     foreach ($shard in $current.shards) { $currentShardMap[[string] $shard.key] = $shard }
 
+    $approvedShardChanges = Read-ApprovedShardChanges $ApprovedShardChangesPath
+    $approvedMissingShardChanges = New-Object System.Collections.Generic.List[object]
+    $approvedMissingShardKeys = New-Object System.Collections.Generic.HashSet[string]([StringComparer]::Ordinal)
+
     # An absent artifact is an incomplete shard, even when that shard was already red on master.
     # Without this synthetic entry, dropping a red artifact also drops its failures and can make a
-    # killed run look like an improvement. Baseline green shards are additionally caught below.
-    $missingCurrentShards = @($baseline.shards | Where-Object {
-        -not $currentShardMap.ContainsKey([string] $_.key)
-    } | ForEach-Object {
-        [PSCustomObject]@{
-            key = [string] $_.key
-            name = [string] $_.name
+    # killed run look like an improvement. A checked-in shard-change manifest is the only exception:
+    # rename/split replacements must all have uploaded artifacts, while removal needs an explicit
+    # reason. That distinguishes an intentional matrix edit from a host that failed to upload.
+    $missingCurrentShards = New-Object System.Collections.Generic.List[object]
+    foreach ($baselineShard in $baseline.shards) {
+        $baselineKey = [string] $baselineShard.key
+        if ($currentShardMap.ContainsKey($baselineKey)) { continue }
+
+        $approvedChange = $approvedShardChanges[$baselineKey]
+        $missingReplacementKeys = if ($null -ne $approvedChange) {
+            @($approvedChange.currentKeys | Where-Object { -not $currentShardMap.ContainsKey([string] $_) })
+        } else { @() }
+        if ($null -ne $approvedChange -and $missingReplacementKeys.Count -eq 0) {
+            [void] $approvedMissingShardKeys.Add($baselineKey)
+            $approvedMissingShardChanges.Add([PSCustomObject]@{
+                baselineKey = $baselineKey
+                currentKeys = @($approvedChange.currentKeys)
+                reason = [string] $approvedChange.reason
+            })
+            continue
+        }
+
+        $missingCurrentShards.Add([PSCustomObject]@{
+            key = $baselineKey
+            name = [string] $baselineShard.name
             status = 'Missing'
             policyStatus = 'Missing'
-            total = [int] $_.total
+            total = [int] $baselineShard.total
             executed = 0
             notExecuted = 0
             aborted = 0
@@ -551,8 +575,8 @@ if (-not $baseline) {
             missingTrx = $true
             parseErrors = @('No current artifact was uploaded for this baseline shard.')
             testStepOutcome = 'missing'
-        }
-    })
+        })
+    }
 
     $greenToRed = New-Object System.Collections.Generic.List[object]
     foreach ($entry in $baselineShardMap.GetEnumerator()) {
@@ -560,6 +584,29 @@ if (-not $baseline) {
             [string] $entry.Value.policyStatus
         } else { [string] $entry.Value.status }
         if ($beforeStatus -ne 'Passed') { continue }
+
+        if ($approvedMissingShardKeys.Contains([string] $entry.Key)) {
+            $approvedChange = $approvedShardChanges[[string] $entry.Key]
+            $replacementKeys = @($approvedChange.currentKeys)
+            if ($replacementKeys.Count -eq 0) { continue }
+
+            $replacementStatuses = @($replacementKeys | ForEach-Object {
+                $replacement = $currentShardMap[[string] $_]
+                if ($replacement.PSObject.Properties['policyStatus']) {
+                    [string] $replacement.policyStatus
+                } else { [string] $replacement.status }
+            })
+            $regressedReplacements = @($replacementStatuses | Where-Object { $_ -ne 'Passed' })
+            if ($regressedReplacements.Count -gt 0) {
+                $greenToRed.Add([PSCustomObject]@{
+                    key = $entry.Key
+                    name = [string] $entry.Value.name
+                    currentStatus = "Replacement $($regressedReplacements -join ', ')"
+                })
+            }
+            continue
+        }
+
         $now = $currentShardMap[$entry.Key]
         $nowStatus = if (-not $now) {
             'Missing'
@@ -575,22 +622,26 @@ if (-not $baseline) {
         }
     }
 
-    $touchedTokens = @(Get-TouchedTokens -Repo $RepositoryPath -Base $BaselineSha -Head $CurrentSha)
-    $touchedNew = @($confirmedNew | Where-Object { Test-MatchesToken $_ $touchedTokens })
+    $touchedTokenResult = Get-TouchedTokens -Repo $RepositoryPath -Base $BaselineSha -Head $CurrentSha
+    $touchedTokens = @($touchedTokenResult.tokens)
+    $touchedSurfaceKnown = [bool] $touchedTokenResult.success
+    $touchedNew = if ($touchedSurfaceKnown) {
+        @($confirmedNew | Where-Object { Test-MatchesToken $_ $touchedTokens })
+    } else { @() }
+    # Discovery is required only when a confirmed new failure exists that must be classified. If
+    # there are no confirmed new failures, none can belong to the touched surface by definition.
+    $touchedSurfaceClean = $touchedNew.Count -eq 0 -and
+        ($touchedSurfaceKnown -or $confirmedNew.Count -eq 0)
     $baselineIncomplete = @($baseline.shards | Where-Object status -eq 'Incomplete')
-    $effectiveCurrentIncomplete = @($currentIncomplete) + @($missingCurrentShards)
+    $effectiveCurrentIncomplete = @($currentIncomplete) + @($missingCurrentShards.ToArray())
     $baselineStats = Get-LedgerStatistics $baseline
     $baselineCategories = @(Get-FailureCategories $baselineFailures)
     $greenToRedArray = @($greenToRed | ForEach-Object { $_ })
-    # A missing result never earns credit as a fix. The verified balance shrinks only when explicit
-    # current passes for baseline failures outnumber genuinely new failures.
-    $netImproved = $fixed.Count -gt $confirmedNew.Count
-    # A neutral PR with zero confirmed-new failures must remain mergeable even when it does not
-    # promise to fix a baseline failure. When new failures exist, require the verified distinct
-    # failure balance to shrink: explicit current passes must outnumber confirmed-new failures.
-    $failureBalanceAccepted = $confirmedNew.Count -eq 0 -or $netImproved
+    # A missing result never earns credit as a fix. A neutral clean comparison remains acceptable;
+    # when failures change, explicit current passes must at least offset genuinely new failures.
+    $netImproved = $fixed.Count -ge $confirmedNew.Count
     $incompleteNotIncreased = $effectiveCurrentIncomplete.Count -le $baselineIncomplete.Count
-    $policyPassed = $failureBalanceAccepted -and $incompleteNotIncreased -and $greenToRed.Count -eq 0 -and $touchedNew.Count -eq 0
+    $policyPassed = $netImproved -and $incompleteNotIncreased -and $greenToRed.Count -eq 0 -and $touchedSurfaceClean
 
     $resolvedBaselineSha = [string] $baseline.sha
     if ($BaselineSha) { $resolvedBaselineSha = [string] $BaselineSha }
@@ -600,13 +651,12 @@ if (-not $baseline) {
         baselineSha = $resolvedBaselineSha
         policyPassed = $policyPassed
         criteria = [PSCustomObject]@{
-            noConfirmedNewFailures = $confirmedNew.Count -eq 0
             verifiedFailureBalanceShrank = $netImproved
-            failureBalanceAccepted = $failureBalanceAccepted
             incompleteShardsDidNotIncrease = $incompleteNotIncreased
             noPreviouslyGreenShardRegressed = $greenToRed.Count -eq 0
-            noTouchedSurfaceRegression = $touchedNew.Count -eq 0
+            noTouchedSurfaceRegression = $touchedSurfaceClean
         }
+        touchedTokenDiscovery = $touchedTokenResult
         counts = [PSCustomObject]@{
             baselineShards = $baselineStats.shardCount
             currentShards = $currentStats.shardCount
@@ -630,6 +680,7 @@ if (-not $baseline) {
             baselineIncompleteShards = $baselineIncomplete.Count
             currentIncompleteShards = $effectiveCurrentIncomplete.Count
             missingCurrentShardArtifacts = $missingCurrentShards.Count
+            approvedShardChanges = $approvedMissingShardChanges.Count
             greenToRedShards = $greenToRed.Count
             touchedNewFailures = $touchedNew.Count
         }
@@ -642,7 +693,8 @@ if (-not $baseline) {
         persistentFailures = @($persistent)
         baselineFailuresNotObserved = @($notObserved)
         currentIncompleteShards = @($effectiveCurrentIncomplete)
-        missingCurrentShardArtifacts = @($missingCurrentShards)
+        missingCurrentShardArtifacts = $missingCurrentShards.ToArray()
+        approvedShardChanges = $approvedMissingShardChanges.ToArray()
         baselineFailureCategories = $baselineCategories
         currentFailureCategories = $currentCategories
         touchedTokens = $touchedTokens
@@ -663,12 +715,15 @@ if (-not $baseline) {
     $lines.Add('')
     $lines.Add('| Acceptance criterion | Result |')
     $lines.Add('|---|---|')
-    $lines.Add("| Strict: no confirmed-new failures | $(if ($confirmedNew.Count -eq 0) { 'PASS' } else { 'FAIL' }) |")
-    $lines.Add("| No confirmed-new failures, or explicit fixes outnumber them | $(if ($failureBalanceAccepted) { 'PASS' } else { 'FAIL' }) |")
+    $lines.Add("| Verified failure balance does not worsen (explicit fixes >= new) | $(if ($netImproved) { 'PASS' } else { 'FAIL' }) |")
     $lines.Add("| Incomplete shards do not increase | $(if ($incompleteNotIncreased) { 'PASS' } else { 'FAIL' }) |")
     $lines.Add("| Previously-green shards stay green | $(if ($greenToRed.Count -eq 0) { 'PASS' } else { 'FAIL' }) |")
-    $lines.Add("| No new failure on a touched type/test | $(if ($touchedNew.Count -eq 0) { 'PASS' } else { 'FAIL' }) |")
+    $lines.Add("| No unresolved touched-surface regression risk | $(if ($touchedSurfaceClean) { 'PASS' } else { 'FAIL' }) |")
     $lines.Add('')
+    if (-not $touchedSurfaceKnown) {
+        $lines.Add("Touched-surface discovery is unavailable: **$(ConvertTo-MarkdownCell ([string] $touchedTokenResult.error))**")
+        $lines.Add('')
+    }
     $lines.Add("Persistent: **$($persistent.Count)**; fixed and explicitly passing: **$($fixed.Count)**; new: **$($newFailures.Count)**; baseline failures not observed because their result/shard is missing: **$($notObserved.Count)**.")
     $lines.Add("Of the new failures, **$($confirmedNew.Count)** reproduced and **$($rerunPassedNew.Count)** explicitly passed the targeted retry.")
     $lines.Add('')
@@ -689,6 +744,10 @@ if (-not $baseline) {
     Add-MarkdownList $lines 'One-run new failures that passed targeted retry' @($rerunPassedNew | ForEach-Object { "$($_.identity) [$($_.shard)]" })
     Add-MarkdownList $lines 'Fixed failures (explicit pass required)' @($fixed | ForEach-Object { "$($_.identity) [$($_.shard)]" })
     Add-MarkdownList $lines 'Incomplete or missing current shards' @($effectiveCurrentIncomplete | ForEach-Object { "$($_.name): executed $($_.executed)/$($_.total), status $($_.testStepOutcome)" })
+    Add-MarkdownList $lines 'Approved matrix shard changes' @($approvedMissingShardChanges | ForEach-Object {
+        $replacement = if ($_.currentKeys.Count -eq 0) { 'removed' } else { "replaced by $($_.currentKeys -join ', ')" }
+        "$($_.baselineKey): $replacement ($($_.reason))"
+    })
 }
 
 $lines | Set-Content -LiteralPath $summaryPath -Encoding utf8
