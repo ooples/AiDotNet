@@ -39,6 +39,7 @@ internal sealed class DiffusionConvolutionalGRULayer<T> : LayerBase<T>, IShapeCo
     private readonly DenseLayer<T> _gateProjection;
     private readonly DenseLayer<T> _candidateProjection;
     private readonly List<Tensor<T>> _supports = new();
+    private readonly List<bool> _identitySupports = new();
     private Tensor<T>? _ones;
 
     /// <summary>The final hidden state produced by the most recent sequence forward.</summary>
@@ -66,7 +67,7 @@ internal sealed class DiffusionConvolutionalGRULayer<T> : LayerBase<T>, IShapeCo
     /// Creates a DCGRU cell. Null transition matrices select identity random walks, which is the
     /// graph-neutral fallback used when a caller has not supplied an adjacency matrix.
     /// </summary>
-    internal DiffusionConvolutionalGRULayer(
+    public DiffusionConvolutionalGRULayer(
         int inputSize,
         int hiddenSize,
         int numNodes,
@@ -107,6 +108,7 @@ internal sealed class DiffusionConvolutionalGRULayer<T> : LayerBase<T>, IShapeCo
         ValidateTransition(backwardTransition, nameof(backwardTransition));
 
         _supports.Clear();
+        _identitySupports.Clear();
         AddSupportPowers(forwardTransition);
         if (_useBackwardSupport)
             AddSupportPowers(backwardTransition);
@@ -177,19 +179,49 @@ internal sealed class DiffusionConvolutionalGRULayer<T> : LayerBase<T>, IShapeCo
     private Tensor<T> BuildDiffusionBasis(Tensor<T> features)
     {
         var basis = new List<Tensor<T>>(1 + _supports.Count) { features };
-        foreach (var support in _supports)
-            basis.Add(Engine.TensorMatMul(support, features));
+        for (int i = 0; i < _supports.Count; i++)
+        {
+            // With no supplied adjacency, DCRNN's graph-neutral fallback is I.
+            // Every power of I is I, so multiplying the dense 207x207 support at
+            // every gate, candidate, time step, and tape replay is mathematically
+            // redundant. Reusing the feature tensor preserves the separate learned
+            // coefficient block contributed by each diffusion direction and order.
+            basis.Add(_identitySupports[i]
+                ? features
+                : Engine.TensorMatMul(_supports[i], features));
+        }
         return Engine.TensorConcatenate(basis.ToArray(), axis: 1);
     }
 
     private void AddSupportPowers(double[,] transition)
     {
+        bool isIdentity = IsIdentity(transition);
         var power = (double[,])transition.Clone();
         for (int step = 1; step <= _maxDiffusionStep; step++)
         {
             _supports.Add(ToTensor(power));
-            power = Multiply(power, transition);
+            _identitySupports.Add(isIdentity);
+            if (!isIdentity)
+                power = Multiply(power, transition);
         }
+    }
+
+    private static bool IsIdentity(double[,] matrix)
+    {
+        int rows = matrix.GetLength(0);
+        int columns = matrix.GetLength(1);
+        if (rows != columns) return false;
+
+        for (int row = 0; row < rows; row++)
+        {
+            for (int column = 0; column < columns; column++)
+            {
+                double expected = row == column ? 1.0 : 0.0;
+                if (matrix[row, column] != expected) return false;
+            }
+        }
+
+        return true;
     }
 
     private Tensor<T> ToTensor(double[,] matrix)
@@ -256,5 +288,18 @@ internal sealed class DiffusionConvolutionalGRULayer<T> : LayerBase<T>, IShapeCo
         _ones = null;
         _gateProjection.ResetState();
         _candidateProjection.ResetState();
+    }
+
+    /// <summary>Persists every constructor value needed to rebuild the DCGRU layer.</summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+        metadata["InputSize"] = _inputSize.ToString(culture);
+        metadata["HiddenSize"] = _hiddenSize.ToString(culture);
+        metadata["NumNodes"] = _numNodes.ToString(culture);
+        metadata["MaxDiffusionStep"] = _maxDiffusionStep.ToString(culture);
+        metadata["UseBackwardSupport"] = _useBackwardSupport.ToString();
+        return metadata;
     }
 }

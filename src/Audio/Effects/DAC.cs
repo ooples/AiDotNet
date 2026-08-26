@@ -2,7 +2,9 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
@@ -108,7 +110,25 @@ public class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
     {
         _options = options ?? new DACOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Official DAC 44.1 kHz training recipe:
+        // AdamW(lr=1e-4, betas=[0.8, 0.99]), ExponentialLR(gamma=0.999996)
+        // after every generator update, and generator gradient clipping at 1e3.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = 0.8,
+                Beta2 = 0.99,
+                Epsilon = 1e-8,
+                WeightDecay = 0.01,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1e3,
+                LearningRateScheduler = new ExponentialLRScheduler(
+                    _options.LearningRate,
+                    gamma: 0.999996),
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch
+            });
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }

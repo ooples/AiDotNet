@@ -92,4 +92,87 @@ public sealed class DcrnnPaperFidelityContractTests
             System.Math.Abs(coupledOutput[1, 0, 0] - isolatedOutput[1, 0, 0]) > 1e-8,
             "Node 1 must respond when the diffusion support gives it an incoming edge from node 0.");
     }
+
+    [Fact]
+    public void DeserializeRebindsDiffusionSupportsToRestoredDcgruLayers()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 2);
+        var options = new DCRNNOptions<double>
+        {
+            NumNodes = 2,
+            NumFeatures = 1,
+            SequenceLength = 2,
+            ForecastHorizon = 2,
+            HiddenDimension = 2,
+            NumEncoderLayers = 1,
+            NumDecoderLayers = 1,
+            DiffusionSteps = 1,
+            MaxDiffusionStep = 1,
+            NumSamples = 1,
+            Seed = 42,
+        };
+        var sourceAdjacency = new double[,]
+        {
+            { 1.0, 0.0 },
+            { 1.0, 0.0 },
+        };
+        var differentConstructorAdjacency = new double[,]
+        {
+            { 1.0, 0.0 },
+            { 0.0, 1.0 },
+        };
+
+        using var source = new DCRNN<double>(architecture, options, sourceAdjacency);
+        using var restored = new DCRNN<double>(architecture, options, differentConstructorAdjacency);
+        var input = new Tensor<double>([2, 2, 1]);
+        input[0, 0, 0] = 1.0;
+        input[0, 1, 0] = 0.5;
+
+        var expected = source.Predict(input);
+        restored.Deserialize(source.Serialize());
+        var actual = restored.Predict(input);
+
+        Assert.Equal(expected.Shape, actual.Shape);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], actual[i], 12);
+    }
+
+    [Fact]
+    public void TrainRejectsTeacherForcingTargetWithAnIncompatibleLayout()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 2);
+        var options = new DCRNNOptions<double>
+        {
+            NumNodes = 2,
+            NumFeatures = 1,
+            SequenceLength = 2,
+            ForecastHorizon = 2,
+            HiddenDimension = 2,
+            NumEncoderLayers = 1,
+            NumDecoderLayers = 1,
+            DiffusionSteps = 1,
+            MaxDiffusionStep = 1,
+            NumSamples = 1,
+            Seed = 42,
+        };
+
+        using var model = new DCRNN<double>(architecture, options);
+        var input = new Tensor<double>([2, 2, 1]);
+        var malformedTarget = new Tensor<double>([2, 2, 1]);
+
+        var exception = Assert.Throws<ArgumentException>(
+            () => model.Train(input, malformedTarget));
+
+        Assert.Equal("target", exception.ParamName);
+        Assert.Contains("shape [2, >= 2]", exception.Message);
+        Assert.Contains("rank 3", exception.Message);
+    }
 }

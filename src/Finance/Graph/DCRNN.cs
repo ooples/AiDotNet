@@ -688,6 +688,7 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
+        ValidateTeacherForcingTarget(target);
         _teacherForcingTarget = target;
         try
         {
@@ -810,6 +811,10 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         _diffusionSteps = reader.ReadInt32();
         _trainingStep = reader.ReadInt32();
 
+        // NeuralNetworkBase restores Layers before this hook runs. Refresh the typed
+        // references so diffusion supports are rebound to those restored instances,
+        // not to the temporary layers created by this object's constructor.
+        ExtractLayerReferences();
         bool hasDiffusion = reader.ReadBoolean();
         if (hasDiffusion)
         {
@@ -1064,10 +1069,11 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         var decoderInput = Tensor<T>.CreateDefault([_numNodes, 1], NumOps.Zero);
         var predictions = new List<Tensor<T>>(_forecastHorizon);
         double teacherForcingRatio = GetTeacherForcingRatio();
-        bool hasTeacherTarget = _teacherForcingTarget is not null
-            && _teacherForcingTarget.Rank == 2
-            && _teacherForcingTarget.Shape[0] == _numNodes
-            && _teacherForcingTarget.Shape[1] >= _forecastHorizon;
+        bool hasTeacherTarget = _teacherForcingTarget is not null;
+        if (hasTeacherTarget)
+        {
+            ValidateTeacherForcingTarget(_teacherForcingTarget!);
+        }
 
         for (int step = 0; step < _forecastHorizon; step++)
         {
@@ -1089,6 +1095,19 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         }
 
         return Engine.TensorConcatenate(predictions.ToArray(), axis: 1);
+    }
+
+    private void ValidateTeacherForcingTarget(Tensor<T> target)
+    {
+        if (target.Rank != 2
+            || target.Shape[0] != _numNodes
+            || target.Shape[1] < _forecastHorizon)
+        {
+            throw new ArgumentException(
+                $"DCRNN scheduled sampling requires a target of shape [{_numNodes}, >= {_forecastHorizon}], "
+                + $"but received rank {target.Rank} with shape [{string.Join(", ", target.Shape)}].",
+                nameof(target));
+        }
     }
 
     private Tensor<T> NormalizePaperInput(Tensor<T> input)
