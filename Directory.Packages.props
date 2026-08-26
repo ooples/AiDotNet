@@ -344,7 +344,7 @@
          lockstep release. -->
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.129.2" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.129.2" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.129.2" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.129.3" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.129.2" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
