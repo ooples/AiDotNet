@@ -148,11 +148,10 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
+        CopyOptionsToFields(options);
         _optimizer = optimizer ?? CreatePaperOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         SetBaseTrainOptimizer(_optimizer);
-
-        CopyOptionsToFields(options);
     }
 
     /// <summary>
@@ -173,11 +172,10 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
+        CopyOptionsToFields(options);
         _optimizer = optimizer ?? CreatePaperOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         SetBaseTrainOptimizer(_optimizer);
-
-        CopyOptionsToFields(options);
         // Size the context window to the architecture's actual input so the patch
         // layers match the input the model is given (the options default assumes
         // paper scale, which need not match the configured architecture).
@@ -194,6 +192,14 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
         Guard.Positive(options.HiddenDimension, nameof(options.HiddenDimension));
         Guard.Positive(options.NumLayers, nameof(options.NumLayers));
         Guard.Positive(options.NumHeads, nameof(options.NumHeads));
+        if (double.IsNaN(options.LearningRate) || double.IsInfinity(options.LearningRate) || options.LearningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(options.LearningRate), "Learning rate must be finite and positive.");
+        if (double.IsNaN(options.Beta1) || double.IsInfinity(options.Beta1) || options.Beta1 < 0.0 || options.Beta1 >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(options.Beta1), "Beta1 must be finite and in [0, 1).");
+        if (double.IsNaN(options.Beta2) || double.IsInfinity(options.Beta2) || options.Beta2 < 0.0 || options.Beta2 >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(options.Beta2), "Beta2 must be finite and in [0, 1).");
+        if (double.IsNaN(options.WeightDecay) || double.IsInfinity(options.WeightDecay) || options.WeightDecay < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(options.WeightDecay), "Weight decay must be finite and non-negative.");
         Guard.Positive(options.WarmupSteps, nameof(options.WarmupSteps));
         Guard.Positive(options.TotalTrainingSteps, nameof(options.TotalTrainingSteps));
         if (options.TotalTrainingSteps < options.WarmupSteps)
@@ -311,7 +317,7 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var opts = new TOTOOptions<T>
+        var opts = new TOTOOptions<T>(_options)
         {
             ContextLength = _contextLength,
             ForecastHorizon = _forecastHorizon,
@@ -321,13 +327,7 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
             NumHeads = _numHeads,
             IntermediateSize = _intermediateSize,
             DropoutRate = _dropout,
-            ModelSize = _modelSize,
-            LearningRate = _options.LearningRate,
-            Beta1 = _options.Beta1,
-            Beta2 = _options.Beta2,
-            WeightDecay = _options.WeightDecay,
-            WarmupSteps = _options.WarmupSteps,
-            TotalTrainingSteps = _options.TotalTrainingSteps
+            ModelSize = _modelSize
         };
 
         if (!_useNativeMode && OnnxModelPath is not null)

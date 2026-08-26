@@ -56,7 +56,8 @@ internal static class VideoPixelInputDomain
             for (int i = 0; i < input.Length; i++)
             {
                 double value = operations.ToDouble(input[i]);
-                if (double.IsFinite(value) && value >= 0.0 && value <= 255.0)
+                if (!double.IsNaN(value) && !double.IsInfinity(value)
+                    && value >= 0.0 && value <= 255.0)
                     continue;
 
                 throw new InputContractViolationException(
@@ -81,7 +82,7 @@ internal static class VideoPixelInputDomain
             var operations = MathHelper.GetNumericOperations<T>();
             for (int i = 0; i < input.Length; i++)
             {
-                double value = Math.Clamp(operations.ToDouble(input[i]) + epsilon, 0.0, 255.0);
+                double value = Math.Min(Math.Max(operations.ToDouble(input[i]) + epsilon, 0.0), 255.0);
                 nearby[i] = operations.FromDouble(value);
             }
             return nearby;
@@ -112,7 +113,8 @@ internal static class VideoPixelInputDomain
             for (int i = 0; i < input.Length; i++)
             {
                 double value = operations.ToDouble(input[i]);
-                if (double.IsFinite(value) && value >= 0.0 && value <= 1.0)
+                if (!double.IsNaN(value) && !double.IsInfinity(value)
+                    && value >= 0.0 && value <= 1.0)
                     continue;
 
                 throw new InputContractViolationException(
@@ -137,7 +139,7 @@ internal static class VideoPixelInputDomain
             var operations = MathHelper.GetNumericOperations<T>();
             for (int i = 0; i < input.Length; i++)
             {
-                double value = Math.Clamp(operations.ToDouble(input[i]) + epsilon, 0.0, 1.0);
+                double value = Math.Min(Math.Max(operations.ToDouble(input[i]) + epsilon, 0.0), 1.0);
                 nearby[i] = operations.FromDouble(value);
             }
             return nearby;

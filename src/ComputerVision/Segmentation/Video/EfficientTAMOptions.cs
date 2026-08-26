@@ -30,8 +30,12 @@ public class EfficientTAMOptions : NeuralNetworkOptions
     /// <summary>
     /// Gets or sets the AdamW image-encoder learning rate used by the full video training recipe.
     /// </summary>
+    /// <value>Defaults to <c>6e-5</c>, following the EfficientTAM full-training recipe.</value>
+    /// <remarks><para><b>For Beginners:</b> This controls how quickly the image encoder learns.</para></remarks>
     public double LearningRate { get; set; } = 6e-5;
 
     /// <summary>Gets or sets the AdamW decoupled weight decay used by the full training recipe.</summary>
+    /// <value>Defaults to <c>0.1</c>, following the EfficientTAM full-training recipe.</value>
+    /// <remarks><para><b>For Beginners:</b> Weight decay regularizes the video segmentation model.</para></remarks>
     public double WeightDecay { get; set; } = 0.1;
 }

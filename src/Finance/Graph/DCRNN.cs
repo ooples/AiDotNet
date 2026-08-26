@@ -133,10 +133,6 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
-    /// <inheritdoc/>
-    public override double MaxGradNormValue => 5.0;
-
-
     private int _sequenceLength;
     private int _forecastHorizon;
     private int _numNodes;
@@ -236,7 +232,7 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         double[,]? adjacencyMatrix = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanAbsoluteErrorLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new MeanAbsoluteErrorLoss<T>(), 5.0)
     {
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
@@ -295,7 +291,7 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         double[,]? adjacencyMatrix = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanAbsoluteErrorLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new MeanAbsoluteErrorLoss<T>(), 5.0)
     {
         _useNativeMode = true;
         _options = options ?? new DCRNNOptions<T>();
@@ -347,8 +343,7 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
                 UseAdaptiveLearningRate = false,
                 UseAdaptiveBetas = false,
                 UseAMSGrad = false,
-                EnableGradientClipping = true,
-                MaxGradientNorm = 5.0,
+                EnableGradientClipping = false,
             });
     }
 

@@ -270,7 +270,15 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
             }
         }
 
-        return parameters.Where(layerNormParameters.Contains).ToArray();
+        var selected = parameters.Where(layerNormParameters.Contains).ToArray();
+        if (parameters.Count > 0 && selected.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "VisionTS full-shot training requires initialized LayerNorm parameters, but the configured " +
+                "architecture did not expose any trainable LayerNorm tensors.");
+        }
+
+        return selected;
     }
 
     /// <summary>
@@ -329,7 +337,7 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var opts = new VisionTSOptions<T>
+        var opts = new VisionTSOptions<T>(_options)
         {
             ContextLength = _contextLength,
             ForecastHorizon = _forecastHorizon,
@@ -340,8 +348,7 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
             IntermediateSize = _intermediateSize,
             DropoutRate = _dropout,
             ModelSize = _modelSize,
-            MaskRatio = _maskRatio,
-            LearningRate = _options.LearningRate
+            MaskRatio = _maskRatio
         };
 
         if (!_useNativeMode && OnnxModelPath is not null)

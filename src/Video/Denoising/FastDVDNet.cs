@@ -466,7 +466,8 @@ public class FastDVDNet<T> : VideoDenoisingBase<T>
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new FastDVDNet<T>(Architecture, _optimizer, _lossFunction, _numFeatures, _numInputFrames);
+        new FastDVDNet<T>(Architecture, _optimizer, _lossFunction, _numFeatures, _numInputFrames,
+            new FastDVDNetOptions(_options));
 
     #endregion
 

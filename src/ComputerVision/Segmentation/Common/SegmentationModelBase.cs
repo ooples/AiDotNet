@@ -230,7 +230,14 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
         double beta1 = 0.9,
         double beta2 = 0.999,
         double epsilon = 1e-8)
-        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+    {
+        ValidateFiniteNonNegative(learningRate, nameof(learningRate));
+        ValidateFiniteNonNegative(weightDecay, nameof(weightDecay));
+        ValidateAdamBeta(beta1, nameof(beta1));
+        ValidateAdamBeta(beta2, nameof(beta2));
+        ValidateFiniteNonNegative(epsilon, nameof(epsilon));
+
+        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
@@ -244,6 +251,19 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
                 UseAMSGrad = false,
                 EnableGradientClipping = false
             });
+    }
+
+    private static void ValidateFiniteNonNegative(double value, string parameterName)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value) || value < 0.0)
+            throw new ArgumentOutOfRangeException(parameterName, value, "Value must be finite and non-negative.");
+    }
+
+    private static void ValidateAdamBeta(double value, string parameterName)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value) || value < 0.0 || value >= 1.0)
+            throw new ArgumentOutOfRangeException(parameterName, value, "Adam beta must be finite and in [0, 1).");
+    }
 
     /// <summary>
     /// Routes the shared tape trainer through the optimizer supplied to this segmentation
@@ -251,7 +271,12 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
     /// NeuralNetworkBase's unrelated generic Adam optimizer.
     /// </summary>
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
-        => Optimizer ?? base.GetOrCreateBaseOptimizer();
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Training is not supported in ONNX inference mode.");
+
+        return Optimizer ?? base.GetOrCreateBaseOptimizer();
+    }
 
     /// <inheritdoc/>
     public int NumClasses => _numClasses;

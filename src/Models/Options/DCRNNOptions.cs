@@ -202,6 +202,8 @@ public class DCRNNOptions<T> : TimeSeriesRegressionOptions<T>
     /// The released METR-LA configuration uses a base rate of 0.01 before its epoch-based
     /// decay schedule. Exposing it here keeps native training configurable without replacing
     /// the paper optimizer.
+    /// <para><b>For Beginners:</b> This controls the size of each Adam update. The paper starts
+    /// at 0.01 and reduces it during training.</para>
     /// </remarks>
     public double LearningRate { get; set; } = 0.01;
 

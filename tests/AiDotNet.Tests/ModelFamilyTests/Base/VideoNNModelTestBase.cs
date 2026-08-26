@@ -88,11 +88,11 @@ public abstract class VideoNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
 
-        var frame1 = CreateRandomTensor(InputShape, rng);
+        var frame1 = CreateRandomTensor(EffectiveInputShape, rng);
         // Frame 2 is a small, legal perturbation in the production input domain.
         // In particular, normalized pixels near 1 must remain in [0,1].
         var frame2 = InputContractTensorFactory.CreateNearby(
-            frame1, InputDomainFor(InputShape), epsilon: 0.01);
+            frame1, InputDomainFor(EffectiveInputShape), epsilon: 0.01);
 
         var out1 = network.Predict(frame1);
         var out2 = network.Predict(frame2);

@@ -314,7 +314,7 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// Parameter-efficient fine-tuning recipes can use it without relying on
     /// private-field reflection or on the composite parameter-vector layout.
     /// </remarks>
-    public IReadOnlyList<Tensor<T>> GetLayerNormalizationTrainableParameters()
+    internal IReadOnlyList<Tensor<T>> GetLayerNormalizationTrainableParameters()
     {
         if (!_isInitialized)
             return Array.Empty<Tensor<T>>();

@@ -155,6 +155,10 @@ public class TOTEMOptions<T> : TimeSeriesRegressionOptions<T>
     /// Defaults to 100, matching the official 100-epoch recipe for a one-batch-per-epoch
     /// training stream. Set this to epochs multiplied by batches per epoch for larger data sets.
     /// </value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Set this to the total number of optimizer updates so the
+    /// OneCycle schedule reaches its final learning rate at the end of training.</para>
+    /// </remarks>
     public int TotalTrainingSteps { get; set; } = 100;
 
     /// <summary>
