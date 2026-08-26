@@ -974,13 +974,13 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             if (!_tapeM.TryGetValue(param, out var m) || !m._shape.SequenceEqual(param._shape))
             {
                 m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape);
-                if (gpuAdam) m.AsWritableSpan().Clear();   // Adam moments start at 0
+                m.AsWritableSpan().Clear();   // Arena-rented CPU/GPU Adam moments both start at 0.
                 _tapeM[param] = m;
             }
             if (!_tapeV.TryGetValue(param, out var v) || !v._shape.SequenceEqual(param._shape))
             {
                 v = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape);
-                if (gpuAdam) v.AsWritableSpan().Clear();
+                v.AsWritableSpan().Clear();
                 _tapeV[param] = v;
             }
             // AMSGrad running max of v̂. Initialised to a fresh zero tensor on
@@ -995,6 +995,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 if (!_tapeVMax.TryGetValue(param, out vMax) || !vMax._shape.SequenceEqual(param._shape))
                 {
                     vMax = new Tensor<T>(param._shape);
+                    vMax.AsWritableSpan().Clear();
                     _tapeVMax[param] = vMax;
                 }
             }

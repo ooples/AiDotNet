@@ -6,6 +6,7 @@ using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -91,11 +92,9 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     private int _codebookDimension;
     private int _numCodebooks;
     private double _dropout;
-    private double _commitmentWeight;
 
     // VQ codebook: [numCodebooks x codebookSize x codebookDimension]
     private Tensor<T>? _codebooks;
-    private T _lastCommitmentLoss;
 
     // RevIN (reversible instance normalization, Kim et al. 2022) statistics.
     // The VQ bottleneck snaps the encoder output to a discrete codebook entry, so
@@ -144,7 +143,7 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         TOTEMOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new HuberLoss<T>(), 1.0)
     {
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
@@ -159,24 +158,11 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        // Built bare, every value GpuResidentFusedStep.TryResolveOptimizerConfig reads back off this
-        // optimizer -- learning rate, betas, epsilon and WEIGHT DECAY -- came from whatever the bare
-        // constructor happened to leave, and the fused step then applied them verbatim. Parameters
-        // went NaN after a single step (L2 28.2080 -> NaN). Set them explicitly from the paper's
-        // Adam configuration so the fused path has well-defined values to resolve.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = options.LearningRate,
-                Beta1 = 0.9,
-                Beta2 = 0.999,
-                Epsilon = 1e-8,
-            });
-        SetBaseTrainOptimizer(_optimizer);
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _lastCommitmentLoss = NumOps.Zero;
-
         CopyOptionsToFields(options);
+        _optimizer = optimizer ?? CreateForecastingOptimizer(options);
+        SetBaseTrainOptimizer(_optimizer);
+        _lossFunction = lossFunction ?? new HuberLoss<T>();
+
     }
 
     /// <summary>
@@ -187,7 +173,7 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         TOTEMOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new HuberLoss<T>(), 1.0)
     {
         options ??= new TOTEMOptions<T>();
         _options = options;
@@ -197,24 +183,11 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        // Built bare, every value GpuResidentFusedStep.TryResolveOptimizerConfig reads back off this
-        // optimizer -- learning rate, betas, epsilon and WEIGHT DECAY -- came from whatever the bare
-        // constructor happened to leave, and the fused step then applied them verbatim. Parameters
-        // went NaN after a single step (L2 28.2080 -> NaN). Set them explicitly from the paper's
-        // Adam configuration so the fused path has well-defined values to resolve.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = options.LearningRate,
-                Beta1 = 0.9,
-                Beta2 = 0.999,
-                Epsilon = 1e-8,
-            });
-        SetBaseTrainOptimizer(_optimizer);
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _lastCommitmentLoss = NumOps.Zero;
-
         CopyOptionsToFields(options);
+        _optimizer = optimizer ?? CreateForecastingOptimizer(options);
+        SetBaseTrainOptimizer(_optimizer);
+        _lossFunction = lossFunction ?? new HuberLoss<T>();
+
         InitializeLayers();
     }
 
@@ -228,7 +201,12 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         Guard.Positive(options.CodebookSize, nameof(options.CodebookSize));
         Guard.Positive(options.CodebookDimension, nameof(options.CodebookDimension));
         Guard.Positive(options.NumCodebooks, nameof(options.NumCodebooks));
-
+        Guard.Positive(options.TotalTrainingSteps, nameof(options.TotalTrainingSteps));
+        if (double.IsNaN(options.LearningRate) || double.IsInfinity(options.LearningRate) || options.LearningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(options.LearningRate), "Learning rate must be finite and positive.");
+        if (double.IsNaN(options.DropoutRate) || double.IsInfinity(options.DropoutRate) ||
+            options.DropoutRate < 0.0 || options.DropoutRate >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(options.DropoutRate), "Dropout rate must be finite and in [0, 1).");
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
         _hiddenDimension = options.HiddenDimension;
@@ -238,9 +216,31 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         _codebookDimension = options.CodebookDimension;
         _numCodebooks = options.NumCodebooks;
         _dropout = options.DropoutRate;
-        _commitmentWeight = options.CommitmentWeight;
         InitializeCodebooks();
     }
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateForecastingOptimizer(
+        TOTEMOptions<T> options)
+    {
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                EnableGradientClipping = false,
+                LearningRateScheduler = new OneCycleLRScheduler(
+                    maxLearningRate: options.LearningRate,
+                    totalSteps: options.TotalTrainingSteps),
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+            });
+    }
+
+
 
     /// <summary>
     /// Initializes the VQ codebook embeddings with random values from N(0, 1/dim).
@@ -349,143 +349,50 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> target)
+    protected override bool SupportsFusedCompiledTraining => false;
+
+    /// <inheritdoc/>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
+        return ForwardNativeForTrainingCore(input);
+    }
 
-        // TOTEM-specific training: reconstruction loss + commitment
-        // term for the vector-quantized encoder. The base trainer's
-        // supervised path only sees reconstruction, which drops the
-        // VQ-VAE commitment penalty and lets the encoder drift
-        // arbitrarily far from the codebook. Run a custom tape step
-        // that combines both.
-
-        var loss = LossFunction;
-
-        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
-
-        // Fused fast path — reconstruction + commitment using the model's configured
-        // optimizer. The paper default is Adam at 1e-3; callers may inject another
-        // supported optimizer, with unsupported custom optimizers falling through to
-        // the eager tape route below. Safe
-        // now that VectorQuantize is fully traceable (argmin + gather + straight-
-        // through + commitment loss all via engine ops) so each replay recomputes
-        // from the CURRENT slot data instead of freezing the trace-batch argmin
-        // into the plan. The codebook EMA runs POST-Step in eager code using the
-        // trace-time argmin/head tensor references — their .Data is refreshed by
-        // each replay, so the post-Step read gives the current batch's values and
-        // the update lands exactly once per batch (CodeRabbit contract).
-        var trainableLayers = Layers.OfType<ITrainableLayer<T>>().ToList();
-        if (trainableLayers.Count > 0)
-        {
-            Tensor<T>? capturedCommitment = null;
-            Tensor<int>? capturedArgmin = null;
-            Tensor<T>? capturedHead = null;
-            Tensor<T> ForwardCombined(Tensor<T> inp)
-            {
-                var (fc, commit, argmin, head) = ForwardNativeForTrainingWithVQExtras(inp);
-                capturedCommitment = commit;
-                capturedArgmin = argmin;
-                capturedHead = head;
-                return fc;
-            }
-            Tensor<T> ComputeLossCombined(Tensor<T> pred, Tensor<T> tgt)
-            {
-                var alignedT = tgt;
-                if (pred.Rank > tgt.Rank && pred.Shape[0] == 1 && pred.Length == tgt.Length)
-                    pred = Engine.Reshape(pred, tgt._shape);
-                else if (tgt.Rank > pred.Rank && tgt.Shape[0] == 1 && tgt.Length == pred.Length)
-                    alignedT = Engine.Reshape(tgt, pred._shape);
-                var recon = loss.ComputeTapeLoss(pred, alignedT);
-                var commit = capturedCommitment
-                    ?? throw new InvalidOperationException(
-                        "TOTEM fused step: commitment loss was not captured by ForwardCombined. " +
-                        "This indicates the fused-step framework called the loss closure before " +
-                        "the forward closure, violating its documented Fwd-then-Loss ordering.");
-                return Engine.TensorAdd(recon, commit);
-            }
-            // The fused path REPLAYS a compiled plan, but ComputeLossCombined reads
-            // capturedCommitment -- state produced by the forward closure during tracing. On replay
-            // that reference is not re-derived as a tape node, so the commitment term contributes no
-            // valid gradient and the update drove every parameter to NaN in a single step
-            // (L2 28.2080 -> NaN), unchanged even at a 1e-6 learning rate. Until the fused step can
-            // express a loss that depends on forward-captured extras, take the eager tape route
-            // below, which rebuilds commitment and reconstruction on one live tape.
-            bool fusedStepSupportsForwardCapturedLoss = false;
-            if (fusedStepSupportsForwardCapturedLoss
-                && AiDotNet.Training.GpuResidentFusedStep<T>.TryResolveOptimizerConfig(
-                    _optimizer, out var optimizerType, out var learningRate,
-                    out var beta1, out var beta2, out var epsilon, out var weightDecay)
-                && AiDotNet.Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
-                    trainableLayers, input, target,
-                    forward: ForwardCombined, computeLoss: ComputeLossCombined,
-                    optimizerType, learningRate, beta1, beta2, epsilon, weightDecay,
-                    out T fusedLoss))
-            {
-                LastLoss = fusedLoss;
-                if (IsTrainingMode && capturedArgmin is not null && capturedHead is not null)
-                    UpdateCodebookEMA(capturedHead, capturedArgmin);
-                return;
-            }
-        }
-
-        using var tape = new GradientTape<T>();
-        var (forecast, commitmentLoss) = ForwardNativeForTrainingWithCommitment(input);
-
-        var alignedTarget = target;
-        if (forecast.Rank > target.Rank && forecast.Shape[0] == 1 && forecast.Length == target.Length)
-            forecast = Engine.Reshape(forecast, target._shape);
-        else if (target.Rank > forecast.Rank && target.Shape[0] == 1 && target.Length == forecast.Length)
-            alignedTarget = Engine.Reshape(target, forecast._shape);
-        var reconLoss = loss.ComputeTapeLoss(forecast, alignedTarget);
-
-        var totalLoss = Engine.TensorAdd(reconLoss, commitmentLoss);
-
-        var allGrads = ComputeAndPublishParameterGradients(tape, totalLoss, sources: null);
-        var grads = new Dictionary<Tensor<T>, Tensor<T>>(
+    /// <inheritdoc/>
+    protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(
+        IReadOnlyList<Tensor<T>> parameters)
+    {
+        // The forecasting stage in the official TOTEM pipeline consumes a frozen
+        // tokenizer/codebook and optimizes only the time-series decoder. In this
+        // integrated model those trainable forecasting components are the decoder
+        // projection and forecast head.
+        var forecastingParameters = new HashSet<Tensor<T>>(
             Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-        foreach (var param in trainableParams)
+
+        static void AddLayerParameters(
+            ILayer<T>? layer,
+            HashSet<Tensor<T>> destination)
         {
-            if (allGrads.TryGetValue(param, out var grad))
-                grads[param] = grad;
+            if (layer is not ITrainableLayer<T> trainable)
+                return;
+
+            foreach (var parameter in trainable.GetTrainableParameters())
+                destination.Add(parameter);
         }
 
-        T lossValue = totalLoss.Length > 0 ? totalLoss[0] : NumOps.Zero;
-        LastLoss = lossValue;
+        foreach (var layer in _transformerLayers)
+            AddLayerParameters(layer, forecastingParameters);
+        AddLayerParameters(_decoder, forecastingParameters);
+        AddLayerParameters(_forecastHead, forecastingParameters);
 
-        var context = new TapeStepContext<T>(trainableParams, grads, lossValue);
-        _optimizer.Step(context);
+        return parameters.Where(forecastingParameters.Contains).ToArray();
     }
 
     /// <summary>
-    /// Training-mode forward. Routes the encoder → VQ → decoder →
-    /// forecast head pipeline through the tape with a straight-through
-    /// vector quantizer so gradients flow into the encoder and
-    /// forecast head while the codebook lookup's argmin stays non-
-    /// differentiable (it has to — there's no gradient to an argmin).
-    /// Also emits the commitment loss as a tape-aware tensor for the
-    /// caller to add to the reconstruction loss.
+    /// Runs the forecasting-stage forward pass through a frozen tokenizer and codebook.
+    /// The official TOTEM forecasting pipeline optimizes the downstream transformer and
+    /// forecast head only; tokenizer pretraining is a separate stage.
     /// </summary>
-    private (Tensor<T> forecast, Tensor<T> commitmentLoss) ForwardNativeForTrainingWithCommitment(Tensor<T> input)
-    {
-        var (forecast, commitmentLoss, _, _) = ForwardNativeForTrainingWithVQExtras(input);
-        return (forecast, commitmentLoss);
-    }
-
-    /// <summary>
-    /// Training forward that also exposes the VQ argmin indices and encoder head
-    /// tensors. Used by the compiled fused path so the caller can invoke
-    /// <see cref="UpdateCodebookEMA"/> AFTER each Step with post-replay values
-    /// (argmin/head are graph-node references whose <c>.Data</c> is refreshed
-    /// by each replay). All ops go through <see cref="Engine"/> so the full
-    /// forward — including the RevIN normalize/denormalize, the encoder, the
-    /// quantization projection, VQ argmin+gather+straight-through, commitment
-    /// loss, and the decoder — records on the autodiff tape and re-executes
-    /// per replay.
-    /// </summary>
-    private (Tensor<T> Forecast, Tensor<T> CommitmentLoss, Tensor<int>? Argmin, Tensor<T>? Head)
-        ForwardNativeForTrainingWithVQExtras(Tensor<T> input)
+    private Tensor<T> ForwardNativeForTrainingCore(Tensor<T> input)
     {
         var normalized = ApplyInstanceNormalization(input);
         // Tokenize to [1, contextLength, 1] for the per-token encoder/decoder.
@@ -494,18 +401,18 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 
         if (_encoder is not null)
             current = _encoder.Forward(current);
-        foreach (var layer in _transformerLayers)
-            current = layer.Forward(current);
         if (_quantizationProjection is not null)
             current = _quantizationProjection.Forward(current);
 
-        // Traceable VQ: returns straight-through-quantized values, commitment loss,
-        // argmin indices, and the reshaped-head input for post-Step EMA.
-        var (quantizedST, commitmentLoss, argmin, head) = VectorQuantizeTraceable(current);
+        // The tokenizer and codebook are frozen during the forecasting stage. Quantization
+        // remains on-tape only so downstream gradients traverse the straight-through values.
+        var quantized = VectorQuantizeTraceable(current);
 
-        var decoded = quantizedST;
+        var decoded = quantized;
         if (_decoder is not null)
             decoded = _decoder.Forward(decoded);
+        foreach (var layer in _transformerLayers)
+            decoded = layer.Forward(decoded);
 
         // Pool the token sequence so the head emits one [1, forecastHorizon] forecast.
         if (decoded.Rank == 3)
@@ -517,7 +424,7 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         // RevIN reverse: train against the input-scale forecast.
         decoded = DenormalizeForecast(decoded);
 
-        return (decoded, commitmentLoss, argmin, head);
+        return decoded;
     }
 
     // UpdateParameters was an empty override, silently dropping every restore. The base
@@ -546,19 +453,7 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new TOTEM<T>(Architecture, new TOTEMOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            CodebookSize = _codebookSize,
-            CodebookDimension = _codebookDimension,
-            NumCodebooks = _numCodebooks,
-            DropoutRate = _dropout,
-            CommitmentWeight = _commitmentWeight
-        });
+        return new TOTEM<T>(Architecture, new TOTEMOptions<T>(_options));
     }
 
     /// <inheritdoc/>
@@ -573,7 +468,6 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         writer.Write(_codebookDimension);
         writer.Write(_numCodebooks);
         writer.Write(_dropout);
-        writer.Write(_commitmentWeight);
 
         // Serialize codebook embeddings
         if (_codebooks is not null)
@@ -602,7 +496,6 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         _codebookDimension = reader.ReadInt32();
         _numCodebooks = reader.ReadInt32();
         _dropout = reader.ReadDouble();
-        _commitmentWeight = reader.ReadDouble();
 
         // Deserialize codebook embeddings
         bool hasCodebooks = reader.ReadBoolean();
@@ -761,8 +654,6 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
             current = _encoder.Forward(current);
 
         // Transformer layers (per-token)
-        foreach (var layer in _transformerLayers)
-            current = layer.Forward(current);
 
         // Project to codebook dimension → [1, seqLen, codebookDim]
         if (_quantizationProjection is not null)
@@ -774,6 +665,9 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         // Decoder → [1, seqLen, hiddenDim]
         if (_decoder is not null)
             quantized = _decoder.Forward(quantized);
+        // Forecasting transformer consumes the frozen code embeddings.
+        foreach (var layer in _transformerLayers)
+            quantized = layer.Forward(quantized);
 
         // Pool the token sequence so the head emits one [1, forecastHorizon] forecast.
         if (quantized.Rank == 3)
@@ -791,44 +685,24 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
 
         return quantized;
     }
-
     /// <summary>
-    /// Vector quantization: for each codebook, find nearest embedding to each input vector.
-    /// Uses product quantization when numCodebooks > 1 (splits features across codebooks).
-    /// Also computes commitment loss: ||z_e - sg(e_k)||^2.
+    /// Applies the frozen product-quantization tokenizer used by both inference and forecasting training.
     /// </summary>
-    /// <summary>
-    /// Legacy scalar-loop VectorQuantize — kept for callers that don't need the argmin/head
-    /// side-outputs (inference, serialization roundtrips). Training paths should use
-    /// <see cref="VectorQuantizeTraceable"/> so the entire quantization runs on-tape and
-    /// re-executes correctly under the compiled fused plan.
-    /// </summary>
+    /// <remarks>
+    /// The tokenizer/codebook objective is optimized in TOTEM's separate pretraining stage; this
+    /// forecasting model consumes those discrete representations without mutating the codebook.
+    /// </remarks>
     private Tensor<T> VectorQuantize(Tensor<T> encoderOutput)
     {
-        var (quantized, _, _, _) = VectorQuantizeTraceable(encoderOutput);
-        return quantized;
+        return VectorQuantizeTraceable(encoderOutput);
     }
 
     /// <summary>
-    /// Traceable VQ-VAE quantization step (van den Oord et al. 2017). Returns the
-    /// straight-through-quantized tensor, the commitment loss, the argmin indices,
-    /// and the reshaped-head input in the [numPositions, numCodebooks, codebookDim]
-    /// layout. All ops go through <see cref="Engine"/> so the computation records on
-    /// the autodiff tape and re-executes on every replay under a compiled fused plan
-    /// — the previous <c>.Data.Span</c> nearest-neighbor + <c>SetCodebookValue</c>
-    /// EMA loop froze the argmin decision AND applied the codebook update at trace
-    /// time (bug flagged by CodeRabbit).
+    /// Applies the frozen TOTEM product-quantization codebook and returns straight-through
+    /// quantized values. The forecasting stage does not update the tokenizer or codebook;
+    /// their VQ objective belongs to the separate tokenizer-pretraining stage.
     /// </summary>
-    /// <remarks>
-    /// EMA is intentionally NOT applied here. The caller invokes <see cref="UpdateCodebookEMA"/>
-    /// with the returned argmin+head AFTER the compiled Step so the codebook update
-    /// runs exactly once per batch (regardless of whether the fused or eager path
-    /// engaged). Under the compiled plan, <c>head</c> and <c>argmin</c> are trace-time
-    /// graph nodes whose <c>.Data</c> is refreshed by each replay — reading them
-    /// post-Step gives the current batch's values.
-    /// </remarks>
-    private (Tensor<T> Quantized, Tensor<T> CommitmentLoss, Tensor<int>? ArgminIndices, Tensor<T>? Head)
-        VectorQuantizeTraceable(Tensor<T> encoderOutput)
+    private Tensor<T> VectorQuantizeTraceable(Tensor<T> encoderOutput)
     {
         if (_codebooks is null) InitializeCodebooks();
         var codebooks = _codebooks!;
@@ -839,16 +713,9 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         int numPositions = Math.Max(1, totalLen / Math.Max(1, blockSize));
         int quantizedElements = numPositions * blockSize;
 
-        // Fallback: input can't be cleanly reshaped into the PQ block structure.
-        // Return the input unchanged with a zero commitment loss and no argmin/head
-        // (the caller's EMA-update path is a no-op when these are null).
+        // If the input cannot form a complete PQ block, leave it unchanged.
         if (numPositions <= 0 || quantizedElements > totalLen)
-        {
-            var zeroLoss = new Tensor<T>(new[] { 1 });
-            Engine.TensorFill(zeroLoss, NumOps.Zero);
-            _lastCommitmentLoss = NumOps.Zero;
-            return (encoderOutput, zeroLoss, null, null);
-        }
+            return encoderOutput;
 
         // Split input into [quantizable, passThrough]. The passThrough tail is
         // copied unchanged; the quantizable prefix goes through PQ.
@@ -891,20 +758,6 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         // Stack per-codebook slices along the codebook axis to get [numPositions, numCodebooks, codebookDim].
         var zq = Engine.TensorStack(zqSlices, axis: 1);
 
-        // Commitment loss per Oord 2017 §3.2: β · ||z_e - sg(e_k)||² averaged over totalLen.
-        // Straight-through routes gradient through encoder only — encoder learns to
-        // match codebook via commitment loss; codebook learns via EMA (separate path).
-        var zqDetached = Engine.StopGradient(zq);
-        var commitmentDelta = Engine.TensorSubtract(head, zqDetached);
-        var commitmentSqSum = Engine.ReduceSum(
-            Engine.TensorMultiply(commitmentDelta, commitmentDelta),
-            axes: null, keepDims: false);
-        var invTotalLen = NumOps.Divide(NumOps.One, NumOps.FromDouble(Math.Max(1, totalLen)));
-        var commitmentLoss = Engine.TensorMultiplyScalar(
-            commitmentSqSum,
-            NumOps.Multiply(NumOps.FromDouble(_commitmentWeight), invTotalLen));
-        _lastCommitmentLoss = commitmentLoss.Length > 0 ? commitmentLoss[0] : NumOps.Zero;
-
         // Straight-through: quantized = head + StopGradient(zq - head). Forward-values
         // equal codebook entries; backward gradient flows through head as if identity.
         var straightThroughShift = Engine.StopGradient(Engine.TensorSubtract(zq, head));
@@ -925,88 +778,7 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
             quantized = encoderOutput.Rank == 1 ? quantizedFlat : Engine.Reshape(quantizedFlat, encoderOutput._shape);
         }
 
-        return (quantized, commitmentLoss, argmin, head);
-    }
-
-    /// <summary>
-    /// Post-Step EMA codebook update (van den Oord 2017 §3.2). Runs exactly once
-    /// per batch, using the trace-time <paramref name="argmin"/> / <paramref name="head"/>
-    /// tensors captured by <see cref="VectorQuantizeTraceable"/> — under the compiled
-    /// plan these are graph-node references whose <c>.Data</c> reflects the LAST
-    /// replay, so post-Step reads give the current batch's values.
-    /// </summary>
-    /// <remarks>
-    /// EMA formula (last-wins matching the eager path's per-position race):
-    /// <c>codebook[c, argmin[p,c], :] ← decay · codebook[c, argmin[p,c], :] +
-    /// (1-decay) · head[p, c, :]</c>.
-    /// Expressed as an in-place scatter-add: <c>codebook += (1-decay) · scatter(head - zq_at_selected)</c>,
-    /// where the scatter writes the deltas into the codebook at (c, argmin) positions
-    /// and the codebook's underlying data is updated via <see cref="IEngine.TensorCopy"/>
-    /// so the tensor object identity (referenced by future trace/replay reads) stays
-    /// stable.
-    /// </remarks>
-    private void UpdateCodebookEMA(Tensor<T> head, Tensor<int> argmin)
-    {
-        if (_codebooks is null) return;
-        var codebooks = _codebooks;
-
-        int dimPerCodebook = Math.Max(1, _codebookDimension);
-        int numPositions = head.Shape.Length >= 3 ? head.Shape[0] : 1;
-
-        var decayT = NumOps.FromDouble(0.99);
-        var oneMinusDecayT = NumOps.FromDouble(0.01);
-
-        // Per-codebook scatter: for each c, the selected entries move by
-        // (1-decay)·(head[:, c, :] - codebook[c, argmin[:, c], :]).
-        // TensorScatterAdd writes updates into a fresh copy of the codebook slice;
-        // TensorCopy propagates the update back into the same codebook tensor object.
-        for (int c = 0; c < _numCodebooks; c++)
-        {
-            var codebookC = Engine.TensorSliceAxis(codebooks, axis: 0, index: c);
-            var headC = Engine.TensorSliceAxis(head, axis: 1, index: c);
-            var argminC = Engine.TensorSliceAxis(argmin, axis: 1, index: c);
-
-            // Current selected entries: gather codebookC by argminC along axis 0.
-            var zqC = Engine.TensorIndexSelectDiff(codebookC, argminC, axis: 0);
-
-            // Delta = (1-decay) · (headC - zqC), shape [numPositions, codebookDim].
-            var deltaC = Engine.TensorMultiplyScalar(
-                Engine.TensorSubtract(headC, zqC),
-                oneMinusDecayT);
-
-            // Scatter deltaC into a zero canvas at argminC indices along axis 0.
-            var canvas = new Tensor<T>(new[] { _codebookSize, dimPerCodebook });
-            Engine.TensorFill(canvas, NumOps.Zero);
-            var updatedCodebookC = Engine.TensorScatterAdd(canvas, argminC, deltaC, axis: 0);
-            // updatedCodebookC = deltas placed at scatter positions, zeros elsewhere.
-
-            // codebookC_new = codebookC + updatedCodebookC.
-            var codebookC_new = Engine.TensorAdd(codebookC, updatedCodebookC);
-
-            // Write codebookC_new back into codebooks[c, :, :] via TensorSliceAxisWrite-like
-            // pattern: reshape to [1, codebookSize, codebookDim], place with TensorScatter
-            // along axis 0 at index c into a per-codebook staging tensor. Simpler:
-            // reconstruct the full codebook by concatenating updated + unchanged slices.
-            var updated3D = Engine.Reshape(codebookC_new, new[] { 1, _codebookSize, dimPerCodebook });
-            var partsList = new System.Collections.Generic.List<Tensor<T>>();
-            if (c > 0)
-            {
-                partsList.Add(Engine.TensorSlice(codebooks, new[] { 0, 0, 0 }, new[] { c, _codebookSize, dimPerCodebook }));
-            }
-            partsList.Add(updated3D);
-            if (c + 1 < _numCodebooks)
-            {
-                partsList.Add(Engine.TensorSlice(codebooks,
-                    new[] { c + 1, 0, 0 },
-                    new[] { _numCodebooks - c - 1, _codebookSize, dimPerCodebook }));
-            }
-            var newCodebooks = partsList.Count == 1 ? partsList[0] : Engine.TensorConcatenate(partsList.ToArray(), axis: 0);
-            Engine.TensorCopy(newCodebooks, codebooks);
-        }
-
-        // Suppress unused-var warning for decayT (kept for documentation of the
-        // decay-in-the-formula intent; the (1-decay) factor is what's actually used).
-        _ = decayT;
+        return quantized;
     }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)

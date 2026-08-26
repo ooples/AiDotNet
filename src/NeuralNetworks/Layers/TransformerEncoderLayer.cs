@@ -305,6 +305,27 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </remarks>
     public override bool SupportsTraining => true;
 
+    /// <summary>
+    /// Returns only the affine parameters owned by this block's two layer
+    /// normalization modules, in forward order.
+    /// </summary>
+    /// <remarks>
+    /// This is intentionally narrower than <see cref="GetTrainableParameters"/>.
+    /// Parameter-efficient fine-tuning recipes can use it without relying on
+    /// private-field reflection or on the composite parameter-vector layout.
+    /// </remarks>
+    internal IReadOnlyList<Tensor<T>> GetLayerNormalizationTrainableParameters()
+    {
+        if (!_isInitialized)
+            return Array.Empty<Tensor<T>>();
+
+        var parameters = new List<Tensor<T>>();
+        parameters.AddRange(_norm1.GetTrainableParameters());
+        parameters.AddRange(_norm2.GetTrainableParameters());
+        return parameters;
+    }
+
+
     public override void Serialize(BinaryWriter writer)
     {
         // Persist _embeddingSize so Deserialize can re-resolve sublayers

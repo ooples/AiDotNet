@@ -281,4 +281,28 @@ public class ParameterBufferScopeTests
         Assert.True(anyDiffers,
             "Original tensor objects must carry updated values after training — RestoreOriginalParameters must copy data back.");
     }
+
+    [Fact]
+    public void CifCompositeParameterSurface_IsDetectedBeforeBufferReplacement()
+    {
+        var layer = new CifAlignmentLayer<double>(encoderDim: 4);
+        var input = new Tensor<double>([1, 3, 4]);
+        for (int i = 0; i < input.Length; i++)
+            input.SetFlat(i, 0.1 * (i + 1));
+
+        // Materialize the registered alpha-predictor child. CifAlignmentLayer exposes that
+        // child's weights through its composite surface and through GetSubLayers().
+        _ = layer.Forward(input);
+
+        var detector = typeof(NeuralNetworkBase<double>).GetMethod(
+            "HasOverlappingParameterOwnership",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+
+        Assert.NotNull(detector);
+        bool overlaps = Assert.IsType<bool>(detector.Invoke(
+            null,
+            new object[] { new ILayer<double>[] { layer } }));
+        Assert.True(overlaps,
+            "CIF's registered predictor must be detected before ParameterBuffer mutates both parameter owners.");
+    }
 }

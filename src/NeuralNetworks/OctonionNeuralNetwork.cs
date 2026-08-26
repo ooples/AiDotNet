@@ -3,6 +3,8 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
@@ -80,7 +82,7 @@ public class OctonionNeuralNetwork<T> : VectorModelLayoutBase<T>
     public OctonionNeuralNetwork()
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.OneDimensional,
-            taskType: Enums.NeuralNetworkTaskType.Regression,
+            taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
             inputSize: 64,
             outputSize: 8))
     {
@@ -90,16 +92,74 @@ public class OctonionNeuralNetwork<T> : VectorModelLayoutBase<T>
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0,
-        OctonionNeuralNetworkOptions? options = null) : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm)
+        double maxGradNorm = double.MaxValue,
+        OctonionNeuralNetworkOptions? options = null)
+        : base(
+            architecture,
+            lossFunction ?? (architecture.TaskType == Enums.NeuralNetworkTaskType.MultiClassClassification
+                ? new CrossEntropyWithLogitsLoss<T>()
+                : new MeanSquaredErrorLoss<T>()),
+            maxGradNorm)
     {
         _options = options ?? new OctonionNeuralNetworkOptions();
+        ValidateOptions(_options);
         Options = _options;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new NesterovAcceleratedGradientOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new NesterovAcceleratedGradientOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.InitialLearningRate,
+                InitialMomentum = _options.Momentum,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveMomentum = false,
+                EnableGradientClipping = false,
+                LearningRateScheduler = new LambdaLRScheduler(
+                    _options.InitialLearningRate,
+                    epoch => epoch < _options.RampEpoch
+                        ? 1.0
+                        : epoch < _options.FirstDecayEpoch
+                            ? 10.0
+                            : epoch < _options.SecondDecayEpoch ? 1.0 : 0.1),
+                SchedulerStepMode = SchedulerStepMode.StepPerEpoch
+            });
         // Use the same loss function instance that was passed to base class
         _lossFunction = LossFunction;
 
         InitializeLayers();
+    }
+
+    private static void ValidateOptions(OctonionNeuralNetworkOptions options)
+    {
+        if (double.IsNaN(options.InitialLearningRate)
+            || double.IsInfinity(options.InitialLearningRate)
+            || options.InitialLearningRate <= 0.0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.InitialLearningRate),
+                options.InitialLearningRate,
+                "InitialLearningRate must be finite and greater than zero.");
+        }
+
+        if (double.IsNaN(options.Momentum)
+            || double.IsInfinity(options.Momentum)
+            || options.Momentum < 0.0
+            || options.Momentum >= 1.0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.Momentum),
+                options.Momentum,
+                "Momentum must be finite and in the range [0, 1).");
+        }
+
+        if (options.RampEpoch < 0
+            || options.RampEpoch >= options.FirstDecayEpoch
+            || options.FirstDecayEpoch >= options.SecondDecayEpoch)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.RampEpoch),
+                $"Epoch thresholds must satisfy 0 <= RampEpoch < FirstDecayEpoch < SecondDecayEpoch; "
+                + $"received {options.RampEpoch}, {options.FirstDecayEpoch}, {options.SecondDecayEpoch}.");
+        }
     }
 
     /// <summary>
@@ -295,7 +355,8 @@ public class OctonionNeuralNetwork<T> : VectorModelLayoutBase<T>
             Architecture,
             null, // Create fresh optimizer - don't share _optimizer
             _lossFunction,
-            Convert.ToDouble(MaxGradNorm));
+            Convert.ToDouble(MaxGradNorm),
+            new OctonionNeuralNetworkOptions(_options));
     }
 
     /// <summary>

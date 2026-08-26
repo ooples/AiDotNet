@@ -3,7 +3,7 @@ using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.ConformerFamily;
 
-/// <summary>Options for ConvTransformer (convolution-augmented Transformer for ASR, 2019).</summary>
+/// <summary>Options for ConvTransformer (Conformer: convolution-augmented Transformer for ASR, 2020).</summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the ConvTransformer model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
 /// </remarks>
@@ -37,6 +37,9 @@ public class ConvTransformerOptions : ModelOptions
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
+        WarmupSteps = other.WarmupSteps;
+        LearningRateFactor = other.LearningRateFactor;
+        WeightDecay = other.WeightDecay;
         Language = other.Language;
         Vocabulary = other.Vocabulary.ToArray();
     }
@@ -52,6 +55,22 @@ public class ConvTransformerOptions : ModelOptions
     public string? ModelPath { get; set; }
     public OnnxModelOptions OnnxOptions { get; set; } = new();
     public double DropoutRate { get; set; } = 0.1;
+
+    /// <summary>Gets or sets the number of Transformer learning-rate warmup steps.</summary>
+    /// <value>Defaults to 10,000 steps.</value>
+    /// <remarks>The Conformer training recipe linearly warms Adam for 10,000 optimizer steps before inverse-square-root decay.</remarks>
+    public int WarmupSteps { get; set; } = 10000;
+
+    /// <summary>Gets or sets the multiplicative factor for the Transformer learning-rate schedule.</summary>
+    /// <value>Defaults to 2.0.</value>
+    /// <remarks>The official EfficientConformer repository uses factor <c>K = 2</c> for its Conformer CTC baselines.</remarks>
+    public double LearningRateFactor { get; set; } = 2.0;
+
+    /// <summary>Gets or sets Adam's coupled L2 weight decay.</summary>
+    /// <value>Defaults to 1e-6.</value>
+    /// <remarks>This is the weight decay used by the official Conformer CTC baseline recipe.</remarks>
+    public double WeightDecay { get; set; } = 1e-6;
+
     public string Language { get; set; } = "en";
     public string[] Vocabulary { get; set; } = GetDefaultVocabulary();
     private static string[] GetDefaultVocabulary() => new[] { "<blank>", "<pad>", "<s>", "</s>", "<unk>", "|", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "'", " " };

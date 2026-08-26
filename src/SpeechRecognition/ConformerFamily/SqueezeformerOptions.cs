@@ -43,6 +43,8 @@ public class SqueezeformerOptions : ModelOptions
         DropoutRate = other.DropoutRate;
         PeakLearningRate = other.PeakLearningRate;
         WarmupSteps = other.WarmupSteps;
+        PeakHoldSteps = other.PeakHoldSteps;
+        LearningRateDecayPower = other.LearningRateDecayPower;
         WeightDecay = other.WeightDecay;
         Language = other.Language;
         // CLONED, NOT SHARED. `Vocabulary = other.Vocabulary` hands the copy the SAME array
@@ -74,25 +76,29 @@ public class SqueezeformerOptions : ModelOptions
     /// and {1, 0.5}e-3 for the small, medium and large variants respectively).
     /// </value>
     /// <remarks>
-    /// In the paper this is the PEAK of a warmup-then-decay schedule rather than a constant rate. With
-    /// <see cref="WarmupSteps"/> at its default of 0 it is applied flat, so for long training runs set
-    /// WarmupSteps as well — the paper warms up over 20 epochs before reaching this value, and reports
-    /// the architecture failing to converge at comparable peak rates when a stabilizing component is
-    /// removed. Gradient clipping is enabled alongside it as a safeguard.
+    /// In the paper this is the peak of a warmup-hold-decay schedule rather than a constant rate.
+    /// <see cref="WarmupSteps"/>, <see cref="PeakHoldSteps"/>, and
+    /// <see cref="LearningRateDecayPower"/> configure the other three terms of that published formula.
     /// </remarks>
     public double PeakLearningRate { get; set; } = 2e-3;
 
     /// <summary>
-    /// Gets or sets the warmup steps for the Noam-annealed learning-rate schedule.
+    /// Gets or sets the warmup steps for the extended Noam learning-rate schedule.
     /// </summary>
     /// <remarks>
-    /// The paper specifies warmup in EPOCHS (20, then holding the peak for a further 160, decaying with
-    /// d = 1), which cannot be converted to steps without knowing the dataset size and batch size — it
-    /// trained on LibriSpeech-960h at batch 1024/2048. Defaults to 0, meaning NO warmup: a non-zero
-    /// default would hold the learning rate near zero for the whole of any short run. Set it from your
-    /// own dataset size (20 epochs worth of steps) to reproduce the paper exactly.
+    /// The paper specifies 20 warmup epochs. The model-level API receives optimizer steps rather than
+    /// a dataset, so the default maps one explicit <c>Train</c> call to one epoch. Dataset trainers must
+    /// set this to <c>20 * stepsPerEpoch</c>.
     /// </remarks>
-    public int WarmupSteps { get; set; } = 0;
+    public int WarmupSteps { get; set; } = 20;
+
+    /// <summary>Gets or sets how many optimizer steps hold the peak learning rate after warmup.</summary>
+    /// <remarks>The paper uses 160 epochs; dataset trainers should set this to <c>160 * stepsPerEpoch</c>.</remarks>
+    public int PeakHoldSteps { get; set; } = 160;
+
+    /// <summary>Gets or sets the polynomial decay power after the peak-hold phase.</summary>
+    /// <value>Defaults to 1.0, the Squeezeformer paper setting.</value>
+    public double LearningRateDecayPower { get; set; } = 1.0;
 
     /// <summary>
     /// Gets or sets AdamW's decoupled weight decay.

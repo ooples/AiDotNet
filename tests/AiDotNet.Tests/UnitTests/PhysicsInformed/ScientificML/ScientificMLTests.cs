@@ -6,6 +6,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.PhysicsInformed.ScientificML;
 using Xunit;
 using System.Threading.Tasks;
@@ -43,14 +44,53 @@ public class ScientificMLTests
         input[0, 0] = 0.25;
         input[0, 1] = -0.5;
 
-        var target = new Tensor<double>(new[] { 1, 1 });
-        target[0, 0] = 0.0;
+        // The HNN paper trains the symplectic time derivative, not scalar H labels.
+        // For H(q,p) = 0.5(q^2+p^2), the canonical target is (p,-q).
+        var target = new Tensor<double>(new[] { 1, 2 });
+        target[0, 0] = input[0, 1];
+        target[0, 1] = -input[0, 0];
 
         var before = model.GetParameters().ToArray();
         model.Train(input, target);
         var after = model.GetParameters().ToArray();
 
         Assert.False(before.SequenceEqual(after));
+    }
+
+    [Fact]
+    public void HamiltonianNeuralNetwork_TrainingObjective_IsTheSymplecticDerivative()
+    {
+        var layer = CreateLinearLayer(inputSize: 2, outputSize: 1);
+        layer.SetParameters(new Vector<double>(new[] { 1.0, 1.0, 0.0 }));
+
+        var architecture = CreateArchitecture(2, 1, new List<ILayer<double>> { layer });
+        var model = new HamiltonianNeuralNetwork<double>(architecture, stateDim: 2);
+        var objective = Assert.IsAssignableFrom<ITrainingObjectiveProvider<double>>(model);
+        var input = new Tensor<double>(new[] { 1, 2 });
+        input[0, 0] = 0.2;
+        input[0, 1] = -0.4;
+        var target = new Tensor<double>(new[] { 1, 2 });
+        target[0, 0] = 1.0;
+        target[0, 1] = -1.0;
+
+        Assert.Equal(TrainingObjectiveKind.HamiltonianDynamics, objective.TrainingObjectiveKind);
+        Assert.Same(target, objective.ResolveTrainingTarget(input, target));
+        Assert.InRange(objective.EvaluateTrainingObjective(input, target), 0.0, 1e-18);
+        Assert.Throws<ArgumentException>(() =>
+            objective.ResolveTrainingTarget(input, new Tensor<double>(new[] { 1, 1 })));
+    }
+
+    [Fact]
+    public void HamiltonianNeuralNetwork_DefaultArchitecture_MatchesReferenceCoordinateMlp()
+    {
+        var options = new HamiltonianNeuralNetworkOptions();
+        var model = new HamiltonianNeuralNetwork<double>();
+
+        Assert.Equal(2, options.HiddenLayerCount);
+        Assert.Equal(200, options.HiddenDimension);
+        Assert.Equal(1e-3, options.LearningRate, precision: 12);
+        Assert.Equal(1e-4, options.WeightDecay, precision: 12);
+        Assert.Equal(41_000, model.GetParameterCount());
     }
 
     [Fact(Timeout = 60000)]

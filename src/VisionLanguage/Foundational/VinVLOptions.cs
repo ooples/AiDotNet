@@ -16,6 +16,7 @@ public class VinVLOptions : FoundationalVLMOptions
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public VinVLOptions(VinVLOptions other)
+        : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
@@ -37,7 +38,6 @@ public class VinVLOptions : FoundationalVLMOptions
         ImageMean = other.ImageMean;
         ImageStd = other.ImageStd;
         ModelPath = other.ModelPath;
-        OnnxOptions = other.OnnxOptions;
         LearningRate = other.LearningRate;
         WeightDecay = other.WeightDecay;
         MaxObjectTags = other.MaxObjectTags;

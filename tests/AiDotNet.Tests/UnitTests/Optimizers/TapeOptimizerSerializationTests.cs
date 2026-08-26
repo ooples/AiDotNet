@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -9,6 +10,190 @@ namespace AiDotNet.Tests.UnitTests.Optimizers;
 
 public class TapeOptimizerSerializationTests
 {
+    [Theory]
+    [InlineData(39_999, 0.0001)]
+    [InlineData(40_000, 0.00005)]
+    [InlineData(80_000, 0.000025)]
+    public void AdamWSerializeDeserialize_RestoresStepSchedulerAtDecayBoundaries(
+        int step,
+        double expectedLearningRate)
+    {
+        var scheduler = new StepLRScheduler(0.0001, 40_000, 0.5);
+        var schedulerState = scheduler.GetState();
+        schedulerState["current_step"] = step;
+        schedulerState["current_lr"] = scheduler.GetLearningRateAtStep(step);
+        scheduler.LoadState(schedulerState);
+
+        var source = new AdamWOptimizer<double, Tensor<double>, Tensor<double>>(
+            null,
+            Common(new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                WeightDecay = 0.0,
+                LearningRateScheduler = scheduler,
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch
+            }));
+
+        var restored = new AdamWOptimizer<double, Tensor<double>, Tensor<double>>(
+            null,
+            Common(new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                WeightDecay = 0.0,
+                // Deliberately wrong recipe and cadence: deserialization must use the checkpoint,
+                // not retain same-typed constructor state from the restore target.
+                LearningRateScheduler = new StepLRScheduler(0.01, 2, 0.9),
+                SchedulerStepMode = SchedulerStepMode.StepPerEpoch
+            }));
+
+        restored.Deserialize(source.Serialize());
+
+        var restoredScheduler = Assert.IsType<StepLRScheduler>(restored.LearningRateScheduler);
+        Assert.Equal(step, restoredScheduler.CurrentStep);
+        Assert.Equal(40_000, restoredScheduler.StepSize);
+        Assert.Equal(0.5, restoredScheduler.Gamma, 12);
+        Assert.Equal(expectedLearningRate, restoredScheduler.CurrentLearningRate, 12);
+        Assert.Equal(expectedLearningRate, restoredScheduler.GetLearningRateAtStep(step), 12);
+        Assert.Equal(SchedulerStepMode.StepPerBatch, restored.SchedulerStepMode);
+        Assert.Equal(scheduler.GetLearningRateAtStep(step + 1), restored.StepScheduler(), 12);
+    }
+
+    [Fact]
+    public void AdamWSerializeDeserialize_ReconstructsOneCycleSchedulerOnFreshOptimizer()
+    {
+        var scheduler = new OneCycleLRScheduler(
+            maxLearningRate: 0.01,
+            totalSteps: 20,
+            pctStart: 0.25,
+            divFactor: 10.0,
+            finalDivFactor: 100.0,
+            annealStrategy: OneCycleLRScheduler.AnnealingStrategy.Linear);
+        for (int i = 0; i < 7; i++)
+            scheduler.Step();
+
+        var source = new AdamWOptimizer<double, Tensor<double>, Tensor<double>>(
+            null,
+            Common(new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                WeightDecay = 0.0,
+                LearningRateScheduler = scheduler,
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch
+            }));
+        var restored = new AdamWOptimizer<double, Tensor<double>, Tensor<double>>(
+            null,
+            Common(new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                WeightDecay = 0.0
+            }));
+
+        restored.Deserialize(source.Serialize());
+
+        var restoredScheduler = Assert.IsType<OneCycleLRScheduler>(restored.LearningRateScheduler);
+        Assert.Equal(0.01, restoredScheduler.MaxLearningRate, 12);
+        Assert.Equal(20, restoredScheduler.TotalSteps);
+        Assert.Equal(0.25, restoredScheduler.PctStart, 12);
+        Assert.Equal(scheduler.CurrentStep, restoredScheduler.CurrentStep);
+        Assert.Equal(scheduler.CurrentLearningRate, restoredScheduler.CurrentLearningRate, 12);
+        Assert.Equal(
+            scheduler.GetLearningRateAtStep(scheduler.CurrentStep + 1),
+            restored.StepScheduler(),
+            12);
+    }
+
+    public static IEnumerable<object[]> CheckpointSupportedBuiltInSchedulers()
+    {
+        yield return ["Constant", (Func<ILearningRateScheduler>)(() => new ConstantLRScheduler(0.01))];
+        yield return ["Step", (Func<ILearningRateScheduler>)(() => new StepLRScheduler(0.01, 3, 0.5))];
+        yield return ["Exponential", (Func<ILearningRateScheduler>)(() => new ExponentialLRScheduler(0.01, 0.9))];
+        yield return ["Cosine", (Func<ILearningRateScheduler>)(() => new CosineAnnealingLRScheduler(0.01, 12, 0.0001))];
+        yield return ["WarmRestarts", (Func<ILearningRateScheduler>)(() => new CosineAnnealingWarmRestartsScheduler(0.01, 4, 2, 0.0001))];
+        yield return ["Cyclic", (Func<ILearningRateScheduler>)(() => new CyclicLRScheduler(0.001, 0.01, 2, 3, CyclicLRScheduler.CyclicMode.Triangular2, 0.9))];
+        yield return ["LinearWarmup", (Func<ILearningRateScheduler>)(() => new LinearWarmupScheduler(0.01, 2, 10, 0.001, LinearWarmupScheduler.DecayMode.Cosine, 0.0001))];
+        yield return ["MultiStep", (Func<ILearningRateScheduler>)(() => new MultiStepLRScheduler(0.01, [2, 5], 0.5, 0.0001))];
+        yield return ["Noam", (Func<ILearningRateScheduler>)(() => new NoamSchedule(16, 4, 0.75))];
+        yield return ["NoamHold", (Func<ILearningRateScheduler>)(() => new NoamHoldAnnealingScheduler(0.01, 2, 3, 1.0))];
+        yield return ["OneCycle", (Func<ILearningRateScheduler>)(() => new OneCycleLRScheduler(0.01, 12, 0.25, 10.0, 100.0, OneCycleLRScheduler.AnnealingStrategy.Linear))];
+        yield return ["Polynomial", (Func<ILearningRateScheduler>)(() => new PolynomialLRScheduler(0.01, 12, 2.0, 0.0001))];
+        yield return ["Plateau", (Func<ILearningRateScheduler>)(() => new ReduceOnPlateauScheduler(0.01, 0.5, 2, 0.001, ReduceOnPlateauScheduler.ThresholdMode.Absolute, 1, ReduceOnPlateauScheduler.Mode.Min, 0.0001))];
+        yield return ["AdaptiveFitness", (Func<ILearningRateScheduler>)(() => new AdaptiveFitnessScheduler(0.01, 0.8, 0.0001, 0.1, higherIsBetter: true))];
+        yield return ["Sequential", (Func<ILearningRateScheduler>)(() => new SequentialLRScheduler(
+            [new LinearWarmupScheduler(0.01, 1), new ExponentialLRScheduler(0.01, 0.9)],
+            [2]))];
+    }
+
+    [Theory]
+    [MemberData(nameof(CheckpointSupportedBuiltInSchedulers))]
+    public void AdamWSerializeDeserialize_ReconstructsEveryCheckpointSupportedBuiltIn(
+        string schedulerName,
+        Func<ILearningRateScheduler> schedulerFactory)
+    {
+        var scheduler = schedulerFactory();
+        bool metricDriven = scheduler is AdaptiveFitnessScheduler or ReduceOnPlateauScheduler;
+
+        void Advance(ILearningRateScheduler candidate)
+        {
+            if (metricDriven)
+                candidate.Step(1.0);
+            else
+                candidate.Step();
+        }
+
+        for (int i = 0; i < 5; i++)
+            Advance(scheduler);
+
+        var source = new AdamWOptimizer<double, Tensor<double>, Tensor<double>>(
+            null,
+            Common(new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                WeightDecay = 0.0,
+                LearningRateScheduler = scheduler
+            }));
+        var restored = new AdamWOptimizer<double, Tensor<double>, Tensor<double>>(
+            null,
+            Common(new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                WeightDecay = 0.0
+            }));
+
+        restored.Deserialize(source.Serialize());
+
+        Assert.NotNull(restored.LearningRateScheduler);
+        Assert.True(
+            scheduler.GetType() == restored.LearningRateScheduler.GetType(),
+            $"{schedulerName} restored as {restored.LearningRateScheduler.GetType().Name}.");
+        Assert.Equal(scheduler.CurrentStep, restored.LearningRateScheduler.CurrentStep);
+        Assert.Equal(
+            scheduler.CurrentLearningRate,
+            restored.LearningRateScheduler.CurrentLearningRate,
+            12);
+
+        // Exercise enough of each schedule to cross warmups, milestones, cooldowns,
+        // and restart boundaries. A missing immutable recipe value must diverge here.
+        for (int i = 0; i < 10; i++)
+        {
+            Advance(scheduler);
+            Advance(restored.LearningRateScheduler);
+            Assert.Equal(scheduler.CurrentStep, restored.LearningRateScheduler.CurrentStep);
+            Assert.Equal(
+                scheduler.CurrentLearningRate,
+                restored.LearningRateScheduler.CurrentLearningRate,
+                12);
+        }
+    }
+
+    [Fact]
+    public void AdamWSerialize_RejectsLambdaSchedulerWithoutPortableRecipe()
+    {
+        var source = new AdamWOptimizer<double, Tensor<double>, Tensor<double>>(
+            null,
+            Common(new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                WeightDecay = 0.0,
+                LearningRateScheduler = new LambdaLRScheduler(0.01, step => 1.0 / (step + 1)),
+            }));
+
+        var exception = Assert.Throws<NotSupportedException>(() => source.Serialize());
+        Assert.Contains("delegates do not have a serializable reconstruction recipe", exception.Message);
+    }
+
     public static IEnumerable<object[]> StatefulTapeOptimizers()
     {
 #pragma warning disable CS8625

@@ -3706,6 +3706,33 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Gets the value domain produced by this network's public output.
+    /// </summary>
+    /// <remarks>
+    /// The default follows the final layer's declared output port. Models whose public
+    /// postprocessing changes that domain (for example, denormalizing and clamping image
+    /// pixels) override this method so trainers, generated fixtures, and diagnostics can
+    /// create semantically valid targets without model-name allowlists.
+    /// </remarks>
+    public virtual LayerInputDomain GetOutputDomain(int[]? outputShape)
+    {
+        var layers = Layers;
+        if (layers is null || layers.Count == 0)
+            return LayerInputDomain.Continuous;
+
+        if (layers[layers.Count - 1] is LayerBase<T> finalLayer
+            && finalLayer.OutputPorts.Count > 0)
+        {
+            var domain = finalLayer.OutputPorts[0].ValueDomain;
+            if (domain.IsResolved)
+                return domain;
+        }
+
+        return LayerInputDomain.Continuous;
+    }
+
+
+    /// <summary>
     /// Minimum external input geometry required by this model. The tensor-port generator overrides
     /// this from <c>[ModelInputShapeConstraint]</c>, so model and fixture implementations do not
     /// duplicate configuration-derived shape rules.
@@ -3986,15 +4013,29 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         _publishedFlatParameterGradients = copy;
     }
 
+    /// <summary>
+    /// Selects the parameter tensors that participate in a training step.
+    /// </summary>
+    /// <remarks>
+    /// The default returns the complete canonical parameter set. Models whose
+    /// published fine-tuning recipe freezes part of a pretrained backbone can
+    /// override this hook; every eager, streaming, and gradient-accumulation
+    /// tape path applies the same selection.
+    /// </remarks>
+    protected virtual IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(
+        IReadOnlyList<Tensor<T>> parameters) => parameters;
+
+
     /// <summary>Collects every trainable tensor owned by this model in canonical order.</summary>
     protected IReadOnlyList<Tensor<T>> CollectModelTrainableTensors()
     {
-        var result = new List<Tensor<T>>();
+        var allParameters = new List<Tensor<T>>();
         var seen = new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
 
         void Add(Tensor<T>? tensor)
         {
-            if (tensor is not null && tensor.Length > 0 && seen.Add(tensor)) result.Add(tensor);
+            if (tensor is not null && tensor.Length > 0 && seen.Add(tensor))
+                allParameters.Add(tensor);
         }
 
         foreach (var tensor in Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion))
@@ -4002,11 +4043,34 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         foreach (var layer in GetExtraTrainableLayers())
         {
             if (layer is null) continue;
-            foreach (var tensor in layer.GetTrainableParameters()) Add(tensor);
+            foreach (var tensor in layer.GetTrainableParameters())
+                Add(tensor);
         }
-        foreach (var tensor in GetExtraTrainableTensors()) Add(tensor);
+        foreach (var tensor in GetExtraTrainableTensors())
+            Add(tensor);
 
-        return result;
+        return SelectTrainableParametersForTraining(allParameters);
+    }
+
+    /// <summary>
+    /// Narrows the selected training set to ordinary parameters owned by <see cref="Layers"/>.
+    /// </summary>
+    /// <remarks>
+    /// Global gradient clipping intentionally excludes model-owned extras. This matches the eager
+    /// tape path while leaving the complete selected set available for gradient publication and
+    /// optimizer updates.
+    /// </remarks>
+    internal IReadOnlyList<Tensor<T>> CollectLayerOwnedTrainableTensorsForClipping(
+        IReadOnlyList<Tensor<T>> selectedParameters)
+    {
+        var selectedSet = new HashSet<Tensor<T>>(
+            selectedParameters,
+            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+
+        return Training.TapeTrainingStep<T>
+            .CollectParameters(Layers, _layerStructureVersion)
+            .Where(selectedSet.Contains)
+            .ToArray();
     }
 
     /// <summary>Runs reverse-mode autodiff and atomically publishes parameter gradients.</summary>
@@ -5846,27 +5910,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             ?? throw new InvalidOperationException(
                 "TrainWithGradientAccumulation requires a LossFunctionBase<T> for ComputeTapeLoss.");
 
-        // Collect any network-level trainable tensors so models with
-        // raw trainable parameters on the network (not on a layer) keep
-        // receiving updates under gradient accumulation, matching
-        // TrainWithTape's parameter set.
-        var extraTrainableTensors = new List<Tensor<T>>();
-        foreach (var t in GetExtraTrainableTensors())
-        {
-            if (t is not null && t.Length > 0) extraTrainableTensors.Add(t);
-        }
-
-        // Same gap as the tape path: layers declared through GetExtraTrainableLayers were counted
-        // and serialized but never received gradients, because collection read Layers alone.
-        foreach (var extraLayer in GetExtraTrainableLayers())
-        {
-            if (extraLayer is null) continue;
-            foreach (var p in extraLayer.GetTrainableParameters())
-            {
-                if (p is not null && p.Length > 0) extraTrainableTensors.Add(p);
-            }
-        }
-
         bool wasTraining = IsTrainingMode;
         if (!wasTraining) SetTrainingMode(true);
         try
@@ -5912,12 +5955,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 T chunkSamplesT = NumOps.FromDouble(chunkSamples);
                 accumLoss = NumOps.Add(accumLoss, NumOps.Multiply(chunkLoss, chunkSamplesT));
 
-                var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
+                var trainableParams = CollectModelTrainableTensors();
                 var allGrads = tape.ComputeGradients(lossTensor, sources: null);
                 // Walk both the layer-collected params AND any network-
                 // level trainable tensors so the latter actually receive
                 // accumulated gradient updates.
-                foreach (var param in trainableParams.Concat(extraTrainableTensors))
+                foreach (var param in trainableParams)
                 {
                     if (!allGrads.TryGetValue(param, out var grad)) continue;
                     if (accumGrads is null)
@@ -5965,7 +6008,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // once for the logical full batch, matching PyTorch's grad-
             // accum pattern.
             var optimizer = GetOrCreateBaseOptimizer();
-            var paramsList = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
+            var paramsList = CollectModelTrainableTensors();
 
             // Mirror TrainWithTape's pre-step global gradient-norm clipping
             // on the ACCUMULATED gradient (PyTorch grad-accum idiom: clip
@@ -5982,13 +6025,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             double maxGradNorm = MaxGradNormValue;
             if (maxGradNorm > 0.0 && avgGrads.Count > 0)
             {
-                ApplyGradientClipping(avgGrads, maxGradNorm, paramsList);
+                var clipParameters = CollectLayerOwnedTrainableTensorsForClipping(paramsList);
+                ApplyGradientClipping(avgGrads, maxGradNorm, clipParameters);
             }
             PublishParameterGradients(avgGrads);
             // Include extra trainable tensors in the optimizer's
             // parameter list too, so its update step (and any per-
             // parameter state it maintains) covers them.
-            var fullParams = paramsList.Concat(extraTrainableTensors).ToList();
+            var fullParams = paramsList.ToList();
             var context = new TapeStepContext<T>(
                 fullParams, avgGrads, avgLoss,
                 input, target,
@@ -9260,11 +9304,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         LastLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
         // Sources = layer-owned trainable params + network-level extras
         // (cls/pos tokens, etc.), exactly the set the eager path optimizes.
-        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
-        var sources = new List<Tensor<T>>(trainableParams.Count + 4);
-        sources.AddRange(trainableParams);
-        foreach (var t in GetExtraTrainableTensors())
-            if (t is not null && t.Length > 0) sources.Add(t);
+        var sources = CollectModelTrainableTensors().ToList();
 
         // #1662 lever #1 (§5a): use the BIT-IDENTICAL full-precision streaming optimizer when the
         // user has explicitly opted into streaming (ForceOn) for an UNCLIPPED model whose optimizer
@@ -9316,7 +9356,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // the eager ApplyGradientClipping call site exactly so the global norm and
             // the rescale set are identical across paths.
             var clipSet = new HashSet<Tensor<T>>(
-                trainableParams, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                CollectLayerOwnedTrainableTensorsForClipping(sources),
+                Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
 
             // Pass 1 — accumulate the global L2 norm over the clip set, streaming so
             // nothing is retained. (Each gradient is released right after we read it.)
@@ -9372,7 +9413,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // same pass and folded into the EMA for next step. First step (no EMA): don't clip,
             // just seed. NFNet-style adaptive clipping (Brock et al. 2021); documented approximation.
             var clipSet = new HashSet<Tensor<T>>(
-                trainableParams, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                CollectLayerOwnedTrainableTensorsForClipping(sources),
+                Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
 
             double emaNorm = _fastClipEmaNorm;            // < 0 until seeded
             bool haveEma = emaNorm >= 0.0;
@@ -9607,10 +9649,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
         else if (_parameterBuffer is null)
         {
-            var initialParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, structureVersion: -1);
+            var initialParams = SelectTrainableParametersForTraining(
+                Training.TapeTrainingStep<T>.CollectParameters(Layers, structureVersion: -1));
             long totalParamCount = 0L;
             for (int i = 0; i < initialParams.Count; i++)
                 totalParamCount += (long)initialParams[i].Length;
+            // Recursive collection deduplicates tied/composite parameters, but buffer replacement
+            // mutates every owning layer. If two layer surfaces expose the same tensor, installing
+            // independent views can break that ownership contract, so retain the eager tape path.
+            bool hasOverlappingParameterOwnership = HasOverlappingParameterOwnership(Layers);
             // Lazy-init detection: layers like EmbeddingLayer / DenseLayer
             // (constructed without an input size) hold `_weights = new
             // Tensor<T>([0,0])` and DON'T call RegisterTrainableParameter
@@ -9657,13 +9704,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // COUNT rather than byte size so the threshold doesn't shift
             // when T = float vs double.
             const long ParameterBufferSkipThresholdParams = 125_000_000L;
-            if (totalParamCount > ParameterBufferSkipThresholdParams)
+            if (hasOverlappingParameterOwnership || totalParamCount > ParameterBufferSkipThresholdParams)
             {
                 paramBuffer = null;
-                // Memoize the foundation-scale skip decision so subsequent
-                // training steps don't repeat the CollectParameters +
-                // sum-Length scan. Sundial-Base (~300 M params) takes
-                // ~120ms per scan; caching makes step 2..N effectively free.
+                // Overlapping ownership and foundation-scale parameter counts are stable for a
+                // given layer structure. Memoize either skip so later steps avoid rescanning.
                 _skipParameterBuffer = true;
                 _skipParameterBufferVersion = _layerStructureVersion;
             }
@@ -9702,37 +9747,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         try
         {
-            // Re-collect after buffer initialization — references are now views
-            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
-            // Snapshot the network-level extras (ViT cls/pos, etc.) once
-            // here so we can both (a) include them in tape source
-            // collection so gradients are computed for them, and
-            // (b) apply a separate gradient-descent update step after
-            // the buffer-aliased optimizer.Step has run on layer params.
-            var extraTrainableTensors = new List<Tensor<T>>();
-            foreach (var t in GetExtraTrainableTensors())
-            {
-                if (t is null || t.Length == 0) continue;
-                extraTrainableTensors.Add(t);
-            }
-
-            // ...and the parameters of any layer declared through GetExtraTrainableLayers. Those
-            // layers were already counted by ParameterCount and written to checkpoints, but the tape
-            // collected from Layers alone -- so a layer surfaced only this way was counted, saved,
-            // and never trained. That is the same dead-but-counted defect this branch has been
-            // removing at the model level, one level up.
-            //
-            // Off-chain is the CORRECT home for a layer the sequential walk must not enter -- an
-            // index lookup handed a hidden state throws -- so the fix belongs here rather than
-            // forcing such layers back into Layers.
-            foreach (var extraLayer in GetExtraTrainableLayers())
-            {
-                if (extraLayer is null) continue;
-                foreach (var p in extraLayer.GetTrainableParameters())
-                {
-                    if (p is not null && p.Length > 0) extraTrainableTensors.Add(p);
-                }
-            }
+            // Re-collect after buffer initialization so ordinary layer parameters are the
+            // buffer-backed views. Apply the model's selection hook once to the complete set,
+            // then partition selected parameters only for the buffer-specific update plumbing.
+            var selectedParameters = CollectModelTrainableTensors();
+            var trainableParams = CollectLayerOwnedTrainableTensorsForClipping(selectedParameters).ToList();
+            var ordinaryParameterSet = new HashSet<Tensor<T>>(
+                trainableParams,
+                Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            var extraTrainableTensors = selectedParameters
+                .Where(parameter => !ordinaryParameterSet.Contains(parameter))
+                .ToList();
 
             var loss = LossFunction as LossFunctions.LossFunctionBase<T>
                 ?? throw new InvalidOperationException("LossFunction must derive from LossFunctionBase<T> for tape-based training.");
@@ -11391,7 +11416,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         SetTrainingMode(true);
         try
         {
-            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+            var trainableParams = CollectModelTrainableTensors();
             var opt = optimizer ?? GetOrCreateBaseOptimizer();
 
             using var tape = new GradientTape<T>();
@@ -11535,6 +11560,80 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// default and the fused fast path.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Creates standard Adam with fixed paper-specified coefficients and optional coupled L2 regularization.
+    /// </summary>
+    /// <param name="initialLearningRate">Initial optimizer learning rate.</param>
+    /// <param name="beta1">First-moment exponential-decay coefficient.</param>
+    /// <param name="beta2">Second-moment exponential-decay coefficient.</param>
+    /// <param name="epsilon">Numerical-stability constant.</param>
+    /// <param name="l2RegularizationStrength">Coupled L2 penalty strength, or zero to disable it.</param>
+    /// <param name="learningRateScheduler">Optional explicit learning-rate schedule.</param>
+    /// <param name="schedulerStepMode">Cadence for the explicit schedule.</param>
+    /// <param name="maxGradientNorm">Global gradient-norm limit, or zero to disable clipping.</param>
+    /// <returns>An Adam optimizer owned by this network.</returns>
+    /// <remarks>
+    /// AiDotNet's Adam options expose adaptive-beta and adaptive-momentum extensions that are useful
+    /// for exploratory optimization but are not part of standard Adam. A research recipe that states
+    /// fixed beta values must disable those extensions. Coupled L2 is configured through
+    /// <c>GradientBasedOptimizerOptions.Regularization</c>, not by substituting
+    /// AdamW's mathematically different decoupled weight decay.
+    /// </remarks>
+    protected AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateFixedAdamOptimizer(
+        double initialLearningRate,
+        double beta1 = 0.9,
+        double beta2 = 0.999,
+        double epsilon = 1e-8,
+        double l2RegularizationStrength = 0.0,
+        AiDotNet.LearningRateSchedulers.ILearningRateScheduler? learningRateScheduler = null,
+        AiDotNet.LearningRateSchedulers.SchedulerStepMode schedulerStepMode =
+            AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+        double maxGradientNorm = 0.0)
+    {
+        if (double.IsNaN(initialLearningRate) || double.IsInfinity(initialLearningRate) || initialLearningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(initialLearningRate), "Learning rate must be finite and positive.");
+        if (double.IsNaN(beta1) || double.IsInfinity(beta1) || beta1 <= 0.0 || beta1 >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(beta1), "Beta1 must be finite and strictly between zero and one.");
+        if (double.IsNaN(beta2) || double.IsInfinity(beta2) || beta2 <= 0.0 || beta2 >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(beta2), "Beta2 must be finite and strictly between zero and one.");
+        if (double.IsNaN(epsilon) || double.IsInfinity(epsilon) || epsilon <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be finite and positive.");
+        if (double.IsNaN(l2RegularizationStrength) ||
+            double.IsInfinity(l2RegularizationStrength) ||
+            l2RegularizationStrength < 0.0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(l2RegularizationStrength),
+                "L2 regularization strength must be finite and non-negative.");
+        }
+        if (double.IsNaN(maxGradientNorm) || double.IsInfinity(maxGradientNorm) || maxGradientNorm < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(maxGradientNorm), "Maximum gradient norm must be finite and non-negative.");
+
+        var options = new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = learningRateScheduler?.CurrentLearningRate ?? initialLearningRate,
+            Beta1 = beta1,
+            Beta2 = beta2,
+            Epsilon = epsilon,
+            UseAdaptiveLearningRate = false,
+            UseAdaptiveMomentum = false,
+            UseAdaptiveBetas = false,
+            UseAMSGrad = false,
+            EnableGradientClipping = maxGradientNorm > 0.0,
+            MaxGradientNorm = maxGradientNorm > 0.0 ? maxGradientNorm : 1.0,
+            LearningRateScheduler = learningRateScheduler,
+            SchedulerStepMode = schedulerStepMode,
+        };
+
+        if (l2RegularizationStrength > 0.0)
+        {
+            options.Regularization = new AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>>(
+                new Models.RegularizationOptions { Strength = l2RegularizationStrength });
+        }
+
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, options);
+    }
+
     /// <summary>
     /// Adopts an optimizer that was constructed FOR this network as its tape-training optimizer, unless one has
     /// already been chosen.
@@ -12205,6 +12304,48 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Restored after each training step so Clone/serialization see real tensors.
     /// </summary>
     private Dictionary<ILayer<T>, IReadOnlyList<Tensor<T>>>? _savedOriginalParameters;
+
+    /// <summary>
+    /// Returns true when the same tensor is exposed by more than one layer parameter surface.
+    /// </summary>
+    /// <remarks>
+    /// Composite layers can publish child parameters from their own trainable list while also
+    /// returning those children from GetSubLayers. Recursive collection safely deduplicates that
+    /// topology, but ParameterBuffer replacement would call SetTrainableParameters on both owners
+    /// and can change the parameter surface. Such graphs must use the eager tape path.
+    /// </remarks>
+    private static bool HasOverlappingParameterOwnership(IEnumerable<ILayer<T>> layers)
+    {
+        var seenLayers = new HashSet<ILayer<T>>();
+        var seenParameters = new HashSet<Tensor<T>>(
+            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+
+        bool Visit(IEnumerable<ILayer<T>> currentLayers)
+        {
+            foreach (var layer in currentLayers)
+            {
+                if (!seenLayers.Add(layer))
+                    continue;
+
+                if (layer is ITrainableLayer<T> trainable)
+                {
+                    foreach (var parameter in trainable.GetTrainableParameters())
+                    {
+                        if (!seenParameters.Add(parameter))
+                            return true;
+                    }
+                }
+
+                var subLayers = layer.GetSubLayers();
+                if (subLayers.Count > 0 && Visit(subLayers))
+                    return true;
+            }
+
+            return false;
+        }
+
+        return Visit(layers);
+    }
 
     /// <summary>
     /// Gets or lazily creates the contiguous parameter buffer from the current trainable parameters.
@@ -15421,40 +15562,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var allGrads = ComputeAndPublishParameterGradients(tape, lossTensor, sources: null);
         var grads = allGrads;
 
-        // Use GetParameterChunks to keep gradient/parameter ordering
-        // aligned (fixes #1245 / #1232). Frozen-or-detached tensors that
-        // tape didn't see are zero-padded to preserve length-alignment.
-        // ParameterCount is long (#1244 widening) but List<T> ctor takes
-        // int. Cap the capacity hint at int.MaxValue — flattening
-        // gradients into a single managed list isn't viable past that
-        // limit anyway (would need TB of RAM), so this matches the
-        // implicit single-host inference contract. Saturating instead
-        // of `checked((int)...)` keeps very-large models running with a
-        // suboptimal capacity hint rather than crashing on construction.
-        // Fill ONE destination vector rather than List -> ToArray() -> Vector.
-        // The old form allocated the parameter vector three times per call (the List's
-        // backing array, the ToArray() copy, then the Vector), which an allocation trace
-        // measured at 1.6 MB/step on a 133K-parameter model -- ~3x the 520 KB parameter
-        // vector, and the single largest non-optimizer cost in the backward path.
-        //
-        // Sizing is a separate pass rather than ParameterCount because the two branches
-        // below contribute DIFFERENT lengths: a matched slot contributes grad.Length, an
-        // unmatched (frozen/detached) one contributes paramTensor.Length. Those agree in
-        // practice, but the old List grew to whatever they summed to, so sizing off
-        // ParameterCount would silently change the returned length if they ever diverged.
-        // Enumerate GetParameterChunks EXACTLY ONCE. It is a lazy `yield` iterator and it is
-        // virtual, so an override is free to synthesize its chunks per call (a sparse compact
-        // copy, a view, a concatenation). `grads` is REFERENCE-keyed, so a second enumeration
-        // handing back freshly-built tensors would miss every lookup, take the zero-fill branch
-        // for every slot, and return an all-zero gradient vector -- silent wrong gradients, not
-        // an exception. Materializing the references first also guarantees the sizing pass and
-        // the fill pass agree, which is what keeps the offsets valid.
-        var chunks = new List<Tensor<T>>();
-        foreach (var paramTensor in GetParameterChunks())
-        {
-            if (paramTensor is null || paramTensor.Length == 0) continue;
-            chunks.Add(paramTensor);
-        }
+        // Flatten exactly the parameter tensors selected by the shared training hook. This keeps
+        // IGradientComputable's gradient vector aligned with ApplyGradients, including model-owned
+        // tensors and off-chain trainable layers while excluding paper-frozen parameters.
+        var chunks = CollectModelTrainableTensors().ToList();
 
         long totalLength = 0;
         foreach (var paramTensor in chunks)
@@ -15530,23 +15641,31 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (gradients == null)
             throw new ArgumentNullException(nameof(gradients));
 
-        int offset = 0;
-        foreach (var layer in Layers)
+        var parameters = CollectModelTrainableTensors();
+        long expectedLength = 0;
+        foreach (var parameter in parameters)
+            expectedLength += parameter.Length;
+
+        if (expectedLength != gradients.Length)
         {
-            var layerParams = layer.GetParameters();
-            if (offset + layerParams.Length > gradients.Length)
-                throw new ArgumentException($"Gradient vector is too short for layer parameters.");
-
-            // Vectorized parameter update: params = params - learningRate * gradients
-            var layerGradients = gradients.GetSubVector(offset, layerParams.Length);
-            var scaledGradients = (Vector<T>)Engine.Multiply(layerGradients, learningRate);
-            var updatedParams = (Vector<T>)Engine.Subtract(layerParams, scaledGradients);
-
-            layer.SetParameters(updatedParams);
-            offset += layerParams.Length;
+            throw new ArgumentException(
+                $"Gradient vector length {gradients.Length} does not match the selected trainable parameter length {expectedLength}.",
+                nameof(gradients));
         }
-    }
 
+        int offset = 0;
+        foreach (var parameter in parameters)
+        {
+            for (int i = 0; i < parameter.Length; i++)
+            {
+                parameter[i] = NumOps.Subtract(
+                    parameter[i],
+                    NumOps.Multiply(learningRate, gradients[offset++]));
+            }
+        }
+
+        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+    }
     /// <summary>
     /// Saves the model's current state to a stream.
     /// </summary>

@@ -88,7 +88,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         Direction = TensorLayoutDirection.Input, BatchOptional = true)]
     [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
         Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-    public class HamiltonianNeuralNetwork<T> : NeuralNetworkBase<T>
+    public class HamiltonianNeuralNetwork<T> : NeuralNetworkBase<T>, ITrainingObjectiveProvider<T>
     {
         private readonly HamiltonianNeuralNetworkOptions _options;
 
@@ -130,6 +130,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         {
             _options = options ?? new HamiltonianNeuralNetworkOptions();
             Options = _options;
+            _options.Validate();
 
             if (stateDim <= 0 || stateDim % 2 != 0)
             {
@@ -149,7 +150,12 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             }
 
             _stateDim = stateDim;
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizer = optimizer ?? CreateFixedAdamOptimizer(
+                _options.LearningRate,
+                beta1: 0.9,
+                beta2: 0.999,
+                epsilon: 1e-8,
+                l2RegularizationStrength: _options.WeightDecay);
             InitializeLayers();
         }
 
@@ -200,9 +206,35 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             }
             else
             {
-                Layers.AddRange(LayerHelper<T>.CreateDefaultHamiltonianLayers(Architecture));
+                Layers.AddRange(LayerHelper<T>.CreateDefaultHamiltonianLayers(
+                    Architecture,
+                    _options.HiddenLayerCount,
+                    _options.HiddenDimension));
             }
         }
+
+        /// <inheritdoc />
+        public TrainingObjectiveKind TrainingObjectiveKind => TrainingObjectiveKind.HamiltonianDynamics;
+
+        /// <inheritdoc />
+        Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(
+            Tensor<T> input,
+            Tensor<T> proposedTarget)
+        {
+            if (!input.Shape.ToArray().SequenceEqual(proposedTarget.Shape.ToArray()))
+            {
+                throw new ArgumentException(
+                    $"Hamiltonian dynamics targets must match the phase-space input shape " +
+                    $"[{string.Join(",", input.Shape)}]; got [{string.Join(",", proposedTarget.Shape)}].",
+                    nameof(proposedTarget));
+            }
+
+            return proposedTarget;
+        }
+
+        /// <inheritdoc />
+        T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+            => EvaluateTrainingObjective(input, target);
 
         /// <summary>
         /// Performs a forward pass through the network.
@@ -218,6 +250,61 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             }
 
             return output;
+        }
+
+        /// <summary>
+        /// Produces the symplectic time-derivative field optimized by the cited HNN paper.
+        /// </summary>
+        /// <remarks>
+        /// The public inference output remains the scalar Hamiltonian. Training instead compares
+        /// (dH/dp, -dH/dq) with observed state derivatives, as Equation 3 requires. Centered input
+        /// differences keep both perturbed forwards on the parameter gradient tape.
+        /// </remarks>
+        public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        {
+            if (input.Rank < 1 || input.Shape[^1] != _stateDim)
+            {
+                throw new ArgumentException(
+                    $"The final input dimension must equal the phase-space dimension {_stateDim}; " +
+                    $"got [{string.Join(",", input.Shape)}].",
+                    nameof(input));
+            }
+
+            T step = NumOps.FromDouble(_options.DerivativeStep);
+            T inverseTwoStep = NumOps.FromDouble(1.0 / (2.0 * _options.DerivativeStep));
+            int sampleCount = input.Length / _stateDim;
+            var hamiltonianGradients = new Tensor<T>[_stateDim];
+
+            for (int coordinate = 0; coordinate < _stateDim; coordinate++)
+            {
+                var plus = input.Clone();
+                var minus = input.Clone();
+                for (int sample = 0; sample < sampleCount; sample++)
+                {
+                    int offset = sample * _stateDim + coordinate;
+                    plus[offset] = NumOps.Add(plus[offset], step);
+                    minus[offset] = NumOps.Subtract(minus[offset], step);
+                }
+
+                Tensor<T> hPlus = Forward(plus);
+                Tensor<T> hMinus = Forward(minus);
+                hamiltonianGradients[coordinate] = Engine.TensorMultiplyScalar(
+                    Engine.TensorSubtract(hPlus, hMinus),
+                    inverseTwoStep);
+            }
+
+            int coordinateCount = _stateDim / 2;
+            var dynamics = new Tensor<T>[_stateDim];
+            for (int coordinate = 0; coordinate < coordinateCount; coordinate++)
+            {
+                dynamics[coordinate] = hamiltonianGradients[coordinateCount + coordinate];
+                dynamics[coordinateCount + coordinate] = Engine.TensorMultiplyScalar(
+                    hamiltonianGradients[coordinate],
+                    NumOps.Negate(NumOps.One));
+            }
+
+            int featureAxis = dynamics[0].Rank - 1;
+            return Engine.TensorConcatenate(dynamics, featureAxis);
         }
 
         /// <summary>
@@ -427,7 +514,11 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// <returns>New Hamiltonian network instance.</returns>
         protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
         {
-            return new HamiltonianNeuralNetwork<T>(Architecture, _stateDim, _optimizer);
+            return new HamiltonianNeuralNetwork<T>(
+                Architecture,
+                _stateDim,
+                _optimizer,
+                new HamiltonianNeuralNetworkOptions(_options));
         }
 
         /// <summary>

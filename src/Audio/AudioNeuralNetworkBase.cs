@@ -5,11 +5,13 @@ using AiDotNet.Diffusion.Audio;
 // having no input layout.
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.Audio;
 
@@ -240,6 +242,134 @@ public abstract class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShapeCo
         Options = new AudioNeuralNetworkOptions();
     }
 
+    /// <summary>
+    /// Creates the Adam/Transformer-schedule recipe used by Conformer-family ASR papers.
+    /// </summary>
+    /// <param name="modelDimension">Hidden width used by the inverse-square-root schedule.</param>
+    /// <param name="warmupSteps">Number of linear warmup steps.</param>
+    /// <param name="scheduleFactor">Multiplicative factor applied by the Noam schedule.</param>
+    /// <param name="l2WeightDecay">Coupled L2 penalty used by <c>torch.optim.Adam(weight_decay=...)</c>.</param>
+    /// <param name="maxGradientNorm">Global gradient-norm limit, or zero to disable clipping.</param>
+    /// <returns>A paper-configured Adam optimizer owned by this network.</returns>
+    /// <remarks>
+    /// The recipe deliberately disables AiDotNet's adaptive-beta extension. Research configurations
+    /// that say "Adam" prescribe fixed beta values; allowing those values to drift would implement a
+    /// different optimizer. Weight decay is coupled L2 regularization here, matching PyTorch Adam,
+    /// rather than decoupled AdamW decay.
+    /// </remarks>
+    protected IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateTransformerScheduleAdamOptimizer(
+        int modelDimension,
+        int warmupSteps,
+        double scheduleFactor,
+        double l2WeightDecay = 0.0,
+        double maxGradientNorm = 0.0)
+    {
+        if (double.IsNaN(l2WeightDecay) || double.IsInfinity(l2WeightDecay) || l2WeightDecay < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(l2WeightDecay), "L2 weight decay must be finite and non-negative.");
+        if (double.IsNaN(maxGradientNorm) || double.IsInfinity(maxGradientNorm) || maxGradientNorm < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(maxGradientNorm), "Maximum gradient norm must be finite and non-negative.");
+
+        var scheduler = new NoamSchedule(modelDimension, warmupSteps, scheduleFactor);
+        return CreateFixedAdamOptimizer(
+            initialLearningRate: scheduler.CurrentLearningRate,
+            beta1: 0.9,
+            beta2: 0.98,
+            epsilon: 1e-9,
+            l2RegularizationStrength: l2WeightDecay,
+            learningRateScheduler: scheduler,
+            schedulerStepMode: SchedulerStepMode.StepPerBatch,
+            maxGradientNorm: maxGradientNorm);
+    }
+
+    /// <summary>
+    /// Creates fixed-beta AdamW with a per-batch one-cycle learning-rate schedule.
+    /// </summary>
+    /// <param name="maxLearningRate">Peak learning rate reached during the cycle.</param>
+    /// <param name="totalSteps">Total number of optimizer steps in the cycle.</param>
+    /// <param name="pctStart">Fraction of the cycle spent increasing the learning rate.</param>
+    /// <param name="weightDecay">Decoupled AdamW weight decay.</param>
+    /// <param name="beta1">First-moment coefficient.</param>
+    /// <param name="beta2">Second-moment coefficient.</param>
+    /// <param name="epsilon">Numerical-stability constant.</param>
+    /// <param name="maxGradientNorm">Global gradient-norm limit, or zero to disable clipping.</param>
+    /// <returns>An AdamW optimizer owned by this network.</returns>
+    protected IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateOneCycleAdamWOptimizer(
+        double maxLearningRate,
+        int totalSteps,
+        double pctStart,
+        double weightDecay,
+        double beta1,
+        double beta2,
+        double epsilon,
+        double maxGradientNorm)
+    {
+        if (double.IsNaN(maxLearningRate) || double.IsInfinity(maxLearningRate) || maxLearningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(maxLearningRate), "Maximum learning rate must be finite and positive.");
+        if (totalSteps <= 0)
+            throw new ArgumentOutOfRangeException(nameof(totalSteps), "Total steps must be positive.");
+        if (double.IsNaN(pctStart) || double.IsInfinity(pctStart) || pctStart < 0.0 || pctStart >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(pctStart), "Warmup fraction must be finite and in [0, 1).");
+        if (double.IsNaN(weightDecay) || double.IsInfinity(weightDecay) || weightDecay < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(weightDecay), "Weight decay must be finite and non-negative.");
+        if (double.IsNaN(beta1) || double.IsInfinity(beta1) || beta1 < 0.0 || beta1 >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(beta1), "Beta1 must be finite and in [0, 1).");
+        if (double.IsNaN(beta2) || double.IsInfinity(beta2) || beta2 < 0.0 || beta2 >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(beta2), "Beta2 must be finite and in [0, 1).");
+        if (double.IsNaN(epsilon) || double.IsInfinity(epsilon) || epsilon <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be finite and positive.");
+        if (double.IsNaN(maxGradientNorm) || double.IsInfinity(maxGradientNorm) || maxGradientNorm < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(maxGradientNorm), "Maximum gradient norm must be finite and non-negative.");
+
+        var scheduler = new OneCycleLRScheduler(maxLearningRate, totalSteps, pctStart);
+        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = scheduler.CurrentLearningRate,
+                Beta1 = beta1,
+                Beta2 = beta2,
+                Epsilon = epsilon,
+                WeightDecay = weightDecay,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                EnableGradientClipping = maxGradientNorm > 0.0,
+                MaxGradientNorm = maxGradientNorm > 0.0 ? maxGradientNorm : 1.0,
+                LearningRateScheduler = scheduler,
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+            });
+    }
+    /// <summary>
+    /// Creates plain stochastic gradient descent with per-batch exponential learning-rate decay.
+    /// </summary>
+    /// <param name="learningRate">Initial SGD learning rate.</param>
+    /// <param name="decayFactor">Multiplicative decay applied after each optimizer step.</param>
+    /// <returns>An SGD optimizer owned by this network.</returns>
+    /// <remarks>
+    /// This is the single-process analogue of research recipes that use distributed asynchronous
+    /// SGD. It preserves the stated update rule and schedule without substituting momentum,
+    /// adaptive moments, or the unrelated averaged-SGD algorithm.
+    /// </remarks>
+    protected IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateExponentialSgdOptimizer(
+        double learningRate,
+        double decayFactor)
+    {
+        if (double.IsNaN(learningRate) || double.IsInfinity(learningRate) || learningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(learningRate), "Learning rate must be finite and positive.");
+        if (double.IsNaN(decayFactor) || double.IsInfinity(decayFactor) || decayFactor <= 0.0 || decayFactor > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(decayFactor), "Decay factor must be finite and in (0, 1].");
+
+        var scheduler = new ExponentialLRScheduler(learningRate, decayFactor);
+        return new StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = learningRate,
+                UseAdaptiveLearningRate = false,
+                LearningRateScheduler = scheduler,
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+            });
+    }
     /// <summary>
     /// Gets whether this network supports training.
     /// </summary>

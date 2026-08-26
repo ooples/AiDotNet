@@ -1,4 +1,5 @@
 ﻿using AiDotNet.Interfaces;
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tests.Helpers;
@@ -905,6 +906,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         => InputContractTensorFactory.CreateValid<T>(shape, ResolveInputDomain(shape), rng);
 
     private LayerInputDomain? _cachedInputDomain;
+    private LayerInputDomain? _cachedOutputDomain;
+
 
     /// <summary>
     /// The value domain the model under test accepts for a tensor of this shape: continuous, or
@@ -1055,8 +1058,36 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// / continuous-target families.
     /// </summary>
     protected virtual Tensor<T> CreateRandomTargetTensor(int[] shape, Random rng)
-        => CreateRandomTensor(shape, rng);
+    {
+        if (!_cachedOutputDomain.HasValue)
+        {
+            using var network = CreateNetwork();
+            CacheOutputDomain(network, shape);
+        }
 
+        return InputContractTensorFactory.CreateValid<T>(
+            shape,
+            _cachedOutputDomain!.Value,
+            rng);
+    }
+
+    private void CacheOutputDomain(INeuralNetworkModel<T> network, int[] shape)
+    {
+        if (_cachedOutputDomain.HasValue)
+            return;
+
+        var domain = network is NeuralNetworkBase<T> neuralNetwork
+            ? neuralNetwork.GetOutputDomain(shape)
+            : LayerInputDomain.Continuous;
+        if (!domain.IsResolved)
+        {
+            throw new InputContractBindingException(
+                $"{GetType().Name} reported an unresolved public output domain {domain} "
+                + $"for target shape [{string.Join(",", shape)}].");
+        }
+
+        _cachedOutputDomain = domain;
+    }
     /// <summary>
     /// Creates a constant tensor, automatically translating scalar probes into
     /// distinct legal indices when the production input contract is discrete.
@@ -1121,12 +1152,17 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// copula fit), NOT a supervised MSE gradient step. Their real training is covered by the
     /// SyntheticTabularGenerator integration tests (Fit → Generate). The supervised
     /// <c>Train(input, expected)</c> path is a NeuralNetworkBase compatibility no-op for them.</description></item>
+    /// <item><description>Models that explicitly report <c>SupportsTraining == false</c> have
+    /// declared the supervised training contract unavailable; invoking <c>Train</c> would contradict
+    /// their public capability surface and commonly throws <see cref="NotSupportedException"/>.</description></item>
     /// </list>
     /// Inference invariants (forward finiteness, determinism, different-inputs-different-outputs)
     /// still run and assert normally.
     /// </summary>
     protected static bool TrainingInvariantsNotApplicable(INeuralNetworkModel<T> network)
-        => network is AiDotNet.Interfaces.IDetectionBackbone<T>
+        => network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> neuralNetwork
+            && !neuralNetwork.SupportsTraining
+        || network is AiDotNet.Interfaces.IDetectionBackbone<T>
         || network is AiDotNet.Interfaces.ISyntheticTabularGenerator<T>;
 
     // =====================================================
@@ -1580,27 +1616,35 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
 
         var input = CreateRandomTensor(EffectiveInputShape, rng);
-        // MULTIPLYING A TOKEN INDEX IS MEANINGLESS, and worse, it leaves the vocabulary: scaling
-        // index 85 by ten asks an embedding table sized 128 for row 850. The invariant being probed
-        // is "a DIFFERENT input produces a different output", so for an index domain the meaningful
-        // perturbation is a different legal index, not a larger number. Wrapping inside the
-        // vocabulary keeps every value legal while still changing every position.
+        // MULTIPLYING A TOKEN INDEX IS MEANINGLESS, and a custom bounded domain
+        // must not be perturbed outside the values its production contract accepts.
+        // The invariant is "a DIFFERENT LEGAL input changes the output", so custom
+        // domains use their provider's nearby-value construction while indices wrap
+        // inside the vocabulary. Unbounded continuous inputs retain the strong 10x probe.
         var scaleDomain = InputDomainFor(EffectiveInputShape);
-        var scaledInput = new Tensor<T>(EffectiveInputShape);
-        for (int i = 0; i < input.Length; i++)
+        Tensor<T> scaledInput;
+        if (scaleDomain.Kind == LayerInputDomainKind.Custom)
         {
-            double original = ConvertToDouble(input[i]);
-            if (scaleDomain.IsIndices)
+            scaledInput = InputContractTensorFactory.CreateNearby(input, scaleDomain, epsilon: 1.0);
+        }
+        else
+        {
+            scaledInput = new Tensor<T>(EffectiveInputShape);
+            for (int i = 0; i < input.Length; i++)
             {
-                int span = scaleDomain.MaxExclusive - scaleDomain.MinInclusive;
-                int shifted = (int)original + Math.Max(1, span / 2);
-                int wrapped = scaleDomain.MinInclusive
-                    + ((shifted - scaleDomain.MinInclusive) % span + span) % span;
-                scaledInput[i] = NumOps.FromDouble(wrapped);
-            }
-            else
-            {
-                scaledInput[i] = NumOps.FromDouble(original * 10.0);
+                double original = ConvertToDouble(input[i]);
+                if (scaleDomain.IsIndices)
+                {
+                    int span = scaleDomain.MaxExclusive - scaleDomain.MinInclusive;
+                    int shifted = (int)original + Math.Max(1, span / 2);
+                    int wrapped = scaleDomain.MinInclusive
+                        + ((shifted - scaleDomain.MinInclusive) % span + span) % span;
+                    scaledInput[i] = NumOps.FromDouble(wrapped);
+                }
+                else
+                {
+                    scaledInput[i] = NumOps.FromDouble(original * 10.0);
+                }
             }
         }
 
@@ -3604,6 +3648,33 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 "loss, because the training invariants skip their assertions on a NaN measurement.");
         }
 
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> ctcNetwork
+            && ctcNetwork.DefaultLossFunction is AiDotNet.LossFunctions.CTCLoss<T> ctc)
+        {
+            var lossTensor = ctc.ComputeTapeLoss(output, target);
+            try
+            {
+                return RequireScalarFiniteLoss(ctc, network, lossTensor);
+            }
+            catch (InvalidOperationException exception)
+            {
+                double minimum = double.PositiveInfinity;
+                double maximum = double.NegativeInfinity;
+                for (int i = 0; i < output.Length; i++)
+                {
+                    double value = ConvertToDouble(output[i]);
+                    minimum = Math.Min(minimum, value);
+                    maximum = Math.Max(maximum, value);
+                }
+
+                string encodedTarget = string.Join(",", target.ToArray().Select(ConvertToDouble));
+                throw new InvalidOperationException(
+                    $"{exception.Message} CTC output shape=[{string.Join(",", output.Shape)}], "
+                    + $"range=[{minimum:G17},{maximum:G17}], encoded target=[{encodedTarget}].",
+                    exception);
+            }
+        }
+
         if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
             && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T> ce
             && !PredictLeavesLossDomain(network))
@@ -3759,9 +3830,48 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         INeuralNetworkModel<T> network,
         Tensor<T> input,
         Tensor<T> proposedTarget)
-        => network is ITrainingObjectiveProvider<T> objectiveProvider
-            ? objectiveProvider.ResolveTrainingTarget(input, proposedTarget)
-            : proposedTarget;
+    {
+        if (network is not ITrainingObjectiveProvider<T> objectiveProvider)
+            return proposedTarget;
+
+        if (objectiveProvider.TrainingObjectiveKind == TrainingObjectiveKind.HamiltonianDynamics)
+            proposedTarget = CreateCanonicalHamiltonianDynamicsTarget(input);
+
+        return objectiveProvider.ResolveTrainingTarget(input, proposedTarget);
+    }
+
+    /// <summary>
+    /// Creates the exact derivative field of H(q,p)=0.5*(||q||^2+||p||^2):
+    /// dq/dt=p and dp/dt=-q. This gives HNN fixtures a mathematically valid dynamics
+    /// target instead of asking a derivative-trained model to regress a scalar label.
+    /// </summary>
+    private static Tensor<T> CreateCanonicalHamiltonianDynamicsTarget(Tensor<T> input)
+    {
+        if (input.Rank < 1 || input.Shape[^1] <= 0 || input.Shape[^1] % 2 != 0)
+        {
+            throw new InvalidOperationException(
+                $"Hamiltonian dynamics require a positive even phase-space feature dimension; " +
+                $"got [{string.Join(",", input.Shape)}].");
+        }
+
+        int stateDimension = input.Shape[^1];
+        int coordinateCount = stateDimension / 2;
+        int sampleCount = input.Length / stateDimension;
+        var target = new Tensor<T>(input.Shape.ToArray());
+
+        for (int sample = 0; sample < sampleCount; sample++)
+        {
+            int offset = sample * stateDimension;
+            for (int coordinate = 0; coordinate < coordinateCount; coordinate++)
+            {
+                target[offset + coordinate] = input[offset + coordinateCount + coordinate];
+                target[offset + coordinateCount + coordinate] =
+                    NumOps.Negate(input[offset + coordinate]);
+            }
+        }
+
+        return target;
+    }
 
     /// <summary>
     /// Resolves the class axis once for both categorical target construction routes.
@@ -3856,6 +3966,44 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </summary>
     protected Tensor<T> MakeTargetWellPosedForLoss(INeuralNetworkModel<T> network, Tensor<T> target, Random rng)
     {
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> ctcNetwork
+            && ctcNetwork.DefaultLossFunction is AiDotNet.LossFunctions.CTCLoss<T> ctc)
+        {
+            int[] outputShape = target.Shape.ToArray();
+            Assert.True(outputShape.Length >= 2,
+                $"CTC output must expose time and class axes; got [{string.Join(",", outputShape)}].");
+            Assert.Equal(ctc.NumClasses, outputShape[^1]);
+
+            int batchSize = outputShape.Length == 3 ? outputShape[0] : 1;
+            int timeSteps = outputShape[^2];
+            Assert.True(batchSize > 0 && timeSteps > 0,
+                $"CTC output must have positive batch/time dimensions; got [{string.Join(",", outputShape)}].");
+
+            int targetLength = timeSteps >= 2 && ctc.NumClasses > 2 ? 2 : 1;
+            var encoded = new Tensor<T>([1 + batchSize * (1 + targetLength)]);
+            encoded[0] = NumOps.FromDouble(batchSize);
+            int offset = 1;
+            for (int batch = 0; batch < batchSize; batch++)
+            {
+                encoded[offset++] = NumOps.FromDouble(targetLength);
+                int previous = ctc.BlankIndex;
+                for (int position = 0; position < targetLength; position++)
+                {
+                    int label;
+                    do
+                    {
+                        label = rng.Next(ctc.NumClasses);
+                    }
+                    while (label == ctc.BlankIndex || label == previous);
+
+                    encoded[offset++] = NumOps.FromDouble(label);
+                    previous = label;
+                }
+            }
+
+            return encoded;
+        }
+
         if (ExternalTargetEncoding == ExternalTargetEncodingKind.SparseClassIndices)
         {
             int numClasses = ExternalCategoricalClassCount(network, target);
@@ -4032,6 +4180,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     protected Tensor<T> CreateLossCompatibleTarget(
         INeuralNetworkModel<T> network, int[] shape, Random rng)
     {
+        CacheOutputDomain(network, shape);
         var target = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(shape, rng), rng);
         ValidateLossCompatibleTarget(network, target);
         return target;
@@ -4047,6 +4196,35 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         if (network is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn)
             return;
+
+        if (nn.DefaultLossFunction is AiDotNet.LossFunctions.CTCLoss<T> ctc)
+        {
+            Assert.True(target.Rank == 1 && target.Length >= 3,
+                $"CTC target must use the encoded rank-1 layout; got [{string.Join(",", target.Shape)}].");
+            int batchSize = (int)ConvertToDouble(target[0]);
+            Assert.True(batchSize > 0, $"CTC target batch size must be positive; got {batchSize}.");
+
+            int offset = 1;
+            for (int batch = 0; batch < batchSize; batch++)
+            {
+                Assert.True(offset < target.Length, "CTC target ended before its target-length field.");
+                int targetLength = (int)ConvertToDouble(target[offset++]);
+                Assert.True(targetLength > 0 && offset + targetLength <= target.Length,
+                    $"CTC target length {targetLength} is invalid at batch {batch}.");
+                for (int position = 0; position < targetLength; position++)
+                {
+                    double rawLabel = ConvertToDouble(target[offset++]);
+                    Assert.True(IsFinite(rawLabel) && rawLabel == Math.Truncate(rawLabel),
+                        $"CTC label {rawLabel:G17} at batch {batch}, position {position} is not an integer.");
+                    int label = (int)rawLabel;
+                    Assert.True(label >= 0 && label < ctc.NumClasses && label != ctc.BlankIndex,
+                        $"CTC label {label} must be a non-blank class in [0, {ctc.NumClasses - 1}].");
+                }
+            }
+
+            Assert.Equal(target.Length, offset);
+            return;
+        }
 
         bool binaryCrossEntropy =
             nn.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>
@@ -5826,6 +6004,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (!usedMirroredScalarTarget)
         {
             var contrastTarget = CreateContrastTarget(network, targetA, input);
+            ValidateLossCompatibleTarget(network, contrastTarget);
             if (MaxAbsTensorDelta(targetA, contrastTarget) > 0.0)
             {
                 var contrastDelta = MeanUpdateDirection(parameterProbe, network, input, contrastTarget);
@@ -6005,6 +6184,29 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var contrast = new Tensor<T>(shape);
 
         if (source.Length == 0) return contrast;
+
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> bornRuleNetwork
+            && bornRuleNetwork.DefaultLossFunction is AiDotNet.LossFunctions.BornRuleMseLoss<T>)
+        {
+            // BornRuleMseLoss expects a non-negative unit-mass probability vector. Reflecting
+            // each value with 1 - p would have mass source.Length - 1, so choose a different
+            // simplex vertex instead.
+            if (source.Length == 1)
+            {
+                contrast[0] = source[0];
+                return contrast;
+            }
+
+            int active = 0;
+            for (int i = 1; i < source.Length; i++)
+            {
+                if (NumOps.GreaterThan(source[i], source[active]))
+                    active = i;
+            }
+
+            contrast[(active + 1) % source.Length] = NumOps.One;
+            return contrast;
+        }
 
         if (ExternalTargetEncoding == ExternalTargetEncodingKind.SparseClassIndices)
         {

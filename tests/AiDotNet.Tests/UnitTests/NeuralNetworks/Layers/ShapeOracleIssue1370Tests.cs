@@ -340,6 +340,15 @@ public class ShapeOracleIssue1370Tests
         Assert.Equal(2L * numFeatures,
             layer.GetTrainableParameters().Sum(parameter => (long)parameter.Length));
         Assert.Equal(4L * numFeatures, layer.ParameterCount);
+
+        var state = layer.GetParameters();
+        for (int i = 0; i < numFeatures; i++)
+        {
+            Assert.Equal(1.0f, state[i]);
+            Assert.Equal(0.0f, state[numFeatures + i]);
+            Assert.Equal(0.0f, state[(2 * numFeatures) + i]);
+            Assert.Equal(1.0f, state[(3 * numFeatures) + i]);
+        }
     }
 
     [Theory]

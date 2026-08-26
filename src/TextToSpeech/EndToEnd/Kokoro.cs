@@ -101,7 +101,14 @@ public class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         _options = options ?? new KokoroOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                UseAdaptiveLearningRate = false,
+            });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -341,6 +348,9 @@ public class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
         writer.Write(_options.NumEncoderLayers);
         writer.Write(_options.NumFlowSteps);
         writer.Write(_options.NumHeads);
+        writer.Write(_options.StyleDim);
+        writer.Write(_options.LearningRate);
+        writer.Write(_options.WeightDecay);
     }
 
     /// <inheritdoc />
@@ -361,6 +371,9 @@ public class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
         _options.NumEncoderLayers = reader.ReadInt32();
         _options.NumFlowSteps = reader.ReadInt32();
         _options.NumHeads = reader.ReadInt32();
+        _options.StyleDim = reader.ReadInt32();
+        _options.LearningRate = reader.ReadDouble();
+        _options.WeightDecay = reader.ReadDouble();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -373,8 +386,8 @@ public class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new Kokoro<T>(Architecture, mp, _options);
-        return new Kokoro<T>(Architecture, _options);
+            return new Kokoro<T>(Architecture, mp, new KokoroOptions(_options));
+        return new Kokoro<T>(Architecture, new KokoroOptions(_options));
     }
 
     private void ThrowIfDisposed()

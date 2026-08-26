@@ -10,6 +10,7 @@ public class Tacotron2Options : AcousticModelOptions
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public Tacotron2Options(Tacotron2Options other)
+        : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
@@ -17,14 +18,16 @@ public class Tacotron2Options : AcousticModelOptions
         PrenetDim = other.PrenetDim;
         AttentionRnnDim = other.AttentionRnnDim;
         DecoderRnnDim = other.DecoderRnnDim;
+        AttentionDimension = other.AttentionDimension;
         AttentionLocationChannels = other.AttentionLocationChannels;
+        StopThreshold = other.StopThreshold;
     }
 
     public Tacotron2Options()
     {
-        // Paper training configuration (Shen et al., 2018, S3): Adam at 10^-3 exponentially decaying
-        // to 10^-5. Inherited from TtsModelOptions, so callers can still override it; this only pins
-        // Tacotron 2's own default to the published value instead of the generic TTS one.
+        // Paper training configuration (Shen et al., 2018, S3): Adam at 10^-3, with exponential
+        // decay beginning after iteration 50,000 and ending at 10^-5. The paper does not publish the
+        // decay rate, so this option pins the fully specified initial phase without inventing a curve.
         LearningRate = 1e-3;
 
         // Same section: "L2 regularization with weight 10^-6". The generic TTS default is 0.01,
@@ -52,6 +55,12 @@ public class Tacotron2Options : AcousticModelOptions
     /// <summary>Gets or sets the decoder RNN dimension.</summary>
     public int DecoderRnnDim { get; set; } = 1024;
 
+    /// <summary>Gets or sets the attention projection dimension.</summary>
+    public int AttentionDimension { get; set; } = 128;
+
     /// <summary>Gets or sets the attention location feature channels.</summary>
     public int AttentionLocationChannels { get; set; } = 32;
+
+    /// <summary>Gets or sets the inference stop-token probability threshold.</summary>
+    public double StopThreshold { get; set; } = 0.5;
 }

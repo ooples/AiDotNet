@@ -90,6 +90,24 @@ public class LossCompatibleTargetProjectionTests
         Assert.Equal(1.0f, projected.ToArray().Sum(), 6);
     }
 
+    [Fact]
+    public void BornRuleContrastTarget_IsDistinctAndRemainsOnTheProbabilitySimplex()
+    {
+        var probe = new ProjectionProbe();
+        using var network = probe.CreateBornRuleNetwork();
+        using var source = new Tensor<float>([3]);
+        source[0] = 0.5f;
+        source[1] = 0.25f;
+        source[2] = 0.25f;
+        using var input = new Tensor<float>([3]);
+
+        using var contrast = probe.Contrast(network, source, input);
+
+        Assert.NotEqual(source.ToArray(), contrast.ToArray());
+        Assert.All(contrast.ToArray(), value => Assert.True(value >= 0.0f));
+        Assert.Equal(1.0f, contrast.ToArray().Sum(), 6);
+    }
+
     private sealed class ProjectionProbe : NeuralNetworkModelTestBase<float>
     {
         // This harness deliberately exercises a dense categorical public target even though its
@@ -116,5 +134,9 @@ public class LossCompatibleTargetProjectionTests
 
         public Tensor<float> Project(INeuralNetworkModel<float> network, Tensor<float> target)
             => MakeTargetWellPosedForLoss(network, target, new Random(1));
+
+        public Tensor<float> Contrast(
+            INeuralNetworkModel<float> network, Tensor<float> source, Tensor<float> input)
+            => CreateContrastTarget(network, source, input);
     }
 }

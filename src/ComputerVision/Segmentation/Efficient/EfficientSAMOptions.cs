@@ -23,6 +23,17 @@ public class EfficientSAMOptions : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
     }
 
+    /// <summary>Gets or sets the AdamW learning rate used for dense segmentation fine-tuning.</summary>
+    /// <value>Defaults to <c>2e-4</c>, following the EfficientSAM training recipe.</value>
+    /// <remarks><para><b>For Beginners:</b> This controls the size of each optimizer update.</para></remarks>
+    public double LearningRate { get; set; } = 2e-4;
+
+    /// <summary>Gets or sets the AdamW decoupled weight decay used for dense segmentation fine-tuning.</summary>
+    /// <value>Defaults to <c>0.05</c>, following the EfficientSAM training recipe.</value>
+    /// <remarks><para><b>For Beginners:</b> Weight decay discourages overly large model weights.</para></remarks>
+    public double WeightDecay { get; set; } = 0.05;
 }

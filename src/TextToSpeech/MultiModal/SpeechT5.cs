@@ -1,7 +1,9 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -84,7 +86,7 @@ public class SpeechT5<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         _options = options ?? new SpeechT5Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -196,6 +198,37 @@ public class SpeechT5<T> : TtsModelBase<T>, IEndToEndTts<T>
         }
     }
 
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+    {
+        if (_options.WarmupUpdates <= 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.WarmupUpdates), "WarmupUpdates must be positive.");
+        if (_options.LearningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(_options.LearningRate), "LearningRate must be positive.");
+
+        int modelDimension = _options.EncoderDim > 0 ? _options.EncoderDim : 192;
+        // Fairseq's inverse-sqrt schedule reaches the configured LR at the end
+        // of warmup. Scale Noam's dimension-dependent factor to the same peak.
+        double factor = _options.LearningRate * Math.Sqrt(modelDimension * (double)_options.WarmupUpdates);
+        var scheduler = new NoamSchedule(modelDimension, _options.WarmupUpdates, factor);
+
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = scheduler.CurrentLearningRate,
+                Beta1 = _options.OptimizerBeta1,
+                Beta2 = _options.OptimizerBeta2,
+                Epsilon = _options.OptimizerEpsilon,
+                EnableGradientClipping = _options.MaxGradientNorm > 0.0,
+                MaxGradientNorm = _options.MaxGradientNorm > 0.0 ? _options.MaxGradientNorm : 1.0,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                LearningRateScheduler = scheduler,
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+            });
+    }
+
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being
@@ -233,6 +266,13 @@ public class SpeechT5<T> : TtsModelBase<T>, IEndToEndTts<T>
         writer.Write(_options.NumHeads);
         writer.Write(_options.MelChannels);
         writer.Write(_options.HopSize);
+        writer.Write(_options.LearningRate);
+        writer.Write(_options.WeightDecay);
+        writer.Write(_options.OptimizerBeta1);
+        writer.Write(_options.OptimizerBeta2);
+        writer.Write(_options.OptimizerEpsilon);
+        writer.Write(_options.MaxGradientNorm);
+        writer.Write(_options.WarmupUpdates);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
@@ -252,6 +292,13 @@ public class SpeechT5<T> : TtsModelBase<T>, IEndToEndTts<T>
         _options.NumHeads = reader.ReadInt32();
         _options.MelChannels = reader.ReadInt32();
         _options.HopSize = reader.ReadInt32();
+        _options.LearningRate = reader.ReadDouble();
+        _options.WeightDecay = reader.ReadDouble();
+        _options.OptimizerBeta1 = reader.ReadDouble();
+        _options.OptimizerBeta2 = reader.ReadDouble();
+        _options.OptimizerEpsilon = reader.ReadDouble();
+        _options.MaxGradientNorm = reader.ReadDouble();
+        _options.WarmupUpdates = reader.ReadInt32();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -263,8 +310,8 @@ public class SpeechT5<T> : TtsModelBase<T>, IEndToEndTts<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new SpeechT5<T>(Architecture, mp, _options);
-        return new SpeechT5<T>(Architecture, _options);
+            return new SpeechT5<T>(Architecture, mp, new SpeechT5Options(_options));
+        return new SpeechT5<T>(Architecture, new SpeechT5Options(_options));
     }
 
     private void ThrowIfDisposed()

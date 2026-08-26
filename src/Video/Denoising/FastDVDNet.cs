@@ -121,7 +121,19 @@ public class FastDVDNet<T> : VideoDenoisingBase<T>
         _imageWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 854;
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                // The official train_fastdvdnet.py uses torch.optim.Adam at 1e-3.
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false
+            });
 
         InitializeLayers();
     }
@@ -395,21 +407,11 @@ public class FastDVDNet<T> : VideoDenoisingBase<T>
         return stacked;
     }
 
-    protected override Tensor<T> PredictCore(Tensor<T> input) => Forward(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input) => Denoise(input);
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
+    /// <inheritdoc/>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     #endregion
 
@@ -464,7 +466,8 @@ public class FastDVDNet<T> : VideoDenoisingBase<T>
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new FastDVDNet<T>(Architecture, _optimizer, _lossFunction, _numFeatures, _numInputFrames);
+        new FastDVDNet<T>(Architecture, _optimizer, _lossFunction, _numFeatures, _numInputFrames,
+            new FastDVDNetOptions(_options));
 
     #endregion
 
@@ -473,7 +476,9 @@ public class FastDVDNet<T> : VideoDenoisingBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Denoise(Tensor<T> noisyFrames)
     {
-        return Forward(noisyFrames);
+        var preprocessed = PreprocessFrames(noisyFrames);
+        var output = _useNativeMode ? Forward(preprocessed) : PredictOnnx(preprocessed);
+        return PostprocessOutput(output);
     }
 
     /// <inheritdoc/>

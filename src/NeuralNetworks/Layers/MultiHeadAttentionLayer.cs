@@ -354,6 +354,26 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     private readonly int _headDimension;
 
     /// <summary>
+    /// Number of adjacent projected frames combined into one attention position.
+    /// A value of one preserves ordinary multi-head attention.
+    /// </summary>
+    private int _attentionGroupSize = 1;
+
+    /// <summary>
+    /// Configures projected-frame grouping for EfficientConformer attention.
+    /// </summary>
+    /// <param name="groupSize">Number of adjacent frames per attention position.</param>
+    /// <returns>This layer.</returns>
+    public MultiHeadAttentionLayer<T> ConfigureAttentionGrouping(int groupSize)
+    {
+        if (groupSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(groupSize), "Attention group size must be positive.");
+
+        _attentionGroupSize = groupSize;
+        return this;
+    }
+
+    /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
 
@@ -365,7 +385,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// <summary>
     /// Indicates whether this layer supports GPU-resident execution.
     /// </summary>
-    protected override bool SupportsGpuExecution => true;
+    protected override bool SupportsGpuExecution => _attentionGroupSize == 1;
 
     /// <summary>
     /// Gets the number of attention heads in this layer.
@@ -1138,6 +1158,8 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     {
         output = Tensor<T>.Empty();
 
+        if (_attentionGroupSize != 1) return false;
+
         if (IsTrainingMode) return false;
         // The fused kernel is inference-only. Do not rely on a backend throwing when a tape is
         // active: the float CPU/OpenCL path can execute successfully but records no Q/K/V graph,
@@ -1377,6 +1399,44 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             (queries, keys) = _ropeLayer.ApplyRoPE(queries, keys, startPosition: 0);
         }
 
+        int attentionSeqLengthQ = seqLengthQ;
+        int attentionSeqLengthKV = seqLengthKV;
+        int attentionHeadDimension = _headDimension;
+        int groupedPadding = 0;
+
+        if (_attentionGroupSize > 1)
+        {
+            if (seqLengthQ != seqLengthKV || seqLenV != seqLengthKV
+                || batchQ != batchK || batchV != batchK)
+            {
+                throw new NotSupportedException(
+                    "Grouped attention requires self-attention with matching query, key, and value shapes.");
+            }
+
+            groupedPadding = (_attentionGroupSize - (seqLengthQ % _attentionGroupSize))
+                % _attentionGroupSize;
+            int paddedSequenceLength = seqLengthQ + groupedPadding;
+            if (groupedPadding > 0)
+            {
+                var padding = new Tensor<T>(
+                    [batchSize, _headCount, groupedPadding, _headDimension]);
+                padding.Fill(NumOps.Zero);
+                queries = Engine.TensorConcatenate([queries, padding], axis: 2);
+                keys = Engine.TensorConcatenate([keys, padding], axis: 2);
+                values = Engine.TensorConcatenate([values, padding], axis: 2);
+            }
+
+            attentionSeqLengthQ = paddedSequenceLength / _attentionGroupSize;
+            attentionSeqLengthKV = attentionSeqLengthQ;
+            attentionHeadDimension = _headDimension * _attentionGroupSize;
+            queries = Engine.Reshape(
+                queries, [batchSize, _headCount, attentionSeqLengthQ, attentionHeadDimension]);
+            keys = Engine.Reshape(
+                keys, [batchSize, _headCount, attentionSeqLengthKV, attentionHeadDimension]);
+            values = Engine.Reshape(
+                values, [batchSize, _headCount, attentionSeqLengthKV, attentionHeadDimension]);
+        }
+
         // Cache projected Q, K, V for backward pass (4D: [batch, heads, seq, head_dim])
         if (cacheForManualBackward)
         {
@@ -1405,12 +1465,14 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             var qContig = queries.Contiguous();
             var kContig = keys.Contiguous();
             var vContig = values.Contiguous();
-            var aliBiBias = _alibiLayer.ComputeBias(seqLengthQ, seqLengthKV, useCausalMask: UseCausalMask);
+            var aliBiBias = _alibiLayer.ComputeBias(
+                attentionSeqLengthQ, attentionSeqLengthKV, useCausalMask: UseCausalMask);
             var flashConfig = FlashAttentionConfig.Default;
             flashConfig.ReturnAttentionWeights = true;
             var (flashOutput, flashWeights) = FlashAttention<T>.Forward(qContig, kContig, vContig, flashConfig, attentionBias: aliBiBias);
             context_4D = flashOutput;
-            attentionWeights4D = flashWeights ?? new Tensor<T>(new[] { batchSize, _headCount, seqLengthQ, seqLengthKV });
+            attentionWeights4D = flashWeights ?? new Tensor<T>(
+                [batchSize, _headCount, attentionSeqLengthQ, attentionSeqLengthKV]);
         }
         else if (!IsTrainingMode
                  && typeof(T) != typeof(double)
@@ -1448,8 +1510,17 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             context_4D = Engine.ScaledDotProductAttention(
                 queries, keys, values,
                 mask: null,
-                scale: 1.0 / Math.Sqrt(_headDimension),
+                scale: 1.0 / Math.Sqrt(attentionHeadDimension),
                 out attentionWeights4D);
+        }
+
+        if (_attentionGroupSize > 1)
+        {
+            int paddedSequenceLength = seqLengthQ + groupedPadding;
+            context_4D = Engine.Reshape(
+                context_4D, [batchSize, _headCount, paddedSequenceLength, _headDimension]);
+            if (groupedPadding > 0)
+                context_4D = Engine.TensorNarrow(context_4D, 2, 0, seqLengthQ);
         }
 
         // Cache attention weights — read by the manual backward (no tape) AND by

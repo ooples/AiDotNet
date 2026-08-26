@@ -90,9 +90,9 @@ public class BSVD<T> : VideoDenoisingBase<T>
     {
         _options = options ?? new BSVDOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = _options.LearningRate,
                 // Optimizer settings taken from the reference implementation's training config
@@ -104,7 +104,10 @@ public class BSVD<T> : VideoDenoisingBase<T>
                 // with the grad-norm bound it is what keeps the first iterations well-behaved.
                 Beta1 = _options.AdamBeta1,
                 Beta2 = _options.AdamBeta2,
-                WeightDecay = 0.0,
+                Epsilon = 1e-8,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
                 EnableGradientClipping = true,
                 MaxGradientNorm = _options.GradientClipNorm
             });
@@ -175,7 +178,7 @@ public class BSVD<T> : VideoDenoisingBase<T>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         var preprocessed = PreprocessFrames(input);
-        var modelOutput = base.ForwardForTraining(preprocessed);
+        var modelOutput = ForwardPreprocessedForTraining(preprocessed);
 
         // Keep the public output contract during tape-based training as well
         // as inference. Engine.Interpolate participates in the active
@@ -216,6 +219,10 @@ public class BSVD<T> : VideoDenoisingBase<T>
         return RestoreSpatialResolution(denormalized);
     }
 
+    /// <inheritdoc/>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
+
     private Tensor<T> RestoreSpatialResolution(Tensor<T> output)
     {
         int targetHeight = Architecture.InputHeight;
@@ -238,26 +245,6 @@ public class BSVD<T> : VideoDenoisingBase<T>
             [targetHeight, targetWidth],
             InterpolateMode.Bilinear,
             alignCorners: false);
-    }
-
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            // ForwardForTraining operates in the normalized model domain,
-            // while Predict/Denoise returns denormalized public-space pixels.
-            // Normalize the supervision target as well so the tape optimizes
-            // the same objective that callers measure after postprocessing.
-            var normalizedExpected = NormalizeFrames(expected);
-            TrainWithTape(input, normalizedExpected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
     }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks

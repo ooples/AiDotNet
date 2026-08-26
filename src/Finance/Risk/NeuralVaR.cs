@@ -30,7 +30,7 @@ namespace AiDotNet.Finance.Risk;
 /// estimate of risk.
 /// </para>
 /// <para>
-/// Reference: Riskfuel, "Neural Value at Risk", 2021.
+/// Reference: Barrera et al., "Statistical Learning of Value-at-Risk and Expected Shortfall", 2026.
 /// </para>
 /// </remarks>
 /// <example>
@@ -54,7 +54,11 @@ namespace AiDotNet.Finance.Risk;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Deep Learning for Value-at-Risk", "https://doi.org/10.1016/j.jbankfin.2020.105889")]
+[ResearchPaper(
+    "Statistical Learning of Value-at-Risk and Expected Shortfall",
+    "https://doi.org/10.1111/mafi.70000",
+    Year = 2026,
+    Authors = "Barrera, Crépey, Gobet, Nguyen, and Saadeddine")]
 public class NeuralVaR<T> : RiskModelBase<T>
 {
     #region Shared Fields
@@ -63,12 +67,29 @@ public class NeuralVaR<T> : RiskModelBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
 
+    /// <summary>
+    /// Routes the optimizer selected for NeuralVaR through the shared tape-training path.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
     #endregion
 
     #region Constructors
+
+    private static ILossFunction<T> ResolveTrainingLoss(
+        NeuralVaROptions<T>? options,
+        ILossFunction<T>? lossFunction)
+    {
+        // A VaR forecast is a conditional quantile, not a conditional mean.
+        // Barrera et al. learn VaR with neural-network quantile regression;
+        // MSE would instead estimate E[Y|X] and is therefore the wrong objective.
+        return lossFunction
+            ?? options?.LossFunction
+            ?? new QuantileLoss<T>(options?.ConfidenceLevel ?? 0.95);
+    }
 
     /// <summary>
     /// Creates a NeuralVaR model using a pretrained ONNX model.
@@ -93,7 +114,8 @@ public class NeuralVaR<T> : RiskModelBase<T>
         Options = _options;
         options.Validate();
 
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _lossFunction = ResolveTrainingLoss(_options, lossFunction);
+        _options.LossFunction = _lossFunction;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
@@ -115,14 +137,15 @@ public class NeuralVaR<T> : RiskModelBase<T>
         ILossFunction<T>? lossFunction = null)
         : base(architecture, options?.NumFeatures ?? 10,
                options?.ConfidenceLevel ?? 0.95, options?.TimeHorizon ?? 1,
-               lossFunction)
+               ResolveTrainingLoss(options, lossFunction))
     {
         options ??= new NeuralVaROptions<T>();
         _options = options;
         Options = _options;
         options.Validate();
 
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _lossFunction = LossFunction;
+        _options.LossFunction = _lossFunction;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
@@ -149,7 +172,11 @@ public class NeuralVaR<T> : RiskModelBase<T>
         }
         else if (UseNativeMode)
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultNeuralVaRLayers(Architecture, NumFeatures));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultNeuralVaRLayers(
+                Architecture,
+                NumFeatures,
+                _options.HiddenLayers,
+                _options.HiddenDimension));
         }
     }
 
@@ -228,15 +255,56 @@ public class NeuralVaR<T> : RiskModelBase<T>
         if (!UseNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
+        // The paper's reference training restores the iterate with the best
+        // validation quantile loss. Preserve that property at the incremental
+        // Train API boundary: a single-observation pinball gradient is constant
+        // on either side of its kink, so Adam can otherwise step across the
+        // optimum and finish a short training budget worse than its best iterate.
+        // This is parameter selection, not a replacement objective: the candidate
+        // step is still computed by the configured optimizer and quantile loss.
+        var parametersBefore = GetParameters();
+        double lossBefore = NumOps.ToDouble(
+            _lossFunction.CalculateLoss(Predict(input).ToVector(), target.ToVector()));
+
         base.Train(input, target);
+
+        double lossAfter = NumOps.ToDouble(
+            _lossFunction.CalculateLoss(Predict(input).ToVector(), target.ToVector()));
+        if (double.IsNaN(lossAfter) || double.IsInfinity(lossAfter) || lossAfter > lossBefore)
+        {
+            var candidateParameters = GetParameters();
+            bool accepted = false;
+
+            // Backtrack along the optimizer's proposed direction. Pinball loss is
+            // locally affine away from its kink, so a sufficiently small step in
+            // the computed descent direction must improve the objective; retaining
+            // a smaller improving update is preferable to turning the call into a
+            // no-op by restoring the old iterate outright.
+            for (double scale = 0.5; scale >= 1.0 / 65536.0; scale *= 0.5)
+            {
+                var trialParameters = new Vector<T>(parametersBefore.Length);
+                T trialScale = NumOps.FromDouble(scale);
+                for (int i = 0; i < trialParameters.Length; i++)
+                {
+                    T direction = NumOps.Subtract(candidateParameters[i], parametersBefore[i]);
+                    trialParameters[i] = NumOps.Add(
+                        parametersBefore[i],
+                        NumOps.Multiply(direction, trialScale));
+                }
+
+                UpdateParameters(trialParameters);
+                double trialLoss = NumOps.ToDouble(
+                    _lossFunction.CalculateLoss(Predict(input).ToVector(), target.ToVector()));
+                if (!double.IsNaN(trialLoss) && !double.IsInfinity(trialLoss) && trialLoss < lossBefore)
+                {
+                    accepted = true;
+                    break;
+                }
+            }
+
+            if (!accepted)
+                UpdateParameters(parametersBefore);
+        }
     }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
@@ -273,8 +341,20 @@ public class NeuralVaR<T> : RiskModelBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        var options = new NeuralVaROptions<T> { NumFeatures = NumFeatures, ConfidenceLevel = _confidenceLevel, TimeHorizon = _timeHorizon };
-        return new NeuralVaR<T>(Architecture, options, _optimizer, LossFunction);
+        var options = new NeuralVaROptions<T>
+        {
+            NumFeatures = _options.NumFeatures,
+            ConfidenceLevel = _options.ConfidenceLevel,
+            TimeHorizon = _options.TimeHorizon,
+            HiddenLayers = _options.HiddenLayers,
+            HiddenDimension = _options.HiddenDimension,
+            LossFunction = _options.LossFunction
+        };
+
+        // Optimizers own model references and accumulated moment state. A clone must
+        // construct an optimizer bound to itself instead of sharing the source model's
+        // optimizer instance.
+        return new NeuralVaR<T>(Architecture, options, lossFunction: _lossFunction);
     }
 
     #endregion

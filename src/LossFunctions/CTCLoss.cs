@@ -40,6 +40,15 @@ public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
 
     /// <summary>Gets the blank symbol index used by this CTC loss.</summary>
     public int BlankIndex => _blankIndex;
+
+    /// <summary>Gets the vocabulary cardinality expected on the final prediction axis.</summary>
+    public int NumClasses => _numClasses;
+
+    /// <summary>
+    /// Gets whether predictions supplied to this loss must already be log probabilities.
+    /// </summary>
+    public bool InputsAreLogProbabilities => _inputsAreLogProbs;
+
     private readonly bool _inputsAreLogProbs;
     private readonly T _logZero;
     private readonly int _numClasses;
@@ -54,9 +63,20 @@ public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when blankIndex is negative.</exception>
     public CTCLoss(int numClasses = 29, int blankIndex = 0, bool inputsAreLogProbs = true)
     {
+        if (numClasses <= 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numClasses), "CTC requires at least two classes.");
+        }
+
         if (blankIndex < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(blankIndex), "Blank index cannot be negative.");
+        }
+
+        if (blankIndex >= numClasses)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(blankIndex), "Blank index must be smaller than the number of classes.");
         }
 
         _numClasses = numClasses;
@@ -524,6 +544,12 @@ public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
         if (predicted.Shape.Length != 3)
             logProbs = Engine.Reshape(predicted, new[] { batchSize, timeSteps, _numClasses });
 
-        return Engine.TensorCTCLoss(logProbs, targetsTensor, inputLengths, targetLengths, _blankIndex);
+        // AiDotNet models expose sequence outputs as [batch, time, classes], while the
+        // tensor engine's CTC primitive follows the conventional [time, batch, classes]
+        // layout. Keep the public loss contract batch-first and transpose through the
+        // engine so the operation remains tape-tracked.
+        var timeMajorLogProbs = Engine.TensorPermute(logProbs, new[] { 1, 0, 2 });
+        return Engine.TensorCTCLoss(
+            timeMajorLogProbs, targetsTensor, inputLengths, targetLengths, _blankIndex);
     }
 }

@@ -81,54 +81,65 @@ public class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// </remarks>
     private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateSqueezeformerOptimizer()
     {
-        // VALIDATED HERE RATHER THAN LEFT TO THE OPTIMIZER, because each of these fails silently rather
-        // than loudly. A non-positive peak rate gives a model that runs a full training job and does not
-        // move; a negative weight decay is an anti-regularizer that grows the weights every step; and a
-        // negative WarmupSteps does not error -- it just misses the `> 0` test below, so warmup is
-        // quietly switched off and the paper's 2e-3 peak is applied flat from step 0, which the remark
-        // above this method identifies as precisely the unstable regime.
-        if (_options.PeakLearningRate <= 0.0 || double.IsNaN(_options.PeakLearningRate) || double.IsInfinity(_options.PeakLearningRate))
+        if (_options.PeakLearningRate <= 0.0 ||
+            double.IsNaN(_options.PeakLearningRate) ||
+            double.IsInfinity(_options.PeakLearningRate))
         {
             throw new InvalidOperationException(
-                $"SqueezeformerOptions.PeakLearningRate must be positive; got {_options.PeakLearningRate}. " +
-                "A non-positive rate trains for the full run and changes nothing, and an infinite one " +
-                "sends every parameter to NaN on the first step.");
+                $"SqueezeformerOptions.PeakLearningRate must be finite and positive; got {_options.PeakLearningRate}.");
         }
 
-        if (_options.WeightDecay < 0.0 || double.IsNaN(_options.WeightDecay) || double.IsInfinity(_options.WeightDecay))
+        if (_options.WeightDecay < 0.0 ||
+            double.IsNaN(_options.WeightDecay) ||
+            double.IsInfinity(_options.WeightDecay))
         {
             throw new InvalidOperationException(
-                $"SqueezeformerOptions.WeightDecay must be non-negative; got {_options.WeightDecay}. " +
-                "A negative decay grows the weights every step instead of shrinking them, and an " +
-                "infinite one collapses them to zero.");
+                $"SqueezeformerOptions.WeightDecay must be finite and non-negative; got {_options.WeightDecay}.");
         }
 
-        if (_options.WarmupSteps < 0)
+        if (_options.WarmupSteps <= 0)
         {
             throw new InvalidOperationException(
-                $"SqueezeformerOptions.WarmupSteps must be non-negative; got {_options.WarmupSteps}. " +
-                "Use 0 to disable warmup -- a negative value disables it too, but looks like a setting.");
+                $"SqueezeformerOptions.WarmupSteps must be positive; got {_options.WarmupSteps}.");
         }
+
+        if (_options.PeakHoldSteps < 0)
+        {
+            throw new InvalidOperationException(
+                $"SqueezeformerOptions.PeakHoldSteps must be non-negative; got {_options.PeakHoldSteps}.");
+        }
+
+        if (_options.LearningRateDecayPower <= 0.0 ||
+            double.IsNaN(_options.LearningRateDecayPower) ||
+            double.IsInfinity(_options.LearningRateDecayPower))
+        {
+            throw new InvalidOperationException(
+                "SqueezeformerOptions.LearningRateDecayPower must be finite and positive; " +
+                $"got {_options.LearningRateDecayPower}.");
+        }
+
+        var scheduler = new AiDotNet.LearningRateSchedulers.NoamHoldAnnealingScheduler(
+            peakLearningRate: _options.PeakLearningRate,
+            warmupSteps: _options.WarmupSteps,
+            holdSteps: _options.PeakHoldSteps,
+            decayRate: _options.LearningRateDecayPower);
 
         return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = _options.PeakLearningRate,
+                InitialLearningRate = scheduler.CurrentLearningRate,
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8,
                 WeightDecay = _options.WeightDecay,
-                // Warmup is OPT-IN (WarmupSteps default 0). The paper expresses warmup in EPOCHS (20)
-                // over LibriSpeech-960h at batch 1024, which cannot be converted to a step count
-                // without the caller's dataset size — and a large step-count default makes the learning
-                // rate approximately zero for the whole of any short run, so the model does not train at
-                // all. Measured: a 4000-step warmup default broke Training_ShouldChangeLoss,
-                // Training_ShouldChangeParameters and GradientFlow, none of which had been failing.
-                LearningRateScheduler = _options.WarmupSteps > 0
-                    ? new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(
-                        baseLearningRate: _options.PeakLearningRate,
-                        warmupSteps: _options.WarmupSteps)
-                    : null,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                LearningRateScheduler = scheduler,
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
                 EnableGradientClipping = true,
-                MaxGradientNorm = 1.0
+                MaxGradientNorm = 1.0,
             });
     }
 
@@ -215,19 +226,19 @@ public class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// the last thing NeuralNetworkBase.Serialize writes, so an exhausted stream is an exact signal
     /// rather than a guess.
     /// </remarks>
-    private const int NetworkSpecificPayloadVersion = 1;
+    private const int NetworkSpecificPayloadVersion = 2;
 
     protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.FeedForwardExpansionFactor); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.DropoutRate); w.Write(_options.Language);
         // The settings that SHAPE THE OPTIMIZER. Without these a reloaded model resumed training under
         // whatever defaults CreateSqueezeformerOptimizer saw at construction, not the ones it was saved
         // with -- a different learning rate and decay, silently.
-        w.Write(NetworkSpecificPayloadVersion); w.Write(_options.PeakLearningRate); w.Write(_options.WeightDecay); w.Write(_options.WarmupSteps); w.Write(_options.UseLayerNormalization); }
+        w.Write(NetworkSpecificPayloadVersion); w.Write(_options.PeakLearningRate); w.Write(_options.WeightDecay); w.Write(_options.WarmupSteps); w.Write(_options.UseLayerNormalization); w.Write(_options.PeakHoldSteps); w.Write(_options.LearningRateDecayPower); }
     protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.FeedForwardExpansionFactor = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
         var stream = r.BaseStream;
         if (!stream.CanSeek || stream.Position < stream.Length)
         {
             int payloadVersion = r.ReadInt32();
-            if (payloadVersion != NetworkSpecificPayloadVersion)
+            if (payloadVersion is < 1 or > NetworkSpecificPayloadVersion)
             {
                 throw new InvalidOperationException(
                     $"Squeezeformer was saved with network-payload version {payloadVersion}, but this " +
@@ -236,6 +247,7 @@ public class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             }
 
             _options.PeakLearningRate = r.ReadDouble(); _options.WeightDecay = r.ReadDouble(); _options.WarmupSteps = r.ReadInt32(); _options.UseLayerNormalization = r.ReadBoolean();
+            if (payloadVersion >= 2) { _options.PeakHoldSteps = r.ReadInt32(); _options.LearningRateDecayPower = r.ReadDouble(); }
 
             // Rebuild it: _optimizer was created from the options as they stood BEFORE this payload was
             // read, so leaving it in place means the restored settings describe the model but not the
@@ -247,7 +259,8 @@ public class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             System.Diagnostics.Trace.TraceWarning(
                 "AiDotNet.Squeezeformer: this model was saved before the optimizer settings were " +
-                "persisted, so PeakLearningRate, WeightDecay, WarmupSteps and UseLayerNormalization " +
+                "persisted, so PeakLearningRate, WeightDecay, WarmupSteps, PeakHoldSteps, " +
+                "LearningRateDecayPower and UseLayerNormalization " +
                 "keep their defaults. Re-save the model to carry them forward.");
         }
 

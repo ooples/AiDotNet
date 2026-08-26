@@ -3,6 +3,7 @@ using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
@@ -56,20 +57,63 @@ public partial class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     /// </remarks>
     protected override int OutputFeatureWidth => _options.VocabSize;
 
-    private readonly KyutaiMoshiOptions _options; public override ModelOptions GetOptions() => _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
+    private readonly KyutaiMoshiOptions _options;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+
+    public override ModelOptions GetOptions() => _options;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => true;
     public bool SupportsWordTimestamps => false;
 
-    public KyutaiMoshi(NeuralNetworkArchitecture<T> architecture, string modelPath, KyutaiMoshiOptions? options = null) : base(architecture) { _options = options ?? new KyutaiMoshiOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public KyutaiMoshi(NeuralNetworkArchitecture<T> architecture, KyutaiMoshiOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new KyutaiMoshiOptions(); _useNativeMode = true;
-        // Paper-faithful LR: Kyutai (2024) Moshi fine-tunes a transformer ASR
-        // stack at LR=5e-5. The framework AdamW default (LR=1e-3) is too
-        // aggressive for BERT-class encoders at random init and causes
-        // Training_ShouldReduceLoss to diverge/time-out within 30 iterations.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-5 });
-        base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public KyutaiMoshi(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        KyutaiMoshiOptions? options = null)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+    {
+        _options = options ?? new KyutaiMoshiOptions();
+        _useNativeMode = false;
+        base.SampleRate = _options.SampleRate;
+        base.NumMels = _options.NumMels;
+
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path required.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+
+        _options.ModelPath = modelPath;
+        OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        SupportedLanguages = new[] { "en" };
+        InitializeLayers();
+    }
+
+    public KyutaiMoshi(
+        NeuralNetworkArchitecture<T> architecture,
+        KyutaiMoshiOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+    {
+        _options = options ?? new KyutaiMoshiOptions();
+        _useNativeMode = true;
+        // Paper-faithful fine-tuning recipe from Kyutai's official Moshi code:
+        // AdamW with max LR=2e-6, betas=(0.9, 0.95), weight decay=0.1,
+        // gradient clipping at 1.0, and a 5%-warmup one-cycle schedule.
+        _optimizer = optimizer ?? CreateOneCycleAdamWOptimizer(
+            maxLearningRate: _options.LearningRate,
+            totalSteps: _options.TotalTrainingSteps,
+            pctStart: _options.WarmupFraction,
+            weightDecay: _options.WeightDecay,
+            beta1: 0.9,
+            beta2: 0.95,
+            epsilon: 1e-8,
+            maxGradientNorm: _options.MaxGradientNorm);
+        base.SampleRate = _options.SampleRate;
+        base.NumMels = _options.NumMels;
+        SupportedLanguages = new[] { "en" };
+        InitializeLayers();
+    }
 
     /// <summary>
     /// Transcribes audio using Moshi's neural codec + Transformer architecture.
@@ -106,24 +150,103 @@ public partial class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
         };
     }
 
-    public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool includeTimestamps = false, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
-    public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
-    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
+    public Task<TranscriptionResult<T>> TranscribeAsync(
+        Tensor<T> audio,
+        string? language = null,
+        bool includeTimestamps = false,
+        CancellationToken cancellationToken = default)
+        => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
+
+    public string DetectLanguage(Tensor<T> audio)
+    {
+        var features = PreprocessAudio(audio);
+        Tensor<T> logits;
+
+        if (IsOnnxMode && OnnxEncoder is not null)
+        {
+            logits = OnnxEncoder.Run(features);
+        }
+        else
+        {
+            logits = features;
+            foreach (var layer in Layers)
+                logits = layer.Forward(logits);
+        }
+
+        var (tokens, _) = CTCGreedyDecodeWithConfidence(logits);
+        return ClassifyLanguageFromTokens(tokens);
+    }
+
+    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
+    {
+        var detected = DetectLanguage(audio);
+        var result = new Dictionary<string, T>();
+        double primaryProbability = 0.85;
+        double otherProbability = SupportedLanguages.Count > 1
+            ? (1.0 - primaryProbability) / (SupportedLanguages.Count - 1)
+            : 0.0;
+
+        foreach (var language in SupportedLanguages)
+        {
+            result[language] = NumOps.FromDouble(
+                language == detected ? primaryProbability : otherProbability);
+        }
+
+        return result;
+    }
+
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => new KyutaiMoshiStreamingSession(this, language ?? _options.Language);
 
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultConformerLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
-    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) {
-        if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(
+                LayerHelper<T>.CreateDefaultConformerLayers(
+                    encoderDim: _options.EncoderDim,
+                    numLayers: _options.NumEncoderLayers,
+                    numAttentionHeads: _options.NumAttentionHeads,
+                    numMels: _options.NumMels,
+                    vocabSize: _options.VocabSize,
+                    dropoutRate: _options.DropoutRate));
+        }
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxEncoder is not null)
+            return OnnxEncoder.Run(input);
+
+        var current = input;
+        foreach (var layer in Layers)
+            current = layer.Forward(current);
+
+        return current;
+    }
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        try {
+        try
+        {
             // Pass the model's own non-AMSGrad AdamW explicitly so the
             // fused-Adam fast path engages. The optimizer-null branch falls
             // back to GetOrCreateBaseOptimizer (AMSGrad), which the fused
             // kernel rejects → eager tape path → ~5 s/iter on this Conformer
             // encoder → 120 s test timeout before 30 iters finish.
             TrainWithTape(input, expected, _optimizer);
-        } finally {
+        }
+        finally
+        {
             SetTrainingMode(false);
         }
     }
@@ -133,25 +256,240 @@ public partial class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "KyutaiMoshi-Native" : "KyutaiMoshi-ONNX", Description = "Moshi: full-duplex speech-text dialogue (Kyutai, 2024)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
-    protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.MaxTextLength); w.Write(_options.DropoutRate); w.Write(_options.Language); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.MaxTextLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new KyutaiMoshi<T>(Architecture, mp, _options); return new KyutaiMoshi<T>(Architecture, _options); }
+    public override ModelMetadata<T> GetModelMetadata() => new()
+    {
+        Name = _useNativeMode ? "KyutaiMoshi-Native" : "KyutaiMoshi-ONNX",
+        Description = "Moshi: full-duplex speech-text dialogue (Kyutai, 2024)",
+        FeatureCount = _options.NumMels,
+        Complexity = _options.NumEncoderLayers,
+        AdditionalInfo = BaseAudioMetadataInfo()
+    };
 
-    private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames && tokens.Count < _options.MaxTextLength; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
-    private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }
-    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
-    private string ClassifyLanguageFromTokens(List<int> tokens) { if (tokens.Count == 0) return _options.Language; int cjkCount = 0, latinCount = 0; foreach (var t in tokens) { if (t >= 0x4E00 && t <= 0x9FFF) cjkCount++; else if (t >= 0x41 && t <= 0x7A) latinCount++; } if (cjkCount > latinCount && SupportedLanguages.Contains("zh")) return "zh"; return _options.Language; }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(KyutaiMoshi<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.SampleRate);
+        writer.Write(_options.MaxAudioLengthSeconds);
+        writer.Write(_options.EncoderDim);
+        writer.Write(_options.NumEncoderLayers);
+        writer.Write(_options.NumAttentionHeads);
+        writer.Write(_options.NumMels);
+        writer.Write(_options.VocabSize);
+        writer.Write(_options.MaxTextLength);
+        writer.Write(_options.DropoutRate);
+        writer.Write(_options.Language);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string modelPath = reader.ReadString();
+        if (!string.IsNullOrEmpty(modelPath))
+            _options.ModelPath = modelPath;
+
+        _options.SampleRate = reader.ReadInt32();
+        _options.MaxAudioLengthSeconds = reader.ReadInt32();
+        _options.EncoderDim = reader.ReadInt32();
+        _options.NumEncoderLayers = reader.ReadInt32();
+        _options.NumAttentionHeads = reader.ReadInt32();
+        _options.NumMels = reader.ReadInt32();
+        _options.VocabSize = reader.ReadInt32();
+        _options.MaxTextLength = reader.ReadInt32();
+        _options.DropoutRate = reader.ReadDouble();
+        _options.Language = reader.ReadString();
+        base.SampleRate = _options.SampleRate;
+        base.NumMels = _options.NumMels;
+
+        if (!_useNativeMode && _options.ModelPath is { } path && !string.IsNullOrEmpty(path))
+            OnnxEncoder = new OnnxModel<T>(path, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } modelPath && !string.IsNullOrEmpty(modelPath))
+            return new KyutaiMoshi<T>(Architecture, modelPath, _options);
+
+        return new KyutaiMoshi<T>(Architecture, _options);
+    }
+
+    private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits)
+    {
+        var tokens = new List<int>();
+        double totalConfidence = 0;
+        int confidenceCount = 0;
+        int previousToken = -1;
+        int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1;
+        int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0];
+
+        for (int frame = 0; frame < numFrames && tokens.Count < _options.MaxTextLength; frame++)
+        {
+            int maxIndex = 0;
+            double maxValue = double.NegativeInfinity;
+            for (int token = 0; token < vocabSize; token++)
+            {
+                double value = logits.Rank >= 2
+                    ? NumOps.ToDouble(logits[frame, token])
+                    : NumOps.ToDouble(logits[token]);
+                if (value > maxValue)
+                {
+                    maxValue = value;
+                    maxIndex = token;
+                }
+            }
+
+            double sumExp = 0;
+            for (int token = 0; token < vocabSize; token++)
+            {
+                double value = logits.Rank >= 2
+                    ? NumOps.ToDouble(logits[frame, token])
+                    : NumOps.ToDouble(logits[token]);
+                sumExp += Math.Exp(value - maxValue);
+            }
+
+            double frameConfidence = 1.0 / sumExp;
+            if (maxIndex != previousToken && maxIndex > 0)
+            {
+                tokens.Add(maxIndex);
+                totalConfidence += frameConfidence;
+                confidenceCount++;
+            }
+
+            previousToken = maxIndex;
+        }
+
+        return (tokens, confidenceCount > 0 ? totalConfidence / confidenceCount : 0.0);
+    }
+
+    private static string TokensToText(List<int> tokens)
+    {
+        var builder = new System.Text.StringBuilder();
+        foreach (var token in tokens)
+        {
+            if (token > 0 && token <= char.MaxValue)
+                builder.Append((char)token);
+            else if (token > char.MaxValue && token <= 0x10FFFF)
+                builder.Append(char.ConvertFromUtf32(token));
+        }
+
+        return builder.ToString().Trim();
+    }
+
+    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(
+        string text,
+        double duration,
+        double confidence)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return Array.Empty<TranscriptionSegment<T>>();
+
+        return new[]
+        {
+            new TranscriptionSegment<T>
+            {
+                Text = text,
+                StartTime = 0.0,
+                EndTime = duration,
+                Confidence = NumOps.FromDouble(confidence)
+            }
+        };
+    }
+
+    private string ClassifyLanguageFromTokens(List<int> tokens)
+    {
+        if (tokens.Count == 0)
+            return _options.Language;
+
+        int cjkCount = 0;
+        int latinCount = 0;
+        foreach (var token in tokens)
+        {
+            if (token >= 0x4E00 && token <= 0x9FFF)
+                cjkCount++;
+            else if (token >= 0x41 && token <= 0x7A)
+                latinCount++;
+        }
+
+        if (cjkCount > latinCount && SupportedLanguages.Contains("zh"))
+            return "zh";
+
+        return _options.Language;
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(KyutaiMoshi<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+        if (disposing)
+            OnnxEncoder?.Dispose();
+
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 
     private sealed class KyutaiMoshiStreamingSession : IStreamingTranscriptionSession<T>
     {
-        private readonly KyutaiMoshi<T> _model; private readonly string _language; private readonly List<Tensor<T>> _chunks = new(); private bool _disposed;
-        public KyutaiMoshiStreamingSession(KyutaiMoshi<T> model, string language) { _model = model; _language = language; }
-        public void FeedAudio(Tensor<T> audioChunk) { if (_disposed) throw new ObjectDisposedException(nameof(KyutaiMoshiStreamingSession)); _chunks.Add(audioChunk); }
-        public TranscriptionResult<T> GetPartialResult() { if (_disposed) throw new ObjectDisposedException(nameof(KyutaiMoshiStreamingSession)); if (_chunks.Count == 0) return new TranscriptionResult<T> { Language = _language }; int totalLen = 0; foreach (var c in _chunks) totalLen += c.Length; var combined = new Tensor<T>(new[] { totalLen }); int offset = 0; foreach (var c in _chunks) { for (int i = 0; i < c.Length; i++) combined[offset + i] = c[i]; offset += c.Length; } return _model.Transcribe(combined, _language); }
-        public TranscriptionResult<T> Finalize() { if (_disposed) throw new ObjectDisposedException(nameof(KyutaiMoshiStreamingSession)); var result = GetPartialResult(); _disposed = true; return result; }
-        public void Dispose() { _disposed = true; }
+        private readonly KyutaiMoshi<T> _model;
+        private readonly string _language;
+        private readonly List<Tensor<T>> _chunks = new();
+        private bool _disposed;
+
+        public KyutaiMoshiStreamingSession(KyutaiMoshi<T> model, string language)
+        {
+            _model = model;
+            _language = language;
+        }
+
+        public void FeedAudio(Tensor<T> audioChunk)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(KyutaiMoshiStreamingSession));
+
+            _chunks.Add(audioChunk);
+        }
+
+        public TranscriptionResult<T> GetPartialResult()
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(KyutaiMoshiStreamingSession));
+            if (_chunks.Count == 0)
+                return new TranscriptionResult<T> { Language = _language };
+
+            int totalLength = 0;
+            foreach (var chunk in _chunks)
+                totalLength += chunk.Length;
+
+            var combined = new Tensor<T>(new[] { totalLength });
+            int offset = 0;
+            foreach (var chunk in _chunks)
+            {
+                for (int index = 0; index < chunk.Length; index++)
+                    combined[offset + index] = chunk[index];
+                offset += chunk.Length;
+            }
+
+            return _model.Transcribe(combined, _language);
+        }
+
+        public TranscriptionResult<T> Finalize()
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(KyutaiMoshiStreamingSession));
+
+            var result = GetPartialResult();
+            _disposed = true;
+            return result;
+        }
+
+        public void Dispose()
+        {
+            _disposed = true;
+        }
     }
 }

@@ -26,6 +26,12 @@ public enum TrainingObjectiveKind
     /// <summary>A zero-shot partition or energy objective is evaluated without supervised fitting.</summary>
     ZeroShotEnergy,
 
+    /// <summary>
+    /// A scalar Hamiltonian is differentiated with respect to phase-space coordinates and its
+    /// symplectic derivative field is fitted to observed time derivatives.
+    /// </summary>
+    HamiltonianDynamics,
+
     /// <summary>Several explicitly structured task objectives are optimized together.</summary>
     MultiTask,
 }
