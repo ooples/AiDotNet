@@ -539,17 +539,14 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         // Paper training configuration (Shen et al. 2018, sec. 3): "Adam optimizer with beta1 = 0.9,
         // beta2 = 0.999, eps = 10^-6 and a learning rate of 10^-3 exponentially decaying to 10^-5".
-        // The optimizer was previously built bare, so none of those values applied and the decoder ran
-        // on framework defaults. Callers can still supply their own optimizer.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = 1e-3,
-                MinLearningRate = 1e-5,
-                Beta1 = 0.9,
-                Beta2 = 0.999,
-                Epsilon = 1e-6,
-            });
+        // Fix the published coefficients, disable AiDotNet's adaptive Adam extensions, and apply the
+        // paper's coupled L2 weight of 10^-6. Callers can still supply their own optimizer.
+        _optimizer = optimizer ?? CreateFixedAdamOptimizer(
+            initialLearningRate: 1e-3,
+            beta1: 0.9,
+            beta2: 0.999,
+            epsilon: 1e-6,
+            l2RegularizationStrength: 1e-6);
 
         InitializeNativeLayers();
     }

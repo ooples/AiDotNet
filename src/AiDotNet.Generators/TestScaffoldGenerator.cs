@@ -9186,19 +9186,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "Tacotron2" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.Classic.", System.StringComparison.Ordinal))
             {
-                // The model's own default is the paper's 10^-3 (Shen et al. 2018), stated for
-                // full-scale training at batch 64. At this fixture's single-sample smoke scale that
-                // step diverges, so bind a smaller one -- through OPTIONS, not the optimizer
-                // parameter. CreateNewInstance forwards _options but NOT the injected optimizer, so
-                // an injected rate applied to the original and silently reverted to 10^-3 in every
-                // clone: MoreData_ShouldNotDegrade's two-iteration clone loss sat at 23.1915 while
-                // the one-iteration original managed 5.1901. Going through options makes the rate
-                // survive cloning. The library default stays at the published value.
+                // Classic.Tacotron2 is a compatibility surface over the shared paper implementation,
+                // so exercise the same encoder/attention/autoregressive-decoder/post-net topology at
+                // the same bounded geometry as Tacotron2Model below. Keep the published Adam rate;
+                // only widths, vocabulary and maximum decoded length are smoke-scaled.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 8, outputSize: 640), " +
-                    "new AiDotNet.TextToSpeech.Classic.Tacotron2Options { LearningRate = 1e-6 })";
+                    "new AiDotNet.TextToSpeech.Classic.Tacotron2Options { " +
+                    "VocabSize = 1024, EncoderDim = 32, AttentionRnnDim = 32, DecoderRnnDim = 32, " +
+                    "AttentionDimension = 16, AttentionLocationChannels = 8, PrenetDim = 16, " +
+                    "PostnetDim = 32, NumEncoderLayers = 1, PostnetLayers = 1, OutputsPerStep = 1, " +
+                    "MaxMelLength = 8, StopThreshold = 1.0, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "Tacotron2Model" && model.TypeParameterCount == 1)
             {
@@ -12763,7 +12763,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (IsTextToMelTTS(model.ClassName))
             {
-                if (model.ClassName == "Tacotron2Model")
+                if (model.ClassName == "Tacotron2Model" || model.ClassName == "Tacotron2")
                 {
                     // Tacotron 2 is batched and autoregressive. The bounded constructor emits
                     // four two-frame decoder steps, hence [1, 8, 80].

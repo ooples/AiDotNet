@@ -12,7 +12,6 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
-using AiDotNet.Regularization;
 
 namespace AiDotNet.Audio;
 
@@ -271,28 +270,15 @@ public abstract class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShapeCo
             throw new ArgumentOutOfRangeException(nameof(maxGradientNorm), "Maximum gradient norm must be finite and non-negative.");
 
         var scheduler = new NoamSchedule(modelDimension, warmupSteps, scheduleFactor);
-        var options = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-        {
-            InitialLearningRate = scheduler.CurrentLearningRate,
-            Beta1 = 0.9,
-            Beta2 = 0.98,
-            Epsilon = 1e-9,
-            UseAdaptiveLearningRate = false,
-            UseAdaptiveBetas = false,
-            UseAMSGrad = false,
-            EnableGradientClipping = maxGradientNorm > 0.0,
-            MaxGradientNorm = maxGradientNorm > 0.0 ? maxGradientNorm : 1.0,
-            LearningRateScheduler = scheduler,
-            SchedulerStepMode = SchedulerStepMode.StepPerBatch,
-        };
-
-        if (l2WeightDecay > 0.0)
-        {
-            options.Regularization = new L2Regularization<T, Tensor<T>, Tensor<T>>(
-                new RegularizationOptions { Strength = l2WeightDecay });
-        }
-
-        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, options);
+        return CreateFixedAdamOptimizer(
+            initialLearningRate: scheduler.CurrentLearningRate,
+            beta1: 0.9,
+            beta2: 0.98,
+            epsilon: 1e-9,
+            l2RegularizationStrength: l2WeightDecay,
+            learningRateScheduler: scheduler,
+            schedulerStepMode: SchedulerStepMode.StepPerBatch,
+            maxGradientNorm: maxGradientNorm);
     }
 
     /// <summary>
