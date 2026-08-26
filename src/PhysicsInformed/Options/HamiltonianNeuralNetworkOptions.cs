@@ -16,7 +16,8 @@ public class HamiltonianNeuralNetworkOptions : PhysicsInformedOptions
     /// <param name="other">The configuration to copy.</param>
     public HamiltonianNeuralNetworkOptions(HamiltonianNeuralNetworkOptions other)
     {
-        ArgumentNullException.ThrowIfNull(other);
+        if (other is null)
+            throw new ArgumentNullException(nameof(other));
         EncoderLayerCount = other.EncoderLayerCount;
         HiddenLayerCount = other.HiddenLayerCount;
         HiddenDimension = other.HiddenDimension;
