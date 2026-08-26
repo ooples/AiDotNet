@@ -391,6 +391,34 @@ public static class LayerCloning
     }
 
     /// <summary>Writes a layer's own learned tensors into another layer of the same type.</summary>
+    /// <summary>
+    /// Copies <paramref name="source"/>'s contents into <paramref name="destination"/> in bulk,
+    /// falling back to flat indexing for the layouts a span cannot address.
+    /// </summary>
+    private static void CopyTensorContents<T>(Tensor<T> source, Tensor<T> destination)
+    {
+        try
+        {
+            var src = source.GetReadOnlyDataArray();
+            var dst = destination.AsWritableSpan();
+            if (src.Length >= source.Length && dst.Length >= source.Length)
+            {
+                src.AsSpan(0, source.Length).CopyTo(dst);
+                destination.IncrementVersion();
+                return;
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // Non-contiguous view: fall through to the flat path, which handles views correctly.
+        }
+        catch (NotSupportedException)
+        {
+        }
+
+        for (int i = 0; i < source.Length; i++) destination.SetFlat(i, source.GetFlat(i));
+    }
+
     private static void CopyOwnTensors<T>(LayerBase<T> source, LayerBase<T> clone, CloneOptions settings)
     {
         // INSTALL TENSORS, NOT A FLAT VECTOR. A tensor carries its own shape, so installing one
@@ -465,9 +493,13 @@ public static class LayerCloning
                 // BULK COPY, not a per-element indexer loop. Tensor's indexer is a generic
                 // virtual call, so copying a 512x512x128 activation buffer one element at a
                 // time ran 33.5M dispatches for a single buffer -- the dominant cost in a
-                // 231-second VAEDecoder clone. GetDataArray is the write-intent accessor and
-                // un-shares copy-on-write storage before the write, which is what we want here.
-                System.Array.Copy(tensor.GetReadOnlyDataArray(), 0, existing.GetDataArray(), 0, tensor.Length);
+                // 231-second VAEDecoder clone.
+                //
+                // NOT GetDataArray for the destination: that returns a fresh contiguous COPY for a
+                // view, so the bulk write would land in a throwaway array and silently leave the
+                // buffer unchanged. AsWritableSpan writes in place and throws for a non-contiguous
+                // view, which is the case the per-element fallback below still handles correctly.
+                CopyTensorContents(tensor, existing);
                 continue;
             }
 
