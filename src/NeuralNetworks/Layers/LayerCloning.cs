@@ -280,6 +280,14 @@ public static class LayerCloning
         // whatever length the layer is actually used at later.
         var exact = declared is not null && Array.TrueForAll(declared, d => d > 0) ? declared : null;
 
+        // COPY BEFORE RESOLVING. Installing tensors already resolves a lazily-shaped clone --
+        // a tensor carries its shape -- so resolving FIRST only forced every lazy child to
+        // allocate and randomly initialize weights that the copy below immediately overwrote.
+        // For a deep VAE that cost minutes per clone in InitializeWeights alone; copying first
+        // lets ConvolutionalLayer.EnsureInitialized hit its idempotent "kernels already have the
+        // expected shape" path and skip both the allocation and the RNG fill.
+        CopyOwnTensors(source, clone, settings);
+
         if (exact is not null && !clone.IsShapeResolved)
         {
             // Two shape conventions, same reason the sweep probes both: GetInputShape describes
@@ -292,7 +300,6 @@ public static class LayerCloning
             }
         }
 
-        CopyOwnTensors(source, clone, settings);
         CopyChildren(source, clone, settings);
 
         if (clone.ParameterCount == source.ParameterCount || declared is null) return;
@@ -455,7 +462,12 @@ public static class LayerCloning
             if (target.TryGetValue(name, out var existing) && existing.Length == tensor.Length)
             {
                 if (ReferenceEquals(existing, tensor)) continue;
-                for (int i = 0; i < tensor.Length; i++) existing[i] = tensor[i];
+                // BULK COPY, not a per-element indexer loop. Tensor's indexer is a generic
+                // virtual call, so copying a 512x512x128 activation buffer one element at a
+                // time ran 33.5M dispatches for a single buffer -- the dominant cost in a
+                // 231-second VAEDecoder clone. GetDataArray is the write-intent accessor and
+                // un-shares copy-on-write storage before the write, which is what we want here.
+                System.Array.Copy(tensor.GetReadOnlyDataArray(), 0, existing.GetDataArray(), 0, tensor.Length);
                 continue;
             }
 

@@ -75,7 +75,7 @@ public partial class HeterogeneousGraphMetadata : AiDotNet.Serialization.ILayerS
         EdgeTypes = Part(1).Length == 0 ? [] : Part(1).Split(',');
 
         NodeTypeFeatures = new Dictionary<string, int>();
-        foreach (var entry in Part(2).Split(',', StringSplitOptions.RemoveEmptyEntries))
+        foreach (var entry in Part(2).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
         {
             int eq = entry.LastIndexOf('=');
             if (eq <= 0) continue;
@@ -84,7 +84,7 @@ public partial class HeterogeneousGraphMetadata : AiDotNet.Serialization.ILayerS
         }
 
         EdgeTypeSchema = new Dictionary<string, (string SourceType, string TargetType)>();
-        foreach (var entry in Part(3).Split(',', StringSplitOptions.RemoveEmptyEntries))
+        foreach (var entry in Part(3).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
         {
             int eq = entry.LastIndexOf('=');
             if (eq <= 0) continue;
