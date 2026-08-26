@@ -288,8 +288,7 @@ public partial class VAEResBlock<T> : LayerBase<T>, IShapeContract
         // them unconditionally kept every stage of every block alive for the whole pass, so a
         // decoder holding ten of these had peak memory O(sum of activations) rather than
         // O(max live set) even during pure inference.
-        bool cacheBwd = ShouldCacheForBackward;
-        if (cacheBwd) _lastInput = input;
+        SaveForBackward(ref _lastInput, input);
 
         // Main path: GroupNorm -> SiLU -> Conv -> GroupNorm -> SiLU -> Conv
         var norm1Output = _norm1.Forward(input);
@@ -303,16 +302,13 @@ public partial class VAEResBlock<T> : LayerBase<T>, IShapeContract
         // Skip connection
         var skipOutput = _skipConv != null ? _skipConv.Forward(input) : input;
 
-        if (cacheBwd)
-        {
-            _norm1Output = norm1Output;
-            _silu1Output = silu1Output;
-            _conv1Output = conv1Output;
-            _norm2Output = norm2Output;
-            _silu2Output = silu2Output;
-            _conv2Output = conv2Output;
-            _skipOutput = skipOutput;
-        }
+        SaveForBackward(ref _norm1Output, norm1Output);
+        SaveForBackward(ref _silu1Output, silu1Output);
+        SaveForBackward(ref _conv1Output, conv1Output);
+        SaveForBackward(ref _norm2Output, norm2Output);
+        SaveForBackward(ref _silu2Output, silu2Output);
+        SaveForBackward(ref _conv2Output, conv2Output);
+        SaveForBackward(ref _skipOutput, skipOutput);
 
         // Add main path and skip connection
         return Engine.TensorAdd(conv2Output, skipOutput);

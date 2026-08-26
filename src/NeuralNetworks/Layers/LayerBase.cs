@@ -3441,7 +3441,42 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         && (GradientTape<T>.Current is null || KeepActivationCacheUnderTape);
 
     /// <summary>
+    /// Saves an activation for this layer's manual backward, or drops it when no backward will read
+    /// it. The single place that decision is made.
+    /// </summary>
+    /// <typeparam name="TValue">The cached value's type (a tensor, or an array of them).</typeparam>
+    /// <param name="field">The backing field, passed by reference.</param>
+    /// <param name="value">The activation to save.</param>
+    /// <remarks>
+    /// <para>
+    /// Modelled on PyTorch's <c>ctx.save_for_backward</c>. The important part of that design is not
+    /// the name, it is WHERE the lifetime lives: PyTorch never stores activations on the module, it
+    /// hands them to the autograd node, so they die with the graph and <c>no_grad</c> /
+    /// <c>inference_mode</c> retain nothing by construction. A raw <c>_lastInput = input</c> puts the
+    /// lifetime on the layer instead, where it outlives the pass and nothing central can see it.
+    /// </para>
+    /// <para>
+    /// Routing the write through here restores the property that matters: the policy is in ONE
+    /// place, and a layer states its intent rather than reimplementing the decision. When no
+    /// backward will read the value the field is actively cleared, so a stale activation from an
+    /// earlier training pass cannot be pinned alive through an inference one.
+    /// </para>
+    /// <para>
+    /// Why this rather than releasing scratch centrally after the forward: <c>[Scratch]</c> marks
+    /// "derived state, not a parameter", which also covers memoized tables that every later forward
+    /// depends on — PositionalEncodingLayer's <c>encodings</c> is built once and reused. Releasing on
+    /// that attribute NullReferences the next forward. Only the write site knows a value is per-pass,
+    /// which is exactly why the decision belongs at the write.
+    /// </para>
+    /// </remarks>
+    protected void SaveForBackward<TValue>(ref TValue? field, TValue value) where TValue : class
+    {
+        field = ShouldCacheForBackward ? value : null;
+    }
+
+    /// <summary>
     /// True when this layer should populate its per-layer manual-backward activation
+
     /// caches (the bespoke <c>_lastInput</c> / pre-activation fields a layer's own
     /// eager <see cref="Backward(Tensor{T})"/> reads). This is the canonical guard
     /// every such cache write should be gated on:

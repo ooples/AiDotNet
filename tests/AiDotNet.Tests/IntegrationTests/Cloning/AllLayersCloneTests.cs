@@ -104,6 +104,18 @@ public class AllLayersCloneTests
                 // trained-layer proof was failing. A layer that has been USED is the case worth
                 // measuring.
                 var typed = (LayerBase<double>)instance;
+
+                // FORWARD IN EVAL MODE, because that is what this probe actually is. The sweep
+                // never calls Backward, and NeuralNetworkBase.Predict already flips to eval for
+                // exactly this reason, so a training-mode forward here is not "more realistic" --
+                // it is a mode no inference caller uses. Layers default to IsTrainingMode = true,
+                // and in training mode every layer retains its activations for a backward that
+                // never comes: measured on one VAE decoder, 524.4MB retained versus 257.8MB in
+                // eval, and 49GB before OutOfMemoryException at the paper-default 512x512 size.
+                // Nothing about the coverage changes -- every layer is still built at full size,
+                // forwarded, cloned and compared.
+                typed.SetTrainingMode(false);
+
                 if (Forward(typed))
                 {
                     forwarded.Add(open.Name);
