@@ -57,7 +57,7 @@ namespace AiDotNet.Finance.NLP;
 // markets from data as a World Agent" (ICAIF'22) — an unrelated paper. SEC-BERT is introduced in
 // Loukas et al., "FiNER: Financial Numeric Entity Recognition for XBRL Tagging" (ACL 2022).
 [ResearchPaper("FiNER: Financial Numeric Entity Recognition for XBRL Tagging (introduces SEC-BERT)", "https://doi.org/10.18653/v1/2022.acl-long.303", Year = 2022, Authors = "Lefteris Loukas, Manos Fergadiotis, Ion Androutsopoulos, Prodromos Malakasiotis")]
-public partial class SECBERT<T> : FinancialNLPModelBase<T>
+public partial class SECBERT<T> : FinancialNLPModelBase<T>, ITrainingObjectiveProvider<T>
 {
     #region Shared Fields
 
@@ -67,6 +67,19 @@ public partial class SECBERT<T> : FinancialNLPModelBase<T>
 
     /// <inheritdoc/>
     public override AiDotNet.Models.Options.ModelOptions GetOptions() => _options;
+
+    /// <inheritdoc/>
+    public TrainingObjectiveKind TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
+
+    /// <inheritdoc/>
+    public Tensor<T> ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    /// <inheritdoc/>
+    public T EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+        => LossFunction.ComputeTapeLoss(ForwardForTraining(input), target).Data.Span[0];
+
+    /// <inheritdoc/>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     #endregion
 
@@ -125,7 +138,7 @@ public partial class SECBERT<T> : FinancialNLPModelBase<T>
                options?.VocabularySize ?? 30522,
                options?.HiddenDimension ?? 768,
                3, // numSentimentClasses
-               lossFunction)
+               lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         options ??= new ModelOptions.SECBERTOptions<T>();
         _options = options;
@@ -133,10 +146,19 @@ public partial class SECBERT<T> : FinancialNLPModelBase<T>
         options.Validate();
 
         _dropout = options.DropoutRate;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperOptimizer();
 
         InitializeLayers();
     }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
+        => new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new ModelOptions.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                UseAMSGrad = false,
+            });
 
     #endregion
 

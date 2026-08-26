@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
@@ -52,12 +53,36 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Training Products of Experts by Minimizing Contrastive Divergence", "https://doi.org/10.1162/089976602760128018")]
-public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>
+public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, ITrainingObjectiveProvider<T>
 {
     private readonly RestrictedBoltzmannMachineOptions _options;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
+
+    /// <inheritdoc />
+    public TrainingObjectiveKind TrainingObjectiveKind => TrainingObjectiveKind.ContrastiveDivergence;
+
+    /// <inheritdoc />
+    public Tensor<T> ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => input;
+
+    /// <inheritdoc />
+    public T EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        var hidden = GetHiddenLayerActivation(input);
+        var reconstruction = GetVisibleLayerActivation(hidden);
+        int length = Math.Min(input.Length, reconstruction.Length);
+        if (length == 0) return NumOps.Zero;
+
+        T squaredError = NumOps.Zero;
+        for (int i = 0; i < length; i++)
+        {
+            T residual = NumOps.Subtract(reconstruction[i], input[i]);
+            squaredError = NumOps.Add(squaredError, NumOps.Multiply(residual, residual));
+        }
+
+        return NumOps.Divide(squaredError, NumOps.FromDouble(length));
+    }
 
     /// <summary>
     /// Gets or sets the bias values for the visible layer neurons.

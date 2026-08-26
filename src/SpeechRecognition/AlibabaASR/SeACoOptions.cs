@@ -77,12 +77,21 @@ public class SeACoOptions : ModelOptions
     /// Gets or sets the Adam learning rate. The default, 5e-4, is the peak rate Paraformer /
     /// SeACo-Paraformer train with (Gao et al., arXiv 2206.08317; Shi et al., arXiv 2308.03266).
     /// </summary>
+    /// <value>The optimizer step size, defaulting to <c>5e-4</c>.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This controls the size of each Adam parameter update.
+    /// The default is the peak learning rate reported by Paraformer and SeACo-Paraformer.</para>
+    /// </remarks>
     public double LearningRate { get; set; } = 5e-4;
 
     /// <summary>
-    /// Which parameter group <c>Train</c> updates. Default: <see cref="SeACoTrainingStage.Joint"/>.
+    /// Which parameter group <c>Train</c> updates. Default: <see cref="SeACoTrainingStage.Backbone"/>.
     /// </summary>
+    /// <value>The stage whose parameter group is updated by <c>Train</c>.</value>
     /// <remarks>
+    /// <para><b>For Beginners:</b> Train the backbone first. Then select
+    /// <see cref="SeACoTrainingStage.Bias"/> to teach hotword customization without changing the
+    /// recognizer.</para>
     /// <para>
     /// SeACo-Paraformer (Shi et al., arXiv 2308.03266, §3) trains the ASR backbone first, then FREEZES
     /// it and trains only the bias parameters, "separate from the ASR training". Select
@@ -90,13 +99,12 @@ public class SeACoOptions : ModelOptions
     /// reproduce that exactly.
     /// </para>
     /// <para>
-    /// The default is <see cref="SeACoTrainingStage.Joint"/> so a single <c>Train</c> call updates every
-    /// parameter, which is what callers expect from one entry point. It is deliberately NOT the paper's
-    /// recipe: joint training lets hot-word supervision reshape the recognizer, which the paper's
-    /// freeze exists to prevent.
+    /// The default is <see cref="SeACoTrainingStage.Backbone"/>, the first stage in the paper's
+    /// two-stage recipe. After the backbone is trained, select <see cref="SeACoTrainingStage.Bias"/>
+    /// to train the contextual-biasing branch while keeping the recognizer frozen.
     /// </para>
     /// </remarks>
-    public SeACoTrainingStage TrainingStage { get; set; } = SeACoTrainingStage.Joint;
+    public SeACoTrainingStage TrainingStage { get; set; } = SeACoTrainingStage.Backbone;
 
     /// <summary>
     /// Weight gamma on the cross-entropy term of Paraformer's objective,
@@ -136,7 +144,19 @@ public class SeACoOptions : ModelOptions
     /// <summary>
     /// Resolves the '#' no-bias token id, defaulting to the appended slot at <see cref="VocabSize"/>.
     /// </summary>
-    internal int ResolveHotwordMaskTokenId() => HotwordMaskTokenId ?? VocabSize;
+    internal int ResolveHotwordMaskTokenId()
+    {
+        int tokenId = HotwordMaskTokenId ?? VocabSize;
+        if (tokenId < 0 || tokenId > VocabSize)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(HotwordMaskTokenId),
+                tokenId,
+                $"HotwordMaskTokenId must identify one of the {VocabSize + 1} bias-output classes.");
+        }
+
+        return tokenId;
+    }
 
     /// <summary>
     /// Depth of SeACo's bias (hotword) encoder. Default: 1.
