@@ -2,6 +2,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using Xunit;
 using System.Threading.Tasks;
 
@@ -146,6 +147,35 @@ public class AdvancedAlgebraNetworkTests
 
         // Assert
         Assert.Equal(3, network.LayerCount);
+    }
+
+    [Fact]
+    public void OctonionNeuralNetwork_Construction_RejectsInvalidOptimizerScheduleOptions()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 16,
+            outputSize: 8,
+            layers: [new OctonionLinearLayer<double>(2, 1)]);
+        var invalidOptions = new[]
+        {
+            new OctonionNeuralNetworkOptions { InitialLearningRate = 0.0 },
+            new OctonionNeuralNetworkOptions { InitialLearningRate = double.NaN },
+            new OctonionNeuralNetworkOptions { InitialLearningRate = double.PositiveInfinity },
+            new OctonionNeuralNetworkOptions { Momentum = -0.01 },
+            new OctonionNeuralNetworkOptions { Momentum = 1.0 },
+            new OctonionNeuralNetworkOptions { Momentum = double.NaN },
+            new OctonionNeuralNetworkOptions { RampEpoch = -1 },
+            new OctonionNeuralNetworkOptions { RampEpoch = 100, FirstDecayEpoch = 100 },
+            new OctonionNeuralNetworkOptions { FirstDecayEpoch = 150, SecondDecayEpoch = 150 }
+        };
+
+        foreach (var options in invalidOptions)
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                new OctonionNeuralNetwork<double>(architecture, options: options));
+        }
     }
 
     #endregion

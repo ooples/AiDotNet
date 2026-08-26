@@ -129,7 +129,9 @@ public class VideoDiffusionSegmentationIntegrationTests
     {
         var model = new DiffCutSegmentation<double>(Arch());
         Assert.NotNull(model);
-        Assert.True(model.SupportsTraining);
+        Assert.False(model.SupportsTraining);
+        Assert.Throws<NotSupportedException>(
+            () => model.Train(Rand(1, 3, 32, 32), Rand(1, 1, 32, 32)));
     }
 
     [Fact(Timeout = 120000)]

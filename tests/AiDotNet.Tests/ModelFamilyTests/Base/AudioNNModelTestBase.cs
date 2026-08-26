@@ -1,4 +1,6 @@
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using Xunit;
@@ -74,9 +76,10 @@ public abstract class AudioNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
     }
 
     // =====================================================
-    // AUDIO INVARIANT: Silence In → Near-Silence Out
-    // Zero input (silence) should produce near-zero output.
-    // A model that produces loud output from silence is broken.
+    // AUDIO INVARIANT: Silence Handling Matches the Output Domain
+    // Waveform-producing models should emit near-silence. Speech recognizers emit
+    // categorical scores, where zero RMS is neither meaningful nor attainable for
+    // normalized log probabilities; those outputs must instead be finite and normalized.
     // =====================================================
 
     [Fact(Timeout = 120000)]
@@ -88,6 +91,41 @@ public abstract class AudioNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
         var silence = CreateConstantTensor(EffectiveInputShape, 0.0);
 
         var output = network.Predict(silence);
+
+        if (network is ISpeechRecognizer<T>)
+        {
+            Assert.True(output.Length > 0, "Speech recognizer output should not be empty for silence.");
+            for (int i = 0; i < output.Length; i++)
+            {
+                double value = ConvertToDouble(output[i]);
+                Assert.True(!double.IsNaN(value) && !double.IsInfinity(value),
+                    $"Speech recognizer produced non-finite silence output {value} at index {i}.");
+            }
+
+            if (network is NeuralNetworkBase<T> neuralNetwork
+                && neuralNetwork.DefaultLossFunction is CTCLoss<T> ctc
+                && ctc.InputsAreLogProbabilities)
+            {
+                Assert.True(output.Rank >= 2,
+                    $"CTC log probabilities must include time and class axes; got rank {output.Rank}.");
+                Assert.Equal(ctc.NumClasses, output.Shape[^1]);
+
+                int classCount = output.Shape[^1];
+                int frameCount = output.Length / classCount;
+                double tolerance = typeof(T) == typeof(float) ? 1e-5 : 1e-10;
+                for (int frame = 0; frame < frameCount; frame++)
+                {
+                    double probabilityMass = 0.0;
+                    int offset = frame * classCount;
+                    for (int @class = 0; @class < classCount; @class++)
+                        probabilityMass += Math.Exp(ConvertToDouble(output[offset + @class]));
+
+                    Assert.InRange(probabilityMass, 1.0 - tolerance, 1.0 + tolerance);
+                }
+            }
+
+            return;
+        }
 
         // Compute RMS of output
         double sumSq = 0;

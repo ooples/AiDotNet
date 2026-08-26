@@ -254,7 +254,7 @@ public class RoomImpulseResponseOptions : ModelOptions
             throw new ArgumentOutOfRangeException(nameof(DereverberationStrength), DereverberationStrength, "Dereverberation strength must be in [0, 1].");
         if (RT60WindowSeconds <= 0.0)
             throw new ArgumentOutOfRangeException(nameof(RT60WindowSeconds), RT60WindowSeconds, "RT60 window must be positive.");
-        if (LearningRate <= 0.0)
-            throw new ArgumentOutOfRangeException(nameof(LearningRate), LearningRate, "Learning rate must be positive.");
+        if (double.IsNaN(LearningRate) || double.IsInfinity(LearningRate) || LearningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(LearningRate), LearningRate, "Learning rate must be finite and positive.");
     }
 }

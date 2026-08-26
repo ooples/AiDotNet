@@ -20,6 +20,7 @@ public class KyutaiMoshiOptions : ModelOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        Seed = other.Seed;
         SampleRate = other.SampleRate;
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
         EncoderDim = other.EncoderDim;
@@ -31,6 +32,11 @@ public class KyutaiMoshiOptions : ModelOptions
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+        WarmupFraction = other.WarmupFraction;
+        TotalTrainingSteps = other.TotalTrainingSteps;
+        MaxGradientNorm = other.MaxGradientNorm;
         Language = other.Language;
     }
 
@@ -45,5 +51,31 @@ public class KyutaiMoshiOptions : ModelOptions
     public string? ModelPath { get; set; }
     public OnnxModelOptions OnnxOptions { get; set; } = new();
     public double DropoutRate { get; set; } = 0.1;
+
+    /// <summary>Gets or sets the maximum fine-tuning learning rate.</summary>
+    /// <value>Defaults to 2e-6.</value>
+    /// <remarks>This is the recommended starting value in Kyutai's official Moshi fine-tuning configuration.</remarks>
+    public double LearningRate { get; set; } = 2e-6;
+
+    /// <summary>Gets or sets AdamW's decoupled weight decay.</summary>
+    /// <value>Defaults to 0.1.</value>
+    /// <remarks>This matches the official Moshi fine-tuning configuration.</remarks>
+    public double WeightDecay { get; set; } = 0.1;
+
+    /// <summary>Gets or sets the fraction of the one-cycle schedule used for warmup.</summary>
+    /// <value>Defaults to 0.05.</value>
+    /// <remarks>Kyutai's official recipe reaches peak learning rate after five percent of the total steps.</remarks>
+    public double WarmupFraction { get; set; } = 0.05;
+
+    /// <summary>Gets or sets the total number of one-cycle scheduler steps.</summary>
+    /// <value>Defaults to 2,000.</value>
+    /// <remarks>This matches the official quick-training Moshi configuration.</remarks>
+    public int TotalTrainingSteps { get; set; } = 2000;
+
+    /// <summary>Gets or sets the global gradient-norm limit.</summary>
+    /// <value>Defaults to 1.0.</value>
+    /// <remarks>The official trainer clips the trainable parameter norm before every AdamW step.</remarks>
+    public double MaxGradientNorm { get; set; } = 1.0;
+
     public string Language { get; set; } = "en";
 }

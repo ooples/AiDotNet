@@ -92,6 +92,7 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _numHeads;
     private readonly int _ffnExpansionFactor;
     private readonly int _convKernelSize;
+    private readonly int _attentionGroupSize;
 
     // Macaron feed-forward #1 (half-step residual).
     private readonly LayerNormalizationLayer<T> _ffn1Norm;
@@ -132,13 +133,18 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
     /// </param>
     /// <param name="ropeTheta">Rotary base frequency for the relative positional encoding.</param>
     /// <param name="maxSequenceLength">Maximum sequence length the positional encoding supports.</param>
+    /// <param name="attentionGroupSize">
+    /// Number of adjacent projected frames combined into one attention position. EfficientConformer
+    /// uses three in its first stage; ordinary Conformer keeps the default value of one.
+    /// </param>
     public ConformerBlockLayer(
         [LayerState] int modelDim,
         [LayerState] int numHeads,
         [LayerState] int ffnExpansionFactor = 4,
         [LayerState] int convKernelSize = 5,
         [LayerState] double ropeTheta = 10000.0,
-        [LayerState] int maxSequenceLength = 2048)
+        [LayerState] int maxSequenceLength = 2048,
+        [LayerState] int attentionGroupSize = 1)
         : base(new[] { -1, modelDim }, new[] { -1, modelDim })
     {
         _maxSequenceLength = maxSequenceLength;
@@ -149,11 +155,13 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
             throw new ArgumentException($"modelDim ({modelDim}) must be divisible by numHeads ({numHeads}).", nameof(numHeads));
         if (ffnExpansionFactor <= 0) throw new ArgumentOutOfRangeException(nameof(ffnExpansionFactor), "ffnExpansionFactor must be positive.");
         if (convKernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(convKernelSize), "convKernelSize must be positive.");
+        if (attentionGroupSize <= 0) throw new ArgumentOutOfRangeException(nameof(attentionGroupSize), "attentionGroupSize must be positive.");
 
         _modelDim = modelDim;
         _numHeads = numHeads;
         _ffnExpansionFactor = ffnExpansionFactor;
         _convKernelSize = convKernelSize;
+        _attentionGroupSize = attentionGroupSize;
         _half = NumOps.FromDouble(0.5);
 
         var swish = (Interfaces.IActivationFunction<T>)new SwishActivation<T>();
@@ -174,7 +182,8 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
 
         // --- Self-attention with RELATIVE positional encoding ---
         _attnNorm = new LayerNormalizationLayer<T>(modelDim);
-        _attention = new MultiHeadAttentionLayer<T>(numHeads, modelDim / numHeads);
+        _attention = new MultiHeadAttentionLayer<T>(numHeads, modelDim / numHeads)
+            .ConfigureAttentionGrouping(attentionGroupSize);
         _attention.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, ropeTheta, maxSequenceLength);
 
         // --- Convolution module (paper §2.2) ---
@@ -274,7 +283,11 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
 
         // [B, D, T] -> [B, T, D] -> original rank
         var outTd = Engine.TensorPermute(projected, new[] { 0, 2, 1 });
-        return Engine.Reshape(outTd, input.Shape.ToArray());
+        // Rank-3 is the native Conformer contract, and outTd already has exactly the requested
+        // [B,T,D] shape. Returning it directly avoids wrapping an arena-backed permutation in a
+        // redundant reshape view whose storage can be recycled while the enclosing residual block
+        // still needs it. Higher-rank callers still need their flattened leading axes restored.
+        return rank == 3 ? outTd : Engine.Reshape(outTd, input.Shape.ToArray());
     }
 
     private ILayer<T>[] OrderedSubLayers => new ILayer<T>[]
@@ -329,6 +342,7 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         metadata["NumHeads"] = _numHeads.ToString(ci);
         metadata["FfnExpansionFactor"] = _ffnExpansionFactor.ToString(ci);
         metadata["ConvKernelSize"] = _convKernelSize.ToString(ci);
+        metadata["AttentionGroupSize"] = _attentionGroupSize.ToString(ci);
         metadata["RopeTheta"] = _attention.RopeTheta.ToString(ci);
         metadata["PositionalMaxSequenceLength"] = _attention.PositionalMaxSequenceLength.ToString(ci);
         return metadata;

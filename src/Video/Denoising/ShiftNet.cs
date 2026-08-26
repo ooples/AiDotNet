@@ -140,23 +140,6 @@ public partial class ShiftNet<T> : VideoDenoisingBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> ForwardForTraining(Tensor<T> input)
-    {
-        // Mirror Denoise() so training optimises the SAME function inference evaluates. The base
-        // ForwardForTraining walked the RAW (unnormalised) input, whereas Denoise normalises the
-        // input (÷255) before the conv stack and denormalises after. Running the layers on a
-        // completely different input scale in training than at inference made the trained weights
-        // explode under Predict (loss 0.25 → ~198). Normalise → tape-aware layer walk →
-        // denormalise, all via Engine ops so gradients flow to the layer weights. (A residual
-        // input+correction connection isn't applicable here: the encoder/decoder conv stack does
-        // not preserve spatial size — e.g. 32×32 in → 29×29 out — so the output can't be added
-        // back to the input.)
-        var norm = PreprocessFrames(input);
-        var output = base.ForwardForTraining(norm);
-        return PostprocessOutput(output);
-    }
-
-    /// <inheritdoc/>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
@@ -184,19 +167,8 @@ public partial class ShiftNet<T> : VideoDenoisingBase<T>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.

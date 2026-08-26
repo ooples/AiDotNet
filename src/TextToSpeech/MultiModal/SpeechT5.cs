@@ -1,7 +1,9 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -84,7 +86,7 @@ public partial class SpeechT5<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         _options = options ?? new SpeechT5Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -194,6 +196,37 @@ public partial class SpeechT5<T> : TtsModelBase<T>, IEndToEndTts<T>
         {
             SetTrainingMode(false);
         }
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+    {
+        if (_options.WarmupUpdates <= 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.WarmupUpdates), "WarmupUpdates must be positive.");
+        if (_options.LearningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(_options.LearningRate), "LearningRate must be positive.");
+
+        int modelDimension = _options.EncoderDim > 0 ? _options.EncoderDim : 192;
+        // Fairseq's inverse-sqrt schedule reaches the configured LR at the end
+        // of warmup. Scale Noam's dimension-dependent factor to the same peak.
+        double factor = _options.LearningRate * Math.Sqrt(modelDimension * (double)_options.WarmupUpdates);
+        var scheduler = new NoamSchedule(modelDimension, _options.WarmupUpdates, factor);
+
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = scheduler.CurrentLearningRate,
+                Beta1 = _options.OptimizerBeta1,
+                Beta2 = _options.OptimizerBeta2,
+                Epsilon = _options.OptimizerEpsilon,
+                EnableGradientClipping = _options.MaxGradientNorm > 0.0,
+                MaxGradientNorm = _options.MaxGradientNorm > 0.0 ? _options.MaxGradientNorm : 1.0,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                LearningRateScheduler = scheduler,
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+            });
     }
 
     /// <inheritdoc />

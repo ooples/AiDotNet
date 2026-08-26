@@ -102,14 +102,23 @@ public partial class LiteDVDNet<T> : VideoDenoisingBase<T>
     {
         _options = options ?? new LiteDVDNetOptions();
         _useNativeMode = true;
-        // The paper trains with "the ADAM algorithm with default hyperparameters" starting at 1e-3. The bare
-        // AdamWOptimizer(this) dropped the model's configured LearningRate entirely and ran at Adam's own
-        // default with no clipping — and, without a GetOrCreateBaseOptimizer override, the tape trainer never
-        // consulted this field at all. Fully user-overridable via the optimizer parameter and
-        // LiteDVDNetOptions.LearningRate. (#1789)
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate, EnableGradientClipping = true, MaxGradientNorm = 1.0 });
+        // LiteDVDNet is trained with standard Adam at 1e-3 and the original Adam hyperparameters.
+        // AdamW is a different algorithm even when its configured weight decay happens to be zero;
+        // pin the fixed-beta Adam contract explicitly so AiDotNet's optional adaptive-beta extension
+        // cannot change the released optimization trajectory. The caller can still supply an optimizer.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0
+            });
         TemporalRadius = (_options.TemporalWindowSize - 1) / 2;
         InitializeLayers();
     }
@@ -155,7 +164,10 @@ public partial class LiteDVDNet<T> : VideoDenoisingBase<T>
     /// different functions. (#1789)
     /// </summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
-        => ApplyResidual(input, base.ForwardForTraining(input));
+    {
+        var preprocessed = PreprocessFrames(input);
+        return ApplyResidual(preprocessed, ForwardPreprocessedForTraining(preprocessed));
+    }
 
     /// <inheritdoc/>
     protected override void InitializeLayers()
@@ -232,12 +244,9 @@ public partial class LiteDVDNet<T> : VideoDenoisingBase<T>
     }
 
     /// <summary>
-    /// Routes TrainWithTape through the model's configured optimizer (default: AdamW at the denoiser-standard
-    /// <see cref="LiteDVDNetOptions.LearningRate"/> = 1e-4 with gradient clipping) instead of the base Adam 1e-3
-    /// default. 1e-3 explodes this deep conv architecture's loss (Training_ShouldReduceLoss saw 0.28 -> 150 even
-    /// with the base global gradient-norm clip); the 10x-smaller step converges. Simply setting the private
-    /// <c>_optimizer</c> field was inert until this override — the base trainer only consults
-    /// GetOrCreateBaseOptimizer(). Fully user-overridable via the constructor's optimizer parameter. (#1789)
+    /// Routes tape training through the model's configured optimizer. The default is the paper's
+    /// standard Adam optimizer at <see cref="LiteDVDNetOptions.LearningRate"/> = 1e-3; callers may
+    /// replace it through the constructor.
     /// </summary>
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
         => _optimizer ?? base.GetOrCreateBaseOptimizer();
@@ -247,29 +256,6 @@ public partial class LiteDVDNet<T> : VideoDenoisingBase<T>
 
     /// <inheritdoc/>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
-
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            // Train in the same normalized domain used by Denoise/Predict. Previously inference
-            // divided frames by 255 and denormalized the result, while training fed raw pixel
-            // tensors directly into the stack. BatchNorm therefore accumulated statistics in a
-            // domain 255x larger than inference; as training continued, evaluation became worse
-            // even though the trainable weights remained stable. Targets must be normalized too,
-            // because ForwardForTraining returns the residual-corrected normalized frame.
-            var normalizedInput = PreprocessFrames(input);
-            var normalizedExpected = PreprocessFrames(expected);
-            TrainWithTape(normalizedInput, normalizedExpected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.

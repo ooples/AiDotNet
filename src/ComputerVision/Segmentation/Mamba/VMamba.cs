@@ -59,6 +59,8 @@ public partial class VMamba<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly VMambaOptions _options;
     public override ModelOptions GetOptions() => _options;
+    protected override double DefaultLearningRate => _options.LearningRate;
+    protected override double DefaultWeightDecay => _options.WeightDecay;
 
     #region Fields
     // Only VMamba's OWN configuration lives here. _height, _width, _channels, _numClasses,

@@ -118,7 +118,22 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         _logitScale = new LearnableLogitScaleLayer<T>(_options.Temperature);
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // The official MedCLIP pretraining recipe uses AdamW at 2e-5 with
+        // decoupled weight decay 1e-4. Route the model options into the optimizer
+        // instead of silently falling back to AdamW's generic 1e-3 / 1e-2 defaults.
+        _optimizer =
+            optimizer
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    Beta1 = 0.9,
+                    Beta2 = 0.999,
+                    Epsilon = 1e-8,
+                    WeightDecay = _options.WeightDecay,
+                }
+            );
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.ProjectionDim;

@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
@@ -66,7 +67,7 @@ public partial class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
         string modelPath,
         ProDiffOptions? options = null
     )
-        : base(architecture)
+        : base(architecture, new MeanAbsoluteErrorLoss<T>())
     {
         _options = options ?? new ProDiffOptions();
         ValidateOptions(_options);
@@ -90,7 +91,7 @@ public partial class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
         ProDiffOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
     )
-        : base(architecture)
+        : base(architecture, new MeanAbsoluteErrorLoss<T>())
     {
         _options = options ?? new ProDiffOptions();
         ValidateOptions(_options);

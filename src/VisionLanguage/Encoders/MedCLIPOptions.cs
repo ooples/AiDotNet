@@ -128,5 +128,8 @@ public class MedCLIPOptions : ContrastiveEncoderOptions
         ImageMean = [0.5862785803043838, 0.5862785803043838, 0.5862785803043838];
         ImageStd = [0.27950088968644304, 0.27950088968644304, 0.27950088968644304];
         Temperature = 0.07;
+        // Official MedCLIP pretraining recipe (examples/run_medclip_pretrain.py).
+        LearningRate = 2e-5;
+        WeightDecay = 1e-4;
     }
 }

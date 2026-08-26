@@ -73,24 +73,34 @@ public partial class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
 
     #region Properties
     /// <summary>
-    /// Gets whether using native mode (trainable) or ONNX mode (inference only).
+    /// Gets whether using the native inference pipeline or an ONNX model.
     /// </summary>
     internal bool UseNativeMode => _useNativeMode;
+
+    /// <summary>
+    /// Gets whether supervised parameter training is supported.
+    /// </summary>
+    /// <remarks>
+    /// DiffCut is a zero-shot, training-free method over frozen diffusion features.
+    /// Exposing the native graph as trainable would describe a different model than the
+    /// cited paper, so both native and ONNX modes are inference-only.
+    /// </remarks>
+    public override bool SupportsTraining => false;
     #endregion
 
     #region Constructors
     /// <summary>
-    /// Initializes DiffCutSegmentation in native (trainable) mode.
+    /// Initializes DiffCutSegmentation with the native inference pipeline.
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
-    /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
-    /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
+    /// <param name="optimizer">Retained for source compatibility; DiffCut does not train parameters.</param>
+    /// <param name="lossFunction">Retained for source compatibility; DiffCut does not use a supervised objective.</param>
     /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
     /// <param name="dropRate">Dropout rate (default: 0).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Creates a trainable DiffCutSegmentation model.
+    /// <b>For Beginners:</b> Creates the training-free DiffCut inference pipeline.
     /// </para>
     /// </remarks>
     public DiffCutSegmentation(NeuralNetworkArchitecture<T> architecture,
@@ -100,7 +110,8 @@ public partial class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
         DiffCutSegmentationOptions? options = null)
         : base(architecture, optimizer, lossFunction, numClasses)
     {
-        _options = options ?? new DiffCutSegmentationOptions(); Options = _options;
+        _options = options ?? new DiffCutSegmentationOptions();
+        Options = _options;
         _dropRate = dropRate;
         var nativeOptions = ValidateAndCopyNativeOptions(_options);
         _channelDims = nativeOptions.ChannelDimensions;
@@ -129,7 +140,8 @@ public partial class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
         DiffCutSegmentationOptions? options = null)
         : base(architecture, onnxModelPath, numClasses)
     {
-        _options = options ?? new DiffCutSegmentationOptions(); Options = _options;
+        _options = options ?? new DiffCutSegmentationOptions();
+        Options = _options;
         _dropRate = 0;
         var nativeOptions = ValidateAndCopyNativeOptions(_options);
         _channelDims = nativeOptions.ChannelDimensions;
@@ -145,28 +157,19 @@ public partial class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
 
     #region Public Methods
     /// <summary>
-    /// Performs one training step.
+    /// Rejects supervised training because DiffCut is a frozen, zero-shot method.
     /// </summary>
     /// <param name="input">The input tensor.</param>
     /// <param name="expectedOutput">Ground-truth segmentation tensor.</param>
     /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Trains the model. Only available in native mode.
-    /// </para>
+    /// <para><b>For Beginners:</b> DiffCut extracts frozen diffusion features and segments
+    /// them with recursive normalized cut; it does not learn from labeled masks.</para>
     /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model.</exception>
+    /// <exception cref="NotSupportedException">Always thrown because the cited method is training-free.</exception>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, Optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        throw new NotSupportedException(
+            "DiffCut is a zero-shot, training-free segmentation method over frozen diffusion features.");
     }
     #endregion
 
@@ -174,29 +177,50 @@ public partial class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
     /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
-        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
+        bool hasBatch = input.Rank == 4;
+        if (!hasBatch)
+            input = AddBatchDimension(input);
+
         var features = input;
-        for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
-        if (!hasBatch) features = RemoveBatchDimension(features); return features;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            features = Layers[i].Forward(features);
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            features = Layers[i].Forward(features);
+
+        if (!hasBatch)
+            features = RemoveBatchDimension(features);
+
+        return features;
     }
 
     /// <inheritdoc />
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
-        if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
-        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
+        if (_onnxSession is null)
+            throw new InvalidOperationException("ONNX session is not initialized.");
+
+        bool hasBatch = input.Rank == 4;
+        if (!hasBatch)
+            input = AddBatchDimension(input);
+
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
+        for (int i = 0; i < input.Length; i++)
+            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
+
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
         using var results = _onnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        for (int i = 0; i < outputTensor.Length; i++)
+            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
-        if (!hasBatch) result = RemoveBatchDimension(result); return result;
+        if (!hasBatch)
+            result = RemoveBatchDimension(result);
+
+        return result;
     }
 
     /// <summary>Adds a leading batch axis through a RECORDED reshape, so it stays on the autodiff tape.</summary>
@@ -254,7 +278,12 @@ public partial class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
     /// </remarks>
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) { ClearLayers(); return; }
+        if (!_useNativeMode)
+        {
+            ClearLayers();
+            return;
+        }
+
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -264,10 +293,23 @@ public partial class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
         }
         else
         {
-            var encoderLayers = LayerHelper<T>.CreateDiffCutSegmentationEncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
-            _encoderLayerEnd = encoderLayers.Count; Layers.AddRange(encoderLayers);
-            int fH = _height / 32, fW = _width / 32;
-            var decoderLayers = LayerHelper<T>.CreateDiffCutSegmentationDecoderLayers(_channelDims[^1], _decoderDim, _numClasses, fH, fW);
+            var encoderLayers = LayerHelper<T>.CreateDiffCutSegmentationEncoderLayers(
+                _channels,
+                _height,
+                _width,
+                _channelDims,
+                _depths,
+                _dropRate).ToList();
+            _encoderLayerEnd = encoderLayers.Count;
+            Layers.AddRange(encoderLayers);
+            int featureHeight = _height / 32;
+            int featureWidth = _width / 32;
+            var decoderLayers = LayerHelper<T>.CreateDiffCutSegmentationDecoderLayers(
+                _channelDims[^1],
+                _decoderDim,
+                _numClasses,
+                featureHeight,
+                featureWidth);
             Layers.AddRange(decoderLayers);
         }
     }
@@ -285,7 +327,15 @@ public partial class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        AdditionalInfo = new Dictionary<string, object> { { "ModelName", "DiffCutSegmentation" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
+        AdditionalInfo = new Dictionary<string, object>
+        {
+            { "ModelName", "DiffCutSegmentation" },
+            { "InputHeight", _height },
+            { "InputWidth", _width },
+            { "NumClasses", _numClasses },
+            { "UseNativeMode", _useNativeMode },
+            { "NumLayers", Layers.Count }
+        },
         ModelData = SerializeForMetadata()
     };
 

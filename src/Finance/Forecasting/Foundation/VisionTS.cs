@@ -142,18 +142,27 @@ public partial class VisionTS<T> : TimeSeriesFoundationModelBase<T>
         if (!File.Exists(onnxModelPath))
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
-        options ??= new VisionTSOptions<T>();
-        _options = options;
-        Options = _options;
+        var session = new InferenceSession(onnxModelPath);
+        try
+        {
+            options ??= new VisionTSOptions<T>();
+            _options = options;
+            Options = _options;
 
-        _useNativeMode = false;
-        OnnxModelPath = onnxModelPath;
-        OnnxSession = new InferenceSession(onnxModelPath);
+            _useNativeMode = false;
+            OnnxModelPath = onnxModelPath;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-
-        CopyOptionsToFields(options);
+            CopyOptionsToFields(options);
+            _optimizer = optimizer ?? CreatePaperOptimizer(options);
+            _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+            SetBaseTrainOptimizer(_optimizer);
+            OnnxSession = session;
+        }
+        catch
+        {
+            session.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
@@ -174,10 +183,11 @@ public partial class VisionTS<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-
         CopyOptionsToFields(options);
+        _optimizer = optimizer ?? CreatePaperOptimizer(options);
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        SetBaseTrainOptimizer(_optimizer);
+
         InitializeLayers();
     }
 
@@ -190,6 +200,7 @@ public partial class VisionTS<T> : TimeSeriesFoundationModelBase<T>
         Guard.Positive(options.NumLayers, nameof(options.NumLayers));
         Guard.Positive(options.NumHeads, nameof(options.NumHeads));
         Guard.Positive(options.IntermediateSize, nameof(options.IntermediateSize));
+        Guard.Positive(options.LearningRate, nameof(options.LearningRate));
 
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
@@ -201,6 +212,20 @@ public partial class VisionTS<T> : TimeSeriesFoundationModelBase<T>
         _dropout = options.DropoutRate;
         _modelSize = options.ModelSize;
         _maskRatio = options.MaskRatio;
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer(VisionTSOptions<T> options)
+    {
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                EnableGradientClipping = false
+            });
     }
 
     #endregion
@@ -228,6 +253,48 @@ public partial class VisionTS<T> : TimeSeriesFoundationModelBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => _useNativeMode;
+
+    /// <summary>
+    /// The VisionTS full-shot recipe freezes the visual MAE and fine-tunes only
+    /// LayerNorm affine parameters. Keep that selection at the shared tape
+    /// boundary so Adam moments and clipping see exactly the paper's subset.
+    /// </summary>
+    protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(
+        IReadOnlyList<Tensor<T>> parameters)
+    {
+        var layerNormParameters = new HashSet<Tensor<T>>(
+            AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+
+        foreach (var layer in Layers)
+        {
+            if (layer is TransformerEncoderLayer<T> encoder)
+            {
+                foreach (var parameter in encoder.GetLayerNormalizationTrainableParameters())
+                    layerNormParameters.Add(parameter);
+            }
+            else if (layer is LayerNormalizationLayer<T> normalization)
+            {
+                foreach (var parameter in normalization.GetTrainableParameters())
+                    layerNormParameters.Add(parameter);
+            }
+        }
+
+        var selected = parameters.Where(layerNormParameters.Contains).ToArray();
+        if (parameters.Count > 0 && selected.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "VisionTS full-shot training requires initialized LayerNorm parameters, but the configured " +
+                "architecture did not expose any trainable LayerNorm tensors.");
+        }
+
+        return selected;
+    }
+
+    /// <summary>
+    /// Fused compiled updates operate on the complete parameter vector and
+    /// therefore cannot preserve VisionTS's LayerNorm-only fine-tuning contract.
+    /// </summary>
+    protected override bool SupportsFusedCompiledTraining => false;
 
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)

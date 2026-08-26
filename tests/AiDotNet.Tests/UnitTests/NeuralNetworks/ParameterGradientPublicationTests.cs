@@ -86,6 +86,23 @@ public class ParameterGradientPublicationTests
         Assert.Contains("must match ParameterCount", error.Message);
     }
 
+    [Fact]
+    public void GradientClippingSelection_ExcludesExtraLayersAndRawTensors()
+    {
+        using var network = new PublicationNetwork();
+
+        var selected = network.TrainableTensors;
+        var clipped = network.LayerOwnedTensorsForClipping;
+
+        Assert.NotEmpty(clipped);
+        Assert.True(clipped.Count < selected.Count);
+        Assert.All(clipped, parameter =>
+            Assert.Contains(selected, candidate => ReferenceEquals(candidate, parameter)));
+        Assert.All(network.ExtraLayerTensors, parameter =>
+            Assert.DoesNotContain(clipped, candidate => ReferenceEquals(candidate, parameter)));
+        Assert.DoesNotContain(clipped, candidate => ReferenceEquals(candidate, network.RawParameter));
+    }
+
     private static Tensor<float> FilledLike(Tensor<float> parameter, float value)
     {
         var result = new Tensor<float>(parameter.Shape.ToArray());
@@ -122,6 +139,13 @@ public class ParameterGradientPublicationTests
         }
 
         public IReadOnlyList<Tensor<float>> TrainableTensors => CollectModelTrainableTensors();
+
+        public IReadOnlyList<Tensor<float>> LayerOwnedTensorsForClipping
+            => CollectLayerOwnedTrainableTensorsForClipping(TrainableTensors);
+
+        public IReadOnlyList<Tensor<float>> ExtraLayerTensors => _extraLayer.GetTrainableParameters();
+
+        public Tensor<float> RawParameter => _rawParameter;
 
         public void Publish(IReadOnlyDictionary<Tensor<float>, Tensor<float>> gradients)
             => PublishParameterGradients(gradients);

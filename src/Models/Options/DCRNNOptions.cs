@@ -76,6 +76,7 @@ public class DCRNNOptions<T> : TimeSeriesRegressionOptions<T>
         // written from the local declarations alone misses it. Losing it on a clone silently
         // changes deterministic initialization.
         Seed = other.Seed;
+        LearningRate = other.LearningRate;
         SequenceLength = other.SequenceLength;
         ForecastHorizon = other.ForecastHorizon;
         NumNodes = other.NumNodes;
@@ -192,6 +193,19 @@ public class DCRNNOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public double DropoutRate { get; set; } = 0.0;
+
+    /// <summary>
+    /// Gets or sets the initial Adam learning rate.
+    /// </summary>
+    /// <value>The learning rate, defaulting to 0.01.</value>
+    /// <remarks>
+    /// The released METR-LA configuration uses a base rate of 0.01 before its epoch-based
+    /// decay schedule. Exposing it here keeps native training configurable without replacing
+    /// the paper optimizer.
+    /// <para><b>For Beginners:</b> This controls the size of each Adam update. The paper starts
+    /// at 0.01 and reduces it during training.</para>
+    /// </remarks>
+    public double LearningRate { get; set; } = 0.01;
 
     /// <summary>
     /// Gets or sets whether to use scheduled sampling during training.

@@ -490,7 +490,9 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         _gamma = new Tensor<T>([numFeatures]);
         _gamma.Fill(NumOps.One);
         _beta = new Tensor<T>([numFeatures]);
+        _beta.Fill(NumOps.Zero);
         _runningMean = TensorAllocator.RentPinned<T>([numFeatures]);
+        _runningMean.Fill(NumOps.Zero);
         _runningVariance = TensorAllocator.RentPinned<T>([numFeatures]);
         _runningVariance.Fill(NumOps.One);
 

@@ -5,6 +5,7 @@ using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -147,10 +148,10 @@ public partial class TOTO<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-
         CopyOptionsToFields(options);
+        _optimizer = optimizer ?? CreatePaperOptimizer(options);
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        SetBaseTrainOptimizer(_optimizer);
     }
 
     /// <summary>
@@ -171,10 +172,10 @@ public partial class TOTO<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-
         CopyOptionsToFields(options);
+        _optimizer = optimizer ?? CreatePaperOptimizer(options);
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        SetBaseTrainOptimizer(_optimizer);
         // Size the context window to the architecture's actual input so the patch
         // layers match the input the model is given (the options default assumes
         // paper scale, which need not match the configured architecture).
@@ -191,6 +192,18 @@ public partial class TOTO<T> : TimeSeriesFoundationModelBase<T>
         Guard.Positive(options.HiddenDimension, nameof(options.HiddenDimension));
         Guard.Positive(options.NumLayers, nameof(options.NumLayers));
         Guard.Positive(options.NumHeads, nameof(options.NumHeads));
+        if (double.IsNaN(options.LearningRate) || double.IsInfinity(options.LearningRate) || options.LearningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(options.LearningRate), "Learning rate must be finite and positive.");
+        if (double.IsNaN(options.Beta1) || double.IsInfinity(options.Beta1) || options.Beta1 < 0.0 || options.Beta1 >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(options.Beta1), "Beta1 must be finite and in [0, 1).");
+        if (double.IsNaN(options.Beta2) || double.IsInfinity(options.Beta2) || options.Beta2 < 0.0 || options.Beta2 >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(options.Beta2), "Beta2 must be finite and in [0, 1).");
+        if (double.IsNaN(options.WeightDecay) || double.IsInfinity(options.WeightDecay) || options.WeightDecay < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(options.WeightDecay), "Weight decay must be finite and non-negative.");
+        Guard.Positive(options.WarmupSteps, nameof(options.WarmupSteps));
+        Guard.Positive(options.TotalTrainingSteps, nameof(options.TotalTrainingSteps));
+        if (options.TotalTrainingSteps < options.WarmupSteps)
+            throw new ArgumentException("Total training steps must be at least the warmup steps.", nameof(options));
 
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
@@ -201,6 +214,31 @@ public partial class TOTO<T> : TimeSeriesFoundationModelBase<T>
         _intermediateSize = options.IntermediateSize;
         _dropout = options.DropoutRate;
         _modelSize = options.ModelSize;
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer(TOTOOptions<T> options)
+    {
+        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                Beta1 = options.Beta1,
+                Beta2 = options.Beta2,
+                WeightDecay = options.WeightDecay,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                EnableGradientClipping = false,
+                LearningRateScheduler = new LinearWarmupScheduler(
+                    baseLearningRate: options.LearningRate,
+                    warmupSteps: options.WarmupSteps,
+                    totalSteps: options.TotalTrainingSteps,
+                    warmupInitLr: options.LearningRate / options.WarmupSteps,
+                    decayMode: LinearWarmupScheduler.DecayMode.Cosine,
+                    endLr: 0.0),
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch
+            });
     }
 
     #endregion

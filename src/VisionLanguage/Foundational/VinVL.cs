@@ -2,6 +2,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
@@ -77,7 +78,7 @@ public partial class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
         string modelPath,
         VinVLOptions? options = null
     )
-        : base(architecture)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new VinVLOptions();
         _useNativeMode = false;
@@ -99,7 +100,7 @@ public partial class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
         VinVLOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
     )
-        : base(architecture)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new VinVLOptions();
         _useNativeMode = true;

@@ -10,6 +10,7 @@ public class WaveRNNOptions : VocoderOptions
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public WaveRNNOptions(WaveRNNOptions other)
+        : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
@@ -17,6 +18,7 @@ public class WaveRNNOptions : VocoderOptions
         RnnDim = other.RnnDim;
         FcDim = other.FcDim;
         Bits = other.Bits;
+        MaxGradientNorm = other.MaxGradientNorm;
     }
 
     public WaveRNNOptions()
@@ -24,9 +26,12 @@ public class WaveRNNOptions : VocoderOptions
         SampleRate = 24000;
         MelChannels = 80;
         HopSize = 256;
+        LearningRate = 1e-4;
+        WeightDecay = 0.0;
     }
 
     public int RnnDim { get; set; } = 512;
     public int FcDim { get; set; } = 512;
     public int Bits { get; set; } = 10;
+    public double MaxGradientNorm { get; set; } = 4.0;
 }

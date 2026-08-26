@@ -16,7 +16,7 @@ namespace AiDotNet.Helpers;
 /// This class contains factory methods that create pre-configured sets of neural network layers
 /// for common architectures like standard feed-forward networks, CNNs, ResNets, and more.
 /// </remarks>
-public static class LayerHelper<T>
+public static partial class LayerHelper<T>
 {
     /// <summary>
     /// Provides operations for the numeric type T.
@@ -171,10 +171,30 @@ public static class LayerHelper<T>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultNeuralVaRLayers(
         NeuralNetworkArchitecture<T> architecture,
-        int numFeatures)
+        int numFeatures,
+        int hiddenLayerCount = 3,
+        int hiddenLayerSize = 0)
     {
-        // Deep MLP for risk mapping
-        return CreateDefaultLayers(architecture, 3, 128, 1);
+        int inputSize = architecture.CalculatedInputSize > 0
+            ? architecture.CalculatedInputSize
+            : numFeatures;
+        int resolvedHiddenLayerSize = hiddenLayerSize > 0
+            ? hiddenLayerSize
+            : checked(inputSize * 2);
+
+        ValidateLayerParameters(hiddenLayerCount, resolvedHiddenLayerSize, 1);
+
+        // Barrera et al.'s reference implementation uses a feed-forward
+        // quantile regressor with Softplus hidden units and an affine scalar
+        // output. Its default hidden stack has three layers of width 2*input;
+        // callers can still override both values through NeuralVaROptions.
+        var layers = new List<ILayer<T>>(hiddenLayerCount + 1);
+        for (int i = 0; i < hiddenLayerCount; i++)
+            layers.Add(new DenseLayer<T>(resolvedHiddenLayerSize, new SoftPlusActivation<T>() as IActivationFunction<T>));
+        layers.Add(new DenseLayer<T>(1, new IdentityActivation<T>() as IActivationFunction<T>));
+
+        ChainResolveLazyLayers(layers, new[] { inputSize });
+        return layers;
     }
 
     /// <summary>
@@ -3958,8 +3978,8 @@ public static class LayerHelper<T>
     /// Creates default layers for a Hamiltonian Neural Network.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration that defines input and output shapes.</param>
-    /// <param name="hiddenLayerCount">Number of hidden layers (default: 3).</param>
-    /// <param name="hiddenLayerSize">Number of neurons in each hidden layer (default: 64).</param>
+    /// <param name="hiddenLayerCount">Number of hidden layers (default: 2, matching the reference MLP).</param>
+    /// <param name="hiddenLayerSize">Number of neurons in each hidden layer (default: 200).</param>
     /// <returns>A collection of layers forming a Hamiltonian neural network.</returns>
     /// <remarks>
     /// <para>
@@ -3982,8 +4002,8 @@ public static class LayerHelper<T>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultHamiltonianLayers(
         NeuralNetworkArchitecture<T> architecture,
-        int hiddenLayerCount = 3,
-        int hiddenLayerSize = 64)
+        int hiddenLayerCount = 2,
+        int hiddenLayerSize = 200)
     {
         ValidateLayerParameters(hiddenLayerCount, hiddenLayerSize, architecture.OutputSize);
 
@@ -3997,25 +4017,26 @@ public static class LayerHelper<T>
         var inputShape = architecture.GetInputShape();
         int inputSize = inputShape.Aggregate((a, b) => a * b);
 
-        // Hamiltonian networks use Tanh for smooth gradients
+        // Greydanus et al. use smooth tanh units and orthogonal initialization for
+        // the coordinate experiments. Smoothness is essential because training
+        // differentiates the scalar Hamiltonian with respect to its inputs.
         var hiddenActivation = new TanhActivation<T>() as IActivationFunction<T>;
+        var initialization = new AiDotNet.Initialization.OrthogonalInitializationStrategy<T>();
 
-        // Build the Hamiltonian net into a list, chain-resolve from the
-        // architecture's known input dim so every layer reports
-        // ParameterCount > 0 immediately (callers compute Hamiltonian
-        // gradients which need materialized weights).
+        // The paper/reference MLP has two 200-wide hidden transformations and a
+        // bias-free final projection. Keep the helper configurable for custom
+        // experiments while making the cited recipe the default.
         var layers = new List<ILayer<T>>(hiddenLayerCount + 1);
-        layers.Add(new DenseLayer<T>(hiddenLayerSize, hiddenActivation));
+        layers.Add(new DenseLayer<T>(hiddenLayerSize, hiddenActivation, initialization));
         for (int i = 1; i < hiddenLayerCount; i++)
         {
-            layers.Add(new DenseLayer<T>(hiddenLayerSize, hiddenActivation));
+            layers.Add(new DenseLayer<T>(hiddenLayerSize, hiddenActivation, initialization));
         }
-        layers.Add(new DenseLayer<T>(1, new IdentityActivation<T>() as IActivationFunction<T>));
+        layers.Add(new BiasFreeLinearLayer<T>(hiddenLayerSize, 1));
 
         ChainResolveLazyLayers(layers, new[] { inputSize });
         foreach (var layer in layers) yield return layer;
     }
-
     /// <summary>
     /// Creates default layers for a Lagrangian Neural Network.
     /// </summary>
@@ -16872,54 +16893,52 @@ public static class LayerHelper<T>
         int numEncoderLayers = 2,
         int numDecoderLayers = 2,
         int forecastHorizon = 12,
-        int diffusionSteps = 2)
+        int diffusionSteps = 2,
+        double[,]? forwardTransition = null,
+        double[,]? backwardTransition = null,
+        string filterType = "dual_random_walk")
     {
-        // Paper-faithful DCRNN (Li et al. 2018): weights are SHARED across nodes.
-        // The model runs these layers on a [numNodes, seqLen, hiddenDim] tensor
-        // (numNodes as the batch dim), so each DenseLayer is a per-node MLP and each
-        // GRULayer a per-node DCGRU — O(hiddenDim^2) params, not the old
-        // numNodes*hiddenDim-wide flattened denses (~1B params at numNodes=207 that
-        // OOM-crashed the optimizer). Spatial diffusion is applied in the forward.
+        _ = architecture;
+        _ = forecastHorizon;
 
-        // === Input Embedding === (per node+step: numFeatures -> hiddenDim)
-        yield return new DenseLayer<T>(
-            outputSize: hiddenDimension,
-            activationFunction: null);
+        bool useBackwardSupport = string.Equals(
+            filterType,
+            "dual_random_walk",
+            StringComparison.OrdinalIgnoreCase);
 
-        // === Encoder DCGRU Layers ===
-        for (int i = 0; i < numEncoderLayers; i++)
+        // Li et al. use a stacked DCGRU encoder. The first cell consumes the per-node
+        // measurements; higher cells consume the preceding hidden sequence.
+        for (int layer = 0; layer < numEncoderLayers; layer++)
         {
-            yield return new GRULayer<T>(
+            yield return new DiffusionConvolutionalGRULayer<T>(
+                inputSize: layer == 0 ? numFeatures : hiddenDimension,
                 hiddenSize: hiddenDimension,
-                returnSequences: true,
-                activation: (IActivationFunction<T>?)null,
-                recurrentActivation: null);
-
-            yield return new DenseLayer<T>(
-                outputSize: hiddenDimension,
-                activationFunction: new ReLUActivation<T>());
+                numNodes: numNodes,
+                maxDiffusionStep: diffusionSteps,
+                forwardTransition: forwardTransition,
+                backwardTransition: backwardTransition,
+                useBackwardSupport: useBackwardSupport);
         }
 
-        // === Decoder DCGRU Layers ===
-        for (int i = 0; i < numDecoderLayers; i++)
+        // The decoder starts with a scalar GO symbol / previous scalar forecast at each
+        // node. Its hidden states are initialized from the corresponding encoder layers.
+        for (int layer = 0; layer < numDecoderLayers; layer++)
         {
-            yield return new GRULayer<T>(
+            yield return new DiffusionConvolutionalGRULayer<T>(
+                inputSize: layer == 0 ? 1 : hiddenDimension,
                 hiddenSize: hiddenDimension,
-                returnSequences: true,
-                activation: (IActivationFunction<T>?)null,
-                recurrentActivation: null);
-
-            yield return new DenseLayer<T>(
-                outputSize: hiddenDimension,
-                activationFunction: new ReLUActivation<T>());
+                numNodes: numNodes,
+                maxDiffusionStep: diffusionSteps,
+                forwardTransition: forwardTransition,
+                backwardTransition: backwardTransition,
+                useBackwardSupport: useBackwardSupport);
         }
 
-        // === Output Projection === (per node: hiddenDim -> forecastHorizon)
+        // The reference supervisor projects every decoder step to one traffic value.
         yield return new DenseLayer<T>(
-            outputSize: forecastHorizon,
+            outputSize: 1,
             activationFunction: null);
     }
-
     /// <summary>
     /// Creates default layers for RelationalGCN (Relational Graph Convolutional Network).
     /// </summary>
@@ -20758,6 +20777,48 @@ public static class LayerHelper<T>
     #region Speech Recognition Layers
 
     /// <summary>
+    /// Creates the feed-forward Deep KWS network from Chen, Parada, and Heigold (ICASSP 2014).
+    /// </summary>
+    /// <param name="architecture">Architecture used to resolve the stacked acoustic-feature width.</param>
+    /// <param name="hiddenLayerCount">Number of fully connected ReLU hidden layers; the paper's small model uses three.</param>
+    /// <param name="hiddenLayerSize">Units in each hidden layer; the paper's small model uses 128.</param>
+    /// <param name="outputLabelCount">Number of keyword/subword labels, or a non-positive value to use the architecture output size.</param>
+    /// <returns>A fully connected ReLU network with a softmax label-posterior head.</returns>
+    /// <remarks>
+    /// The paper stacks acoustic frames into one fixed-width vector, then predicts keyword-label
+    /// posteriors with a standard feed-forward DNN. This helper deliberately contains no attention,
+    /// convolution, recurrence, or CTC head: those implement different KWS papers.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultKeywordSpottingLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenLayerCount = 3,
+        int hiddenLayerSize = 128,
+        int outputLabelCount = -1)
+    {
+        if (architecture is null)
+            throw new ArgumentNullException(nameof(architecture));
+
+        int labelCount = outputLabelCount > 0
+            ? outputLabelCount
+            : Math.Max(1, architecture.OutputSize);
+        ValidateLayerParameters(hiddenLayerCount, hiddenLayerSize, labelCount);
+
+        var layers = new List<ILayer<T>>(hiddenLayerCount + 1);
+        for (int i = 0; i < hiddenLayerCount; i++)
+        {
+            layers.Add(new DenseLayer<T>(
+                hiddenLayerSize,
+                (IActivationFunction<T>)new ReLUActivation<T>()));
+        }
+
+        layers.Add(new DenseLayer<T>(
+            labelCount,
+            (IActivationFunction<T>)new SoftmaxActivation<T>()));
+
+        ChainResolveLazyLayers(layers, new[] { architecture.CalculatedInputSize });
+        return layers;
+    }
+    /// <summary>
     /// Builds a USM / Chirp encoder from GENUINE Conformer blocks (Zhang et al. 2023,
     /// arXiv:2303.01037 §2.1 — "We use the convolution-augmented transformer, or Conformer, with
     /// relative attention as an encoder"; block per Gulati et al. 2020, arXiv:2005.08100 Eq. 1).
@@ -23347,6 +23408,10 @@ public static class LayerHelper<T>
 
         // --- Encoder: 5 layers per block, channels ramping geometrically to encoderMaxChannels ---
         const int baseChannels = 32;
+        // BatchNormalizationLayer defines momentum as the retained weight of prior running stats.
+        // FiNS trains with large batches but evaluates with accumulated stats, so retain 10% of the
+        // prior estimate to keep inference aligned with the rapidly changing strided activations.
+        const double batchNormRunningStatisticsRetention = 0.1;
         // "same" padding keeps the halving driven by the stride alone rather than by edge losses.
         int encoderPadding = (encoderKernelSize - 1) / 2;
         for (int i = 0; i < numEncoderBlocks; i++)
@@ -23360,12 +23425,14 @@ public static class LayerHelper<T>
 
             yield return new Conv1DLayer<T>(outputChannels: channels, kernelSize: encoderKernelSize,
                 stride: encoderStride, padding: encoderPadding, activation: identity);
-            yield return new BatchNormalizationLayer<T>(numFeatures: channels);
+            yield return new BatchNormalizationLayer<T>(numFeatures: channels,
+                momentum: batchNormRunningStatisticsRetention);
             yield return new ActivationLayer<T>((IActivationFunction<T>)new PReLUActivation<T>());
             // Residual projection: 1x1 at the SAME stride so it lines up with the main branch.
             yield return new Conv1DLayer<T>(outputChannels: channels, kernelSize: 1,
                 stride: encoderStride, padding: 0, activation: identity);
-            yield return new BatchNormalizationLayer<T>(numFeatures: channels);
+            yield return new BatchNormalizationLayer<T>(numFeatures: channels,
+                momentum: batchNormRunningStatisticsRetention);
         }
 
         // --- Three-layer MLP: pooled encoder output -> latent z ---
@@ -23402,7 +23469,8 @@ public static class LayerHelper<T>
         // Pinning the fan-in makes the layer's contract independent of walk order.
         yield return new Conv1DLayer<T>(inputChannels: 1, outputChannels: numNoiseBands,
             kernelSize: noiseFilterOrder + 1, dilation: 1, stride: 1,
-            padding: noiseFilterOrder / 2, activation: identity);
+            padding: noiseFilterOrder / 2, activation: identity,
+            initializationStrategy: new OctaveBandpassInitializationStrategy<T>());
         // 1x1 mix of the M late bands and the early component into the monophonic RIR.
         yield return new Conv1DLayer<T>(outputChannels: 1, kernelSize: 1,
             stride: 1, padding: 0, activation: identity);

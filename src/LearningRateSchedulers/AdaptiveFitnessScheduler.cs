@@ -156,6 +156,9 @@ public class AdaptiveFitnessScheduler : LearningRateSchedulerBase
     public override Dictionary<string, object> GetState()
     {
         var state = base.GetState();
+        state["decay"] = _decay;
+        state["max_learning_rate"] = _maxLearningRate;
+        state["higher_is_better"] = _higherIsBetter;
         state["best_metric"] = _bestMetric;
         return state;
     }

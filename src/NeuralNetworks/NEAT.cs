@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.NeuralNetworks.Layers;
 
 using AiDotNet.Models.Parameters;
 
@@ -60,6 +61,16 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Every non-input node is passed through <see cref="ApplySigmoid"/>, including
+    /// the output nodes, so supervised fitness targets must lie in the function's
+    /// actual codomain. NEAT has no ordinary final layer from which the base can
+    /// discover this domain.
+    /// </remarks>
+    public override LayerInputDomain GetOutputDomain(int[]? outputShape) =>
+        UnitIntervalTensorDomain.Value;
 
     /// <summary>
     /// Gets the current population of genomes (neural network structures).

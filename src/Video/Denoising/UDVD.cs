@@ -145,25 +145,8 @@ public partial class UDVD<T> : VideoDenoisingBase<T>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            // Denoise/Predict normalize public pixel-domain input before the native forward and
-            // denormalize its result afterwards. Train in that same model domain; otherwise the
-            // optimizer fits F(input) to expected while inference measures 255*F(input/255),
-            // which is a different function as soon as convolution biases/nonlinearities exist.
-            var normalizedInput = NormalizeFrames(input);
-            var normalizedExpected = NormalizeFrames(expected);
-            TrainWithTape(normalizedInput, normalizedExpected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>

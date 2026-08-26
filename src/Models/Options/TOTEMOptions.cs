@@ -21,7 +21,7 @@ namespace AiDotNet.Models.Options;
 /// <b>Key Advantages:</b>
 /// - Converts continuous time series to discrete tokens for LLM compatibility
 /// - Multiple codebooks capture different aspects of temporal patterns
-/// - Commitment loss keeps encoder outputs close to codebook entries
+/// - The forecasting stage consumes a tokenizer/codebook trained separately
 /// </para>
 /// <para>
 /// <b>Reference:</b> Talukder et al., "TOTEM: TOkenized Time Series EMbeddings for General Time Series Analysis", 2024.
@@ -39,18 +39,15 @@ public class TOTEMOptions<T> : TimeSeriesRegressionOptions<T>
     /// </summary>
     /// <param name="other">The instance to copy from.</param>
     public TOTEMOptions(TOTEMOptions<T> other)
+        : base(other)
     {
-        if (other == null) throw new ArgumentNullException(nameof(other));
-        // Seed is declared on ModelOptions rather than in this file, so a copy constructor
-        // written from the local declarations alone misses it. Losing it on a clone silently
-        // changes deterministic initialization.
-        Seed = other.Seed;
         ContextLength = other.ContextLength; ForecastHorizon = other.ForecastHorizon;
         HiddenDimension = other.HiddenDimension; NumLayers = other.NumLayers;
         NumHeads = other.NumHeads; CodebookSize = other.CodebookSize;
         CodebookDimension = other.CodebookDimension; NumCodebooks = other.NumCodebooks;
-        DropoutRate = other.DropoutRate; CommitmentWeight = other.CommitmentWeight;
+        DropoutRate = other.DropoutRate;
         LearningRate = other.LearningRate;
+        TotalTrainingSteps = other.TotalTrainingSteps;
     }
 
     /// <summary>
@@ -138,23 +135,25 @@ public class TOTEMOptions<T> : TimeSeriesRegressionOptions<T>
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>
-    /// Gets or sets the Adam learning rate.
+    /// Gets or sets the peak Adam learning rate for forecasting.
     /// </summary>
-    /// <value>Defaults to 1e-3, the rate the TOTEM paper trains with.</value>
+    /// <value>Defaults to 1e-4, the rate used by the official forecasting pipeline.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> How big a step the model takes each time it learns. Lower it if
     /// training becomes unstable.</para>
     /// </remarks>
-    public double LearningRate { get; set; } = 1e-3;
+    public double LearningRate { get; set; } = 1e-4;
 
     /// <summary>
-    /// Gets or sets the commitment loss weight for VQ training.
+    /// Gets or sets the number of optimizer steps in the forecasting OneCycle schedule.
     /// </summary>
-    /// <value>Defaults to 0.25.</value>
+    /// <value>
+    /// Defaults to 100, matching the official 100-epoch recipe for a one-batch-per-epoch
+    /// training stream. Set this to epochs multiplied by batches per epoch for larger data sets.
+    /// </value>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Controls how strongly encoder outputs are pulled toward
-    /// their nearest codebook entry. Higher values produce tighter clusters. The original
-    /// VQ-VAE paper recommends 0.25.</para>
+    /// <para><b>For Beginners:</b> Set this to the total number of optimizer updates so the
+    /// OneCycle schedule reaches its final learning rate at the end of training.</para>
     /// </remarks>
-    public double CommitmentWeight { get; set; } = 0.25;
+    public int TotalTrainingSteps { get; set; } = 100;
 }

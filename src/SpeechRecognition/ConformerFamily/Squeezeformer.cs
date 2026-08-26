@@ -81,54 +81,65 @@ public partial class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     /// </remarks>
     private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateSqueezeformerOptimizer()
     {
-        // VALIDATED HERE RATHER THAN LEFT TO THE OPTIMIZER, because each of these fails silently rather
-        // than loudly. A non-positive peak rate gives a model that runs a full training job and does not
-        // move; a negative weight decay is an anti-regularizer that grows the weights every step; and a
-        // negative WarmupSteps does not error -- it just misses the `> 0` test below, so warmup is
-        // quietly switched off and the paper's 2e-3 peak is applied flat from step 0, which the remark
-        // above this method identifies as precisely the unstable regime.
-        if (_options.PeakLearningRate <= 0.0 || double.IsNaN(_options.PeakLearningRate) || double.IsInfinity(_options.PeakLearningRate))
+        if (_options.PeakLearningRate <= 0.0 ||
+            double.IsNaN(_options.PeakLearningRate) ||
+            double.IsInfinity(_options.PeakLearningRate))
         {
             throw new InvalidOperationException(
-                $"SqueezeformerOptions.PeakLearningRate must be positive; got {_options.PeakLearningRate}. " +
-                "A non-positive rate trains for the full run and changes nothing, and an infinite one " +
-                "sends every parameter to NaN on the first step.");
+                $"SqueezeformerOptions.PeakLearningRate must be finite and positive; got {_options.PeakLearningRate}.");
         }
 
-        if (_options.WeightDecay < 0.0 || double.IsNaN(_options.WeightDecay) || double.IsInfinity(_options.WeightDecay))
+        if (_options.WeightDecay < 0.0 ||
+            double.IsNaN(_options.WeightDecay) ||
+            double.IsInfinity(_options.WeightDecay))
         {
             throw new InvalidOperationException(
-                $"SqueezeformerOptions.WeightDecay must be non-negative; got {_options.WeightDecay}. " +
-                "A negative decay grows the weights every step instead of shrinking them, and an " +
-                "infinite one collapses them to zero.");
+                $"SqueezeformerOptions.WeightDecay must be finite and non-negative; got {_options.WeightDecay}.");
         }
 
-        if (_options.WarmupSteps < 0)
+        if (_options.WarmupSteps <= 0)
         {
             throw new InvalidOperationException(
-                $"SqueezeformerOptions.WarmupSteps must be non-negative; got {_options.WarmupSteps}. " +
-                "Use 0 to disable warmup -- a negative value disables it too, but looks like a setting.");
+                $"SqueezeformerOptions.WarmupSteps must be positive; got {_options.WarmupSteps}.");
         }
+
+        if (_options.PeakHoldSteps < 0)
+        {
+            throw new InvalidOperationException(
+                $"SqueezeformerOptions.PeakHoldSteps must be non-negative; got {_options.PeakHoldSteps}.");
+        }
+
+        if (_options.LearningRateDecayPower <= 0.0 ||
+            double.IsNaN(_options.LearningRateDecayPower) ||
+            double.IsInfinity(_options.LearningRateDecayPower))
+        {
+            throw new InvalidOperationException(
+                "SqueezeformerOptions.LearningRateDecayPower must be finite and positive; " +
+                $"got {_options.LearningRateDecayPower}.");
+        }
+
+        var scheduler = new AiDotNet.LearningRateSchedulers.NoamHoldAnnealingScheduler(
+            peakLearningRate: _options.PeakLearningRate,
+            warmupSteps: _options.WarmupSteps,
+            holdSteps: _options.PeakHoldSteps,
+            decayRate: _options.LearningRateDecayPower);
 
         return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = _options.PeakLearningRate,
+                InitialLearningRate = scheduler.CurrentLearningRate,
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8,
                 WeightDecay = _options.WeightDecay,
-                // Warmup is OPT-IN (WarmupSteps default 0). The paper expresses warmup in EPOCHS (20)
-                // over LibriSpeech-960h at batch 1024, which cannot be converted to a step count
-                // without the caller's dataset size — and a large step-count default makes the learning
-                // rate approximately zero for the whole of any short run, so the model does not train at
-                // all. Measured: a 4000-step warmup default broke Training_ShouldChangeLoss,
-                // Training_ShouldChangeParameters and GradientFlow, none of which had been failing.
-                LearningRateScheduler = _options.WarmupSteps > 0
-                    ? new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(
-                        baseLearningRate: _options.PeakLearningRate,
-                        warmupSteps: _options.WarmupSteps)
-                    : null,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                LearningRateScheduler = scheduler,
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
                 EnableGradientClipping = true,
-                MaxGradientNorm = 1.0
+                MaxGradientNorm = 1.0,
             });
     }
 
@@ -215,9 +226,7 @@ public partial class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     /// the last thing NeuralNetworkBase.Serialize writes, so an exhausted stream is an exact signal
     /// rather than a guess.
     /// </remarks>
-    private const int NetworkSpecificPayloadVersion = 1;
-
-
+    private const int NetworkSpecificPayloadVersion = 2;
 
     private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
     private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }

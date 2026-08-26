@@ -80,7 +80,15 @@ public partial class WaveRNN<T> : VocoderBase<T>
     {
         _options = options ?? new WaveRNNOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                EnableGradientClipping = _options.MaxGradientNorm > 0.0,
+                MaxGradientNorm = _options.MaxGradientNorm > 0.0 ? _options.MaxGradientNorm : 1.0,
+                UseAdaptiveLearningRate = false,
+            });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

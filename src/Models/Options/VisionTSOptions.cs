@@ -64,6 +64,7 @@ public class VisionTSOptions<T> : TimeSeriesRegressionOptions<T>
         MaskRatio = other.MaskRatio;
         ImageHeight = other.ImageHeight;
         ImageWidth = other.ImageWidth;
+        LearningRate = other.LearningRate;
     }
 
     /// <summary>
@@ -137,4 +138,15 @@ public class VisionTSOptions<T> : TimeSeriesRegressionOptions<T>
     /// </summary>
     /// <value>Defaults to 224 (standard ViT input).</value>
     public int ImageWidth { get; set; } = 224;
+
+    /// <summary>
+    /// Gets or sets the Adam learning rate used by the paper's one-epoch
+    /// LayerNorm-only full-shot fine-tuning recipe.
+    /// </summary>
+    /// <value>Defaults to <c>0.0001</c>, the full-shot rate reported by VisionTS.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This controls how quickly the small set of unfrozen
+    /// LayerNorm parameters changes during fine-tuning.</para>
+    /// </remarks>
+    public double LearningRate { get; set; } = 0.0001;
 }

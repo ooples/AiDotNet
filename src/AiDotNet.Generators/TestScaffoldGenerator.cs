@@ -4006,10 +4006,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "new AiDotNet.Optimizers.AdamWOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null, " +
             "new AiDotNet.Models.Options.AdamWOptimizerOptions<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>> " +
             "{ InitialLearningRate = 1e-5 })";
-        const string ultraConservativeSmokeAdamWOptimizer =
-            "new AiDotNet.Optimizers.AdamWOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null, " +
-            "new AiDotNet.Models.Options.AdamWOptimizerOptions<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>> " +
-            "{ InitialLearningRate = 1e-7 })";
         const string noDecaySmokeAdamWOptimizer =
             "new AiDotNet.Optimizers.AdamWOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null, " +
             "new AiDotNet.Models.Options.AdamWOptimizerOptions<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>> " +
@@ -4763,18 +4759,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "EfficientConformer" && model.TypeParameterCount == 1)
             {
-                // The paper defaults remain 512-wide and 16 layers. Keep progressive
-                // Conformer downsampling and the vocabulary head at public-options smoke scale.
+                // The paper's CTC-small defaults are 120/168/240 across fifteen blocks.
+                // Exercise all three stages, both progressive reductions, grouped first-stage
+                // attention, and the CTC head at an explicitly bounded width/depth.
                 pinInitSeed = true;
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "new AiDotNet.SpeechRecognition.ConformerFamily.EfficientConformerOptions { " +
-                    "EncoderDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 2, " +
-                    "FeedForwardExpansionFactor = 2, DownsamplingFactor = 2, NumMels = 32, " +
-                    "VocabSize = 4, DropoutRate = 0.0, UseLayerNormalization = true }, " +
-                    $"optimizer: {ultraConservativeSmokeAdamWOptimizer})";
+                    "EncoderDim = 32, NumEncoderLayers = 3, NumAttentionHeads = 2, " +
+                    "FeedForwardExpansionFactor = 2, ConvKernelSize = 5, InitialAttentionGroupSize = 2, " +
+                    "DownsamplingFactor = 8, NumMels = 32, VocabSize = 4, " +
+                    "DropoutRate = 0.0, UseLayerNormalization = true })";
             }
             else if ((model.ClassName is "EmformerRNNT" or "FastEmit") && model.TypeParameterCount == 1)
             {
@@ -9221,24 +9218,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "ContextLength = 64, ForecastHorizon = 16, " +
                     "HiddenDimension = 32, NumLayers = 2, NumHeads = 2, " +
                     "CodebookSize = 64, CodebookDimension = 16, NumCodebooks = 1, " +
-                    "DropoutRate = 0.0, LearningRate = 1e-3 })";
+                    "DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "Tacotron2" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.Classic.", System.StringComparison.Ordinal))
             {
-                // The model's own default is the paper's 10^-3 (Shen et al. 2018), stated for
-                // full-scale training at batch 64. At this fixture's single-sample smoke scale that
-                // step diverges, so bind a smaller one -- through OPTIONS, not the optimizer
-                // parameter. CreateNewInstance forwards _options but NOT the injected optimizer, so
-                // an injected rate applied to the original and silently reverted to 10^-3 in every
-                // clone: MoreData_ShouldNotDegrade's two-iteration clone loss sat at 23.1915 while
-                // the one-iteration original managed 5.1901. Going through options makes the rate
-                // survive cloning. The library default stays at the published value.
+                // Classic.Tacotron2 is a compatibility surface over the shared paper implementation,
+                // so exercise the same encoder/attention/autoregressive-decoder/post-net topology at
+                // the same bounded geometry as Tacotron2Model below. Keep the published Adam rate;
+                // only widths, vocabulary and maximum decoded length are smoke-scaled.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 8, outputSize: 640), " +
-                    "new AiDotNet.TextToSpeech.Classic.Tacotron2Options { LearningRate = 1e-6 })";
+                    "new AiDotNet.TextToSpeech.Classic.Tacotron2Options { " +
+                    "VocabSize = 1024, EncoderDim = 32, AttentionRnnDim = 32, DecoderRnnDim = 32, " +
+                    "AttentionDimension = 16, AttentionLocationChannels = 8, PrenetDim = 16, " +
+                    "PostnetDim = 32, NumEncoderLayers = 1, PostnetLayers = 1, OutputsPerStep = 1, " +
+                    "MaxMelLength = 8, StopThreshold = 1.0, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "Tacotron2Model" && model.TypeParameterCount == 1)
             {
@@ -12803,7 +12800,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (IsTextToMelTTS(model.ClassName))
             {
-                if (model.ClassName == "Tacotron2Model")
+                if (model.ClassName == "Tacotron2Model" || model.ClassName == "Tacotron2")
                 {
                     // Tacotron 2 is batched and autoregressive. The bounded constructor emits
                     // four two-frame decoder steps, hence [1, 8, 80].
@@ -12970,7 +12967,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // the loss recorded immediately before update 2 is still in the first Adam
                     // overshoot (0.707407 -> 1.057642). Fifteen sub-second steps measure the settled
                     // trajectory while retaining the exact strict-decrease assertion.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "AudioLM" or "IndexTTS2" or "SpeechT5" or "StyleTTS" or "StyleTTS2" or "Vocos" or "WaveGrad" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    // ProDiff's official 2,000-step linear warmup is even more conservative: its
+                    // first two L1 updates straddle the initial Adam transient, while 15 updates
+                    // produce a strict decrease under the unchanged paper schedule and threshold.
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "AudioLM" or "IndexTTS2" or "ProDiff" or "SpeechT5" or "StyleTTS" or "StyleTTS2" or "Vocos" or "WaveGrad" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                 }
                 // The VAE+flow+decoder stack is init-sensitive: a poorly-scaled init
                 // (inherited from the order-dependent process-shared RNG when sibling
@@ -13003,6 +13003,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
                 sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
             }
+            else if (model.ClassName == "EfficientConformer")
+            {
+                // The bounded native fixture retains the paper's complete 8x progressive
+                // reduction, so 64 input frames produce eight CTC log-probability frames.
+                // Restate the generic FP32 audio repetition budget because this branch owns
+                // the shape contract; assertion thresholds remain unchanged.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 8, 4 };");
+                sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
+                sb.AppendLine("    protected override int TrainingIterations => 2;");
+                sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
+                sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+                sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
+                sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
+            }
+
             else if (model.ClassName == "CTCDecoder")
             {
                 // #1789 Generated C: MoreData_ShouldNotDegrade was the only CTCDecoder test to
@@ -13517,7 +13533,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else
             {
-                sb.AppendLine($"    protected override int[] InputShape => new[] {{ {dim} }};");
+                sb.AppendLine(model.ClassName == "HamiltonianNeuralNetwork"
+                    ? $"    protected override int[] InputShape => ResolveModelDeclaredInputShape(new[] {{ {dim} }});"
+                    : $"    protected override int[] InputShape => new[] {{ {dim} }};");
                 sb.AppendLine(model.ClassName == "FastText"
                     ? "    protected override int[] OutputShape => new[] { 128 };"
                     : model.ClassName == "XLSTMLanguageModel"
@@ -14701,22 +14719,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("            \"Gain-normalized enhancement model produced identical outputs for two distinct random inputs - forward may ignore the spectral pattern. \" +");
             sb.AppendLine("            \"Uniform input gain is intentionally normalized away; this assertion verifies input-PATTERN sensitivity.\");");
             sb.AppendLine("    }");
-        }
-
-        if (model.ClassName == "HamiltonianNeuralNetwork")
-        {
-            // HNN (Greydanus et al. 2019) fits a scalar Hamiltonian H(q,p) via supervised gradient
-            // descent on a 3x64 MLP (Adam). At the default 10 (x3 = 30) TrainingError steps and the
-            // conservative default LR it UNDERFITS the single trained (input,target) pair (train MSE
-            // ~1.7e-3), so it does not memorize that pair tighter than an unseen random test target and
-            // trips TrainingError_ShouldNotExceedTestError (which needs train MSE <= 3*test MSE). More
-            // steps let it properly memorize the training pair (train MSE << unseen-test MSE, the
-            // expected generalization gap). TrainingError_ShouldNotExceedTestError itself trains for
-            // TrainingIterations * 3 steps, so an override of 20 yields the intended ~60 total steps;
-            // setting 60 here would balloon to 180 train calls and needlessly bloat generated-test
-            // runtime. The tiny MLP keeps 60 total steps well inside the budget, and the architecture
-            // stays paper-faithful (scalar H + symplectic-gradient dynamics).
-            sb.AppendLine("    protected override int TrainingIterations => 20;");
         }
 
         sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");
