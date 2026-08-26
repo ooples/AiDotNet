@@ -37,7 +37,11 @@ public class TapeOptimizerSerializationTests
             null,
             Common(new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>
             {
-                WeightDecay = 0.0
+                WeightDecay = 0.0,
+                // Deliberately wrong recipe and cadence: deserialization must use the checkpoint,
+                // not retain same-typed constructor state from the restore target.
+                LearningRateScheduler = new StepLRScheduler(0.01, 2, 0.9),
+                SchedulerStepMode = SchedulerStepMode.StepPerEpoch
             }));
 
         restored.Deserialize(source.Serialize());
@@ -48,6 +52,8 @@ public class TapeOptimizerSerializationTests
         Assert.Equal(0.5, restoredScheduler.Gamma, 12);
         Assert.Equal(expectedLearningRate, restoredScheduler.CurrentLearningRate, 12);
         Assert.Equal(expectedLearningRate, restoredScheduler.GetLearningRateAtStep(step), 12);
+        Assert.Equal(SchedulerStepMode.StepPerBatch, restored.SchedulerStepMode);
+        Assert.Equal(scheduler.GetLearningRateAtStep(step + 1), restored.StepScheduler(), 12);
     }
 
     public static IEnumerable<object[]> StatefulTapeOptimizers()

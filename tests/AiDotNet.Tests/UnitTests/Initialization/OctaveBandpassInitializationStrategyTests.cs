@@ -19,8 +19,10 @@ public class OctaveBandpassInitializationStrategyTests
         }
     }
 
-    [Fact]
-    public void RoomImpulseResponse_ValidatesOptionsBeforeConstructingLoss()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RoomImpulseResponse_ValidatesOptionsBeforeConstructingLoss(bool onnxMode)
     {
         var architecture = new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
             inputType: AiDotNet.Enums.InputType.OneDimensional,
@@ -37,11 +39,14 @@ public class OctaveBandpassInitializationStrategyTests
             NoiseFilterOrder = 15,
             RIRLength = 32,
             EarlyResponseLength = 8,
-            StftFrameSizes = []
+            StftFrameSizes = [0]
         };
 
-        var exception = Assert.Throws<ArgumentOutOfRangeException>(
-            () => new RoomImpulseResponse<double>(architecture, options));
+        var exception = onnxMode
+            ? Assert.Throws<ArgumentOutOfRangeException>(
+                () => new RoomImpulseResponse<double>(architecture, "unused.onnx", options))
+            : Assert.Throws<ArgumentOutOfRangeException>(
+                () => new RoomImpulseResponse<double>(architecture, options));
 
         Assert.Equal(nameof(RoomImpulseResponseOptions.StftFrameSizes), exception.ParamName);
     }

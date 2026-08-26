@@ -2720,6 +2720,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             writer.Write(_learningRateScheduler.GetType().AssemblyQualifiedName ?? string.Empty);
             writer.Write(JsonConvert.SerializeObject(_learningRateScheduler.GetState()));
         }
+        writer.Write((int)_schedulerStepMode);
     }
 
     /// <inheritdoc />
@@ -2802,6 +2803,22 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                     _learningRateScheduler = null;
                     GradientOptions.LearningRateScheduler = null;
                 }
+
+                // Older v1 payloads ended after the scheduler state. Preserve that compatibility,
+                // while new checkpoints also retain whether the restored schedule advances per
+                // batch or per epoch. The mode lives on the optimizer, not in scheduler.GetState().
+                if (reader.BaseStream.Position < reader.BaseStream.Length)
+                {
+                    int serializedStepMode = reader.ReadInt32();
+                    if (!Enum.IsDefined(typeof(SchedulerStepMode), serializedStepMode))
+                    {
+                        throw new InvalidOperationException(
+                            $"Optimizer checkpoint has invalid scheduler step mode {serializedStepMode}.");
+                    }
+
+                    _schedulerStepMode = (SchedulerStepMode)serializedStepMode;
+                    GradientOptions.SchedulerStepMode = _schedulerStepMode;
+                }
             }
         }
         catch (Exception ex) when (ex is System.IO.EndOfStreamException or System.IO.IOException)
@@ -2817,23 +2834,26 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         var state = JsonConvert.DeserializeObject<Dictionary<string, object>>(stateJson)
             ?? throw new InvalidOperationException("Learning-rate scheduler state is missing or invalid.");
 
-        Type? serializedType = Type.GetType(schedulerTypeName, throwOnError: false);
-        string serializedTypeName = serializedType?.FullName
-            ?? schedulerTypeName.Split(',')[0].Trim();
+        // The checkpoint is untrusted input. The assembly-qualified name is used only as a stable
+        // discriminator; do not ask the runtime to resolve or load an arbitrary named assembly.
+        string serializedTypeName = schedulerTypeName.Split(',')[0].Trim();
 
         ILearningRateScheduler scheduler;
-        if (_learningRateScheduler is not null
-            && string.Equals(_learningRateScheduler.GetType().FullName, serializedTypeName, StringComparison.Ordinal))
+        if (string.Equals(serializedTypeName, typeof(StepLRScheduler).FullName, StringComparison.Ordinal))
         {
-            scheduler = _learningRateScheduler;
-        }
-        else if (string.Equals(serializedTypeName, typeof(StepLRScheduler).FullName, StringComparison.Ordinal))
-        {
+            // Always reconstruct StepLR from the serialized recipe. Reusing a same-typed target
+            // scheduler is not sufficient: LoadState restores progress but its immutable step size
+            // and gamma would remain whatever the target happened to configure.
             scheduler = new StepLRScheduler(
                 Convert.ToDouble(state["base_lr"]),
                 Convert.ToInt32(state["step_size"]),
                 Convert.ToDouble(state["gamma"]),
                 Convert.ToDouble(state["min_lr"]));
+        }
+        else if (_learningRateScheduler is not null
+            && string.Equals(_learningRateScheduler.GetType().FullName, serializedTypeName, StringComparison.Ordinal))
+        {
+            scheduler = _learningRateScheduler;
         }
         else
         {
