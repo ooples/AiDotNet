@@ -224,8 +224,23 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
         var random = RandomHelper.CreateSeededRandom(42);
 
         // Calculate number of non-zero weights
-        int totalWeights = OutputFeatures * InputFeatures;
-        int nonZeroCount = Math.Max(1, (int)(totalWeights * (1.0 - _sparsity)));
+        // WIDENED TO long. OutputFeatures * InputFeatures is int * int, so it silently wraps for a
+        // large layer: 32768 x 16384 lands on -536870912 (-2^29), which then travelled onward as a
+        // NEGATIVE shape dimension and failed far from here as "Shape dimension 0 must be
+        // non-negative". A sparse layer is exactly the kind that is wide enough to overflow, and the
+        // count below is a proportion of the dense size, so it must be computed at full width and
+        // only narrowed once it is known to fit.
+        long totalWeights = (long)OutputFeatures * InputFeatures;
+        long requested = (long)(totalWeights * (1.0 - _sparsity));
+        if (requested > int.MaxValue)
+        {
+            throw new InvalidOperationException(
+                $"{GetType().Name} would need {requested:N0} non-zero weights for a "
+                    + $"{OutputFeatures}x{InputFeatures} layer at sparsity {_sparsity}, which exceeds "
+                    + "what a single sparse tensor can index. Raise the sparsity or split the layer.");
+        }
+
+        int nonZeroCount = (int)Math.Max(1L, requested);
 
         // Generate random non-zero positions
         var indices = new HashSet<(int row, int col)>();

@@ -66,11 +66,44 @@ internal sealed class ParameterLayoutNode
         return node;
     }
 
+    /// <summary>Largest tensor rank this reader will believe from a stream.</summary>
+    /// <remarks>
+    /// Not a limit on real tensors -- nothing in the library approaches it. It is the point past
+    /// which the value can only have come from a misaligned or corrupt stream.
+    /// </remarks>
+    private const int MaxCredibleRank = 64;
+
     private static int[] ReadShape(System.IO.BinaryReader reader)
     {
         int rank = reader.ReadInt32();
+
+        // A rank read off a misaligned stream is arbitrary. Unchecked, `new int[rank]` turned that
+        // into an OverflowException or a multi-gigabyte allocation thrown from deep inside the
+        // reader, which said nothing about the real problem -- the bytes did not line up. Failing
+        // here names the cause, and does so before allocating anything.
+        if (rank < 0 || rank > MaxCredibleRank)
+        {
+            throw new System.IO.InvalidDataException(
+                $"Parameter layout is corrupt: read a tensor rank of {rank}, which is outside "
+                    + $"0..{MaxCredibleRank}. The stream is misaligned -- the layout was written by "
+                    + "a different format version, or a preceding field was read at the wrong width.");
+        }
+
         var shape = new int[rank];
-        for (int i = 0; i < rank; i++) shape[i] = reader.ReadInt32();
+        for (int i = 0; i < rank; i++)
+        {
+            int dimension = reader.ReadInt32();
+            if (dimension < 0)
+            {
+                throw new System.IO.InvalidDataException(
+                    $"Parameter layout is corrupt: dimension {i} of a rank-{rank} shape is "
+                        + $"{dimension}. A negative extent is unrepresentable; the usual cause is an "
+                        + "int product that overflowed before it was written.");
+            }
+
+            shape[i] = dimension;
+        }
+
         return shape;
     }
 }

@@ -6000,7 +6000,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     // that skipped the shape block would misread the parameter count as a rank, so the two formats
     // cannot be told apart by content and the magic has to separate them. Same pre-1.0 stance as the
     // previous bump: one authoritative format beats an ambiguous one that needs per-layer rescue.
-    private const int ParameterSerializationMagic = unchecked((int)0xA1D07E02);
+    private const int ParameterSerializationMagic = unchecked((int)0xA1D07E03);
 
     /// <summary>Writes the layer's resolved input shape, or a marker saying it has none yet.</summary>
     /// <param name="writer">The writer receiving the shape block.</param>
@@ -6575,6 +6575,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // unmaterialized layer writes an empty layout beside an empty vector, which is consistent
         // and is what PyTorch saves for a lazy module that has never run a forward.
         writer.Write(Parameters.Length);
+        WriteResolvedInputShape(writer);   // per node: the reader expects a shape here for EVERY node
 
         var components = GetOrderedParameterComponents();
         int trainableCount = 0;
@@ -6627,9 +6628,28 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         WriteShape(writer, component.Tensor);
     }
 
+    /// <summary>Writes this node's resolved input shape, or a zero rank when it has none yet.</summary>
+    /// <remarks>
+    /// ParameterLayoutNode.Read expects this immediately after OwnLength for EVERY node, so a
+    /// nested lazy layer carries its own shape. Writing it only once at the root left the reader
+    /// consuming trainableCount as a rank and everything after it as garbage.
+    /// </remarks>
+    private void WriteResolvedInputShape(System.IO.BinaryWriter writer)
+    {
+        var shape = InputShape;
+        if (!IsShapeResolved || shape is null || shape.Length == 0 || ShapeContainsSentinel(shape))
+        {
+            writer.Write(0);
+            return;
+        }
+
+        writer.Write(shape.Length);
+        for (int i = 0; i < shape.Length; i++) writer.Write(shape[i]);
+    }
+
     private static void WriteEmptyLayout(System.IO.BinaryWriter writer)
     {
-        writer.Write(0); writer.Write(0); writer.Write(0); writer.Write(0);
+        writer.Write(0); writer.Write(0); writer.Write(0); writer.Write(0); writer.Write(0);
     }
 
     /// <summary>
