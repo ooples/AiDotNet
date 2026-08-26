@@ -955,15 +955,16 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         {
             if (_isInitialized) return;
 
-            // Placeholder activation caches (batch=1, replaced in Forward()). These are the only
-            // part of initialization that needs concrete spatial dims, so allocate them only when
-            // those are known; a channel-pinned layer whose height/width arrive with the first
-            // input skips them and Forward sizes them for real.
-            if (IsShapeResolved && InputShape.Length >= 3 && OutputShape.Length >= 3)
-            {
-                _lastInput = new Tensor<T>([1, InputShape[0], InputShape[1], InputShape[2]]);
-                _lastOutput = new Tensor<T>([1, OutputShape[0], OutputShape[1], OutputShape[2]]);
-            }
+            // Activation caches stay EMPTY here. They are [Scratch]: Forward overwrites both with
+            // correctly-sized tensors before anything reads them, and the reset/detach paths in this
+            // same file already leave them as [0,0,0,0], so an empty placeholder is the established
+            // state that the ParameterCount / Serialize logic reading _lastInput.Shape is written for.
+            //
+            // Allocating them at full spatial size here was not free. LayerCloning.InstallInto calls
+            // ResolveFromShape on the clone, which runs EnsureInitialized for every conv child, so a
+            // deep decoder allocated a full activation cache pair per child purely to discard it on
+            // the next Forward -- measured as the OutOfMemoryException that VAEDecoder threw while
+            // cloning, in a process that had constructed nothing else.
 
             // Allocate kernels and biases with proper shapes before initializing weights.
             // The lazy path sets _kernels to [0,0,0,0], so we must resize here.
