@@ -398,6 +398,10 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
     /// Set this to null (default) to use a constant learning rate.
     /// </para>
     /// </remarks>
+    /// <value>
+    /// The scheduler used during training, or <c>null</c> for a constant learning rate.
+    /// JSON serialization excludes this runtime scheduler object.
+    /// </value>
     [JsonIgnore]
     public ILearningRateScheduler? LearningRateScheduler { get; set; }
 

@@ -17,8 +17,10 @@ using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Reflection;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Optimizers;
 
@@ -2839,20 +2841,18 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         string serializedTypeName = schedulerTypeName.Split(',')[0].Trim();
 
         ILearningRateScheduler scheduler;
-        if (string.Equals(serializedTypeName, typeof(StepLRScheduler).FullName, StringComparison.Ordinal))
+        if (TryCreateBuiltInScheduler(serializedTypeName, state, out var builtInScheduler))
         {
-            // Always reconstruct StepLR from the serialized recipe. Reusing a same-typed target
-            // scheduler is not sufficient: LoadState restores progress but its immutable step size
-            // and gamma would remain whatever the target happened to configure.
-            scheduler = new StepLRScheduler(
-                Convert.ToDouble(state["base_lr"]),
-                Convert.ToInt32(state["step_size"]),
-                Convert.ToDouble(state["gamma"]),
-                Convert.ToDouble(state["min_lr"]));
+            // Always reconstruct built-ins from their serialized recipe. Reusing a same-typed
+            // target is insufficient because LoadState restores progress, not immutable settings.
+            scheduler = builtInScheduler;
         }
         else if (_learningRateScheduler is not null
             && string.Equals(_learningRateScheduler.GetType().FullName, serializedTypeName, StringComparison.Ordinal))
         {
+            // Custom schedulers (including LambdaLR delegates) cannot be instantiated safely from
+            // untrusted type names. They remain restorable when the caller explicitly configures
+            // an instance of the same type on the target optimizer.
             scheduler = _learningRateScheduler;
         }
         else
@@ -2867,6 +2867,205 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         _learningRateScheduler = scheduler;
         GradientOptions.LearningRateScheduler = scheduler;
         SetLearningRate(scheduler.CurrentLearningRate);
+    }
+
+    /// <summary>
+    /// Reconstructs built-in scheduler recipes without resolving or loading a checkpoint-supplied type.
+    /// </summary>
+    private static bool TryCreateBuiltInScheduler(
+        string serializedTypeName,
+        Dictionary<string, object> state,
+        out ILearningRateScheduler scheduler)
+    {
+        scheduler = null!;
+
+        if (IsSchedulerType<ConstantLRScheduler>(serializedTypeName))
+        {
+            scheduler = new ConstantLRScheduler(StateValue<double>(state, "base_lr"));
+        }
+        else if (IsSchedulerType<StepLRScheduler>(serializedTypeName))
+        {
+            scheduler = new StepLRScheduler(
+                StateValue<double>(state, "base_lr"),
+                StateValue<int>(state, "step_size"),
+                StateValue<double>(state, "gamma"),
+                StateValue<double>(state, "min_lr"));
+        }
+        else if (IsSchedulerType<ExponentialLRScheduler>(serializedTypeName))
+        {
+            scheduler = new ExponentialLRScheduler(
+                StateValue<double>(state, "base_lr"),
+                StateValue<double>(state, "gamma"),
+                StateValue<double>(state, "min_lr"));
+        }
+        else if (IsSchedulerType<CosineAnnealingLRScheduler>(serializedTypeName))
+        {
+            scheduler = new CosineAnnealingLRScheduler(
+                StateValue<double>(state, "base_lr"),
+                StateValue<int>(state, "t_max"),
+                StateValue<double>(state, "eta_min"));
+        }
+        else if (IsSchedulerType<CosineAnnealingWarmRestartsScheduler>(serializedTypeName))
+        {
+            scheduler = new CosineAnnealingWarmRestartsScheduler(
+                StateValue<double>(state, "base_lr"),
+                StateValue<int>(state, "t0"),
+                StateValue<int>(state, "t_mult"),
+                StateValue<double>(state, "eta_min"));
+        }
+        else if (IsSchedulerType<CyclicLRScheduler>(serializedTypeName))
+        {
+            scheduler = new CyclicLRScheduler(
+                StateValue<double>(state, "base_lr"),
+                StateValue<double>(state, "max_learning_rate"),
+                StateValue<int>(state, "step_size_up"),
+                StateValue<int>(state, "step_size_down"),
+                StateEnum<CyclicLRScheduler.CyclicMode>(state, "mode"),
+                StateValue<double>(state, "gamma"));
+        }
+        else if (IsSchedulerType<LinearWarmupScheduler>(serializedTypeName))
+        {
+            scheduler = new LinearWarmupScheduler(
+                StateValue<double>(state, "base_lr"),
+                StateValue<int>(state, "warmup_steps"),
+                StateValue<int>(state, "total_steps"),
+                StateValue<double>(state, "warmup_init_lr"),
+                StateEnum<LinearWarmupScheduler.DecayMode>(state, "decay_mode"),
+                StateValue<double>(state, "end_lr"));
+        }
+        else if (IsSchedulerType<MultiStepLRScheduler>(serializedTypeName))
+        {
+            scheduler = new MultiStepLRScheduler(
+                StateValue<double>(state, "base_lr"),
+                StateValue<int[]>(state, "milestones"),
+                StateValue<double>(state, "gamma"),
+                StateValue<double>(state, "min_lr"));
+        }
+        else if (IsSchedulerType<NoamSchedule>(serializedTypeName))
+        {
+            scheduler = new NoamSchedule(
+                StateValue<int>(state, "model_dimension"),
+                StateValue<int>(state, "warmup_steps"),
+                StateValue<double>(state, "factor"));
+        }
+        else if (IsSchedulerType<OneCycleLRScheduler>(serializedTypeName))
+        {
+            scheduler = new OneCycleLRScheduler(
+                StateValue<double>(state, "max_learning_rate"),
+                StateValue<int>(state, "total_steps"),
+                StateValue<double>(state, "pct_start"),
+                StateValue<double>(state, "div_factor"),
+                StateValue<double>(state, "final_div_factor"),
+                StateEnum<OneCycleLRScheduler.AnnealingStrategy>(state, "anneal_strategy"));
+        }
+        else if (IsSchedulerType<PolynomialLRScheduler>(serializedTypeName))
+        {
+            scheduler = new PolynomialLRScheduler(
+                StateValue<double>(state, "base_lr"),
+                StateValue<int>(state, "total_steps"),
+                StateValue<double>(state, "power"),
+                StateValue<double>(state, "end_lr"));
+        }
+        else if (IsSchedulerType<ReduceOnPlateauScheduler>(serializedTypeName))
+        {
+            scheduler = new ReduceOnPlateauScheduler(
+                StateValue<double>(state, "base_lr"),
+                StateValue<double>(state, "factor"),
+                StateValue<int>(state, "patience"),
+                StateValue<double>(state, "threshold"),
+                StateEnum<ReduceOnPlateauScheduler.ThresholdMode>(state, "threshold_mode"),
+                StateValue<int>(state, "cooldown"),
+                StateEnum<ReduceOnPlateauScheduler.Mode>(state, "mode"),
+                StateValue<double>(state, "min_lr"));
+        }
+        else if (IsSchedulerType<AdaptiveFitnessScheduler>(serializedTypeName))
+        {
+            scheduler = new AdaptiveFitnessScheduler(
+                StateValue<double>(state, "base_lr"),
+                StateValue<double>(state, "decay"),
+                StateValue<double>(state, "min_lr"),
+                StateValue<double>(state, "max_learning_rate"),
+                StateValue<bool>(state, "higher_is_better"));
+        }
+        else if (IsSchedulerType<SequentialLRScheduler>(serializedTypeName))
+        {
+            var schedulerTypes = StateValue<string[]>(state, "scheduler_types");
+            var schedulerStates = StateValue<Dictionary<string, object>[]>(state, "scheduler_states");
+            if (schedulerTypes.Length == 0 || schedulerTypes.Length != schedulerStates.Length)
+            {
+                throw new InvalidOperationException(
+                    "Sequential scheduler checkpoint has mismatched child type and state counts.");
+            }
+
+            var children = new List<ILearningRateScheduler>(schedulerTypes.Length);
+            for (int i = 0; i < schedulerTypes.Length; i++)
+            {
+                string childTypeName = schedulerTypes[i].Split(',')[0].Trim();
+                if (!TryCreateBuiltInScheduler(childTypeName, schedulerStates[i], out var child))
+                {
+                    throw new InvalidOperationException(
+                        $"Sequential scheduler child type '{childTypeName}' is not a checkpoint-supported built-in.");
+                }
+
+                children.Add(child);
+            }
+
+            scheduler = new SequentialLRScheduler(
+                children,
+                StateValue<int[]>(state, "milestones"));
+        }
+        else
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsSchedulerType<TScheduler>(string serializedTypeName)
+        where TScheduler : ILearningRateScheduler
+        => string.Equals(serializedTypeName, typeof(TScheduler).FullName, StringComparison.Ordinal);
+
+    private static TState StateValue<TState>(Dictionary<string, object> state, string key)
+    {
+        if (!state.TryGetValue(key, out var value) || value is null)
+        {
+            throw new InvalidOperationException(
+                $"Learning-rate scheduler checkpoint is missing required recipe value '{key}'.");
+        }
+
+        try
+        {
+            if (value is TState typedValue)
+                return typedValue;
+            if (value is JToken token)
+            {
+                return token.ToObject<TState>()
+                    ?? throw new InvalidOperationException(
+                        $"Learning-rate scheduler recipe value '{key}' cannot be converted to {typeof(TState).Name}.");
+            }
+
+            return (TState)Convert.ChangeType(value, typeof(TState), CultureInfo.InvariantCulture);
+        }
+        catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException or JsonException)
+        {
+            throw new InvalidOperationException(
+                $"Learning-rate scheduler recipe value '{key}' is invalid.", ex);
+        }
+    }
+
+    private static TEnum StateEnum<TEnum>(Dictionary<string, object> state, string key)
+        where TEnum : struct, Enum
+    {
+        string value = StateValue<string>(state, key);
+        if (!Enum.TryParse<TEnum>(value, ignoreCase: false, out var parsed)
+            || !Enum.IsDefined(typeof(TEnum), parsed))
+        {
+            throw new InvalidOperationException(
+                $"Learning-rate scheduler recipe value '{key}' has unsupported {typeof(TEnum).Name} value '{value}'.");
+        }
+
+        return parsed;
     }
 
 

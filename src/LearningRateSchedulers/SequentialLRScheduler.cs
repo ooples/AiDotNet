@@ -1,3 +1,5 @@
+using Newtonsoft.Json.Linq;
+
 namespace AiDotNet.LearningRateSchedulers;
 
 /// <summary>
@@ -130,6 +132,9 @@ public class SequentialLRScheduler : LearningRateSchedulerBase
         var state = base.GetState();
         state["current_scheduler_index"] = _currentSchedulerIndex;
         state["milestones"] = _milestones;
+        state["scheduler_types"] = _schedulers
+            .Select(s => s.GetType().AssemblyQualifiedName ?? s.GetType().FullName ?? s.GetType().Name)
+            .ToArray();
         state["scheduler_states"] = _schedulers.Select(s => s.GetState()).ToList();
         return state;
     }
@@ -140,9 +145,15 @@ public class SequentialLRScheduler : LearningRateSchedulerBase
         base.LoadState(state);
         if (state.TryGetValue("current_scheduler_index", out var idx))
             _currentSchedulerIndex = Convert.ToInt32(idx);
-        if (state.TryGetValue("scheduler_states", out var states) &&
-            states is List<Dictionary<string, object>> schedulerStates)
+        if (state.TryGetValue("scheduler_states", out var states))
         {
+            var schedulerStates = states switch
+            {
+                List<Dictionary<string, object>> typedStates => typedStates,
+                JToken token => token.ToObject<List<Dictionary<string, object>>>() ?? [],
+                _ => []
+            };
+
             for (int i = 0; i < Math.Min(_schedulers.Count, schedulerStates.Count); i++)
             {
                 _schedulers[i].LoadState(schedulerStates[i]);

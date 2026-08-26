@@ -245,40 +245,50 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         if (!File.Exists(onnxModelPath))
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
-        _useNativeMode = false;
-        OnnxModelPath = onnxModelPath;
-        OnnxSession = new InferenceSession(onnxModelPath);
-        _options = options ?? new DCRNNOptions<T>();
-        Options = _options;
-        _lossFunction = lossFunction ?? new MeanAbsoluteErrorLoss<T>();
-        _optimizer = optimizer ?? CreatePaperOptimizer();
-        SetBaseTrainOptimizer(_optimizer);
-
-        _sequenceLength = _options.SequenceLength;
-        _forecastHorizon = _options.ForecastHorizon;
-        _numNodes = _options.NumNodes;
-        _numFeatures = _options.NumFeatures;
-        _hiddenDimension = _options.HiddenDimension;
-        _numEncoderLayers = _options.NumEncoderLayers;
-        _numDecoderLayers = _options.NumDecoderLayers;
-        _diffusionSteps = _options.DiffusionSteps;
-        _numSamples = _options.NumSamples;
-        _trainingStep = 0;
-
-        _adjacencyMatrix = adjacencyMatrix;
-        _random = _options.Seed.HasValue
-            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
-            : RandomHelper.CreateSecureRandom();
-        _encoderGRUs = new List<GRULayer<T>>();
-        _decoderGRUs = new List<GRULayer<T>>();
-        _encoderDCGRUs = new List<DiffusionConvolutionalGRULayer<T>>();
-        _decoderDCGRUs = new List<DiffusionConvolutionalGRULayer<T>>();
-        _forwardPowers = new List<double[,]>();
-        _backwardPowers = new List<double[,]>();
-
-        if (adjacencyMatrix is not null)
+        var session = new InferenceSession(onnxModelPath);
+        try
         {
-            InitializeDiffusionMatrices(adjacencyMatrix);
+            _useNativeMode = false;
+            OnnxModelPath = onnxModelPath;
+            _options = options ?? new DCRNNOptions<T>();
+            Options = _options;
+            _lossFunction = lossFunction ?? new MeanAbsoluteErrorLoss<T>();
+            _optimizer = optimizer ?? CreatePaperOptimizer();
+            SetBaseTrainOptimizer(_optimizer);
+
+            _sequenceLength = _options.SequenceLength;
+            _forecastHorizon = _options.ForecastHorizon;
+            _numNodes = _options.NumNodes;
+            _numFeatures = _options.NumFeatures;
+            _hiddenDimension = _options.HiddenDimension;
+            _numEncoderLayers = _options.NumEncoderLayers;
+            _numDecoderLayers = _options.NumDecoderLayers;
+            _diffusionSteps = _options.DiffusionSteps;
+            _numSamples = _options.NumSamples;
+            _trainingStep = 0;
+
+            _adjacencyMatrix = adjacencyMatrix;
+            _random = _options.Seed.HasValue
+                ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
+                : RandomHelper.CreateSecureRandom();
+            _encoderGRUs = new List<GRULayer<T>>();
+            _decoderGRUs = new List<GRULayer<T>>();
+            _encoderDCGRUs = new List<DiffusionConvolutionalGRULayer<T>>();
+            _decoderDCGRUs = new List<DiffusionConvolutionalGRULayer<T>>();
+            _forwardPowers = new List<double[,]>();
+            _backwardPowers = new List<double[,]>();
+
+            if (adjacencyMatrix is not null)
+            {
+                InitializeDiffusionMatrices(adjacencyMatrix);
+            }
+
+            OnnxSession = session;
+        }
+        catch
+        {
+            session.Dispose();
+            throw;
         }
     }
 

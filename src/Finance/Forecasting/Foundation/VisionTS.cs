@@ -142,18 +142,27 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
         if (!File.Exists(onnxModelPath))
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
-        options ??= new VisionTSOptions<T>();
-        _options = options;
-        Options = _options;
+        var session = new InferenceSession(onnxModelPath);
+        try
+        {
+            options ??= new VisionTSOptions<T>();
+            _options = options;
+            Options = _options;
 
-        _useNativeMode = false;
-        OnnxModelPath = onnxModelPath;
-        OnnxSession = new InferenceSession(onnxModelPath);
+            _useNativeMode = false;
+            OnnxModelPath = onnxModelPath;
 
-        CopyOptionsToFields(options);
-        _optimizer = optimizer ?? CreatePaperOptimizer(options);
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        SetBaseTrainOptimizer(_optimizer);
+            CopyOptionsToFields(options);
+            _optimizer = optimizer ?? CreatePaperOptimizer(options);
+            _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+            SetBaseTrainOptimizer(_optimizer);
+            OnnxSession = session;
+        }
+        catch
+        {
+            session.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
