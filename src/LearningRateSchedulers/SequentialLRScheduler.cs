@@ -74,6 +74,11 @@ public class SequentialLRScheduler : LearningRateSchedulerBase
     /// </summary>
     public ILearningRateScheduler CurrentScheduler => _schedulers[_currentSchedulerIndex];
 
+    /// <summary>
+    /// Gets the child schedulers for trusted checkpoint recipe capture.
+    /// </summary>
+    internal IReadOnlyList<ILearningRateScheduler> Schedulers => _schedulers;
+
     /// <inheritdoc/>
     public override double Step()
     {

@@ -157,6 +157,21 @@ public class TapeOptimizerSerializationTests
             12);
     }
 
+    [Fact]
+    public void AdamWSerialize_RejectsLambdaSchedulerWithoutPortableRecipe()
+    {
+        var source = new AdamWOptimizer<double, Tensor<double>, Tensor<double>>(
+            null,
+            Common(new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                WeightDecay = 0.0,
+                LearningRateScheduler = new LambdaLRScheduler(0.01, step => 1.0 / (step + 1)),
+            }));
+
+        var exception = Assert.Throws<NotSupportedException>(() => source.Serialize());
+        Assert.Contains("delegates do not have a serializable reconstruction recipe", exception.Message);
+    }
+
     public static IEnumerable<object[]> StatefulTapeOptimizers()
     {
 #pragma warning disable CS8625

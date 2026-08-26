@@ -2720,7 +2720,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         if (_learningRateScheduler is not null)
         {
             writer.Write(_learningRateScheduler.GetType().AssemblyQualifiedName ?? string.Empty);
-            writer.Write(JsonConvert.SerializeObject(_learningRateScheduler.GetState()));
+            writer.Write(JsonConvert.SerializeObject(
+                LearningRateSchedulerCheckpointFactory.CaptureState(_learningRateScheduler)));
         }
         writer.Write((int)_schedulerStepMode);
     }
