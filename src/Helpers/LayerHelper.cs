@@ -20756,6 +20756,48 @@ public static class LayerHelper<T>
     #region Speech Recognition Layers
 
     /// <summary>
+    /// Creates the feed-forward Deep KWS network from Chen, Parada, and Heigold (ICASSP 2014).
+    /// </summary>
+    /// <param name="architecture">Architecture used to resolve the stacked acoustic-feature width.</param>
+    /// <param name="hiddenLayerCount">Number of fully connected ReLU hidden layers; the paper's small model uses three.</param>
+    /// <param name="hiddenLayerSize">Units in each hidden layer; the paper's small model uses 128.</param>
+    /// <param name="outputLabelCount">Number of keyword/subword labels, or a non-positive value to use the architecture output size.</param>
+    /// <returns>A fully connected ReLU network with a softmax label-posterior head.</returns>
+    /// <remarks>
+    /// The paper stacks acoustic frames into one fixed-width vector, then predicts keyword-label
+    /// posteriors with a standard feed-forward DNN. This helper deliberately contains no attention,
+    /// convolution, recurrence, or CTC head: those implement different KWS papers.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultKeywordSpottingLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int hiddenLayerCount = 3,
+        int hiddenLayerSize = 128,
+        int outputLabelCount = -1)
+    {
+        if (architecture is null)
+            throw new ArgumentNullException(nameof(architecture));
+
+        int labelCount = outputLabelCount > 0
+            ? outputLabelCount
+            : Math.Max(1, architecture.OutputSize);
+        ValidateLayerParameters(hiddenLayerCount, hiddenLayerSize, labelCount);
+
+        var layers = new List<ILayer<T>>(hiddenLayerCount + 1);
+        for (int i = 0; i < hiddenLayerCount; i++)
+        {
+            layers.Add(new DenseLayer<T>(
+                hiddenLayerSize,
+                (IActivationFunction<T>)new ReLUActivation<T>()));
+        }
+
+        layers.Add(new DenseLayer<T>(
+            labelCount,
+            (IActivationFunction<T>)new SoftmaxActivation<T>()));
+
+        ChainResolveLazyLayers(layers, new[] { architecture.CalculatedInputSize });
+        return layers;
+    }
+    /// <summary>
     /// Builds a USM / Chirp encoder from GENUINE Conformer blocks (Zhang et al. 2023,
     /// arXiv:2303.01037 §2.1 — "We use the convolution-augmented transformer, or Conformer, with
     /// relative attention as an encoder"; block per Gulati et al. 2020, arXiv:2005.08100 Eq. 1).

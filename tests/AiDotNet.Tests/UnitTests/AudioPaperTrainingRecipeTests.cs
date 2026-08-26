@@ -1,12 +1,16 @@
 using System.Reflection;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Regularization;
 using AiDotNet.SpeechRecognition.ConformerFamily;
+using AiDotNet.SpeechRecognition.Specialized;
 using AiDotNet.SpeechRecognition.Streaming;
 using Xunit;
 
@@ -65,6 +69,74 @@ public class AudioPaperTrainingRecipeTests
         Assert.False(optimizerOptions.UseAMSGrad);
         Assert.Equal(SchedulerStepMode.StepPerBatch, optimizerOptions.SchedulerStepMode);
         Assert.Equal(scheduler.CurrentLearningRate, optimizerOptions.InitialLearningRate, 15);
+    }
+
+    [Fact]
+    public void KeywordSpotting_DefaultNetworkAndOptimizerMatchDeepKwsPaper()
+    {
+        var architecture = CreateArchitecture();
+        var options = new KeywordSpottingOptions();
+        var layers = LayerHelper<double>.CreateDefaultKeywordSpottingLayers(
+            architecture,
+            options.NumEncoderLayers,
+            options.EncoderDim,
+            architecture.OutputSize).ToArray();
+
+        Assert.Equal(3, options.NumEncoderLayers);
+        Assert.Equal(128, options.EncoderDim);
+        Assert.Equal(40, options.NumMels);
+        Assert.Equal(4, layers.Length);
+        foreach (var hidden in layers.Take(3))
+        {
+            var dense = Assert.IsType<DenseLayer<double>>(hidden);
+            Assert.IsType<ReLUActivation<double>>(dense.ScalarActivation);
+        }
+        var output = Assert.IsType<DenseLayer<double>>(layers[^1]);
+        Assert.IsType<SoftmaxActivation<double>>(output.ScalarActivation);
+
+        using var model = new KeywordSpotting<double>(architecture, options);
+        var field = typeof(KeywordSpotting<double>).GetField("_optimizer", BindingFlags.Instance | BindingFlags.NonPublic);
+        var optimizer = Assert.IsType<StochasticGradientDescentOptimizer<double, Tensor<double>, Tensor<double>>>(field?.GetValue(model));
+        var optimizerOptions = Assert.IsType<StochasticGradientDescentOptimizerOptions<double, Tensor<double>, Tensor<double>>>(optimizer.GetOptions());
+        var scheduler = Assert.IsType<ExponentialLRScheduler>(optimizerOptions.LearningRateScheduler);
+
+        Assert.Equal(options.LearningRate, optimizerOptions.InitialLearningRate, 15);
+        Assert.Equal(options.LearningRate, scheduler.BaseLearningRate, 15);
+        Assert.Equal(options.LearningRateDecay, scheduler.Gamma, 15);
+        Assert.False(optimizerOptions.UseAdaptiveLearningRate);
+        Assert.Equal(SchedulerStepMode.StepPerBatch, optimizerOptions.SchedulerStepMode);
+    }
+
+    [Fact]
+    public void KeywordSpotting_PosteriorHandlingImplementsPaperEquations()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 2,
+            inputWidth: 3,
+            inputDepth: 1,
+            outputSize: 3);
+        var options = new KeywordSpottingOptions
+        {
+            Vocabulary = new[] { "filler", "okay", "google" },
+        };
+        using var model = new KeywordSpotting<double>(architecture, options);
+        var posteriors = new Tensor<double>(new[] { 2, 3 });
+        posteriors[0] = 0.1;
+        posteriors[1] = 0.8;
+        posteriors[2] = 0.1;
+        posteriors[3] = 0.0;
+        posteriors[4] = 0.0;
+        posteriors[5] = 1.0;
+
+        var decode = typeof(KeywordSpotting<double>).GetMethod(
+            "DecodeKeywordPosteriors",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        var decoded = Assert.IsType<ValueTuple<List<int>, double>>(decode?.Invoke(model, new object[] { posteriors }));
+
+        Assert.Equal(new[] { 1, 2 }, decoded.Item1);
+        Assert.Equal(Math.Sqrt(0.8 * 0.55), decoded.Item2, 12);
     }
 
     private static void AssertTransformerAdamRecipe(

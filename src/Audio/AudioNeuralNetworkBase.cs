@@ -353,7 +353,37 @@ public abstract class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>, IShapeCo
                 SchedulerStepMode = SchedulerStepMode.StepPerBatch,
             });
     }
+    /// <summary>
+    /// Creates plain stochastic gradient descent with per-batch exponential learning-rate decay.
+    /// </summary>
+    /// <param name="learningRate">Initial SGD learning rate.</param>
+    /// <param name="decayFactor">Multiplicative decay applied after each optimizer step.</param>
+    /// <returns>An SGD optimizer owned by this network.</returns>
+    /// <remarks>
+    /// This is the single-process analogue of research recipes that use distributed asynchronous
+    /// SGD. It preserves the stated update rule and schedule without substituting momentum,
+    /// adaptive moments, or the unrelated averaged-SGD algorithm.
+    /// </remarks>
+    protected IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateExponentialSgdOptimizer(
+        double learningRate,
+        double decayFactor)
+    {
+        if (double.IsNaN(learningRate) || double.IsInfinity(learningRate) || learningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(learningRate), "Learning rate must be finite and positive.");
+        if (double.IsNaN(decayFactor) || double.IsInfinity(decayFactor) || decayFactor <= 0.0 || decayFactor > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(decayFactor), "Decay factor must be finite and in (0, 1].");
 
+        var scheduler = new ExponentialLRScheduler(learningRate, decayFactor);
+        return new StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = learningRate,
+                UseAdaptiveLearningRate = false,
+                LearningRateScheduler = scheduler,
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+            });
+    }
     /// <summary>
     /// Gets whether this network supports training.
     /// </summary>
