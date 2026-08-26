@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -7,6 +8,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -14,6 +16,18 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 
 public class ParameterGradientPublicationTests
 {
+    [Fact]
+    public void FusedCapability_IncludesEagerOnlyExtraTrainableLayer()
+    {
+        using var network = new PublicationNetwork(useEagerOnlyExtra: true);
+        var capabilityCheck = typeof(NeuralNetworkBase<float>).GetMethod(
+            "LayersSupportFusedCompiledTraining",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.NotNull(capabilityCheck);
+        Assert.False((bool)capabilityCheck.Invoke(network, null)!);
+    }
+
     [Fact]
     public void Publication_UsesCanonicalLayerExtraLayerAndRawTensorOrder()
     {
@@ -83,10 +97,10 @@ public class ParameterGradientPublicationTests
     [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
     private sealed class PublicationNetwork : NeuralNetworkBase<float>
     {
-        private readonly DenseLayer<float> _extraLayer;
+        private readonly LayerBase<float> _extraLayer;
         private readonly Tensor<float> _rawParameter;
 
-        public PublicationNetwork()
+        public PublicationNetwork(bool useEagerOnlyExtra = false)
             : base(CreateArchitecture(), new MeanSquaredErrorLoss<float>())
         {
             var sample = new Tensor<float>(new[] { 1, 3 });
@@ -94,8 +108,16 @@ public class ParameterGradientPublicationTests
             _ = primaryLayer.Forward(sample);
             Layers.Add(primaryLayer);
 
-            _extraLayer = new DenseLayer<float>(2);
-            _ = _extraLayer.Forward(sample);
+            if (useEagerOnlyExtra)
+            {
+                _extraLayer = new RealGatedLinearRecurrenceLayer<float>(
+                    sequenceLength: 1, modelDimension: 3);
+            }
+            else
+            {
+                _extraLayer = new DenseLayer<float>(2);
+                _ = _extraLayer.Forward(sample);
+            }
             _rawParameter = new Tensor<float>(new[] { 2 });
         }
 

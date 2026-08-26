@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
@@ -117,4 +118,38 @@ public class QuantumNeuralNetworkTests : NeuralNetworkModelTestBase<float>
             + "Forward pass may ignore input values (note: scalar scaling is a no-op for "
             + "unit-norm-encoded quantum networks; this test perturbs the input DIRECTION instead).");
     }
+
+    [Fact]
+    public void LargeFiniteInput_DoesNotCollapseTheQuantumStateToZero()
+    {
+        using var network = CreateNetwork();
+        var input = new Tensor<float>(InputShape);
+        for (int i = 0; i < input.Length; i++)
+            input[i] = (i & 1) == 0 ? float.MaxValue : -float.MaxValue;
+
+        var output = network.Predict(input);
+
+        Assert.All(output.ToArray(), value => Assert.True(IsFinite(value)));
+        Assert.Contains(output.ToArray(), value => value > 0.0f);
+    }
+
+    [Fact]
+    public void TinyFiniteInput_PreservesItsDirection()
+    {
+        using var network = CreateNetwork();
+        var tinyInput = new Tensor<float>(InputShape);
+        var unitInput = new Tensor<float>(InputShape);
+        tinyInput[0] = 1e-20f;
+        unitInput[0] = 1.0f;
+
+        var tinyOutput = network.Predict(tinyInput);
+        var unitOutput = network.Predict(unitInput);
+
+        Assert.Equal(unitOutput.Length, tinyOutput.Length);
+        for (int i = 0; i < unitOutput.Length; i++)
+        {
+            Assert.Equal(unitOutput[i], tinyOutput[i], 5);
+        }
+    }
+
 }

@@ -57,6 +57,7 @@ namespace AiDotNet.Document.Analysis.TableDetection;
 [ResearchPaper("PubTables-1M: Towards Comprehensive Table Extraction from Unstructured Documents", "https://doi.org/10.48550/arXiv.2110.00061", Year = 2022, Authors = "Brandon Smock, Rohith Pesala, Robin Abraham")]
 public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor<T>
 {
+
     private readonly TableTransformerOptions _options;
 
     /// <inheritdoc/>

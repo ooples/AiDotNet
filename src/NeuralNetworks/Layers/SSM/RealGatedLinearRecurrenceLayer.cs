@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -461,6 +461,8 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeCon
         Tensor<T> value, Tensor<T> transition, Tensor<T> inpGate,
         int batchSize, int seqLen)
     {
+        // TODO(#2050): Replace this O(seqLen) graph unroll with graph-mode recording for
+        // RgLruScanForward so production context lengths do not inflate trace time and plan memory.
         var hiddenByTime = new Tensor<T>[seqLen];
         var hidden = new Tensor<T>(new[] { batchSize, _recurrenceDimension });
         var ones = Tensor<T>.CreateDefault(

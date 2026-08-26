@@ -56,6 +56,7 @@ namespace AiDotNet.Document.OCR.TextDetection;
 [ResearchPaper("Shape Robust Text Detection with Progressive Scale Expansion Network", "https://doi.org/10.48550/arXiv.1903.12473", Year = 2019, Authors = "Wenhai Wang, Enze Xie, Xiang Li, Wenbo Hou, Tong Lu, Gang Yu, Shuai Shao")]
 public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 {
+
     private readonly PSENetOptions _options;
 
     /// <inheritdoc/>
@@ -159,7 +160,7 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         _backboneChannels = backboneChannels;
         _featureChannels = featureChannels;
         _numKernels = numKernels;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
 
         ImageSize = imageSize;
 
@@ -205,7 +206,7 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         _backboneChannels = backboneChannels;
         _featureChannels = featureChannels;
         _numKernels = numKernels;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
 
         ImageSize = imageSize;
 
@@ -239,6 +240,21 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     }
 
     #endregion
+
+    private AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+    {
+        // The native ResNet/FPN detector has more than three million parameters at the bounded
+        // conformance size. Adam's generic 1e-3 default moves all of them on its first bias-corrected
+        // step and overshoots otherwise well-posed BCE-with-logits targets. A 1e-4 detector fine-tuning
+        // rate keeps the step clipped and descending; callers that supply an optimizer remain untouched.
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-4,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0,
+            });
+    }
 
     #region ITextDetector Implementation
 
