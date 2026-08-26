@@ -400,7 +400,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     {
         if (!_useNativeMode)
             return base.GetNamedLayerActivations(input);
-        return base.GetNamedLayerActivations(PreprocessAudio(input));
+        return GetNamedLayerActivationsFromLayerInput(PreprocessAudio(input));
     }
 
     /// <inheritdoc />

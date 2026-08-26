@@ -349,7 +349,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     /// <param name="input">Raw audio tensor [samples] or [batch, samples].</param>
     /// <returns>The activation produced by each named audio encoder layer.</returns>
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
-        => base.GetNamedLayerActivations(PreprocessAudio(input));
+        => GetNamedLayerActivationsFromLayerInput(PreprocessAudio(input));
 
     /// <summary>
     /// Encodes a tokenised text caption into a CLAP embedding vector.

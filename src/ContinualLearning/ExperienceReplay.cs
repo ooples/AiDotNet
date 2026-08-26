@@ -101,7 +101,10 @@ public class ExperienceReplay<T> : IContinualLearningStrategy<T>
     }
 
     /// <inheritdoc />
-    public bool AccumulatesAcrossTasks => true;
+    // Replay retains examples from prior tasks, but ComputeLoss samples one fixed-size batch and
+    // returns its mean loss. Adding another task changes that sample distribution; it does not add
+    // another regularization term the way EWC or MAS does.
+    public bool AccumulatesAcrossTasks => false;
 
     public double Lambda
     {

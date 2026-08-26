@@ -136,7 +136,13 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
         _controlBias = new Tensor<T>([controlPointCount * 2]);
         // Zero weights are intentional: the bias alone reproduces the target control points, so
         // the initial spatial transform is the identity before localization training begins.
-        InitializeIdentityControlBias(_controlBias, controlPointCount, marginX, marginY);
+        // The released SVTR TPS localization head starts from source fiducials at 0.01/0.99,
+        // while the rectified target grid keeps its configurable 0.05 margins. Keeping those
+        // grids distinct reproduces the released initialization instead of starting from the
+        // target grid itself.
+        const double releasedSourceMargin = 0.01;
+        InitializeIdentityControlBias(
+            _controlBias, controlPointCount, releasedSourceMargin, releasedSourceMargin);
         RegisterTrainableParameter(_controlWeights, PersistentTensorRole.Weights);
         AppendTrainableParameter(_controlBias, PersistentTensorRole.Biases);
 

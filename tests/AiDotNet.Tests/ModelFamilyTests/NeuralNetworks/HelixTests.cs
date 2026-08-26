@@ -74,6 +74,11 @@ public class HelixTests : VisionLanguageTestBase<float>
             System1NumHeads = 4,
             ActionDimension = 35,
             DropoutRate = 0.0,
+            // The fixture reduces the released model by roughly two orders of magnitude and
+            // trains on a single deterministic example instead of Helix's large batches. Use a
+            // correspondingly conservative public-option schedule so this conformance probe
+            // measures the dual-system gradient path rather than small-batch first-step overshoot.
+            LearningRate = 1e-5,
         };
 
         return new Helix<float>(architecture, options);

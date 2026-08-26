@@ -89,6 +89,33 @@ public abstract class AudioNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
 
         var output = network.Predict(silence);
 
+        // A classifier maps silence to class logits, not to an output waveform. Non-zero logits
+        // (including learned class priors and biases) are valid; the relevant invariant is that the
+        // classification remains finite and does not crash. Near-zero output is meaningful only for
+        // audio-producing/regression paths.
+        var taskType = network.GetArchitecture().TaskType;
+        bool usesClassificationLoss = network.DefaultLossFunction
+            is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>
+            or AiDotNet.LossFunctions.BinaryCrossEntropyLoss<T>
+            or AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>;
+        if (usesClassificationLoss
+            || taskType is AiDotNet.Enums.NeuralNetworkTaskType.BinaryClassification
+            or AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification
+            or AiDotNet.Enums.NeuralNetworkTaskType.MultiLabelClassification
+            or AiDotNet.Enums.NeuralNetworkTaskType.SequenceClassification
+            or AiDotNet.Enums.NeuralNetworkTaskType.ImageClassification
+            or AiDotNet.Enums.NeuralNetworkTaskType.TokenClassification)
+        {
+            Assert.True(output.Length > 0, "Silence classification should produce a non-empty result.");
+            for (int i = 0; i < output.Length; i++)
+            {
+                double value = ConvertToDouble(output[i]);
+                Assert.True(!double.IsNaN(value) && !double.IsInfinity(value),
+                    $"Silence classification output[{i}] is non-finite: {value}.");
+            }
+            return;
+        }
+
         // Compute RMS of output
         double sumSq = 0;
         for (int i = 0; i < output.Length; i++)
