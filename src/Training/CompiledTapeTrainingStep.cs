@@ -9,6 +9,11 @@ using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Training;
 
+internal static class FirstCompiledStepAllocationGate
+{
+    internal static readonly object Instance = new();
+}
+
 /// <summary>
 /// Compiled training step — auto-compiles the forward + backward pass on the first step,
 /// then replays the compiled plan on subsequent steps for near-zero overhead training.
@@ -31,6 +36,50 @@ namespace AiDotNet.Training;
 /// <typeparam name="T">The numeric type.</typeparam>
 public static class CompiledTapeTrainingStep<T>
 {
+    /// <summary>
+    /// Gives a newly compiled plan zero-initialized, exact-size scratch storage for its trace and
+    /// first replay, then restores the caller's pooling policy. Compiled actions retain the traced
+    /// buffers across later replays, so allowing an uninitialized pooled buffer into that first
+    /// lifecycle can preserve unwritten values and poison every subsequent optimizer step.
+    /// </summary>
+    private readonly struct FirstCompiledStepAllocationScope : IDisposable
+    {
+        private readonly bool _entered;
+        private readonly bool _previousForceFresh;
+
+        private FirstCompiledStepAllocationScope(bool entered, bool previousForceFresh)
+        {
+            _entered = entered;
+            _previousForceFresh = previousForceFresh;
+        }
+
+        public static FirstCompiledStepAllocationScope Enter(bool required)
+        {
+            if (!required)
+                return default;
+
+            System.Threading.Monitor.Enter(FirstCompiledStepAllocationGate.Instance);
+            bool previousForceFresh = TensorPool.ForceFreshAllocations;
+            TensorPool.ForceFreshAllocations = true;
+            return new FirstCompiledStepAllocationScope(true, previousForceFresh);
+        }
+
+        public void Dispose()
+        {
+            if (!_entered)
+                return;
+
+            try
+            {
+                TensorPool.ForceFreshAllocations = _previousForceFresh;
+            }
+            finally
+            {
+                System.Threading.Monitor.Exit(FirstCompiledStepAllocationGate.Instance);
+            }
+        }
+    }
+
     [ThreadStatic]
     private static CompiledModelCache<T>? _cache;
     [ThreadStatic]
@@ -578,6 +627,8 @@ public static class CompiledTapeTrainingStep<T>
             // to pre-Train, even though LastLoss reports a non-zero loss
             // (the plan ran on the previous model's now-stale tensors).
             InvalidateIfLayerSetChanged(layers);
+            using var firstCompiledStepAllocations =
+                FirstCompiledStepAllocationScope.Enter(_configuredPlan is null);
             var cache = _cache ??= new CompiledModelCache<T>();
 
             // AiDotNet#1331: ensure the persistent input/target tensors exist
