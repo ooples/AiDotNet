@@ -1103,24 +1103,44 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         // xoshiro256** fill path still applies. See MultiHeadAttentionLayer for full
         // rationale (Span<T> can't be reinterpreted across generic T without a struct
         // constraint, which we don't have, and CreateSpan isn't on net471).
+        // CHUNKED, like the generic branch below. A full-size temp array here cost a second copy of
+        // every kernel: materializing a 512x512 VAE decoder allocated 479.9MB for 239.9MB of conv
+        // weights, an exact 2.00x, and that transient doubling is what pushed the 339-layer clone
+        // sweep into OutOfMemoryException. The buffer exists only so the SIMD-batched xoshiro256**
+        // fill still applies, and a fixed-size chunk keeps that while making the allocation O(1) in
+        // the kernel size instead of O(n). The RNG is drawn sequentially, so chunking yields the
+        // same stream and the same weights, bit for bit.
+        const int fillBatch = 4096;
         if (typeof(T) == typeof(double))
         {
-            var buffer = new double[total];
-            rng.NextDoubles(buffer.AsSpan());
-            for (int i = 0; i < total; i++)
-                buffer[i] = (buffer[i] * 2.0 - 1.0) * bound;
+            var buffer = new double[Math.Min(total, fillBatch)];
             var reinterpreted = System.Runtime.CompilerServices.Unsafe.As<double[], T[]>(ref buffer);
-            reinterpreted.AsSpan(0, total).CopyTo(span);
+            int offset = 0;
+            while (offset < total)
+            {
+                int chunk = Math.Min(buffer.Length, total - offset);
+                rng.NextDoubles(buffer.AsSpan(0, chunk));
+                for (int i = 0; i < chunk; i++)
+                    buffer[i] = (buffer[i] * 2.0 - 1.0) * bound;
+                reinterpreted.AsSpan(0, chunk).CopyTo(span.Slice(offset, chunk));
+                offset += chunk;
+            }
         }
         else if (typeof(T) == typeof(float))
         {
-            var buffer = new float[total];
-            rng.NextFloats(buffer.AsSpan());
-            float boundF = (float)bound;
-            for (int i = 0; i < total; i++)
-                buffer[i] = (buffer[i] * 2f - 1f) * boundF;
+            var buffer = new float[Math.Min(total, fillBatch)];
             var reinterpreted = System.Runtime.CompilerServices.Unsafe.As<float[], T[]>(ref buffer);
-            reinterpreted.AsSpan(0, total).CopyTo(span);
+            float boundF = (float)bound;
+            int offset = 0;
+            while (offset < total)
+            {
+                int chunk = Math.Min(buffer.Length, total - offset);
+                rng.NextFloats(buffer.AsSpan(0, chunk));
+                for (int i = 0; i < chunk; i++)
+                    buffer[i] = (buffer[i] * 2f - 1f) * boundF;
+                reinterpreted.AsSpan(0, chunk).CopyTo(span.Slice(offset, chunk));
+                offset += chunk;
+            }
         }
         else
         {
