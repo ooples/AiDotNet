@@ -68,6 +68,12 @@ internal static class LearningRateSchedulerCheckpointFactory
                     StateValue<int>(state, "model_dimension"),
                     StateValue<int>(state, "warmup_steps"),
                     StateValue<double>(state, "factor")),
+            [typeof(NoamHoldAnnealingScheduler)] = state =>
+                new NoamHoldAnnealingScheduler(
+                    StateValue<double>(state, "base_lr"),
+                    StateValue<int>(state, "warmup_steps"),
+                    StateValue<int>(state, "hold_steps"),
+                    StateValue<double>(state, "decay_rate")),
             [typeof(OneCycleLRScheduler)] = state =>
                 new OneCycleLRScheduler(
                     StateValue<double>(state, "max_learning_rate"),

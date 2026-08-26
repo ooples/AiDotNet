@@ -139,6 +139,57 @@ public class AudioPaperTrainingRecipeTests
         Assert.Equal(Math.Sqrt(0.8 * 0.55), decoded.Item2, 12);
     }
 
+    [Fact]
+    public void NoamHoldAnnealing_FollowsSqueezeformerEquation()
+    {
+        var scheduler = new NoamHoldAnnealingScheduler(
+            peakLearningRate: 2e-3,
+            warmupSteps: 20,
+            holdSteps: 160,
+            decayRate: 1.0);
+
+        Assert.Equal(1e-4, scheduler.GetLearningRateAtStep(0), 15);
+        Assert.Equal(2e-3, scheduler.GetLearningRateAtStep(19), 15);
+        Assert.Equal(2e-3, scheduler.GetLearningRateAtStep(178), 15);
+        Assert.Equal(2e-3, scheduler.GetLearningRateAtStep(179), 15);
+        Assert.Equal(1e-3, scheduler.GetLearningRateAtStep(199), 15);
+    }
+
+    [Fact]
+    public void Squeezeformer_DefaultOptimizerMatchesPaperSchedule()
+    {
+        var options = new SqueezeformerOptions
+        {
+            EncoderDim = 4,
+            NumEncoderLayers = 1,
+            NumAttentionHeads = 1,
+            NumMels = 4,
+            VocabSize = 4,
+            DropoutRate = 0.0,
+        };
+        using var model = new Squeezeformer<double>(CreateArchitecture(), options);
+        var field = typeof(Squeezeformer<double>).GetField("_optimizer", BindingFlags.Instance | BindingFlags.NonPublic);
+        var optimizer = Assert.IsType<AdamWOptimizer<double, Tensor<double>, Tensor<double>>>(field?.GetValue(model));
+        var optimizerOptions = Assert.IsType<AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>>(optimizer.GetOptions());
+        var scheduler = Assert.IsType<NoamHoldAnnealingScheduler>(optimizerOptions.LearningRateScheduler);
+
+        Assert.Equal(options.PeakLearningRate, scheduler.PeakLearningRate, 15);
+        Assert.Equal(options.WarmupSteps, scheduler.WarmupSteps);
+        Assert.Equal(options.PeakHoldSteps, scheduler.HoldSteps);
+        Assert.Equal(options.LearningRateDecayPower, scheduler.DecayRate, 15);
+        Assert.Equal(scheduler.CurrentLearningRate, optimizerOptions.InitialLearningRate, 15);
+        Assert.Equal(0.9, optimizerOptions.Beta1, 12);
+        Assert.Equal(0.999, optimizerOptions.Beta2, 12);
+        Assert.Equal(1e-8, optimizerOptions.Epsilon, 15);
+        Assert.Equal(options.WeightDecay, optimizerOptions.WeightDecay, 15);
+        Assert.False(optimizerOptions.UseAdaptiveLearningRate);
+        Assert.False(optimizerOptions.UseAdaptiveBetas);
+        Assert.False(optimizerOptions.UseAMSGrad);
+        Assert.Equal(SchedulerStepMode.StepPerBatch, optimizerOptions.SchedulerStepMode);
+        Assert.True(optimizerOptions.EnableGradientClipping);
+        Assert.Equal(1.0, optimizerOptions.MaxGradientNorm, 15);
+    }
+
     private static void AssertTransformerAdamRecipe(
         object model,
         int expectedModelDimension,

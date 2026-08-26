@@ -109,6 +109,7 @@ public class TapeOptimizerSerializationTests
         yield return ["LinearWarmup", (Func<ILearningRateScheduler>)(() => new LinearWarmupScheduler(0.01, 2, 10, 0.001, LinearWarmupScheduler.DecayMode.Cosine, 0.0001))];
         yield return ["MultiStep", (Func<ILearningRateScheduler>)(() => new MultiStepLRScheduler(0.01, [2, 5], 0.5, 0.0001))];
         yield return ["Noam", (Func<ILearningRateScheduler>)(() => new NoamSchedule(16, 4, 0.75))];
+        yield return ["NoamHold", (Func<ILearningRateScheduler>)(() => new NoamHoldAnnealingScheduler(0.01, 2, 3, 1.0))];
         yield return ["OneCycle", (Func<ILearningRateScheduler>)(() => new OneCycleLRScheduler(0.01, 12, 0.25, 10.0, 100.0, OneCycleLRScheduler.AnnealingStrategy.Linear))];
         yield return ["Polynomial", (Func<ILearningRateScheduler>)(() => new PolynomialLRScheduler(0.01, 12, 2.0, 0.0001))];
         yield return ["Plateau", (Func<ILearningRateScheduler>)(() => new ReduceOnPlateauScheduler(0.01, 0.5, 2, 0.001, ReduceOnPlateauScheduler.ThresholdMode.Absolute, 1, ReduceOnPlateauScheduler.Mode.Min, 0.0001))];
