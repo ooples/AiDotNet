@@ -23347,6 +23347,10 @@ public static class LayerHelper<T>
 
         // --- Encoder: 5 layers per block, channels ramping geometrically to encoderMaxChannels ---
         const int baseChannels = 32;
+        // BatchNormalizationLayer defines momentum as the retained weight of prior running stats.
+        // FiNS trains with large batches but evaluates with accumulated stats, so retain 10% of the
+        // prior estimate to keep inference aligned with the rapidly changing strided activations.
+        const double batchNormRunningStatisticsRetention = 0.1;
         // "same" padding keeps the halving driven by the stride alone rather than by edge losses.
         int encoderPadding = (encoderKernelSize - 1) / 2;
         for (int i = 0; i < numEncoderBlocks; i++)
@@ -23360,12 +23364,14 @@ public static class LayerHelper<T>
 
             yield return new Conv1DLayer<T>(outputChannels: channels, kernelSize: encoderKernelSize,
                 stride: encoderStride, padding: encoderPadding, activation: identity);
-            yield return new BatchNormalizationLayer<T>(numFeatures: channels);
+            yield return new BatchNormalizationLayer<T>(numFeatures: channels,
+                momentum: batchNormRunningStatisticsRetention);
             yield return new ActivationLayer<T>((IActivationFunction<T>)new PReLUActivation<T>());
             // Residual projection: 1x1 at the SAME stride so it lines up with the main branch.
             yield return new Conv1DLayer<T>(outputChannels: channels, kernelSize: 1,
                 stride: encoderStride, padding: 0, activation: identity);
-            yield return new BatchNormalizationLayer<T>(numFeatures: channels);
+            yield return new BatchNormalizationLayer<T>(numFeatures: channels,
+                momentum: batchNormRunningStatisticsRetention);
         }
 
         // --- Three-layer MLP: pooled encoder output -> latent z ---
@@ -23402,7 +23408,8 @@ public static class LayerHelper<T>
         // Pinning the fan-in makes the layer's contract independent of walk order.
         yield return new Conv1DLayer<T>(inputChannels: 1, outputChannels: numNoiseBands,
             kernelSize: noiseFilterOrder + 1, dilation: 1, stride: 1,
-            padding: noiseFilterOrder / 2, activation: identity);
+            padding: noiseFilterOrder / 2, activation: identity,
+            initializationStrategy: new OctaveBandpassInitializationStrategy<T>());
         // 1x1 mix of the M late bands and the early component into the monophonic RIR.
         yield return new Conv1DLayer<T>(outputChannels: 1, kernelSize: 1,
             stride: 1, padding: 0, activation: identity);

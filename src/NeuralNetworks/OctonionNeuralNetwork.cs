@@ -102,6 +102,7 @@ public class OctonionNeuralNetwork<T> : VectorModelLayoutBase<T>
             maxGradNorm)
     {
         _options = options ?? new OctonionNeuralNetworkOptions();
+        ValidateOptions(_options);
         Options = _options;
         _optimizer = optimizer ?? new NesterovAcceleratedGradientOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
@@ -125,6 +126,40 @@ public class OctonionNeuralNetwork<T> : VectorModelLayoutBase<T>
         _lossFunction = LossFunction;
 
         InitializeLayers();
+    }
+
+    private static void ValidateOptions(OctonionNeuralNetworkOptions options)
+    {
+        if (double.IsNaN(options.InitialLearningRate)
+            || double.IsInfinity(options.InitialLearningRate)
+            || options.InitialLearningRate <= 0.0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.InitialLearningRate),
+                options.InitialLearningRate,
+                "InitialLearningRate must be finite and greater than zero.");
+        }
+
+        if (double.IsNaN(options.Momentum)
+            || double.IsInfinity(options.Momentum)
+            || options.Momentum < 0.0
+            || options.Momentum >= 1.0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.Momentum),
+                options.Momentum,
+                "Momentum must be finite and in the range [0, 1).");
+        }
+
+        if (options.RampEpoch < 0
+            || options.RampEpoch >= options.FirstDecayEpoch
+            || options.FirstDecayEpoch >= options.SecondDecayEpoch)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options.RampEpoch),
+                $"Epoch thresholds must satisfy 0 <= RampEpoch < FirstDecayEpoch < SecondDecayEpoch; "
+                + $"received {options.RampEpoch}, {options.FirstDecayEpoch}, {options.SecondDecayEpoch}.");
+        }
     }
 
     /// <summary>
