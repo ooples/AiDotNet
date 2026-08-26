@@ -2255,6 +2255,48 @@ jobs:
           run-id: ${{ steps.baseline.outputs.baseline_run_id }}
           github-token: ${{ github.token }}
 
+      - name: Download promoted baseline provenance
+        if: steps.baseline.outputs.baseline_available == 'true' && steps.baseline.outputs.baseline_mode == 'promoted'
+        id: promoted-analysis-download
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          name: ci-test-analysis-${{ steps.baseline.outputs.baseline_sha }}
+          path: promoted-baseline-analysis
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.baseline.outputs.baseline_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Resolve promoted baseline source
+        if: steps.baseline.outputs.baseline_available == 'true' && steps.baseline.outputs.baseline_mode == 'promoted' && steps.promoted-analysis-download.outcome == 'success'
+        id: promoted-baseline
+        shell: pwsh
+        run: |
+          $promotion = Get-ChildItem promoted-baseline-analysis -Recurse -Filter promotion.json |
+            Select-Object -First 1
+          if (-not $promotion) {
+            throw 'Promoted baseline artifact contains no promotion.json provenance.'
+          }
+          $provenance = Get-Content -LiteralPath $promotion.FullName -Raw | ConvertFrom-Json
+          if (-not $provenance.sourceRunId -or -not $provenance.testedSha) {
+            throw 'promotion.json must contain sourceRunId and testedSha.'
+          }
+          "source_run_id=$($provenance.sourceRunId)" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+          "tested_sha=$($provenance.testedSha)" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
+
+      - name: Download promoted source TRX artifacts
+        if: steps.baseline.outputs.baseline_available == 'true' && steps.baseline.outputs.baseline_mode == 'promoted' && steps.promoted-baseline.outcome == 'success'
+        id: promoted-trx-download
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          pattern: coverage-${{ steps.promoted-baseline.outputs.tested_sha }}-*
+          path: promoted-baseline-test-results
+          merge-multiple: false
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.promoted-baseline.outputs.source_run_id }}
+          github-token: ${{ github.token }}
+
       - name: Download legacy baseline TRX artifacts
         if: steps.baseline.outputs.baseline_available == 'true' && steps.baseline.outputs.baseline_mode == 'trx'
         id: baseline-trx-download
@@ -2279,6 +2321,7 @@ jobs:
           BASELINE_MODE: ${{ steps.baseline.outputs.baseline_mode }}
           LEDGER_DOWNLOAD_OUTCOME: ${{ steps.baseline-ledger-download.outcome }}
           TRX_DOWNLOAD_OUTCOME: ${{ steps.baseline-trx-download.outcome }}
+          PROMOTED_TRX_DOWNLOAD_OUTCOME: ${{ steps.promoted-trx-download.outcome }}
         run: |
           $arguments = @{
             CurrentResultsPath = 'current-test-results'
@@ -2287,21 +2330,26 @@ jobs:
             RepositoryPath = '.'
             ApprovedShardChangesPath = '.github/test-shard-changes.json'
           }
+          $ledger = Get-ChildItem baseline-ledger -Recurse -Filter ledger.json -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          $legacyTrx = @(Get-ChildItem baseline-test-results -Recurse -Filter '*.trx' -File -ErrorAction SilentlyContinue)
+          $promotedTrx = @(Get-ChildItem promoted-baseline-test-results -Recurse -Filter '*.trx' -File -ErrorAction SilentlyContinue)
           $baselineReady = $env:COMPARE -eq 'true' -and $env:BASELINE_AVAILABLE -eq 'true' -and (
-            ($env:BASELINE_MODE -eq 'ledger' -and $env:LEDGER_DOWNLOAD_OUTCOME -eq 'success') -or
-            ($env:BASELINE_MODE -eq 'trx' -and $env:TRX_DOWNLOAD_OUTCOME -eq 'success'))
+            ($env:BASELINE_MODE -eq 'ledger' -and $env:LEDGER_DOWNLOAD_OUTCOME -eq 'success' -and $null -ne $ledger) -or
+            ($env:BASELINE_MODE -eq 'trx' -and $env:TRX_DOWNLOAD_OUTCOME -eq 'success' -and $legacyTrx.Count -gt 0) -or
+            ($env:BASELINE_MODE -eq 'promoted' -and $env:PROMOTED_TRX_DOWNLOAD_OUTCOME -eq 'success' -and $promotedTrx.Count -gt 0))
           if ($baselineReady) {
             $arguments.BaselineSha = $env:BASE_SHA
             $arguments.FailOnPolicy = $true
             if ($env:BASELINE_MODE -eq 'ledger') {
-              $ledger = Get-ChildItem baseline-ledger -Recurse -Filter ledger.json | Select-Object -First 1
-              if (-not $ledger) { throw 'Downloaded baseline artifact contains no ledger.json.' }
               $arguments.BaselineLedgerPath = $ledger.FullName
+            } elseif ($env:BASELINE_MODE -eq 'promoted') {
+              $arguments.BaselineResultsPath = 'promoted-baseline-test-results'
             } else {
               $arguments.BaselineResultsPath = 'baseline-test-results'
             }
           } elseif ($env:COMPARE -eq 'true') {
-            $message = "Exact baseline comparison is unavailable (mode '$($env:BASELINE_MODE)', ledger download '$($env:LEDGER_DOWNLOAD_OUTCOME)', TRX download '$($env:TRX_DOWNLOAD_OUTCOME)')."
+            $message = "Exact baseline comparison is unavailable (mode '$($env:BASELINE_MODE)', ledger download '$($env:LEDGER_DOWNLOAD_OUTCOME)', TRX download '$($env:TRX_DOWNLOAD_OUTCOME)', promoted TRX download '$($env:PROMOTED_TRX_DOWNLOAD_OUTCOME)')."
             Write-Warning $message
             "`n> [!WARNING]`n> $message The current inventory is still published, but no regression verdict is claimed.`n" |
               Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
@@ -2692,6 +2740,16 @@ jobs:
           path: TestAnalysis
           merge-multiple: true
 
+      - name: Download certified PR outcome ledger
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ needs.validation-source.outputs.run_id }}
+          pattern: test-outcome-ledger-*
+          path: TestOutcomeLedger
+          merge-multiple: true
+
       - name: Record promotion provenance
         shell: bash
         env:
@@ -2712,6 +2770,14 @@ jobs:
         with:
           name: ci-test-analysis-${{ github.sha }}
           path: TestAnalysis/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload master-keyed outcome ledger
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: test-outcome-ledger-${{ github.sha }}
+          path: TestOutcomeLedger/
           if-no-files-found: error
           retention-days: 90
 

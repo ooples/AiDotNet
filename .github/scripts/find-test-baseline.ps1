@@ -3,9 +3,11 @@
 Finds the exact Actions run/artifact that represents a pull request's base SHA.
 
 .DESCRIPTION
-Prefers the compact TRX ledger emitted by the aggregate job. For the first run
-after this feature is introduced, falls back to the legacy coverage/TRX artifacts
-from the exact master SHA so the rollout does not require a manual baseline.
+Prefers the compact TRX ledger emitted by the aggregate job. A master push may
+reuse a certified pull-request run and therefore publish only a promoted analysis
+artifact under the landed SHA. In that case the caller follows promotion.json to
+the source run's coverage/TRX artifacts. For older ordinary master runs, falls
+back to legacy coverage/TRX artifacts from the exact master SHA.
 #>
 
 [CmdletBinding()]
@@ -55,9 +57,8 @@ if ($ledgerArtifact.Count -gt 0) {
 }
 
 # Bootstrap path: this base SHA predates compact ledgers. Locate the exact push
-# run and let download-artifact fetch its coverage-<sha>-* artifacts. Conclusion
-# is intentionally unrestricted: master workflows can be cancelled by CodeQL
-# after every test shard has already uploaded a valid TRX.
+# run. Conclusion is intentionally unrestricted: master workflows can be
+# cancelled by CodeQL after every test shard has already uploaded a valid TRX.
 $encodedWorkflow = [Uri]::EscapeDataString($Workflow)
 $runs = Invoke-GhJson "repos/$Repository/actions/workflows/$encodedWorkflow/runs?head_sha=$BaseSha&event=push&per_page=100"
 $run = @($runs.workflow_runs |
@@ -68,7 +69,40 @@ if ($run.Count -eq 0) {
     throw "No completed '$Workflow' push run exists for exact baseline SHA $BaseSha."
 }
 
-Set-ActionOutput 'baseline_mode' 'trx'
-Set-ActionOutput 'baseline_run_id' ([string] $run[0].id)
-Set-ActionOutput 'baseline_sha' $BaseSha
-if ($ShardSlug) { Set-ActionOutput 'baseline_artifact_name' "coverage-$BaseSha-$ShardSlug" }
+$runId = [string] $run[0].id
+$runArtifacts = Invoke-GhJson "repos/$Repository/actions/runs/$runId/artifacts?per_page=100"
+$coveragePrefix = "coverage-$BaseSha-"
+$hasExactCoverage = @($runArtifacts.artifacts | Where-Object {
+    -not $_.expired -and ([string] $_.name).StartsWith($coveragePrefix, [StringComparison]::Ordinal)
+}).Count -gt 0
+
+if ($hasExactCoverage) {
+    Set-ActionOutput 'baseline_mode' 'trx'
+    Set-ActionOutput 'baseline_run_id' $runId
+    Set-ActionOutput 'baseline_sha' $BaseSha
+    if ($ShardSlug) { Set-ActionOutput 'baseline_artifact_name' "coverage-$BaseSha-$ShardSlug" }
+    exit 0
+}
+
+# A certified-reuse master run intentionally skips the duplicate test matrix.
+# Its promoted analysis records the source PR run and tested merge SHA in
+# promotion.json, which the workflow uses to fetch the real TRX artifacts.
+$analysisName = "ci-test-analysis-$BaseSha"
+$encodedAnalysisName = [Uri]::EscapeDataString($analysisName)
+$analysisResponse = Invoke-GhJson "repos/$Repository/actions/artifacts?name=$encodedAnalysisName&per_page=100"
+$analysisArtifact = @($analysisResponse.artifacts |
+    Where-Object {
+        -not $_.expired -and $_.name -eq $analysisName -and
+        $_.workflow_run -and $_.workflow_run.head_sha -eq $BaseSha
+    } |
+    Sort-Object created_at -Descending | Select-Object -First 1)
+
+if ($analysisArtifact.Count -gt 0) {
+    Set-ActionOutput 'baseline_mode' 'promoted'
+    Set-ActionOutput 'baseline_run_id' ([string] $analysisArtifact[0].workflow_run.id)
+    Set-ActionOutput 'baseline_sha' $BaseSha
+    if ($ShardSlug) { Set-ActionOutput 'baseline_artifact_name' $analysisName }
+    exit 0
+}
+
+throw "Completed '$Workflow' run $runId for baseline SHA $BaseSha has neither a compact ledger, exact coverage artifacts, nor promoted analysis provenance."

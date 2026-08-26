@@ -212,6 +212,22 @@ try {
     Assert-Equal $true $schemaRejected 'unsupported ledger schema versions are rejected'
     Assert-Matches 'Unsupported baseline ledger schema' $schemaError 'schema rejection identifies the incompatibility'
 
+    $emptyBaselineRoot = Join-Path $testRoot 'empty-baseline'
+    New-Item -Path $emptyBaselineRoot -ItemType Directory -Force | Out-Null
+    $emptyBaselineRejected = $false
+    $emptyBaselineError = ''
+    try {
+        & $analyzer -CurrentResultsPath $currentRoot -BaselineResultsPath $emptyBaselineRoot `
+            -BaselineSha 'empty' -OutputDirectory (Join-Path $testRoot 'empty-baseline-output') `
+            -CurrentSha 'bbbb'
+    }
+    catch {
+        $emptyBaselineRejected = $true
+        $emptyBaselineError = $_.Exception.Message
+    }
+    Assert-Equal $true $emptyBaselineRejected 'an empty downloaded baseline is rejected'
+    Assert-Matches 'contains zero measured test shards' $emptyBaselineError 'empty baseline rejection explains the invalid comparison'
+
     $missingOutput = Join-Path $testRoot 'missing-output'
     $missingRoot = Join-Path $testRoot 'missing-current'
     Write-SyntheticShard $missingRoot 'cccc' 'Shard Green' 'GreenTest' 'Passed'

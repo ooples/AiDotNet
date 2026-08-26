@@ -469,6 +469,15 @@ $baseline = $null
 if ($BaselineLedgerPath) { $baseline = Read-LedgerFile $BaselineLedgerPath }
 elseif ($BaselineResultsPath) { $baseline = Read-TestLedger -Root $BaselineResultsPath -Sha $BaselineSha }
 
+# An explicitly requested baseline that resolved to zero shards is never a real
+# comparison. actions/download-artifact treats a pattern with no matches as a
+# successful step, so accepting an empty directory here would classify every
+# current failure as new against an invented all-green baseline.
+if (($BaselineLedgerPath -or $BaselineResultsPath) -and
+    @($baseline.shards | Where-Object { -not $_.missingTrx }).Count -eq 0) {
+    throw "Resolved baseline '$BaselineSha' contains zero measured test shards; refusing to enforce a false regression comparison."
+}
+
 if (-not $baseline) {
     $summary = [PSCustomObject]@{
         mode = 'inventory'
