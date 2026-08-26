@@ -3572,16 +3572,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             || NeuralNetworkArchitecture<T>.IsEmbeddingCategoryLayer(prevLayer))
             return true;
 
-        // Flatten is deliberately shape-polymorphic: it accepts every non-scalar tensor and binds
-        // its feature product to the actual runtime input. Static chain resolution supplies
-        // per-sample convolutional shapes such as [C,H,W], while Flatten's runtime convention
-        // preserves a leading batch axis; treating its reconciled [H,W] cache as a hard declared
-        // input rejects a valid Conv -> Flatten edge. The layer itself validates rank zero and
-        // rebinds on every changed real shape, so there is no additional compatibility constraint
-        // for the preceding layer to satisfy here.
-        if (currentLayer is FlattenLayer<T>)
-            return true;
-
         // Lazy layers report InputShape = [-1] (or empty) until first Forward —
         // skip the strict shape-equality check; resolution happens at first
         // forward. Empty-shape layers are shape-agnostic by design (e.g.
@@ -14456,29 +14446,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected virtual bool SupportsSequentialActivationFold => false;
 
     /// <summary>
-    /// Collects named activations from an input that has already been transformed into the
-    /// representation consumed by <see cref="Layers"/>.
-    /// </summary>
-    /// <remarks>
-    /// Models with a public preprocessing boundary (for example, waveform-to-spectrogram audio
-    /// models) use this after preprocessing. Calling <see cref="GetNamedLayerActivations"/> with
-    /// that internal representation can otherwise fall back to <see cref="Predict"/>, which applies
-    /// the public preprocessing a second time.
-    /// </remarks>
-    protected Dictionary<string, Tensor<T>> GetNamedLayerActivationsFromLayerInput(Tensor<T> input)
-    {
-        var activations = new Dictionary<string, Tensor<T>>();
-        var current = input;
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            current = Layers[i].Forward(current);
-            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
-        }
-
-        return activations;
-    }
-
-    /// <summary>
     /// Gets the intermediate activations from each layer when processing the given input with named keys.
     /// </summary>
     public virtual Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
@@ -14503,7 +14470,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             try
             {
-                activations = GetNamedLayerActivationsFromLayerInput(input);
+                var current = input;
+                for (int i = 0; i < Layers.Count; i++)
+                {
+                    current = Layers[i].Forward(current);
+                    activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+                }
 
                 // AN EMPTY RESULT IS ALSO A FAILURE TO ANSWER, not an answer of "no activations".
                 // Layers is empty for every model that keeps its real layers somewhere else -- an echo

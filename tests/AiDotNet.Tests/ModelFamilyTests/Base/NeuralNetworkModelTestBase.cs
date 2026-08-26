@@ -635,20 +635,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     protected virtual int TrainingErrorIterations => 3;
 
     /// <summary>
-    /// Maximum optimizer steps an ordinary generated conformance probe may request. The default
-    /// protects the full matrix; small fixtures with a measured optimizer warm-up can override it
-    /// without increasing work for every other model.
-    /// </summary>
-    protected virtual int MaximumConformanceTrainingSteps => 10;
-
-    /// <summary>
     /// Converts a requested repetition count into a model-independent conformance workload. The
     /// budget is expressed in parameter-updates rather than model names or elapsed time, so the
     /// same policy scales from small MLPs to foundation-sized fixtures deterministically on every
     /// runner. At least one complete optimizer step always runs; sustained throughput belongs to
     /// the performance census.
     /// </summary>
-    protected int ResolveConformanceTrainingIterations(
+    protected static int ResolveConformanceTrainingIterations(
         INeuralNetworkModel<T> network,
         int requestedIterations)
     {
@@ -660,8 +653,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 : parameterCount + chunk.Length;
         }
 
-        return ResolveConformanceTrainingIterations(
-            parameterCount, requestedIterations, MaximumConformanceTrainingSteps);
+        return ResolveConformanceTrainingIterations(parameterCount, requestedIterations);
     }
 
     /// <summary>
@@ -674,29 +666,21 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     protected static int ResolveConformanceTrainingIterations(
         long parameterCount,
         int requestedIterations)
-        => ResolveConformanceTrainingIterations(parameterCount, requestedIterations, 10);
-
-    private static int ResolveConformanceTrainingIterations(
-        long parameterCount,
-        int requestedIterations,
-        int maximumConformanceSteps)
     {
         Assert.True(requestedIterations > 0,
             $"Requested training iterations must be > 0; got {requestedIterations}.");
-        Assert.True(maximumConformanceSteps > 0,
-            $"Maximum conformance steps must be > 0; got {maximumConformanceSteps}.");
 
         // Correctness probes answer whether an update is connected, finite and directionally useful;
         // sustained convergence belongs to the performance lane. Cap both dimensions of work:
-        // ordinary inherited invariants perform no more than ten optimizer steps, and the cumulative
-        // tensor update surface is at most three 25M-parameter equivalents. Small generated fixtures
-        // may raise the step ceiling after a measured warm-up. Three steps preserve the short
+        // no inherited invariant performs more than ten optimizer steps, and the cumulative tensor
+        // update surface is at most three 25M-parameter equivalents. Three steps preserve the short
         // recovery trajectory after Adam's first-step transient for mid-sized models, while a
         // foundation-sized fixture still runs exactly one complete step. This remains deterministic
         // across machines, unlike elapsed-time early exits.
+        const int MaximumConformanceSteps = 10;
         const long ParameterUpdateBudget = 75_000_000L;
 
-        int boundedRequest = System.Math.Min(requestedIterations, maximumConformanceSteps);
+        int boundedRequest = System.Math.Min(requestedIterations, MaximumConformanceSteps);
         if (parameterCount <= 0) return boundedRequest;
         long affordable = System.Math.Max(1L, ParameterUpdateBudget / parameterCount);
         return (int)System.Math.Min(boundedRequest, affordable);
@@ -1498,7 +1482,6 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // emitted random floats and tripped strict label validation
         // in the CRF NLL path.
         var trainTarget = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
-        trainTarget = ResolveTrainingObjectiveTarget(network, trainInput, trainTarget);
         PrepareForSupervisedTrainingInvariant(network, trainInput);
         int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);
         for (int i = 0; i < iterations; i++)
@@ -2510,6 +2493,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             network.Train(input, target);
 
         double trainMSE = MeasureLoss(network, input, network.Predict(input), target);
+        var testInput = CreateRandomTensor(EffectiveInputShape, ModelTestHelpers.CreateSeededRandom(99));
 
         // MEASURE BOTH SIDES AGAINST THE SAME TARGET. The invariant's claim is about the INPUT --
         // a model should predict data it trained on at least as well as data it did not -- so the
@@ -2536,23 +2520,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // lower on it than on an unseen one, which is the whole claim; a model that ignores its
         // input scores equal on both and passes, which was already true and is now deterministic
         // instead of decided by a label lottery.
-        // A single unseen draw is not a test distribution. In low-dimensional heads it can land
-        // accidentally much closer to the fixed target than both the training example and the
-        // population, making the verdict depend on one seed. Average a small deterministic panel
-        // instead: this preserves the invariant (training error versus unseen-data error) while
-        // removing the single-sample lottery that produced false findings on DQN, DNC, and compact
-        // Conformer heads. Eight forwards are negligible beside the training loop and give every
-        // fixture the same reproducible comparison.
-        const int testProbeCount = 8;
-        double testMSE = 0.0;
-        for (int probe = 0; probe < testProbeCount; probe++)
-        {
-            var testInput = CreateRandomTensor(
-                EffectiveInputShape,
-                ModelTestHelpers.CreateSeededRandom(99 + probe));
-            testMSE += MeasureLoss(network, testInput, network.Predict(testInput), target);
-        }
-        testMSE /= testProbeCount;
+        double testMSE = MeasureLoss(network, testInput, network.Predict(testInput), target);
 
         if (!double.IsNaN(trainMSE) && !double.IsNaN(testMSE))
         {

@@ -137,16 +137,7 @@ public partial class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
     {
         _options = options ?? new HelixOptions();
         _useNativeMode = true;
-        // HelixOptions inherits the released VLA training schedule (1e-4 AdamW by default).
-        // Constructing AdamW without those options silently selected its generic 1e-3 rate,
-        // making the native dual-system path overshoot even on a fixed fitting example.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-            });
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

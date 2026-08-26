@@ -366,10 +366,7 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         SetTrainingMode(true);
         try
         {
-            // Use the constructor-owned optimizer. The overload without it falls back to the
-            // base trainer's generic optimizer, silently discarding both an injected optimizer
-            // and MedCLIP's configured schedule.
-            TrainWithTape(PreprocessImage(input), expected, _optimizer);
+            TrainWithTape(PreprocessImage(input), expected);
         }
         finally
         {
