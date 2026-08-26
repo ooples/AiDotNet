@@ -64,6 +64,13 @@ namespace AiDotNet.Audio.Effects;
     Authors = "Christian J. Steinmetz, Vamsi Krishna Ithapu, Paul Calamia")]
 public partial class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
+    private const double GlobalGradientClipNorm = 5.0;
+    private const double AdamBeta1 = 0.9;
+    private const double AdamBeta2 = 0.999;
+    private const double AdamEpsilon = 1e-8;
+    private const double LearningRateDecay = 0.5;
+    private const int LearningRateDecaySteps = 40_000;
+
     #region Fields
 
     private readonly RoomImpulseResponseOptions _options;
@@ -111,10 +118,16 @@ public partial class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioE
 
     /// <summary>Creates an RIR estimation model in ONNX inference mode.</summary>
     public RoomImpulseResponse(NeuralNetworkArchitecture<T> architecture, string modelPath, RoomImpulseResponseOptions? options = null)
-        : base(architecture, new MultiResolutionStftLoss<T>((options ?? new RoomImpulseResponseOptions()).StftFrameSizes), 5.0)
+        : this(architecture, modelPath, ResolveAndValidateOptions(options), optionsAreValidated: true)
     {
-        _options = options ?? new RoomImpulseResponseOptions();
-        _options.Validate();
+    }
+
+    private RoomImpulseResponse(NeuralNetworkArchitecture<T> architecture, string modelPath,
+        RoomImpulseResponseOptions options, bool optionsAreValidated)
+        : base(architecture, new MultiResolutionStftLoss<T>(options.StftFrameSizes), GlobalGradientClipNorm)
+    {
+        _ = optionsAreValidated;
+        _options = options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -125,15 +138,21 @@ public partial class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioE
     /// <summary>Creates an RIR estimation model in native training mode.</summary>
     public RoomImpulseResponse(NeuralNetworkArchitecture<T> architecture, RoomImpulseResponseOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : this(architecture, ResolveAndValidateOptions(options), optimizer, optionsAreValidated: true)
+    {
+    }
+
+    private RoomImpulseResponse(NeuralNetworkArchitecture<T> architecture, RoomImpulseResponseOptions options,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer, bool optionsAreValidated)
         // FiNS trains on the multi-resolution STFT loss, which the paper reports worked best ALONE
         // (no time-domain term). Passing it here replaces the audio base's MeanSquaredErrorLoss
         // default: sample-wise MSE is a poor objective for an impulse response, where a small time
         // shift changes every sample while sounding identical, and it cannot express the per-band
         // decay behaviour the filtered-noise-shaping decoder exists to model.
-        : base(architecture, new MultiResolutionStftLoss<T>((options ?? new RoomImpulseResponseOptions()).StftFrameSizes), 5.0)
+        : base(architecture, new MultiResolutionStftLoss<T>(options.StftFrameSizes), GlobalGradientClipNorm)
     {
-        _options = options ?? new RoomImpulseResponseOptions();
-        _options.Validate();
+        _ = optionsAreValidated;
+        _options = options;
         _useNativeMode = true;
         // FiNS uses AdamW at 1e-4, clips the global norm at 5 in the shared trainer,
         // and halves the rate every 40,000 optimizer steps.
@@ -142,20 +161,28 @@ public partial class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioE
             new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = _options.LearningRate,
-                Beta1 = 0.9,
-                Beta2 = 0.999,
-                Epsilon = 1e-8,
+                Beta1 = AdamBeta1,
+                Beta2 = AdamBeta2,
+                Epsilon = AdamEpsilon,
                 UseAdaptiveLearningRate = false,
                 UseAdaptiveBetas = false,
                 UseAMSGrad = false,
                 EnableGradientClipping = false,
-                LearningRateScheduler = new LambdaLRScheduler(
+                LearningRateScheduler = new StepLRScheduler(
                     _options.LearningRate,
-                    step => Math.Pow(0.5, step / 40000)),
+                    LearningRateDecaySteps,
+                    LearningRateDecay),
                 SchedulerStepMode = SchedulerStepMode.StepPerBatch,
             });
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
+    }
+
+    private static RoomImpulseResponseOptions ResolveAndValidateOptions(RoomImpulseResponseOptions? options)
+    {
+        var resolved = options ?? new RoomImpulseResponseOptions();
+        resolved.Validate();
+        return resolved;
     }
 
     internal static async Task<RoomImpulseResponse<T>> CreateAsync(RoomImpulseResponseOptions? options = null,

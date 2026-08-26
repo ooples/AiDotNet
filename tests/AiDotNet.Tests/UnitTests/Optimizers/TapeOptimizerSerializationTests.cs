@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -9,6 +10,46 @@ namespace AiDotNet.Tests.UnitTests.Optimizers;
 
 public class TapeOptimizerSerializationTests
 {
+    [Theory]
+    [InlineData(39_999, 0.0001)]
+    [InlineData(40_000, 0.00005)]
+    [InlineData(80_000, 0.000025)]
+    public void AdamWSerializeDeserialize_RestoresStepSchedulerAtDecayBoundaries(
+        int step,
+        double expectedLearningRate)
+    {
+        var scheduler = new StepLRScheduler(0.0001, 40_000, 0.5);
+        var schedulerState = scheduler.GetState();
+        schedulerState["current_step"] = step;
+        schedulerState["current_lr"] = scheduler.GetLearningRateAtStep(step);
+        scheduler.LoadState(schedulerState);
+
+        var source = new AdamWOptimizer<double, Tensor<double>, Tensor<double>>(
+            null,
+            Common(new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                WeightDecay = 0.0,
+                LearningRateScheduler = scheduler,
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch
+            }));
+
+        var restored = new AdamWOptimizer<double, Tensor<double>, Tensor<double>>(
+            null,
+            Common(new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                WeightDecay = 0.0
+            }));
+
+        restored.Deserialize(source.Serialize());
+
+        var restoredScheduler = Assert.IsType<StepLRScheduler>(restored.LearningRateScheduler);
+        Assert.Equal(step, restoredScheduler.CurrentStep);
+        Assert.Equal(40_000, restoredScheduler.StepSize);
+        Assert.Equal(0.5, restoredScheduler.Gamma, 12);
+        Assert.Equal(expectedLearningRate, restoredScheduler.CurrentLearningRate, 12);
+        Assert.Equal(expectedLearningRate, restoredScheduler.GetLearningRateAtStep(step), 12);
+    }
+
     public static IEnumerable<object[]> StatefulTapeOptimizers()
     {
 #pragma warning disable CS8625

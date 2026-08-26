@@ -18,6 +18,7 @@ using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using System.Collections.Concurrent;
 using System.Reflection;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
 
@@ -102,6 +103,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected Vector<T> _lastComputedGradients;
 
     private const string TapeStateExtensionMarker = "AiDotNet.GradientTapeOptimizerState.v1";
+    private const string SchedulerStateExtensionMarker = "AiDotNet.LearningRateSchedulerState.v1";
 
     private readonly ConcurrentDictionary<Tensor<T>, int> _tapeParameterIndices =
         new(TensorReferenceComparer<Tensor<T>>.Instance);
@@ -2711,6 +2713,13 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             writer.Write(field.Name);
             WriteTapeTensorStateDictionary(writer, field);
         }
+        writer.Write(SchedulerStateExtensionMarker);
+        writer.Write(_learningRateScheduler is not null);
+        if (_learningRateScheduler is not null)
+        {
+            writer.Write(_learningRateScheduler.GetType().AssemblyQualifiedName ?? string.Empty);
+            writer.Write(JsonConvert.SerializeObject(_learningRateScheduler.GetState()));
+        }
     }
 
     /// <inheritdoc />
@@ -2772,6 +2781,28 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                     _pendingTapeTensorStates[fieldName] = ReadTapeTensorStateDictionary(reader);
                 }
             }
+            if (reader.BaseStream.Position < reader.BaseStream.Length)
+            {
+                string schedulerMarker = reader.ReadString();
+                if (!string.Equals(schedulerMarker, SchedulerStateExtensionMarker, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"Unknown learning-rate scheduler extension payload '{schedulerMarker}'.");
+                }
+
+                bool hasScheduler = reader.ReadBoolean();
+                if (hasScheduler)
+                {
+                    string schedulerTypeName = reader.ReadString();
+                    string schedulerStateJson = reader.ReadString();
+                    RestoreLearningRateScheduler(schedulerTypeName, schedulerStateJson);
+                }
+                else
+                {
+                    _learningRateScheduler = null;
+                    GradientOptions.LearningRateScheduler = null;
+                }
+            }
         }
         catch (Exception ex) when (ex is System.IO.EndOfStreamException or System.IO.IOException)
         {
@@ -2780,6 +2811,44 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 "checkpoint stream while reading optimizer state).", ex);
         }
     }
+
+    private void RestoreLearningRateScheduler(string schedulerTypeName, string stateJson)
+    {
+        var state = JsonConvert.DeserializeObject<Dictionary<string, object>>(stateJson)
+            ?? throw new InvalidOperationException("Learning-rate scheduler state is missing or invalid.");
+
+        Type? serializedType = Type.GetType(schedulerTypeName, throwOnError: false);
+        string serializedTypeName = serializedType?.FullName
+            ?? schedulerTypeName.Split(',')[0].Trim();
+
+        ILearningRateScheduler scheduler;
+        if (_learningRateScheduler is not null
+            && string.Equals(_learningRateScheduler.GetType().FullName, serializedTypeName, StringComparison.Ordinal))
+        {
+            scheduler = _learningRateScheduler;
+        }
+        else if (string.Equals(serializedTypeName, typeof(StepLRScheduler).FullName, StringComparison.Ordinal))
+        {
+            scheduler = new StepLRScheduler(
+                Convert.ToDouble(state["base_lr"]),
+                Convert.ToInt32(state["step_size"]),
+                Convert.ToDouble(state["gamma"]),
+                Convert.ToDouble(state["min_lr"]));
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                $"Cannot reconstruct learning-rate scheduler type '{serializedTypeName}'. " +
+                "Restore into an optimizer configured with the same scheduler type, or use a built-in " +
+                "scheduler with a serializable construction recipe.");
+        }
+
+        scheduler.LoadState(state);
+        _learningRateScheduler = scheduler;
+        GradientOptions.LearningRateScheduler = scheduler;
+        SetLearningRate(scheduler.CurrentLearningRate);
+    }
+
 
     private void WriteTapeTensorStateDictionary(BinaryWriter writer, FieldInfo field)
     {
@@ -3230,6 +3299,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         if (options is GradientBasedOptimizerOptions<T, TInput, TOutput> gradientOptions)
         {
             GradientOptions = gradientOptions;
+            _schedulerStepMode = gradientOptions.SchedulerStepMode;
         }
     }
 

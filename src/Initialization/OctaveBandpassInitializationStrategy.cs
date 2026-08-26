@@ -16,7 +16,7 @@ namespace AiDotNet.Initialization;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public sealed class OctaveBandpassInitializationStrategy<T> : InitializationStrategyBase<T>
+internal sealed class OctaveBandpassInitializationStrategy<T> : InitializationStrategyBase<T>
 {
     /// <inheritdoc />
     public override bool IsLazy => false;

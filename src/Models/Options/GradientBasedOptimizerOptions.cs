@@ -2,6 +2,7 @@ using System;
 using AiDotNet.Caching;
 using AiDotNet.Interfaces;
 using AiDotNet.LearningRateSchedulers;
+using Newtonsoft.Json;
 
 namespace AiDotNet.Models.Options;
 
@@ -397,6 +398,7 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
     /// Set this to null (default) to use a constant learning rate.
     /// </para>
     /// </remarks>
+    [JsonIgnore]
     public ILearningRateScheduler? LearningRateScheduler { get; set; }
 
     /// <summary>

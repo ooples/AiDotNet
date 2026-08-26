@@ -20,6 +20,33 @@ public class OctaveBandpassInitializationStrategyTests
     }
 
     [Fact]
+    public void RoomImpulseResponse_ValidatesOptionsBeforeConstructingLoss()
+    {
+        var architecture = new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+            inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 64,
+            outputSize: 32);
+        var options = new RoomImpulseResponseOptions
+        {
+            NumEncoderBlocks = 2,
+            EncoderMaxChannels = 16,
+            LatentDim = 8,
+            NumDecoderBlocks = 2,
+            NumNoiseBands = 3,
+            NoiseFilterOrder = 15,
+            RIRLength = 32,
+            EarlyResponseLength = 8,
+            StftFrameSizes = []
+        };
+
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(
+            () => new RoomImpulseResponse<double>(architecture, options));
+
+        Assert.Equal(nameof(RoomImpulseResponseOptions.StftFrameSizes), exception.ParamName);
+    }
+
+    [Fact]
     public void InitializeWeights_CreatesSymmetricSelectiveUnitGainOctaveBands()
     {
         const int bandCount = 3;
