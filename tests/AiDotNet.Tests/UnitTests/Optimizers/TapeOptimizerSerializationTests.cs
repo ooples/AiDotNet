@@ -125,10 +125,18 @@ public class TapeOptimizerSerializationTests
         Func<ILearningRateScheduler> schedulerFactory)
     {
         var scheduler = schedulerFactory();
-        if (scheduler is AdaptiveFitnessScheduler or ReduceOnPlateauScheduler)
-            scheduler.Step(1.0);
-        else
-            scheduler.Step();
+        bool metricDriven = scheduler is AdaptiveFitnessScheduler or ReduceOnPlateauScheduler;
+
+        void Advance(ILearningRateScheduler candidate)
+        {
+            if (metricDriven)
+                candidate.Step(1.0);
+            else
+                candidate.Step();
+        }
+
+        for (int i = 0; i < 5; i++)
+            Advance(scheduler);
 
         var source = new AdamWOptimizer<double, Tensor<double>, Tensor<double>>(
             null,
@@ -155,6 +163,19 @@ public class TapeOptimizerSerializationTests
             scheduler.CurrentLearningRate,
             restored.LearningRateScheduler.CurrentLearningRate,
             12);
+
+        // Exercise enough of each schedule to cross warmups, milestones, cooldowns,
+        // and restart boundaries. A missing immutable recipe value must diverge here.
+        for (int i = 0; i < 10; i++)
+        {
+            Advance(scheduler);
+            Advance(restored.LearningRateScheduler);
+            Assert.Equal(scheduler.CurrentStep, restored.LearningRateScheduler.CurrentStep);
+            Assert.Equal(
+                scheduler.CurrentLearningRate,
+                restored.LearningRateScheduler.CurrentLearningRate,
+                12);
+        }
     }
 
     [Fact]
