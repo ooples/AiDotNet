@@ -3958,8 +3958,8 @@ public static class LayerHelper<T>
     /// Creates default layers for a Hamiltonian Neural Network.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration that defines input and output shapes.</param>
-    /// <param name="hiddenLayerCount">Number of hidden layers (default: 3).</param>
-    /// <param name="hiddenLayerSize">Number of neurons in each hidden layer (default: 64).</param>
+    /// <param name="hiddenLayerCount">Number of hidden layers (default: 2, matching the reference MLP).</param>
+    /// <param name="hiddenLayerSize">Number of neurons in each hidden layer (default: 200).</param>
     /// <returns>A collection of layers forming a Hamiltonian neural network.</returns>
     /// <remarks>
     /// <para>
@@ -3982,8 +3982,8 @@ public static class LayerHelper<T>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultHamiltonianLayers(
         NeuralNetworkArchitecture<T> architecture,
-        int hiddenLayerCount = 3,
-        int hiddenLayerSize = 64)
+        int hiddenLayerCount = 2,
+        int hiddenLayerSize = 200)
     {
         ValidateLayerParameters(hiddenLayerCount, hiddenLayerSize, architecture.OutputSize);
 
@@ -3997,25 +3997,26 @@ public static class LayerHelper<T>
         var inputShape = architecture.GetInputShape();
         int inputSize = inputShape.Aggregate((a, b) => a * b);
 
-        // Hamiltonian networks use Tanh for smooth gradients
+        // Greydanus et al. use smooth tanh units and orthogonal initialization for
+        // the coordinate experiments. Smoothness is essential because training
+        // differentiates the scalar Hamiltonian with respect to its inputs.
         var hiddenActivation = new TanhActivation<T>() as IActivationFunction<T>;
+        var initialization = new AiDotNet.Initialization.OrthogonalInitializationStrategy<T>();
 
-        // Build the Hamiltonian net into a list, chain-resolve from the
-        // architecture's known input dim so every layer reports
-        // ParameterCount > 0 immediately (callers compute Hamiltonian
-        // gradients which need materialized weights).
+        // The paper/reference MLP has two 200-wide hidden transformations and a
+        // bias-free final projection. Keep the helper configurable for custom
+        // experiments while making the cited recipe the default.
         var layers = new List<ILayer<T>>(hiddenLayerCount + 1);
-        layers.Add(new DenseLayer<T>(hiddenLayerSize, hiddenActivation));
+        layers.Add(new DenseLayer<T>(hiddenLayerSize, hiddenActivation, initialization));
         for (int i = 1; i < hiddenLayerCount; i++)
         {
-            layers.Add(new DenseLayer<T>(hiddenLayerSize, hiddenActivation));
+            layers.Add(new DenseLayer<T>(hiddenLayerSize, hiddenActivation, initialization));
         }
-        layers.Add(new DenseLayer<T>(1, new IdentityActivation<T>() as IActivationFunction<T>));
+        layers.Add(new BiasFreeLinearLayer<T>(hiddenLayerSize, 1));
 
         ChainResolveLazyLayers(layers, new[] { inputSize });
         foreach (var layer in layers) yield return layer;
     }
-
     /// <summary>
     /// Creates default layers for a Lagrangian Neural Network.
     /// </summary>

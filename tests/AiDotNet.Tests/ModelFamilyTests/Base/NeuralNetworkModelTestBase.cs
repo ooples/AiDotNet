@@ -1,4 +1,5 @@
 ﻿using AiDotNet.Interfaces;
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tests.Helpers;
@@ -3797,9 +3798,48 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         INeuralNetworkModel<T> network,
         Tensor<T> input,
         Tensor<T> proposedTarget)
-        => network is ITrainingObjectiveProvider<T> objectiveProvider
-            ? objectiveProvider.ResolveTrainingTarget(input, proposedTarget)
-            : proposedTarget;
+    {
+        if (network is not ITrainingObjectiveProvider<T> objectiveProvider)
+            return proposedTarget;
+
+        if (objectiveProvider.TrainingObjectiveKind == TrainingObjectiveKind.HamiltonianDynamics)
+            proposedTarget = CreateCanonicalHamiltonianDynamicsTarget(input);
+
+        return objectiveProvider.ResolveTrainingTarget(input, proposedTarget);
+    }
+
+    /// <summary>
+    /// Creates the exact derivative field of H(q,p)=0.5*(||q||^2+||p||^2):
+    /// dq/dt=p and dp/dt=-q. This gives HNN fixtures a mathematically valid dynamics
+    /// target instead of asking a derivative-trained model to regress a scalar label.
+    /// </summary>
+    private static Tensor<T> CreateCanonicalHamiltonianDynamicsTarget(Tensor<T> input)
+    {
+        if (input.Rank < 1 || input.Shape[^1] <= 0 || input.Shape[^1] % 2 != 0)
+        {
+            throw new InvalidOperationException(
+                $"Hamiltonian dynamics require a positive even phase-space feature dimension; " +
+                $"got [{string.Join(",", input.Shape)}].");
+        }
+
+        int stateDimension = input.Shape[^1];
+        int coordinateCount = stateDimension / 2;
+        int sampleCount = input.Length / stateDimension;
+        var target = new Tensor<T>(input.Shape.ToArray());
+
+        for (int sample = 0; sample < sampleCount; sample++)
+        {
+            int offset = sample * stateDimension;
+            for (int coordinate = 0; coordinate < coordinateCount; coordinate++)
+            {
+                target[offset + coordinate] = input[offset + coordinateCount + coordinate];
+                target[offset + coordinateCount + coordinate] =
+                    NumOps.Negate(input[offset + coordinate]);
+            }
+        }
+
+        return target;
+    }
 
     /// <summary>
     /// Resolves the class axis once for both categorical target construction routes.

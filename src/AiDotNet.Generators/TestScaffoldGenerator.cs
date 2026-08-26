@@ -13477,7 +13477,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else
             {
-                sb.AppendLine($"    protected override int[] InputShape => new[] {{ {dim} }};");
+                sb.AppendLine(model.ClassName == "HamiltonianNeuralNetwork"
+                    ? $"    protected override int[] InputShape => ResolveModelDeclaredInputShape(new[] {{ {dim} }});"
+                    : $"    protected override int[] InputShape => new[] {{ {dim} }};");
                 sb.AppendLine(model.ClassName == "FastText"
                     ? "    protected override int[] OutputShape => new[] { 128 };"
                     : model.ClassName == "XLSTMLanguageModel"
@@ -14661,22 +14663,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("            \"Gain-normalized enhancement model produced identical outputs for two distinct random inputs - forward may ignore the spectral pattern. \" +");
             sb.AppendLine("            \"Uniform input gain is intentionally normalized away; this assertion verifies input-PATTERN sensitivity.\");");
             sb.AppendLine("    }");
-        }
-
-        if (model.ClassName == "HamiltonianNeuralNetwork")
-        {
-            // HNN (Greydanus et al. 2019) fits a scalar Hamiltonian H(q,p) via supervised gradient
-            // descent on a 3x64 MLP (Adam). At the default 10 (x3 = 30) TrainingError steps and the
-            // conservative default LR it UNDERFITS the single trained (input,target) pair (train MSE
-            // ~1.7e-3), so it does not memorize that pair tighter than an unseen random test target and
-            // trips TrainingError_ShouldNotExceedTestError (which needs train MSE <= 3*test MSE). More
-            // steps let it properly memorize the training pair (train MSE << unseen-test MSE, the
-            // expected generalization gap). TrainingError_ShouldNotExceedTestError itself trains for
-            // TrainingIterations * 3 steps, so an override of 20 yields the intended ~60 total steps;
-            // setting 60 here would balloon to 180 train calls and needlessly bloat generated-test
-            // runtime. The tiny MLP keeps 60 total steps well inside the budget, and the architecture
-            // stays paper-faithful (scalar H + symplectic-gradient dynamics).
-            sb.AppendLine("    protected override int TrainingIterations => 20;");
         }
 
         sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");

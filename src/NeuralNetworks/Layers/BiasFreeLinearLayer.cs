@@ -74,7 +74,24 @@ public sealed partial class BiasFreeLinearLayer<T> : LayerBase<T>, IShapeContrac
             throw new ArgumentException(
                 $"Expected last dimension {_inputSize}, got [{string.Join(",", input.Shape)}].",
                 nameof(input));
-        return Engine.TensorMatMul(input, _weights);
+
+        // TensorMatMul requires rank >= 2, while this layer's public shape contract
+        // intentionally accepts a bare feature vector. Flatten every leading axis for
+        // the projection, then restore those axes with the new feature width. Engine
+        // reshapes are tape-aware, so this path preserves gradients for both the input
+        // and the bias-free weights.
+        int rowCount = input.Length / _inputSize;
+        Tensor<T> matrixInput = input.Rank == 2
+            ? input
+            : Engine.Reshape(input, [rowCount, _inputSize]);
+        Tensor<T> matrixOutput = Engine.TensorMatMul(matrixInput, _weights);
+
+        if (input.Rank == 2)
+            return matrixOutput;
+
+        int[] outputShape = input.Shape.ToArray();
+        outputShape[^1] = _outputSize;
+        return Engine.Reshape(matrixOutput, outputShape);
     }
 
     public override void UpdateParameters(T learningRate)

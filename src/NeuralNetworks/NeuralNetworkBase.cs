@@ -11559,6 +11559,80 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </para>
     /// </remarks>
     /// <summary>
+    /// Creates standard Adam with fixed paper-specified coefficients and optional coupled L2 regularization.
+    /// </summary>
+    /// <param name="initialLearningRate">Initial optimizer learning rate.</param>
+    /// <param name="beta1">First-moment exponential-decay coefficient.</param>
+    /// <param name="beta2">Second-moment exponential-decay coefficient.</param>
+    /// <param name="epsilon">Numerical-stability constant.</param>
+    /// <param name="l2RegularizationStrength">Coupled L2 penalty strength, or zero to disable it.</param>
+    /// <param name="learningRateScheduler">Optional explicit learning-rate schedule.</param>
+    /// <param name="schedulerStepMode">Cadence for the explicit schedule.</param>
+    /// <param name="maxGradientNorm">Global gradient-norm limit, or zero to disable clipping.</param>
+    /// <returns>An Adam optimizer owned by this network.</returns>
+    /// <remarks>
+    /// AiDotNet's Adam options expose adaptive-beta and adaptive-momentum extensions that are useful
+    /// for exploratory optimization but are not part of standard Adam. A research recipe that states
+    /// fixed beta values must disable those extensions. Coupled L2 is configured through
+    /// <c>GradientBasedOptimizerOptions.Regularization</c>, not by substituting
+    /// AdamW's mathematically different decoupled weight decay.
+    /// </remarks>
+    protected AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateFixedAdamOptimizer(
+        double initialLearningRate,
+        double beta1 = 0.9,
+        double beta2 = 0.999,
+        double epsilon = 1e-8,
+        double l2RegularizationStrength = 0.0,
+        AiDotNet.LearningRateSchedulers.ILearningRateScheduler? learningRateScheduler = null,
+        AiDotNet.LearningRateSchedulers.SchedulerStepMode schedulerStepMode =
+            AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+        double maxGradientNorm = 0.0)
+    {
+        if (double.IsNaN(initialLearningRate) || double.IsInfinity(initialLearningRate) || initialLearningRate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(initialLearningRate), "Learning rate must be finite and positive.");
+        if (double.IsNaN(beta1) || double.IsInfinity(beta1) || beta1 <= 0.0 || beta1 >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(beta1), "Beta1 must be finite and strictly between zero and one.");
+        if (double.IsNaN(beta2) || double.IsInfinity(beta2) || beta2 <= 0.0 || beta2 >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(beta2), "Beta2 must be finite and strictly between zero and one.");
+        if (double.IsNaN(epsilon) || double.IsInfinity(epsilon) || epsilon <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be finite and positive.");
+        if (double.IsNaN(l2RegularizationStrength) ||
+            double.IsInfinity(l2RegularizationStrength) ||
+            l2RegularizationStrength < 0.0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(l2RegularizationStrength),
+                "L2 regularization strength must be finite and non-negative.");
+        }
+        if (double.IsNaN(maxGradientNorm) || double.IsInfinity(maxGradientNorm) || maxGradientNorm < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(maxGradientNorm), "Maximum gradient norm must be finite and non-negative.");
+
+        var options = new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = learningRateScheduler?.CurrentLearningRate ?? initialLearningRate,
+            Beta1 = beta1,
+            Beta2 = beta2,
+            Epsilon = epsilon,
+            UseAdaptiveLearningRate = false,
+            UseAdaptiveMomentum = false,
+            UseAdaptiveBetas = false,
+            UseAMSGrad = false,
+            EnableGradientClipping = maxGradientNorm > 0.0,
+            MaxGradientNorm = maxGradientNorm > 0.0 ? maxGradientNorm : 1.0,
+            LearningRateScheduler = learningRateScheduler,
+            SchedulerStepMode = schedulerStepMode,
+        };
+
+        if (l2RegularizationStrength > 0.0)
+        {
+            options.Regularization = new AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>>(
+                new Models.RegularizationOptions { Strength = l2RegularizationStrength });
+        }
+
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, options);
+    }
+
+    /// <summary>
     /// Adopts an optimizer that was constructed FOR this network as its tape-training optimizer, unless one has
     /// already been chosen.
     /// </summary>
