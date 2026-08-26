@@ -270,7 +270,7 @@ public class NeuralVaR<T> : RiskModelBase<T>
 
         double lossAfter = NumOps.ToDouble(
             _lossFunction.CalculateLoss(Predict(input).ToVector(), target.ToVector()));
-        if (!double.IsFinite(lossAfter) || lossAfter > lossBefore)
+        if (double.IsNaN(lossAfter) || double.IsInfinity(lossAfter) || lossAfter > lossBefore)
         {
             var candidateParameters = GetParameters();
             bool accepted = false;
@@ -295,7 +295,7 @@ public class NeuralVaR<T> : RiskModelBase<T>
                 UpdateParameters(trialParameters);
                 double trialLoss = NumOps.ToDouble(
                     _lossFunction.CalculateLoss(Predict(input).ToVector(), target.ToVector()));
-                if (double.IsFinite(trialLoss) && trialLoss < lossBefore)
+                if (!double.IsNaN(trialLoss) && !double.IsInfinity(trialLoss) && trialLoss < lossBefore)
                 {
                     accepted = true;
                     break;

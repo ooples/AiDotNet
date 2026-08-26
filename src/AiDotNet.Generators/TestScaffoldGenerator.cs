@@ -3966,10 +3966,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "new AiDotNet.Optimizers.AdamWOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null, " +
             "new AiDotNet.Models.Options.AdamWOptimizerOptions<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>> " +
             "{ InitialLearningRate = 1e-5 })";
-        const string ultraConservativeSmokeAdamWOptimizer =
-            "new AiDotNet.Optimizers.AdamWOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null, " +
-            "new AiDotNet.Models.Options.AdamWOptimizerOptions<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>> " +
-            "{ InitialLearningRate = 1e-7 })";
         const string noDecaySmokeAdamWOptimizer =
             "new AiDotNet.Optimizers.AdamWOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null, " +
             "new AiDotNet.Models.Options.AdamWOptimizerOptions<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>> " +
@@ -4723,18 +4719,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "EfficientConformer" && model.TypeParameterCount == 1)
             {
-                // The paper defaults remain 512-wide and 16 layers. Keep progressive
-                // Conformer downsampling and the vocabulary head at public-options smoke scale.
+                // The paper's CTC-small defaults are 120/168/240 across fifteen blocks.
+                // Exercise all three stages, both progressive reductions, grouped first-stage
+                // attention, and the CTC head at an explicitly bounded width/depth.
                 pinInitSeed = true;
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "new AiDotNet.SpeechRecognition.ConformerFamily.EfficientConformerOptions { " +
-                    "EncoderDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 2, " +
-                    "FeedForwardExpansionFactor = 2, DownsamplingFactor = 2, NumMels = 32, " +
-                    "VocabSize = 4, DropoutRate = 0.0, UseLayerNormalization = true }, " +
-                    $"optimizer: {ultraConservativeSmokeAdamWOptimizer})";
+                    "EncoderDim = 32, NumEncoderLayers = 3, NumAttentionHeads = 2, " +
+                    "FeedForwardExpansionFactor = 2, ConvKernelSize = 5, InitialAttentionGroupSize = 2, " +
+                    "DownsamplingFactor = 8, NumMels = 32, VocabSize = 4, " +
+                    "DropoutRate = 0.0, UseLayerNormalization = true })";
             }
             else if ((model.ClassName is "EmformerRNNT" or "FastEmit") && model.TypeParameterCount == 1)
             {
@@ -12930,7 +12927,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // the loss recorded immediately before update 2 is still in the first Adam
                     // overshoot (0.707407 -> 1.057642). Fifteen sub-second steps measure the settled
                     // trajectory while retaining the exact strict-decrease assertion.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "AudioLM" or "IndexTTS2" or "SpeechT5" or "StyleTTS" or "StyleTTS2" or "Vocos" or "WaveGrad" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    // ProDiff's official 2,000-step linear warmup is even more conservative: its
+                    // first two L1 updates straddle the initial Adam transient, while 15 updates
+                    // produce a strict decrease under the unchanged paper schedule and threshold.
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "AudioLM" or "IndexTTS2" or "ProDiff" or "SpeechT5" or "StyleTTS" or "StyleTTS2" or "Vocos" or "WaveGrad" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                 }
                 // The VAE+flow+decoder stack is init-sensitive: a poorly-scaled init
                 // (inherited from the order-dependent process-shared RNG when sibling
@@ -12963,6 +12963,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
                 sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
             }
+            else if (model.ClassName == "EfficientConformer")
+            {
+                // The bounded native fixture retains the paper's complete 8x progressive
+                // reduction, so 64 input frames produce eight CTC log-probability frames.
+                // Restate the generic FP32 audio repetition budget because this branch owns
+                // the shape contract; assertion thresholds remain unchanged.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 8, 4 };");
+                sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
+                sb.AppendLine("    protected override int TrainingIterations => 2;");
+                sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
+                sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+                sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
+                sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
+            }
+
             else if (model.ClassName == "CTCDecoder")
             {
                 // #1789 Generated C: MoreData_ShouldNotDegrade was the only CTCDecoder test to

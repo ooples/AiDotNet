@@ -16,7 +16,7 @@ namespace AiDotNet.Helpers;
 /// This class contains factory methods that create pre-configured sets of neural network layers
 /// for common architectures like standard feed-forward networks, CNNs, ResNets, and more.
 /// </remarks>
-public static class LayerHelper<T>
+public static partial class LayerHelper<T>
 {
     /// <summary>
     /// Provides operations for the numeric type T.

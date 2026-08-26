@@ -2,6 +2,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
@@ -77,7 +78,7 @@ public class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
         string modelPath,
         VinVLOptions? options = null
     )
-        : base(architecture)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new VinVLOptions();
         _useNativeMode = false;
@@ -99,7 +100,7 @@ public class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
         VinVLOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
     )
-        : base(architecture)
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new VinVLOptions();
         _useNativeMode = true;
@@ -350,8 +351,8 @@ public class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new VinVL<T>(Architecture, mp, _options);
-        return new VinVL<T>(Architecture, _options);
+            return new VinVL<T>(Architecture, mp, new VinVLOptions(_options));
+        return new VinVL<T>(Architecture, new VinVLOptions(_options));
     }
 
     private void ThrowIfDisposed()

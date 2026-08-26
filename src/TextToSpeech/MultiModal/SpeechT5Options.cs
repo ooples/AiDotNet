@@ -23,7 +23,8 @@ public class SpeechT5Options : EndToEndTtsOptions
     public SpeechT5Options(SpeechT5Options other)
         : base(other)
     {
-        ArgumentNullException.ThrowIfNull(other);
+        if (other == null)
+            throw new ArgumentNullException(nameof(other));
         OptimizerBeta1 = other.OptimizerBeta1;
         OptimizerBeta2 = other.OptimizerBeta2;
         OptimizerEpsilon = other.OptimizerEpsilon;

@@ -1,8 +1,9 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
@@ -11,114 +12,242 @@ using AiDotNet.Optimizers;
 namespace AiDotNet.SpeechRecognition.ConformerFamily;
 
 /// <summary>
-/// Efficient Conformer with progressive frequency/time downsampling.
+/// Efficient Conformer with progressive temporal downsampling and grouped attention.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "Efficient Conformer: Progressive Downsampling and Grouped Attention" (Burchi &amp; Vielzeuf, 2021)</item></list></para>
-/// <para><b>For Beginners:</b> Progressively downsamples both frequency and time dimensions through the encoder layers, reducing computation while preserving accuracy. Groups of encoder layers operate at different resolutions, with strided convolution transitions between groups...</para>
-/// <para>
-/// Progressively downsamples both frequency and time dimensions through the encoder layers,
-/// reducing computation while preserving accuracy. Groups of encoder layers operate at
-/// different resolutions, with strided convolution transitions between groups.
-/// Achieves similar accuracy to standard Conformer with ~30% fewer FLOPs.
-/// </para>
+/// Implements the CTC architecture from "Efficient Conformer: Progressive Downsampling and
+/// Grouped Attention for Automatic Speech Recognition" (Burchi and Vielzeuf, 2021).
 /// </remarks>
-/// <example>
-/// <code>
-/// // Create an Efficient Conformer model with progressive downsampling
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
-///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
-/// var model = new EfficientConformer&lt;double&gt;(architecture);
-///
-/// // Or load a pre-trained ONNX model for efficient ASR inference
-/// var onnxModel = new EfficientConformer&lt;double&gt;(architecture, "efficientconformer.onnx");
-/// </code>
-/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Efficient Conformer: Progressive Downsampling and Grouped Attention for Automatic Speech Recognition", "https://arxiv.org/abs/2109.01163", Year = 2021, Authors = "Burchi and Vielzeuf")]
+[ResearchPaper(
+    "Efficient Conformer: Progressive Downsampling and Grouped Attention for Automatic Speech Recognition",
+    "https://arxiv.org/abs/2109.01163",
+    Year = 2021,
+    Authors = "Burchi and Vielzeuf")]
 public class EfficientConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
-    private readonly EfficientConformerOptions _options; public override ModelOptions GetOptions() => _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
+    private readonly EfficientConformerOptions _options;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+
+    /// <inheritdoc />
     public IReadOnlyList<string> SupportedLanguages { get; }
+
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
+
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
-    public EfficientConformer(NeuralNetworkArchitecture<T> architecture, string modelPath, EfficientConformerOptions? options = null) : base(architecture) { _options = options ?? new EfficientConformerOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
-    public EfficientConformer(NeuralNetworkArchitecture<T> architecture, EfficientConformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    /// <inheritdoc />
+    public override ModelOptions GetOptions() => _options;
+
+    /// <summary>Creates an ONNX-backed EfficientConformer.</summary>
+    public EfficientConformer(
+        NeuralNetworkArchitecture<T> architecture,
+        string modelPath,
+        EfficientConformerOptions? options = null)
+        : base(architecture)
+    {
+        _options = options ?? new EfficientConformerOptions();
+        _useNativeMode = false;
+        base.SampleRate = _options.SampleRate;
+        base.NumMels = _options.NumMels;
+
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path required.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+
+        _options.ModelPath = modelPath;
+        OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        SupportedLanguages = [_options.Language];
+        SetLossFunction(new CTCLoss<T>(_options.VocabSize, blankIndex: 0, inputsAreLogProbs: true));
+        InitializeLayers();
+    }
+
+    /// <summary>Creates the native paper architecture.</summary>
+    public EfficientConformer(
+        NeuralNetworkArchitecture<T> architecture,
+        EfficientConformerOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture)
     {
         _options = options ?? new EfficientConformerOptions();
         _useNativeMode = true;
         _optimizer = optimizer ?? CreateTransformerScheduleAdamOptimizer(
-            _options.EncoderDim,
+            ResolveFinalEncoderDimension(_options),
             _options.WarmupSteps,
             _options.LearningRateFactor,
             _options.WeightDecay);
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
-        SupportedLanguages = new[] { _options.Language };
+        SupportedLanguages = [_options.Language];
+        SetLossFunction(new CTCLoss<T>(_options.VocabSize, blankIndex: 0, inputsAreLogProbs: true));
         InitializeLayers();
     }
 
-    /// <summary>
-    /// Transcribes audio using progressive downsampling Conformer encoder.
-    /// Per the paper: encoder layers are grouped into stages with decreasing resolution,
-    /// strided convolution transitions between stages, and grouped attention heads
-    /// reduce computation while maintaining representation quality.
-    /// </summary>
-    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool includeTimestamps = false)
+    /// <inheritdoc />
+    public TranscriptionResult<T> Transcribe(
+        Tensor<T> audio,
+        string? language = null,
+        bool includeTimestamps = false)
     {
         ThrowIfDisposed();
         var features = PreprocessAudio(audio);
-        var logits = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
-        var (tokens, confidence) = CTCGreedyDecodeWithConfidence(logits); var text = TokensToText(tokens);
+        var logProbabilities = Predict(features);
+        var (tokens, confidence) = CTCGreedyDecodeWithConfidence(logProbabilities);
+        string text = TokensToText(tokens);
         double duration = audio.Length > 0 ? (double)audio.Shape[0] / SampleRate : 0;
-        return new TranscriptionResult<T> { Text = text, Language = language ?? _options.Language, Confidence = NumOps.FromDouble(confidence), DurationSeconds = duration, Segments = includeTimestamps ? ExtractSegments(text, duration, confidence) : Array.Empty<TranscriptionSegment<T>>() };
+
+        return new TranscriptionResult<T>
+        {
+            Text = text,
+            Language = language ?? _options.Language,
+            Confidence = NumOps.FromDouble(confidence),
+            DurationSeconds = duration,
+            Segments = includeTimestamps
+                ? ExtractSegments(text, duration, confidence)
+                : Array.Empty<TranscriptionSegment<T>>()
+        };
     }
 
-    public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool includeTimestamps = false, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
-    public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
+    /// <inheritdoc />
+    public Task<TranscriptionResult<T>> TranscribeAsync(
+        Tensor<T> audio,
+        string? language = null,
+        bool includeTimestamps = false,
+        CancellationToken cancellationToken = default)
+        => Task.Run(
+            () => Transcribe(audio, language, includeTimestamps),
+            cancellationToken);
+
+    /// <inheritdoc />
+    public string DetectLanguage(Tensor<T> audio)
+    {
+        var tokens = CTCGreedyDecodeWithConfidence(Predict(PreprocessAudio(audio))).tokens;
+        return ClassifyLanguageFromTokens(tokens);
+    }
+
+    /// <inheritdoc />
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
     {
-        var detected = DetectLanguage(audio);
+        string detected = DetectLanguage(audio);
         var result = new Dictionary<string, T>();
-        foreach (var lang in SupportedLanguages)
-            result[lang] = NumOps.FromDouble(lang == detected ? 1.0 : 0.0);
+        foreach (string language in SupportedLanguages)
+            result[language] = NumOps.FromDouble(language == detected ? 1.0 : 0.0);
         return result;
     }
-    public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("EfficientConformer does not support streaming.");
 
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultSqueezeformerLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, feedForwardExpansionFactor: _options.FeedForwardExpansionFactor, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate, useLayerNormalization: _options.UseLayerNormalization)); }
-    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer() => _optimizer ?? throw new InvalidOperationException("A native EfficientConformer optimizer is not available in ONNX mode.");
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { TrainWithTape(input, expected, _optimizer); } finally { SetTrainingMode(false); } }
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null)
+        => throw new NotSupportedException("EfficientConformer does not support streaming.");
+
+    /// <inheritdoc />
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode)
+            return;
+
+        if (Architecture.Layers is { Count: > 0 })
+        {
+            Layers.AddRange(Architecture.Layers);
+            return;
+        }
+
+        Layers.AddRange(LayerHelper<T>.CreateDefaultEfficientConformerLayers(
+            encoderDim: _options.EncoderDim,
+            numLayers: _options.NumEncoderLayers,
+            numAttentionHeads: _options.NumAttentionHeads,
+            feedForwardExpansionFactor: _options.FeedForwardExpansionFactor,
+            convKernelSize: _options.ConvKernelSize,
+            downsamplingFactor: _options.DownsamplingFactor,
+            attentionGroupSize: _options.InitialAttentionGroupSize,
+            numMels: _options.NumMels,
+            vocabSize: _options.VocabSize,
+            dropoutRate: _options.DropoutRate,
+            useLayerNormalization: _options.UseLayerNormalization));
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        Tensor<T> logits;
+        if (IsOnnxMode && OnnxEncoder is not null)
+        {
+            logits = OnnxEncoder.Run(input);
+        }
+        else
+        {
+            logits = input;
+            foreach (var layer in Layers)
+                logits = layer.Forward(logits);
+        }
+
+        return Engine.TensorLogSoftmax(logits.Contiguous(), axis: logits.Rank - 1);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var logits = base.ForwardForTraining(input);
+        return Engine.TensorLogSoftmax(logits.Contiguous(), axis: logits.Rank - 1);
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T> PostprocessOutput(Tensor<T> output)
+        => Engine.TensorLogSoftmax(output.Contiguous(), axis: output.Rank - 1);
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer
+            ?? throw new InvalidOperationException(
+                "A native EfficientConformer optimizer is not available in ONNX mode.");
+
+    /// <inheritdoc />
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training not supported in ONNX mode.");
+
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <inheritdoc />
     protected override bool SupportsParameterMutation => _useNativeMode;
-    protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
+
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         Name = _useNativeMode ? "EfficientConformer-Native" : "EfficientConformer-ONNX",
-        Description = "Efficient Conformer: Progressive Downsampling (Burchi & Vielzeuf, 2021)",
+        Description = "Efficient Conformer: progressive downsampling and grouped attention",
         FeatureCount = _options.NumMels,
         Complexity = _options.NumEncoderLayers,
         AdditionalInfo = new Dictionary<string, object>
         {
             ["Mode"] = _useNativeMode ? "Native" : "ONNX",
             ["EncoderDim"] = _options.EncoderDim,
+            ["FinalEncoderDim"] = ResolveFinalEncoderDimension(_options),
             ["NumEncoderLayers"] = _options.NumEncoderLayers,
             ["NumAttentionHeads"] = _options.NumAttentionHeads,
             ["FeedForwardExpansionFactor"] = _options.FeedForwardExpansionFactor,
+            ["ConvKernelSize"] = _options.ConvKernelSize,
+            ["InitialAttentionGroupSize"] = _options.InitialAttentionGroupSize,
             ["DownsamplingFactor"] = _options.DownsamplingFactor,
             ["NumMels"] = _options.NumMels,
             ["VocabSize"] = _options.VocabSize,
@@ -129,24 +258,207 @@ public class EfficientConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
             ["Language"] = _options.Language
         }
     };
-    protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.FeedForwardExpansionFactor); w.Write(_options.DownsamplingFactor); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.DropoutRate); w.Write(_options.Language); w.Write(_options.UseLayerNormalization); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.FeedForwardExpansionFactor = r.ReadInt32(); _options.DownsamplingFactor = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); if (r.BaseStream.Position < r.BaseStream.Length) _options.UseLayerNormalization = r.ReadBoolean(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
+
+    /// <inheritdoc />
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.SampleRate);
+        writer.Write(_options.MaxAudioLengthSeconds);
+        writer.Write(_options.EncoderDim);
+        writer.Write(_options.NumEncoderLayers);
+        writer.Write(_options.NumAttentionHeads);
+        writer.Write(_options.FeedForwardExpansionFactor);
+        writer.Write(_options.DownsamplingFactor);
+        writer.Write(_options.NumMels);
+        writer.Write(_options.VocabSize);
+        writer.Write(_options.DropoutRate);
+        writer.Write(_options.Language);
+        writer.Write(_options.UseLayerNormalization);
+        writer.Write(_options.ConvKernelSize);
+        writer.Write(_options.InitialAttentionGroupSize);
+    }
+
+    /// <inheritdoc />
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string modelPath = reader.ReadString();
+        if (!string.IsNullOrEmpty(modelPath))
+            _options.ModelPath = modelPath;
+
+        _options.SampleRate = reader.ReadInt32();
+        _options.MaxAudioLengthSeconds = reader.ReadInt32();
+        _options.EncoderDim = reader.ReadInt32();
+        _options.NumEncoderLayers = reader.ReadInt32();
+        _options.NumAttentionHeads = reader.ReadInt32();
+        _options.FeedForwardExpansionFactor = reader.ReadInt32();
+        _options.DownsamplingFactor = reader.ReadInt32();
+        _options.NumMels = reader.ReadInt32();
+        _options.VocabSize = reader.ReadInt32();
+        _options.DropoutRate = reader.ReadDouble();
+        _options.Language = reader.ReadString();
+
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+            _options.UseLayerNormalization = reader.ReadBoolean();
+        if (reader.BaseStream.Position + sizeof(int) <= reader.BaseStream.Length)
+            _options.ConvKernelSize = reader.ReadInt32();
+        if (reader.BaseStream.Position + sizeof(int) <= reader.BaseStream.Length)
+            _options.InitialAttentionGroupSize = reader.ReadInt32();
+
+        base.SampleRate = _options.SampleRate;
+        base.NumMels = _options.NumMels;
+        SetLossFunction(new CTCLoss<T>(_options.VocabSize, blankIndex: 0, inputsAreLogProbs: true));
+
+        if (!_useNativeMode && _options.ModelPath is { Length: > 0 } path)
+            OnnxEncoder = new OnnxModel<T>(path, _options.OnnxOptions);
+    }
+
+    /// <inheritdoc />
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new EfficientConformer<T>(Architecture, mp, new EfficientConformerOptions(_options));
+        if (!_useNativeMode && _options.ModelPath is { Length: > 0 } modelPath)
+            return new EfficientConformer<T>(
+                Architecture,
+                modelPath,
+                new EfficientConformerOptions(_options));
 
-        var cloneOptimizer = _optimizer?.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> optimizerOptions
-            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                null,
-                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(optimizerOptions))
-            : null;
-        return new EfficientConformer<T>(Architecture, new EfficientConformerOptions(_options), cloneOptimizer);
+        var cloneOptimizer =
+            _optimizer?.GetOptions()
+                is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> optimizerOptions
+                ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                    null,
+                    new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(optimizerOptions))
+                : null;
+        return new EfficientConformer<T>(
+            Architecture,
+            new EfficientConformerOptions(_options),
+            cloneOptimizer);
     }
-    private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
-    private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }
-    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
-    private string ClassifyLanguageFromTokens(List<int> tokens) { if (tokens.Count == 0) return _options.Language; int cjkCount = 0, latinCount = 0; foreach (var t in tokens) { if (t >= 0x4E00 && t <= 0x9FFF) cjkCount++; else if (t >= 0x41 && t <= 0x7A) latinCount++; } if (cjkCount > latinCount && SupportedLanguages.Contains("zh")) return "zh"; return _options.Language; }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(EfficientConformer<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
+
+    private static int ResolveFinalEncoderDimension(EfficientConformerOptions options)
+    {
+        int heads = Math.Max(1, options.NumAttentionHeads);
+        int dimension = (int)Math.Round(options.EncoderDim * 2.0 / heads) * heads;
+        return Math.Max(heads, dimension);
+    }
+
+    private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(
+        Tensor<T> logProbabilities)
+    {
+        var tokens = new List<int>();
+        double totalConfidence = 0;
+        int confidenceCount = 0;
+        int previousToken = -1;
+        int frameCount = logProbabilities.Rank >= 2 ? logProbabilities.Shape[^2] : 1;
+        int vocabularySize = logProbabilities.Shape[^1];
+
+        for (int frame = 0; frame < frameCount; frame++)
+        {
+            int maxIndex = 0;
+            double maxValue = double.NegativeInfinity;
+            int frameOffset = frame * vocabularySize;
+            for (int token = 0; token < vocabularySize; token++)
+            {
+                double value = NumOps.ToDouble(logProbabilities[frameOffset + token]);
+                if (value > maxValue)
+                {
+                    maxValue = value;
+                    maxIndex = token;
+                }
+            }
+
+            double sumExp = 0;
+            for (int token = 0; token < vocabularySize; token++)
+            {
+                double value = NumOps.ToDouble(logProbabilities[frameOffset + token]);
+                sumExp += Math.Exp(value - maxValue);
+            }
+
+            double frameConfidence = 1.0 / sumExp;
+            if (maxIndex != previousToken && maxIndex > 0)
+            {
+                tokens.Add(maxIndex);
+                totalConfidence += frameConfidence;
+                confidenceCount++;
+            }
+
+            previousToken = maxIndex;
+        }
+
+        return (tokens, confidenceCount > 0 ? totalConfidence / confidenceCount : 0.0);
+    }
+
+    private static string TokensToText(List<int> tokens)
+    {
+        var text = new System.Text.StringBuilder();
+        foreach (int token in tokens)
+        {
+            if (token > 0 && token <= char.MaxValue)
+                text.Append((char)token);
+            else if (token > char.MaxValue && token <= 0x10FFFF)
+                text.Append(char.ConvertFromUtf32(token));
+        }
+
+        return text.ToString().Trim();
+    }
+
+    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(
+        string text,
+        double duration,
+        double confidence)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return Array.Empty<TranscriptionSegment<T>>();
+
+        return
+        [
+            new TranscriptionSegment<T>
+            {
+                Text = text,
+                StartTime = 0.0,
+                EndTime = duration,
+                Confidence = NumOps.FromDouble(confidence)
+            }
+        ];
+    }
+
+    private string ClassifyLanguageFromTokens(List<int> tokens)
+    {
+        if (tokens.Count == 0)
+            return _options.Language;
+
+        int cjkCount = 0;
+        int latinCount = 0;
+        foreach (int token in tokens)
+        {
+            if (token is >= 0x4E00 and <= 0x9FFF)
+                cjkCount++;
+            else if (token is >= 0x41 and <= 0x7A)
+                latinCount++;
+        }
+
+        if (cjkCount > latinCount && SupportedLanguages.Contains("zh"))
+            return "zh";
+        return _options.Language;
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName ?? nameof(EfficientConformer<T>));
+    }
+
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed)
+            return;
+
+        if (disposing)
+            OnnxEncoder?.Dispose();
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }

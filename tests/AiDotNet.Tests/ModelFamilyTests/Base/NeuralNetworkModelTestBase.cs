@@ -1152,12 +1152,17 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// copula fit), NOT a supervised MSE gradient step. Their real training is covered by the
     /// SyntheticTabularGenerator integration tests (Fit → Generate). The supervised
     /// <c>Train(input, expected)</c> path is a NeuralNetworkBase compatibility no-op for them.</description></item>
+    /// <item><description>Models that explicitly report <c>SupportsTraining == false</c> have
+    /// declared the supervised training contract unavailable; invoking <c>Train</c> would contradict
+    /// their public capability surface and commonly throws <see cref="NotSupportedException"/>.</description></item>
     /// </list>
     /// Inference invariants (forward finiteness, determinism, different-inputs-different-outputs)
     /// still run and assert normally.
     /// </summary>
     protected static bool TrainingInvariantsNotApplicable(INeuralNetworkModel<T> network)
-        => network is AiDotNet.Interfaces.IDetectionBackbone<T>
+        => network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> neuralNetwork
+            && !neuralNetwork.SupportsTraining
+        || network is AiDotNet.Interfaces.IDetectionBackbone<T>
         || network is AiDotNet.Interfaces.ISyntheticTabularGenerator<T>;
 
     // =====================================================
@@ -3643,6 +3648,33 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 "loss, because the training invariants skip their assertions on a NaN measurement.");
         }
 
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> ctcNetwork
+            && ctcNetwork.DefaultLossFunction is AiDotNet.LossFunctions.CTCLoss<T> ctc)
+        {
+            var lossTensor = ctc.ComputeTapeLoss(output, target);
+            try
+            {
+                return RequireScalarFiniteLoss(ctc, network, lossTensor);
+            }
+            catch (InvalidOperationException exception)
+            {
+                double minimum = double.PositiveInfinity;
+                double maximum = double.NegativeInfinity;
+                for (int i = 0; i < output.Length; i++)
+                {
+                    double value = ConvertToDouble(output[i]);
+                    minimum = Math.Min(minimum, value);
+                    maximum = Math.Max(maximum, value);
+                }
+
+                string encodedTarget = string.Join(",", target.ToArray().Select(ConvertToDouble));
+                throw new InvalidOperationException(
+                    $"{exception.Message} CTC output shape=[{string.Join(",", output.Shape)}], "
+                    + $"range=[{minimum:G17},{maximum:G17}], encoded target=[{encodedTarget}].",
+                    exception);
+            }
+        }
+
         if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
             && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T> ce
             && !PredictLeavesLossDomain(network))
@@ -3934,6 +3966,44 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </summary>
     protected Tensor<T> MakeTargetWellPosedForLoss(INeuralNetworkModel<T> network, Tensor<T> target, Random rng)
     {
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> ctcNetwork
+            && ctcNetwork.DefaultLossFunction is AiDotNet.LossFunctions.CTCLoss<T> ctc)
+        {
+            int[] outputShape = target.Shape.ToArray();
+            Assert.True(outputShape.Length >= 2,
+                $"CTC output must expose time and class axes; got [{string.Join(",", outputShape)}].");
+            Assert.Equal(ctc.NumClasses, outputShape[^1]);
+
+            int batchSize = outputShape.Length == 3 ? outputShape[0] : 1;
+            int timeSteps = outputShape[^2];
+            Assert.True(batchSize > 0 && timeSteps > 0,
+                $"CTC output must have positive batch/time dimensions; got [{string.Join(",", outputShape)}].");
+
+            int targetLength = timeSteps >= 2 && ctc.NumClasses > 2 ? 2 : 1;
+            var encoded = new Tensor<T>([1 + batchSize * (1 + targetLength)]);
+            encoded[0] = NumOps.FromDouble(batchSize);
+            int offset = 1;
+            for (int batch = 0; batch < batchSize; batch++)
+            {
+                encoded[offset++] = NumOps.FromDouble(targetLength);
+                int previous = ctc.BlankIndex;
+                for (int position = 0; position < targetLength; position++)
+                {
+                    int label;
+                    do
+                    {
+                        label = rng.Next(ctc.NumClasses);
+                    }
+                    while (label == ctc.BlankIndex || label == previous);
+
+                    encoded[offset++] = NumOps.FromDouble(label);
+                    previous = label;
+                }
+            }
+
+            return encoded;
+        }
+
         if (ExternalTargetEncoding == ExternalTargetEncodingKind.SparseClassIndices)
         {
             int numClasses = ExternalCategoricalClassCount(network, target);
@@ -4126,6 +4196,35 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         if (network is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn)
             return;
+
+        if (nn.DefaultLossFunction is AiDotNet.LossFunctions.CTCLoss<T> ctc)
+        {
+            Assert.True(target.Rank == 1 && target.Length >= 3,
+                $"CTC target must use the encoded rank-1 layout; got [{string.Join(",", target.Shape)}].");
+            int batchSize = (int)ConvertToDouble(target[0]);
+            Assert.True(batchSize > 0, $"CTC target batch size must be positive; got {batchSize}.");
+
+            int offset = 1;
+            for (int batch = 0; batch < batchSize; batch++)
+            {
+                Assert.True(offset < target.Length, "CTC target ended before its target-length field.");
+                int targetLength = (int)ConvertToDouble(target[offset++]);
+                Assert.True(targetLength > 0 && offset + targetLength <= target.Length,
+                    $"CTC target length {targetLength} is invalid at batch {batch}.");
+                for (int position = 0; position < targetLength; position++)
+                {
+                    double rawLabel = ConvertToDouble(target[offset++]);
+                    Assert.True(IsFinite(rawLabel) && rawLabel == Math.Truncate(rawLabel),
+                        $"CTC label {rawLabel:G17} at batch {batch}, position {position} is not an integer.");
+                    int label = (int)rawLabel;
+                    Assert.True(label >= 0 && label < ctc.NumClasses && label != ctc.BlankIndex,
+                        $"CTC label {label} must be a non-blank class in [0, {ctc.NumClasses - 1}].");
+                }
+            }
+
+            Assert.Equal(target.Length, offset);
+            return;
+        }
 
         bool binaryCrossEntropy =
             nn.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>

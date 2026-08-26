@@ -35,7 +35,7 @@ public class AudioPaperTrainingRecipeTests
         var options = CreateEfficientConformerOptions();
         using var model = new EfficientConformer<double>(CreateArchitecture(), options);
 
-        AssertTransformerAdamRecipe(model, options.EncoderDim, options.WarmupSteps, options.LearningRateFactor, options.WeightDecay);
+        AssertTransformerAdamRecipe(model, options.EncoderDim * 2, options.WarmupSteps, options.LearningRateFactor, options.WeightDecay);
     }
 
     [Fact]
