@@ -4052,6 +4052,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return SelectTrainableParametersForTraining(allParameters);
     }
 
+    /// <summary>
+    /// Narrows the selected training set to ordinary parameters owned by <see cref="Layers"/>.
+    /// </summary>
+    /// <remarks>
+    /// Global gradient clipping intentionally excludes model-owned extras. This matches the eager
+    /// tape path while leaving the complete selected set available for gradient publication and
+    /// optimizer updates.
+    /// </remarks>
+    internal IReadOnlyList<Tensor<T>> CollectLayerOwnedTrainableTensorsForClipping(
+        IReadOnlyList<Tensor<T>> selectedParameters)
+    {
+        var selectedSet = new HashSet<Tensor<T>>(
+            selectedParameters,
+            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+
+        return Training.TapeTrainingStep<T>
+            .CollectParameters(Layers, _layerStructureVersion)
+            .Where(selectedSet.Contains)
+            .ToArray();
+    }
+
     /// <summary>Runs reverse-mode autodiff and atomically publishes parameter gradients.</summary>
     protected Dictionary<Tensor<T>, Tensor<T>> ComputeAndPublishParameterGradients(
         GradientTape<T> tape,
@@ -6004,7 +6025,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             double maxGradNorm = MaxGradNormValue;
             if (maxGradNorm > 0.0 && avgGrads.Count > 0)
             {
-                ApplyGradientClipping(avgGrads, maxGradNorm, paramsList);
+                var clipParameters = CollectLayerOwnedTrainableTensorsForClipping(paramsList);
+                ApplyGradientClipping(avgGrads, maxGradNorm, clipParameters);
             }
             PublishParameterGradients(avgGrads);
             // Include extra trainable tensors in the optimizer's
@@ -9334,7 +9356,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // the eager ApplyGradientClipping call site exactly so the global norm and
             // the rescale set are identical across paths.
             var clipSet = new HashSet<Tensor<T>>(
-                sources, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                CollectLayerOwnedTrainableTensorsForClipping(sources),
+                Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
 
             // Pass 1 — accumulate the global L2 norm over the clip set, streaming so
             // nothing is retained. (Each gradient is released right after we read it.)
@@ -9390,7 +9413,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // same pass and folded into the EMA for next step. First step (no EMA): don't clip,
             // just seed. NFNet-style adaptive clipping (Brock et al. 2021); documented approximation.
             var clipSet = new HashSet<Tensor<T>>(
-                sources, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                CollectLayerOwnedTrainableTensorsForClipping(sources),
+                Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
 
             double emaNorm = _fastClipEmaNorm;            // < 0 until seeded
             bool haveEma = emaNorm >= 0.0;
@@ -9725,12 +9749,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // buffer-backed views. Apply the model's selection hook once to the complete set,
             // then partition selected parameters only for the buffer-specific update plumbing.
             var selectedParameters = CollectModelTrainableTensors();
-            var ordinaryParameters = Training.TapeTrainingStep<T>.CollectParameters(
-                Layers, _layerStructureVersion);
+            var trainableParams = CollectLayerOwnedTrainableTensorsForClipping(selectedParameters).ToList();
             var ordinaryParameterSet = new HashSet<Tensor<T>>(
-                ordinaryParameters,
+                trainableParams,
                 Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-            var trainableParams = selectedParameters.Where(ordinaryParameterSet.Contains).ToList();
             var extraTrainableTensors = selectedParameters
                 .Where(parameter => !ordinaryParameterSet.Contains(parameter))
                 .ToList();

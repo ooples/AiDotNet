@@ -246,6 +246,7 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         Options = _options;
         _lossFunction = lossFunction ?? new MeanAbsoluteErrorLoss<T>();
         _optimizer = optimizer ?? CreatePaperOptimizer();
+        SetBaseTrainOptimizer(_optimizer);
 
         _sequenceLength = _options.SequenceLength;
         _forecastHorizon = _options.ForecastHorizon;
@@ -298,6 +299,7 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         Options = _options;
         _lossFunction = lossFunction ?? new MeanAbsoluteErrorLoss<T>();
         _optimizer = optimizer ?? CreatePaperOptimizer();
+        SetBaseTrainOptimizer(_optimizer);
 
         _sequenceLength = _options.SequenceLength;
         _forecastHorizon = _options.ForecastHorizon;

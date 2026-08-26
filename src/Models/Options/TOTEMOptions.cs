@@ -21,7 +21,7 @@ namespace AiDotNet.Models.Options;
 /// <b>Key Advantages:</b>
 /// - Converts continuous time series to discrete tokens for LLM compatibility
 /// - Multiple codebooks capture different aspects of temporal patterns
-/// - Commitment loss keeps encoder outputs close to codebook entries
+/// - The forecasting stage consumes a tokenizer/codebook trained separately
 /// </para>
 /// <para>
 /// <b>Reference:</b> Talukder et al., "TOTEM: TOkenized Time Series EMbeddings for General Time Series Analysis", 2024.
@@ -49,7 +49,7 @@ public class TOTEMOptions<T> : TimeSeriesRegressionOptions<T>
         HiddenDimension = other.HiddenDimension; NumLayers = other.NumLayers;
         NumHeads = other.NumHeads; CodebookSize = other.CodebookSize;
         CodebookDimension = other.CodebookDimension; NumCodebooks = other.NumCodebooks;
-        DropoutRate = other.DropoutRate; CommitmentWeight = other.CommitmentWeight;
+        DropoutRate = other.DropoutRate;
         LearningRate = other.LearningRate;
         TotalTrainingSteps = other.TotalTrainingSteps;
     }
@@ -160,15 +160,4 @@ public class TOTEMOptions<T> : TimeSeriesRegressionOptions<T>
     /// OneCycle schedule reaches its final learning rate at the end of training.</para>
     /// </remarks>
     public int TotalTrainingSteps { get; set; } = 100;
-
-    /// <summary>
-    /// Gets or sets the commitment loss weight for VQ training.
-    /// </summary>
-    /// <value>Defaults to 0.25.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Controls how strongly encoder outputs are pulled toward
-    /// their nearest codebook entry. Higher values produce tighter clusters. The original
-    /// VQ-VAE paper recommends 0.25.</para>
-    /// </remarks>
-    public double CommitmentWeight { get; set; } = 0.25;
 }

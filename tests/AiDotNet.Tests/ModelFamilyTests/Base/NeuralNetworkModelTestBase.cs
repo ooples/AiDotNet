@@ -5858,6 +5858,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (!usedMirroredScalarTarget)
         {
             var contrastTarget = CreateContrastTarget(network, targetA, input);
+            ValidateLossCompatibleTarget(network, contrastTarget);
             if (MaxAbsTensorDelta(targetA, contrastTarget) > 0.0)
             {
                 var contrastDelta = MeanUpdateDirection(parameterProbe, network, input, contrastTarget);
@@ -6037,6 +6038,29 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var contrast = new Tensor<T>(shape);
 
         if (source.Length == 0) return contrast;
+
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> bornRuleNetwork
+            && bornRuleNetwork.DefaultLossFunction is AiDotNet.LossFunctions.BornRuleMseLoss<T>)
+        {
+            // BornRuleMseLoss expects a non-negative unit-mass probability vector. Reflecting
+            // each value with 1 - p would have mass source.Length - 1, so choose a different
+            // simplex vertex instead.
+            if (source.Length == 1)
+            {
+                contrast[0] = source[0];
+                return contrast;
+            }
+
+            int active = 0;
+            for (int i = 1; i < source.Length; i++)
+            {
+                if (NumOps.GreaterThan(source[i], source[active]))
+                    active = i;
+            }
+
+            contrast[(active + 1) % source.Length] = NumOps.One;
+            return contrast;
+        }
 
         if (ExternalTargetEncoding == ExternalTargetEncodingKind.SparseClassIndices)
         {

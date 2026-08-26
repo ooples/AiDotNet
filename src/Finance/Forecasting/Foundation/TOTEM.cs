@@ -92,7 +92,6 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     private int _codebookDimension;
     private int _numCodebooks;
     private double _dropout;
-    private double _commitmentWeight;
 
     // VQ codebook: [numCodebooks x codebookSize x codebookDimension]
     private Tensor<T>? _codebooks;
@@ -208,11 +207,6 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         if (double.IsNaN(options.DropoutRate) || double.IsInfinity(options.DropoutRate) ||
             options.DropoutRate < 0.0 || options.DropoutRate >= 1.0)
             throw new ArgumentOutOfRangeException(nameof(options.DropoutRate), "Dropout rate must be finite and in [0, 1).");
-        if (double.IsNaN(options.CommitmentWeight) || double.IsInfinity(options.CommitmentWeight) ||
-            options.CommitmentWeight < 0.0)
-            throw new ArgumentOutOfRangeException(nameof(options.CommitmentWeight), "Commitment weight must be finite and non-negative.");
-
-
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
         _hiddenDimension = options.HiddenDimension;
@@ -222,7 +216,6 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         _codebookDimension = options.CodebookDimension;
         _numCodebooks = options.NumCodebooks;
         _dropout = options.DropoutRate;
-        _commitmentWeight = options.CommitmentWeight;
         InitializeCodebooks();
     }
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateForecastingOptimizer(
@@ -475,7 +468,6 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         writer.Write(_codebookDimension);
         writer.Write(_numCodebooks);
         writer.Write(_dropout);
-        writer.Write(_commitmentWeight);
 
         // Serialize codebook embeddings
         if (_codebooks is not null)
@@ -504,7 +496,6 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         _codebookDimension = reader.ReadInt32();
         _numCodebooks = reader.ReadInt32();
         _dropout = reader.ReadDouble();
-        _commitmentWeight = reader.ReadDouble();
 
         // Deserialize codebook embeddings
         bool hasCodebooks = reader.ReadBoolean();

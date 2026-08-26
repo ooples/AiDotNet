@@ -150,11 +150,10 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
+        CopyOptionsToFields(options);
         _optimizer = optimizer ?? CreatePaperOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         SetBaseTrainOptimizer(_optimizer);
-
-        CopyOptionsToFields(options);
     }
 
     /// <summary>
@@ -175,11 +174,11 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
+        CopyOptionsToFields(options);
         _optimizer = optimizer ?? CreatePaperOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         SetBaseTrainOptimizer(_optimizer);
 
-        CopyOptionsToFields(options);
         InitializeLayers();
     }
 
@@ -192,6 +191,7 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
         Guard.Positive(options.NumLayers, nameof(options.NumLayers));
         Guard.Positive(options.NumHeads, nameof(options.NumHeads));
         Guard.Positive(options.IntermediateSize, nameof(options.IntermediateSize));
+        Guard.Positive(options.LearningRate, nameof(options.LearningRate));
 
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
