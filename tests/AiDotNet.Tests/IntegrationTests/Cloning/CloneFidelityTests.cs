@@ -83,4 +83,69 @@ public class CloneFidelityTests
             "the clone reports zero parameters, so its stream layers did not survive -- the failure "
                 + "mode that persisting a collection as a bare type name produces.");
     }
+
+    /// <summary>A layer must clone correctly while its forward activations are still resident.</summary>
+    /// <remarks>
+    /// The 339-layer sweep calls ResetState() between the forward probe and the clone, because
+    /// holding every layer's backward activation caches at once made whichever of VAEDecoder /
+    /// VAEEncoder ran first throw OutOfMemoryException -- a single 512x512 double activation is
+    /// 268MB. That keeps the sweep honest about parameters but stops it exercising the case where
+    /// a clone is taken while scratch is LIVE, so it is covered explicitly here.
+    ///
+    /// This is the state a clone is most likely to be taken in during real training (mid-epoch,
+    /// activations retained for the backward pass), and it is the state ConvolutionalLayer's
+    /// scratch handling was changed for: EnsureInitialized no longer pre-allocates _lastInput /
+    /// _lastOutput, so a clone taken after a forward must still come back complete and independent.
+    /// </remarks>
+    [Theory]
+    [InlineData("conv")]
+    [InlineData("dense")]
+    [InlineData("lstm")]
+    public void CloneWithLiveActivations_IsCompleteAndIndependent(string kind)
+    {
+        LayerBase<double> layer;
+        Tensor<double> input;
+
+        switch (kind)
+        {
+            case "conv":
+                layer = new ConvolutionalLayer<double>(outputDepth: 16, kernelSize: 3, stride: 1, padding: 1);
+                input = Tensor<double>.CreateRandom(3, 8, 8);
+                break;
+            case "dense":
+                layer = new DenseLayer<double>(32);
+                input = Tensor<double>.CreateRandom(1, 16);
+                break;
+            default:
+                layer = new LSTMLayer<double>(8);
+                input = Tensor<double>.CreateRandom(2, 3, 4);
+                break;
+        }
+
+        // Forward and deliberately DO NOT reset: the activation caches stay live across the clone.
+        layer.Forward(input);
+
+        var original = layer.GetParameters();
+        Assert.NotEmpty(original.ToArray());
+
+        var clone = (LayerBase<double>)layer.Clone();
+
+        Assert.Equal(layer.GetType(), clone.GetType());
+        Assert.Equal(layer.ParameterCount, clone.ParameterCount);
+        Assert.Equal(original.ToArray(), clone.GetParameters().ToArray());
+
+        // Independent storage: writing to the clone must not reach back into the source.
+        var mutated = clone.GetParameters();
+        mutated[0] = original[0] + 12345.0;
+        clone.SetParameters(mutated);
+
+        Assert.Equal(original[0], layer.GetParameters()[0]);
+
+        // And the clone must still be usable -- a clone that inherited half-built scratch would
+        // throw or return the wrong shape on its own first forward.
+        var replayed = clone.Forward(input);
+        Assert.NotNull(replayed);
+        Assert.Equal(layer.Forward(input).Shape, replayed.Shape);
+    }
+
 }

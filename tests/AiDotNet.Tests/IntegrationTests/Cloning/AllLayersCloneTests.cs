@@ -104,7 +104,29 @@ public class AllLayersCloneTests
                 // trained-layer proof was failing. A layer that has been USED is the case worth
                 // measuring.
                 var typed = (LayerBase<double>)instance;
-                if (Forward(typed)) forwarded.Add(open.Name);
+                if (Forward(typed))
+                {
+                    forwarded.Add(open.Name);
+
+                    // RELEASE THE BACKWARD ACTIVATION CACHES the forward left behind. Clone copies
+                    // parameters and registered buffers, not scratch, so by the time Clone runs
+                    // these are dead weight -- and for a 512x512 double VAE a single one is 268MB.
+                    // Holding 339 layers' worth of them made whichever of VAEDecoder/VAEEncoder ran
+                    // first throw OutOfMemoryException, nondeterministically swapping between runs.
+                    //
+                    // THIS REDUCES THE FAILURE, IT DOES NOT REMOVE IT. Measured over repeated runs:
+                    // without the reset the sweep failed every time; with it roughly two runs in
+                    // three pass. Forcing GC.Collect() between layers did not help, and neither did
+                    // LargeObjectHeapCompactionMode.CompactOnce (2 of 3), so the residue is not
+                    // simply uncollected garbage. The open item is VAEDecoder's own clone, which
+                    // still costs ~210-270s and has not been profiled yet.
+                    //
+                    // This does NOT shrink the workload: every layer is still constructed at its
+                    // full default size, forwarded, cloned and compared. What it gives up is cloning
+                    // a layer while its activations are still resident, and that case is covered
+                    // explicitly by CloneFidelityTests.CloneWithLiveActivations_* instead.
+                    typed.ResetState();
+                }
 
                 // LayerBase declares Clone as a public virtual instance method, which is the
                 // surviving mechanism after #1789 replaced this branch's LayerCloning extension with
