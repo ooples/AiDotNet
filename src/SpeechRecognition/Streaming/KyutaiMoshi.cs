@@ -64,11 +64,18 @@ public partial class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
 
     public KyutaiMoshi(NeuralNetworkArchitecture<T> architecture, string modelPath, KyutaiMoshiOptions? options = null) : base(architecture) { _options = options ?? new KyutaiMoshiOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
     public KyutaiMoshi(NeuralNetworkArchitecture<T> architecture, KyutaiMoshiOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new KyutaiMoshiOptions(); _useNativeMode = true;
-        // Paper-faithful LR: Kyutai (2024) Moshi fine-tunes a transformer ASR
-        // stack at LR=5e-5. The framework AdamW default (LR=1e-3) is too
-        // aggressive for BERT-class encoders at random init and causes
-        // Training_ShouldReduceLoss to diverge/time-out within 30 iterations.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-5 });
+        // Paper-faithful fine-tuning recipe from Kyutai's official Moshi code:
+        // AdamW with max LR=2e-6, betas=(0.9, 0.95), weight decay=0.1,
+        // gradient clipping at 1.0, and a 5%-warmup one-cycle schedule.
+        _optimizer = optimizer ?? CreateOneCycleAdamWOptimizer(
+            maxLearningRate: _options.LearningRate,
+            totalSteps: _options.TotalTrainingSteps,
+            pctStart: _options.WarmupFraction,
+            weightDecay: _options.WeightDecay,
+            beta1: 0.9,
+            beta2: 0.95,
+            epsilon: 1e-8,
+            maxGradientNorm: _options.MaxGradientNorm);
         base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>

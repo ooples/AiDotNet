@@ -53,7 +53,20 @@ public class EfficientConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     public bool SupportsWordTimestamps => false;
 
     public EfficientConformer(NeuralNetworkArchitecture<T> architecture, string modelPath, EfficientConformerOptions? options = null) : base(architecture) { _options = options ?? new EfficientConformerOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
-    public EfficientConformer(NeuralNetworkArchitecture<T> architecture, EfficientConformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new EfficientConformerOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
+    public EfficientConformer(NeuralNetworkArchitecture<T> architecture, EfficientConformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    {
+        _options = options ?? new EfficientConformerOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? CreateTransformerScheduleAdamOptimizer(
+            _options.EncoderDim,
+            _options.WarmupSteps,
+            _options.LearningRateFactor,
+            _options.WeightDecay);
+        base.SampleRate = _options.SampleRate;
+        base.NumMels = _options.NumMels;
+        SupportedLanguages = new[] { _options.Language };
+        InitializeLayers();
+    }
 
     /// <summary>
     /// Transcribes audio using progressive downsampling Conformer encoder.

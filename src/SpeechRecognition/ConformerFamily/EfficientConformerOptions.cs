@@ -38,9 +38,12 @@ public class EfficientConformerOptions : ModelOptions
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         DropoutRate = other.DropoutRate;
+        WarmupSteps = other.WarmupSteps;
+        LearningRateFactor = other.LearningRateFactor;
+        WeightDecay = other.WeightDecay;
         UseLayerNormalization = other.UseLayerNormalization;
         Language = other.Language;
-        Vocabulary = other.Vocabulary;
+        Vocabulary = other.Vocabulary.ToArray();
     }
 
     public int SampleRate { get; set; } = 16000;
@@ -55,6 +58,22 @@ public class EfficientConformerOptions : ModelOptions
     public string? ModelPath { get; set; }
     public OnnxModelOptions OnnxOptions { get; set; } = new();
     public double DropoutRate { get; set; } = 0.1;
+
+    /// <summary>Gets or sets the number of Transformer learning-rate warmup steps.</summary>
+    /// <value>Defaults to 10,000 steps.</value>
+    /// <remarks>All EfficientConformer CTC configurations in the authors' repository use a 10,000-step warmup.</remarks>
+    public int WarmupSteps { get; set; } = 10000;
+
+    /// <summary>Gets or sets the multiplicative factor for the Transformer learning-rate schedule.</summary>
+    /// <value>Defaults to 2.0.</value>
+    /// <remarks>The authors' CTC configurations set the schedule factor <c>K</c> to 2.</remarks>
+    public double LearningRateFactor { get; set; } = 2.0;
+
+    /// <summary>Gets or sets Adam's coupled L2 weight decay.</summary>
+    /// <value>Defaults to 1e-6.</value>
+    /// <remarks>The official EfficientConformer training configurations use Adam with weight decay 1e-6.</remarks>
+    public double WeightDecay { get; set; } = 1e-6;
+
     /// <summary>
     /// Gets or sets whether the native encoder replaces its BatchNorm stages with
     /// LayerNorm. The research-default BatchNorm topology remains the default.
