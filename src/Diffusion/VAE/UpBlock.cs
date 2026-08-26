@@ -296,7 +296,11 @@ public partial class UpBlock<T> : LayerBase<T>, IShapeContract
     /// <returns>Output tensor with shape [batch, outChannels, 2*H, 2*W] if hasUpsample, else [batch, outChannels, H, W].</returns>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = input;
+        // Cache only when a manual backward will read it. Retaining the post-upsample activation
+        // and every res-block output unconditionally pinned the whole stage alive for the pass;
+        // at 512x512 fp64 each of those is 268MB.
+        bool cacheBwd = ShouldCacheForBackward;
+        if (cacheBwd) _lastInput = input;
         var x = input;
 
         // Apply upsampling if enabled
@@ -305,13 +309,13 @@ public partial class UpBlock<T> : LayerBase<T>, IShapeContract
             x = _upsample.Forward(x);
         }
 
-        _postUpsampleOutput = x;
+        if (cacheBwd) _postUpsampleOutput = x;
 
         // Process through residual blocks
         for (int i = 0; i < _numLayers; i++)
         {
             x = _resBlocks[i].Forward(x);
-            _resBlockOutputs[i] = x;
+            if (cacheBwd) _resBlockOutputs[i] = x;
         }
 
         return x;

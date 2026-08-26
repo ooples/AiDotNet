@@ -283,22 +283,39 @@ public partial class VAEResBlock<T> : LayerBase<T>, IShapeContract
     /// <returns>Output tensor with shape [batch, outChannels, height, width].</returns>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = input;
+        // LOCALS carry the dataflow; the fields are populated only when a manual backward will
+        // actually read them (LayerBase.ShouldCacheForBackward is the canonical guard). Assigning
+        // them unconditionally kept every stage of every block alive for the whole pass, so a
+        // decoder holding ten of these had peak memory O(sum of activations) rather than
+        // O(max live set) even during pure inference.
+        bool cacheBwd = ShouldCacheForBackward;
+        if (cacheBwd) _lastInput = input;
 
         // Main path: GroupNorm -> SiLU -> Conv -> GroupNorm -> SiLU -> Conv
-        _norm1Output = _norm1.Forward(input);
-        _silu1Output = ApplySiLU(_norm1Output);
-        _conv1Output = _conv1.Forward(_silu1Output);
+        var norm1Output = _norm1.Forward(input);
+        var silu1Output = ApplySiLU(norm1Output);
+        var conv1Output = _conv1.Forward(silu1Output);
 
-        _norm2Output = _norm2.Forward(_conv1Output);
-        _silu2Output = ApplySiLU(_norm2Output);
-        _conv2Output = _conv2.Forward(_silu2Output);
+        var norm2Output = _norm2.Forward(conv1Output);
+        var silu2Output = ApplySiLU(norm2Output);
+        var conv2Output = _conv2.Forward(silu2Output);
 
         // Skip connection
-        _skipOutput = _skipConv != null ? _skipConv.Forward(input) : input;
+        var skipOutput = _skipConv != null ? _skipConv.Forward(input) : input;
+
+        if (cacheBwd)
+        {
+            _norm1Output = norm1Output;
+            _silu1Output = silu1Output;
+            _conv1Output = conv1Output;
+            _norm2Output = norm2Output;
+            _silu2Output = silu2Output;
+            _conv2Output = conv2Output;
+            _skipOutput = skipOutput;
+        }
 
         // Add main path and skip connection
-        return Engine.TensorAdd(_conv2Output, _skipOutput);
+        return Engine.TensorAdd(conv2Output, skipOutput);
     }
 
     /// <summary>

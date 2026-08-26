@@ -183,20 +183,19 @@ public partial class VAEDecoder<T> : LayerBase<T>, IShapeContract
     private readonly int _outputSpatialSize;
 
     /// <summary>
-    /// Cached intermediate values for backward pass.
+    /// Cached input for the backward pass.
     /// </summary>
+    /// <remarks>
+    /// The per-stage intermediates this class used to cache alongside it (post-quant, input-conv,
+    /// mid-block, per-up-block, norm and SiLU outputs) were WRITE-ONLY: nothing in this type, in any
+    /// derived type, or in generated code ever read them, and this decoder has no manual Backward.
+    /// They held every activation of the pass alive to the end of it, so peak memory was
+    /// O(sum of all activations) rather than O(max live set) — measured at 656MB still live after a
+    /// forward that allocated 746MB on a 5MB model, and 49GB before OutOfMemoryException at the
+    /// paper-default 512x512 fp64 size. Autodiff captures its own graph and does not read these.
+    /// </remarks>
     [Scratch]
     private Tensor<T>? _lastInput;
-    private Tensor<T>? _postQuantOutput;
-    private Tensor<T>? _inputConvOutput;
-    private Tensor<T>? _midBlock1Output;
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _midBlock2Output;
-    private readonly Tensor<T>?[] _upBlockOutputs;
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _normOutOutput;
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _siluOutput;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -293,8 +292,6 @@ public partial class VAEDecoder<T> : LayerBase<T>, IShapeContract
 
         // Bottleneck spatial size: divide by the validated upsample factor.
         _bottleneckSize = outputSpatialSize / upsampleFactor;
-
-        _upBlockOutputs = new Tensor<T>?[_channelMults.Length];
 
         // Post-quant convolution
         _postQuantConv = new ConvolutionalLayer<T>(
@@ -416,30 +413,24 @@ public partial class VAEDecoder<T> : LayerBase<T>, IShapeContract
     {
         // Post-quant convolution
         var x = _postQuantConv.Forward(input);
-        _postQuantOutput = x;
 
         // Input convolution
         x = _inputConv.Forward(x);
-        _inputConvOutput = x;
 
         // Middle blocks
         x = _midBlocks[0].Forward(x);
-        _midBlock1Output = x;
         x = _midBlocks[1].Forward(x);
-        _midBlock2Output = x;
 
-        // Up blocks
+        // Up blocks. Each stage's output is consumed by the next and then dead; keeping a reference
+        // to every one of them is what made peak memory O(sum of activations).
         for (int i = 0; i < _upBlocks.Length; i++)
         {
             x = _upBlocks[i].Forward(x);
-            _upBlockOutputs[i] = x;
         }
 
         // Output normalization and activation
         x = _normOut.Forward(x);
-        _normOutOutput = x;
         x = ApplySiLU(x);
-        _siluOutput = x;
 
         // Output convolution
         x = _outputConv.Forward(x);
@@ -570,17 +561,6 @@ public partial class VAEDecoder<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         _lastInput = null;
-        _postQuantOutput = null;
-        _inputConvOutput = null;
-        _midBlock1Output = null;
-        _midBlock2Output = null;
-        _normOutOutput = null;
-        _siluOutput = null;
-
-        for (int i = 0; i < _upBlockOutputs.Length; i++)
-        {
-            _upBlockOutputs[i] = null;
-        }
 
         _postQuantConv.ResetState();
         _inputConv.ResetState();

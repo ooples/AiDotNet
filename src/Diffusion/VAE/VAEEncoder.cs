@@ -185,19 +185,16 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
     private readonly int _bottleneckSize;
 
     /// <summary>
-    /// Cached intermediate values for backward pass.
+    /// Cached input for the backward pass.
     /// </summary>
+    /// <remarks>
+    /// The per-stage intermediates that used to sit here were WRITE-ONLY, exactly as in
+    /// <see cref="VAEDecoder{T}"/>: nothing read them, and this encoder has no manual Backward. They
+    /// pinned every activation of the pass alive until the end of it, making peak memory
+    /// O(sum of all activations) instead of O(max live set).
+    /// </remarks>
     [Scratch]
     private Tensor<T>? _lastInput;
-    private Tensor<T>? _inputConvOutput;
-    private readonly Tensor<T>?[] _downBlockOutputs;
-    private Tensor<T>? _midBlock1Output;
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _midBlock2Output;
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _normOutOutput;
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _siluOutput;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -267,8 +264,6 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
         {
             _bottleneckSize /= 2;
         }
-
-        _downBlockOutputs = new Tensor<T>?[_channelMults.Length];
 
         // Input convolution: [inputChannels] -> [baseChannels]
         _inputConv = new ConvolutionalLayer<T>(
@@ -410,26 +405,20 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
     {
         // Input convolution
         var x = _inputConv.Forward(input);
-        _inputConvOutput = x;
 
-        // Down blocks
+        // Down blocks. Each stage's output feeds the next and is then dead.
         for (int i = 0; i < _downBlocks.Length; i++)
         {
             x = _downBlocks[i].Forward(x);
-            _downBlockOutputs[i] = x;
         }
 
         // Middle blocks
         x = _midBlocks[0].Forward(x);
-        _midBlock1Output = x;
         x = _midBlocks[1].Forward(x);
-        _midBlock2Output = x;
 
         // Output normalization and activation
         x = _normOut.Forward(x);
-        _normOutOutput = x;
         x = ApplySiLU(x);
-        _siluOutput = x;
 
         // Project to mean and log variance
         var mean = _meanConv.Forward(x);
@@ -663,16 +652,6 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         _lastInput = null;
-        _inputConvOutput = null;
-        _midBlock1Output = null;
-        _midBlock2Output = null;
-        _normOutOutput = null;
-        _siluOutput = null;
-
-        for (int i = 0; i < _downBlockOutputs.Length; i++)
-        {
-            _downBlockOutputs[i] = null;
-        }
 
         _inputConv.ResetState();
         foreach (var block in _downBlocks)
