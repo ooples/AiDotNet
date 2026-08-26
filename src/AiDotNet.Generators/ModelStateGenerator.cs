@@ -319,6 +319,24 @@ public class ModelStateGenerator : IIncrementalGenerator
             }
         }
 
+        // Canonical layer replacement and declared-state restore can leave a model's derived views
+        // describing its constructor graph. A conventional zero-argument Rebind* method is the
+        // model's existing declaration of how to repair those views. Run it only after parameters
+        // and generated aliases are final; invoking it during the structural phase would merely
+        // rebind the constructor objects that the base is about to replace.
+        foreach (var rebind in type.GetMembers().OfType<IMethodSymbol>()
+                     .Where(method => !method.IsStatic
+                                      && method.Parameters.Length == 0
+                                      && method.TypeParameters.Length == 0
+                                      && method.ReturnsVoid
+                                      && method.Name.StartsWith("Rebind", System.StringComparison.Ordinal))
+                     .OrderBy(method => method.Name, System.StringComparer.Ordinal))
+        {
+            string name = $"{type.Name}.$derivedRebind.{rebind.Name}";
+            members.Add(($"$derivedRebind.{rebind.Name}",
+                $"state.DeclareAfterParameterRestore(\"{name}\", {rebind.Name});"));
+        }
+
         // A declaring type ALWAYS gets its Core method, even empty: its hand-written hook calls it
         // unconditionally, so omitting it would leave that call with no target.
         if (members.Count == 0 && !declaresHook && !emitSerializationSurface) return;

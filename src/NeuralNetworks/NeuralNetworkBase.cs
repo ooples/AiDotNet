@@ -13667,16 +13667,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <param name="data">The byte array containing the serialized neural network data.</param>
     public virtual void Deserialize(byte[] data)
     {
-        // Strips and applies any declared-state trailer, so the body below reads the payload
-        // exactly as it did before this existed.
-        data = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, data);
         if (data is null)
             throw new ArgumentNullException(nameof(data));
         if (data.Length == 0)
             throw new ArgumentException("Serialized data cannot be empty.", nameof(data));
 
         ModelPersistenceGuard.EnforceBeforeDeserialize();
-        DeserializeInternalUnchecked(data);
+        byte[] declaredStateEnvelope = data;
+        byte[] inner = AiDotNet.Models.ModelStateEnvelope.ExtractBeforeParameters(DeclaredState, data);
+        DeserializeInternalUnchecked(inner);
+        _ = AiDotNet.Models.ModelStateEnvelope.ExtractAfterParameters(DeclaredState, declaredStateEnvelope);
+        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
     }
 
     /// <summary>
@@ -14704,13 +14705,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                         largeBase.DeserializeNetworkSpecificData(nsReader);
                     }
                 }
-                CopyDeclaredStateTo(largeBase);
+                byte[] largeDeclaredStateEnvelope = CopyDeclaredStateBeforeParametersTo(largeBase);
                 CopyGeneratedTrainableTensorsTo(largeBase);
                 // CreateNewInstance implementations sometimes receive an Architecture whose layer
                 // objects still belong to the source. Generated aliases must always point at the
                 // destination's canonical graph before its manifest or forward path is observed.
                 largeBase.RebindLayerAliases(_layers, largeBase._layers);
                 CopyGeneratedLayerAliasesTo(largeBase);
+                CompleteDeclaredStateRestore(largeBase, largeDeclaredStateEnvelope);
                 largeBase.InvalidateParameterCountCache();
                 largeBase.SetTrainingMode(false);
                 // The per-layer parameter copy above skips non-trainable stochastic layers
@@ -14737,7 +14739,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // "unknown handle"). A transient in-memory clone keeps its weights resident — see the
             // matching guard in the large/custom-layer copy path above.
             copyBase.DisableAutoStreaming();
-            byte[] inner = ModelStateEnvelope.Extract(copyBase.DeclaredState, serialized);
+            byte[] inner = ModelStateEnvelope.ExtractBeforeParameters(copyBase.DeclaredState, serialized);
             copyBase._protectedCloneSourceLayers = _layers;
             try
             {
@@ -14748,6 +14750,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 copyBase._protectedCloneSourceLayers = null;
             }
             CopyGeneratedLayerAliasesTo(copyBase);
+            _ = ModelStateEnvelope.ExtractAfterParameters(copyBase.DeclaredState, serialized);
             CopyGeneratedTrainableTensorsTo(copyBase);
             CopyCloneRuntimeConfigurationTo(copyBase);
             // Base LayerBase.Serialize does NOT persist the per-layer RandomSeed, so the
@@ -14844,7 +14847,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 copyBase.DeserializeNetworkSpecificData(nsReader);
             }
         }
-        CopyDeclaredStateTo(copyBase);
+        byte[] copyOnWriteDeclaredStateEnvelope = CopyDeclaredStateBeforeParametersTo(copyBase);
 
         // A source may have promoted a runtime-observed shape into generated constructor state
         // (for example NODE rebuilding its ensemble for the real feature width). Synchronize that
@@ -15271,6 +15274,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             for (int k = 0; k < srcTensor.Length; k++) dstTensor[k] = srcTensor[k];
         }
 
+        CompleteDeclaredStateRestore(copyBase, copyOnWriteDeclaredStateEnvelope);
         copyBase.InvalidateParameterCountCache();
         copyBase.OnParametersRestored();
         copyBase.SetTrainingMode(false);
@@ -15454,6 +15458,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         LayerBase<T> destination)
     {
         if (source.GetType() != destination.GetType()) return false;
+        if (!HasEquivalentLayerConstructionState(source, destination)) return false;
 
         try
         {
@@ -15479,13 +15484,54 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
+    /// Determines whether a value-only in-place restore can safely retain the destination instance.
+    /// </summary>
+    /// <remarks>
+    /// Layer serialization restores shapes, buffers, and parameter values; constructor arguments are
+    /// carried separately by the generated construction manifest. Reusing a same-typed destination
+    /// whose manifest differs would preserve its constructor constants while applying the source's
+    /// weights. Graph supports in diffusion-recurrent layers are one concrete example. In that case
+    /// the caller must keep the layer reconstructed from the source manifest and rebind aliases to it.
+    /// </remarks>
+    private static bool HasEquivalentLayerConstructionState(
+        LayerBase<T> source,
+        LayerBase<T> destination)
+    {
+        var sourceMetadata = source.GetMetadata();
+        var destinationMetadata = destination.GetMetadata();
+        if (sourceMetadata.Count != destinationMetadata.Count) return false;
+
+        foreach (var pair in sourceMetadata)
+        {
+            if (!destinationMetadata.TryGetValue(pair.Key, out string? destinationValue)
+                || !string.Equals(pair.Value, destinationValue, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Copies generated/model-declared state without routing an internal clone through a public,
     /// overridable persistence API.
     /// </summary>
-    private void CopyDeclaredStateTo(NeuralNetworkBase<T> destination)
+    private byte[] CopyDeclaredStateBeforeParametersTo(NeuralNetworkBase<T> destination)
     {
         byte[] envelope = ModelStateEnvelope.Append(DeclaredState, Array.Empty<byte>());
-        byte[] inner = ModelStateEnvelope.Extract(destination.DeclaredState, envelope);
+        byte[] inner = ModelStateEnvelope.ExtractBeforeParameters(destination.DeclaredState, envelope);
+        if (inner.Length != 0)
+            throw new InvalidOperationException("Declared-state clone envelope retained an unexpected payload.");
+        return envelope;
+    }
+
+    /// <summary>Runs parameter-aware generated repairs after the destination graph is final.</summary>
+    private static void CompleteDeclaredStateRestore(
+        NeuralNetworkBase<T> destination,
+        byte[] envelope)
+    {
+        byte[] inner = ModelStateEnvelope.ExtractAfterParameters(destination.DeclaredState, envelope);
         if (inner.Length != 0)
             throw new InvalidOperationException("Declared-state clone envelope retained an unexpected payload.");
     }
