@@ -1058,29 +1058,35 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </summary>
     protected virtual Tensor<T> CreateRandomTargetTensor(int[] shape, Random rng)
     {
-        LayerInputDomain domain;
-        if (_cachedOutputDomain.HasValue)
-        {
-            domain = _cachedOutputDomain.Value;
-        }
-        else
+        if (!_cachedOutputDomain.HasValue)
         {
             using var network = CreateNetwork();
-            domain = network is NeuralNetworkBase<T> neuralNetwork
-                ? neuralNetwork.GetOutputDomain(shape)
-                : LayerInputDomain.Continuous;
-            if (!domain.IsResolved)
-            {
-                throw new InputContractBindingException(
-                    $"{GetType().Name} reported an unresolved public output domain {domain} "
-                    + $"for target shape [{string.Join(",", shape)}].");
-            }
-            _cachedOutputDomain = domain;
+            CacheOutputDomain(network, shape);
         }
 
-        return InputContractTensorFactory.CreateValid<T>(shape, domain, rng);
+        return InputContractTensorFactory.CreateValid<T>(
+            shape,
+            _cachedOutputDomain!.Value,
+            rng);
     }
 
+    private void CacheOutputDomain(INeuralNetworkModel<T> network, int[] shape)
+    {
+        if (_cachedOutputDomain.HasValue)
+            return;
+
+        var domain = network is NeuralNetworkBase<T> neuralNetwork
+            ? neuralNetwork.GetOutputDomain(shape)
+            : LayerInputDomain.Continuous;
+        if (!domain.IsResolved)
+        {
+            throw new InputContractBindingException(
+                $"{GetType().Name} reported an unresolved public output domain {domain} "
+                + $"for target shape [{string.Join(",", shape)}].");
+        }
+
+        _cachedOutputDomain = domain;
+    }
     /// <summary>
     /// Creates a constant tensor, automatically translating scalar probes into
     /// distinct legal indices when the production input contract is discrete.
@@ -4064,6 +4070,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     protected Tensor<T> CreateLossCompatibleTarget(
         INeuralNetworkModel<T> network, int[] shape, Random rng)
     {
+        CacheOutputDomain(network, shape);
         var target = MakeTargetWellPosedForLoss(network, CreateRandomTargetTensor(shape, rng), rng);
         ValidateLossCompatibleTarget(network, target);
         return target;
