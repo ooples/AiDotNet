@@ -80,7 +80,15 @@ public class WaveRNN<T> : VocoderBase<T>
     {
         _options = options ?? new WaveRNNOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                EnableGradientClipping = _options.MaxGradientNorm > 0.0,
+                MaxGradientNorm = _options.MaxGradientNorm > 0.0 ? _options.MaxGradientNorm : 1.0,
+                UseAdaptiveLearningRate = false,
+            });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -199,6 +207,8 @@ public class WaveRNN<T> : VocoderBase<T>
         writer.Write(_options.HopSize);
         writer.Write(_options.RnnDim);
         writer.Write(_options.DropoutRate);
+        writer.Write(_options.LearningRate);
+        writer.Write(_options.MaxGradientNorm);
     }
 
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
@@ -212,6 +222,8 @@ public class WaveRNN<T> : VocoderBase<T>
         _options.HopSize = reader.ReadInt32();
         _options.RnnDim = reader.ReadInt32();
         _options.DropoutRate = reader.ReadDouble();
+        _options.LearningRate = reader.ReadDouble();
+        _options.MaxGradientNorm = reader.ReadDouble();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -222,8 +234,8 @@ public class WaveRNN<T> : VocoderBase<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new WaveRNN<T>(Architecture, mp, _options);
-        return new WaveRNN<T>(Architecture, _options);
+            return new WaveRNN<T>(Architecture, mp, new WaveRNNOptions(_options));
+        return new WaveRNN<T>(Architecture, new WaveRNNOptions(_options));
     }
 
     private void ThrowIfDisposed()

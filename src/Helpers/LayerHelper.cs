@@ -171,10 +171,30 @@ public static class LayerHelper<T>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultNeuralVaRLayers(
         NeuralNetworkArchitecture<T> architecture,
-        int numFeatures)
+        int numFeatures,
+        int hiddenLayerCount = 3,
+        int hiddenLayerSize = 0)
     {
-        // Deep MLP for risk mapping
-        return CreateDefaultLayers(architecture, 3, 128, 1);
+        int inputSize = architecture.CalculatedInputSize > 0
+            ? architecture.CalculatedInputSize
+            : numFeatures;
+        int resolvedHiddenLayerSize = hiddenLayerSize > 0
+            ? hiddenLayerSize
+            : checked(inputSize * 2);
+
+        ValidateLayerParameters(hiddenLayerCount, resolvedHiddenLayerSize, 1);
+
+        // Barrera et al.'s reference implementation uses a feed-forward
+        // quantile regressor with Softplus hidden units and an affine scalar
+        // output. Its default hidden stack has three layers of width 2*input;
+        // callers can still override both values through NeuralVaROptions.
+        var layers = new List<ILayer<T>>(hiddenLayerCount + 1);
+        for (int i = 0; i < hiddenLayerCount; i++)
+            layers.Add(new DenseLayer<T>(resolvedHiddenLayerSize, new SoftPlusActivation<T>() as IActivationFunction<T>));
+        layers.Add(new DenseLayer<T>(1, new IdentityActivation<T>() as IActivationFunction<T>));
+
+        ChainResolveLazyLayers(layers, new[] { inputSize });
+        return layers;
     }
 
     /// <summary>

@@ -21,10 +21,11 @@ public class NeuralVaROptions<T> : RiskModelOptions<T>
     /// More layers allow more complex patterns but slow training.
     /// </para>
     /// </remarks>
-    public int HiddenLayers { get; set; } = 2;
+    public int HiddenLayers { get; set; } = 3;
 
     /// <summary>
-    /// Size of hidden layers.
+    /// Size of hidden layers. A value of zero selects twice the input dimension,
+    /// matching the reference implementation used by the cited paper.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -32,7 +33,7 @@ public class NeuralVaROptions<T> : RiskModelOptions<T>
     /// Larger values make the model stronger but more expensive.
     /// </para>
     /// </remarks>
-    public int HiddenDimension { get; set; } = 64;
+    public int HiddenDimension { get; set; } = 0;
 
     /// <summary>
     /// Validates the NeuralVaR options.
@@ -47,7 +48,7 @@ public class NeuralVaROptions<T> : RiskModelOptions<T>
             throw new ArgumentException("NumFeatures must be at least 1.", nameof(NumFeatures));
         if (HiddenLayers < 1)
             throw new ArgumentException("HiddenLayers must be at least 1.", nameof(HiddenLayers));
-        if (HiddenDimension < 1)
-            throw new ArgumentException("HiddenDimension must be at least 1.", nameof(HiddenDimension));
+        if (HiddenDimension < 0)
+            throw new ArgumentException("HiddenDimension must be zero (automatic) or at least 1.", nameof(HiddenDimension));
     }
 }
