@@ -2236,7 +2236,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         {
             try
             {
-                EnsureInitializedFromInput(new Tensor<T>(candidate));
+                EnsureInitializedFromInput(ShapeProbeTensor(candidate));
                 return;
             }
             catch (Exception)
@@ -3249,8 +3249,31 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                     nameof(inputShape));
             }
         }
-        var dummy = new Tensor<T>(inputShape);
+        var dummy = ShapeProbeTensor(inputShape);
         EnsureInitializedFromInput(dummy);
+    }
+
+    /// <summary>
+    /// A tensor that carries <paramref name="shape"/> for shape resolution, without paying for the
+    /// storage that shape implies.
+    /// </summary>
+    /// <remarks>
+    /// Shape resolution only ever READS the shape — <see cref="OnFirstForward"/> and
+    /// <see cref="EnsureInitializedFromInput"/> derive dimensions from it and never look at values,
+    /// which they could not anyway since the old dummy was uniformly zero. Allocating the full
+    /// tensor to say "this is the shape" cost the whole activation: cloning a 512x512 VAE decoder
+    /// allocated 67,108,864 doubles (537MB) PER CHILD inside LayerCloning.CopyChildren, which is a
+    /// large part of what pushed the 339-layer clone sweep into OutOfMemoryException.
+    ///
+    /// A one-element tensor expanded to the target shape reports identical Shape and Rank while
+    /// backing it with a single element, because ExpandTo produces a stride-0 view rather than a
+    /// copy. Never write through it.
+    /// </remarks>
+    private static Tensor<T> ShapeProbeTensor(int[] shape)
+    {
+        var unit = new int[shape.Length];
+        for (int i = 0; i < unit.Length; i++) unit[i] = 1;
+        return new Tensor<T>(unit).ExpandTo(shape);
     }
 
     /// <summary>
@@ -3274,7 +3297,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                     nameof(inputShape));
             }
         }
-        var dummy = new Tensor<T>(inputShape);
+        var dummy = ShapeProbeTensor(inputShape);
         IsResolvingShapesOnly = true;
         try
         {

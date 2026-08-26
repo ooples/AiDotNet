@@ -263,9 +263,14 @@
 	  <Compile Remove="Generated\**\*.cs" />
 	</ItemGroup>
 
-	<!-- AiDotNet.Tensors NuGet package (spun out to separate repo) -->
-	<ItemGroup>
+	<!-- AiDotNet.Tensors NuGet package (spun out to separate repo).
+	     Build with -p:UseLocalTensors=true to compile against a sibling checkout instead, for
+	     cross-repo debugging without cutting a package first. Default is unchanged. -->
+	<ItemGroup Condition="'$(UseLocalTensors)' != 'true'">
 	  <PackageReference Include="AiDotNet.Tensors" />
+	</ItemGroup>
+	<ItemGroup Condition="'$(UseLocalTensors)' == 'true'">
+	  <ProjectReference Include="$(MSBuildThisFileDirectory)..\..\AiDotNet.Tensors\src\AiDotNet.Tensors\AiDotNet.Tensors.csproj" />
 	</ItemGroup>
 
 	<!--
