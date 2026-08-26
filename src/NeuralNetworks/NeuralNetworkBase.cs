@@ -9654,6 +9654,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             long totalParamCount = 0L;
             for (int i = 0; i < initialParams.Count; i++)
                 totalParamCount += (long)initialParams[i].Length;
+            // Recursive collection deduplicates tied/composite parameters, but buffer replacement
+            // mutates every owning layer. If two layer surfaces expose the same tensor, installing
+            // independent views can break that ownership contract, so retain the eager tape path.
+            bool hasOverlappingParameterOwnership = HasOverlappingParameterOwnership(Layers);
             // Lazy-init detection: layers like EmbeddingLayer / DenseLayer
             // (constructed without an input size) hold `_weights = new
             // Tensor<T>([0,0])` and DON'T call RegisterTrainableParameter
@@ -9700,13 +9704,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // COUNT rather than byte size so the threshold doesn't shift
             // when T = float vs double.
             const long ParameterBufferSkipThresholdParams = 125_000_000L;
-            if (totalParamCount > ParameterBufferSkipThresholdParams)
+            if (hasOverlappingParameterOwnership || totalParamCount > ParameterBufferSkipThresholdParams)
             {
                 paramBuffer = null;
-                // Memoize the foundation-scale skip decision so subsequent
-                // training steps don't repeat the CollectParameters +
-                // sum-Length scan. Sundial-Base (~300 M params) takes
-                // ~120ms per scan; caching makes step 2..N effectively free.
+                // Overlapping ownership and foundation-scale parameter counts are stable for a
+                // given layer structure. Memoize either skip so later steps avoid rescanning.
                 _skipParameterBuffer = true;
                 _skipParameterBufferVersion = _layerStructureVersion;
             }
@@ -12302,6 +12304,48 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Restored after each training step so Clone/serialization see real tensors.
     /// </summary>
     private Dictionary<ILayer<T>, IReadOnlyList<Tensor<T>>>? _savedOriginalParameters;
+
+    /// <summary>
+    /// Returns true when the same tensor is exposed by more than one layer parameter surface.
+    /// </summary>
+    /// <remarks>
+    /// Composite layers can publish child parameters from their own trainable list while also
+    /// returning those children from GetSubLayers. Recursive collection safely deduplicates that
+    /// topology, but ParameterBuffer replacement would call SetTrainableParameters on both owners
+    /// and can change the parameter surface. Such graphs must use the eager tape path.
+    /// </remarks>
+    private static bool HasOverlappingParameterOwnership(IEnumerable<ILayer<T>> layers)
+    {
+        var seenLayers = new HashSet<ILayer<T>>();
+        var seenParameters = new HashSet<Tensor<T>>(
+            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+
+        bool Visit(IEnumerable<ILayer<T>> currentLayers)
+        {
+            foreach (var layer in currentLayers)
+            {
+                if (!seenLayers.Add(layer))
+                    continue;
+
+                if (layer is ITrainableLayer<T> trainable)
+                {
+                    foreach (var parameter in trainable.GetTrainableParameters())
+                    {
+                        if (!seenParameters.Add(parameter))
+                            return true;
+                    }
+                }
+
+                var subLayers = layer.GetSubLayers();
+                if (subLayers.Count > 0 && Visit(subLayers))
+                    return true;
+            }
+
+            return false;
+        }
+
+        return Visit(layers);
+    }
 
     /// <summary>
     /// Gets or lazily creates the contiguous parameter buffer from the current trainable parameters.
