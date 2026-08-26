@@ -98,7 +98,7 @@ public abstract class AudioNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
             for (int i = 0; i < output.Length; i++)
             {
                 double value = ConvertToDouble(output[i]);
-                Assert.True(double.IsFinite(value),
+                Assert.True(!double.IsNaN(value) && !double.IsInfinity(value),
                     $"Speech recognizer produced non-finite silence output {value} at index {i}.");
             }
 

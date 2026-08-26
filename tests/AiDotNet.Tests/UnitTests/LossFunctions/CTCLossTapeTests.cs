@@ -32,11 +32,11 @@ public class CTCLossTapeTests
         var value = loss.ComputeTapeLoss(logProbs, encodedTarget);
         var gradients = tape.ComputeGradients(value, [logProbs]);
 
-        Assert.True(double.IsFinite(value[0]), $"Expected finite CTC loss, got {value[0]}.");
+        Assert.True(IsFinite(value[0]), $"Expected finite CTC loss, got {value[0]}.");
         Assert.True(value[0] > 0.0);
         Assert.True(gradients.TryGetValue(logProbs, out var gradient));
         Assert.NotNull(gradient);
-        Assert.All(gradient.ToArray(), item => Assert.True(double.IsFinite(item)));
+        Assert.All(gradient.ToArray(), item => Assert.True(IsFinite(item)));
     }
 
     [Fact]
@@ -160,20 +160,20 @@ public class CTCLossTapeTests
             for (int valueIndex = 0; valueIndex < current.Length; valueIndex++)
             {
                 Assert.True(
-                    double.IsFinite(current[valueIndex]),
+                    IsFinite(current[valueIndex]),
                     $"Layer {layerIndex} ({layers[layerIndex].GetType().Name}) produced " +
                     $"non-finite output {current[valueIndex]} at index {valueIndex}.");
             }
         }
 
-        Assert.Equal(new[] { 1, 8, 4 }, logProbs.Shape);
+        Assert.Equal(new[] { 1, 8, 4 }, logProbs.Shape.ToArray());
         for (int time = 0; time < 8; time++)
         {
             double probabilityMass = 0.0;
             for (int @class = 0; @class < 4; @class++)
             {
                 double value = logProbs[0, time, @class];
-                Assert.True(double.IsFinite(value), $"logProbs[0,{time},{@class}] was {value}.");
+                Assert.True(IsFinite(value), $"logProbs[0,{time},{@class}] was {value}.");
                 probabilityMass += Math.Exp(value);
             }
 
@@ -182,6 +182,8 @@ public class CTCLossTapeTests
 
         var loss = new CTCLoss<float>(4, blankIndex: 0, inputsAreLogProbs: true)
             .ComputeTapeLoss(logProbs, target);
-        Assert.True(double.IsFinite(loss[0]), $"Expected finite CTC loss, got {loss[0]}.");
+        Assert.True(IsFinite(loss[0]), $"Expected finite CTC loss, got {loss[0]}.");
     }
+
+    private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 }
