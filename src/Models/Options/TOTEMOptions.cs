@@ -51,6 +51,7 @@ public class TOTEMOptions<T> : TimeSeriesRegressionOptions<T>
         CodebookDimension = other.CodebookDimension; NumCodebooks = other.NumCodebooks;
         DropoutRate = other.DropoutRate; CommitmentWeight = other.CommitmentWeight;
         LearningRate = other.LearningRate;
+        TotalTrainingSteps = other.TotalTrainingSteps;
     }
 
     /// <summary>
@@ -138,14 +139,23 @@ public class TOTEMOptions<T> : TimeSeriesRegressionOptions<T>
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>
-    /// Gets or sets the Adam learning rate.
+    /// Gets or sets the peak Adam learning rate for forecasting.
     /// </summary>
-    /// <value>Defaults to 1e-3, the rate the TOTEM paper trains with.</value>
+    /// <value>Defaults to 1e-4, the rate used by the official forecasting pipeline.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> How big a step the model takes each time it learns. Lower it if
     /// training becomes unstable.</para>
     /// </remarks>
-    public double LearningRate { get; set; } = 1e-3;
+    public double LearningRate { get; set; } = 1e-4;
+
+    /// <summary>
+    /// Gets or sets the number of optimizer steps in the forecasting OneCycle schedule.
+    /// </summary>
+    /// <value>
+    /// Defaults to 100, matching the official 100-epoch recipe for a one-batch-per-epoch
+    /// training stream. Set this to epochs multiplied by batches per epoch for larger data sets.
+    /// </value>
+    public int TotalTrainingSteps { get; set; } = 100;
 
     /// <summary>
     /// Gets or sets the commitment loss weight for VQ training.

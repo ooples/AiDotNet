@@ -202,7 +202,56 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
     /// Creates the optimizer used when the constructor was given none. Override to change the default.
     /// </summary>
     protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
-        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        => CreateAdamWOptimizer(DefaultLearningRate, DefaultWeightDecay);
+
+    /// <summary>
+    /// Gets the base learning rate for the model's default AdamW training recipe.
+    /// Derived paper implementations override this instead of reimplementing optimizer plumbing.
+    /// </summary>
+    protected virtual double DefaultLearningRate => 1e-3;
+
+    /// <summary>
+    /// Gets the decoupled weight decay for the model's default AdamW training recipe.
+    /// </summary>
+    protected virtual double DefaultWeightDecay => 0.01;
+
+    /// <summary>
+    /// Creates a fixed-hyperparameter AdamW optimizer for a paper-defined training recipe.
+    /// </summary>
+    /// <remarks>
+    /// AiDotNet's optimizer options support adaptive betas, adaptive learning rates, AMSGrad,
+    /// and gradient clipping. Those are intentionally disabled here unless a concrete model
+    /// explicitly opts into them: silently adding an optimization variant would no longer match
+    /// an AdamW recipe that specifies only its learning rate, betas, epsilon, and weight decay.
+    /// </remarks>
+    protected IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateAdamWOptimizer(
+        double learningRate,
+        double weightDecay,
+        double beta1 = 0.9,
+        double beta2 = 0.999,
+        double epsilon = 1e-8)
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = learningRate,
+                WeightDecay = weightDecay,
+                Beta1 = beta1,
+                Beta2 = beta2,
+                Epsilon = epsilon,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                EnableGradientClipping = false
+            });
+
+    /// <summary>
+    /// Routes the shared tape trainer through the optimizer supplied to this segmentation
+    /// model (or through <see cref="CreateDefaultOptimizer"/>), rather than silently creating
+    /// NeuralNetworkBase's unrelated generic Adam optimizer.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => Optimizer ?? base.GetOrCreateBaseOptimizer();
 
     /// <inheritdoc/>
     public int NumClasses => _numClasses;

@@ -9181,7 +9181,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "ContextLength = 64, ForecastHorizon = 16, " +
                     "HiddenDimension = 32, NumLayers = 2, NumHeads = 2, " +
                     "CodebookSize = 64, CodebookDimension = 16, NumCodebooks = 1, " +
-                    "DropoutRate = 0.0, LearningRate = 1e-3 })";
+                    "DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "Tacotron2" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.Classic.", System.StringComparison.Ordinal))

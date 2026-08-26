@@ -150,8 +150,9 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        SetBaseTrainOptimizer(_optimizer);
 
         CopyOptionsToFields(options);
     }
@@ -174,8 +175,9 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        SetBaseTrainOptimizer(_optimizer);
 
         CopyOptionsToFields(options);
         InitializeLayers();
@@ -203,6 +205,20 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
         _maskRatio = options.MaskRatio;
     }
 
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer(VisionTSOptions<T> options)
+    {
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                EnableGradientClipping = false
+            });
+    }
+
     #endregion
 
     #region Initialization
@@ -228,6 +244,40 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => _useNativeMode;
+
+    /// <summary>
+    /// The VisionTS full-shot recipe freezes the visual MAE and fine-tunes only
+    /// LayerNorm affine parameters. Keep that selection at the shared tape
+    /// boundary so Adam moments and clipping see exactly the paper's subset.
+    /// </summary>
+    protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(
+        IReadOnlyList<Tensor<T>> parameters)
+    {
+        var layerNormParameters = new HashSet<Tensor<T>>(
+            AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+
+        foreach (var layer in Layers)
+        {
+            if (layer is TransformerEncoderLayer<T> encoder)
+            {
+                foreach (var parameter in encoder.GetLayerNormalizationTrainableParameters())
+                    layerNormParameters.Add(parameter);
+            }
+            else if (layer is LayerNormalizationLayer<T> normalization)
+            {
+                foreach (var parameter in normalization.GetTrainableParameters())
+                    layerNormParameters.Add(parameter);
+            }
+        }
+
+        return parameters.Where(layerNormParameters.Contains).ToArray();
+    }
+
+    /// <summary>
+    /// Fused compiled updates operate on the complete parameter vector and
+    /// therefore cannot preserve VisionTS's LayerNorm-only fine-tuning contract.
+    /// </summary>
+    protected override bool SupportsFusedCompiledTraining => false;
 
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
@@ -290,7 +340,8 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
             IntermediateSize = _intermediateSize,
             DropoutRate = _dropout,
             ModelSize = _modelSize,
-            MaskRatio = _maskRatio
+            MaskRatio = _maskRatio,
+            LearningRate = _options.LearningRate
         };
 
         if (!_useNativeMode && OnnxModelPath is not null)

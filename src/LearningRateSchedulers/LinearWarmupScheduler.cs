@@ -120,6 +120,13 @@ public class LinearWarmupScheduler : LearningRateSchedulerBase
     public double EndLr => _endLr;
 
     /// <inheritdoc/>
+    public override void Reset()
+    {
+        base.Reset();
+        _currentLearningRate = _warmupInitLr;
+    }
+
+    /// <inheritdoc/>
     protected override double ComputeLearningRate(int step)
     {
         if (step < _warmupSteps)

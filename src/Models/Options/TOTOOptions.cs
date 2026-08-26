@@ -37,15 +37,27 @@ public class TOTOOptions<T> : TimeSeriesRegressionOptions<T>
         IntermediateSize = other.IntermediateSize;
         DropoutRate = other.DropoutRate;
         ModelSize = other.ModelSize;
+        LearningRate = other.LearningRate;
+        Beta1 = other.Beta1;
+        Beta2 = other.Beta2;
+        WeightDecay = other.WeightDecay;
+        WarmupSteps = other.WarmupSteps;
+        TotalTrainingSteps = other.TotalTrainingSteps;
     }
 
     public int ContextLength { get; set; } = 2048;
     public int ForecastHorizon { get; set; } = 96;
     public int PatchLength { get; set; } = 32;
-    public int HiddenDimension { get; set; } = 768;
-    public int NumLayers { get; set; } = 12;
-    public int NumHeads { get; set; } = 12;
-    public int IntermediateSize { get; set; } = 3072;
+    public int HiddenDimension { get; set; } = 512;
+    public int NumLayers { get; set; } = 24;
+    public int NumHeads { get; set; } = 8;
+    public int IntermediateSize { get; set; } = 2048;
     public double DropoutRate { get; set; } = 0.1;
     public FoundationModelSize ModelSize { get; set; } = FoundationModelSize.Base;
+    public double LearningRate { get; set; } = 0.001;
+    public double Beta1 { get; set; } = 0.9;
+    public double Beta2 { get; set; } = 0.95;
+    public double WeightDecay { get; set; } = 0.01;
+    public int WarmupSteps { get; set; } = 5000;
+    public int TotalTrainingSteps { get; set; } = 193000;
 }

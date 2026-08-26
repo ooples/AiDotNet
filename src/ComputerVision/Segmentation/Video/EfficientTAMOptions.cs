@@ -23,6 +23,15 @@ public class EfficientTAMOptions : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
     }
 
+    /// <summary>
+    /// Gets or sets the AdamW image-encoder learning rate used by the full video training recipe.
+    /// </summary>
+    public double LearningRate { get; set; } = 6e-5;
+
+    /// <summary>Gets or sets the AdamW decoupled weight decay used by the full training recipe.</summary>
+    public double WeightDecay { get; set; } = 0.1;
 }

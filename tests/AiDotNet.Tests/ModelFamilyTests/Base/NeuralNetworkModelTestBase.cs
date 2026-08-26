@@ -878,6 +878,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         => InputContractTensorFactory.CreateValid<T>(shape, ResolveInputDomain(shape), rng);
 
     private LayerInputDomain? _cachedInputDomain;
+    private LayerInputDomain? _cachedOutputDomain;
+
 
     /// <summary>
     /// The value domain the model under test accepts for a tensor of this shape: continuous, or
@@ -1028,7 +1030,29 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// / continuous-target families.
     /// </summary>
     protected virtual Tensor<T> CreateRandomTargetTensor(int[] shape, Random rng)
-        => CreateRandomTensor(shape, rng);
+    {
+        LayerInputDomain domain;
+        if (_cachedOutputDomain.HasValue)
+        {
+            domain = _cachedOutputDomain.Value;
+        }
+        else
+        {
+            using var network = CreateNetwork();
+            domain = network is NeuralNetworkBase<T> neuralNetwork
+                ? neuralNetwork.GetOutputDomain(shape)
+                : LayerInputDomain.Continuous;
+            if (!domain.IsResolved)
+            {
+                throw new InputContractBindingException(
+                    $"{GetType().Name} reported an unresolved public output domain {domain} "
+                    + $"for target shape [{string.Join(",", shape)}].");
+            }
+            _cachedOutputDomain = domain;
+        }
+
+        return InputContractTensorFactory.CreateValid<T>(shape, domain, rng);
+    }
 
     /// <summary>
     /// Creates a constant tensor, automatically translating scalar probes into
@@ -1559,27 +1583,35 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
 
         var input = CreateRandomTensor(EffectiveInputShape, rng);
-        // MULTIPLYING A TOKEN INDEX IS MEANINGLESS, and worse, it leaves the vocabulary: scaling
-        // index 85 by ten asks an embedding table sized 128 for row 850. The invariant being probed
-        // is "a DIFFERENT input produces a different output", so for an index domain the meaningful
-        // perturbation is a different legal index, not a larger number. Wrapping inside the
-        // vocabulary keeps every value legal while still changing every position.
+        // MULTIPLYING A TOKEN INDEX IS MEANINGLESS, and a custom bounded domain
+        // must not be perturbed outside the values its production contract accepts.
+        // The invariant is "a DIFFERENT LEGAL input changes the output", so custom
+        // domains use their provider's nearby-value construction while indices wrap
+        // inside the vocabulary. Unbounded continuous inputs retain the strong 10x probe.
         var scaleDomain = InputDomainFor(EffectiveInputShape);
-        var scaledInput = new Tensor<T>(EffectiveInputShape);
-        for (int i = 0; i < input.Length; i++)
+        Tensor<T> scaledInput;
+        if (scaleDomain.Kind == LayerInputDomainKind.Custom)
         {
-            double original = ConvertToDouble(input[i]);
-            if (scaleDomain.IsIndices)
+            scaledInput = InputContractTensorFactory.CreateNearby(input, scaleDomain, epsilon: 1.0);
+        }
+        else
+        {
+            scaledInput = new Tensor<T>(EffectiveInputShape);
+            for (int i = 0; i < input.Length; i++)
             {
-                int span = scaleDomain.MaxExclusive - scaleDomain.MinInclusive;
-                int shifted = (int)original + Math.Max(1, span / 2);
-                int wrapped = scaleDomain.MinInclusive
-                    + ((shifted - scaleDomain.MinInclusive) % span + span) % span;
-                scaledInput[i] = NumOps.FromDouble(wrapped);
-            }
-            else
-            {
-                scaledInput[i] = NumOps.FromDouble(original * 10.0);
+                double original = ConvertToDouble(input[i]);
+                if (scaleDomain.IsIndices)
+                {
+                    int span = scaleDomain.MaxExclusive - scaleDomain.MinInclusive;
+                    int shifted = (int)original + Math.Max(1, span / 2);
+                    int wrapped = scaleDomain.MinInclusive
+                        + ((shifted - scaleDomain.MinInclusive) % span + span) % span;
+                    scaledInput[i] = NumOps.FromDouble(wrapped);
+                }
+                else
+                {
+                    scaledInput[i] = NumOps.FromDouble(original * 10.0);
+                }
             }
         }
 

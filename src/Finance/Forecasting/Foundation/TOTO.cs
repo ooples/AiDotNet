@@ -5,6 +5,7 @@ using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -147,8 +148,9 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        SetBaseTrainOptimizer(_optimizer);
 
         CopyOptionsToFields(options);
     }
@@ -171,8 +173,9 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperOptimizer(options);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        SetBaseTrainOptimizer(_optimizer);
 
         CopyOptionsToFields(options);
         // Size the context window to the architecture's actual input so the patch
@@ -191,6 +194,10 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
         Guard.Positive(options.HiddenDimension, nameof(options.HiddenDimension));
         Guard.Positive(options.NumLayers, nameof(options.NumLayers));
         Guard.Positive(options.NumHeads, nameof(options.NumHeads));
+        Guard.Positive(options.WarmupSteps, nameof(options.WarmupSteps));
+        Guard.Positive(options.TotalTrainingSteps, nameof(options.TotalTrainingSteps));
+        if (options.TotalTrainingSteps < options.WarmupSteps)
+            throw new ArgumentException("Total training steps must be at least the warmup steps.", nameof(options));
 
         _contextLength = options.ContextLength;
         _forecastHorizon = options.ForecastHorizon;
@@ -201,6 +208,31 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
         _intermediateSize = options.IntermediateSize;
         _dropout = options.DropoutRate;
         _modelSize = options.ModelSize;
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer(TOTOOptions<T> options)
+    {
+        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = options.LearningRate,
+                Beta1 = options.Beta1,
+                Beta2 = options.Beta2,
+                WeightDecay = options.WeightDecay,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                EnableGradientClipping = false,
+                LearningRateScheduler = new LinearWarmupScheduler(
+                    baseLearningRate: options.LearningRate,
+                    warmupSteps: options.WarmupSteps,
+                    totalSteps: options.TotalTrainingSteps,
+                    warmupInitLr: options.LearningRate / options.WarmupSteps,
+                    decayMode: LinearWarmupScheduler.DecayMode.Cosine,
+                    endLr: 0.0),
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch
+            });
     }
 
     #endregion
@@ -289,7 +321,13 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
             NumHeads = _numHeads,
             IntermediateSize = _intermediateSize,
             DropoutRate = _dropout,
-            ModelSize = _modelSize
+            ModelSize = _modelSize,
+            LearningRate = _options.LearningRate,
+            Beta1 = _options.Beta1,
+            Beta2 = _options.Beta2,
+            WeightDecay = _options.WeightDecay,
+            WarmupSteps = _options.WarmupSteps,
+            TotalTrainingSteps = _options.TotalTrainingSteps
         };
 
         if (!_useNativeMode && OnnxModelPath is not null)

@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
@@ -88,11 +89,10 @@ public abstract class VideoNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
         var network = CreateNetwork();
 
         var frame1 = CreateRandomTensor(InputShape, rng);
-        // Frame 2: small perturbation of frame 1
-        var frame2 = new Tensor<T>(InputShape);
-        var eps = NumOps.FromDouble(0.01);
-        for (int i = 0; i < frame1.Length; i++)
-            frame2[i] = NumOps.Add(frame1[i], eps);
+        // Frame 2 is a small, legal perturbation in the production input domain.
+        // In particular, normalized pixels near 1 must remain in [0,1].
+        var frame2 = InputContractTensorFactory.CreateNearby(
+            frame1, InputDomainFor(InputShape), epsilon: 0.01);
 
         var out1 = network.Predict(frame1);
         var out2 = network.Predict(frame2);

@@ -64,6 +64,7 @@ public class VisionTSOptions<T> : TimeSeriesRegressionOptions<T>
         MaskRatio = other.MaskRatio;
         ImageHeight = other.ImageHeight;
         ImageWidth = other.ImageWidth;
+        LearningRate = other.LearningRate;
     }
 
     /// <summary>
@@ -137,4 +138,10 @@ public class VisionTSOptions<T> : TimeSeriesRegressionOptions<T>
     /// </summary>
     /// <value>Defaults to 224 (standard ViT input).</value>
     public int ImageWidth { get; set; } = 224;
+
+    /// <summary>
+    /// Gets or sets the Adam learning rate used by the paper's one-epoch
+    /// LayerNorm-only full-shot fine-tuning recipe.
+    /// </summary>
+    public double LearningRate { get; set; } = 0.0001;
 }

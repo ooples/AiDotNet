@@ -28,6 +28,13 @@ public class ViTAdapterOptions : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
     }
 
+    /// <summary>Gets or sets the AdamW backbone learning rate used by the ADE20K recipe.</summary>
+    public double LearningRate { get; set; } = 2e-5;
+
+    /// <summary>Gets or sets the AdamW decoupled weight decay used by the ADE20K recipe.</summary>
+    public double WeightDecay { get; set; } = 0.01;
 }

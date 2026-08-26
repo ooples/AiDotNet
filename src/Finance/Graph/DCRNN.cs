@@ -133,6 +133,10 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
+    /// <inheritdoc/>
+    public override double MaxGradNormValue => 5.0;
+
+
     private int _sequenceLength;
     private int _forecastHorizon;
     private int _numNodes;
@@ -232,7 +236,7 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         double[,]? adjacencyMatrix = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new MeanAbsoluteErrorLoss<T>(), 1.0)
     {
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
@@ -244,8 +248,8 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         _options = options ?? new DCRNNOptions<T>();
         Options = _options;
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? new MeanAbsoluteErrorLoss<T>();
+        _optimizer = optimizer ?? CreatePaperOptimizer();
 
         _sequenceLength = _options.SequenceLength;
         _forecastHorizon = _options.ForecastHorizon;
@@ -291,13 +295,13 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         double[,]? adjacencyMatrix = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new MeanAbsoluteErrorLoss<T>(), 1.0)
     {
         _useNativeMode = true;
         _options = options ?? new DCRNNOptions<T>();
         Options = _options;
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? new MeanAbsoluteErrorLoss<T>();
+        _optimizer = optimizer ?? CreatePaperOptimizer();
 
         _sequenceLength = _options.SequenceLength;
         _forecastHorizon = _options.ForecastHorizon;
@@ -327,6 +331,25 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         {
             InitializeDefaultDiffusionMatrices();
         }
+    }
+
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
+    {
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-3,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 5.0,
+            });
     }
 
     #endregion
@@ -573,6 +596,19 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     {
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }
+
+    /// <summary>
+    /// Runs tape training through the same last-step readout and graph-diffusion path
+    /// used by native forecasting.
+    /// </summary>
+    /// <remarks>
+    /// The generic sequential fallback returns every recurrent time step and omits
+    /// <see cref="ApplyDiffusionConvolution"/>. DCRNN supervises the decoder forecast,
+    /// so training that fallback optimizes a different tensor and objective than
+    /// <see cref="PredictCore"/>.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
+
 
     /// <summary>
     /// Trains the DCRNN model on provided data.

@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.Video;
 
@@ -36,6 +37,17 @@ namespace AiDotNet.Video;
     Direction = TensorLayoutDirection.Output)]
 public abstract class VideoDenoisingBase<T> : VideoNeuralNetworkBase<T>, IShapeContract
 {
+    /// <summary>
+    /// Video denoisers accept public frame tensors on the unsigned 8-bit pixel scale.
+    /// The native model path normalizes these values to [0, 1] before forwarding.
+    /// </summary>
+    public override LayerInputDomain GetInputDomain(int[]? inputShape) => VideoPixelInputDomain.Value;
+
+    /// <summary>
+    /// Denoised public outputs use the same unsigned 8-bit pixel scale as their inputs.
+    /// </summary>
+    public override LayerInputDomain GetOutputDomain(int[]? outputShape) => VideoPixelInputDomain.Value;
+
     /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
         => inputRank == 4
@@ -102,6 +114,57 @@ public abstract class VideoDenoisingBase<T> : VideoNeuralNetworkBase<T>, IShapeC
     /// <param name="noisyFrames">Noisy input frames [numFrames, channels, height, width].</param>
     /// <returns>Denoised frames [numFrames, channels, height, width].</returns>
     public abstract Tensor<T> Denoise(Tensor<T> noisyFrames);
+
+    /// <summary>
+    /// Runs the native denoising stack on a public raw-frame tensor while keeping the
+    /// tape objective in the normalized model domain.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var preprocessed = PreprocessFrames(input);
+        return ForwardPreprocessedForTraining(preprocessed);
+    }
+
+    /// <summary>
+    /// Runs the registered layer graph for an input that has already passed through
+    /// <see cref="VideoNeuralNetworkBase{T}.PreprocessFrames"/>.
+    /// </summary>
+    /// <remarks>
+    /// Architecture-specific denoisers use this hook when they add a residual readout
+    /// or restore spatial resolution. Calling <c>base.ForwardForTraining</c> from such
+    /// an override would preprocess the tensor a second time.
+    /// </remarks>
+    protected Tensor<T> ForwardPreprocessedForTraining(Tensor<T> preprocessedInput)
+        => base.ForwardForTraining(preprocessedInput);
+
+    /// <inheritdoc />
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+
+        SetTrainingMode(true);
+        try
+        {
+            // ForwardForTraining performs the model's input preprocessing. Supervision
+            // must be placed in that same normalized domain, while callers continue to
+            // provide and receive raw [0,255] frames through Train/Predict.
+            var normalizedExpected = PreprocessTarget(expectedOutput);
+            TrainWithTape(input, normalizedExpected);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
+    /// Maps public supervision into the native model's output domain. Most denoisers
+    /// expose raw pixels and therefore normalize the target; models whose published
+    /// API is already normalized can override this independently of input reshaping.
+    /// </summary>
+    protected virtual Tensor<T> PreprocessTarget(Tensor<T> expectedOutput)
+        => NormalizeFrames(expectedOutput);
 
     /// <summary>
     /// Estimates the noise level (sigma) from noisy input frames.

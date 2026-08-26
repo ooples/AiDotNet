@@ -73,6 +73,8 @@ public class ViTAdapter<T> : Common.SemanticSegmentationBase<T>
     /// </para>
     /// </remarks>
     public override ModelOptions GetOptions() => _options;
+    protected override double DefaultLearningRate => _options.LearningRate;
+    protected override double DefaultWeightDecay => _options.WeightDecay;
 
     #region Fields
 

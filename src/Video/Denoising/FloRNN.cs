@@ -62,6 +62,14 @@ public class FloRNN<T> : VideoDenoisingBase<T>
     private bool _disposed;
 
     /// <summary>
+    /// The released FloRNN model consumes and emits normalized image tensors.
+    /// </summary>
+    public override LayerInputDomain GetInputDomain(int[]? inputShape) => VideoPixelInputDomain.NormalizedValue;
+
+    /// <inheritdoc/>
+    public override LayerInputDomain GetOutputDomain(int[]? outputShape) => VideoPixelInputDomain.NormalizedValue;
+
+    /// <summary>
     /// Creates a FloRNN model for ONNX inference.
     /// </summary>
     public FloRNN(
@@ -88,13 +96,19 @@ public class FloRNN<T> : VideoDenoisingBase<T>
     {
         _options = options ?? new FloRNNOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+        // The released FloRNN training script uses torch.optim.Adam at 1e-4
+        // with Adam's standard fixed moments (train_models/sRGB_train.py).
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
-            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = _options.LearningRate,
-                EnableGradientClipping = true,
-                MaxGradientNorm = 1.0
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                UseAMSGrad = false
             });
         InitializeLayers();
     }
@@ -128,28 +142,17 @@ public class FloRNN<T> : VideoDenoisingBase<T>
     }
 
     /// <inheritdoc/>
-    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
+    protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => rawFrames;
 
     /// <inheritdoc/>
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => modelOutput;
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            if (_optimizer is not null)
-                TrainWithTape(input, expected, _optimizer);
-            else
-                TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
+    protected override Tensor<T> PreprocessTarget(Tensor<T> expectedOutput) => expectedOutput;
+
+    /// <inheritdoc/>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.

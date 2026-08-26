@@ -3706,6 +3706,33 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Gets the value domain produced by this network's public output.
+    /// </summary>
+    /// <remarks>
+    /// The default follows the final layer's declared output port. Models whose public
+    /// postprocessing changes that domain (for example, denormalizing and clamping image
+    /// pixels) override this method so trainers, generated fixtures, and diagnostics can
+    /// create semantically valid targets without model-name allowlists.
+    /// </remarks>
+    public virtual LayerInputDomain GetOutputDomain(int[]? outputShape)
+    {
+        var layers = Layers;
+        if (layers is null || layers.Count == 0)
+            return LayerInputDomain.Continuous;
+
+        if (layers[layers.Count - 1] is LayerBase<T> finalLayer
+            && finalLayer.OutputPorts.Count > 0)
+        {
+            var domain = finalLayer.OutputPorts[0].ValueDomain;
+            if (domain.IsResolved)
+                return domain;
+        }
+
+        return LayerInputDomain.Continuous;
+    }
+
+
+    /// <summary>
     /// Minimum external input geometry required by this model. The tensor-port generator overrides
     /// this from <c>[ModelInputShapeConstraint]</c>, so model and fixture implementations do not
     /// duplicate configuration-derived shape rules.
@@ -3986,6 +4013,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         _publishedFlatParameterGradients = copy;
     }
 
+    /// <summary>
+    /// Selects the parameter tensors that participate in a training step.
+    /// </summary>
+    /// <remarks>
+    /// The default returns the complete canonical parameter set. Models whose
+    /// published fine-tuning recipe freezes part of a pretrained backbone can
+    /// override this hook; every eager, streaming, and gradient-accumulation
+    /// tape path applies the same selection.
+    /// </remarks>
+    protected virtual IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(
+        IReadOnlyList<Tensor<T>> parameters) => parameters;
+
+
     /// <summary>Collects every trainable tensor owned by this model in canonical order.</summary>
     protected IReadOnlyList<Tensor<T>> CollectModelTrainableTensors()
     {
@@ -3997,7 +4037,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             if (tensor is not null && tensor.Length > 0 && seen.Add(tensor)) result.Add(tensor);
         }
 
-        foreach (var tensor in Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion))
+        foreach (var tensor in SelectTrainableParametersForTraining(
+                     Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion)))
             Add(tensor);
         foreach (var layer in GetExtraTrainableLayers())
         {
@@ -5912,7 +5953,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 T chunkSamplesT = NumOps.FromDouble(chunkSamples);
                 accumLoss = NumOps.Add(accumLoss, NumOps.Multiply(chunkLoss, chunkSamplesT));
 
-                var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
+                var trainableParams = SelectTrainableParametersForTraining(
+                    Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion));
                 var allGrads = tape.ComputeGradients(lossTensor, sources: null);
                 // Walk both the layer-collected params AND any network-
                 // level trainable tensors so the latter actually receive
@@ -5965,7 +6007,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // once for the logical full batch, matching PyTorch's grad-
             // accum pattern.
             var optimizer = GetOrCreateBaseOptimizer();
-            var paramsList = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
+            var paramsList = SelectTrainableParametersForTraining(
+                Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion));
 
             // Mirror TrainWithTape's pre-step global gradient-norm clipping
             // on the ACCUMULATED gradient (PyTorch grad-accum idiom: clip
@@ -9260,7 +9303,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         LastLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
         // Sources = layer-owned trainable params + network-level extras
         // (cls/pos tokens, etc.), exactly the set the eager path optimizes.
-        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
+        var trainableParams = SelectTrainableParametersForTraining(
+            Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion));
         var sources = new List<Tensor<T>>(trainableParams.Count + 4);
         sources.AddRange(trainableParams);
         foreach (var t in GetExtraTrainableTensors())
@@ -9607,7 +9651,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
         else if (_parameterBuffer is null)
         {
-            var initialParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, structureVersion: -1);
+            var initialParams = SelectTrainableParametersForTraining(
+                Training.TapeTrainingStep<T>.CollectParameters(Layers, structureVersion: -1));
             long totalParamCount = 0L;
             for (int i = 0; i < initialParams.Count; i++)
                 totalParamCount += (long)initialParams[i].Length;
@@ -9703,7 +9748,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         try
         {
             // Re-collect after buffer initialization — references are now views
-            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
+            var trainableParams = SelectTrainableParametersForTraining(
+                Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion));
             // Snapshot the network-level extras (ViT cls/pos, etc.) once
             // here so we can both (a) include them in tape source
             // collection so gradients are computed for them, and
@@ -11391,7 +11437,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         SetTrainingMode(true);
         try
         {
-            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+            var trainableParams = CollectModelTrainableTensors();
             var opt = optimizer ?? GetOrCreateBaseOptimizer();
 
             using var tape = new GradientTape<T>();
