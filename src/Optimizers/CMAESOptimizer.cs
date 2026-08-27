@@ -401,15 +401,39 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
             NumOps.Add(NumOps.FromDouble(dimensions), NumOps.Add(muEff, NumOps.FromDouble(5)))
         );
 
+        // chiN: the expected length of a draw from N(0, I) in this many dimensions.
+        //
+        // Hansen's step-size rule compares the evolution path against how long a path of PURE
+        // CHANCE would be, and adjusts sigma by the ratio. That reference length is E||N(0,I)||,
+        // approximated as sqrt(n)(1 - 1/(4n) + 1/(21n^2)); this code used sqrt(n) on its own, which
+        // is the leading term without the correction and is always too big.
+        //
+        // Always too big means always biased the same way. In two dimensions chiN is 1.2543 against
+        // a sqrt(n) of 1.4142, so the ratio ||ps||/chiN came out 12.7% low, every generation, and
+        // sigma shrank when it should have held. The search contracts early and settles in whatever
+        // basin it happens to be in - which on Rastrigin, whose minima sit one lattice step apart,
+        // means an answer of about 1.0 instead of 0.
+        T chiN = NumOps.FromDouble(
+            Math.Sqrt(dimensions) * (1.0 - 1.0 / (4.0 * dimensions) + 1.0 / (21.0 * dimensions * dimensions)));
+
         // Update evolution paths
         var y = _mean.Subtract(oldMean).Divide(_sigma);
         _ps = _ps.Multiply(NumOps.Subtract(NumOps.One, cs)).Add(
             y.Multiply(NumOps.Sqrt(NumOps.Multiply(cs, NumOps.Subtract(NumOps.FromDouble(2), cs)))).Multiply(NumOps.Sqrt(muEff)));
 
+        // The same reference length belongs here. Hansen's hsig test is
+        //   ||ps|| / sqrt(1 - (1-cs)^(2(g+1))) / chiN  <  1.4 + 2/(n+1)
+        // and the division by chiN was missing, so the left side was measured in the wrong units
+        // and compared against a threshold expressed in the right ones. Without it the test reads
+        // high, hsig turns off, and the rank-one update stops accumulating exactly when a long
+        // path says it should.
         T hsig = NumOps.LessThan(
             NumOps.Divide(
-                _ps.Norm(),
-                NumOps.Sqrt(NumOps.Subtract(NumOps.One, NumOps.Power(NumOps.Subtract(NumOps.One, cs), NumOps.FromDouble(2 * _options.MaxGenerations))))
+                NumOps.Divide(
+                    _ps.Norm(),
+                    NumOps.Sqrt(NumOps.Subtract(NumOps.One, NumOps.Power(NumOps.Subtract(NumOps.One, cs), NumOps.FromDouble(2 * _options.MaxGenerations))))
+                ),
+                chiN
             ),
             NumOps.FromDouble(1.4 + 2 / (dimensions + 1.0))
         ) ? NumOps.One : NumOps.Zero;
@@ -431,10 +455,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
         _sigma = NumOps.Multiply(_sigma, NumOps.Exp(NumOps.Multiply(
             NumOps.Divide(cs, damps),
             NumOps.Subtract(
-                NumOps.Divide(
-                    _ps.Norm(),
-                    NumOps.Sqrt(NumOps.FromDouble(dimensions))
-                ),
+                NumOps.Divide(_ps.Norm(), chiN),
                 NumOps.One
             )
         )));
