@@ -93,7 +93,6 @@ public class FDYSED<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         InitializeLayers();
     }
 
-    /// <summary>Creates an FDY-SED model for native training mode.</summary>
     /// <summary>Creates a FDYSED for native training mode with the default objective.</summary>
     /// <remarks>
     /// Kept as its own three-parameter constructor rather than relying on the defaulted
@@ -109,6 +108,7 @@ public class FDYSED<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     {
     }
 
+    /// <summary>Creates an FDY-SED model for native training mode.</summary>
     public FDYSED(NeuralNetworkArchitecture<T> architecture, FDYSEDOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)

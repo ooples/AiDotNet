@@ -153,16 +153,7 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
         InitializeLayers();
     }
 
-    /// <summary>
-    /// Creates an AudioEventDetector for native training mode.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture.</param>
-    /// <param name="options">Detection options.</param>
-    /// <param name="optimizer">Optional custom optimizer (defaults to AdamW).</param>
-    /// <param name="lossFunction">
-    /// Optional custom training loss; defaults to binary cross-entropy with logits for multi-label detection.
-    /// </param>
-    /// <summary>Creates a AudioEventDetector for native training mode with the default objective.</summary>
+    /// <summary>Creates an AudioEventDetector for native training mode with the default objective.</summary>
     /// <remarks>
     /// Kept as its own three-parameter constructor rather than relying on the defaulted
     /// parameter below: a defaulted parameter is a compile-time convenience but only ONE CLR
@@ -177,6 +168,15 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
     {
     }
 
+    /// <summary>
+    /// Creates an AudioEventDetector for native training mode.
+    /// </summary>
+    /// <param name="architecture">The neural network architecture.</param>
+    /// <param name="options">Detection options.</param>
+    /// <param name="optimizer">Optional custom optimizer (defaults to AdamW).</param>
+    /// <param name="lossFunction">
+    /// Optional custom training loss; defaults to binary cross-entropy with logits for multi-label detection.
+    /// </param>
     public AudioEventDetector(
         NeuralNetworkArchitecture<T> architecture,
         AudioEventDetectorOptions? options = null,

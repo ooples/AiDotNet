@@ -101,7 +101,6 @@ public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<
         InitializeLayers();
     }
 
-    /// <summary>Creates a CRNN SED model for native training mode.</summary>
     /// <summary>Creates a CRNNEventDetector for native training mode with the default objective.</summary>
     /// <remarks>
     /// Kept as its own three-parameter constructor rather than relying on the defaulted
@@ -117,6 +116,7 @@ public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<
     {
     }
 
+    /// <summary>Creates a CRNN SED model for native training mode.</summary>
     public CRNNEventDetector(NeuralNetworkArchitecture<T> architecture, CRNNEventDetectorOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
