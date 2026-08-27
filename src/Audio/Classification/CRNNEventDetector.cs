@@ -4,6 +4,7 @@ using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
@@ -102,8 +103,9 @@ public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<
 
     /// <summary>Creates a CRNN SED model for native training mode.</summary>
     public CRNNEventDetector(NeuralNetworkArchitecture<T> architecture, CRNNEventDetectorOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new CRNNEventDetectorOptions();
         _useNativeMode = true;

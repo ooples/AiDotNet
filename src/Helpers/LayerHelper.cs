@@ -22870,7 +22870,12 @@ public static partial class LayerHelper<T>
         foreach (int ch in cnnChannels)
         {
             yield return new FullyConnectedLayer<T>(ch, reluActivation);
-            yield return new BatchNormalizationLayer<T>();
+            // Size the normalization explicitly from the projection width. These blocks emit a
+            // BATCHED SEQUENCE, [batch, frames, ch], and BatchNormalizationLayer's lazy resolver
+            // reads rank 3 as an UNBATCHED [C, H, W], so it would take the batch axis as the
+            // channel count and allocate a single gamma/beta for the whole feature map instead of
+            // one per feature -- a parameter count that also moves with the batch size.
+            yield return new BatchNormalizationLayer<T>(numFeatures: ch);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             currentDim = ch;
         }
@@ -22912,7 +22917,13 @@ public static partial class LayerHelper<T>
                 yield return new FullyConnectedLayer<T>(
                     ch / numFrequencyGroups, reluActivation);
             }
-            yield return new BatchNormalizationLayer<T>();
+            // The per-group projections run in sequence, so the width reaching the normalization
+            // is one group's width, not the whole block's. Size it explicitly: these blocks emit a
+            // BATCHED SEQUENCE, [batch, frames, width], and BatchNormalizationLayer's lazy resolver
+            // reads rank 3 as an UNBATCHED [C, H, W], so it would take the batch axis as the
+            // channel count and allocate a single gamma/beta for the whole feature map instead of
+            // one per feature -- a parameter count that also moves with the batch size.
+            yield return new BatchNormalizationLayer<T>(numFeatures: ch / numFrequencyGroups);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             currentDim = ch;
         }
