@@ -19,6 +19,34 @@ namespace AiDotNet.Models.Options;
 /// <typeparam name="T">The numeric type.</typeparam>
 public class ABCNetOptions<T> : NeuralNetworkOptions
 {
+    /// <summary>Initializes a new instance with the paper's defaults.</summary>
+    public ABCNetOptions()
+    {
+    }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public ABCNetOptions(ABCNetOptions<T> other)
+    {
+        if (other is null)
+            throw new ArgumentNullException(nameof(other));
+
+        InputHeight = other.InputHeight;
+        InputWidth = other.InputWidth;
+        InputChannels = other.InputChannels;
+        FeatureChannels = other.FeatureChannels;
+        FeatureStride = other.FeatureStride;
+        BezierSampleHeight = other.BezierSampleHeight;
+        BezierSampleWidth = other.BezierSampleWidth;
+        NumCharacterClasses = other.NumCharacterClasses;
+        RecognitionHiddenSize = other.RecognitionHiddenSize;
+        ConfidenceThreshold = other.ConfidenceThreshold;
+        MaxInstances = other.MaxInstances;
+        LearningRate = other.LearningRate;
+        Momentum = other.Momentum;
+    }
+
     /// <summary>Gets or sets the input image height. Default 256.</summary>
     public int InputHeight { get; set; } = 256;
 
@@ -100,6 +128,10 @@ public class ABCNetOptions<T> : NeuralNetworkOptions
     /// shared backbone's activations negative until every input produced the same detection map.
     /// Lower this to roughly 1e-4 if you inject an Adam-family optimizer instead.
     /// </para>
+    /// <para><b>For Beginners:</b> The learning rate sets how big a step the model takes each time
+    /// it learns from a mistake. It has to suit the optimizer it is used with: the same number that
+    /// is sensible for SGD is far too large for an Adam-style optimizer, which is why the default
+    /// optimizer here is the SGD the paper used.</para>
     /// </remarks>
     public double LearningRate { get; set; } = 0.01;
 
@@ -110,6 +142,10 @@ public class ABCNetOptions<T> : NeuralNetworkOptions
     /// The paper trains with SGD at momentum 0.9. Exposed for the same reason the learning rate is:
     /// a published default is only useful if a caller can retune it without having to rebuild the
     /// whole optimizer.
+    /// </para>
+    /// <para><b>For Beginners:</b> Momentum lets each update keep part of the direction of the
+    /// updates before it, like a ball rolling downhill rather than restarting from a standstill at
+    /// every step. It smooths out noisy steps and speeds up steady progress.</para>
     /// </remarks>
     public double Momentum { get; set; } = 0.9;
 

@@ -130,7 +130,10 @@ public class ABCNet<T> : NeuralNetworkBase<T>, ICompositeLoss<T>
     /// <see cref="ExpectedLayerCount"/> of them, in this class's documented order — see
     /// <see cref="InitializeLayers"/>.
     /// </param>
-    /// <param name="optimizer">Optional optimizer; Adam by default.</param>
+    /// <param name="optimizer">
+    /// Optional optimizer. The default is the paper's SGD with momentum, at
+    /// <see cref="ABCNetOptions{T}.LearningRate"/> and <see cref="ABCNetOptions{T}.Momentum"/>.
+    /// </param>
     /// <param name="lossFunction">
     /// Optional loss for the inherited training surface. The paper's objective is a sum of a detection
     /// loss over the score map, an L1 loss on the Bezier coordinates, and a CTC loss on the recognition

@@ -162,6 +162,21 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
     /// <param name="lossFunction">
     /// Optional custom training loss; defaults to binary cross-entropy with logits for multi-label detection.
     /// </param>
+    /// <summary>Creates a AudioEventDetector for native training mode with the default objective.</summary>
+    /// <remarks>
+    /// Kept as its own three-parameter constructor rather than relying on the defaulted
+    /// parameter below: a defaulted parameter is a compile-time convenience but only ONE CLR
+    /// signature, so adding it removed the arity already-compiled callers bind to and they
+    /// would fail with MissingMethodException.
+    /// </remarks>
+    public AudioEventDetector(
+        NeuralNetworkArchitecture<T> architecture,
+        AudioEventDetectorOptions? options,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+        : this(architecture, options, optimizer, null)
+    {
+    }
+
     public AudioEventDetector(
         NeuralNetworkArchitecture<T> architecture,
         AudioEventDetectorOptions? options = null,

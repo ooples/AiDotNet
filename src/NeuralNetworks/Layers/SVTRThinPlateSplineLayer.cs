@@ -91,7 +91,9 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
 
     /// <summary>
     /// Inset used for the localization network's identity bias, separately from the output grid's
-    /// <see cref="MarginX"/> / <see cref="MarginY"/>.
+    /// <see cref="MarginX"/> / <see cref="MarginY"/>. Internal: this layer is an implementation
+    /// detail of SVTR rather than a supported public surface, and callers configure the model
+    /// through its options rather than by reaching into the layer.
     /// </summary>
     /// <remarks>
     /// The released SVTR rectifier does NOT reuse one margin for both point sets. Its localization
@@ -100,7 +102,7 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
     /// initial transform the identity by construction and removes the small source/target offset the
     /// published initialization starts from.
     /// </remarks>
-    public double LocalizationMargin => _localizationMargin;
+    internal double LocalizationMargin => _localizationMargin;
     public override bool SupportsTraining => true;
     public SVTRThinPlateSplineLayer(
         int inputChannels = 3,
@@ -121,8 +123,16 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
             throw new ArgumentException("TPS requires an even control-point count of at least four.", nameof(controlPointCount));
         if (marginX <= 0 || marginX >= 0.5 || marginY <= 0 || marginY >= 0.5)
             throw new ArgumentOutOfRangeException(nameof(marginX));
-        if (localizationMargin <= 0 || localizationMargin >= 0.5)
+        if (double.IsNaN(localizationMargin)
+            || double.IsInfinity(localizationMargin)
+            || localizationMargin <= 0
+            || localizationMargin >= 0.5)
+        {
+            // NaN fails every ordered comparison, so a bare range check lets it through and the
+            // control-point grid, the TPS kernel and its inverse all fill with NaN instead of
+            // failing here.
             throw new ArgumentOutOfRangeException(nameof(localizationMargin));
+        }
 
         _inputChannels = inputChannels;
         _localizationHeight = localizationHeight;
@@ -152,8 +162,11 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
 
         _controlWeights = new Tensor<T>([512, controlPointCount * 2]);
         _controlBias = new Tensor<T>([controlPointCount * 2]);
-        // Zero weights are intentional: the bias alone reproduces the target control points, so
-        // the initial spatial transform is the identity before localization training begins.
+        // Zero weights are intentional: the bias alone reproduces the SOURCE control points, so the
+        // localization network starts by predicting exactly the grid it was seeded with. That grid
+        // sits at localizationMargin while the sampler's target grid sits at marginX / marginY, so
+        // the initial transform is NOT the identity -- it preserves the small source-to-target
+        // offset the released initialization starts from.
         InitializeIdentityControlBias(_controlBias, controlPointCount, localizationMargin, localizationMargin);
         RegisterTrainableParameter(_controlWeights, PersistentTensorRole.Weights);
         AppendTrainableParameter(_controlBias, PersistentTensorRole.Biases);

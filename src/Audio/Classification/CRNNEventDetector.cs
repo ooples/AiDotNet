@@ -102,6 +102,21 @@ public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<
     }
 
     /// <summary>Creates a CRNN SED model for native training mode.</summary>
+    /// <summary>Creates a CRNNEventDetector for native training mode with the default objective.</summary>
+    /// <remarks>
+    /// Kept as its own three-parameter constructor rather than relying on the defaulted
+    /// parameter below: a defaulted parameter is a compile-time convenience but only ONE CLR
+    /// signature, so adding it removed the arity already-compiled callers bind to and they
+    /// would fail with MissingMethodException.
+    /// </remarks>
+    public CRNNEventDetector(
+        NeuralNetworkArchitecture<T> architecture,
+        CRNNEventDetectorOptions? options,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+        : this(architecture, options, optimizer, null)
+    {
+    }
+
     public CRNNEventDetector(NeuralNetworkArchitecture<T> architecture, CRNNEventDetectorOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)

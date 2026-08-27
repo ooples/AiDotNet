@@ -149,11 +149,23 @@ public sealed class ParameterChunk<T>
     /// re-shaped or snapshot view rather than that storage itself. Defaults to
     /// <paramref name="tensor"/>.
     /// </param>
-    public ParameterChunk(
+    /// <remarks>
+    /// Kept as its own three-argument constructor rather than folded into the overload below with a
+    /// defaulted parameter: an optional parameter is a compile-time convenience but only ONE CLR
+    /// signature, so collapsing them would break already-compiled callers of this shape with a
+    /// MissingMethodException.
+    /// </remarks>
+    public ParameterChunk(string stableId, ParameterSlotRole role, Tensor<T> tensor)
+        : this(stableId, role, tensor, null)
+    {
+    }
+
+    /// <summary>Creates one role-aware state chunk whose payload is a view of other storage.</summary>
+    internal ParameterChunk(
         string stableId,
         ParameterSlotRole role,
         Tensor<T> tensor,
-        Tensor<T>? sourceTensor = null)
+        Tensor<T>? sourceTensor)
     {
         if (string.IsNullOrWhiteSpace(stableId))
             throw new ArgumentException("A parameter chunk requires a stable ID.", nameof(stableId));
@@ -182,7 +194,7 @@ public sealed class ParameterChunk<T>
     /// tensor. Callers keyed by tensor REFERENCE -- looking a chunk up in a tape's gradient
     /// dictionary, for instance -- must use this, or a sparse weight silently reads as absent.
     /// </remarks>
-    public Tensor<T> SourceTensor { get; }
+    internal Tensor<T> SourceTensor { get; }
 }
 
 /// <summary>

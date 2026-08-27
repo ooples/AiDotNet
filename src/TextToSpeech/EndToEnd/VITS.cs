@@ -59,7 +59,10 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly VITSOptions _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    // Not readonly: a restore rewrites _options, and the default optimizer is BUILT FROM
+    // those options, so it has to be rebuilt afterwards or the model keeps running on the
+    // coefficients it happened to be constructed with.
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -285,6 +288,14 @@ public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
         writer.Write(_options.NumDecoderLayers);
         writer.Write(_options.NumEncoderLayers);
         writer.Write(_options.NumHeads);
+        // The training recipe is part of the model's configuration: every one of these feeds
+        // CreatePaperOptimizer, so a caller's override is silently lost across a round trip
+        // unless it travels with the rest of the options.
+        writer.Write(_options.LearningRate);
+        writer.Write(_options.Beta1);
+        writer.Write(_options.Beta2);
+        writer.Write(_options.Epsilon);
+        writer.Write(_options.WeightDecay);
     }
 
     /// <inheritdoc />
@@ -305,6 +316,14 @@ public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
         _options.NumDecoderLayers = reader.ReadInt32();
         _options.NumEncoderLayers = reader.ReadInt32();
         _options.NumHeads = reader.ReadInt32();
+        _options.LearningRate = reader.ReadDouble();
+        _options.Beta1 = reader.ReadDouble();
+        _options.Beta2 = reader.ReadDouble();
+        _options.Epsilon = reader.ReadDouble();
+        _options.WeightDecay = reader.ReadDouble();
+        // Rebuild from the restored recipe. The optimizer was constructed before this ran.
+        if (_useNativeMode)
+            _optimizer = CreatePaperOptimizer();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

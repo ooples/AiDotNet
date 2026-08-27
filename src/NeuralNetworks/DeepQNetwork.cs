@@ -210,6 +210,18 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
     {
     }
 
+    /// <summary>Creates a Deep Q-Network using the published RMSProp settings.</summary>
+    /// <remarks>
+    /// Kept as its own four-parameter constructor rather than relying on the defaulted optimizer
+    /// parameter below: a defaulted parameter is a compile-time convenience but only ONE CLR
+    /// signature, so adding it removed the arity already-compiled callers bind to and they would
+    /// fail with MissingMethodException.
+    /// </remarks>
+    public DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction, double epsilon, DeepQNetworkOptions? options) :
+        this(architecture, lossFunction, epsilon, options, null)
+    {
+    }
+
     public DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, double epsilon = 1.0, DeepQNetworkOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) :
         this(architecture, lossFunction, epsilon, isTargetNetwork: false, options: options, optimizer: optimizer)
     {
