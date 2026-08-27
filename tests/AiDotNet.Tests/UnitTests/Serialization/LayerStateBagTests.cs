@@ -1,4 +1,6 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.Serialization;
 using Xunit;
@@ -85,5 +87,21 @@ public sealed class LayerStateBagTests
 
         copy[0, 0].Add(99);
         Assert.Equal(new[] { 1, 2 }, source[0, 0]);
+    }
+
+    [Fact]
+    public void Live_parametric_activation_preserves_configuration_in_an_independent_copy()
+    {
+        var source = new LeakyReLUActivation<float>(alpha: 0.2);
+        var bag = new LayerStateBag(new Dictionary<string, object>
+        {
+            ["activation"] = source,
+        }, "ActivationProbe");
+
+        var copy = bag.Component<IActivationFunction<float>>("activation");
+
+        var typed = Assert.IsType<LeakyReLUActivation<float>>(copy);
+        Assert.NotSame(source, typed);
+        Assert.Equal(source.Alpha, typed.Alpha);
     }
 }

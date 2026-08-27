@@ -3,12 +3,15 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 
 namespace AiDotNet.Models;
 
@@ -153,8 +156,60 @@ public sealed class ModelStateRegistry<T>
         ConstructorHandling = ConstructorHandling.AllowNonPublicDefaultConstructor,
         Formatting = Formatting.None,
         TypeNameHandling = TypeNameHandling.None,
-        Converters = { new NumericStateJsonConverter(), new ModelSerializerJsonConverter() }
+        Converters =
+        {
+            new NumericStateJsonConverter(),
+            new DriftDetectorStateJsonConverter(),
+            new ModelSerializerJsonConverter()
+        }
     };
+
+    private static readonly JsonSerializerSettings DriftDetectorStateSettings = new()
+    {
+        ConstructorHandling = ConstructorHandling.AllowNonPublicDefaultConstructor,
+        Formatting = Formatting.None,
+        TypeNameHandling = TypeNameHandling.None,
+        ContractResolver = new DriftDetectorStateContractResolver()
+    };
+
+    /// <summary>
+    /// Carries the complete private scalar state of drift detectors embedded in generated object
+    /// state. Detector implementations intentionally expose observations read-only, so ordinary JSON
+    /// properties cannot reproduce a streaming checkpoint.
+    /// </summary>
+    private sealed class DriftDetectorStateContractResolver : DefaultContractResolver
+    {
+        protected override IList<JsonProperty> CreateProperties(Type type, MemberSerialization memberSerialization)
+        {
+            var properties = new List<JsonProperty>();
+            for (Type? current = type; current is not null && current != typeof(object); current = current.BaseType)
+            {
+                var fields = current.GetFields(
+                    System.Reflection.BindingFlags.Instance
+                    | System.Reflection.BindingFlags.Public
+                    | System.Reflection.BindingFlags.NonPublic
+                    | System.Reflection.BindingFlags.DeclaredOnly);
+                Array.Sort(fields, static (left, right) => left.MetadataToken.CompareTo(right.MetadataToken));
+
+                foreach (var field in fields)
+                {
+                    if (field.IsStatic || field.Name == "NumOps"
+                        || typeof(INumericOperations<T>).IsAssignableFrom(field.FieldType))
+                    {
+                        continue;
+                    }
+
+                    JsonProperty property = base.CreateProperty(field, MemberSerialization.Fields);
+                    property.PropertyName = $"{current.FullName}:{field.Name}";
+                    property.Readable = true;
+                    property.Writable = true;
+                    properties.Add(property);
+                }
+            }
+
+            return properties;
+        }
+    }
 
     private readonly List<Entry> _entries = new();
     private readonly HashSet<string> _names = new(StringComparer.Ordinal);
@@ -295,6 +350,39 @@ public sealed class ModelStateRegistry<T>
                 CopyCollectionState(name, current, restored);
             });
 
+    /// <summary>Declares the exact continuation state of a constructor-owned random generator.</summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the random generator created by the model constructor.</param>
+    /// <remarks>
+    /// <see cref="Random"/> exposes no public state API. Replaying its original seed is insufficient
+    /// after training has consumed draws, so this declaration records the private primitive state of
+    /// the runtime implementation and restores it into the already-constructed generator. Field and
+    /// runtime-type validation is deliberately strict: a different runtime layout fails loudly rather
+    /// than pretending a checkpoint can continue the same stochastic sequence.
+    /// </remarks>
+    public void DeclareRandom(string name, Func<Random?> get)
+        => Add(name,
+            w => WriteRandomState(w, get()),
+            r => ReadRandomState(r, get(), set: null, name));
+
+    /// <summary>Declares continuation state for an assignable, lazily-created random generator.</summary>
+    /// <param name="name">A stable name, unique within the model.</param>
+    /// <param name="get">Reads the model's current random generator.</param>
+    /// <param name="set">Stores a generator materialized from the payload when the constructor left it null.</param>
+    /// <remarks>
+    /// Models commonly create their generator when training first starts. A freshly constructed clone
+    /// therefore has a null destination even though the trained source has continuation state. The
+    /// registry materializes only the standard implementations returned by <see cref="RandomHelper"/>
+    /// and still requires their complete private layout to match the payload.
+    /// </remarks>
+    public void DeclareRandom(string name, Func<Random?> get, Action<Random?> set)
+    {
+        if (set is null) throw new ArgumentNullException(nameof(set));
+        Add(name,
+            w => WriteRandomState(w, get()),
+            r => ReadRandomState(r, get(), set, name));
+    }
+
     /// <summary>
     /// Declares a deterministic repair that runs after the ordinary state entries in the payload.
     /// </summary>
@@ -364,6 +452,334 @@ public sealed class ModelStateRegistry<T>
         CopyCollectionState(name, current, restored);
     }
 
+    private static void WriteRandomState(BinaryWriter writer, Random? random)
+    {
+        if (random is null) { writer.Write(false); return; }
+        writer.Write(true);
+        WriteRandomObject(
+            writer,
+            random,
+            depth: 0,
+            new HashSet<object>(RandomStateReferenceComparer.Instance));
+    }
+
+    private static void ReadRandomState(
+        BinaryReader reader,
+        Random? random,
+        Action<Random?>? set,
+        string name)
+    {
+        if (!reader.ReadBoolean())
+        {
+            if (set is not null)
+            {
+                set(null);
+                return;
+            }
+
+            if (random is not null)
+            {
+                throw new InvalidDataException(
+                    $"State '{name}' saved a null random generator, but the constructor created one.");
+            }
+            return;
+        }
+
+        if (random is null)
+        {
+            if (set is not null)
+            {
+                set(ReadRandomIntoNewInstance(reader, name));
+                return;
+            }
+
+            throw new InvalidDataException(
+                $"State '{name}' contains random-generator continuation state, but the constructor "
+                + "left the destination generator null.");
+        }
+
+        ReadRandomObject(reader, random, name, depth: 0);
+    }
+
+    private static Random ReadRandomIntoNewInstance(BinaryReader reader, string name)
+    {
+        if (!reader.BaseStream.CanSeek)
+        {
+            throw new InvalidDataException(
+                $"State '{name}' cannot materialize a random generator from a non-seekable stream.");
+        }
+
+        long payloadStart = reader.BaseStream.Position;
+        var candidates = new Func<Random>[]
+        {
+            static () => RandomHelper.CreateSeededRandom(0),
+            static () => RandomHelper.CreateSecureRandom()
+        };
+        var failures = new List<string>(candidates.Length);
+
+        foreach (Func<Random> create in candidates)
+        {
+            reader.BaseStream.Position = payloadStart;
+            Random candidate = create();
+            try
+            {
+                ReadRandomObject(reader, candidate, name, depth: 0);
+                return candidate;
+            }
+            catch (InvalidDataException ex)
+            {
+                failures.Add($"{candidate.GetType().FullName}: {ex.Message}");
+            }
+        }
+
+        reader.BaseStream.Position = payloadStart;
+        throw new InvalidDataException(
+            $"State '{name}' does not match a random implementation produced by RandomHelper: "
+            + string.Join(" | ", failures));
+    }
+
+    private static void WriteRandomObject(
+        BinaryWriter writer,
+        object value,
+        int depth,
+        HashSet<object> ancestors)
+    {
+        if (depth > 32)
+            throw new InvalidOperationException("Random-generator state exceeded the maximum object depth.");
+        if (!ancestors.Add(value))
+            throw new InvalidOperationException("Random-generator state contains an unmarked reference cycle.");
+
+        try
+        {
+            Type runtimeType = value.GetType();
+            writer.Write(runtimeType.FullName ?? runtimeType.Name);
+            FieldInfo[] fields = GetRandomStateFields(runtimeType);
+            writer.Write(fields.Length);
+            foreach (FieldInfo field in fields)
+            {
+                writer.Write(field.DeclaringType?.FullName ?? string.Empty);
+                writer.Write(field.Name);
+                WriteRandomValue(
+                    writer, field.FieldType, field.GetValue(value), depth + 1, ancestors);
+            }
+        }
+        finally
+        {
+            ancestors.Remove(value);
+        }
+    }
+
+    private static object? ReadRandomObject(
+        BinaryReader reader,
+        object destination,
+        string stateName,
+        int depth)
+    {
+        if (depth > 32)
+            throw new InvalidDataException($"State '{stateName}' exceeded the maximum random-state depth.");
+
+        Type runtimeType = destination.GetType();
+        string savedType = reader.ReadString();
+        if (!string.Equals(savedType, runtimeType.FullName, StringComparison.Ordinal))
+        {
+            throw new InvalidDataException(
+                $"State '{stateName}' saved random runtime type '{savedType}', but this runtime "
+                + $"constructed '{runtimeType.FullName}'.");
+        }
+
+        FieldInfo[] fields = GetRandomStateFields(runtimeType);
+        int fieldCount = reader.ReadInt32();
+        if (fieldCount != fields.Length)
+        {
+            throw new InvalidDataException(
+                $"State '{stateName}' saved {fieldCount} fields for '{savedType}', but this runtime "
+                + $"exposes {fields.Length}.");
+        }
+
+        foreach (FieldInfo expected in fields)
+        {
+            string declaringType = reader.ReadString();
+            string fieldName = reader.ReadString();
+            if (!string.Equals(declaringType, expected.DeclaringType?.FullName, StringComparison.Ordinal)
+                || !string.Equals(fieldName, expected.Name, StringComparison.Ordinal))
+            {
+                throw new InvalidDataException(
+                    $"State '{stateName}' expected random field "
+                    + $"'{expected.DeclaringType?.FullName}.{expected.Name}', but the payload contains "
+                    + $"'{declaringType}.{fieldName}'.");
+            }
+
+            object? current = expected.GetValue(destination);
+            object? restored = ReadRandomValue(
+                reader, expected.FieldType, current, stateName, depth + 1);
+            if (expected.FieldType.IsValueType || !ReferenceEquals(current, restored))
+                expected.SetValue(destination, restored);
+        }
+
+        return destination;
+    }
+
+    private static void WriteRandomValue(
+        BinaryWriter writer,
+        Type declaredType,
+        object? value,
+        int depth,
+        HashSet<object> ancestors)
+    {
+        if (!declaredType.IsValueType)
+        {
+            writer.Write(value is not null);
+            if (value is null) return;
+
+            if (declaredType != typeof(string))
+            {
+                bool referencesAncestor = ancestors.Contains(value);
+                writer.Write(referencesAncestor);
+                if (referencesAncestor) return;
+            }
+        }
+
+        if (declaredType.IsEnum)
+        {
+            Type underlyingType = Enum.GetUnderlyingType(declaredType);
+            object underlyingValue = Convert.ChangeType(
+                value!, underlyingType, System.Globalization.CultureInfo.InvariantCulture);
+            WriteRandomValue(writer, underlyingType, underlyingValue, depth, ancestors);
+            return;
+        }
+
+        if (declaredType == typeof(bool)) { writer.Write((bool)value!); return; }
+        if (declaredType == typeof(byte)) { writer.Write((byte)value!); return; }
+        if (declaredType == typeof(sbyte)) { writer.Write((sbyte)value!); return; }
+        if (declaredType == typeof(short)) { writer.Write((short)value!); return; }
+        if (declaredType == typeof(ushort)) { writer.Write((ushort)value!); return; }
+        if (declaredType == typeof(int)) { writer.Write((int)value!); return; }
+        if (declaredType == typeof(uint)) { writer.Write((uint)value!); return; }
+        if (declaredType == typeof(long)) { writer.Write((long)value!); return; }
+        if (declaredType == typeof(ulong)) { writer.Write((ulong)value!); return; }
+        if (declaredType == typeof(float)) { writer.Write((float)value!); return; }
+        if (declaredType == typeof(double)) { writer.Write((double)value!); return; }
+        if (declaredType == typeof(decimal)) { writer.Write((decimal)value!); return; }
+        if (declaredType == typeof(char)) { writer.Write((char)value!); return; }
+        if (declaredType == typeof(string)) { writer.Write((string)value!); return; }
+        if (declaredType == typeof(IntPtr)) { writer.Write(((IntPtr)value!).ToInt64()); return; }
+        if (declaredType == typeof(UIntPtr)) { writer.Write(((UIntPtr)value!).ToUInt64()); return; }
+
+        if (declaredType.IsArray)
+        {
+            var array = (Array)value!;
+            if (array.Rank != 1)
+                throw new NotSupportedException("Random-generator state supports only rank-one arrays.");
+            writer.Write(array.Length);
+            Type elementType = declaredType.GetElementType()!;
+            for (int index = 0; index < array.Length; index++)
+                WriteRandomValue(
+                    writer, elementType, array.GetValue(index), depth + 1, ancestors);
+            return;
+        }
+
+        if (value is null)
+            throw new InvalidOperationException($"Random state value '{declaredType.FullName}' was null.");
+        WriteRandomObject(writer, value, depth + 1, ancestors);
+    }
+
+    private static object? ReadRandomValue(
+        BinaryReader reader,
+        Type declaredType,
+        object? current,
+        string stateName,
+        int depth)
+    {
+        if (!declaredType.IsValueType)
+        {
+            if (!reader.ReadBoolean()) return null;
+            if (declaredType != typeof(string) && reader.ReadBoolean())
+            {
+                if (current is null)
+                {
+                    throw new InvalidDataException(
+                        $"State '{stateName}' contains a random-state back-reference for "
+                        + $"'{declaredType.FullName}', but the constructor left it null.");
+                }
+                return current;
+            }
+        }
+
+        if (declaredType.IsEnum)
+        {
+            Type underlyingType = Enum.GetUnderlyingType(declaredType);
+            object? underlyingValue = ReadRandomValue(
+                reader, underlyingType, null, stateName, depth);
+            return Enum.ToObject(declaredType, underlyingValue!);
+        }
+        if (declaredType == typeof(bool)) return reader.ReadBoolean();
+        if (declaredType == typeof(byte)) return reader.ReadByte();
+        if (declaredType == typeof(sbyte)) return reader.ReadSByte();
+        if (declaredType == typeof(short)) return reader.ReadInt16();
+        if (declaredType == typeof(ushort)) return reader.ReadUInt16();
+        if (declaredType == typeof(int)) return reader.ReadInt32();
+        if (declaredType == typeof(uint)) return reader.ReadUInt32();
+        if (declaredType == typeof(long)) return reader.ReadInt64();
+        if (declaredType == typeof(ulong)) return reader.ReadUInt64();
+        if (declaredType == typeof(float)) return reader.ReadSingle();
+        if (declaredType == typeof(double)) return reader.ReadDouble();
+        if (declaredType == typeof(decimal)) return reader.ReadDecimal();
+        if (declaredType == typeof(char)) return reader.ReadChar();
+        if (declaredType == typeof(string)) return reader.ReadString();
+        if (declaredType == typeof(IntPtr)) return new IntPtr(reader.ReadInt64());
+        if (declaredType == typeof(UIntPtr)) return new UIntPtr(reader.ReadUInt64());
+
+        if (declaredType.IsArray)
+        {
+            int length = reader.ReadInt32();
+            if (length < 0 || length > 1_000_000)
+                throw new InvalidDataException(
+                    $"State '{stateName}' contains invalid random-state array length {length}.");
+            Type elementType = declaredType.GetElementType()!;
+            Array array = (current as Array) is { Rank: 1 } existing && existing.Length == length
+                ? existing
+                : Array.CreateInstance(elementType, length);
+            for (int index = 0; index < length; index++)
+                array.SetValue(ReadRandomValue(
+                    reader, elementType, array.GetValue(index), stateName, depth + 1), index);
+            return array;
+        }
+
+        if (current is null)
+        {
+            throw new InvalidDataException(
+                $"State '{stateName}' cannot restore random field '{declaredType.FullName}' because "
+                + "the constructor left its destination null.");
+        }
+        return ReadRandomObject(reader, current, stateName, depth + 1);
+    }
+
+    private static FieldInfo[] GetRandomStateFields(Type type)
+    {
+        var fields = new List<FieldInfo>();
+        for (Type? current = type; current is not null && current != typeof(object); current = current.BaseType)
+        {
+            fields.AddRange(current.GetFields(
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+                | BindingFlags.DeclaredOnly).Where(field => !field.IsStatic));
+        }
+
+        return fields
+            .OrderBy(field => field.DeclaringType?.FullName, StringComparer.Ordinal)
+            .ThenBy(field => field.MetadataToken)
+            .ToArray();
+    }
+
+    private sealed class RandomStateReferenceComparer : IEqualityComparer<object>
+    {
+        internal static readonly RandomStateReferenceComparer Instance = new();
+
+        public new bool Equals(object? left, object? right) => ReferenceEquals(left, right);
+
+        public int GetHashCode(object value)
+            => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(value);
+    }
+
     private static void WriteObjectState<TState>(BinaryWriter writer, TState? value)
         where TState : class
     {
@@ -419,6 +835,89 @@ public sealed class ModelStateRegistry<T>
         throw new InvalidOperationException(
             $"State '{name}' requested in-place restoration for '{typeof(TState).FullName}', "
             + "which is neither a list nor a dictionary.");
+    }
+
+    /// <summary>
+    /// Preserves drift-detector configuration and accumulated streaming statistics when a detector is
+    /// nested inside generated object state (for example, an adaptive-forest member record).
+    /// </summary>
+    private sealed class DriftDetectorStateJsonConverter : JsonConverter
+    {
+        public override bool CanConvert(Type objectType)
+            => typeof(AiDotNet.DriftDetection.DriftDetectorBase<T>).IsAssignableFrom(objectType);
+
+        public override void WriteJson(JsonWriter writer, object? value, JsonSerializer serializer)
+        {
+            if (value is null) { writer.WriteNull(); return; }
+
+            writer.WriteStartObject();
+            writer.WritePropertyName("detectorType");
+            writer.WriteValue(value.GetType().AssemblyQualifiedName);
+            writer.WritePropertyName("payload");
+            writer.WriteValue(JsonConvert.SerializeObject(
+                value,
+                value.GetType(),
+                DriftDetectorStateSettings));
+            writer.WriteEndObject();
+        }
+
+        public override object? ReadJson(
+            JsonReader reader,
+            Type objectType,
+            object? existingValue,
+            JsonSerializer serializer)
+        {
+            if (reader.TokenType == JsonToken.Null) return null;
+
+            var data = JObject.Load(reader);
+            string? typeName = data["detectorType"]?.Value<string>();
+            string? payload = data["payload"]?.Value<string>();
+            Type? concrete = string.IsNullOrWhiteSpace(typeName)
+                ? objectType
+                : Type.GetType(typeName!, throwOnError: false);
+            if (concrete is null || !objectType.IsAssignableFrom(concrete) || !CanConvert(concrete))
+            {
+                throw new JsonSerializationException(
+                    $"Drift detector type '{typeName}' cannot be restored as '{objectType.FullName}'.");
+            }
+
+            object detector = CreateDetector(concrete);
+            JsonConvert.PopulateObject(payload ?? "{}", detector, DriftDetectorStateSettings);
+            return detector;
+        }
+
+        private static object CreateDetector(Type type)
+        {
+            try
+            {
+                object? built = Activator.CreateInstance(type, nonPublic: true);
+                if (built is not null) return built;
+            }
+            catch (MissingMethodException)
+            {
+            }
+
+            var constructor = type
+                .GetConstructors(System.Reflection.BindingFlags.Public
+                    | System.Reflection.BindingFlags.NonPublic
+                    | System.Reflection.BindingFlags.Instance)
+                .FirstOrDefault(candidate => candidate.GetParameters().Length > 0
+                    && candidate.GetParameters().All(parameter => parameter.IsOptional));
+            if (constructor is not null)
+            {
+                var arguments = new object?[constructor.GetParameters().Length];
+                for (int i = 0; i < arguments.Length; i++) arguments[i] = Type.Missing;
+                object? built = constructor.Invoke(
+                    System.Reflection.BindingFlags.OptionalParamBinding,
+                    binder: null,
+                    arguments,
+                    culture: null);
+                if (built is not null) return built;
+            }
+
+            throw new JsonSerializationException(
+                $"Drift detector type '{type.FullName}' has no constructor callable without arguments.");
+        }
     }
 
     /// <summary>

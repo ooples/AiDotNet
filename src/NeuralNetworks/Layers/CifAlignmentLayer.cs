@@ -406,19 +406,6 @@ public partial class CifAlignmentLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// The generated child manifest supplies reconstruction shape and registration, but a layer
-    /// with no tensor fields of its own has no generated trainable accessor. Delegate the composite
-    /// surface to the predictor so the tape and ParameterBuffer see the tensors used by Forward.
-    /// </remarks>
-    public override IReadOnlyList<Tensor<T>> GetTrainableParameters()
-        => _alphaPredictor.GetTrainableParameters();
-
-    /// <inheritdoc/>
-    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
-        => _alphaPredictor.SetTrainableParameters(parameters);
-
-    /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
         => _alphaPredictor.GetParameterGradients();
 

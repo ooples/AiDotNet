@@ -76,6 +76,9 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             {
                 Coefficients = value;
             }));
+        RegisterParameterComponent(new ScalarParameterSource<T>(
+            () => Intercept,
+            value => Intercept = value));
     }
     /// <summary>
     /// Relative singular-value tolerance used by the rank-revealing SVD fallback.
@@ -114,6 +117,9 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
     /// </remarks>
     public Vector<T> Coefficients { get; private set; }
 
+    /// <summary>Gets the fitted constant term of the linear regression model.</summary>
+    public T Intercept { get; private set; }
+
     /// <summary>
     /// Cached feature importance to avoid recreating on every GetModelMetadata() call.
     /// </summary>
@@ -123,14 +129,6 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
     /// The default loss function used by this model for gradient computation.
     /// </summary>
     private readonly ILossFunction<T> _defaultLossFunction;
-
-    /// <summary>
-    /// Initializes an empty vector model whose coefficient shape will be supplied during restoration.
-    /// </summary>
-    public VectorModel()
-        : this(Vector<T>.Empty())
-    {
-    }
 
     /// <summary>
     /// Initializes a new instance of the VectorModel class with the specified coefficients.
@@ -164,6 +162,7 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
     {
         Guard.NotNull(coefficients);
         Coefficients = coefficients;
+        Intercept = NumOps.Zero;
         _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
     }
 
@@ -315,7 +314,7 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
 
         // Compute gradient w.r.t. coefficients: ∂L/∂coefficients = (1/n) * X^T * ∂L/∂y_pred
         // Pre-extract columns from input for Engine.DotProduct
-        var gradients = new Vector<T>(Coefficients.Length);
+        var gradients = new Vector<T>(Coefficients.Length + 1);
         for (int j = 0; j < Coefficients.Length; j++)
         {
             var col = new Vector<T>(input.Rows);
@@ -326,6 +325,13 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             // gradient[j] = (1/n) * X[:,j] · predictionGradient
             gradients[j] = NumOps.Divide(Engine.DotProduct(col, predictionGradient), NumOps.FromDouble(input.Rows));
         }
+        T interceptGradient = NumOps.Zero;
+        for (int i = 0; i < predictionGradient.Length; i++)
+        {
+            interceptGradient = NumOps.Add(interceptGradient, predictionGradient[i]);
+        }
+        gradients[Coefficients.Length] = NumOps.Divide(
+            interceptGradient, NumOps.FromDouble(input.Rows));
 
         return gradients;
     }
@@ -353,10 +359,10 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
     {
         if (gradients == null)
             throw new ArgumentNullException(nameof(gradients));
-        if (gradients.Length != Coefficients.Length)
+        if (gradients.Length != Coefficients.Length + 1)
         {
             throw new ArgumentException(
-                $"Gradient vector length ({gradients.Length}) must match coefficient count ({Coefficients.Length})",
+                $"Gradient vector length ({gradients.Length}) must match coefficient count plus intercept ({Coefficients.Length + 1})",
                 nameof(gradients));
         }
 
@@ -366,6 +372,8 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             T update = NumOps.Multiply(learningRate, gradients[i]);
             Coefficients[i] = NumOps.Subtract(Coefficients[i], update);
         }
+        Intercept = NumOps.Subtract(
+            Intercept, NumOps.Multiply(learningRate, gradients[Coefficients.Length]));
 
         // Invalidate cached feature importance since coefficients changed
         _cachedFeatureImportance = null;
@@ -410,7 +418,7 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             throw new ArgumentException($"Input vector length ({input.Length}) must match coefficients length ({Coefficients.Length}).", nameof(input));
         }
 
-        return Engine.DotProduct(Coefficients, input);
+        return NumOps.Add(Engine.DotProduct(Coefficients, input), Intercept);
     }
 
     /// <summary>
@@ -471,10 +479,41 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
 
         try
         {
-            // Implement a simple linear regression using the normal equation
-            // (X^T * X)^-1 * X^T * y
-            Matrix<T> XTranspose = X.Transpose();
-            Matrix<T> XTX = XTranspose * X;
+            // Bishop's linear-regression model includes a constant basis function. Solve the slopes on
+            // centered data, then recover the intercept from the feature and target means. Besides being
+            // algebraically equivalent to augmenting X with a column of ones, centering keeps a uniform
+            // target translation entirely in the intercept and improves the normal equation's conditioning.
+            var featureMeans = new Vector<T>(X.Columns);
+            T targetMean = NumOps.Zero;
+            for (int row = 0; row < X.Rows; row++)
+            {
+                targetMean = NumOps.Add(targetMean, y[row]);
+                for (int column = 0; column < X.Columns; column++)
+                {
+                    featureMeans[column] = NumOps.Add(featureMeans[column], X[row, column]);
+                }
+            }
+
+            T sampleCount = NumOps.FromDouble(X.Rows);
+            targetMean = NumOps.Divide(targetMean, sampleCount);
+            for (int column = 0; column < X.Columns; column++)
+            {
+                featureMeans[column] = NumOps.Divide(featureMeans[column], sampleCount);
+            }
+
+            var centeredX = new Matrix<T>(X.Rows, X.Columns);
+            var centeredY = new Vector<T>(y.Length);
+            for (int row = 0; row < X.Rows; row++)
+            {
+                centeredY[row] = NumOps.Subtract(y[row], targetMean);
+                for (int column = 0; column < X.Columns; column++)
+                {
+                    centeredX[row, column] = NumOps.Subtract(X[row, column], featureMeans[column]);
+                }
+            }
+
+            Matrix<T> XTranspose = centeredX.Transpose();
+            Matrix<T> XTX = XTranspose * centeredX;
 
             // Normal equations are fast for a full-rank system. When rank deficient, use a
             // scale-aware truncated SVD of X itself. Unlike an absolute ridge on X^T·X, this is
@@ -483,18 +522,24 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             if (XTX.IsInvertible())
             {
                 Matrix<T> XTXInverse = XTX.Inverse();
-                Matrix<T> XTY = XTranspose * Matrix<T>.FromVector(y);
+                Matrix<T> XTY = XTranspose * Matrix<T>.FromVector(centeredY);
                 newCoefficients = (XTXInverse * XTY).GetColumn(0);
             }
             else
             {
-                newCoefficients = SolveMinimumNorm(X, y);
+                newCoefficients = SolveMinimumNorm(centeredX, centeredY);
             }
 
             // Update the coefficients
             for (int i = 0; i < FeatureCount; i++)
             {
                 Coefficients[i] = newCoefficients[i];
+            }
+            Intercept = targetMean;
+            for (int column = 0; column < FeatureCount; column++)
+            {
+                Intercept = NumOps.Subtract(
+                    Intercept, NumOps.Multiply(featureMeans[column], newCoefficients[column]));
             }
 
             // Invalidate cached feature importance
@@ -863,8 +908,22 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             throw new ArgumentNullException(nameof(parameters));
         }
 
-        // Create a new model with the provided parameters
-        // Allow different sizes to support genetic algorithm optimization which may resize models
+        // The registered parameter vector is [coefficients..., intercept]. Preserve the historical
+        // coefficients-only form for callers that deliberately resize a genetic candidate.
+        if (parameters.Length == FeatureCount + 1)
+        {
+            var coefficients = new Vector<T>(FeatureCount);
+            for (int i = 0; i < FeatureCount; i++)
+            {
+                coefficients[i] = parameters[i];
+            }
+
+            return new VectorModel<T>(coefficients)
+            {
+                Intercept = parameters[FeatureCount]
+            };
+        }
+
         return new VectorModel<T>(parameters);
     }
 

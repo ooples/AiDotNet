@@ -1122,7 +1122,8 @@ internal static class FinanceModelTestFactory
         SetInt(options, "BatchSize", 4);
         SetInt(options, "ReplayBufferSize", 32);
         SetInt(options, "TargetUpdateFrequency", 10);
-        SetInt(options, "WarmupSteps", 0);
+        // Preserve each model's scheduler default. Zero is not a universally valid shortcut:
+        // paper-faithful schedules such as TOTO require a positive warmup interval.
         SetInt(options, "StateSize", 8);
         SetInt(options, "ActionSize", 3);
         SetInt(options, "MaxInventory", 10);

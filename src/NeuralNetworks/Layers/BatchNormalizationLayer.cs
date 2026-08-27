@@ -993,13 +993,12 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
                 "Batch-normalization affine operands must have identical shapes.");
         }
 
-        var scale = new Tensor<T>(gamma._shape);
-        var shift = new Tensor<T>(gamma._shape);
-        for (int i = 0; i < scale.Length; i++)
-        {
-            scale[i] = NumOps.Divide(gamma[i], standardDeviation[i]);
-            shift[i] = NumOps.Subtract(beta[i], NumOps.Multiply(scale[i], runningMean[i]));
-        }
+        // Keep the affine transform on the active tape. Constructing fresh tensors and filling them
+        // through scalar indexing reproduces the forward values but severs gamma/beta from the graph,
+        // making eval-mode fine tuning and every composite that contains BatchNorm report zero
+        // parameter gradients.
+        var scale = Engine.TensorDivide(gamma, standardDeviation);
+        var shift = Engine.TensorSubtract(beta, Engine.TensorMultiply(scale, runningMean));
 
         return (scale, shift);
     }

@@ -957,6 +957,7 @@ public partial class NetworkState<T> : AiDotNet.Models.ModelBase<T, object, obje
     private sealed class Record
     {
         public AiDotNet.Tensors.LinearAlgebra.Matrix<T> Covariance { get; set; } = new();
+        public AiDotNet.Interfaces.ILayer<T>? Layer { get; set; }
     }
 }";
 
@@ -1281,6 +1282,65 @@ public partial class GeneratedSerializationModel<T> : GeneratedSerializationBase
     }
 
     [Fact]
+    public void ModelStateGenerator_PersistsRandomContinuationState()
+    {
+        const string source = @"
+public partial class RandomBackedModel<T> : AiDotNet.Models.ModelBase<T, object, object>
+{
+    private readonly System.Random _random =
+        AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelStateGenerator(), source);
+
+        Assert.Contains(
+            "state.DeclareRandom(\"RandomBackedModel._random\", () => _random);",
+            generated,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ModelStateGenerator_AssignsLazilyCreatedRandomContinuationState()
+    {
+        const string source = @"
+public partial class LazyRandomBackedModel<T> : AiDotNet.Models.ModelBase<T, object, object>
+{
+    private System.Random? _random;
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelStateGenerator(), source);
+
+        Assert.Contains(
+            "state.DeclareRandom(\"LazyRandomBackedModel._random\", () => _random, v => _random = v);",
+            generated,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ModelStateGenerator_PersistsCollectionsContainingDriftDetectors()
+    {
+        const string source = @"
+using System.Collections.Generic;
+public partial class DetectorBackedModel<T> : AiDotNet.Models.ModelBase<T, object, object>
+{
+    private sealed class Member
+    {
+        public AiDotNet.DriftDetection.DDMDriftDetector<T>? Detector { get; set; }
+        public long Count { get; set; }
+    }
+
+    private readonly List<Member> _members = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelStateGenerator(), source);
+
+        Assert.Contains(
+            "state.DeclareObjectInPlace(\"DetectorBackedModel._members\", () => _members);",
+            generated,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ModelGenerator_NestedNetworksUseReadinessAwareLayerAndTensorTraversal()
     {
         await Task.Yield();
@@ -1536,6 +1596,39 @@ public partial class EncapsulatedNetwork<T> : AiDotNet.NeuralNetworks.NeuralNetw
 
         Assert.Contains("_stem.EnumerateLayers()", generated, StringComparison.Ordinal);
         Assert.Contains("SelectMany(__owner => __owner.EnumerateLayers())", generated,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ModelGenerator_TraversesAndRebindsLayerGraphsAndNestedLayerCollections()
+    {
+        const string source = @"
+using System.Collections.Generic;
+public partial class GraphBackedNetwork<T> : AiDotNet.NeuralNetworks.NeuralNetworkBase<T>
+{
+    private AiDotNet.NeuralNetworks.Graph.LayerGraph<T>? _graph;
+    private readonly List<List<AiDotNet.Interfaces.ILayer<T>>> _stages = new();
+}";
+
+        string generated = Run(new AiDotNet.Generators.ModelParameterGenerator(), source);
+
+        Assert.Contains("_graph?.ToLayerList()", generated, StringComparison.Ordinal);
+        Assert.Contains(
+            "_graph = RebindLayerGraphAlias(_graph, previousLayers, replacementLayers, nameof(_graph));",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "__destination._graph = CopyLayerGraphAlias(_graph, __destination._graph, Layers, __destination.Layers, nameof(_graph));",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains("SelectMany(__layers => __layers)", generated, StringComparison.Ordinal);
+        Assert.Contains(
+            "RebindNestedLayerAliasCollections(_stages, previousLayers, replacementLayers, nameof(_stages));",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "CopyNestedLayerAliasCollections(_stages, __destination._stages, Layers, __destination.Layers, nameof(_stages));",
+            generated,
             StringComparison.Ordinal);
     }
 }

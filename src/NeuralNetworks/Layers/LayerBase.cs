@@ -6048,14 +6048,27 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         }
 
         if (savedShape is not null && IsShapeResolved
-            && !InputShape.SequenceEqual(savedShape))
+            && (!InputShape.SequenceEqual(savedShape)
+                || (IsShapePreserving && !OutputShape.SequenceEqual(savedShape))))
         {
             // A construction-sized layer can still adapt its input width at runtime. Restoring
             // [200, 9] Dense weights into a fresh layer already resolved at [30, 9] previously
             // kept the stale [30] declaration, so TryAdoptRestoredParameters correctly rejected
             // the checkpoint on first forward. The checkpoint's concrete shape is authoritative
             // at this value boundary; update the common shape metadata before adoption.
-            UpdateInputShape((int[])savedShape.Clone());
+            if (IsShapePreserving)
+            {
+                // A shape-preserving layer publishes the same geometry on both sides. Updating
+                // only InputShape leaves OutputShape at the constructor placeholder, so a
+                // parameter-free layer can deserialize successfully yet remain a mixed-shape
+                // execution node. Restore the invariant atomically through the normal resolution
+                // path (ActivationLayer after a runtime-rank change is the minimal reproducer).
+                ResolveShapes((int[])savedShape.Clone(), (int[])savedShape.Clone());
+            }
+            else
+            {
+                UpdateInputShape((int[])savedShape.Clone());
+            }
         }
         else if (savedShape is not null && !IsShapeResolved)
         {

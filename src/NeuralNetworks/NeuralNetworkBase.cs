@@ -3184,11 +3184,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
         replaced = new List<IDisposable>();
         failure = string.Empty;
+        var previousDestinationLayers = destination._layers.ToArray();
 
         ILayer<T> Reconstruct(LayerBase<T> sourceLayer)
         {
-            var metadata = new Dictionary<string, object>(StringComparer.Ordinal);
-            foreach (var pair in sourceLayer.GetMetadata()) metadata[pair.Key] = pair.Value;
+            var metadata = CaptureLayerConstructionValuesForClone(sourceLayer);
             return DeserializationHelper.CreateLayerFromType<T>(
                 GetPersistentLayerTypeName(sourceLayer),
                 sourceLayer.GetInputShape(),
@@ -3239,6 +3239,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             destination._layers.Clear();
             destination._layers.AddRange(reconstructed);
             destination.InvalidateParameterCountCache();
+            destination.RebindLayerAliases(previousDestinationLayers, destination._layers);
             return true;
         }
 
@@ -3280,8 +3281,20 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // before tensor adoption so generated shape-derived fields and the tensor registry agree.
             if (matches)
             {
-                matches = sourceLayer.GetInputShape().SequenceEqual(destinationLayer.GetInputShape())
+                bool shapesMatch = sourceLayer.GetInputShape().SequenceEqual(destinationLayer.GetInputShape())
                     && sourceLayer.GetOutputShape().SequenceEqual(destinationLayer.GetOutputShape());
+                if (!shapesMatch && TryRestoreLayerStateForClone(sourceLayer, destinationLayer)
+                    && sourceLayer.GetInputShape().SequenceEqual(destinationLayer.GetInputShape())
+                    && sourceLayer.GetOutputShape().SequenceEqual(destinationLayer.GetOutputShape()))
+                {
+                    // Preserve the constructor-created layer object whenever only runtime-resolved
+                    // state differs. Custom execution graphs can retain that object's identity several
+                    // containers deep; restoring it in place updates every such alias and avoids
+                    // replacing/disposal of a layer that the destination still legitimately references.
+                    continue;
+                }
+
+                matches = shapesMatch;
             }
 
             if (matches) continue;
@@ -3308,6 +3321,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             if (!ReferenceEquals(_layers[item.Index], item.Previous))
                 replaced.Add(item.Previous);
         }
+
+        if (pending.Count > 0)
+            destination.RebindLayerAliases(previousDestinationLayers, destination._layers);
 
         return true;
     }
@@ -3509,6 +3525,69 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             "or mutable ICollection<TLayer>, or provide an explicit RebindLayerAliases override.");
     }
 
+    /// <summary>Rebinds nested generated collection views of the canonical layer graph.</summary>
+    protected static void RebindNestedLayerAliasCollections<TLayer>(
+        IEnumerable<IEnumerable<TLayer>>? aliasGroups,
+        IReadOnlyList<ILayer<T>> previousLayers,
+        IReadOnlyList<ILayer<T>> replacementLayers,
+        string memberName)
+        where TLayer : class, ILayer<T>
+    {
+        if (aliasGroups is null)
+            return;
+
+        int groupIndex = 0;
+        foreach (var aliases in aliasGroups)
+        {
+            RebindLayerAliasCollection(
+                aliases, previousLayers, replacementLayers,
+                memberName + "[" + groupIndex + "]");
+            groupIndex++;
+        }
+    }
+
+    /// <summary>Rebuilds a graph view so every canonical node targets the replacement graph.</summary>
+    protected static Graph.LayerGraph<T>? RebindLayerGraphAlias(
+        Graph.LayerGraph<T>? graph,
+        IReadOnlyList<ILayer<T>> previousLayers,
+        IReadOnlyList<ILayer<T>> replacementLayers,
+        string memberName)
+    {
+        if (graph is null)
+            return null;
+
+        var nodes = new List<Graph.LayerNode<T>>(graph.Nodes.Count);
+        bool changed = false;
+        foreach (var node in graph.Nodes)
+        {
+            var replacement = node.Layer is null
+                ? null
+                : RebindLayerAlias(node.Layer, previousLayers, replacementLayers,
+                    memberName + ".Nodes[" + node.Id + "]");
+            changed |= !ReferenceEquals(node.Layer, replacement);
+            nodes.Add(new Graph.LayerNode<T>(
+                node.Id, replacement, node.Inputs, node.EdgeTransform, node.EdgeDescription));
+        }
+
+        return changed ? new Graph.LayerGraph<T>(nodes, graph.OutputNodeId) : graph;
+    }
+
+    /// <summary>Fails fast when a readonly graph contains stale canonical-layer aliases.</summary>
+    protected static void ValidateReadonlyLayerGraphAlias(
+        Graph.LayerGraph<T>? graph,
+        IReadOnlyList<ILayer<T>> previousLayers,
+        IReadOnlyList<ILayer<T>> replacementLayers,
+        string memberName)
+    {
+        var rebound = RebindLayerGraphAlias(graph, previousLayers, replacementLayers, memberName);
+        if (!ReferenceEquals(graph, rebound))
+        {
+            throw new InvalidOperationException(
+                $"Readonly layer graph member '{memberName}' aliases the canonical Layers graph and cannot " +
+                "be rebound after replacement. Make the graph member writable.");
+        }
+    }
+
     /// <summary>Fails fast when a readonly scalar member is a stale canonical-layer alias.</summary>
     protected static void ValidateReadonlyLayerAlias<TLayer>(
         TLayer? alias,
@@ -3633,6 +3712,103 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             throw new InvalidOperationException(
                 $"Generated layer alias collection '{memberName}' must be mutable to receive the clone's canonical graph.");
+        }
+    }
+
+    /// <summary>Transfers nested generated collection views from a source graph to a clone graph.</summary>
+    protected static void CopyNestedLayerAliasCollections<TLayer>(
+        IEnumerable<IEnumerable<TLayer>>? sourceGroups,
+        IEnumerable<IEnumerable<TLayer>>? destinationGroups,
+        IReadOnlyList<ILayer<T>> sourceLayers,
+        IReadOnlyList<ILayer<T>> destinationLayers,
+        string memberName)
+        where TLayer : class, ILayer<T>
+    {
+        if (sourceGroups is null || destinationGroups is null)
+            return;
+
+        var source = sourceGroups.ToList();
+        var destination = destinationGroups.ToList();
+        if (source.Count != destination.Count)
+        {
+            throw new InvalidOperationException(
+                $"Generated nested layer alias collection '{memberName}' has {destination.Count} groups " +
+                $"in the clone but {source.Count} in the source.");
+        }
+
+        for (int groupIndex = 0; groupIndex < source.Count; groupIndex++)
+        {
+            CopyLayerAliasCollection(
+                source[groupIndex], destination[groupIndex], sourceLayers, destinationLayers,
+                memberName + "[" + groupIndex + "]");
+        }
+    }
+
+    /// <summary>Transfers a graph view while preserving the clone's own edge delegates and topology.</summary>
+    protected static Graph.LayerGraph<T>? CopyLayerGraphAlias(
+        Graph.LayerGraph<T>? sourceGraph,
+        Graph.LayerGraph<T>? destinationGraph,
+        IReadOnlyList<ILayer<T>> sourceLayers,
+        IReadOnlyList<ILayer<T>> destinationLayers,
+        string memberName)
+    {
+        if (sourceGraph is null)
+            return null;
+        if (destinationGraph is null || sourceGraph.Nodes.Count != destinationGraph.Nodes.Count)
+        {
+            throw new InvalidOperationException(
+                $"Generated layer graph alias '{memberName}' must have matching source and clone topology.");
+        }
+        if (sourceGraph.OutputNodeId != destinationGraph.OutputNodeId)
+        {
+            throw new InvalidOperationException(
+                $"Generated layer graph alias '{memberName}' has a different output node in the clone.");
+        }
+
+        var nodes = new List<Graph.LayerNode<T>>(destinationGraph.Nodes.Count);
+        for (int index = 0; index < sourceGraph.Nodes.Count; index++)
+        {
+            var sourceNode = sourceGraph.Nodes[index];
+            var destinationNode = destinationGraph.Nodes[index];
+            if (sourceNode.Id != destinationNode.Id
+                || !sourceNode.Inputs.SequenceEqual(destinationNode.Inputs))
+            {
+                throw new InvalidOperationException(
+                    $"Generated layer graph alias '{memberName}' differs at node {index} in the clone.");
+            }
+
+            var replacement = sourceNode.Layer is null
+                ? null
+                : CopyLayerAlias(
+                    sourceNode.Layer, destinationNode.Layer, sourceLayers, destinationLayers,
+                    memberName + ".Nodes[" + sourceNode.Id + "]");
+            nodes.Add(new Graph.LayerNode<T>(
+                destinationNode.Id, replacement, destinationNode.Inputs,
+                destinationNode.EdgeTransform, destinationNode.EdgeDescription));
+        }
+
+        return new Graph.LayerGraph<T>(nodes, destinationGraph.OutputNodeId);
+    }
+
+    /// <summary>Validates that a readonly clone graph already targets the clone's canonical layers.</summary>
+    protected static void ValidateCopiedReadonlyLayerGraphAlias(
+        Graph.LayerGraph<T>? sourceGraph,
+        Graph.LayerGraph<T>? destinationGraph,
+        IReadOnlyList<ILayer<T>> sourceLayers,
+        IReadOnlyList<ILayer<T>> destinationLayers,
+        string memberName)
+    {
+        var copied = CopyLayerGraphAlias(
+            sourceGraph, destinationGraph, sourceLayers, destinationLayers, memberName);
+        if (copied is null && destinationGraph is null)
+            return;
+        if (copied is null || destinationGraph is null
+            || copied.Nodes.Count != destinationGraph.Nodes.Count
+            || copied.Nodes.Where((node, index) =>
+                !ReferenceEquals(node.Layer, destinationGraph.Nodes[index].Layer)).Any())
+        {
+            throw new InvalidOperationException(
+                $"Readonly layer graph member '{memberName}' does not target the clone's canonical Layers graph.");
         }
     }
 
@@ -15060,6 +15236,40 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             var src = srcLayers[i];
             var dst = dstLayers[i];
 
+            // The reflection walk also contains parameter-free nested layers. Their resolved
+            // geometry is still persistent execution state even though they have no tensors for
+            // the parameter-count preflight below to inspect. Leaving one at its constructor shape
+            // produces a clone with a mixed source/destination graph (GraFPrint's nested activation
+            // layers are one concrete case). Restore any comparable resolved-shape mismatch in place
+            // before adopting tensors so every alias to the constructor-created object stays valid.
+            if (src is LayerBase<T> resolvedSource
+                && dst is LayerBase<T> resolvedDestination
+                && resolvedSource.IsShapeResolved)
+            {
+                bool shapesComparable = true;
+                bool resolvedShapesMatch;
+                try
+                {
+                    resolvedShapesMatch = resolvedDestination.IsShapeResolved
+                        && resolvedSource.GetInputShape().SequenceEqual(resolvedDestination.GetInputShape())
+                        && resolvedSource.GetOutputShape().SequenceEqual(resolvedDestination.GetOutputShape());
+                }
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+                {
+                    shapesComparable = false;
+                    resolvedShapesMatch = true;
+                }
+
+                if (shapesComparable && !resolvedShapesMatch
+                    && (!TryRestoreLayerStateForClone(resolvedSource, resolvedDestination)
+                        || !resolvedSource.GetInputShape().SequenceEqual(resolvedDestination.GetInputShape())
+                        || !resolvedSource.GetOutputShape().SequenceEqual(resolvedDestination.GetOutputShape())))
+                {
+                    return RejectCandidate(
+                        $"trainable layer {i} ({src.GetType().Name}) could not restore its resolved execution shape");
+                }
+            }
+
             // Resolve a lazy destination LayerBase from the source's input shape so its parameter list
             // exists (and won't re-initialize over the shared tensors on first forward) before we map it.
             // Trigger on "the destination has no parameter tensors yet", not merely on "its shape is
@@ -15408,8 +15618,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             }
             if (borrowedSource is null) continue;
 
-            var metadata = new Dictionary<string, object>(StringComparer.Ordinal);
-            foreach (var pair in borrowedSource.GetMetadata()) metadata[pair.Key] = pair.Value;
+            var metadata = CaptureLayerConstructionValuesForClone(borrowedSource);
 
             ILayer<T> reconstructed;
             try
@@ -15462,6 +15671,25 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
+    /// Captures both durable metadata and the live constructor components used by an in-memory clone.
+    /// </summary>
+    private static Dictionary<string, object> CaptureLayerConstructionValuesForClone(
+        LayerBase<T> source)
+    {
+        var values = new Dictionary<string, object>(StringComparer.Ordinal);
+        foreach (var pair in source.GetMetadata())
+            values[pair.Key] = pair.Value;
+
+        // Durable metadata can name a component type, but it cannot retain per-instance constructor
+        // state that is not encoded in that type name. The layer-state generator already exposes the
+        // live-object channel used by LayerCloning (for example LeakyReLU(0.2)); use the same contract
+        // when NeuralNetworkBase reconstructs a topology slot so clone behavior cannot fall back to a
+        // component's default configuration.
+        source.CaptureConstructionObjects(values);
+        return values;
+    }
+
+    /// <summary>
     /// Restores one mismatched child through the same layout-aware contract used by checkpoints.
     /// This is a localized eager fallback: all matching layers remain copy-on-write shared.
     /// </summary>
@@ -15470,7 +15698,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         LayerBase<T> destination)
     {
         if (source.GetType() != destination.GetType()) return false;
-        if (!HasEquivalentLayerConstructionState(source, destination)) return false;
+        if (!HasEquivalentLayerConstructionState(source, destination))
+        {
+            if (IsCloneRejectionTracingEnabled())
+            {
+                static string DescribeMetadata(LayerBase<T> layer)
+                    => string.Join(", ", layer.GetMetadata()
+                        .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                        .Select(pair => pair.Key + "=" + pair.Value));
+
+                throw new InvalidOperationException(
+                    $"Cannot restore {source.GetType().Name} in place because construction metadata differs. " +
+                    $"Source: [{DescribeMetadata(source)}]. Destination: [{DescribeMetadata(destination)}].");
+            }
+
+            return false;
+        }
 
         try
         {
@@ -15491,9 +15734,23 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                                    or InvalidOperationException
                                    or NotSupportedException)
         {
+            if (IsCloneRejectionTracingEnabled())
+            {
+                throw new InvalidOperationException(
+                    $"Could not restore {source.GetType().Name} through its layer persistence contract: " +
+                    $"{ex.GetType().Name}: {ex.Message}",
+                    ex);
+            }
+
             return false;
         }
     }
+
+    private static bool IsCloneRejectionTracingEnabled()
+        => string.Equals(
+            Environment.GetEnvironmentVariable("AIDOTNET_TRACE_CLONE_REJECTION"),
+            "1",
+            StringComparison.Ordinal);
 
     /// <summary>
     /// Determines whether a value-only in-place restore can safely retain the destination instance.

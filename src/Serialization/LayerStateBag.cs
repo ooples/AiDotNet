@@ -697,10 +697,54 @@ public readonly struct LayerStateBag
             return cloned;
         }
 
+        // Scalar activation parameters are often stored in the network's numeric type even though
+        // the public constructor accepts double (LeakyReLU<T>.Alpha is T, while its constructor is
+        // LeakyReLU(double)). CloneEngine's exact-type constructor mapping therefore treats the
+        // optional argument as absent and replays its default, silently changing LeakyReLU(0.2) to
+        // LeakyReLU(0.01). Reconstruct this common immutable activation contract explicitly from the
+        // live value before falling back to the general configuration copier. This mirrors the Alpha
+        // metadata contract used for durable layer reconstruction and still returns a distinct object.
+        if (TryCloneParameterizedActivation(source, out object? configuredActivation))
+        {
+            visited[source] = configuredActivation;
+            return configuredActivation;
+        }
+
         object structural = AiDotNet.Models.CloneEngine.CopyConfiguration(source);
         visited[source] = structural;
         CopyAttributedConstructionState(source, structural, visited);
         return structural;
+    }
+
+    private static bool TryCloneParameterizedActivation(object source, out object clone)
+    {
+        clone = null!;
+        Type type = source.GetType();
+        bool isActivation = type.GetInterfaces().Any(iface =>
+            iface.IsGenericType
+            && (iface.GetGenericTypeDefinition() == typeof(AiDotNet.Interfaces.IActivationFunction<>)
+                || iface.GetGenericTypeDefinition() == typeof(AiDotNet.Interfaces.IVectorActivationFunction<>)));
+        if (!isActivation) return false;
+
+        PropertyInfo? alpha = type.GetProperty(
+            "Alpha",
+            BindingFlags.Public | BindingFlags.Instance);
+        ConstructorInfo? constructor = type.GetConstructor(new[] { typeof(double) });
+        if (alpha?.GetValue(source) is not object value || constructor is null)
+            return false;
+
+        try
+        {
+            double converted = Convert.ToDouble(value, CultureInfo.InvariantCulture);
+            clone = constructor.Invoke(new object[] { converted });
+            return true;
+        }
+        catch (Exception ex) when (ex is FormatException
+                                   or InvalidCastException
+                                   or OverflowException)
+        {
+            return false;
+        }
     }
 
     private static void CopyAttributedConstructionState(

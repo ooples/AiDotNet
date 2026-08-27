@@ -2734,7 +2734,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     continue;
                 }
 
-                bool canConstruct = (model.HasParameterlessConstructor || model.HasArchitectureOnlyConstructor) &&
+                bool canConstruct = (model.HasParameterlessConstructor
+                                    || model.HasArchitectureOnlyConstructor
+                                    || model.HasVectorOnlyConstructor) &&
                                     IsCompatibleWithFamily(model, family.Value);
 
                 // Don't emit a runtime-throwing NotImplementedException stub
@@ -2756,9 +2758,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 {
                     // Report the two causes SEPARATELY - they have different fixes, and lumping them
                     // together is what made this class of gap unreadable in the first place.
-                    bool hasCtor = model.HasParameterlessConstructor || model.HasArchitectureOnlyConstructor;
+                    bool hasCtor = model.HasParameterlessConstructor
+                                || model.HasArchitectureOnlyConstructor
+                                || model.HasVectorOnlyConstructor;
                     string reason = !hasCtor
-                        ? "it has neither a parameterless nor an architecture-only constructor, so the "
+                        ? "it has no supported parameterless, architecture-only, or vector-only constructor, so the "
                           + "generated fixture has no way to build it"
                         : $"it resolves to test family {family.Value}, whose fixture requires an "
                           + $"interface this type does not implement (see IsCompatibleWithFamily); the "
@@ -3104,6 +3108,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // either parameterless, or all parameters have default values.
         bool hasParameterlessCtor = false;
         bool hasArchitectureOnlyCtor = false;
+        bool hasVectorOnlyCtor = false;
         string? architectureParamTypeName = null;
         foreach (var ctor in modelClass.InstanceConstructors)
         {
@@ -3137,6 +3142,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             if (ctor.Parameters.Length >= 1)
             {
                 var firstParam = ctor.Parameters[0];
+                bool restOptional = true;
+                for (int pi = 1; pi < ctor.Parameters.Length; pi++)
+                {
+                    // Only explicit default values make a parameter optional.
+                    // Nullable type annotations (string?) do NOT imply optionality.
+                    if (!ctor.Parameters[pi].HasExplicitDefaultValue)
+                    {
+                        restOptional = false;
+                        break;
+                    }
+                }
+
+                if (IsExactlyVector(firstParam.Type)
+                    && !firstParam.HasExplicitDefaultValue
+                    && restOptional)
+                {
+                    hasVectorOnlyCtor = true;
+                }
+
                 // Check if the first parameter type IS exactly NeuralNetworkArchitecture<T>.
                 // Derived types (CodeSynthesisArchitecture<T>, etc.) have incompatible constructors
                 // and need manual test classes — they stay as NotImplementedException.
@@ -3144,17 +3168,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
                 if (isArchitectureParam && !firstParam.HasExplicitDefaultValue)
                 {
-                    bool restOptional = true;
-                    for (int pi = 1; pi < ctor.Parameters.Length; pi++)
-                    {
-                        // Only explicit default values make a parameter optional.
-                        // Nullable type annotations (string?) do NOT imply optionality.
-                        if (!ctor.Parameters[pi].HasExplicitDefaultValue)
-                        {
-                            restOptional = false;
-                            break;
-                        }
-                    }
                     if (restOptional)
                     {
                         hasArchitectureOnlyCtor = true;
@@ -3196,6 +3209,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             UsesVectorOutput = usesVectorOutput,
             HasParameterlessConstructor = hasParameterlessCtor,
             HasArchitectureOnlyConstructor = hasArchitectureOnlyCtor,
+            HasVectorOnlyConstructor = hasVectorOnlyCtor,
             InheritsFromExcludedBase = InheritsFromAnyExcludedBase(modelClass),
             RequestsFloatScaffold = HasFloatScaffoldAttribute(modelClass),
             ArchitectureParamTypeName = architectureParamTypeName,
@@ -3478,6 +3492,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Fallback: metadata name check if symbol resolution failed
         return originalDef.MetadataName == "NeuralNetworkArchitecture`1" &&
                originalDef.ContainingNamespace.ToDisplayString() == "AiDotNet.NeuralNetworks";
+    }
+
+    /// <summary>Checks whether a constructor parameter is exactly Vector&lt;T&gt;.</summary>
+    private static bool IsExactlyVector(ITypeSymbol type)
+    {
+        if (type is not INamedTypeSymbol { IsGenericType: true } namedType)
+            return false;
+
+        var originalDef = namedType.OriginalDefinition;
+        return originalDef.MetadataName == "Vector`1"
+            && originalDef.ContainingNamespace.ToDisplayString() == "AiDotNet.Tensors.LinearAlgebra";
     }
 
     /// <summary>
@@ -10711,6 +10736,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 3))";
             }
+            else if (model.HasVectorOnlyConstructor && model.TypeParameterCount == 1)
+            {
+                // A coefficient-backed regression model is only meaningful when its coefficient width
+                // matches the generated fixture's three input features. Supplying that public constructor
+                // argument keeps every strict invariant active without a serialization-only empty model.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "new AiDotNet.Tensors.LinearAlgebra.Vector<double>(3))";
+            }
             // These models expose convenient parameterless constructors that intentionally build their
             // paper/default scale. Do not let the generic fallback shadow their explicit CI-smoke branches
             // below. Production behavior is unchanged; only generated fixtures use the bounded constructors.
@@ -13605,15 +13638,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // PR #1789 / issue #1933 timeout ladder, rung 2: RecurrentGemma was already
             // emitted in FP32 (rung 1), but both the multi-update training invariant and
             // the sampled finite-difference invariant still exceeded the 120-second gate.
-            // Cap the repeated work before considering rung 3 (shrinking the fixture): five
-            // training/memorization iterations and one finite-difference coordinate still exercise
-            // the real optimizer and analytical-vs-numerical gradient paths. The full-class run
-            // later proved the cap insufficient and activated the constructor shrink above; retain
-            // these caps so the smaller fixture does not spend its budget repeating the same probe.
+            // Cap the repeated work before considering rung 3 (shrinking the fixture). Five ordinary
+            // training iterations and one finite-difference coordinate exercise the real optimizer
+            // and analytical-vs-numerical gradient paths. The deterministic memorization trajectory,
+            // however, needs twelve updates to clear the unchanged strict 1% improvement threshold;
+            // its smoke-scale fixture completes that stronger probe in only a few seconds.
             if (model.ClassName == "RecurrentGemmaLanguageModel")
             {
                 sb.AppendLine("    protected override int TrainingIterations => 5;");
-                sb.AppendLine("    protected override int MemorizationTaskIterations => 5;");
+                sb.AppendLine("    protected override int MemorizationTaskIterations => 12;");
                 sb.AppendLine("    protected override int GradientCheckSampleCount => 1;");
             }
 
@@ -14752,6 +14785,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         else
         {
             sb.AppendLine(factoryBody);
+        }
+        if (model.HasVectorOnlyConstructor)
+        {
+            string featureWidthConstructor = constructorExpr
+                .Replace("Vector<double>(3)", "Vector<double>(featureCount)")
+                .Replace("Vector<float>(3)", "Vector<float>(featureCount)");
+            sb.AppendLine();
+            sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}(int featureCount)");
+            sb.AppendLine($"        => {featureWidthConstructor};");
         }
         if (model.ClassName == "StableVideoSR")
         {
@@ -16789,6 +16831,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         /// When true, the generator can emit a default architecture to construct the model.
         /// </summary>
         public bool HasArchitectureOnlyConstructor { get; set; }
+
+        /// <summary>
+        /// Whether the model has a public constructor whose only required parameter is Vector&lt;T&gt;.
+        /// The generated regression fixture supplies a vector matching its three input features.
+        /// </summary>
+        public bool HasVectorOnlyConstructor { get; set; }
+
         /// <summary>
         /// The fully-qualified display name of the architecture parameter type (e.g.,
         /// "AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture&lt;double&gt;").

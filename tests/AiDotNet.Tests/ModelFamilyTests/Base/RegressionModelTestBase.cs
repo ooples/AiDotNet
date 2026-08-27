@@ -81,6 +81,17 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
     protected abstract IFullModel<T, Matrix<T>, Vector<T>> CreateModel();
 
     /// <summary>
+    /// Creates a model whose construction-time feature width matches a dimension-specific invariant.
+    /// </summary>
+    /// <remarks>
+    /// Most regressors infer width during training, so the default delegates to <see cref="CreateModel()"/>.
+    /// Coefficient-backed models have a real construction-time width; generated scaffolds override this
+    /// hook so the invariant exercises the requested dataset rather than an invalid fixture.
+    /// </remarks>
+    protected virtual IFullModel<T, Matrix<T>, Vector<T>> CreateModel(int featureCount)
+        => CreateModel();
+
+    /// <summary>
     /// Converts a generated target into the domain this model accepts, then into <typeparamref name="T"/>.
     /// </summary>
     /// <param name="y">The continuous linear target this base class generates.</param>
@@ -453,8 +464,8 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
 
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
-        var model1 = CreateModel();
-        var model2 = CreateModel();
+        var model1 = CreateModel(Features);
+        var model2 = CreateModel(Features + 1);
 
         var (trainX_real, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng1, noise: 0.1);
         var (testX_real, testY) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng2, noise: 0.1);
@@ -994,7 +1005,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        using var model = CreateModel();
+        using var model = CreateModel(featureCount: 1);
         int n = TrainSamples;
         var x = new Matrix<double>(n, 1);
         var y = new Vector<double>(n);

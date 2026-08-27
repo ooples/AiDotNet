@@ -719,6 +719,13 @@ public class ModelParameterGenerator : IIncrementalGenerator
     {
         var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
 
+        if (IsLayerGraphOf(bare, elem))
+        {
+            return $"{name}?.ToLayerList() ?? " +
+                   $"(global::System.Collections.Generic.IEnumerable<global::AiDotNet.Interfaces.ILayer<{elem}>>)" +
+                   $"global::System.Array.Empty<global::AiDotNet.Interfaces.ILayer<{elem}>>()";
+        }
+
         // A model helper may own a real layer graph without itself being a LayerBase. Detection
         // backbones commonly encapsulate stages this way and expose the ownership boundary through
         // a conventional zero-argument EnumerateLayers method. Consume that declaration just like a
@@ -783,6 +790,15 @@ public class ModelParameterGenerator : IIncrementalGenerator
                 var networkType = element.ToDisplayString();
                 return $"({name} ?? (global::System.Collections.Generic.IEnumerable<{networkType}>)global::System.Array.Empty<{networkType}>()).SelectMany(__n => EnumerateNestedNetworkLayers(__n))";
             }
+        }
+
+        var nestedElement = LayerCollectionElementType(element);
+        if (nestedElement is not null && IsLayerOf(
+                nestedElement.WithNullableAnnotation(NullableAnnotation.NotAnnotated), elem))
+        {
+            string outerElementName = element.ToDisplayString();
+            return $"({name} ?? (global::System.Collections.Generic.IEnumerable<{outerElementName}>)" +
+                   $"global::System.Array.Empty<{outerElementName}>()).SelectMany(__layers => __layers)";
         }
 
         if (!IsLayerOf(element, elem)) return null;
@@ -1091,6 +1107,19 @@ public class ModelParameterGenerator : IIncrementalGenerator
             return $"RebindNestedNetworkCanonicalLayerAliases({member.Name}, previousLayers, replacementLayers, nameof({member.Name}));";
         }
 
+        if (IsLayerGraphOf(bare, elem))
+        {
+            bool writable = member switch
+            {
+                IFieldSymbol field => !field.IsReadOnly,
+                IPropertySymbol property => property.SetMethod is not null && !property.SetMethod.IsInitOnly,
+                _ => false,
+            };
+            return writable
+                ? $"{member.Name} = RebindLayerGraphAlias({member.Name}, previousLayers, replacementLayers, nameof({member.Name}));"
+                : $"ValidateReadonlyLayerGraphAlias({member.Name}, previousLayers, replacementLayers, nameof({member.Name}));";
+        }
+
         if (IsLayerOf(bare, elem))
         {
             bool writable = member switch
@@ -1108,8 +1137,18 @@ public class ModelParameterGenerator : IIncrementalGenerator
         }
 
         var element = LayerCollectionElementType(bare);
-        if (element is null || !IsLayerOf(
-                element.WithNullableAnnotation(NullableAnnotation.NotAnnotated), elem))
+        if (element is null)
+            return null;
+
+        var nestedElement = LayerCollectionElementType(
+            element.WithNullableAnnotation(NullableAnnotation.NotAnnotated));
+        if (nestedElement is not null && IsLayerOf(
+                nestedElement.WithNullableAnnotation(NullableAnnotation.NotAnnotated), elem))
+        {
+            return $"RebindNestedLayerAliasCollections({member.Name}, previousLayers, replacementLayers, nameof({member.Name}));";
+        }
+
+        if (!IsLayerOf(element.WithNullableAnnotation(NullableAnnotation.NotAnnotated), elem))
             return null;
 
         return $"RebindLayerAliasCollection({member.Name}, previousLayers, replacementLayers, nameof({member.Name}));";
@@ -1194,6 +1233,19 @@ public class ModelParameterGenerator : IIncrementalGenerator
             return $"CopyNestedNetworkCanonicalLayerAliases({member.Name}, __destination.{member.Name}, Layers, __destination.Layers, nameof({member.Name}));";
         }
 
+        if (IsLayerGraphOf(bare, elem))
+        {
+            bool writable = member switch
+            {
+                IFieldSymbol field => !field.IsReadOnly,
+                IPropertySymbol property => property.SetMethod is not null && !property.SetMethod.IsInitOnly,
+                _ => false,
+            };
+            return writable
+                ? $"__destination.{member.Name} = CopyLayerGraphAlias({member.Name}, __destination.{member.Name}, Layers, __destination.Layers, nameof({member.Name}));"
+                : $"ValidateCopiedReadonlyLayerGraphAlias({member.Name}, __destination.{member.Name}, Layers, __destination.Layers, nameof({member.Name}));";
+        }
+
         if (IsLayerOf(bare, elem))
         {
             bool writable = member switch
@@ -1214,8 +1266,18 @@ public class ModelParameterGenerator : IIncrementalGenerator
         }
 
         var element = LayerCollectionElementType(bare);
-        if (element is null || !IsLayerOf(
-                element.WithNullableAnnotation(NullableAnnotation.NotAnnotated), elem))
+        if (element is null)
+            return null;
+
+        var nestedElement = LayerCollectionElementType(
+            element.WithNullableAnnotation(NullableAnnotation.NotAnnotated));
+        if (nestedElement is not null && IsLayerOf(
+                nestedElement.WithNullableAnnotation(NullableAnnotation.NotAnnotated), elem))
+        {
+            return $"CopyNestedLayerAliasCollections({member.Name}, __destination.{member.Name}, Layers, __destination.Layers, nameof({member.Name}));";
+        }
+
+        if (!IsLayerOf(element.WithNullableAnnotation(NullableAnnotation.NotAnnotated), elem))
             return null;
 
         return $"CopyLayerAliasCollection({member.Name}, __destination.{member.Name}, Layers, __destination.Layers, nameof({member.Name}));";
@@ -1271,6 +1333,18 @@ public class ModelParameterGenerator : IIncrementalGenerator
             || open.StartsWith("System.Collections.Generic.IEnumerable<", System.StringComparison.Ordinal)
             ? named.TypeArguments[0]
             : null;
+    }
+
+    /// <summary>LayerGraph&lt;T&gt; over the model's element type.</summary>
+    private static bool IsLayerGraphOf(ITypeSymbol type, string elem)
+    {
+        if (type is not INamedTypeSymbol named || named.TypeArguments.Length != 1)
+            return false;
+
+        var original = named.OriginalDefinition;
+        return original.MetadataName == "LayerGraph`1"
+            && original.ContainingNamespace.ToDisplayString() == "AiDotNet.NeuralNetworks.Graph"
+            && named.TypeArguments[0].ToDisplayString() == elem;
     }
 
     /// <summary>ILayer&lt;T&gt; or a LayerBase&lt;T&gt; subclass over the model's element type.</summary>

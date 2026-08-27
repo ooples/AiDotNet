@@ -171,6 +171,7 @@ public class ModelStateGenerator : IIncrementalGenerator
                 && !IsSerializableModelList(memberType)
                 && !IsObjectCollection(memberType)
                 && !IsLayerList(memberType)
+                && !IsRandom(memberType)
                 && !CanRestoreReadonlyNumericArray(memberType))
             {
                 continue;
@@ -466,6 +467,22 @@ public class ModelStateGenerator : IIncrementalGenerator
         return false;
     }
 
+    /// <summary>True when generated object state can delegate a detector to the shared detector converter.</summary>
+    private static bool IsDriftDetector(ITypeSymbol type)
+    {
+        for (var current = type as INamedTypeSymbol; current is not null; current = current.BaseType)
+        {
+            if (current.OriginalDefinition.ToDisplayString().StartsWith(
+                    "AiDotNet.DriftDetection.DriftDetectorBase<",
+                    System.StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Whether the type still persists state by hand, and so already owns its layers.</summary>
     /// <remarks>
     /// Checks the type's OWN members, not inherited ones: an inherited hook is the base doing the work,
@@ -696,6 +713,18 @@ public class ModelStateGenerator : IIncrementalGenerator
             return $"state.DeclareObjectInPlace(\"{id}\", {getter});";
         }
 
+        // A model's RNG position is continuation state, not disposable training machinery. A clone
+        // that rebuilds Random from the original seed reproduces initialization but not the draws
+        // already consumed by online training, so Poisson sampling and replacement trees diverge on
+        // the very next update. The registry restores the opaque runtime state into the constructor-
+        // created instance; no model-specific serialization hook or assignable field is required.
+        if (IsRandom(memberType))
+        {
+            return restoreInPlace
+                ? $"state.DeclareRandom(\"{id}\", {getter});"
+                : $"state.DeclareRandom(\"{id}\", {getter}, {setter});";
+        }
+
         return key switch
         {
             // A DECISION TREE, carried whole instead of walked by hand: the shared hand-written
@@ -895,6 +924,7 @@ public class ModelStateGenerator : IIncrementalGenerator
         if (IsObjectStateNumericTensor(type)) return true;
         if (IsInfrastructure(type)) return false;
         if (IsSerializableModel(type)) return true;
+        if (IsDriftDetector(type)) return true;
 
         if (named.Name is "List" or "IList" or "IReadOnlyList" or "IEnumerable"
                 or "ICollection" or "IReadOnlyCollection"
@@ -1501,6 +1531,9 @@ public class ModelStateGenerator : IIncrementalGenerator
 
         return Machinery(type.Name) || type.AllInterfaces.Any(i => Machinery(i.Name));
     }
+
+    private static bool IsRandom(ITypeSymbol type)
+        => type.ToDisplayString().TrimEnd('?') == "System.Random";
 
     private static bool IsPartial(INamedTypeSymbol type)
         => type.DeclaringSyntaxReferences
