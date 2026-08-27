@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -279,9 +279,6 @@ public partial class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
             },
         };
     }
-
-    /// <inheritdoc />
-
 
     private void ThrowIfDisposed()
     {

@@ -135,25 +135,48 @@ jobs:
 
       - name: Pack NuGet
         run: |
-          dotnet pack src/AiDotNet.csproj -c Release -o out --no-build \
-            /p:PackageVersion=${{ needs.release-please.outputs.version }}
-          echo "Package created: AiDotNet.${{ needs.release-please.outputs.version }}.nupkg"
+          set -e
+          version=${{ needs.release-please.outputs.version }}
+          dotnet pack src/AiDotNet.csproj -c Release -o out --no-build /p:PackageVersion=$version
+          echo "Package created: AiDotNet.$version.nupkg"
 
-      - name: Verify TFMs in package (net471, net10.0)
+          # The opt-in metapackages extracted by audit-2026-05 (phases 2b/2c). They are versioned in
+          # lockstep with the core package, but only AiDotNet was ever packed here, so a consumer
+          # told to add AiDotNet.Storage.Sqlite could not get it from NuGet at all. Packed with the
+          # SAME version so an opt-in backend can never drift from the core it extends.
+          for proj in src/AiDotNet.Privacy.HE/AiDotNet.Privacy.HE.csproj                       src/AiDotNet.Storage.Sqlite/AiDotNet.Storage.Sqlite.csproj                       src/AiDotNet.Storage.Elasticsearch/AiDotNet.Storage.Elasticsearch.csproj                       src/AiDotNet.Storage.Neo4j/AiDotNet.Storage.Neo4j.csproj; do
+            echo "Packing $proj"
+            dotnet pack "$proj" -c Release -o out --no-build /p:PackageVersion=$version
+          done
+
+      - name: Verify packages
         run: |
           set -e
           shopt -s nullglob
-          pkgs=(out/*.nupkg)
-          [ ${#pkgs[@]} -gt 0 ] || { echo "Error: No packages found in out/"; exit 1; }
-          for pkg in "${pkgs[@]}"; do
-            files=$(unzip -Z1 "$pkg")
-            for tfm in net471 net10.0; do
-              echo "$files" | grep -qE "^lib/${tfm}/.+\.dll$" || { echo "Error: Missing ${tfm} lib in $pkg"; exit 1; }
-              echo "Found ${tfm} in $(basename "$pkg")"
-            done
-            echo "$files" | grep -q '^analyzers/dotnet/cs/AiDotNet.Generators.dll$' || {
-              echo "Error: Missing packaged source generator in $pkg"; exit 1;
-            }
+          version=${{ needs.release-please.outputs.version }}
+          main="out/AiDotNet.${version}.nupkg"
+          [ -f "$main" ] || { echo "Error: core package $main not found"; exit 1; }
+
+          files=$(unzip -Z1 "$main")
+          for tfm in net471 net10.0; do
+            echo "$files" | grep -qE "^lib/${tfm}/.+[.]dll$" || { echo "Error: Missing ${tfm} lib in $main"; exit 1; }
+            echo "Found ${tfm} in $(basename "$main")"
+          done
+          # A <None Include> of a path that does not exist is skipped SILENTLY, so a generator that
+          # was never built yields a package with no analyzer and no error. This is that check.
+          echo "$files" | grep -q '^analyzers/dotnet/cs/AiDotNet.Generators.dll$' || {
+            echo "Error: Missing packaged source generator in $main"; exit 1;
+          }
+
+          for pkg in out/*.nupkg; do
+            [ "$pkg" = "$main" ] && continue
+            name=$(basename "$pkg")
+            case "$name" in
+              *".${version}.nupkg") ;;
+              *) echo "Error: $name is not stamped with the release version $version"; exit 1 ;;
+            esac
+            unzip -Z1 "$pkg" | grep -qE '^lib/.+/.+[.]dll$' || { echo "Error: $name contains no lib assembly"; exit 1; }
+            echo "Verified metapackage $name"
           done
 
       - name: Verify PackageReference consumer gets generated factories automatically
