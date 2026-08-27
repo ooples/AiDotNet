@@ -1445,7 +1445,13 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
 
         // [x_t ; r_{t-1} ; h_{t-1}] -- the recurrent controller reads its own previous hidden state,
         // which is what carries working state across a sequence's timesteps.
-        var previousHidden = _controllerHidden ?? ZeroControllerState();
+        //
+        // DETACHED, matching the cell state in ApplyControllerCell. Both halves of the carried state
+        // must cross the timestep boundary the same way: leaving the hidden half attached would keep
+        // the previous step's graph alive through this concat, so a sequence would accumulate one
+        // graph per timestep and backpropagate through all of them while the cell half stopped at
+        // one step -- neither truncated recurrence nor full BPTT, and unbounded in memory.
+        var previousHidden = Engine.StopGradient(_controllerHidden ?? ZeroControllerState());
 
         return Engine.TensorConcatenate(new[] { inputFlat, readVecTensor, previousHidden }, axis: 1);
     }
