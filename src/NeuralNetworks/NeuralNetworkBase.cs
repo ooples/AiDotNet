@@ -10892,6 +10892,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (trainableLayers.Length == 0)
             return EmitFusedMissAndFallback("no trainable layers");
 
+        // Models whose published recipe fine-tunes only part of a pretrained backbone narrow the
+        // optimized set through SelectTrainableParametersForTraining. That hook reaches the eager,
+        // streaming and grad-accum tapes via CollectModelTrainableTensors; hand the same selection
+        // to the fused kernel so it configures optimizer state for — and writes — exactly those
+        // leaves. Without this the fused path would update the full vector and silently unfreeze
+        // the backbone, which is why partial-freeze models used to opt out of fusion entirely.
+        var allTrainable = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
+        var selectedTrainable = SelectTrainableParametersForTraining(allTrainable);
+        // The base implementation returns its argument unchanged; only a model that actually
+        // built a narrowed list needs the filter threaded through.
+        IReadOnlyCollection<Tensor<T>>? fusedSelection =
+            ReferenceEquals(selectedTrainable, allTrainable) ? null : selectedTrainable;
+        if (fusedSelection is not null && fusedSelection.Count == 0)
+            return EmitFusedMissAndFallback("partial-freeze selection is empty");
+
         var loss = LossFunction as LossFunctions.LossFunctionBase<T>;
         if (loss is null)
             return EmitFusedMissAndFallback("loss function not derived from LossFunctionBase<T>");
@@ -10984,7 +10999,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // updates parameters in-replay and returns without ever passing through the eager
                 // gradient code below, which is why the surface stayed empty for every model that
                 // engages fusion -- the largest single cause of the all-zero gradient reports.
-                onGradients: ScatterFusedGradients);
+                onGradients: ScatterFusedGradients,
+                trainableSelection: fusedSelection);
         }
         finally
         {
