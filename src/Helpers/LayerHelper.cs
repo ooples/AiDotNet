@@ -1787,11 +1787,22 @@ public static partial class LayerHelper<T>
             ? architecture.OutputSize
             : throw new InvalidOperationException("Output size must be specified and greater than 0 for DNC.");
 
-        // Controller input includes read vectors concatenated: inputSize + readHeads * memoryWordSize
-        int controllerInputSize = inputSize + readHeads * memoryWordSize;
+        // Controller input is [x_t ; r_{t-1} ; h_{t-1}]: the step's input, the previous read vectors,
+        // and the controller's own previous hidden state. Graves et al. 2016 use a RECURRENT
+        // controller, and its recurrence is what lets the DNC hold working state across a sequence's
+        // timesteps alongside the external memory.
+        int controllerInputSize = inputSize + readHeads * memoryWordSize + controllerSize;
 
-        // Controller (Feed-forward network) - first layer takes the combined input
-        yield return new DenseLayer<T>(controllerSize, new ReLUActivation<T>() as IActivationFunction<T>);
+        // LSTM gate pre-activations, [i | f | g | o], four blocks of controllerSize.
+        //
+        // This is the cell form, not a sequence layer. The DNC drives ONE timestep per forward and
+        // threads its own state, exactly as PyTorch's nn.LSTMCell takes and returns (h, c) and as
+        // DeepMind's reference core is (inputs, prev_state) -> (output, next_state). A sequence
+        // layer cannot express that: it owns the recurrence internally and would restart from zero
+        // state on every single-step call, contributing gate parameters but no recurrence at all.
+        // Producing the gates through a Dense layer keeps them on the tape and in the model's
+        // ordinary parameter surface; DifferentiableNeuralComputer applies the cell arithmetic.
+        yield return new DenseLayer<T>(4 * controllerSize, new IdentityActivation<T>() as IActivationFunction<T>);
 
         // Controller output layer - produces BOTH direct output (controllerSize) AND interface signals
         // The DNC's CombineControllerOutputWithReadVectors expects:

@@ -362,6 +362,31 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
     private bool _suppressMemoryReset;
 
     /// <summary>
+    /// The recurrent controller's carried state, threaded EXPLICITLY the way the external memory
+    /// is rather than hidden inside a layer.
+    /// </summary>
+    /// <remarks>
+    /// Graves et al. 2016 use a recurrent controller, and its state belongs to the DNC's state the
+    /// same way the memory matrix, usage and temporal links do. PyTorch expresses the same shape
+    /// with <c>nn.LSTMCell</c>, which takes and returns <c>(h, c)</c> per timestep, and DeepMind's
+    /// reference core is <c>(inputs, prev_state) -&gt; (output, next_state)</c>.
+    ///
+    /// Explicit state is also what makes this correct under the training loop: TrainWithTape replays
+    /// the forward pass to re-evaluate the loss after a tentative update, and a layer holding its own
+    /// mutable hidden state would evolve across those replays exactly as the memory did before the
+    /// per-call reset was introduced.
+    /// </remarks>
+    [Scratch]
+    private Tensor<T>? _controllerHidden;
+
+    /// <inheritdoc cref="_controllerHidden"/>
+    [Scratch]
+    private Tensor<T>? _controllerCell;
+
+    /// <summary>Zeroed controller state, one row of <see cref="_controllerSize"/> columns.</summary>
+    private Tensor<T> ZeroControllerState() => new Tensor<T>([1, _controllerSize]);
+
+    /// <summary>
     /// Gets or sets the list of vectors read from memory.
     /// </summary>
     /// <value>A list of vectors, each of length MemoryWordSize, representing content read from memory.</value>
@@ -1396,7 +1421,11 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
             }
         }
 
-        return Engine.TensorConcatenate(new[] { inputFlat, readVecTensor }, axis: 1);
+        // [x_t ; r_{t-1} ; h_{t-1}] -- the recurrent controller reads its own previous hidden state,
+        // which is what carries working state across a sequence's timesteps.
+        var previousHidden = _controllerHidden ?? ZeroControllerState();
+
+        return Engine.TensorConcatenate(new[] { inputFlat, readVecTensor, previousHidden }, axis: 1);
     }
 
     /// <summary>
@@ -1437,6 +1466,13 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
         {
             currentOutput = Layers[i].Forward(currentOutput);
 
+            // Layers[0] emits the LSTM gate pre-activations; the cell arithmetic turns them into the
+            // controller's hidden state, which is what the rest of the controller consumes.
+            if (i == 0 && IsRecurrentControllerProjection(currentOutput))
+            {
+                currentOutput = ApplyControllerCell(currentOutput);
+            }
+
             // Store input/output for each layer if in training mode
             if (IsTrainingMode)
             {
@@ -1445,6 +1481,53 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
         }
 
         return currentOutput;
+    }
+
+    /// <summary>
+    /// Whether the first controller layer emitted the four gate blocks of a recurrent controller.
+    /// </summary>
+    /// <remarks>
+    /// A caller supplying its own <c>Architecture.Layers</c> keeps whatever controller it built, so
+    /// the shape decides rather than a flag: only the default recurrent controller emits exactly
+    /// four times the controller width.
+    /// </remarks>
+    private bool IsRecurrentControllerProjection(Tensor<T> projected)
+        => projected.Rank == 2 && projected.Shape[1] == 4 * _controllerSize;
+
+    /// <summary>
+    /// One LSTM cell step over pre-activations laid out as <c>[i | f | g | o]</c>.
+    /// </summary>
+    /// <remarks>
+    /// The arithmetic is the standard cell PyTorch's <c>nn.LSTMCell</c> documents:
+    /// <c>i, f, o = sigmoid(.)</c>, <c>g = tanh(.)</c>, <c>c' = f * c + i * g</c>,
+    /// <c>h' = o * tanh(c')</c>. Every step goes through Engine ops so the gates stay on the tape
+    /// and the gradient reaches the projection's weights.
+    ///
+    /// The carried state enters DETACHED. Within one forward the cell is a single step, so nothing
+    /// is lost; across the timesteps of a sequence this is the truncation boundary that keeps the
+    /// graph from growing without bound, which is the standard treatment of carried recurrent state.
+    /// </remarks>
+    private Tensor<T> ApplyControllerCell(Tensor<T> gates)
+    {
+        int width = _controllerSize;
+        Tensor<T> Gate(int index) => Engine.TensorNarrow(gates, dim: 1, start: index * width, length: width);
+
+        Tensor<T> inputGate = Engine.Sigmoid(Gate(0));
+        Tensor<T> forgetGate = Engine.Sigmoid(Gate(1));
+        Tensor<T> candidate = Engine.Tanh(Gate(2));
+        Tensor<T> outputGate = Engine.Sigmoid(Gate(3));
+
+        Tensor<T> previousCell = Engine.StopGradient(_controllerCell ?? ZeroControllerState());
+
+        Tensor<T> cell = Engine.TensorAdd(
+            Engine.TensorMultiply(forgetGate, previousCell),
+            Engine.TensorMultiply(inputGate, candidate));
+        Tensor<T> hidden = Engine.TensorMultiply(outputGate, Engine.Tanh(cell));
+
+        _controllerCell = cell;
+        _controllerHidden = hidden;
+
+        return hidden;
     }
 
     /// <summary>
@@ -1773,6 +1856,12 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
     /// </remarks>
     public void ResetMemoryState()
     {
+        // The controller's carried state resets with the memory. Both are the DNC's state, and the
+        // reference implementation builds a fresh initial state -- controller and memory together --
+        // for each new batch, carrying them only across the timesteps of one sequence.
+        _controllerHidden = null;
+        _controllerCell = null;
+
         // Reset memory matrix
         for (int i = 0; i < _memorySize; i++)
         {
