@@ -145,17 +145,23 @@ public class ABCNet<T> : NeuralNetworkBase<T>, ICompositeLoss<T>
     {
         _options = options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        // THE RATE IS NOW THE OPTIONS' RATHER THAN AdamOptimizer'S GENERIC DEFAULT. Constructed bare,
-        // this trained at InitialLearningRate = 0.001 with no way for a caller to change it short of
-        // building the whole optimizer. ABCNetOptions.LearningRate now supplies it, defaulting to the
-        // paper's 0.01 -- see the remark on that property: 0.01 is the paper's SGD+momentum rate and is
-        // well above the usual Adam scale, so reproducing the paper means injecting an SGD optimizer
-        // here, and staying on this default Adam optimizer means lowering the rate to around 1e-4.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+        // THE OPTIMIZER NOW MATCHES THE RATE. ABCNetOptions.LearningRate defaults to the paper's
+        // 0.01, which is an SGD-WITH-MOMENTUM rate; the default optimizer here was Adam, whose step
+        // is roughly the learning rate itself, so 0.01 was about two orders of magnitude too large
+        // for it. The note previously left on this line said exactly that -- reproducing the paper
+        // means injecting SGD, and staying on Adam means dropping to about 1e-4 -- but the code kept
+        // the one combination it warned against, and the oversized steps drove the shared backbone's
+        // ReLUs negative until every input produced the same constant detection map.
+        //
+        // Take the paper's side of that choice rather than retuning its published rate: SGD with
+        // momentum, which this optimizer applies with InitialMomentum defaulting to the paper's 0.9.
+        // Injecting an optimizer still overrides all of it.
+        _optimizer = optimizer ?? new StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = _options.LearningRate,
+                InitialMomentum = _options.Momentum,
             });
 
         InitializeLayers();
