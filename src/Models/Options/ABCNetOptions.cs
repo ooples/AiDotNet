@@ -32,6 +32,9 @@ public class ABCNetOptions<T> : NeuralNetworkOptions
         if (other is null)
             throw new ArgumentNullException(nameof(other));
 
+        // Inherited from ModelOptions: a clone that drops it initializes and trains differently
+        // from the configuration it was copied from.
+        Seed = other.Seed;
         InputHeight = other.InputHeight;
         InputWidth = other.InputWidth;
         InputChannels = other.InputChannels;

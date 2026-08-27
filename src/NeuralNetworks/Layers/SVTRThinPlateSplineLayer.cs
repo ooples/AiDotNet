@@ -121,8 +121,16 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
             throw new ArgumentOutOfRangeException(nameof(outputHeight));
         if (controlPointCount < 4 || controlPointCount % 2 != 0)
             throw new ArgumentException("TPS requires an even control-point count of at least four.", nameof(controlPointCount));
-        if (marginX <= 0 || marginX >= 0.5 || marginY <= 0 || marginY >= 0.5)
+        if (double.IsNaN(marginX) || double.IsInfinity(marginX)
+            || double.IsNaN(marginY) || double.IsInfinity(marginY)
+            || marginX <= 0 || marginX >= 0.5
+            || marginY <= 0 || marginY >= 0.5)
+        {
+            // Same reason the localization margin below is checked this way: NaN fails every
+            // ordered comparison, so a bare range test lets it reach BuildControlPoints and the TPS
+            // matrices fill with NaN instead of failing here.
             throw new ArgumentOutOfRangeException(nameof(marginX));
+        }
         if (double.IsNaN(localizationMargin)
             || double.IsInfinity(localizationMargin)
             || localizationMargin <= 0

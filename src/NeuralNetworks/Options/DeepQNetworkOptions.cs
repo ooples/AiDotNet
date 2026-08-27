@@ -22,6 +22,9 @@ public class DeepQNetworkOptions : NeuralNetworkOptions
         if (other is null)
             throw new ArgumentNullException(nameof(other));
 
+        // Inherited from ModelOptions: a clone that drops it initializes and trains differently
+        // from the configuration it was copied from.
+        Seed = other.Seed;
         LearningRate = other.LearningRate;
         GradientMomentum = other.GradientMomentum;
         SquaredGradientMomentum = other.SquaredGradientMomentum;
@@ -71,4 +74,45 @@ public class DeepQNetworkOptions : NeuralNetworkOptions
     /// blow up when recent gradients have been tiny.</para>
     /// </remarks>
     public double MinSquaredGradient { get; set; } = 0.01;
+
+    /// <summary>
+    /// Validates the training settings, throwing on values the optimizer cannot use.
+    /// </summary>
+    /// <remarks>
+    /// These four values are handed straight to the RMSProp optimizer, so they are external input
+    /// to it and are checked before it is built. Non-finite values matter as much as out-of-range
+    /// ones: NaN fails every ordered comparison, so a bare range test would let it through and the
+    /// first update would poison every parameter.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when a value cannot describe a working
+    /// optimizer.</exception>
+    public void Validate()
+    {
+        if (double.IsNaN(LearningRate) || double.IsInfinity(LearningRate) || LearningRate <= 0.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(LearningRate), LearningRate,
+                "LearningRate must be a positive, finite number.");
+        }
+
+        if (double.IsNaN(GradientMomentum) || double.IsInfinity(GradientMomentum)
+            || GradientMomentum < 0.0 || GradientMomentum >= 1.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(GradientMomentum), GradientMomentum,
+                "GradientMomentum must be finite and within [0, 1).");
+        }
+
+        if (double.IsNaN(SquaredGradientMomentum) || double.IsInfinity(SquaredGradientMomentum)
+            || SquaredGradientMomentum < 0.0 || SquaredGradientMomentum >= 1.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(SquaredGradientMomentum), SquaredGradientMomentum,
+                "SquaredGradientMomentum must be finite and within [0, 1).");
+        }
+
+        if (double.IsNaN(MinSquaredGradient) || double.IsInfinity(MinSquaredGradient)
+            || MinSquaredGradient <= 0.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(MinSquaredGradient), MinSquaredGradient,
+                "MinSquaredGradient must be a positive, finite number.");
+        }
+    }
 }

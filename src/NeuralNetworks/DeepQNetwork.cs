@@ -250,6 +250,10 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
         // larger than a generic epsilon precisely so the effective step stays bounded when recent
         // gradients are small. Every value is an option, and a caller can still replace the whole
         // optimizer.
+        // Validate before the optimizer is built: these four values are handed straight to it, so
+        // they are external input to it, and a non-finite one would only surface as poisoned
+        // parameters after the first update.
+        _options.Validate();
         _trainOptimizer = optimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new RootMeanSquarePropagationOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -597,15 +601,18 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
         // Set network to training mode
         SetTrainingMode(true);
 
-        // Forward pass with memory
-        var predictions = ForwardWithMemoryBatch(statesBatch);
-
-        // Calculate loss using the configured loss function
-        LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), targetsBatch.ToVector());
-
-        // Compute gradients and update network
-        var outputGradients = predictions.Subtract(targetsBatch);
-        UpdateParameters(NumOps.FromDouble(0.001)); // Learning rate
+        // THE REPLAY BATCH IS WHERE DQN ACTUALLY LEARNS, and it was not learning from it. The
+        // previous body ran a bookkeeping forward, computed a loss, computed an output-gradient
+        // tensor, DISCARDED that tensor, and then called a per-layer update with a hardcoded 0.001 --
+        // so no backward pass ran for the batch and the layers were stepped on whatever gradients
+        // they happened to be holding. The configured optimizer was reached only by the supervised
+        // fallback taken while the buffer is below one batch, which meant none of the published
+        // RMSProp settings applied once the buffer filled, which is nearly always.
+        //
+        // TrainWithTape runs the same forward this walked (neither this model nor the base overrides
+        // ForwardForTraining away from the Layers walk), then a real backward and a real optimizer
+        // step, and records LastLoss itself.
+        TrainWithTape(statesBatch, targetsBatch, _trainOptimizer);
 
         // Set network back to inference mode
         SetTrainingMode(false);
@@ -649,44 +656,6 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
         return batch;
     }
 
-    /// <summary>
-    /// Performs a forward pass for a batch of inputs while storing intermediate values for backpropagation.
-    /// </summary>
-    /// <param name="inputs">A tensor containing a batch of input states.</param>
-    /// <returns>A tensor containing a batch of predicted Q-values.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method processes a batch of inputs through the network, storing intermediate values
-    /// needed for backpropagation during training. It's similar to ForwardWithMemory but handles
-    /// batched inputs for more efficient training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method processes multiple inputs at once and remembers
-    /// intermediate values to help with learning.
-    /// 
-    /// Processing inputs in batches:
-    /// - Is more efficient than processing one at a time
-    /// - Helps the network learn more stable patterns
-    /// - Requires keeping track of intermediate values for learning
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ForwardWithMemoryBatch(Tensor<T> inputs)
-    {
-        var current = inputs;
-
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            // Store input to each layer for backpropagation
-            _layerInputs[i] = current;
-
-            // Forward pass through layer
-            current = Layers[i].Forward(current);
-
-            // Store output from each layer for backpropagation
-            _layerOutputs[i] = current;
-        }
-
-        return current;
-    }
 
     /// <summary>
     /// Updates the parameters of all layers in the network using the calculated gradients.

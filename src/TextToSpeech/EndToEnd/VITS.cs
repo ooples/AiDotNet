@@ -63,6 +63,13 @@ public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
     // those options, so it has to be rebuilt afterwards or the model keeps running on the
     // coefficients it happened to be constructed with.
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+
+    /// <summary>
+    /// Whether <see cref="_optimizer"/> is the one this model built from its options rather than
+    /// one the caller supplied. Only the former may be rebuilt when a restore rewrites those
+    /// options; substituting AdamW for a caller's optimizer would change how the model trains.
+    /// </summary>
+    private readonly bool _usesDefaultOptimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -111,6 +118,7 @@ public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         _options = options ?? new VITSOptions();
         _useNativeMode = true;
+        _usesDefaultOptimizer = optimizer is null;
         _optimizer = optimizer ?? CreatePaperOptimizer();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
@@ -316,14 +324,24 @@ public class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
         _options.NumDecoderLayers = reader.ReadInt32();
         _options.NumEncoderLayers = reader.ReadInt32();
         _options.NumHeads = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.Beta1 = reader.ReadDouble();
-        _options.Beta2 = reader.ReadDouble();
-        _options.Epsilon = reader.ReadDouble();
-        _options.WeightDecay = reader.ReadDouble();
-        // Rebuild from the restored recipe. The optimizer was constructed before this ran.
-        if (_useNativeMode)
-            _optimizer = CreatePaperOptimizer();
+        // APPENDED FIELDS, READ ONLY IF THE PAYLOAD CARRIES THEM. The model-specific section is the
+        // last thing written and the reader wraps the payload's own MemoryStream, so remaining
+        // bytes are exactly this section's. A payload written before the training recipe was
+        // persisted simply ends here and keeps the option defaults.
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            _options.LearningRate = reader.ReadDouble();
+            _options.Beta1 = reader.ReadDouble();
+            _options.Beta2 = reader.ReadDouble();
+            _options.Epsilon = reader.ReadDouble();
+            _options.WeightDecay = reader.ReadDouble();
+
+            // Rebuild ONLY the default optimizer. A caller-supplied one is its own type, its own
+            // configuration and its own state; replacing it with AdamW here would silently change
+            // how the restored model trains, so it is left exactly as the caller built it.
+            if (_useNativeMode && _usesDefaultOptimizer)
+                _optimizer = CreatePaperOptimizer();
+        }
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

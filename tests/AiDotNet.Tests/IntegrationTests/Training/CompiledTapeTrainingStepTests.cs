@@ -305,10 +305,14 @@ public class CompiledTapeTrainingStepTests
         IReadOnlyList<Tensor<float>> after)
     {
         Assert.Equal(before.Count, after.Count);
+        // The two-sequence Zip overload that returns tuples is .NET-Core-era only; this project also
+        // targets net471, where the projection overload is the one that exists.
         Assert.True(
             before.SelectMany(values => values)
-                .Zip(after.SelectMany(tensor => tensor.AsSpan().ToArray()))
-                .Any(pair => pair.First != pair.Second),
+                .Zip(
+                    after.SelectMany(tensor => tensor.AsSpan().ToArray()),
+                    (first, second) => first != second)
+                .Any(changed => changed),
             "At least one selected parameter element must change after the fused optimizer step.");
     }
 

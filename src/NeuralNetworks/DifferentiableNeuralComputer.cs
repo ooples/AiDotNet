@@ -383,6 +383,18 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
     [Scratch]
     private Tensor<T>? _controllerCell;
 
+    /// <summary>
+    /// Whether InitializeLayers built the DEFAULT recurrent controller, and therefore whether the
+    /// first layer's output is this model's LSTM gate block.
+    /// </summary>
+    /// <remarks>
+    /// Recorded explicitly rather than inferred from the first layer's output width. A caller that
+    /// supplies Architecture.Layers can legitimately have a first layer four times the controller
+    /// width without it being a gate projection, and treating it as one would silently collapse its
+    /// output before the next custom layer ever saw it.
+    /// </remarks>
+    private bool _usesDefaultRecurrentController;
+
     /// <summary>Zeroed controller state, one row of <see cref="_controllerSize"/> columns.</summary>
     private Tensor<T> ZeroControllerState() => new Tensor<T>([1, _controllerSize]);
 
@@ -824,9 +836,11 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
             // Use the layers provided by the user
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
+            _usesDefaultRecurrentController = false;
         }
         else
         {
+            _usesDefaultRecurrentController = true;
             // Use default layer configuration if no layers are provided
             Layers.AddRange(LayerHelper<T>.CreateDefaultDNCLayers(Architecture, _controllerSize, _memoryWordSize, _readHeads, CalculateDNCInterfaceSize(_memoryWordSize, _readHeads)));
         }
@@ -900,10 +914,18 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // Reset memory and layer state for deterministic inference
-        ResetMemoryState();
-        foreach (var layer in Layers)
-            layer.ResetState();
+        // Reset memory and layer state for deterministic inference -- UNLESS a sequence is being
+        // carried. ProcessSequence suppresses the reset precisely so memory, the temporal links and
+        // the controller's recurrence evolve across its timesteps, and it drives those timesteps
+        // through Predict; resetting unconditionally here undid that suppression on every step, so
+        // the controller saw a zero hidden state throughout and the allocation and link mechanisms
+        // never left their initial state.
+        if (!_suppressMemoryReset)
+        {
+            ResetMemoryState();
+            foreach (var layer in Layers)
+                layer.ResetState();
+        }
 
         return ProcessInput(input, false);
     }
@@ -1468,7 +1490,7 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
 
             // Layers[0] emits the LSTM gate pre-activations; the cell arithmetic turns them into the
             // controller's hidden state, which is what the rest of the controller consumes.
-            if (i == 0 && IsRecurrentControllerProjection(currentOutput))
+            if (i == 0 && _usesDefaultRecurrentController)
             {
                 currentOutput = ApplyControllerCell(currentOutput);
             }
@@ -1483,16 +1505,6 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
         return currentOutput;
     }
 
-    /// <summary>
-    /// Whether the first controller layer emitted the four gate blocks of a recurrent controller.
-    /// </summary>
-    /// <remarks>
-    /// A caller supplying its own <c>Architecture.Layers</c> keeps whatever controller it built, so
-    /// the shape decides rather than a flag: only the default recurrent controller emits exactly
-    /// four times the controller width.
-    /// </remarks>
-    private bool IsRecurrentControllerProjection(Tensor<T> projected)
-        => projected.Rank == 2 && projected.Shape[1] == 4 * _controllerSize;
 
     /// <summary>
     /// One LSTM cell step over pre-activations laid out as <c>[i | f | g | o]</c>.
@@ -1716,6 +1728,40 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
                 writer.Write(Convert.ToDouble(readVector[i]));
             }
         }
+
+        // THE CONTROLLER'S CARRIED STATE IS PART OF THE SNAPSHOT. Restoring memory, usage and links
+        // while the recurrence restarts from zero does not resume the saved DNC: mid-sequence, the
+        // controller's hidden and cell state are as much of the machine's state as the memory
+        // matrix is. Appended after the existing fields so a payload written before the recurrent
+        // controller existed simply ends above and restores to a zero controller state, which is
+        // what such a payload actually described.
+        WriteControllerState(writer, _controllerHidden);
+        WriteControllerState(writer, _controllerCell);
+    }
+
+    private static void WriteControllerState(BinaryWriter writer, Tensor<T>? state)
+    {
+        if (state is null)
+        {
+            writer.Write(0);
+            return;
+        }
+
+        writer.Write(state.Length);
+        for (int i = 0; i < state.Length; i++)
+            writer.Write(Convert.ToDouble(state[i]));
+    }
+
+    private Tensor<T>? ReadControllerState(BinaryReader reader)
+    {
+        int length = reader.ReadInt32();
+        if (length <= 0)
+            return null;
+
+        var state = new Tensor<T>([1, length]);
+        for (int i = 0; i < length; i++)
+            state[i] = NumOps.FromDouble(reader.ReadDouble());
+        return state;
     }
 
     /// <summary>
@@ -1826,6 +1872,16 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
                 readVector[i] = NumOps.FromDouble(reader.ReadDouble());
             }
             _readVectors.Add(readVector);
+        }
+
+        // Appended fields, read only if the payload carries them. The model-specific section is the
+        // last thing written and the reader wraps the payload's own MemoryStream, so any remaining
+        // bytes belong to this section. A payload predating the recurrent controller ends here and
+        // leaves the controller state null, which is the zero state it described.
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            _controllerHidden = ReadControllerState(reader);
+            _controllerCell = ReadControllerState(reader);
         }
     }
 
