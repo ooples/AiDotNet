@@ -463,15 +463,32 @@ jobs:
       - name: Build source generator first
         run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release --no-restore
 
-      # The full solution across all three frameworks. -m:2 is kept HERE and only here:
-      # this is the job that actually runs net8/net10/net471 csc processes together, which
-      # is the combination that reached the 16-GB ceiling and got a compiler killed with
-      # exit 137.
-      - name: Build (Release, all frameworks)
-        run: dotnet build -c Release --no-restore -m:2
+      # SCOPED TO WHAT `build` DID NOT ALREADY COMPILE, because total CI minutes matter more
+      # than this job's own latency. A full-solution build here would recompile the test
+      # project for net10.0 -- the single most expensive compile in the repo, and the one
+      # `build` just finished -- on a second runner, buying nothing.
+      #
+      # So: every src project across all ITS frameworks (pack needs them, and they are small
+      # -- src/bin is ~200 MB per modern framework against ~1.6 GB for the test project),
+      # then the test project for net471 ONLY, which is the compatibility check itself and
+      # pulls the satellites to net471 with it.
+      #
+      # -m:2 is kept HERE and only here: this is the job that actually runs net8/net10/net471
+      # csc processes together, the combination that reached the 16-GB ceiling and got a
+      # compiler killed with exit 137.
+      # ONE solution build, so tools/ and the satellites stay covered exactly as they were
+      # and projects still compile in parallel. CompatBuildOnly narrows the test project to
+      # net471 -- its net10.0 compile is the most expensive in the repo and the Build job
+      # just did it, so repeating it on a second runner would burn CI minutes for nothing.
+      #
+      # -m:2 is kept HERE and only here: this is the job that actually runs net8/net10/net471
+      # csc processes together, the combination that reached the 16-GB ceiling and got a
+      # compiler killed with exit 137.
+      - name: Build (Release, compat frameworks)
+        run: dotnet build -c Release --no-restore -m:2 -p:CompatBuildOnly=true
 
       - name: Build NuGet package
-        run: dotnet pack --no-build -c Release --output ./artifacts
+        run: dotnet pack --no-build -c Release --output ./artifacts -p:CompatBuildOnly=true
 
       - name: Upload NuGet package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
