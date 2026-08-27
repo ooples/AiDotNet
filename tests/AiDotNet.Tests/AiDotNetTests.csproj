@@ -1,7 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-	  <TargetFrameworks>net10.0;net8.0;net471</TargetFrameworks>
+	  <!-- net8.0 is OPT-IN. The Build job compiles the whole solution and every one of the
+	       ~116 test shards waits on it, so a third target framework for the largest compile in
+	       the repo lands squarely on the critical path. The net8.0 smoke shard sets this
+	       property and builds the target itself, in parallel, where it costs nobody else. -->
+	  <TargetFrameworks>net10.0;net471</TargetFrameworks>
+	  <TargetFrameworks Condition="'$(IncludeNet8TestTarget)' == 'true'">net10.0;net8.0;net471</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 	  <IsPackable>false</IsPackable>

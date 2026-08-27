@@ -363,6 +363,12 @@ jobs:
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        # net471 is COMPILED in the step above and deliberately not shipped here. Compiling it
+        # is the check -- it catches net471-only breakage a net10.0 build cannot see -- but no
+        # job RUNS it: every consumer of this artifact (the test shards, the shape-conformance
+        # job, the enumeration sweep) executes net10.0. Uploading it added ~1.7 GB that each of
+        # the ~116 shards then downloaded and never opened, against a download step capped at
+        # 12 minutes that has already stalled a shard once.
         with:
           name: build-output-${{ github.sha }}
           path: |
@@ -370,6 +376,7 @@ jobs:
             tests/AiDotNet.Tests/bin/Release/
             tests/AiDotNet.ParameterSweepWorker/bin/Release/
             tests/AiDotNet.Serving.Tests/bin/Release/
+            !**/bin/Release/net471/
           retention-days: 1
 
       - name: Build NuGet package
@@ -1254,7 +1261,8 @@ jobs:
           - name: Net8 Smoke
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net8.0
-            timeout: 15
+            # Sized for the net8.0 COMPILE, not the 10 seconds of tests that follow it.
+            timeout: 30
             filter: >-
               Category!=GPU&Category!=Stress&Category!=Sweep&Category!=HeavyTimeout&
               (FullyQualifiedName~UnitTests.Autodiff|FullyQualifiedName~UnitTests.LinearAlgebra|
@@ -1314,12 +1322,24 @@ jobs:
         # rather than as a transfer that stalled. A cap converts that into a fast, clearly
         # attributed failure that a rerun can fix in minutes.
         timeout-minutes: 12
+        # Skipped for net8.0: that shard builds its own target below, so the net10.0 artifact
+        # is dead weight -- and this is the step that has stalled a shard for a whole job.
+        if: matrix.shard.framework != 'net8.0'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
         with:
           name: build-output-${{ github.sha }}
 
       - name: Restore dependencies
         run: dotnet restore ${{ matrix.shard.project }}
+
+      # The build artifact carries net10.0 only, so the net8.0 shard compiles its own target
+      # here. This is the whole point of making that target opt-in: the work happens on one
+      # shard in parallel rather than in the Build job every other shard is blocked on.
+      - name: Build net8.0 target (smoke shard only)
+        if: matrix.shard.framework == 'net8.0'
+        run: |
+          dotnet restore ${{ matrix.shard.project }} -p:IncludeNet8TestTarget=true
+          dotnet build ${{ matrix.shard.project }} -c Release -f net8.0             -p:IncludeNet8TestTarget=true --no-restore -m:2
 
       - name: Run tests (sharded) with coverage
         id: shard-tests
