@@ -1630,5 +1630,13 @@ public partial class GraphBackedNetwork<T> : AiDotNet.NeuralNetworks.NeuralNetwo
             "CopyNestedLayerAliasCollections(_stages, __destination._stages, Layers, __destination.Layers, nameof(_stages));",
             generated,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "GetGeneratedAdditionalLayerPartitionSizes<AiDotNet.Interfaces.ILayer<T>>(_stages)",
+            generated,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "ReplaceGeneratedNestedAdditionalLayerCollections(_stages, __layers, __partitions, nameof(_stages))",
+            generated,
+            StringComparison.Ordinal);
     }
 }

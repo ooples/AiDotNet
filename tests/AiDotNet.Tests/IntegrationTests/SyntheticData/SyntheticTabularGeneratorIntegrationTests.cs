@@ -170,6 +170,39 @@ public class SyntheticTabularGeneratorIntegrationTests
     }
 
     /// <summary>
+    /// Asserts that nested auxiliary-layer ownership retains every partition and parameter value.
+    /// </summary>
+    private static void AssertNestedAuxLayerListsPreserved<TLayer>(
+        object original,
+        object restored,
+        string fieldName)
+        where TLayer : ILayer<double>
+    {
+        var originalPartitions =
+            GetPrivateField<System.Collections.Generic.List<System.Collections.Generic.List<TLayer>>>(
+                original, fieldName);
+        var restoredPartitions =
+            GetPrivateField<System.Collections.Generic.List<System.Collections.Generic.List<TLayer>>>(
+                restored, fieldName);
+        Assert.NotNull(originalPartitions);
+        Assert.NotNull(restoredPartitions);
+        Assert.Equal(originalPartitions.Count, restoredPartitions.Count);
+        Assert.True(originalPartitions.Count > 0, $"{fieldName} had no partitions");
+
+        for (int partition = 0; partition < originalPartitions.Count; partition++)
+        {
+            Assert.Equal(originalPartitions[partition].Count, restoredPartitions[partition].Count);
+            for (int layer = 0; layer < originalPartitions[partition].Count; layer++)
+            {
+                var expected = originalPartitions[partition][layer].GetParameters();
+                var actual = restoredPartitions[partition][layer].GetParameters();
+                Assert.Equal(expected.Length, actual.Length);
+                for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], actual[i], 10);
+            }
+        }
+    }
+
+    /// <summary>
     /// Creates a NeuralNetworkArchitecture for GAN/NN-based generators.
     /// </summary>
     private static NeuralNetworkArchitecture<double> CreateArchitecture(int inputFeatures, int outputSize)
@@ -367,8 +400,11 @@ public class SyntheticTabularGeneratorIntegrationTests
         restored.Deserialize(bytes);
 
         // The generator batch-norm layers live outside the base Layers collection; verify they
-        // (and the VGM transformer driving output activations) survive serialization.
+        // and the teacher ensemble retains its per-teacher partitions. The VGM transformer driving
+        // output activations must survive as fitted state as well.
         AssertAuxLayerListPreserved<BatchNormalizationLayer<double>>(generator, restored, "_genBNLayers");
+        AssertNestedAuxLayerListsPreserved<FullyConnectedLayer<double>>(
+            generator, restored, "_teacherLayers");
         var originalTransformer = GetPrivateField<TabularDataTransformer<double>>(generator, "_transformer");
         var restoredTransformer = GetPrivateField<TabularDataTransformer<double>>(restored, "_transformer");
         Assert.NotNull(restoredTransformer);

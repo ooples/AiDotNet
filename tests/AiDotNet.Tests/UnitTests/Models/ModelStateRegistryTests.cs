@@ -1,11 +1,39 @@
+using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Models;
 
 public sealed class ModelStateRegistryTests
 {
+    [Fact]
+    public void AssignableChild_RestoresModelWithOneRequiredVectorConstructor()
+    {
+        var coefficients = new Vector<double>(new[] { 1.25, -2.5, 3.75 });
+        using var source = new VectorModel<double>(coefficients);
+        var writingRegistry = new ModelStateRegistry<double>();
+        writingRegistry.DeclareChild<IModelSerializer>("child", () => source, _ => { });
+        using var payload = Write(writingRegistry);
+
+        IModelSerializer? destination = null;
+        var readingRegistry = new ModelStateRegistry<double>();
+        readingRegistry.DeclareChild<IModelSerializer>(
+            "child",
+            () => destination,
+            value => destination = value);
+        using var reader = new BinaryReader(
+            payload, System.Text.Encoding.UTF8, leaveOpen: true);
+        readingRegistry.ReadAll(reader);
+
+        using var restored = Assert.IsType<VectorModel<double>>(destination);
+        Assert.Equal(payload.Length, payload.Position);
+        Assert.Equal(coefficients.Length, restored.Coefficients.Length);
+        for (int i = 0; i < coefficients.Length; i++)
+            Assert.Equal(coefficients[i], restored.Coefficients[i]);
+    }
+
     [Fact]
     public void RandomState_RestoresSeededContinuationIntoIndependentInstance()
     {

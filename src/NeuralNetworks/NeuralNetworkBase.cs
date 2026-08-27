@@ -9025,9 +9025,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             Replace = replace;
         }
 
+        internal GeneratedAdditionalLayerGroup(
+            string stableId,
+            Func<IEnumerable<ILayer<T>?>> get,
+            Func<IReadOnlyList<int>> getPartitionSizes,
+            Action<IReadOnlyList<ILayer<T>>, IReadOnlyList<int>> replacePartitioned)
+            : this(stableId, get, replace: null)
+        {
+            GetPartitionSizes = getPartitionSizes
+                ?? throw new ArgumentNullException(nameof(getPartitionSizes));
+            ReplacePartitioned = replacePartitioned
+                ?? throw new ArgumentNullException(nameof(replacePartitioned));
+        }
+
         internal string StableId { get; }
         internal Func<IEnumerable<ILayer<T>?>> Get { get; }
         internal Action<IReadOnlyList<ILayer<T>>>? Replace { get; }
+        internal Func<IReadOnlyList<int>>? GetPartitionSizes { get; }
+        internal Action<IReadOnlyList<ILayer<T>>, IReadOnlyList<int>>? ReplacePartitioned { get; }
     }
 
     /// <summary>Generated override chain describing layer-bearing fields and collections.</summary>
@@ -9136,6 +9151,106 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         collection ??= new List<TLayer>();
         ReplaceGeneratedAdditionalLayerCollection(collection, replacements, memberName);
         return collection;
+    }
+
+    /// <summary>Returns the independently-owned count in each nested layer collection.</summary>
+    protected IReadOnlyList<int> GetGeneratedAdditionalLayerPartitionSizes<TLayer>(
+        IEnumerable<IEnumerable<TLayer>>? collections)
+        where TLayer : ILayer<T>
+    {
+        var sizes = new List<int>();
+        if (collections is null) return sizes;
+
+        foreach (var collection in collections)
+        {
+            int count = 0;
+            foreach (var layer in collection)
+            {
+                if (layer is not null && !IsCanonicalLayerReference(layer)) count++;
+            }
+            sizes.Add(count);
+        }
+        return sizes;
+    }
+
+    /// <summary>Rebuilds nested layer collections using their serialized partition boundaries.</summary>
+    protected void ReplaceGeneratedNestedAdditionalLayerCollections<TLayer>(
+        IList<List<TLayer>> collections,
+        IReadOnlyList<ILayer<T>> replacements,
+        IReadOnlyList<int> partitionSizes,
+        string memberName)
+        where TLayer : ILayer<T>
+    {
+        if (collections is null) throw new ArgumentNullException(nameof(collections));
+        long partitionLayerCount = 0;
+        bool hasInvalidPartition = false;
+        for (int i = 0; i < partitionSizes.Count; i++)
+        {
+            if (partitionSizes[i] < 0) hasInvalidPartition = true;
+            partitionLayerCount += partitionSizes[i];
+        }
+        if (hasInvalidPartition || partitionLayerCount != replacements.Count)
+        {
+            throw new InvalidDataException(
+                $"Generated auxiliary-layer group '{memberName}' has invalid nested partition sizes.");
+        }
+
+        var aliases = new List<List<TLayer>>(collections.Count);
+        for (int i = 0; i < collections.Count; i++)
+        {
+            var partitionAliases = new List<TLayer>();
+            for (int j = 0; j < collections[i].Count; j++)
+            {
+                if (IsCanonicalLayerReference(collections[i][j]))
+                    partitionAliases.Add(collections[i][j]);
+            }
+            aliases.Add(partitionAliases);
+        }
+
+        if (aliases.Any(partition => partition.Count > 0) && aliases.Count != partitionSizes.Count)
+        {
+            throw new InvalidDataException(
+                $"Generated auxiliary-layer group '{memberName}' cannot preserve canonical aliases " +
+                "because its nested partition count changed.");
+        }
+
+        for (int i = 0; i < replacements.Count; i++)
+        {
+            if (replacements[i] is not TLayer)
+            {
+                throw new InvalidDataException(
+                    $"Generated auxiliary-layer group '{memberName}' cannot accept restored type " +
+                    $"'{replacements[i].GetType().FullName}' as '{typeof(TLayer).FullName}'.");
+            }
+        }
+
+        var rebuilt = new List<List<TLayer>>(partitionSizes.Count);
+        int replacementIndex = 0;
+        for (int partitionIndex = 0; partitionIndex < partitionSizes.Count; partitionIndex++)
+        {
+            var partition = new List<TLayer>();
+            if (partitionIndex < aliases.Count) partition.AddRange(aliases[partitionIndex]);
+            for (int i = 0; i < partitionSizes[partitionIndex]; i++)
+                partition.Add((TLayer)replacements[replacementIndex++]);
+            rebuilt.Add(partition);
+        }
+
+        collections.Clear();
+        for (int i = 0; i < rebuilt.Count; i++) collections.Add(rebuilt[i]);
+    }
+
+    /// <summary>Creates a nullable nested layer collection when fitted topology first appears.</summary>
+    protected List<List<TLayer>> RestoreGeneratedNestedAdditionalLayerCollections<TLayer>(
+        List<List<TLayer>>? collections,
+        IReadOnlyList<ILayer<T>> replacements,
+        IReadOnlyList<int> partitionSizes,
+        string memberName)
+        where TLayer : ILayer<T>
+    {
+        collections ??= new List<List<TLayer>>();
+        ReplaceGeneratedNestedAdditionalLayerCollections(
+            collections, replacements, partitionSizes, memberName);
+        return collections;
     }
 
     /// <summary>Restores one independently-owned layer field.</summary>
@@ -13826,7 +13941,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     // layers participate in parameter counting, optimization and cloning already; omitting them
     // from Save/Load made auxiliary GAN heads and multimodal encoder streams come back freshly
     // initialized even though the shared parameter surface claimed to own them.
-    private const int SerializationVersion = 6;
+    // v7 adds partition sizes for nested layer lists so a fitted topology can be rebuilt without
+    // flattening distinct blocks, teacher networks or encoder streams into one unusable collection.
+    private const int SerializationVersion = 7;
 
     // Mirrors System.Array.MaxLength (introduced in .NET 6). Hardcoded
     // here so the check still compiles on net471, where Array.MaxLength
@@ -13869,6 +13986,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // OutOfMemoryException on a 774M-parameter model being torn down. A save legitimately needs the
         // values it is about to write; a count does not.
         MaterializeParameters();
+        ReconcileCanonicalNestedNetworkLayerViews();
 
         // Pre-size the MemoryStream to avoid ensureCapacity doubling near the
         // 2GB array cap on large models. ViLBERT (~174M params × 8 B = 1.4 GB)
@@ -14226,7 +14344,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Independent layer members are left alone because rebinding is reference-identity based.
         RebindLayerAliases(previousLayers, _layers);
 
-        if (version >= 6) RestoreGeneratedAdditionalLayerState(reader);
+        if (version >= 6) RestoreGeneratedAdditionalLayerState(reader, version);
 
         // Deserialized models should be in inference mode by default.
         // This ensures BatchNorm uses running statistics (not batch statistics)
@@ -14337,6 +14455,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // while a fresh restore target constructed two, making the same model unable to load.
         // Enumerate once, then let the generated member graph claim the resulting objects.
         var extraLayers = GetExtraTrainableLayers().ToList();
+        ReconcileCanonicalNestedNetworkLayerViews();
         var groups = GetGeneratedAdditionalLayerGroups().ToList();
         var claimed = new List<object>();
         for (int i = 0; i < groups.Count; i++)
@@ -14382,6 +14501,26 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             var group = groups[groupIndex];
             writer.Write(group.StableId);
             var layers = IndependentLayers(group);
+            var partitionSizes = group.GetPartitionSizes?.Invoke();
+            writer.Write(partitionSizes is not null);
+            if (partitionSizes is not null)
+            {
+                long partitionLayerCount = 0;
+                bool hasInvalidPartition = false;
+                for (int i = 0; i < partitionSizes.Count; i++)
+                {
+                    if (partitionSizes[i] < 0) hasInvalidPartition = true;
+                    partitionLayerCount += partitionSizes[i];
+                }
+                if (hasInvalidPartition || partitionLayerCount != layers.Count)
+                {
+                    throw new InvalidOperationException(
+                        $"Generated auxiliary-layer group '{group.StableId}' reported partition sizes " +
+                        "that do not cover its independently-owned layers exactly.");
+                }
+                writer.Write(partitionSizes.Count);
+                for (int i = 0; i < partitionSizes.Count; i++) writer.Write(partitionSizes[i]);
+            }
             writer.Write(layers.Count);
             for (int i = 0; i < layers.Count; i++)
             {
@@ -14410,7 +14549,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
     }
 
-    private void RestoreGeneratedAdditionalLayerState(BinaryReader reader)
+    private void RestoreGeneratedAdditionalLayerState(BinaryReader reader, int version)
     {
         var groups = CaptureAdditionalLayerGroups();
         var byId = new Dictionary<string, GeneratedAdditionalLayerGroup>(StringComparer.Ordinal);
@@ -14425,7 +14564,44 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         for (int groupIndex = 0; groupIndex < groupCount; groupIndex++)
         {
             string stableId = reader.ReadString();
+            IReadOnlyList<int>? savedPartitionSizes = null;
+            if (version >= 7 && reader.ReadBoolean())
+            {
+                int partitionCount = reader.ReadInt32();
+                if (partitionCount < 0)
+                    throw new InvalidDataException(
+                        $"Serialized auxiliary-layer group '{stableId}' has a negative partition count.");
+                if (reader.BaseStream.CanSeek
+                    && partitionCount > (reader.BaseStream.Length - reader.BaseStream.Position) / sizeof(int))
+                {
+                    throw new EndOfStreamException(
+                        $"Serialized auxiliary-layer group '{stableId}' ends before its partition table.");
+                }
+                var partitions = new int[partitionCount];
+                for (int i = 0; i < partitionCount; i++) partitions[i] = reader.ReadInt32();
+                savedPartitionSizes = partitions;
+            }
             int layerCount = reader.ReadInt32();
+            if (layerCount < 0)
+                throw new InvalidDataException(
+                    $"Serialized auxiliary-layer group '{stableId}' has a negative layer count.");
+            long savedPartitionLayerCount = 0;
+            bool hasInvalidSavedPartition = false;
+            if (savedPartitionSizes is not null)
+            {
+                for (int i = 0; i < savedPartitionSizes.Count; i++)
+                {
+                    if (savedPartitionSizes[i] < 0) hasInvalidSavedPartition = true;
+                    savedPartitionLayerCount += savedPartitionSizes[i];
+                }
+            }
+            if (savedPartitionSizes is not null
+                && (hasInvalidSavedPartition || savedPartitionLayerCount != layerCount))
+            {
+                throw new InvalidDataException(
+                    $"Serialized auxiliary-layer group '{stableId}' has partition sizes that do not " +
+                    "cover its layers exactly.");
+            }
             var saved = new List<SerializedAdditionalLayer>(layerCount);
             for (int i = 0; i < layerCount; i++)
             {
@@ -14456,6 +14632,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
             var current = IndependentLayers(targetGroup);
             bool canRestoreInPlace = current.Count == saved.Count;
+            if (canRestoreInPlace && savedPartitionSizes is not null)
+            {
+                var currentPartitionSizes = targetGroup.GetPartitionSizes?.Invoke();
+                canRestoreInPlace = currentPartitionSizes is not null
+                    && currentPartitionSizes.SequenceEqual(savedPartitionSizes);
+            }
             for (int i = 0; canRestoreInPlace && i < saved.Count; i++)
                 canRestoreInPlace = string.Equals(
                     GetPersistentLayerTypeName(current[i]), saved[i].TypeName, StringComparison.Ordinal);
@@ -14466,7 +14648,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 continue;
             }
 
-            if (targetGroup.Replace is null)
+            if ((savedPartitionSizes is null && targetGroup.Replace is null)
+                || (savedPartitionSizes is not null && targetGroup.ReplacePartitioned is null))
             {
                 throw new InvalidDataException(
                     $"Serialized auxiliary-layer group '{stableId}' contains {saved.Count} layers, but " +
@@ -14485,7 +14668,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 DeserializeAdditionalLayer(layer, item);
                 replacements.Add(layer);
             }
-            targetGroup.Replace(replacements);
+            if (savedPartitionSizes is not null)
+                targetGroup.ReplacePartitioned!(replacements, savedPartitionSizes);
+            else
+                targetGroup.Replace!(replacements);
         }
 
         InvalidateParameterCountCache();
@@ -14868,6 +15054,28 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     protected virtual bool SupportsCopyOnWriteDeepCopy => true;
 
+    /// <summary>
+    /// Determines whether every layer in the executable graph can safely consume shared parameter
+    /// storage during its forward pass.
+    /// </summary>
+    private bool SupportsCopyOnWriteLayerGraph()
+    {
+        foreach (var layer in AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<T>(this))
+        {
+            // Batch-normalization inference keeps gamma and beta on the active autodiff tape by using
+            // engine tensor operations. CpuEngine's optimized TensorDivide kernel currently obtains its
+            // input arrays through the mutable DataVector surface, which copy-on-write tensors correctly
+            // reject because an escaped array could mutate every alias without detaching. The eager clone
+            // path remains fully faithful and preserves both inference values and eval-mode gradients.
+            // Remove this guard only after every TensorDivide backend reads its operands through a
+            // read-only span (and writes only through the destination's writable surface).
+            if (layer is AiDotNet.NeuralNetworks.Layers.BatchNormalizationLayer<T>)
+                return false;
+        }
+
+        return true;
+    }
+
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
 
@@ -14875,6 +15083,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Falls back to the eager paths below for any model it cannot share safely (layer-count or
         // parameter-count mismatch, a layer whose SetTrainableParameters can't re-sync its fields).
         if (UseCopyOnWriteDeepCopy && SupportsCopyOnWriteDeepCopy
+            && SupportsCopyOnWriteLayerGraph()
             && TryDeepCopyCopyOnWrite(out var cowCopy))
             return cowCopy;
 

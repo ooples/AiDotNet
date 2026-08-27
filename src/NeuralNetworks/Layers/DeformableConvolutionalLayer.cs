@@ -341,20 +341,37 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
 
         // Main convolution weights [outC, inC/groups, kH, kW]
         int inChannelsPerGroup = inChannels / _groups;
-        _weights = InitializeWeights(_outputChannels, inChannelsPerGroup, _kernelSize, _kernelSize);
-        _bias = AllocateLazyWeight([_outputChannels]);
-
         // Offset prediction weights — 2 (x,y) × kernel² per deform group.
         int offsetChannels = 2 * _kernelSize * _kernelSize * _deformGroups;
-        _offsetWeights = InitializeWeights(offsetChannels, inChannels, _kernelSize, _kernelSize);
-        _offsetBias = AllocateLazyWeight([offsetChannels]);
+        int maskChannels = _kernelSize * _kernelSize * _deformGroups;
+        bool parametersAlreadyAllocated =
+            WeightsAlreadyAllocated(
+                _weights, _outputChannels, inChannelsPerGroup, _kernelSize, _kernelSize)
+            && WeightsAlreadyAllocated(_bias, _outputChannels)
+            && WeightsAlreadyAllocated(
+                _offsetWeights, offsetChannels, inChannels, _kernelSize, _kernelSize)
+            && WeightsAlreadyAllocated(_offsetBias, offsetChannels)
+            && (!_useModulation
+                || (WeightsAlreadyAllocated(
+                        _maskWeights, maskChannels, inChannels, _kernelSize, _kernelSize)
+                    && WeightsAlreadyAllocated(_maskBias, maskChannels)));
 
-        // Modulation mask weights (DCNv2 only).
-        if (_useModulation)
+        // A checkpoint can materialize and populate every tensor before the first Forward call.
+        // In that case shape resolution must adopt those tensors, not replace trained state with a
+        // fresh initialization. A partial or shape-incompatible set is not adopted as a unit.
+        if (!parametersAlreadyAllocated)
         {
-            int maskChannels = _kernelSize * _kernelSize * _deformGroups;
-            _maskWeights = InitializeWeights(maskChannels, inChannels, _kernelSize, _kernelSize);
-            _maskBias = AllocateLazyWeight([maskChannels]);
+            _weights = InitializeWeights(_outputChannels, inChannelsPerGroup, _kernelSize, _kernelSize);
+            _bias = AllocateLazyWeight([_outputChannels]);
+            _offsetWeights = InitializeWeights(offsetChannels, inChannels, _kernelSize, _kernelSize);
+            _offsetBias = AllocateLazyWeight([offsetChannels]);
+
+            // Modulation mask weights (DCNv2/DCNv3 only).
+            if (_useModulation)
+            {
+                _maskWeights = InitializeWeights(maskChannels, inChannels, _kernelSize, _kernelSize);
+                _maskBias = AllocateLazyWeight([maskChannels]);
+            }
         }
 
         RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
