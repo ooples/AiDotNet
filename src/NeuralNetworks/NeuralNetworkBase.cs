@@ -4025,6 +4025,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected virtual IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(
         IReadOnlyList<Tensor<T>> parameters) => parameters;
 
+    private bool? _hasCustomTrainableParameterSelection;
+
+    private bool HasCustomTrainableParameterSelection()
+    {
+        if (_hasCustomTrainableParameterSelection.HasValue)
+            return _hasCustomTrainableParameterSelection.Value;
+
+        var selector = GetType().GetMethod(
+            nameof(SelectTrainableParametersForTraining),
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        _hasCustomTrainableParameterSelection =
+            selector is not null && selector.DeclaringType != typeof(NeuralNetworkBase<T>);
+        return _hasCustomTrainableParameterSelection.Value;
+    }
 
     /// <summary>Collects every trainable tensor owned by this model in canonical order.</summary>
     protected IReadOnlyList<Tensor<T>> CollectModelTrainableTensors()
@@ -4050,6 +4064,36 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             Add(tensor);
 
         return SelectTrainableParametersForTraining(allParameters);
+    }
+
+    private IReadOnlyList<Tensor<T>>? CollectFusedExtraTrainableTensors()
+    {
+        List<Tensor<T>>? extraParameters = null;
+        HashSet<Tensor<T>>? seen = null;
+
+        foreach (var layer in GetExtraTrainableLayers())
+        {
+            if (layer is null) continue;
+            foreach (var parameter in layer.GetTrainableParameters())
+            {
+                if (parameter is null || parameter.Length == 0) continue;
+                seen ??= new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                if (!seen.Add(parameter)) continue;
+                extraParameters ??= [];
+                extraParameters.Add(parameter);
+            }
+        }
+
+        foreach (var parameter in GetExtraTrainableTensors())
+        {
+            if (parameter is null || parameter.Length == 0) continue;
+            seen ??= new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            if (!seen.Add(parameter)) continue;
+            extraParameters ??= [];
+            extraParameters.Add(parameter);
+        }
+
+        return extraParameters;
     }
 
     /// <summary>
@@ -10839,6 +10883,57 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return acc;
     }
 
+    private double FusedTrainableParamChecksum(
+        IReadOnlyList<ITrainableLayer<T>> layers,
+        IReadOnlyList<Tensor<T>>? extraParameters)
+    {
+        long total = 0;
+        for (int layerIndex = 0; layerIndex < layers.Count; layerIndex++)
+        {
+            foreach (var parameter in layers[layerIndex].GetTrainableParameters())
+            {
+                if (parameter is not null)
+                    total += parameter.AsSpan().Length;
+            }
+        }
+        if (extraParameters is not null)
+        {
+            for (int i = 0; i < extraParameters.Count; i++)
+                total += extraParameters[i].AsSpan().Length;
+        }
+        if (total == 0) return 0.0;
+
+        int stride = (int)System.Math.Max(1, total / FusedChecksumTargetSamples);
+        double acc = 0.0;
+        for (int layerIndex = 0; layerIndex < layers.Count; layerIndex++)
+        {
+            foreach (var parameter in layers[layerIndex].GetTrainableParameters())
+            {
+                if (parameter is null) continue;
+                var span = parameter.AsSpan();
+                for (int i = 0; i < span.Length; i += stride)
+                {
+                    double value = NumOps.ToDouble(span[i]);
+                    acc += value * value;
+                }
+            }
+        }
+        if (extraParameters is not null)
+        {
+            for (int parameterIndex = 0; parameterIndex < extraParameters.Count; parameterIndex++)
+            {
+                var span = extraParameters[parameterIndex].AsSpan();
+                for (int i = 0; i < span.Length; i += stride)
+                {
+                    double value = NumOps.ToDouble(span[i]);
+                    acc += value * value;
+                }
+            }
+        }
+
+        return acc;
+    }
+
     private bool TryTrainWithFusedOptimizer(
         Tensor<T> input,
         Tensor<T> expected,
@@ -10887,33 +10982,53 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (trainableLayers.Length == 0)
             return EmitFusedMissAndFallback("no trainable layers");
 
-        // A paper-defined selector must see the live parameter tensors rather than lazy
-        // placeholders. Materialize in inference mode before selecting the subset, matching
-        // the eager path's no-RNG/no-running-stat warmup contract.
-        if (AnyLayerNeedsShapeResolution() || AnyLayerHasUnmaterializedParameters())
-        {
-            bool wasTraining = IsTrainingMode;
-            if (wasTraining) SetTrainingMode(false);
-            try
-            {
-                ForwardForTraining(input);
-            }
-            catch
-            {
-                // Best effort only. The compiled training forward below will surface
-                // the original model error with its full context.
-            }
-            finally
-            {
-                if (wasTraining) SetTrainingMode(true);
-            }
-        }
+        IReadOnlyList<Tensor<T>>? selectedParameters = null;
+        IReadOnlyList<Tensor<T>>? fusedExtraParameters;
 
-        // Use the same canonical selection as eager, streaming and accumulated tape
-        // training. This includes extra trainable layers/tensors as well as Layers.
-        var selectedParameters = CollectModelTrainableTensors();
-        if (selectedParameters.Count == 0)
-            return EmitFusedMissAndFallback("parameter selection returned no trainable tensors");
+        // Only models that override the paper-selection hook pay for a complete canonical
+        // parameter walk. Doing this unconditionally duplicates parameter materialization for
+        // every ordinary model and is observable as training-step allocation, especially in
+        // recurrent and composite architectures.
+        if (HasCustomTrainableParameterSelection())
+        {
+            // A paper-defined selector must see the live parameter tensors rather than lazy
+            // placeholders. Materialize in inference mode before selecting the subset, matching
+            // the eager path's no-RNG/no-running-stat warmup contract.
+            if (AnyLayerNeedsShapeResolution() || AnyLayerHasUnmaterializedParameters())
+            {
+                bool wasTraining = IsTrainingMode;
+                if (wasTraining) SetTrainingMode(false);
+                try
+                {
+                    ForwardForTraining(input);
+                }
+                catch
+                {
+                    // Best effort only. The compiled training forward below will surface
+                    // the original model error with its full context.
+                }
+                finally
+                {
+                    if (wasTraining) SetTrainingMode(true);
+                }
+            }
+
+            // Use the same canonical selection as eager, streaming and accumulated tape
+            // training. This includes extra trainable layers/tensors as well as Layers.
+            selectedParameters = CollectModelTrainableTensors();
+            if (selectedParameters.Count == 0)
+                return EmitFusedMissAndFallback("parameter selection returned no trainable tensors");
+
+            // The explicit selection doubles as the extras source so selected tensors owned
+            // outside Layers are still available to the compiled collector.
+            fusedExtraParameters = selectedParameters;
+        }
+        else
+        {
+            // Preserve the original one-pass primary-layer path for ordinary models while
+            // still including trainable state owned outside Layers.
+            fusedExtraParameters = CollectFusedExtraTrainableTensors();
+        }
 
         var loss = LossFunction as LossFunctions.LossFunctionBase<T>;
         if (loss is null)
@@ -10970,9 +11085,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         bool verifyFusedPersistence =
             (!_fusedPersistenceVerified && !_fusedTrainingCommitted)
             || (++_fusedStepsSincePersistenceCheck >= FusedPersistenceRecheckInterval);
-        double fusedParamChecksumBefore = verifyFusedPersistence
-            ? FusedTrainableParamChecksum(selectedParameters)
-            : 0.0;
+        double fusedParamChecksumBefore = 0.0;
+        if (verifyFusedPersistence)
+        {
+            fusedParamChecksumBefore = selectedParameters is not null
+                ? FusedTrainableParamChecksum(selectedParameters)
+                : FusedTrainableParamChecksum(trainableLayers, fusedExtraParameters);
+        }
 
         bool ran;
         T lossValue;
@@ -11002,9 +11121,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // fused optimizers beyond the inline Adam/SGD fast paths by applying this
                 // optimizer's own master update to the FP16-computed FP32 gradients.
                 eagerOptimizer: resolvedOptimizer,
-                // The canonical selection also carries parameters owned by extra trainable
-                // layers/tensors, which are not discoverable from the primary layer list.
-                extraTensors: selectedParameters,
+                // Carry selected or ordinary model-owned extras that are not discoverable
+                // from the primary layer list.
+                extraTensors: fusedExtraParameters,
                 fusedExtras: fusedCfg.Extras,
                 // Publish the fused kernel's gradients onto the layer surface. The fused path
                 // updates parameters in-replay and returns without ever passing through the eager
@@ -11030,7 +11149,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // is a clean fall-through (no plan-embedded moment state to lose).
             if (verifyFusedPersistence)
             {
-                double fusedParamChecksumAfter = FusedTrainableParamChecksum(selectedParameters);
+                double fusedParamChecksumAfter = selectedParameters is not null
+                    ? FusedTrainableParamChecksum(selectedParameters)
+                    : FusedTrainableParamChecksum(trainableLayers, fusedExtraParameters);
                 bool persisted = fusedParamChecksumAfter != fusedParamChecksumBefore;
                 // Do NOT gate on fusedParamChecksumBefore != 0.0: the checksum is a sum of
                 // squares, so 0.0 means every trainable parameter starts exactly at zero. A
