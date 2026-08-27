@@ -40,7 +40,10 @@ concurrency:
   # Keep only the newest run for a PR, merge-group ref, or protected branch. A master push
   # normally reuses its exact-tree PR artifacts, so it no longer queues another test matrix.
   group: build-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # A synchronize event captured while a PR was still a draft can be delivered after the
+  # ready_for_review run has started. Its job-level draft gates intentionally skip validation,
+  # so it must never cancel the real ready run and replace it with an all-skipped check suite.
+  cancel-in-progress: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft != true }}
 
 env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
