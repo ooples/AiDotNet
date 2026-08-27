@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Compilation;
+using AiDotNet.Tensors.Engines.Optimization;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Training;
@@ -111,6 +112,78 @@ public class CompiledTapeTrainingStepTests
     }
 
     [Fact]
+    public void FusedStep_ChangingSameSizedSelection_UpdatesOnlySelectedTensors()
+    {
+        var originalOptions = TensorCodecOptions.Current;
+        try
+        {
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+            CompiledTapeTrainingStep<float>.Invalidate();
+
+            var (layers, forward) = BuildMLP();
+            IReadOnlyList<ITrainableLayer<float>> trainableLayers = layers;
+            var input = CreateRandomTensor(new[] { 8, 4 }, 42);
+            var target = CreateRandomTensor(new[] { 8, 2 }, 43);
+            var mseLoss = MakeMSELoss();
+
+            // Materialize both dense layers before defining the paper-selected subsets.
+            forward(input);
+            var firstLayerParameters = layers[0].GetTrainableParameters();
+            var secondLayerParameters = layers[1].GetTrainableParameters();
+            Assert.Equal(firstLayerParameters.Count, secondLayerParameters.Count);
+
+            var firstBefore = Snapshot(firstLayerParameters);
+            var secondBefore = Snapshot(secondLayerParameters);
+            bool firstRan = CompiledTapeTrainingStep<float>.TryStepWithFusedOptimizer(
+                trainableLayers,
+                input,
+                target,
+                forward,
+                mseLoss,
+                OptimizerType.SGD,
+                learningRate: 0.01f,
+                beta1: 0.9f,
+                beta2: 0.999f,
+                epsilon: 1e-8f,
+                weightDecay: 0.0f,
+                out float firstLoss,
+                trainableSelection: firstLayerParameters);
+
+            Assert.True(firstRan);
+            Assert.False(float.IsNaN(firstLoss));
+            AssertAnyTensorChanged(firstBefore, firstLayerParameters);
+            AssertTensorsExactlyEqual(secondBefore, secondLayerParameters);
+
+            var firstAfterFirstStep = Snapshot(firstLayerParameters);
+            var secondAfterFirstStep = Snapshot(secondLayerParameters);
+            bool secondRan = CompiledTapeTrainingStep<float>.TryStepWithFusedOptimizer(
+                trainableLayers,
+                input,
+                target,
+                forward,
+                mseLoss,
+                OptimizerType.SGD,
+                learningRate: 0.01f,
+                beta1: 0.9f,
+                beta2: 0.999f,
+                epsilon: 1e-8f,
+                weightDecay: 0.0f,
+                out float secondLoss,
+                trainableSelection: secondLayerParameters);
+
+            Assert.True(secondRan);
+            Assert.False(float.IsNaN(secondLoss));
+            AssertTensorsExactlyEqual(firstAfterFirstStep, firstLayerParameters);
+            AssertAnyTensorChanged(secondAfterFirstStep, secondLayerParameters);
+        }
+        finally
+        {
+            CompiledTapeTrainingStep<float>.Invalidate();
+            TensorCodecOptions.SetCurrent(originalOptions);
+        }
+    }
+
+    [Fact]
     public void CompiledStep_IsFasterThanEager_AfterWarmup()
     {
         CompiledTapeTrainingStep<float>.Invalidate();
@@ -211,6 +284,32 @@ public class CompiledTapeTrainingStepTests
             var sq = engine.TensorMultiply(diff, diff);
             return engine.ReduceSum(sq, null);
         };
+    }
+
+    private static float[][] Snapshot(IReadOnlyList<Tensor<float>> parameters)
+    {
+        return parameters.Select(parameter => parameter.AsSpan().ToArray()).ToArray();
+    }
+
+    private static void AssertTensorsExactlyEqual(
+        IReadOnlyList<float[]> expected,
+        IReadOnlyList<Tensor<float>> actual)
+    {
+        Assert.Equal(expected.Count, actual.Count);
+        for (int i = 0; i < expected.Count; i++)
+            Assert.Equal(expected[i], actual[i].AsSpan().ToArray());
+    }
+
+    private static void AssertAnyTensorChanged(
+        IReadOnlyList<float[]> before,
+        IReadOnlyList<Tensor<float>> after)
+    {
+        Assert.Equal(before.Count, after.Count);
+        Assert.True(
+            before.SelectMany(values => values)
+                .Zip(after.SelectMany(tensor => tensor.AsSpan().ToArray()))
+                .Any(pair => pair.First != pair.Second),
+            "At least one selected parameter element must change after the fused optimizer step.");
     }
 
     private static Tensor<float> CreateRandomTensor(int[] shape, int seed)

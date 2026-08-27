@@ -10805,7 +10805,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     // an exact norm — so it samples a deterministic stride instead of every element.
     private const int FusedChecksumTargetSamples = 1 << 16; // 65536
 
-    private double FusedTrainableParamChecksum(IReadOnlyList<ITrainableLayer<T>> layers)
+    private double FusedTrainableParamChecksum(IReadOnlyList<Tensor<T>> parameters)
     {
         // Bounded persistence probe (#1822). Summing ALL parameters is O(N) scalar
         // generic ToDouble; at foundation scale (e.g. 385M params) that alone is
@@ -10821,24 +10821,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // cap; for larger models it's a faithful subset that still catches the
         // silent-no-op the guard exists for.
         long total = 0;
-        for (int li = 0; li < layers.Count; li++)
-            foreach (var p in layers[li].GetTrainableParameters())
-                if (p is not null) total += p.AsSpan().Length;
+        for (int i = 0; i < parameters.Count; i++)
+            total += parameters[i].AsSpan().Length;
         if (total == 0) return 0.0;
 
         int stride = (int)System.Math.Max(1, total / FusedChecksumTargetSamples);
         double acc = 0.0;
-        for (int li = 0; li < layers.Count; li++)
+        for (int pi = 0; pi < parameters.Count; pi++)
         {
-            foreach (var p in layers[li].GetTrainableParameters())
+            var span = parameters[pi].AsSpan();
+            for (int i = 0; i < span.Length; i += stride)
             {
-                if (p is null) continue;
-                var span = p.AsSpan();
-                for (int i = 0; i < span.Length; i += stride)
-                {
-                    double v = NumOps.ToDouble(span[i]);
-                    acc += v * v;
-                }
+                double v = NumOps.ToDouble(span[i]);
+                acc += v * v;
             }
         }
         return acc;
@@ -10892,20 +10887,33 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (trainableLayers.Length == 0)
             return EmitFusedMissAndFallback("no trainable layers");
 
-        // Models whose published recipe fine-tunes only part of a pretrained backbone narrow the
-        // optimized set through SelectTrainableParametersForTraining. That hook reaches the eager,
-        // streaming and grad-accum tapes via CollectModelTrainableTensors; hand the same selection
-        // to the fused kernel so it configures optimizer state for — and writes — exactly those
-        // leaves. Without this the fused path would update the full vector and silently unfreeze
-        // the backbone, which is why partial-freeze models used to opt out of fusion entirely.
-        var allTrainable = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
-        var selectedTrainable = SelectTrainableParametersForTraining(allTrainable);
-        // The base implementation returns its argument unchanged; only a model that actually
-        // built a narrowed list needs the filter threaded through.
-        IReadOnlyCollection<Tensor<T>>? fusedSelection =
-            ReferenceEquals(selectedTrainable, allTrainable) ? null : selectedTrainable;
-        if (fusedSelection is not null && fusedSelection.Count == 0)
-            return EmitFusedMissAndFallback("partial-freeze selection is empty");
+        // A paper-defined selector must see the live parameter tensors rather than lazy
+        // placeholders. Materialize in inference mode before selecting the subset, matching
+        // the eager path's no-RNG/no-running-stat warmup contract.
+        if (AnyLayerNeedsShapeResolution() || AnyLayerHasUnmaterializedParameters())
+        {
+            bool wasTraining = IsTrainingMode;
+            if (wasTraining) SetTrainingMode(false);
+            try
+            {
+                ForwardForTraining(input);
+            }
+            catch
+            {
+                // Best effort only. The compiled training forward below will surface
+                // the original model error with its full context.
+            }
+            finally
+            {
+                if (wasTraining) SetTrainingMode(true);
+            }
+        }
+
+        // Use the same canonical selection as eager, streaming and accumulated tape
+        // training. This includes extra trainable layers/tensors as well as Layers.
+        var selectedParameters = CollectModelTrainableTensors();
+        if (selectedParameters.Count == 0)
+            return EmitFusedMissAndFallback("parameter selection returned no trainable tensors");
 
         var loss = LossFunction as LossFunctions.LossFunctionBase<T>;
         if (loss is null)
@@ -10963,7 +10971,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             (!_fusedPersistenceVerified && !_fusedTrainingCommitted)
             || (++_fusedStepsSincePersistenceCheck >= FusedPersistenceRecheckInterval);
         double fusedParamChecksumBefore = verifyFusedPersistence
-            ? FusedTrainableParamChecksum(trainableLayers)
+            ? FusedTrainableParamChecksum(selectedParameters)
             : 0.0;
 
         bool ran;
@@ -10994,13 +11002,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // fused optimizers beyond the inline Adam/SGD fast paths by applying this
                 // optimizer's own master update to the FP16-computed FP32 gradients.
                 eagerOptimizer: resolvedOptimizer,
+                // The canonical selection also carries parameters owned by extra trainable
+                // layers/tensors, which are not discoverable from the primary layer list.
+                extraTensors: selectedParameters,
                 fusedExtras: fusedCfg.Extras,
                 // Publish the fused kernel's gradients onto the layer surface. The fused path
                 // updates parameters in-replay and returns without ever passing through the eager
                 // gradient code below, which is why the surface stayed empty for every model that
                 // engages fusion -- the largest single cause of the all-zero gradient reports.
                 onGradients: ScatterFusedGradients,
-                trainableSelection: fusedSelection);
+                trainableSelection: selectedParameters);
         }
         finally
         {
@@ -11019,7 +11030,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // is a clean fall-through (no plan-embedded moment state to lose).
             if (verifyFusedPersistence)
             {
-                double fusedParamChecksumAfter = FusedTrainableParamChecksum(trainableLayers);
+                double fusedParamChecksumAfter = FusedTrainableParamChecksum(selectedParameters);
                 bool persisted = fusedParamChecksumAfter != fusedParamChecksumBefore;
                 // Do NOT gate on fusedParamChecksumBefore != 0.0: the checksum is a sum of
                 // squares, so 0.0 means every trainable parameter starts exactly at zero. A

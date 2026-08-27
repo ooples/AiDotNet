@@ -86,14 +86,14 @@ public static class CompiledTapeTrainingStep<T>
     private static Tensor<T>[]? _cachedParameters;
 
     /// <summary>
-    /// Size of the partial-freeze selection that produced <see cref="_cachedParameters"/>,
-    /// or -1 when the cache was built with no selection. The layer-set identity check
-    /// already separates distinct models, but the cached array is now selection-dependent,
-    /// so a mismatch here must also invalidate rather than silently reuse a filtered array
-    /// for a caller that optimizes everything.
+    /// Tensor identities of the explicit partial-freeze selection that produced
+    /// <see cref="_cachedParameters"/>. Count alone is insufficient: two paper-defined
+    /// stages may select different tensors while keeping the same cardinality.
     /// </summary>
     [ThreadStatic]
-    private static int _cachedSelectionCount;
+    private static Tensor<T>[]? _cachedSelectionIdentities;
+    [ThreadStatic]
+    private static bool _cachedUsesExplicitSelection;
 
     /// <summary>
     /// AiDotNet#1406: identity of the trainable-layer set that produced
@@ -293,6 +293,7 @@ public static class CompiledTapeTrainingStep<T>
                 // Caches cleared; cache field rebound below.
                 _mpPlan = null; _mpAdamPlan = null; _mpGenericPlan = null; // also drop the mixed-precision plans (#558)
             }
+            InvalidateIfSelectionChanged(null);
             var cache = _cache ??= new CompiledModelCache<T>();
 
             // Force layer initialization before collecting parameters.
@@ -308,7 +309,11 @@ public static class CompiledTapeTrainingStep<T>
             // wrong for the fused kernel's m/v buffers downstream.
             bool firstCollectThisLifecycle = _cachedParameters is null;
             var parameters = _cachedParameters ??= CollectDeduplicatedParameters(layers);
-            if (firstCollectThisLifecycle) RememberLayerSet(layers);
+            if (firstCollectThisLifecycle)
+            {
+                RememberLayerSet(layers);
+                RememberSelection(null);
+            }
 
             // Zero gradients before forward pass
             foreach (var layer in layers)
@@ -442,11 +447,60 @@ public static class CompiledTapeTrainingStep<T>
         _cachedLayerSetIdentities = ids;
     }
 
+    /// <summary>
+    /// Invalidates when a cached compiled plan was built for a different explicit
+    /// parameter subset. The comparison is ordered reference identity, matching the
+    /// parameter order captured by the optimizer plan.
+    /// </summary>
+    private static bool InvalidateIfSelectionChanged(
+        IReadOnlyCollection<Tensor<T>>? selection)
+    {
+        if (_cachedParameters is null)
+            return false;
+
+        bool usesExplicitSelection = selection is not null;
+        if (_cachedUsesExplicitSelection != usesExplicitSelection)
+        {
+            Invalidate();
+            return true;
+        }
+
+        if (!usesExplicitSelection)
+            return false;
+
+        var cached = _cachedSelectionIdentities;
+        if (cached is null || cached.Length != selection!.Count)
+        {
+            Invalidate();
+            return true;
+        }
+
+        int index = 0;
+        foreach (var parameter in selection)
+        {
+            if (!ReferenceEquals(cached[index++], parameter))
+            {
+                Invalidate();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void RememberSelection(IReadOnlyCollection<Tensor<T>>? selection)
+    {
+        _cachedUsesExplicitSelection = selection is not null;
+        _cachedSelectionIdentities = selection?.ToArray();
+    }
+
     public static void Invalidate()
     {
         _cache?.Invalidate();
         _cachedParameters = null;
         _cachedLayerSetIdentities = null;
+        _cachedSelectionIdentities = null;
+        _cachedUsesExplicitSelection = false;
         _configuredPlan = null;
         _configuredOptimizerConfig = null;
         // AiDotNet#1331: drop the persistent input/target tensors so the next
@@ -641,12 +695,9 @@ public static class CompiledTapeTrainingStep<T>
             // to pre-Train, even though LastLoss reports a non-zero loss
             // (the plan ran on the previous model's now-stale tensors).
             InvalidateIfLayerSetChanged(layers);
-            // The cached parameter array is selection-dependent (partial-freeze models narrow
-            // it); reusing one built under a different selection would optimize the wrong set.
-            int selectionCount = trainableSelection?.Count ?? -1;
-            if (_cachedParameters is not null && _cachedSelectionCount != selectionCount)
-                Invalidate();
-            _cachedSelectionCount = selectionCount;
+            // Cached optimizer state is tied to the exact ordered tensor subset, not merely
+            // its size. A same-cardinality stage switch must compile a fresh plan.
+            InvalidateIfSelectionChanged(trainableSelection);
             using var firstCompiledStepAllocations =
                 FirstCompiledStepAllocationScope.Enter(_configuredPlan is null);
             var cache = _cache ??= new CompiledModelCache<T>();
@@ -732,7 +783,11 @@ public static class CompiledTapeTrainingStep<T>
             bool firstCollectThisLifecycle = _cachedParameters is null;
             var parameters = _cachedParameters ??=
                 CollectDeduplicatedParametersWithExtras(layers, extraTensors, trainableSelection);
-            if (firstCollectThisLifecycle) RememberLayerSet(layers);
+            if (firstCollectThisLifecycle)
+            {
+                RememberLayerSet(layers);
+                RememberSelection(trainableSelection);
+            }
 
             // GPU-RESIDENCY (campaign M1): on the DirectGpu engine, make the parameters GPU-resident ONCE so
             // CompiledTrainingPlan.ConfigureOptimizerFloat takes its GPU Adam branch (param.TryGetGpuBuffer()
