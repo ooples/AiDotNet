@@ -394,7 +394,7 @@ jobs:
   # Sharded test execution for fast, parallel feedback and coverage generation (net10.0).
   # Coverage artifacts are consumed by the SonarCloud analysis job below.
   test-net10-sharded:
-    name: Tests (net10.0) - ${{ matrix.shard.name }}
+    name: Tests (${{ matrix.shard.framework }}) - ${{ matrix.shard.name }}
     runs-on: ubuntu-latest
     needs: [build, validation-source]
     # A shard may raise its own ceiling; the default also reserves five minutes beyond the
@@ -1239,6 +1239,26 @@ jobs:
             project: tests/AiDotNet.Serving.Tests/AiDotNet.Serving.Tests.csproj
             framework: net10.0
             filter: 'Category!=GPU&Category!=Stress'
+          # =====================================================================
+          # NET8.0 SMOKE
+          # =====================================================================
+          # net10.0 is where the full matrix runs; net471 gets no shard at all so it
+          # does not slow CI down. net8.0 sits between them: src ships it, so a
+          # SMOKE-SIZED shard is worth the minute it costs, but it is deliberately
+          # not a second matrix.
+          #
+          # Scoped to what a compile cannot prove and a runtime difference would
+          # break: the tape (autodiff), the numeric core (linear algebra), and ONE
+          # model fixture whose conformance invariants run train/predict end to end.
+          # ~120 tests. Everything broader belongs on net10.0.
+          - name: Net8 Smoke
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net8.0
+            timeout: 15
+            filter: >-
+              Category!=GPU&Category!=Stress&Category!=Sweep&Category!=HeavyTimeout&
+              (FullyQualifiedName~UnitTests.Autodiff|FullyQualifiedName~UnitTests.LinearAlgebra|
+              FullyQualifiedName~ModelFamilyTests.Regression.SimpleRegressionTests)
 
     steps:
       - name: Checkout code
