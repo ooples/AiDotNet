@@ -1,6 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- Not shipped. release-please packs and pushes src/AiDotNet.csproj ALONE, so this
+         produced a package nothing publishes or consumes. A BenchmarkDotNet harness, not a library. -->
+    <IsPackable>false</IsPackable>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
