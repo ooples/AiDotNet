@@ -1038,20 +1038,13 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
     /// </remarks>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
-        // THROUGH THE PAYLOAD, not through a hand-written list of fields. This used to copy exactly
-        // SupportVectors, Alphas, B, Options and Regularization -- correct for a support-vector model
-        // and silently wrong for every subclass whose state is something else. LocallyWeightedRegression
-        // keeps its training set in _xTrain/_yTrain; those were declared, they round-tripped through
-        // Serialize perfectly, and DeepCopy dropped them anyway because it was never told they exist.
-        // Its clone predicted 59.3 where the original predicted 64.6.
-        //
-        // Serialize already carries whatever this model declared, so routing the copy through it means
-        // a subclass adding state gets a correct DeepCopy for free -- which is the whole point of
-        // declaring state rather than enumerating it in a base that cannot know its subclasses.
+        // Create through the subclass factory so constructor-bound collaborators (such as an
+        // optimizer whose model owner is supplied by a factory) bind to the clone, not the source.
+        // The serialized payload remains the single source of truth for fitted and declared state.
         using (ModelPersistenceGuard.InternalOperation())
         {
             byte[] state = Serialize();
-            var clone = (NonLinearRegressionBase<T>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
+            var clone = (NonLinearRegressionBase<T>)CreateInstance();
             clone.Deserialize(state);
             AiDotNet.Models.CloneEngine.RestoreMutableConstructorConfiguration(this, clone);
             return clone;

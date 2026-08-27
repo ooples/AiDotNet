@@ -38,6 +38,44 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="TOutput">The type of output data for the model.</typeparam>
 public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, TOutput>, IModelShape
 {
+    // --- declared state (ModelStateRegistry) ---
+    // Optimizers are not model parameters, but their algorithmic history is state: moment vectors,
+    // per-parameter step sizes, and iteration counters must survive a checkpoint exactly.
+
+    /// <summary>State owned by the optimizer that is not represented by model parameters.</summary>
+    private readonly AiDotNet.Models.ModelStateRegistry<T> _declaredState = new();
+    private bool _declaredStateRegistered;
+
+    /// <summary>
+    /// Declares optimizer state that cannot be inferred by the generated state registry.
+    /// </summary>
+    /// <param name="state">The state registry to populate.</param>
+    protected virtual void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+    }
+
+    /// <summary>Generated declarations for optimizer state across the inheritance hierarchy.</summary>
+    /// <param name="state">The state registry to populate.</param>
+    protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+    }
+
+    /// <summary>The optimizer state registry, initialized after the derived constructor has run.</summary>
+    protected AiDotNet.Models.ModelStateRegistry<T> DeclaredState
+    {
+        get
+        {
+            if (!_declaredStateRegistered)
+            {
+                _declaredStateRegistered = true;
+                RegisterGeneratedState(_declaredState);
+                RegisterState(_declaredState);
+            }
+
+            return _declaredState;
+        }
+    }
+
     /// <summary>
     /// Gets the global execution engine for vector operations.
     /// </summary>
@@ -1969,7 +2007,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         SerializeAdditionalData(writer);
         SerializeExtensionData(writer);
 
-        return memoryStream.ToArray();
+        return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, memoryStream.ToArray());
     }
 
     /// <summary>
@@ -1998,6 +2036,9 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     public virtual void Deserialize(byte[] data)
     {
+        // Apply and strip generated optimizer state before parsing the legacy-compatible body.
+        data = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, data);
+
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         using MemoryStream ms = new(data);
         using BinaryReader reader = new(ms);

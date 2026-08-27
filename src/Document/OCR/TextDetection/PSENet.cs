@@ -159,7 +159,14 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         _backboneChannels = backboneChannels;
         _featureChannels = featureChannels;
         _numKernels = numKernels;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                // The detector's multi-million-parameter ResNet/FPN stack needs the bounded
+                // fine-tuning step used by the established PSENet training path; Adam's generic
+                // 1e-3 first step overshoots the BCE-with-logits objective.
+                InitialLearningRate = 1e-4
+            });
 
         ImageSize = imageSize;
 
@@ -205,7 +212,11 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         _backboneChannels = backboneChannels;
         _featureChannels = featureChannels;
         _numKernels = numKernels;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-4
+            });
 
         ImageSize = imageSize;
 

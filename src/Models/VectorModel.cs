@@ -74,10 +74,7 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             () => Coefficients,
             value =>
             {
-                // Coefficients is get-only, so restore writes THROUGH it rather than replacing
-                // it -- the same thing the hand-written SetParameters did. The base fold has
-                // already rejected a wrong-length vector by this point.
-                for (int i = 0; i < Coefficients.Length; i++) Coefficients[i] = value[i];
+                Coefficients = value;
             }));
     }
     /// <summary>
@@ -115,7 +112,7 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
     /// These coefficients make the model interpretable - you can see exactly how each feature affects the prediction.
     /// </para>
     /// </remarks>
-    public Vector<T> Coefficients { get; }
+    public Vector<T> Coefficients { get; private set; }
 
     /// <summary>
     /// Cached feature importance to avoid recreating on every GetModelMetadata() call.
@@ -126,6 +123,14 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
     /// The default loss function used by this model for gradient computation.
     /// </summary>
     private readonly ILossFunction<T> _defaultLossFunction;
+
+    /// <summary>
+    /// Initializes an empty vector model whose coefficient shape will be supplied during restoration.
+    /// </summary>
+    public VectorModel()
+        : this(Vector<T>.Empty())
+    {
+    }
 
     /// <summary>
     /// Initializes a new instance of the VectorModel class with the specified coefficients.

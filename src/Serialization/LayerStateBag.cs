@@ -957,6 +957,36 @@ public readonly struct LayerStateBag
         if (typeName.Length == 0) return null;
 
         var type = Type.GetType(typeName);
+        // Legacy layer metadata stored activation enum names (for example "ReLU") rather than
+        // assembly-qualified implementation types. Preserve that wire format at the component
+        // boundary, while keeping arbitrary component names fail-closed below.
+        if (type is null
+            && System.Enum.TryParse<AiDotNet.Enums.ActivationFunction>(typeName, ignoreCase: true, out var activation)
+            && typeof(TComponent).IsGenericType)
+        {
+            Type contract = typeof(TComponent).GetGenericTypeDefinition();
+            string? factoryMethod = contract == typeof(AiDotNet.Interfaces.IActivationFunction<>)
+                ? "CreateActivationFunction"
+                : contract == typeof(AiDotNet.Interfaces.IVectorActivationFunction<>)
+                    ? "CreateVectorActivationFunction"
+                    : null;
+
+            if (factoryMethod is not null)
+            {
+                Type numericType = typeof(TComponent).GetGenericArguments()[0];
+                Type factoryType = typeof(AiDotNet.Factories.ActivationFunctionFactory<>)
+                    .MakeGenericType(numericType);
+                MethodInfo? create = factoryType.GetMethod(
+                    factoryMethod,
+                    BindingFlags.Public | BindingFlags.Static);
+
+                if (create?.Invoke(null, new object[] { activation }) is TComponent legacyActivation)
+                {
+                    return legacyActivation;
+                }
+            }
+        }
+
         if (type is null)
         {
             throw new InvalidOperationException(

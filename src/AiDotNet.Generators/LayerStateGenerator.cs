@@ -137,12 +137,14 @@ public class LayerStateGenerator : IIncrementalGenerator
         var syntax = (ConstructorDeclarationSyntax)ctx.Node;
         if (ctx.SemanticModel.GetDeclaredSymbol(syntax) is not IMethodSymbol ctor) return null;
 
-        // A constructor that delegates with `: this(...)` holds no construction state of its own --
-        // the target does. Analysing it anyway made SetAbstractionLayer's single-scale overload
-        // report `searchRadius` as unbacked even after it was reduced to a pure delegation to the
-        // multi-scale constructor, which is the one that stores everything.
+        // An unannotated convenience constructor that delegates with `: this(...)` holds no
+        // construction-state claim of its own; the target does. An explicitly [LayerState]-marked
+        // delegating constructor is different: it can assign additional state in its body after the
+        // delegation (FeatureTokenizerLayer's runtime feature count is the representative case).
+        // Discarding it before inspecting the attributes silently selects the narrower constructor.
         if (syntax.Initializer is { } selfInit
-            && selfInit.IsKind(SyntaxKind.ThisConstructorInitializer))
+            && selfInit.IsKind(SyntaxKind.ThisConstructorInitializer)
+            && !ctor.Parameters.Any(HasStateAttribute))
         {
             return null;
         }

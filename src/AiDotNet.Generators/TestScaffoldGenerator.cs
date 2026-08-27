@@ -2136,7 +2136,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     // ModelTask enum values (must match AiDotNet.Enums.ModelTask)
     private const int TaskClassification = 0;
     private const int TaskRegression = 1;
-    private const int TaskClustering = 2;
+    private const int TaskGeneration = 2;
+    private const int TaskClustering = 8;
 
     private static readonly DiagnosticDescriptor UntestedModel = new(
         id: "AIDN040",
@@ -5899,7 +5900,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // through the public native constructor at CI-smoke scale.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "modelSize: AiDotNet.Audio.AudioGen.AudioGenModelSize.Medium, " +
                     "sampleRate: 8000, durationSeconds: 0.1, maxDurationSeconds: 0.1, " +
@@ -11145,9 +11146,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // model.HasArchitectureOnlyConstructor (and canConstruct) only when
                 // IsExactlyArchitecture is true.
                 string archTypeName = "NeuralNetworkArchitecture<double>";
+                string taskTypeExpr = model.Tasks.Contains(TaskGeneration)
+                    ? "AiDotNet.Enums.NeuralNetworkTaskType.Generative"
+                    : "AiDotNet.Enums.NeuralNetworkTaskType.Regression";
                 string archExpr = $"new {archTypeName}(" +
                     $"inputType: {inputTypeExpr}, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    $"taskType: {taskTypeExpr}, " +
                     $"{sizeExpr})";
 
                 // Paper-scale language models (Griffin/Hawk/RecurrentGemma) default to a 256k
@@ -15596,6 +15600,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool isTrainable = true, hasTrainingMode = false, changesShape = false, isStateful = false;
         bool supportsBackprop = true, normalizesInput = false, usesSurrogateGradient = false;
         bool producesNonFiniteOutput = false;
+        bool requiresDoublePrecisionGradients = false;
         bool trainsViaCustomLoss = false;
         int apiShape = LayerApiShapeSingleTensor;
         string testInputShape = "";
@@ -15605,6 +15610,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         foreach (var attr in symbol.GetAttributes())
         {
             if (attr.AttributeClass is null) continue;
+            if (attr.AttributeClass.Name == "GenerateDoubleTestScaffoldAttribute")
+            {
+                requiresDoublePrecisionGradients = true;
+                continue;
+            }
+
             if (!attr.AttributeClass.ToDisplayString().EndsWith("LayerPropertyAttribute", System.StringComparison.Ordinal))
                 continue;
 
@@ -15676,7 +15687,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             NormalizesInput = normalizesInput,
             UsesSurrogateGradient = usesSurrogateGradient,
             ProducesNonFiniteOutput = producesNonFiniteOutput,
-            TrainsViaCustomLoss = trainsViaCustomLoss
+            TrainsViaCustomLoss = trainsViaCustomLoss,
+            RequiresDoublePrecisionGradients = requiresDoublePrecisionGradients
         };
     }
 
@@ -15744,6 +15756,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         string testClassName)
     {
         var typeName = GeneratorHelpers.StripGenericSuffix(layer.FullyQualifiedName);
+        string numericType = layer.RequiresDoublePrecisionGradients ? "double" : "float";
         string constructorArgs = string.IsNullOrEmpty(layer.TestConstructorArgs) ? "" : layer.TestConstructorArgs;
         if (layer.ClassName == "DepthwiseSeparableConvolutionalLayer")
         {
@@ -15752,13 +15765,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // the negative ReLU half-space and falsely report identical zeros.
             // Use identity only in the generated fixture so the invariant tests
             // the depthwise/pointwise convolution rather than activation clipping.
-            constructorArgs = "2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<float>)new AiDotNet.ActivationFunctions.IdentityActivation<float>()";
+            constructorArgs =
+                $"2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<{numericType}>)" +
+                $"new AiDotNet.ActivationFunctions.IdentityActivation<{numericType}>()";
         }
-        else
+        else if (numericType == "float")
         {
             constructorArgs = GeneratedTestFloatify.Floatify(constructorArgs);
         }
-        string constructorExpr = $"new {typeName}<float>({constructorArgs})";
+        string constructorExpr = $"new {typeName}<{numericType}>({constructorArgs})";
 
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -15779,10 +15794,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // compile time if it drifts, instead of the old pattern of two
         // strings-in-lockstep that could silently diverge. See issue #1166.
         sb.AppendLine("[Collection(global::AiDotNet.Tests.Fixtures.LayerSerializationCollection.Name)]");
-        sb.AppendLine($"public class {testClassName} : LayerTestBase<float>");
+        sb.AppendLine($"public class {testClassName} : LayerTestBase<{numericType}>");
         sb.AppendLine("{");
         sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
-        sb.AppendLine($"    protected override ILayer<float> CreateLayer()");
+        sb.AppendLine($"    protected override ILayer<{numericType}> CreateLayer()");
         sb.AppendLine($"        => {constructorExpr};");
 
         // Override InputShape if specified
@@ -16057,6 +16072,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool UsesSurrogateGradient { get; set; }
         public bool ProducesNonFiniteOutput { get; set; }
         public bool TrainsViaCustomLoss { get; set; }
+        public bool RequiresDoublePrecisionGradients { get; set; }
 
         /// <summary>Where the layer is declared, or null when it came from a referenced assembly.</summary>
         /// <remarks>

@@ -3272,6 +3272,18 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     break;
                 }
             }
+            // Resolved shapes are persistence state even when they are intentionally absent from
+            // construction metadata. Shape-adaptive layers such as FeatureTokenizerLayer omit their
+            // observed feature count from metadata because it is a runtime cache, but their first
+            // forward will rebuild and randomize correctly adopted tensors if that cache still
+            // reflects the fresh model's default width. Reconstruct from the source's resolved shape
+            // before tensor adoption so generated shape-derived fields and the tensor registry agree.
+            if (matches)
+            {
+                matches = sourceLayer.GetInputShape().SequenceEqual(destinationLayer.GetInputShape())
+                    && sourceLayer.GetOutputShape().SequenceEqual(destinationLayer.GetOutputShape());
+            }
+
             if (matches) continue;
 
             try

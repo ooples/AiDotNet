@@ -143,6 +143,14 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
             && context.ContainingSymbol is IMethodSymbol { ContainingType: { IsAbstract: false } lifecycleOwner }
             && (IsModel(lifecycleOwner) || IsLayer(lifecycleOwner) || isParameterOwnershipHook))
         {
+            // Explicit compatibility formats may own only the public byte encoding. Construction,
+            // cloning, parameter ownership, and network-specific state remain generated/base-owned.
+            if (name is "Serialize" or "Deserialize"
+                && HasCustomSerializationFormat(lifecycleOwner))
+            {
+                return;
+            }
+
             context.ReportDiagnostic(Diagnostic.Create(
                 ConcreteLifecycleOverride,
                 method.Identifier.GetLocation(),
@@ -150,7 +158,6 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
                 name));
             return;
         }
-
         // Serialization is reported wherever it is hand-written, without asking whether the base
         // "already reproduces" it. That question is the wrong one: the state a layer persists by
         // hand is state nothing declared, so the base COULD not reproduce it, and treating that as
@@ -172,6 +179,12 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
             if (context.ContainingSymbol is IMethodSymbol { OverriddenMethod: not null and not { IsAbstract: true } }
                 && context.ContainingSymbol.ContainingType is INamedTypeSymbol owner)
             {
+                // A small number of public checkpoint formats deliberately encode state differently
+                // from its in-memory representation (for example, Adam8Bit's versioned quantized
+                // payload and legacy compatibility checks). Require an explicit type-level marker
+                // for those cases; every unmarked hand-written serializer remains an error.
+                if (HasCustomSerializationFormat(owner)) return;
+
                 context.ReportDiagnostic(Diagnostic.Create(
                     HandWrittenSerialization, method.Identifier.GetLocation(), owner.Name, name));
             }
@@ -506,4 +519,9 @@ public class CloneAutomationAnalyzer : DiagnosticAnalyzer
 
         return false;
     }
+
+    /// <summary>Returns whether a type explicitly owns a stable custom checkpoint wire format.</summary>
+    private static bool HasCustomSerializationFormat(INamedTypeSymbol type)
+        => type.GetAttributes().Any(attribute
+            => attribute.AttributeClass?.Name == "CustomSerializationFormatAttribute");
 }

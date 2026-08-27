@@ -89,13 +89,13 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Baseline cumulative hazard function times.
     /// </summary>
-    [AiDotNet.Attributes.Scratch]
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _baselineHazardTimes;
 
     /// <summary>
     /// Baseline cumulative hazard function values.
     /// </summary>
-    [AiDotNet.Attributes.Scratch]
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _baselineHazardValues;
 
     /// <summary>

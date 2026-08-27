@@ -952,9 +952,8 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             var epsilonVec = Tensor<T>.CreateDefault(_runningVariance._shape, _epsilon);
             var variancePlusEps = Engine.TensorAdd(_runningVariance, epsilonVec);
             var stdDev = Engine.TensorSqrt(variancePlusEps);
-            var inferenceScale = Engine.TensorDivide(_gamma, stdDev);
-            var term2 = Engine.TensorDivide(Engine.TensorMultiply(_gamma, _runningMean), stdDev);
-            var inferenceShift = Engine.TensorSubtract(_beta, term2);
+            var (inferenceScale, inferenceShift) =
+                CreateInferenceAffine(_gamma, _beta, _runningMean, stdDev);
 
             // Handle any tensor rank (2D, 3D, 4D, 5D, etc.)
             // Dimension 0 is batch, dimension 1 is features/channels
@@ -975,6 +974,34 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
 
             return result;
         }
+    }
+
+    /// <summary>
+    /// Builds inference affine coefficients without requesting writable access to persistent operands.
+    /// </summary>
+    private (Tensor<T> Scale, Tensor<T> Shift) CreateInferenceAffine(
+        Tensor<T> gamma,
+        Tensor<T> beta,
+        Tensor<T> runningMean,
+        Tensor<T> standardDeviation)
+    {
+        if (!gamma._shape.SequenceEqual(beta._shape)
+            || !gamma._shape.SequenceEqual(runningMean._shape)
+            || !gamma._shape.SequenceEqual(standardDeviation._shape))
+        {
+            throw new ArgumentException(
+                "Batch-normalization affine operands must have identical shapes.");
+        }
+
+        var scale = new Tensor<T>(gamma._shape);
+        var shift = new Tensor<T>(gamma._shape);
+        for (int i = 0; i < scale.Length; i++)
+        {
+            scale[i] = NumOps.Divide(gamma[i], standardDeviation[i]);
+            shift[i] = NumOps.Subtract(beta[i], NumOps.Multiply(scale[i], runningMean[i]));
+        }
+
+        return (scale, shift);
     }
 
     /// <summary>

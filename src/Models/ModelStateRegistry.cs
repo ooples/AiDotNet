@@ -145,13 +145,15 @@ public sealed class ModelStateRegistry<T>
     // A child-list payload used to begin directly with its count. A negative marker keeps old
     // payloads readable while allowing new payloads to record each child's concrete runtime type.
     private const int TypedChildListMarker = unchecked((int)0xA1D0C11D);
+    private const int TypedChildMarker = unchecked((int)0xA1D0C11C);
+
 
     private static readonly JsonSerializerSettings ObjectStateSettings = new()
     {
         ConstructorHandling = ConstructorHandling.AllowNonPublicDefaultConstructor,
         Formatting = Formatting.None,
         TypeNameHandling = TypeNameHandling.None,
-        Converters = { new ModelSerializerJsonConverter() }
+        Converters = { new NumericStateJsonConverter(), new ModelSerializerJsonConverter() }
     };
 
     private readonly List<Entry> _entries = new();
@@ -481,6 +483,76 @@ public sealed class ModelStateRegistry<T>
     /// <param name="name">A stable name, unique within the model.</param>
     /// <param name="get">Reads the current value.</param>
     /// <param name="set">Installs a restored value.</param>
+    /// <summary>
+    /// Preserves numeric tensors nested inside generated object state through the registry's
+    /// native binary representation. Json.NET can enumerate these values but cannot reconstruct
+    /// their storage and shape from public properties alone.
+    /// </summary>
+    private sealed class NumericStateJsonConverter : JsonConverter
+    {
+        public override bool CanConvert(Type objectType)
+            => objectType == typeof(Vector<T>)
+                || objectType == typeof(Matrix<T>)
+                || objectType == typeof(Tensor<T>);
+
+        public override void WriteJson(JsonWriter writer, object? value, JsonSerializer serializer)
+        {
+            if (value is null) { writer.WriteNull(); return; }
+
+            using var stream = new MemoryStream();
+            using (var binaryWriter = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+            {
+                switch (value)
+                {
+                    case Vector<T> vector: WriteVector(binaryWriter, vector); break;
+                    case Matrix<T> matrix: WriteMatrix(binaryWriter, matrix); break;
+                    case Tensor<T> tensor: WriteTensor(binaryWriter, tensor); break;
+                    default:
+                        throw new JsonSerializationException(
+                            $"'{value.GetType().FullName}' is not supported numeric object state.");
+                }
+            }
+
+            writer.WriteValue(Convert.ToBase64String(stream.ToArray()));
+        }
+
+        public override object? ReadJson(
+            JsonReader reader,
+            Type objectType,
+            object? existingValue,
+            JsonSerializer serializer)
+        {
+            if (reader.TokenType == JsonToken.Null) return null;
+            if (reader.TokenType != JsonToken.String || reader.Value is not string payloadText)
+                throw new JsonSerializationException(
+                    $"Numeric state for '{objectType.FullName}' must be a base64 string.");
+
+            byte[] payload;
+            try
+            {
+                payload = Convert.FromBase64String(payloadText);
+            }
+            catch (FormatException exception)
+            {
+                throw new JsonSerializationException("Numeric object-state payload is not valid base64.", exception);
+            }
+
+            using var stream = new MemoryStream(payload, writable: false);
+            using var binaryReader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+            object? result = objectType == typeof(Vector<T>)
+                ? ReadVector(binaryReader)
+                : objectType == typeof(Matrix<T>)
+                    ? ReadMatrix(binaryReader)
+                    : ReadTensor(binaryReader);
+
+            if (stream.Position != stream.Length)
+                throw new JsonSerializationException(
+                    $"Numeric state for '{objectType.FullName}' contains trailing bytes.");
+
+            return result;
+        }
+    }
+
     /// <remarks>
     /// A per-feature collection is one piece of state, not N of them: restoring some entries and not
     /// others gives a model that is fitted for part of its input and defaulted for the rest, which
@@ -923,19 +995,38 @@ public sealed class ModelStateRegistry<T>
                 var child = get();
                 if (child is null) { w.Write(-1); return; }
                 var bytes = child.Serialize();
+                w.Write(TypedChildMarker);
+                w.Write(child.GetType().AssemblyQualifiedName
+                    ?? child.GetType().FullName
+                    ?? child.GetType().Name);
                 w.Write(bytes.Length);
                 w.Write(bytes);
             },
             r =>
             {
-                int length = r.ReadInt32();
-                if (length < 0) { set(null); return; }
+                int marker = r.ReadInt32();
+                if (marker == -1) { set(null); return; }
+
+                string typeName = string.Empty;
+                int length;
+                if (marker == TypedChildMarker)
+                {
+                    typeName = r.ReadString();
+                    length = r.ReadInt32();
+                }
+                else
+                {
+                    if (marker < 0)
+                        throw new InvalidDataException(
+                            $"State '{name}' carries an unknown child format marker {marker}.");
+                    length = marker;
+                }
 
                 var bytes = r.ReadBytes(length);
                 var child = get();
                 if (child is null)
                 {
-                    child = CreateChild<TChild>(name, string.Empty);
+                    child = CreateChild<TChild>(name, typeName);
                     set(child);
                 }
 
@@ -1367,7 +1458,8 @@ public sealed class ModelStateRegistry<T>
     /// prediction.
     /// </para>
     /// </remarks>
-    public void DeclareOptions(string name, Func<ModelOptions?> get)
+    public void DeclareOptions<TOptions>(string name, Func<TOptions?> get)
+        where TOptions : class
         => Add(name,
             w =>
             {
@@ -1375,16 +1467,18 @@ public sealed class ModelStateRegistry<T>
                 if (options is null) { w.Write(-1); return; }
 
                 var properties = ScalarOptionProperties(options.GetType());
+                w.Write(NamedOptionsFormat);
                 w.Write(properties.Count);
                 foreach (var property in properties)
                 {
+                    w.Write(property.Name);
                     WriteScalarOption(w, property.GetValue(options));
                 }
             },
             r =>
             {
-                int count = r.ReadInt32();
-                if (count < 0) return;
+                int marker = r.ReadInt32();
+                if (marker == -1) return;
 
                 var options = get();
                 // The reader must consume its bytes whether or not there is anywhere to put them,
@@ -1393,7 +1487,31 @@ public sealed class ModelStateRegistry<T>
                     ? new List<System.Reflection.PropertyInfo>()
                     : ScalarOptionProperties(options.GetType());
 
-                for (int i = 0; i < count; i++)
+                if (marker == NamedOptionsFormat)
+                {
+                    int count = r.ReadInt32();
+                    var byName = properties.ToDictionary(property => property.Name, StringComparer.Ordinal);
+                    for (int i = 0; i < count; i++)
+                    {
+                        string propertyName = r.ReadString();
+                        byName.TryGetValue(propertyName, out var target);
+                        var value = ReadScalarOption(r, target?.PropertyType);
+                        if (options is null || target is null) continue;
+                        target.SetValue(options, value);
+                    }
+                    return;
+                }
+
+                // Legacy payloads wrote scalar values positionally. Keep reading them so existing
+                // checkpoints remain valid; new payloads are name-tagged because a clone can
+                // legitimately reconstruct the same field with a more-derived options runtime type.
+                if (marker < 0)
+                {
+                    throw new InvalidOperationException(
+                        $"An options payload carries an unknown format marker {marker}.");
+                }
+
+                for (int i = 0; i < marker; i++)
                 {
                     var target = i < properties.Count ? properties[i] : null;
                     var value = ReadScalarOption(r, target?.PropertyType);
@@ -1427,6 +1545,10 @@ public sealed class ModelStateRegistry<T>
     // Each value is TAGGED with its own type. The reader must be able to consume a value it has
     // nowhere to put -- an options object that is null, or a setting that no longer exists -- and
     // without a tag it would have to guess a width and desynchronise every later declaration.
+    // Negative so it cannot be confused with the non-negative property count used by legacy
+    // positional option payloads. -1 remains the established null-options marker.
+    private const int NamedOptionsFormat = -2;
+
     private const byte OptionNull = 0;
     private const byte OptionBool = 1;
     private const byte OptionInt = 2;

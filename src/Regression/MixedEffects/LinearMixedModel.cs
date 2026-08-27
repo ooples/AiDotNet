@@ -84,6 +84,7 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// List of random effect specifications.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private readonly List<RandomEffect<T>> _randomEffects;
 
     /// <summary>

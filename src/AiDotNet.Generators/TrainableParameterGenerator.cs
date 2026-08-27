@@ -224,8 +224,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             // none of which can collide with what they wrote.
             bool declaresGetter = DeclaresAny(classSymbol, "GetTrainableParameters");
             bool declaresSetter = DeclaresAny(classSymbol, "SetTrainableParameters");
-            if (declaresGetter && declaresSetter)
-                continue;
+            bool suppressGeneratedParameterAccessors = declaresGetter && declaresSetter;
 
             // A loop/local registration (for example, foreach (var tensor in dictionary.Values))
             // is an explicit parameter declaration, but it cannot be reconstructed from fields at
@@ -652,7 +651,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             var source = GenerateSource(
                 classSymbol, paramFields, gradientFields, subLayerFields, bufferFields,
                 useRuntimeParameterRegistry, useConventionalTensorEnumerator,
-                emitParameterFreeContract, legacyParametersAreDerivedSnapshot, unguardableAxes);
+                emitParameterFreeContract, legacyParametersAreDerivedSnapshot,
+                suppressGeneratedParameterAccessors, unguardableAxes);
 
             // A declared axis the generator could not trace back to a guardable dimension. Emitting
             // the declaration anyway is what let ConvolutionalLayer publish [8, 0, 3, 3] from an
@@ -735,6 +735,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         bool useConventionalTensorEnumerator,
         bool emitParameterFreeContract,
         bool legacyParametersAreDerivedSnapshot,
+        bool suppressGeneratedParameterAccessors,
         ICollection<string>? unguardableAxes = null)
     {
         var ns = classSymbol.ContainingNamespace.ToDisplayString();
@@ -1175,7 +1176,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         bool hasCollections = paramFields.Any(p => p.CollectionKind != ParameterCollectionKind.Direct);
         bool hasOptional = paramFields.Any(p =>
             (p.CollectionKind == ParameterCollectionKind.Direct && p.Optional) || p.Condition is not null);
-        if (paramFields.Count > 0 && !useRuntimeParameterRegistry)
+        if (paramFields.Count > 0 && !useRuntimeParameterRegistry && !suppressGeneratedParameterAccessors)
         {
             bool hasFixedParameterView = !hasCollections && !hasOptional;
             if (hasFixedParameterView)

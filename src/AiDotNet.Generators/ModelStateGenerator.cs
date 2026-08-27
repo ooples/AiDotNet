@@ -836,6 +836,15 @@ public class ModelStateGenerator : IIncrementalGenerator
 
         return CanCarryObjectState(type, numeric, new HashSet<string>(), depth: 0);
     }
+    /// <summary>
+    /// Whether the registry's object-state JSON converter can carry this numeric tensor when it
+    /// appears inside a fitted collection or record.
+    /// </summary>
+    private static bool IsObjectStateNumericTensor(ITypeSymbol type)
+        => type is INamedTypeSymbol { TypeArguments.Length: 1 } named
+            && named.Name is "Vector" or "Matrix" or "Tensor"
+            && named.TypeArguments[0] is ITypeParameterSymbol;
+
 
     /// <summary>
     /// Proves the JSON-backed fallback can reconstruct the complete reachable public shape.
@@ -883,7 +892,7 @@ public class ModelStateGenerator : IIncrementalGenerator
                 CanCarryObjectState(element.Type, numeric, visiting, depth + 1));
         }
 
-        if (ParameterMemberSemanticModel.IsNumericStateStorage(type)) return false;
+        if (IsObjectStateNumericTensor(type)) return true;
         if (IsInfrastructure(type)) return false;
         if (IsSerializableModel(type)) return true;
 
@@ -902,17 +911,19 @@ public class ModelStateGenerator : IIncrementalGenerator
                     or SpecialType.System_Int16 or SpecialType.System_UInt16
                     or SpecialType.System_Int32 or SpecialType.System_UInt32
                     or SpecialType.System_Int64 or SpecialType.System_UInt64
-                    or SpecialType.System_Char or SpecialType.System_String;
+                    or SpecialType.System_Single or SpecialType.System_Double
+                    or SpecialType.System_Decimal or SpecialType.System_Char or SpecialType.System_String;
             return safeKey
                 && CanCarryObjectState(named.TypeArguments[1], numeric, visiting, depth + 1);
         }
+
+        if (ParameterMemberSemanticModel.IsNumericStateStorage(type)) return false;
 
         if (named.TypeKind != TypeKind.Class || named.IsAbstract) return false;
         bool hasJsonConstructor = named.InstanceConstructors.Any(c => c.GetAttributes().Any(a =>
             a.AttributeClass?.ToDisplayString() == "Newtonsoft.Json.JsonConstructorAttribute"));
         if (!hasJsonConstructor
-            && !named.InstanceConstructors.Any(c => c.Parameters.Length == 0
-                || c.Parameters.All(p => p.IsOptional))
+            && !named.InstanceConstructors.Any(c => c.Parameters.Length == 0)
             && !HasSingleJsonMappableConstructor(named))
         {
             return false;
@@ -956,7 +967,7 @@ public class ModelStateGenerator : IIncrementalGenerator
     /// object-state type to also expose a parameterless or explicitly attributed constructor
     /// excluded immutable value records such as NEAT Genome/Connection even though their complete
     /// public shape is constructor-mappable. Keep the proof narrow: exactly one public constructor,
-    /// and every required argument must have a same-typed readable public property or field.
+    /// and every argument must have a same-typed readable public property or field.
     /// Remaining writable properties and constructor-created collections are populated by Json.NET
     /// after construction and are validated by the ordinary public-shape walk below.
     /// </remarks>
@@ -1003,8 +1014,7 @@ public class ModelStateGenerator : IIncrementalGenerator
 
                 if (matched) break;
             }
-
-            if (!matched && !parameter.IsOptional) return false;
+            if (!matched) return false;
         }
 
         return true;
@@ -1015,6 +1025,8 @@ public class ModelStateGenerator : IIncrementalGenerator
     /// <returns><see langword="true"/> when it derives from <c>ModelOptions</c>.</returns>
     private static bool IsModelOptions(ITypeSymbol type)
     {
+        if (type.Name.EndsWith("Options", System.StringComparison.Ordinal)) return true;
+
         for (var current = type as INamedTypeSymbol; current is not null; current = current.BaseType)
         {
             if (current.Name == "ModelOptions") return true;

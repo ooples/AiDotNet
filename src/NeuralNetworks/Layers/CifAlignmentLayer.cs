@@ -405,19 +405,18 @@ public partial class CifAlignmentLayer<T> : LayerBase<T>, IShapeContract
         return windowed;
     }
 
-    // GetTrainableParameters / SetTrainableParameters are GENERATED, not written here.
-    //
-    // They used to be hand-written overrides delegating to _alphaPredictor, which fixed the
-    // recursion problem they describe and created a worse one: TrainableParameterGenerator skips
-    // any layer that declares BOTH, so this class produced no generated file at all -- and with it
-    // no DeclaredSubLayerShapes. The [SubLayerInput("_encoderDim")] declaration on _alphaPredictor
-    // was therefore inert, the rebuilt predictor was never sized, and the layer answered
-    // ParameterCount 0 against a trained 66. The override that made the layer work in training was
-    // the same one that stopped it round-tripping.
-    //
-    // The base recursion those remarks were written against now exists: the generated pair folds
-    // GetSubLayers(), so the alpha predictor's tensors are reached without anyone delegating by
-    // hand, and the same declaration sizes it on rebuild.
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The generated child manifest supplies reconstruction shape and registration, but a layer
+    /// with no tensor fields of its own has no generated trainable accessor. Delegate the composite
+    /// surface to the predictor so the tape and ParameterBuffer see the tensors used by Forward.
+    /// </remarks>
+    public override IReadOnlyList<Tensor<T>> GetTrainableParameters()
+        => _alphaPredictor.GetTrainableParameters();
+
+    /// <inheritdoc/>
+    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
+        => _alphaPredictor.SetTrainableParameters(parameters);
 
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()

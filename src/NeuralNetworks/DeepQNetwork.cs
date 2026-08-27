@@ -124,6 +124,10 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
     /// chasing a constantly moving target, which would make learning very difficult.
     /// </para>
     /// </remarks>
+    // The target network is the frozen Bellman-bootstrap snapshot from DQN, not an independently
+    // optimized parameter branch. Persist it as model state, but exclude it from the online network's
+    // trainable parameter surface and copy-on-write module graph.
+    [Buffer]
     private DeepQNetwork<T>? _targetNetwork;
 
     /// <summary>

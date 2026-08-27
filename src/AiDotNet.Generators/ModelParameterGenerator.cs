@@ -151,18 +151,8 @@ public class ModelParameterGenerator : IIncrementalGenerator
                     {
                         if (tf.IsStatic || tf.IsConst || tf.IsImplicitlyDeclared || tf.AssociatedSymbol is not null)
                             continue;
-                        if (emitLayerAliasRebinding)
-                        {
-                            var rebinder = LayerAliasRebinderFor(tf, elem);
-                            if (rebinder is not null) layerAliasRebinders.Add(rebinder);
-                            var copier = LayerAliasCopierFor(tf, elem);
-                            if (copier is not null) layerAliasCopiers.Add(copier);
-                        }
-                        var additionalGroup = AdditionalLayerGroupFor(tf, elem, classSymbol);
-                        if (additionalGroup is not null) additionalLayerGroups.Add(additionalGroup);
                         var classification = ParameterMemberSemanticModel.Classify(tf);
                         var trainableCopier = TrainableTensorCopierFor(tf, elem, classification.Kind);
-                        if (trainableCopier is not null) trainableTensorCopiers.Add(trainableCopier);
                         if (IsNonOptimizerPersistentState(classification.Kind) && hasRegistry)
                         {
                             var persistentSource = SourceExpressionFor(
@@ -179,6 +169,26 @@ public class ModelParameterGenerator : IIncrementalGenerator
                                 continue;
                             }
                         }
+
+                        // A declared non-trainable nested model is state, not an optimizer/module branch.
+                        // In particular, DQN target networks are [Buffer] snapshots: walking their layers
+                        // doubles ParameterCount and lets clone alias reconciliation mutate the online graph.
+                        if (classification.Kind is not ParameterMemberSemanticModel.Kind.Unclassified
+                            and not ParameterMemberSemanticModel.Kind.Trainable)
+                        {
+                            continue;
+                        }
+
+                        if (emitLayerAliasRebinding)
+                        {
+                            var rebinder = LayerAliasRebinderFor(tf, elem);
+                            if (rebinder is not null) layerAliasRebinders.Add(rebinder);
+                            var copier = LayerAliasCopierFor(tf, elem);
+                            if (copier is not null) layerAliasCopiers.Add(copier);
+                        }
+                        var additionalGroup = AdditionalLayerGroupFor(tf, elem, classSymbol);
+                        if (additionalGroup is not null) additionalLayerGroups.Add(additionalGroup);
+                        if (trainableCopier is not null) trainableTensorCopiers.Add(trainableCopier);
                         if (emitTensors)
                         {
                             var nestedTensors = NestedNetworkTensorAccessorFor(tf.Type, tf.Name, elem);
@@ -217,19 +227,8 @@ public class ModelParameterGenerator : IIncrementalGenerator
                         // Sub-networks are conventionally exposed as properties (GAN's Generator and
                         // Discriminator, StyleGAN's MappingNetwork). Fields alone would miss them.
                         if (tp.IsStatic || tp.IsImplicitlyDeclared || tp.GetMethod is null) continue;
-                        if (emitLayerAliasRebinding)
-                        {
-                            var rebinder = LayerAliasRebinderFor(tp, elem);
-                            if (rebinder is not null) layerAliasRebinders.Add(rebinder);
-                            var copier = LayerAliasCopierFor(tp, elem);
-                            if (copier is not null) layerAliasCopiers.Add(copier);
-                        }
-                        var additionalGroup = AdditionalLayerGroupFor(tp, elem, classSymbol);
-                        if (additionalGroup is not null) additionalLayerGroups.Add(additionalGroup);
-                        if (!emitLayers) continue;
                         var classification = ParameterMemberSemanticModel.Classify(tp);
                         var trainableCopier = TrainableTensorCopierFor(tp, elem, classification.Kind);
-                        if (trainableCopier is not null) trainableTensorCopiers.Add(trainableCopier);
                         if (IsNonOptimizerPersistentState(classification.Kind) && hasRegistry)
                         {
                             var persistentSource = SourceExpressionFor(
@@ -246,6 +245,24 @@ public class ModelParameterGenerator : IIncrementalGenerator
                                 continue;
                             }
                         }
+
+                        if (classification.Kind is not ParameterMemberSemanticModel.Kind.Unclassified
+                            and not ParameterMemberSemanticModel.Kind.Trainable)
+                        {
+                            continue;
+                        }
+
+                        if (emitLayerAliasRebinding)
+                        {
+                            var rebinder = LayerAliasRebinderFor(tp, elem);
+                            if (rebinder is not null) layerAliasRebinders.Add(rebinder);
+                            var copier = LayerAliasCopierFor(tp, elem);
+                            if (copier is not null) layerAliasCopiers.Add(copier);
+                        }
+                        var additionalGroup = AdditionalLayerGroupFor(tp, elem, classSymbol);
+                        if (additionalGroup is not null) additionalLayerGroups.Add(additionalGroup);
+                        if (!emitLayers) continue;
+                        if (trainableCopier is not null) trainableTensorCopiers.Add(trainableCopier);
                         if (emitTensors)
                         {
                             var nestedTensors = NestedNetworkTensorAccessorFor(tp.Type, tp.Name, elem);

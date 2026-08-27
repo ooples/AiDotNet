@@ -71,7 +71,8 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ResearchPaper("Pattern Recognition and Machine Learning", "https://www.springer.com/gp/book/9780387310732")]
+[ResearchPaper("Pattern Recognition and Machine Learning", "https://www.springer.com/gp/book/9780387310732")]
+[CustomSerializationFormat]
 public partial class BayesianRegression<T> : RegressionBase<T>
 {
     /// <summary>
@@ -84,6 +85,10 @@ public partial class BayesianRegression<T> : RegressionBase<T>
     /// </summary>
     [Buffer]
     private Matrix<T> _posteriorCovariance;
+
+    /// <summary>Training features retained as kernel centres for non-linear prediction.</summary>
+    [Buffer(Availability = Models.Parameters.ParameterAvailability.Fit)]
+    private Matrix<T> _kernelTrainingFeatures = new(0, 0);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BayesianRegression{T}"/> class with the specified options and regularization.
@@ -177,30 +182,32 @@ public partial class BayesianRegression<T> : RegressionBase<T>
         int d = x.Columns;
         TrainingFeatureCount = d;
 
-        // Use OLS for reliable predictions on generic linear data
-        var xWithOls = x.AddConstantColumn(NumOps.One);
-        var xTxOls = xWithOls.Transpose().Multiply(xWithOls);
-        var xTyOls = xWithOls.Transpose().Multiply(y);
-        for (int i = 0; i < xTxOls.Rows; i++)
-            xTxOls[i, i] = NumOps.Add(xTxOls[i, i], NumOps.FromDouble(1e-10));
-        var olsSolution = SolveSystem(xTxOls, xTyOls);
-        Intercept = olsSolution[0];
-        Coefficients = olsSolution.Slice(1, d);
-        _posteriorCovariance = new Matrix<T>(d, d);
-        if (Coefficients.Length > 0) return;
+        // This method previously fitted ORDINARY LEAST SQUARES and returned immediately. The
+        // guard that followed it was written as a condition but is always true for any real
+        // problem, so it acted as an unconditional return and left the real estimation below
+        // unreachable: callers received a plain linear least-squares fit from a model named for a
+        // different algorithm. The real estimation now runs.
 
-        // Add bias term if using intercept
-        if (Options.UseIntercept)
+        if (_bayesOptions.KernelType == KernelType.Linear)
         {
-            x = x.AddConstantColumn(NumOps.One);
-            d++;
+            _kernelTrainingFeatures = new Matrix<T>(0, 0);
+            if (Options.UseIntercept)
+            {
+                x = x.AddConstantColumn(NumOps.One);
+            }
         }
-
-        // Apply kernel if specified
-        if (_bayesOptions.KernelType != KernelType.Linear)
+        else
         {
-            x = ApplyKernel(x);
+            // Kernel Bayesian regression operates in the n-dimensional dual feature space. Keep
+            // an owned copy of the centres so prediction can build K(test, train), not K(test,test).
+            _kernelTrainingFeatures = x.Clone();
+            x = ApplyKernel(_kernelTrainingFeatures);
+            if (Options.UseIntercept)
+            {
+                x = x.AddConstantColumn(NumOps.One);
+            }
         }
+        d = x.Columns;
 
         // Note: Bayesian regression has built-in regularization through the prior precision (alpha).
         // Additional regularization is not applied through data transformation.
@@ -261,8 +268,8 @@ public partial class BayesianRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        // Use base linear prediction: X * Coefficients + Intercept
-        var predictions = input.Multiply(Coefficients);
+        Matrix<T> design = CreatePredictionDesign(input);
+        var predictions = design.Multiply(Coefficients);
         for (int i = 0; i < predictions.Length; i++)
             predictions[i] = NumOps.Add(predictions[i], Intercept);
         return predictions;
@@ -306,15 +313,10 @@ public partial class BayesianRegression<T> : RegressionBase<T>
         var mean = Predict(input);
 
         // Now augment input for variance calculation
-        var augmentedInput = input;
+        var augmentedInput = CreatePredictionDesign(input);
         if (Options.UseIntercept)
         {
             augmentedInput = augmentedInput.AddConstantColumn(NumOps.One);
-        }
-
-        if (_bayesOptions.KernelType != KernelType.Linear)
-        {
-            augmentedInput = ApplyKernel(augmentedInput);
         }
 
         var variance = new Vector<T>(augmentedInput.Rows);
@@ -327,6 +329,28 @@ public partial class BayesianRegression<T> : RegressionBase<T>
         }
 
         return (mean, variance);
+    }
+
+    private Matrix<T> CreatePredictionDesign(Matrix<T> input)
+    {
+        if (input.Columns != TrainingFeatureCount)
+        {
+            throw new ArgumentException(
+                $"Prediction input has {input.Columns} features; expected {TrainingFeatureCount}.",
+                nameof(input));
+        }
+
+        if (_bayesOptions.KernelType == KernelType.Linear)
+        {
+            return input;
+        }
+        if (_kernelTrainingFeatures.Rows == 0)
+        {
+            throw new InvalidOperationException(
+                "The non-linear Bayesian model has no fitted kernel centres. Train or deserialize it first.");
+        }
+
+        return ApplyCrossKernel(input, _kernelTrainingFeatures);
     }
 
     /// <summary>
@@ -356,67 +380,150 @@ public partial class BayesianRegression<T> : RegressionBase<T>
     /// </remarks>
     private Matrix<T> ApplyKernel(Matrix<T> input)
     {
-        return _bayesOptions.KernelType switch
-        {
-            KernelType.RBF => ApplyRBFKernel(input),
-            KernelType.Polynomial => ApplyPolynomialKernel(input),
-            KernelType.Sigmoid => ApplySigmoidKernel(input),
-            KernelType.Linear => input,// Linear kernel (no change)
-            KernelType.Laplacian => ApplyLaplacianKernel(input),
-            _ => throw new ArgumentException($"Unsupported kernel type: {_bayesOptions.KernelType}"),
-        };
+        return _bayesOptions.KernelType == KernelType.Linear
+            ? input
+            : ApplyCrossKernel(input, input);
     }
 
-    /// <summary>
-    /// Applies the Laplacian kernel transformation to the input matrix.
-    /// </summary>
-    /// <param name="input">The input features matrix.</param>
-    /// <returns>The kernel matrix.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes the Laplacian kernel matrix for the input features. The Laplacian kernel is defined as
-    /// K(x, y) = exp(-? * |x - y|1), where |x - y|1 is the Manhattan distance between x and y, and γ is the kernel width parameter.
-    /// The Laplacian kernel is similar to the RBF kernel but uses the L1 norm instead of the L2 norm, making it more robust to outliers.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method transforms your data using the Laplacian kernel.
-    /// 
-    /// The Laplacian kernel works by measuring how similar each data point is to every other data point,
-    /// using a measure called the "Manhattan distance" (like walking on a city grid - you can only move
-    /// along streets, not diagonally through buildings).
-    /// 
-    /// This kernel is particularly good at handling outliers (unusual data points that are far from the others)
-    /// because it doesn't penalize large distances as severely as some other kernels.
-    /// 
-    /// The LaplacianGamma parameter controls how quickly similarity decreases with distance:
-    /// - Higher values make distant points seem very different
-    /// - Lower values make even distant points seem somewhat similar
-    /// </para>
-    /// </remarks>
-    private Matrix<T> ApplyLaplacianKernel(Matrix<T> input)
+    /// <summary>Computes K(left, right) for prediction against the fitted kernel centres.</summary>
+    private Matrix<T> ApplyCrossKernel(Matrix<T> left, Matrix<T> right)
     {
-        int n = input.Rows;
-        var output = new Matrix<T>(n, n);
-        var gamma = NumOps.FromDouble(_bayesOptions.LaplacianGamma); // Kernel width parameter
-
-        for (int i = 0; i < n; i++)
+        if (left.Columns != right.Columns)
         {
-            for (int j = i; j < n; j++) // We only need to compute half of the matrix due to symmetry
+            throw new ArgumentException("Kernel operands must have the same feature count.");
+        }
+
+        var result = new Matrix<T>(left.Rows, right.Rows);
+        for (int i = 0; i < left.Rows; i++)
+        {
+            Vector<T> leftRow = left.GetRow(i);
+            for (int j = 0; j < right.Rows; j++)
             {
-                if (i == j)
+                Vector<T> rightRow = right.GetRow(j);
+                result[i, j] = _bayesOptions.KernelType switch
                 {
-                    output[i, j] = NumOps.One; // The kernel of a point with itself is always 1
-                }
-                else
-                {
-                    var distance = CalculateManhattanDistance(input.GetRow(i), input.GetRow(j));
-                    var kernelValue = NumOps.Exp(NumOps.Negate(NumOps.Multiply(gamma, distance)));
-                    output[i, j] = kernelValue;
-                    output[j, i] = kernelValue; // The kernel matrix is symmetric
-                }
+                    KernelType.RBF => RbfKernel(leftRow, rightRow),
+                    KernelType.Polynomial => PolynomialKernel(leftRow, rightRow),
+                    KernelType.Sigmoid => SigmoidKernel(leftRow, rightRow),
+                    KernelType.Laplacian => LaplacianKernel(leftRow, rightRow),
+                    _ => throw new ArgumentException(
+                        $"Unsupported cross-kernel type: {_bayesOptions.KernelType}"),
+                };
             }
         }
 
-        return output;
+        return result;
+    }
+
+    /// <summary>
+    /// Evaluates the Gaussian radial-basis kernel
+    /// <c>K(x,y) = exp(-gamma * ||x-y||^2)</c>.
+    /// </summary>
+    private T RbfKernel(Vector<T> left, Vector<T> right)
+    {
+        var difference = (Vector<T>)Engine.Subtract(left, right);
+        T squaredDistance = difference.DotProduct(difference);
+        return NumOps.Exp(NumOps.Negate(
+            NumOps.Multiply(NumOps.FromDouble(_bayesOptions.Gamma), squaredDistance)));
+    }
+
+    /// <summary>
+    /// Evaluates the polynomial kernel
+    /// <c>K(x,y) = (gamma * x^T y + coef0)^degree</c>.
+    /// </summary>
+    private T PolynomialKernel(Vector<T> left, Vector<T> right)
+    {
+        T scaledDot = NumOps.Multiply(
+            NumOps.FromDouble(_bayesOptions.Gamma), left.DotProduct(right));
+        return NumOps.Power(
+            NumOps.Add(scaledDot, NumOps.FromDouble(_bayesOptions.Coef0)),
+            NumOps.FromDouble(_bayesOptions.PolynomialDegree));
+    }
+
+    /// <summary>
+    /// Evaluates the sigmoid kernel <c>K(x,y) = tanh(gamma * x^T y + coef0)</c>.
+    /// </summary>
+    /// <remarks>The sigmoid kernel is not positive-semidefinite for every parameter choice.</remarks>
+    private T SigmoidKernel(Vector<T> left, Vector<T> right)
+    {
+        T scaledDot = NumOps.Multiply(
+            NumOps.FromDouble(_bayesOptions.Gamma), left.DotProduct(right));
+        return MathHelper.Tanh(NumOps.Add(scaledDot, NumOps.FromDouble(_bayesOptions.Coef0)));
+    }
+
+    /// <summary>
+    /// Evaluates the Laplacian kernel <c>K(x,y) = exp(-gamma * ||x-y||_1)</c>.
+    /// </summary>
+    private T LaplacianKernel(Vector<T> left, Vector<T> right)
+    {
+        T distance = CalculateManhattanDistance(left, right);
+        return NumOps.Exp(NumOps.Negate(
+            NumOps.Multiply(NumOps.FromDouble(_bayesOptions.LaplacianGamma), distance)));
+    }
+
+    public override byte[] Serialize()
+    {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+        byte[] baseData = base.Serialize();
+        writer.Write(baseData.Length);
+        writer.Write(baseData);
+        WriteMatrix(writer, _posteriorCovariance);
+        WriteMatrix(writer, _kernelTrainingFeatures);
+        writer.Write(TrainingFeatureCount);
+        return stream.ToArray();
+    }
+
+    public override void Deserialize(byte[] modelData)
+    {
+        using var stream = new MemoryStream(modelData);
+        using var reader = new BinaryReader(stream);
+        int baseLength = reader.ReadInt32();
+        if (baseLength < 0 || baseLength > stream.Length - stream.Position)
+            throw new InvalidDataException("Invalid Bayesian regression base-state length.");
+        base.Deserialize(reader.ReadBytes(baseLength));
+        _posteriorCovariance = ReadMatrix(reader);
+        _kernelTrainingFeatures = ReadMatrix(reader);
+        TrainingFeatureCount = reader.ReadInt32();
+    }
+
+    private void WriteMatrix(BinaryWriter writer, Matrix<T> matrix)
+    {
+        writer.Write(matrix.Rows);
+        writer.Write(matrix.Columns);
+        for (int r = 0; r < matrix.Rows; r++)
+            for (int c = 0; c < matrix.Columns; c++) writer.Write(NumOps.ToDouble(matrix[r, c]));
+    }
+
+    private Matrix<T> ReadMatrix(BinaryReader reader)
+    {
+        int rows = reader.ReadInt32();
+        int columns = reader.ReadInt32();
+        if (rows < 0 || columns < 0) throw new InvalidDataException("Invalid Bayesian matrix shape.");
+
+        long elementCount;
+        long requiredBytes;
+        try
+        {
+            elementCount = checked((long)rows * columns);
+            requiredBytes = checked(elementCount * sizeof(double));
+        }
+        catch (OverflowException exception)
+        {
+            throw new InvalidDataException("The Bayesian matrix shape is too large.", exception);
+        }
+
+        Stream stream = reader.BaseStream;
+        if (!stream.CanSeek || requiredBytes > stream.Length - stream.Position)
+        {
+            throw new InvalidDataException(
+                $"The Bayesian matrix payload is truncated: shape {rows}x{columns} requires {requiredBytes} bytes.");
+        }
+
+        var matrix = new Matrix<T>(rows, columns);
+        for (int r = 0; r < rows; r++)
+            for (int c = 0; c < columns; c++) matrix[r, c] = NumOps.FromDouble(reader.ReadDouble());
+        return matrix;
     }
 
     /// <summary>
@@ -451,153 +558,4 @@ public partial class BayesianRegression<T> : RegressionBase<T>
         return Engine.Sum(absDiff);
     }
 
-    /// <summary>
-    /// Applies the Radial Basis Function (RBF) kernel transformation to the input matrix.
-    /// </summary>
-    /// <param name="input">The input features matrix.</param>
-    /// <returns>The kernel matrix.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes the RBF kernel matrix for the input features. The RBF kernel, also known as the Gaussian kernel,
-    /// is defined as K(x, y) = exp(-γ × ||x - y||²), where ||x - y|| is the Euclidean distance between x and y,
-    /// and γ is the kernel width parameter. The RBF kernel is one of the most widely used kernels due to its smooth properties
-    /// and ability to capture non-linear relationships.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method transforms your data using the RBF (Radial Basis Function) kernel.
-    /// 
-    /// The RBF kernel (also called the Gaussian kernel) works by measuring how similar each data point is
-    /// to every other data point, based on their distance from each other. Points that are close together
-    /// are considered very similar, while points that are far apart are considered very different.
-    /// 
-    /// This kernel is particularly good at capturing smooth, curved relationships in your data.
-    /// 
-    /// The Gamma parameter controls how quickly similarity decreases with distance:
-    /// - Higher gamma values mean that only very close points are considered similar
-    /// - Lower gamma values mean that even somewhat distant points are considered similar
-    /// 
-    /// The RBF kernel is often a good default choice when you're not sure which kernel to use.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> ApplyRBFKernel(Matrix<T> input)
-    {
-        int n = input.Rows;
-        var result = new Matrix<T>(n, n);
-        var gamma = NumOps.FromDouble(_bayesOptions.Gamma);
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i; j < n; j++)
-            {
-                var diff = input.GetRow(i).Subtract(input.GetRow(j));
-                var squaredDistance = diff.DotProduct(diff);
-                var value = NumOps.Exp(NumOps.Multiply(NumOps.Negate(gamma), squaredDistance));
-                result[i, j] = result[j, i] = value;
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Applies the Polynomial kernel transformation to the input matrix.
-    /// </summary>
-    /// <param name="input">The input features matrix.</param>
-    /// <returns>The kernel matrix.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes the Polynomial kernel matrix for the input features. The Polynomial kernel is defined as
-    /// K(x, y) = (? * x²y + coef0)^degree, where x²y is the dot product between x and y, ? is a scaling parameter,
-    /// coef0 is a constant term, and degree is the polynomial degree. The Polynomial kernel can capture various degrees
-    /// of non-linear relationships and is particularly useful when features interact multiplicatively.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method transforms your data using the Polynomial kernel.
-    /// 
-    /// The Polynomial kernel captures interactions between features raised to a certain power (degree).
-    /// It's particularly useful when you believe the relationship in your data involves products
-    /// of features rather than just their individual effects.
-    /// 
-    /// For example, in predicting crop yield, the combination of both temperature AND rainfall
-    /// might be more important than either factor alone. The Polynomial kernel can capture
-    /// these kinds of interactions.
-    /// 
-    /// Parameters that control this kernel:
-    /// - PolynomialDegree: Higher degrees capture more complex interactions but may overfit
-    /// - Gamma: Controls the influence of higher vs. lower degree terms
-    /// - Coef0: Adds a constant term; higher values make the kernel less sensitive to changes in input
-    /// 
-    /// A polynomial degree of 1 is equivalent to linear regression, while higher degrees
-    /// capture progressively more complex relationships.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> ApplyPolynomialKernel(Matrix<T> input)
-    {
-        int n = input.Rows;
-        var result = new Matrix<T>(n, n);
-        var gamma = NumOps.FromDouble(_bayesOptions.Gamma);
-        var coef0 = NumOps.FromDouble(_bayesOptions.Coef0);
-        var degree = _bayesOptions.PolynomialDegree;
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i; j < n; j++)
-            {
-                var dot = input.GetRow(i).DotProduct(input.GetRow(j));
-                var value = NumOps.Power(NumOps.Add(NumOps.Multiply(gamma, dot), coef0), NumOps.FromDouble(degree));
-                result[i, j] = result[j, i] = value;
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Applies the Sigmoid kernel transformation to the input matrix.
-    /// </summary>
-    /// <param name="input">The input features matrix.</param>
-    /// <returns>The kernel matrix.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes the Sigmoid kernel matrix for the input features. The Sigmoid kernel is defined as
-    /// K(x, y) = tanh(? * x²y + coef0), where x²y is the dot product between x and y, ? is a scaling parameter,
-    /// coef0 is a constant term, and tanh is the hyperbolic tangent function. The Sigmoid kernel is similar to
-    /// the activation function used in neural networks and can capture certain non-linear relationships.
-    /// Note that the Sigmoid kernel is not guaranteed to be positive semi-definite for all parameter values.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method transforms your data using the Sigmoid kernel.
-    /// 
-    /// The Sigmoid kernel (also called the Hyperbolic Tangent kernel) creates an S-shaped transformation
-    /// of your data, similar to the activation functions used in neural networks. It produces a value
-    /// between -1 and 1 for each pair of points.
-    /// 
-    /// This kernel can capture certain types of non-linear relationships, particularly those with
-    /// threshold effects or saturation (where the relationship levels off at certain extremes).
-    /// 
-    /// Parameters that control this kernel:
-    /// - Gamma: Controls the steepness of the S-curve
-    /// - Coef0: Shifts the curve horizontally
-    /// 
-    /// The Sigmoid kernel is less commonly used than RBF or Polynomial kernels in regression,
-    /// but can be effective for certain types of data, especially when there are clear
-    /// threshold effects in your variables.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> ApplySigmoidKernel(Matrix<T> input)
-    {
-        int n = input.Rows;
-        var result = new Matrix<T>(n, n);
-        var gamma = NumOps.FromDouble(_bayesOptions.Gamma);
-        var coef0 = NumOps.FromDouble(_bayesOptions.Coef0);
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i; j < n; j++)
-            {
-                var dot = input.GetRow(i).DotProduct(input.GetRow(j));
-                var value = MathHelper.Tanh(NumOps.Add(NumOps.Multiply(gamma, dot), coef0));
-                result[i, j] = result[j, i] = value;
-            }
-        }
-
-        return result;
-    }
 }
