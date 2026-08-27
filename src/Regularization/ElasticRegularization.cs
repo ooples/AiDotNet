@@ -148,7 +148,7 @@ public class ElasticNetRegularization<T, TInput, TOutput> : RegularizationBase<T
         var l2Ratio = NumOps.FromDouble(1 - Options.L1Ratio);
         var result = new Matrix<T>(data.Rows, data.Columns);
 
-        var l2ShrinkageFactor = NumOps.Subtract(NumOps.One, NumOps.Multiply(regularizationStrength, l2Ratio));
+        var l2ShrinkageFactor = ShrinkTowardZero(NumOps.Multiply(regularizationStrength, l2Ratio));
 
         for (int i = 0; i < data.Rows; i++)
         {
@@ -189,7 +189,7 @@ public class ElasticNetRegularization<T, TInput, TOutput> : RegularizationBase<T
         var l2Ratio = NumOps.FromDouble(1 - Options.L1Ratio);
         var result = new Vector<T>(data.Length);
 
-        var l2ShrinkageFactor = NumOps.Subtract(NumOps.One, NumOps.Multiply(regularizationStrength, l2Ratio));
+        var l2ShrinkageFactor = ShrinkTowardZero(NumOps.Multiply(regularizationStrength, l2Ratio));
 
         for (int i = 0; i < data.Length; i++)
         {
