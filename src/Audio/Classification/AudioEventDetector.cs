@@ -162,8 +162,9 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
     public AudioEventDetector(
         NeuralNetworkArchitecture<T> architecture,
         AudioEventDetectorOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new AudioEventDetectorOptions();
         _useNativeMode = true;
