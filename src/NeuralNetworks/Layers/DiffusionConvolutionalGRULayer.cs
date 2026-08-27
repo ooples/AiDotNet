@@ -240,7 +240,7 @@ internal sealed class DiffusionConvolutionalGRULayer<T> : LayerBase<T>, IShapeCo
             || input.Shape[2] != _inputSize)
         {
             throw new ArgumentException(
-                $"DCGRU sequence input must be [{_numNodes}, time, {_inputSize}].", nameof(input));
+                $"DCGRU sequence input shape must be [{_numNodes}, time, {_inputSize}] (nodes, time, features).", nameof(input));
         }
     }
 
