@@ -11,7 +11,15 @@
             the size of the instrumented surface and was adding ~14 minutes to every shard.
           -->
           <Exclude>[*Tests*]*,[*Benchmark*]*,[xunit.*]*,[AiDotNet.Generators]*,[AiDotNet.ProgramSynthesis.Tooling]*,[AiDotNet.Playground*]*,[AiDotNet.Dashboard]*</Exclude>
-          <ExcludeByAttribute>Obsolete,GeneratedCodeAttribute,CompilerGeneratedAttribute</ExcludeByAttribute>
+          <!--
+            Roslyn output is excluded by its generated-document path below instead of by
+            GeneratedCodeAttribute. Coverlet performs state-machine/lambda analysis for every
+            method-level attribute exclusion; with thousands of generated parameter/state methods
+            that path becomes quadratic enough to consume an entire shard budget before tests start.
+            File exclusion is checked before method-body/branch instrumentation and preserves
+            coverage for the hand-written members of the same partial model or layer type.
+          -->
+          <ExcludeByAttribute>Obsolete,CompilerGeneratedAttribute</ExcludeByAttribute>
           <!--
             File exclusions mirror sonar.coverage.exclusions in sonarcloud.yml — Sonar discards
             these anyway, so there is no point instrumenting or serializing them.
@@ -26,7 +34,7 @@
             (per master's narrower-than-the-folder convention) to catch I-prefixed
             interface files anywhere under that project tree.
           -->
-          <ExcludeByFile>**/ProgramSynthesis/Models/**/*.cs,**/ProgramSynthesis/Execution/**/*.cs,**/ProgramSynthesis/Requests/**/*.cs,**/ProgramSynthesis/Results/**/*.cs,**/ProgramSynthesis/Interfaces/**/*.cs,**/ProgramSynthesis/Enums/**/*.cs,**/AiDotNet.Serving/Configuration/**/*.cs,**/AiDotNet.Serving/Models/**/*.cs,**/AiDotNet.Serving/Persistence/Entities/**/*.cs,**/AiDotNet.Serving/Persistence/Migrations/**/*.cs,**/AiDotNet.Serving/**/I*.cs</ExcludeByFile>
+          <ExcludeByFile>**/*.g.cs,**/Onnx/Protobuf/Generated/**/*.cs,**/ProgramSynthesis/Models/**/*.cs,**/ProgramSynthesis/Execution/**/*.cs,**/ProgramSynthesis/Requests/**/*.cs,**/ProgramSynthesis/Results/**/*.cs,**/ProgramSynthesis/Interfaces/**/*.cs,**/ProgramSynthesis/Enums/**/*.cs,**/AiDotNet.Serving/Configuration/**/*.cs,**/AiDotNet.Serving/Models/**/*.cs,**/AiDotNet.Serving/Persistence/Entities/**/*.cs,**/AiDotNet.Serving/Persistence/Migrations/**/*.cs,**/AiDotNet.Serving/**/I*.cs</ExcludeByFile>
           <!-- SingleHit: record only whether each line was hit, not the hit count. Smaller XML, faster write. -->
           <SingleHit>true</SingleHit>
           <!-- SkipAutoProps: don't instrument trivial compiler-generated property accessors. -->

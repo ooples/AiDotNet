@@ -1187,50 +1187,6 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             TensorToVector(expectedOutput, expectedOutput.Length));
     }
 
-    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
-    // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.SequenceLength);
-        writer.Write(_materializedHiddenDimension);
-        writer.Write(_materializedNumLayers);
-        writer.Write(_dataWidth);
-        writer.Write(IsFitted);
-    }
-
-    /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // SequenceLength
-        _materializedHiddenDimension = reader.ReadInt32();
-        _materializedNumLayers = reader.ReadInt32();
-        _dataWidth = reader.ReadInt32();
-        IsFitted = reader.ReadBoolean();
-    }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var materializedOptions = _options.CreateMaterializedSnapshot(
-            _materializedHiddenDimension,
-            _materializedNumLayers);
-        var copy = new TimeGANGenerator<T>(Architecture, materializedOptions);
-
-        // The generic clone machinery can copy/share every reachable layer, but it cannot invent a
-        // model's unique auxiliary topology. A fresh TimeGAN constructor creates only the generator;
-        // materialize the fitted embedder/recovery/supervisor/discriminator graph before the base
-        // performs its structural preflight and weight transfer.
-        if (IsFitted)
-        {
-            copy._columns = new List<ColumnMetadata>(_columns);
-            copy._dataWidth = _dataWidth;
-            copy.RebuildAllNetworks();
-        }
-
-        return copy;
-    }
-
     /// <inheritdoc />
     public override Dictionary<string, T> GetFeatureImportance()
     {

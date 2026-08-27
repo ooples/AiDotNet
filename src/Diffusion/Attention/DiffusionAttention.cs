@@ -91,6 +91,7 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached input for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -117,6 +118,9 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
     /// Gets whether Flash Attention is enabled.
     /// </summary>
     public bool FlashAttentionEnabled => _flashConfig != null;
+
+    /// <summary>Construction state: the 'useCausalMask' the layer was built with.</summary>
+    private readonly bool _useCausalMask;
 
     /// <summary>
     /// Initializes a new diffusion attention layer.
@@ -146,6 +150,7 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
             CalculateInputShape(channels, spatialSize),
             CalculateOutputShape(channels, spatialSize))
     {
+        _useCausalMask = useCausalMask;
         if (channels <= 0)
             throw new ArgumentOutOfRangeException(nameof(channels), "Channels must be positive.");
         if (numHeads <= 0)
@@ -392,11 +397,13 @@ public partial class DiffusionCrossAttention<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached input for backward pass.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Cached context for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastContext;
 
     /// <inheritdoc />

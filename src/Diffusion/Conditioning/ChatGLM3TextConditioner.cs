@@ -70,9 +70,6 @@ public class ChatGLM3TextConditioner<T> : TextConditioningBase<T>
             numHeads: GetNumHeads(_variant),
             numKvHeads: GetNumKvHeads(_variant));
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new ChatGLM3TextConditioner<T>(Tokenizer, _variant, Architecture);
-
     public override Tensor<T> GetPooledEmbedding(Tensor<T> sequenceEmbeddings)
     {
         int rank = sequenceEmbeddings.Shape.Length;

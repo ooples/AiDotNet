@@ -1458,36 +1458,10 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.EmbeddingDimension);
-        writer.Write(_options.GeneratorDimensions.Length);
-        foreach (var dim in _options.GeneratorDimensions) writer.Write(dim);
-        writer.Write(_options.DiscriminatorDimensions.Length);
-        foreach (var dim in _options.DiscriminatorDimensions) writer.Write(dim);
-        writer.Write(_options.BatchSize);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.GradientPenaltyWeight);
-        writer.Write(_options.PacSize);
-        writer.Write(_options.VGMModes);
-        writer.Write(_options.DiscriminatorDropout);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Options are reconstructed from serialized data
-    }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new CTGANGenerator<T>(
-            Architecture,
-            _options,
-            _generatorOptimizer,
-            _lossFunction);
-    }
 
     /// <inheritdoc/>
     public override Dictionary<string, T> GetFeatureImportance()

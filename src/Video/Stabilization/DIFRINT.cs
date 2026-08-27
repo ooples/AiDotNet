@@ -74,7 +74,7 @@ namespace AiDotNet.Video.Stabilization;
     "https://arxiv.org/abs/1909.02641",
     Year = 2020,
     Authors = "Jinsoo Choi, In So Kweon")]
-public class DIFRINT<T> : VideoStabilizationBase<T>
+public partial class DIFRINT<T> : VideoStabilizationBase<T>
 {
     private readonly DIFRINTOptions _options;
 
@@ -585,19 +585,9 @@ public class DIFRINT<T> : VideoStabilizationBase<T>
         ModelData = _useNativeMode ? this.Serialize() : []
     };
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numFeatures); writer.Write(_numIterations);
-        writer.Write(_imageHeight); writer.Write(_imageWidth);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        for (int i = 0; i < 4; i++) _ = reader.ReadInt32();
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new DIFRINT<T>(Architecture, _optimizer, _lossFunction, _numFeatures, _numIterations);
+
 
     #endregion
 

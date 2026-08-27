@@ -22,7 +22,7 @@ namespace AiDotNet.Statistics;
 /// This information helps you improve your model and decide if it's ready to use in real-world situations.
 /// </para>
 /// </remarks>
-public class ModelStats<T, TInput, TOutput>
+public partial class ModelStats<T, TInput, TOutput>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly ModelStatsOptions _options;
@@ -46,6 +46,7 @@ public class ModelStats<T, TInput, TOutput>
     /// This helps you understand which features might be providing similar information.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _correlationMatrix = default!;
     public Matrix<T> CorrelationMatrix { get { EnsureFullStatsComputed(); return _correlationMatrix; } private set { _correlationMatrix = value; } }
 
@@ -58,6 +59,7 @@ public class ModelStats<T, TInput, TOutput>
     /// It helps identify patterns in how your features behave together.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _covarianceMatrix = default!;
     public Matrix<T> CovarianceMatrix { get { EnsureFullStatsComputed(); return _covarianceMatrix; } private set { _covarianceMatrix = value; } }
 

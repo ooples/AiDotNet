@@ -17,7 +17,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 /// Models extending this base class: SAM 2, Cutie, XMem, DEVA, EfficientTAM, UniVS.
 /// </para>
 /// </remarks>
-public abstract class VideoSegmentationBase<T> : SegmentationModelBase<T>, IVideoSegmentation<T>
+public abstract partial class VideoSegmentationBase<T> : SegmentationModelBase<T>, IVideoSegmentation<T>
 {
     // protected and mutable so a derived model can read it and restore it on deserialization - see
     // PanopticSegmentationBase._numStuffClasses for why private/readonly makes a base unadoptable.

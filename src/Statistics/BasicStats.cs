@@ -28,7 +28,7 @@ namespace AiDotNet.Statistics;
 /// These statistics help you understand your data at a glance without having to examine every value.
 /// </para>
 /// </remarks>
-public class BasicStats<T>
+public partial class BasicStats<T>
 {
     /// <summary>
     /// Gets the arithmetic mean (average) of the values.
@@ -372,6 +372,7 @@ public class BasicStats<T>
         _deferredValues = inputs.Values;
     }
 
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _deferredValues;
     private bool _fullStatsComputed;
 

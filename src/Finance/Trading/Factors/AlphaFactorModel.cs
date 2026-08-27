@@ -66,7 +66,7 @@ namespace AiDotNet.Finance.Trading.Factors;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T>
+public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T>
 {
     #region Execution Mode
 
@@ -378,31 +378,6 @@ public class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T>
     }
 
     /// <summary>
-    /// Creates a new instance with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is used when the framework needs a fresh model
-    /// with the same settings (for example during cloning).
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new AlphaFactorOptions<T>
-        {
-            NumFactors = _numFactors,
-            NumAssets = _numAssets,
-            NumFeatures = _numFeatures,
-            HiddenDimension = _hiddenDimension,
-            SequenceLength = _sequenceLength,
-            PredictionHorizon = _predictionHorizon,
-            DropoutRate = _dropoutRate
-        };
-
-        return new AlphaFactorModel<T>(Architecture, optionsCopy);
-    }
-
-    /// <summary>
     /// Serializes model-specific data.
     /// </summary>
     /// <param name="writer">Binary writer.</param>
@@ -411,16 +386,7 @@ public class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T>
     /// <b>For Beginners:</b> Saves the model configuration so it can be restored later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numFactors);
-        writer.Write(_numAssets);
-        writer.Write(_numFeatures);
-        writer.Write(_hiddenDimension);
-        writer.Write(_sequenceLength);
-        writer.Write(_predictionHorizon);
-        writer.Write(_dropoutRate);
-    }
+
 
     /// <summary>
     /// Deserializes model-specific data.
@@ -431,16 +397,7 @@ public class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T>
     /// <b>For Beginners:</b> Restores the saved configuration when loading a model.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _numFactors = reader.ReadInt32();
-        _numAssets = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _sequenceLength = reader.ReadInt32();
-        _predictionHorizon = reader.ReadInt32();
-        _dropoutRate = reader.ReadDouble();
-    }
+
 
     #endregion
 

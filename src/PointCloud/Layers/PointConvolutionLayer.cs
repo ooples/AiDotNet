@@ -75,11 +75,16 @@ public partial class PointConvolutionLayer<T> : LayerBase<T>, IShapeContract
     }
 
     // Trainable parameters as registered Tensors so the autodiff tape trains them.
-    // Not readonly: SetTrainableParameters re-points them for the copy-on-write DeepCopy/Clone
+    // Not readonly: the restore path re-points them for the copy-on-write DeepCopy/Clone
     // path (which rebinds shared tensor storage into each layer), and Forward reads these fields
     // directly, so a clone that only rebinds the base registry — without updating these fields —
-    // would keep its fresh random init and diverge from the original.
+    // would keep its fresh random init and diverge from the original. The generated setter
+    // rebinds a mutable field for exactly that reason, and unlike the hand-written pair it
+    // replaced it also brings the base registry along instead of leaving it pointing at the
+    // pre-clone tensors.
+    [AiDotNet.Attributes.TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _weights; // [inputChannels, outputChannels]
+    [AiDotNet.Attributes.TrainableParameter(Role = PersistentTensorRole.Biases)]
     private Tensor<T> _biases;  // [outputChannels]
 
     /// <summary>
@@ -132,32 +137,6 @@ public partial class PointConvolutionLayer<T> : LayerBase<T>, IShapeContract
         var matmul = Engine.TensorMatMul(input, _weights);                               // [N, Out]
         var biased = Engine.TensorAdd(matmul, Engine.Reshape(_biases, [1, _outputChannels]));
         return ApplyActivation(biased);
-    }
-
-    /// <summary>
-    /// Returns the field-backed trainable tensors so the tape optimizer, the parameter-count walk,
-    /// and the copy-on-write clone all see the SAME instances the Forward reads. Overriding this
-    /// (rather than relying on the base <c>_registeredTensors</c> list) keeps GetTrainableParameters
-    /// consistent with <see cref="SetTrainableParameters"/> after a field re-point.
-    /// </summary>
-    public override IReadOnlyList<Tensor<T>> GetTrainableParameters() => new[] { _weights, _biases };
-
-    /// <summary>
-    /// Re-points the field-backed weight/bias tensors to the supplied instances. The copy-on-write
-    /// DeepCopy/Clone path shares each source tensor into its clone through this method; because
-    /// <see cref="Forward"/> reads the <c>_weights</c>/<c>_biases</c> fields directly, they must be
-    /// rebound here (the base only updates its private registry), or the clone diverges from the
-    /// original (issue #1221 class).
-    /// </summary>
-    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
-    {
-        if (parameters.Count != 2)
-        {
-            throw new ArgumentException($"Expected 2 parameter tensors (weights, biases), got {parameters.Count}.", nameof(parameters));
-        }
-
-        _weights = parameters[0];
-        _biases = parameters[1];
     }
 
     // UpdateParameters delegated straight to SetParameters. The base does that now.

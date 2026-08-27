@@ -41,7 +41,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// Reference: LoRA+: Efficient Low Rank Adaptation of Large Models (February 2024)
 /// </para>
 /// </remarks>
-public class LoRAPlusAdapter<T> : LoRAAdapterBase<T>
+public partial class LoRAPlusAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// The ratio of learning rates between matrix B and matrix A.

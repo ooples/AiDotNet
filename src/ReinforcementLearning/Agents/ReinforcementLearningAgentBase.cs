@@ -32,9 +32,52 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 /// their own unique learning logic while sharing common functionality.
 /// </para>
 /// </remarks>
-public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigurableModel<T>, IModelShape, IDisposable,
+public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigurableModel<T>, IModelShape, IDisposable,
     AiDotNet.Models.Parameters.IParameterManifestProvider
 {
+    // --- declared state (ModelStateRegistry) ---
+    // Identical in every model base because these bases are siblings over the same interfaces rather
+    // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.
+
+    /// <summary>State that is not a parameter vector, declared once and persisted by this base.</summary>
+    private readonly AiDotNet.Models.ModelStateRegistry<T> _declaredState = new();
+    private bool _declaredStateRegistered;
+
+    /// <summary>
+    /// Declare state here that the parameter vector does not carry -- a retained training set,
+    /// fitted knots, kernel centres, an ensemble's children. Both halves of the payload are driven
+    /// by the declaration, so they cannot drift.
+    /// </summary>
+    /// <param name="state">The registry to declare into.</param>
+    protected virtual void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+    }
+    /// <summary>Generated state declarations for fields declared across this model's hierarchy.</summary>
+    /// <param name="state">The registry to declare into.</param>
+    /// <remarks>
+    /// Emitted by ModelStateGenerator into the partial model, so a model author declares nothing. The
+    /// hand-written <c>RegisterState</c> beside it exists only for state the classifier genuinely
+    /// cannot place; anything it CAN place belongs here, where it cannot be forgotten.
+    /// </remarks>
+    protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        RegisterGeneratedStateCore(state);
+    }
+
+    /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>
+    protected AiDotNet.Models.ModelStateRegistry<T> DeclaredState
+    {
+        get
+        {
+            if (!_declaredStateRegistered)
+            {
+                _declaredStateRegistered = true;
+                RegisterGeneratedState(_declaredState);
+                RegisterState(_declaredState);
+            }
+            return _declaredState;
+        }
+    }
     /// <summary>
     /// Numeric operations provider for type T.
     /// </summary>
@@ -300,9 +343,95 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     public abstract byte[] Serialize();
 
     /// <summary>
+    /// Implements the common generated serialization surface for agents that do not own a legacy
+    /// external format. ModelStateGenerator emits the public override that delegates here.
+    /// </summary>
+    protected byte[] SerializeGeneratedModelState()
+    {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
+
+        var parameters = GetParameters();
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+
+        writer.Write(AgentSerializationMagicV2);
+        writer.Write(GetType().FullName ?? GetType().Name);
+        writer.Write(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            writer.Write(Convert.ToDouble(parameters[i]));
+        }
+
+        _parameterRegistry.WriteParameterTopologies(writer);
+        DeclaredState.WriteAll(writer);
+        writer.Flush();
+        return stream.ToArray();
+    }
+
+    /// <summary>
     /// Deserializes the agent from bytes.
     /// </summary>
     public abstract void Deserialize(byte[] data);
+
+    /// <summary>
+    /// Implements the common generated deserialization surface paired with
+    /// <see cref="SerializeGeneratedModelState"/>.
+    /// </summary>
+    protected void DeserializeGeneratedModelState(byte[] data)
+    {
+        if (data is null) throw new ArgumentNullException(nameof(data));
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
+
+        using var stream = new MemoryStream(data);
+        using var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+
+        int magic = reader.ReadInt32();
+        if (magic != AgentSerializationMagicV1 && magic != AgentSerializationMagicV2)
+        {
+            throw new InvalidDataException(
+                $"{GetType().Name}: payload is not an AiDotNet reinforcement-learning agent state block.");
+        }
+
+        string savedType = reader.ReadString();
+        string liveType = GetType().FullName ?? GetType().Name;
+        if (!string.Equals(savedType, liveType, StringComparison.Ordinal))
+        {
+            throw new InvalidDataException(
+                $"State was saved from '{savedType}' and is being loaded into '{liveType}'.");
+        }
+
+        int count = reader.ReadInt32();
+        if (count < 0)
+        {
+            throw new InvalidDataException($"Agent parameter count cannot be negative ({count}).");
+        }
+
+        var parameters = new Vector<T>(count);
+        for (int i = 0; i < count; i++)
+        {
+            parameters[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+
+        // Keys and shapes are state, not values. Recreate them before generated state and the flat
+        // vector are restored so sparse/tabular sources expose the same slots as the checkpoint.
+        if (magic == AgentSerializationMagicV2)
+        {
+            _ = Components;
+            _parameterRegistry.ReadParameterTopologies(reader);
+        }
+
+        // State can materialize variable-length storage and child components. Restore it before the
+        // flat vector so SetParameters sees the saved structure and remains authoritative for values.
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            DeclaredState.ReadAll(reader);
+        }
+
+        SetParameters(parameters);
+    }
+
+    private const int AgentSerializationMagicV1 = unchecked((int)0xA1D0A63E);
+    private const int AgentSerializationMagicV2 = unchecked((int)0xA1D0A63F);
 
     /// <summary>
     /// Gets the agent's parameters.
@@ -503,7 +632,28 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// <summary>
     /// Clones the agent.
     /// </summary>
-    public abstract IFullModel<T, Vector<T>, Vector<T>> Clone();
+    /// <remarks>
+    /// <para>
+    /// No longer abstract. Configuration is rebuilt from the compile-time clone plan, which records
+    /// the constructor the type was built with; learned state is carried through the model's own
+    /// public Serialize and Deserialize, so a model that persists something extra keeps it. The
+    /// persistence guard is told this is an internal operation because a clone is not a save.
+    /// </para>
+    /// <para>
+    /// A model overrides this only when the generator reports that it cannot rebuild the type --
+    /// a constructor parameter with no member holding its value -- and the build names which one.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, Vector<T>, Vector<T>> Clone()
+    {
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            byte[] state = Serialize();
+            var copy = (ReinforcementLearningAgentBase<T>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
+            copy.Deserialize(state);
+            return copy;
+        }
+    }
 
     /// <summary>
     /// Creates a deep copy of the agent.

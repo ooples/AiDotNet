@@ -65,11 +65,12 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Linear Mixed Models for Longitudinal Data", "https://doi.org/10.1007/b98969")]
-public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
+public partial class MixedEffectsModel<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
     /// Fixed effect coefficients.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _fixedEffects;
 
     /// <summary>
@@ -80,6 +81,7 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Variance of random effects.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _randomEffectVariance;
 
     /// <summary>
@@ -90,6 +92,7 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Standard errors of fixed effects.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _fixedEffectStdErrors;
 
     /// <summary>
@@ -999,87 +1002,6 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     }
 
     /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Options and dimensions
-        writer.Write(_numFeatures);
-        writer.Write(_numRandomEffects);
-        writer.Write(_options.IncludeRandomIntercept);
-        writer.Write(_options.IncludeRandomSlopes);
-        writer.Write(_options.CenterFeatures);
-
-        // Fixed effects
-        writer.Write(_fixedEffects?.Length ?? 0);
-        if (_fixedEffects != null)
-        {
-            foreach (var fe in _fixedEffects)
-            {
-                writer.Write(NumOps.ToDouble(fe));
-            }
-        }
-
-        // Residual variance
-        writer.Write(NumOps.ToDouble(_residualVariance));
-
-        // Feature means
-        writer.Write(_featureMeans?.Length ?? 0);
-        if (_featureMeans != null)
-        {
-            foreach (var mean in _featureMeans)
-            {
-                writer.Write(NumOps.ToDouble(mean));
-            }
-        }
-
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        int baseLen = reader.ReadInt32();
-        base.Deserialize(reader.ReadBytes(baseLen));
-
-        _numFeatures = reader.ReadInt32();
-        _numRandomEffects = reader.ReadInt32();
-        _options.IncludeRandomIntercept = reader.ReadBoolean();
-        _options.IncludeRandomSlopes = reader.ReadBoolean();
-        _options.CenterFeatures = reader.ReadBoolean();
-
-        int numFE = reader.ReadInt32();
-        if (numFE > 0)
-        {
-            _fixedEffects = new Vector<T>(numFE);
-            for (int i = 0; i < numFE; i++)
-            {
-                _fixedEffects[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-
-        _residualVariance = NumOps.FromDouble(reader.ReadDouble());
-
-        int numMeans = reader.ReadInt32();
-        if (numMeans > 0)
-        {
-            _featureMeans = new Vector<T>(numMeans);
-            for (int i = 0; i < numMeans; i++)
-            {
-                _featureMeans[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-    }
-
-    /// <inheritdoc/>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new MixedEffectsModel<T>(_options, Regularization);
@@ -1092,36 +1014,4 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
         var groupIndices = Enumerable.Range(0, x.Rows).Select(i => i % Math.Max(1, x.Rows / 10)).ToArray();
         Train(x, y, groupIndices);
     }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new MixedEffectsModel<T>(_options, Regularization);
-        if (SupportVectors.Rows > 0)
-            clone.SupportVectors = SupportVectors.Clone();
-        if (Alphas.Length > 0)
-            clone.Alphas = new Vector<T>(Alphas);
-        clone.B = B;
-        if (_fixedEffects is not null)
-            clone._fixedEffects = new Vector<T>(_fixedEffects);
-        if (_featureMeans is not null)
-            clone._featureMeans = new Vector<T>(_featureMeans);
-        clone._numFeatures = _numFeatures;
-        clone._numRandomEffects = _numRandomEffects;
-        clone._residualVariance = _residualVariance;
-        if (_randomEffectVariance is not null)
-            clone._randomEffectVariance = _randomEffectVariance.Clone();
-        if (_fixedEffectStdErrors is not null)
-            clone._fixedEffectStdErrors = new Vector<T>(_fixedEffectStdErrors);
-        if (_groupIndices is not null)
-            clone._groupIndices = (int[])_groupIndices.Clone();
-        if (_randomEffects is not null)
-        {
-            clone._randomEffects = new Dictionary<int, Vector<T>>();
-            foreach (var kvp in _randomEffects)
-                clone._randomEffects[kvp.Key] = new Vector<T>(kvp.Value);
-        }
-        return clone;
-    }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 }

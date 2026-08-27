@@ -54,7 +54,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2207.08548",
     Year = 2022,
     Authors = "Joseph, R. & Raj, H.")]
-public class GANDALFNetwork<T> : TabularNeuralNetworkBase<T>
+public partial class GANDALFNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly GANDALFOptions<T> _options;
 
@@ -368,33 +368,8 @@ public class GANDALFNetwork<T> : TabularNeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.NumTrees);
-        writer.Write(_options.TreeDepth);
-        writer.Write(_options.NumGatingLayers);
-        writer.Write(_options.GatingHiddenDimension);
-        writer.Write(_options.Temperature);
-        writer.Write(_options.LeafDimension);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.UseBatchNorm);
-        writer.Write(_options.InitScale);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Options are reconstructed from serialized data
-        // Layers are handled by base class
-    }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new GANDALFNetwork<T>(
-            Architecture,
-            _options,
-            _optimizer,
-            _lossFunction);
-    }
 }

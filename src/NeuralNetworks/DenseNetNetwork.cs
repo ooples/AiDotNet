@@ -63,7 +63,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Densely Connected Convolutional Networks", "https://arxiv.org/abs/1608.06993", Year = 2017, Authors = "Gao Huang, Zhuang Liu, Laurens van der Maaten, Kilian Q. Weinberger")]
-public class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
+public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly DenseNetOptions _options;
 
@@ -377,61 +377,10 @@ public class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     }
 
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_configuration.Variant);
-        writer.Write(_configuration.InputChannels);
-        writer.Write(_configuration.InputHeight);
-        writer.Write(_configuration.InputWidth);
-        writer.Write(_configuration.NumClasses);
-        writer.Write(_configuration.GrowthRate);
-        writer.Write(_configuration.CompressionFactor);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        var variant = (DenseNetVariant)reader.ReadInt32();
-        var inputChannels = reader.ReadInt32();
-        var inputHeight = reader.ReadInt32();
-        var inputWidth = reader.ReadInt32();
-        var numClasses = reader.ReadInt32();
-        var growthRate = reader.ReadInt32();
-        var compressionFactor = reader.ReadDouble();
 
-        if (variant != _configuration.Variant ||
-            inputChannels != _configuration.InputChannels ||
-            inputHeight != _configuration.InputHeight ||
-            inputWidth != _configuration.InputWidth ||
-            numClasses != _configuration.NumClasses ||
-            growthRate != _configuration.GrowthRate ||
-            Math.Abs(compressionFactor - _configuration.CompressionFactor) > 0.001)
-        {
-            throw new InvalidDataException("Serialized DenseNet configuration does not match current configuration.");
-        }
-    }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var config = new DenseNetConfiguration(
-            _configuration.Variant,
-            _configuration.NumClasses,
-            _configuration.InputHeight,
-            _configuration.InputWidth,
-            _configuration.InputChannels,
-            _configuration.GrowthRate,
-            _configuration.CompressionFactor,
-            _configuration.CustomBlockLayers);
-
-        return new DenseNetNetwork<T>(Architecture, config, _optimizer, _lossFunction);
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
-    {
-        return DeepCopy();
-    }
 
     /// <summary>
     /// Gets the layer at the specified index.

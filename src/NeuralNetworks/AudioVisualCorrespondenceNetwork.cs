@@ -96,12 +96,14 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
     private List<ILayer<T>>? _audioEncoderLayers;
     private ILayer<T>? _audioInputProjection;
     private ILayer<T>? _audioOutputProjection;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _audioPositionalEmbedding;
 
     // Visual encoder components
     private List<ILayer<T>>? _visualEncoderLayers;
     private ILayer<T>? _visualInputProjection;
     private ILayer<T>? _visualOutputProjection;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visualPositionalEmbedding;
 
     // Cross-modal attention for localization
@@ -1071,40 +1073,6 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
             SetTrainingMode(false);
         }
     }
-
-    // UpdateParameters was overridden here to validate against ParameterCount and walk
-    // Layers by hand. Both are the base's job, and keeping it would have broken as soon as
-    // the tables below joined the count: it walked only Layers, so it would have been short
-    // by exactly their size.
-    /// <summary>
-    /// Declares the audio and visual positional embedding tables, which live outside <see cref="NeuralNetworkBase{T}.Layers"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// These were in NEITHER surface. The base walks Layers, these are not in Layers, and
-    /// nothing declared them -- so they were never counted, never handed out, never restored,
-    /// and never trained through a flat-vector optimizer. Declaring them adds to the parameter
-    /// count, deliberately: the old number was not a smaller-but-correct total, it omitted real
-    /// weights.
-    /// </para>
-    /// <para>
-    /// A hook rather than a [TrainableParameter] attribute because TrainableParameterGenerator
-    /// only processes LayerBase subclasses (see its ExtendsLayerBase guard) -- the attribute
-    /// does nothing on a model. For a model, declaring through this hook IS the mechanism.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        if (_audioPositionalEmbedding is not null)
-        {
-            yield return _audioPositionalEmbedding;
-        }
-
-        if (_visualPositionalEmbedding is not null)
-        {
-            yield return _visualPositionalEmbedding;
-        }
-    }
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -1125,75 +1093,10 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_embeddingDimension);
-        writer.Write(_audioSampleRate);
-        writer.Write(_videoFrameRate);
-        writer.Write(_numEncoderLayers);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read serialized values
-        var embDim = reader.ReadInt32();
-        var sampleRate = reader.ReadInt32();
-        var frameRate = reader.ReadDouble();
-        var numLayers = reader.ReadInt32();
 
-        // Validate that loaded values match current instance configuration
-        if (embDim != _embeddingDimension)
-        {
-            throw new InvalidOperationException(
-                $"Loaded embedding dimension ({embDim}) doesn't match current ({_embeddingDimension}).");
-        }
-
-        if (sampleRate != _audioSampleRate)
-        {
-            throw new InvalidOperationException(
-                $"Loaded audio sample rate ({sampleRate}) doesn't match current ({_audioSampleRate}).");
-        }
-
-        if (Math.Abs(frameRate - _videoFrameRate) > 0.001)
-        {
-            throw new InvalidOperationException(
-                $"Loaded video frame rate ({frameRate}) doesn't match current ({_videoFrameRate}).");
-        }
-
-        if (numLayers != _numEncoderLayers)
-        {
-            throw new InvalidOperationException(
-                $"Loaded encoder layers ({numLayers}) doesn't match current ({_numEncoderLayers}).");
-        }
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new AudioVisualCorrespondenceNetwork<T>(
-            Architecture,
-            _embeddingDimension,
-            _audioSampleRate,
-            _videoFrameRate,
-            _numEncoderLayers);
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        // Create a new instance without passing optimizer/loss to get fresh instances
-        // Passing the same optimizer would share mutable state (momentum, etc.)
-        var copy = new AudioVisualCorrespondenceNetwork<T>(
-            Architecture,
-            _embeddingDimension,
-            _audioSampleRate,
-            _videoFrameRate,
-            _numEncoderLayers);
-
-        copy.SetParameters(GetParameters());
-        return copy;
-    }
 
     #endregion
 }

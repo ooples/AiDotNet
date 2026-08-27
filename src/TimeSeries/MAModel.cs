@@ -63,6 +63,7 @@ public partial class MAModel<T> : TimeSeriesModelBase<T>
     /// For example, if the coefficient for yesterday's error is 0.7, it means yesterday's
     /// error strongly influences today's prediction adjustment.
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _maCoefficients;
 
     /// <summary>
@@ -96,20 +97,6 @@ public partial class MAModel<T> : TimeSeriesModelBase<T>
     /// more randomness and less predictability in the time series.
     /// </remarks>
     private T _noiseVariance;
-
-    /// <summary>
-    /// Flag indicating whether the model has been trained.
-    /// </summary>
-    // IsTrained is inherited from TimeSeriesModelBase
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        // Use serialize/deserialize for deep copy to preserve all MA-specific state
-        byte[] serialized = this.Serialize();
-        var clone = new MAModel<T>(new MAModelOptions<T> { MAOrder = _maOptions.MAOrder });
-        clone.Deserialize(serialized);
-        return clone;
-    }
 
     /// <summary>
     /// Maximum number of iterations for optimization algorithms.
@@ -1017,33 +1004,7 @@ public partial class MAModel<T> : TimeSeriesModelBase<T>
     /// The method saves all the essential parameters: the order (q) value,
     /// the mean of the series, the MA coefficients, and the recent errors.
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        // Note: IsTrained is handled by base class Serialize, don't duplicate
 
-        // Write MA-specific options
-        writer.Write(_maOptions.MAOrder);
-
-        // Write mean
-        writer.Write(Convert.ToDouble(_mean));
-
-        // Write noise variance
-        writer.Write(Convert.ToDouble(_noiseVariance));
-
-        // Write MA coefficients
-        writer.Write(_maCoefficients.Length);
-        for (int i = 0; i < _maCoefficients.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_maCoefficients[i]));
-        }
-
-        // Write recent errors
-        writer.Write(_recentErrors.Length);
-        for (int i = 0; i < _recentErrors.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_recentErrors[i]));
-        }
-    }
 
     /// <summary>
     /// Deserializes the model's state from a binary stream.
@@ -1061,36 +1022,7 @@ public partial class MAModel<T> : TimeSeriesModelBase<T>
     /// The method loads all the parameters that were saved during serialization:
     /// the order (q) value, the mean of the series, the MA coefficients, and the recent errors.
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        // Note: IsTrained is handled by base class Deserialize
 
-        // Read MA-specific options
-        int q = reader.ReadInt32();
-        _maOptions = new MAModelOptions<T> { MAOrder = q };
-
-        // Read mean
-        _mean = NumOps.FromDouble(reader.ReadDouble());
-
-        // Read noise variance
-        _noiseVariance = NumOps.FromDouble(reader.ReadDouble());
-
-        // Read MA coefficients
-        int maLength = reader.ReadInt32();
-        _maCoefficients = new Vector<T>(maLength);
-        for (int i = 0; i < maLength; i++)
-        {
-            _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read recent errors
-        int errorsLength = reader.ReadInt32();
-        _recentErrors = new Vector<T>(errorsLength);
-        for (int i = 0; i < errorsLength; i++)
-        {
-            _recentErrors[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-    }
 
     /// <summary>
     /// Gets metadata about the model, including its type, parameters, and configuration.

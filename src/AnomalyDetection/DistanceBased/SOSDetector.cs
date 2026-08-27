@@ -44,7 +44,7 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Stochastic Outlier Selection", "https://jmlr.org/papers/v14/janssens13a.html")]
-public class SOSDetector<T> : AnomalyDetectorBase<T>
+public partial class SOSDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _perplexity;
     [Buffer]

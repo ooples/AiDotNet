@@ -67,7 +67,7 @@ namespace AiDotNet.Video.Generation;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public class AnimateDiff<T> : NeuralNetworkBase<T>
+public partial class AnimateDiff<T> : NeuralNetworkBase<T>
 {
     private readonly AnimateDiffOptions _options;
 
@@ -495,42 +495,10 @@ public class AnimateDiff<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Serialization is not supported in ONNX mode.");
 
-        writer.Write(_inputChannels);
-        writer.Write(_numLayers);
-        writer.Write(_numFrames);
-        writer.Write(_featureHeight);
-        writer.Write(_featureWidth);
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
 
-        _ = reader.ReadInt32(); // inputChannels
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadInt32(); // numFrames
-        _ = reader.ReadInt32(); // featureHeight
-        _ = reader.ReadInt32(); // featureWidth
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new AnimateDiff<T>(
-            Architecture,
-            _optimizer,
-            _lossFunction,
-            _inputChannels,
-            _numLayers,
-            _numFrames);
-    }
 
     #endregion
 }

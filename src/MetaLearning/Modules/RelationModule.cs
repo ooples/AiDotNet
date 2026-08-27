@@ -40,7 +40,7 @@ namespace AiDotNet.MetaLearning.Modules;
     Authors = "Sung, F., Yang, Y., Zhang, L., Xiang, T., Torr, P. H. S., & Hospedales, T. M.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class RelationModule<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+public partial class RelationModule<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
 
     /// <inheritdoc />
@@ -57,6 +57,7 @@ public class RelationModule<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     // NumOps inherited from ModelBase
 
     private readonly int _hiddenDimension;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _weights;
     private bool _isTraining;
 
@@ -160,13 +161,6 @@ public class RelationModule<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         var copy = DeepCopy();
         ((IParameterizable<T, Tensor<T>, Tensor<T>>)copy).SetParameters(parameters);
         return copy;
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        var cloned = Clone();
-        return cloned;
     }
 
     #endregion

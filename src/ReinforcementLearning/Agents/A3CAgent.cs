@@ -776,14 +776,6 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new A3CAgent<T>(_options, _optimizer);
-        clone.SetParameters(GetParameters());
-        return clone;
-    }
-
-    /// <inheritdoc/>
     public Vector<T> ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
@@ -794,46 +786,6 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // A3C uses asynchronous updates - not directly applicable
-    }
-
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        writer.Write(_options.StateSize);
-        writer.Write(_options.ActionSize);
-        writer.Write(_globalSteps);
-
-        var policyBytes = _globalPolicyNetwork.Serialize();
-        writer.Write(policyBytes.Length);
-        writer.Write(policyBytes);
-
-        var valueBytes = _globalValueNetwork.Serialize();
-        writer.Write(valueBytes.Length);
-        writer.Write(valueBytes);
-
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        reader.ReadInt32(); // stateSize
-        reader.ReadInt32(); // actionSize
-        _globalSteps = reader.ReadInt32();
-
-        var policyLength = reader.ReadInt32();
-        var policyBytes = reader.ReadBytes(policyLength);
-        _globalPolicyNetwork.Deserialize(policyBytes);
-
-        var valueLength = reader.ReadInt32();
-        var valueBytes = reader.ReadBytes(valueLength);
-        _globalValueNetwork.Deserialize(valueBytes);
     }
 
     /// <inheritdoc/>

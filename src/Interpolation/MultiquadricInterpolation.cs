@@ -14,7 +14,7 @@ namespace AiDotNet.Interpolation;
 /// and can create very smooth surfaces.
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class MultiquadricInterpolation<T> : I2DInterpolation<T>
+public partial class MultiquadricInterpolation<T> : I2DInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the known data points.
@@ -29,6 +29,7 @@ public class MultiquadricInterpolation<T> : I2DInterpolation<T>
     /// <summary>
     /// The z-values (heights) of the known data points.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _z;
 
     /// <summary>

@@ -117,33 +117,58 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastQuery;
+    [Scratch]
     private Tensor<T>? _lastKey;
+    [Scratch]
     private Tensor<T>? _lastValue;
+    [Scratch]
     private Tensor<T>? _lastQueryNormed;
+    [Scratch]
     private Tensor<T>? _lastKeyNormed;
+    [Scratch]
     private Tensor<T>? _lastQueryRmsInv;
+    [Scratch]
     private Tensor<T>? _lastKeyRmsInv;
+    [Scratch]
     private Tensor<T>? _lastAttnRaw;
+    [Scratch]
     private Tensor<T>? _lastAttnNormed;
+    [Scratch]
     private Tensor<T>? _lastAttnRmsInv;
+    [Scratch]
     private Tensor<T>? _lastGateRaw;
+    [Scratch]
     private Tensor<T>? _lastGate;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _queryNormScaleGradient;
+    [Scratch]
     private Tensor<T>? _keyNormScaleGradient;
+    [Scratch]
     private Tensor<T>? _gammasGradient;
+    [Scratch]
     private Tensor<T>? _outputNormScaleGradient;
+    [Scratch]
     private Tensor<T>? _outputGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />
@@ -168,6 +193,9 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
     /// Gets the decay rate.
     /// </summary>
     public double DecayRate => _decayRate;
+
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
 
     /// <summary>
     /// Creates a new TransNormerLLM layer with lightning attention.
@@ -204,6 +232,7 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

@@ -59,7 +59,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("OMG-LLaVA: Bridging Image-Level, Object-Level, Pixel-Level Reasoning and Understanding", "https://arxiv.org/abs/2406.19389", Year = 2024, Authors = "Zhang et al.")]
-public class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
+public partial class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
 {
     private readonly OMGLLaVAOptions _options;
     public override ModelOptions GetOptions() => _options;
@@ -257,46 +257,6 @@ public class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "OMGLLaVA" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = SerializeForMetadata()
     };
-
-    /// <summary>
-    /// Writes configuration to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    { writer.Write(_height); writer.Write(_width); writer.Write(_channels); writer.Write(_numClasses); writer.Write(_decoderDim); writer.Write(_dropRate); writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty); writer.Write(_encoderLayerEnd); writer.Write(_channelDims.Length); foreach (int d in _channelDims) writer.Write(d); writer.Write(_depths.Length); foreach (int d in _depths) writer.Write(d); }
-
-    /// <summary>
-    /// Reads configuration from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    { _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble(); _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32(); int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32(); int dd = reader.ReadInt32(); for (int i = 0; i < dd; i++) _ = reader.ReadInt32(); }
-
-    /// <summary>
-    /// Creates a new instance with the same configuration but fresh weights.
-    /// </summary>
-    /// <returns>A new model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new OMGLLaVA<T>(Architecture, optimizer: null, lossFunction: LossFunction,
-            numClasses: _numClasses, dropRate: _dropRate, options: new OMGLLaVAOptions(_options))
-        : new OMGLLaVA<T>(Architecture,
-            _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."),
-            _numClasses, new OMGLLaVAOptions(_options));
     // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and latches
     // _disposed, and OMGLLaVA owns no other unmanaged resource.
     #endregion

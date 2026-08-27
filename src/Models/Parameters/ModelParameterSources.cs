@@ -92,6 +92,24 @@ public interface IVariableLengthParameterSource<T> : IParameterSource<T>
 }
 
 /// <summary>
+/// Persists the non-numeric structure that gives a variable parameter surface its shape.
+/// </summary>
+/// <remarks>
+/// A flat parameter vector can restore values only after the destination owns the same slots. Sparse
+/// tables are the canonical example: their state/action keys are topology, while the values stored at
+/// those keys are parameters. Model bases write this small topology block before restoring the vector,
+/// keeping values single-owned by <see cref="IParameterSource{T}"/>.
+/// </remarks>
+public interface IParameterTopologySource
+{
+    /// <summary>Writes the keys/shapes required to recreate this source's parameter slots.</summary>
+    void WriteParameterTopology(BinaryWriter writer);
+
+    /// <summary>Recreates this source's parameter slots without restoring their numeric values.</summary>
+    void ReadParameterTopology(BinaryReader reader);
+}
+
+/// <summary>
 /// A whole <see cref="Vector{T}"/> field exposed as a parameter surface.
 /// </summary>
 /// <remarks>
@@ -200,7 +218,8 @@ public sealed class DelegatingParameterSource<T> : IParameterSource<T>
 /// variable-length piece FIRST, which the registry cannot slice; owning the whole packing in one
 /// component keeps the layout exactly as it was and still leaves one place that decides it.
 /// </remarks>
-public sealed class VariableLengthParameterSource<T> : IVariableLengthParameterSource<T>
+public sealed class VariableLengthParameterSource<T> :
+    IVariableLengthParameterSource<T>, IParameterLayoutSource
 {
     private readonly Func<long> _count;
     private readonly Func<Vector<T>> _get;
@@ -219,6 +238,39 @@ public sealed class VariableLengthParameterSource<T> : IVariableLengthParameterS
 
     /// <inheritdoc />
     public bool CanResizeOnRestore => true;
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout()
+    {
+        try
+        {
+            long count = _count();
+            if (count < 0)
+                throw new InvalidOperationException(
+                    $"A variable-length parameter source reported a negative count ({count}).");
+
+            return new[]
+            {
+                new ParameterSlotDescriptor(
+                    "$", ParameterSlotRole.Trainable,
+                    count == 0 ? ParameterReadiness.ParameterFree : ParameterReadiness.Materialized,
+                    count)
+            };
+        }
+        catch (ParameterLayoutNotReadyException)
+        {
+            // A composite source often computes its width by packing a child model. Before that
+            // child is fitted, asking for the width is a metadata query, not a value read. Preserve
+            // the deferred layout so capability checks can select the direct training path without
+            // forcing the child to expose parameters prematurely.
+            return new[]
+            {
+                new ParameterSlotDescriptor(
+                    "$", ParameterSlotRole.Trainable,
+                    ParameterReadiness.FitDeferred, null)
+            };
+        }
+    }
 
     /// <inheritdoc />
     public Vector<T> GetParameters() => _get();

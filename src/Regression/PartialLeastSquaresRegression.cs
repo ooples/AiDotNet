@@ -71,6 +71,7 @@ public partial class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// <value>
     /// A matrix where each column represents the loadings for a component.
     /// </value>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _loadings;
 
     /// <summary>
@@ -79,6 +80,7 @@ public partial class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// <value>
     /// A matrix where each column represents the scores for a component.
     /// </value>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _scores;
 
     /// <summary>
@@ -87,11 +89,13 @@ public partial class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// <value>
     /// A matrix where each column represents the weights for a component.
     /// </value>
+    [AiDotNet.Attributes.FittedParameter]
     private Tensor<T> _weights;
 
     /// <summary>
     /// Y-loadings (c) from the NIPALS algorithm: c_k = t_k'*y / (t_k'*t_k).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _yLoadings = new Vector<T>(0);
 
     /// <summary>
@@ -191,17 +195,6 @@ public partial class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// length saw parameters the model claimed not to have.
     /// </remarks>
     public override bool SupportsParameterInitialization => false;
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new PartialLeastSquaresRegression<T>(_options, Regularization);
-        clone.Coefficients = new Vector<T>(Coefficients);
-        clone.Intercept = Intercept;
-        clone.TrainingFeatureCount = TrainingFeatureCount;
-        return clone;
-    }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <summary>
     /// Fits the model with NIPALS, the algorithm PLS is defined by.
@@ -545,150 +538,5 @@ public partial class PartialLeastSquaresRegression<T> : RegressionBase<T>
         }
 
         return vip;
-    }
-
-    /// <summary>
-    /// Serializes the model to a byte array.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model data.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method serializes the model's parameters, including base class data and PLS-specific data
-    /// such as loadings, scores, weights, means, and standard deviations.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// Serialization converts the model's internal state into a format that can be saved to disk or
-    /// transmitted over a network. This allows you to save a trained model and load it later without
-    /// having to retrain it. Think of it like saving your progress in a video game.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using MemoryStream ms = new MemoryStream();
-        using BinaryWriter writer = new BinaryWriter(ms);
-
-        // Write base class data
-        base.Serialize();
-
-        // Write PLS-specific data
-        writer.Write(_options.NumComponents);
-        SerializationHelper<T>.SerializeMatrix(writer, _loadings);
-        SerializationHelper<T>.SerializeMatrix(writer, _scores);
-        SerializationHelper<T>.SerializeTensor(writer, _weights);
-        SerializationHelper<T>.WriteValue(writer, _yMean);
-        SerializationHelper<T>.SerializeVector(writer, _xMean);
-        SerializationHelper<T>.WriteValue(writer, _yStd);
-        SerializationHelper<T>.SerializeVector(writer, _xStd);
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the model from a byte array.
-    /// </summary>
-    /// <param name="modelData">The byte array containing the serialized model data.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reconstructs the model's parameters from a serialized byte array, including base class data
-    /// and PLS-specific data such as loadings, scores, weights, means, and standard deviations.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// Deserialization is the opposite of serialization - it takes the saved model data and reconstructs
-    /// the model's internal state. This allows you to load a previously trained model and use it to make
-    /// predictions without having to retrain it. It's like loading a saved game to continue where you left off.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] modelData)
-    {
-        using MemoryStream ms = new MemoryStream(modelData);
-        using BinaryReader reader = new BinaryReader(ms);
-
-        // Read base class data
-        base.Deserialize(modelData);
-
-        // Read PLS-specific data
-        _options.NumComponents = reader.ReadInt32();
-        _loadings = SerializationHelper<T>.DeserializeMatrix(reader);
-        _scores = SerializationHelper<T>.DeserializeMatrix(reader);
-        _weights = SerializationHelper<T>.DeserializeTensor(reader);
-        _yMean = SerializationHelper<T>.ReadValue(reader);
-        _xMean = SerializationHelper<T>.DeserializeVector(reader);
-        _yStd = SerializationHelper<T>.ReadValue(reader);
-        _xStd = SerializationHelper<T>.DeserializeVector(reader);
-    }
-
-    /// <summary>
-    /// Creates a new instance of the Partial Least Squares Regression model with the same configuration.
-    /// </summary>
-    /// <returns>A new instance of the Partial Least Squares Regression model.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method creates a deep copy of the current Partial Least Squares Regression model, including its options,
-    /// coefficients, intercept, loadings, scores, weights, and data scaling parameters. The new instance is completely 
-    /// independent of the original, allowing modifications without affecting the original model.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// This method creates an exact copy of your trained model.
-    /// 
-    /// Think of it like making a perfect duplicate:
-    /// - It copies all the configuration settings (like the number of components)
-    /// - It preserves the coefficients and intercept that define your regression model
-    /// - It duplicates all the internal matrices (loadings, scores, weights) that capture the patterns in your data
-    /// - It maintains the scaling information (means and standard deviations) needed to process new data
-    /// 
-    /// Creating a copy is useful when you want to:
-    /// - Create a backup before further modifying the model
-    /// - Create variations of the same model for different purposes
-    /// - Share the model with others while keeping your original intact
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        // Create a new instance with the same options and regularization
-        var newModel = new PartialLeastSquaresRegression<T>(_options, Regularization);
-
-        // Copy coefficients and intercept from base class
-        if (Coefficients != null)
-        {
-            newModel.Coefficients = Coefficients.Clone();
-        }
-        newModel.Intercept = Intercept;
-
-        // Copy PLS-specific components
-        if (_loadings != null)
-        {
-            newModel._loadings = _loadings.Clone();
-        }
-
-        if (_scores != null)
-        {
-            newModel._scores = _scores.Clone();
-        }
-
-        if (_weights != null)
-        {
-            newModel._weights = _weights.Clone();
-        }
-
-        // Copy means and standard deviations used for scaling
-        newModel._yMean = _yMean;
-
-        if (_xMean != null)
-        {
-            newModel._xMean = _xMean.Clone();
-        }
-
-        newModel._yStd = _yStd;
-
-        if (_xStd != null)
-        {
-            newModel._xStd = _xStd.Clone();
-        }
-
-        return newModel;
     }
 }

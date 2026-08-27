@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Options;
@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Training Products of Experts by Minimizing Contrastive Divergence", "https://doi.org/10.1162/089976602760128018")]
-public class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, ITrainingObjectiveProvider<T>
+public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, ITrainingObjectiveProvider<T>
 {
     private readonly RestrictedBoltzmannMachineOptions _options;
 
@@ -598,39 +598,6 @@ public class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, ITraining
         {
             throw new InvalidOperationException("No activation function specified.");
         }
-    }
-
-    /// <summary>
-    /// Declares the RBM's three parameter tensors, which live outside
-    /// <see cref="NeuralNetworkBase{T}.Layers"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// An RBM has no layer stack -- it is one weight matrix between the visible and hidden units
-    /// plus a bias per unit on each side. Declared in the order the old GetParameters concatenated
-    /// them (weights row-major over [HiddenSize, VisibleSize], then visible biases, then hidden
-    /// biases), so checkpoints written before this change still restore correctly.
-    /// </para>
-    /// <para>
-    /// This replaces FIVE hand-written members: ParameterCount as the formula
-    /// <c>(HiddenSize * VisibleSize) + VisibleSize + HiddenSize</c>, a GetParameters that copied
-    /// the three stores into a flat buffer element by element, a SetParameters that forwarded to
-    /// UpdateParameters, the UpdateParameters that unpacked them again, and a GetParameterChunks
-    /// that built a third copy. Five places that had to agree about one layout; now there is one.
-    /// </para>
-    /// <para>
-    /// <c>_weights</c> became a <c>Tensor&lt;T&gt;</c> for this: the base restores by writing
-    /// THROUGH the declared tensors, and <c>Tensor&lt;T&gt;.FromMatrix</c> hands back a copy, so a
-    /// declared matrix would have been restored into a temporary and discarded. The biases stay
-    /// <c>Vector&lt;T&gt;</c> -- a tensor built over a vector shares its storage, so writing through
-    /// these views lands in the fields themselves.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        yield return _weights;
-        yield return new Tensor<T>([_visibleBiases.Length], _visibleBiases);
-        yield return new Tensor<T>([_hiddenBiases.Length], _hiddenBiases);
     }
 
     /// <summary>
@@ -1226,54 +1193,7 @@ public class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, ITraining
     /// retrain it from scratch, which can be time-consuming.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write layer sizes
-        writer.Write(VisibleSize);
-        writer.Write(HiddenSize);
 
-        // Write weights
-        for (int i = 0; i < HiddenSize; i++)
-        {
-            for (int j = 0; j < VisibleSize; j++)
-            {
-                writer.Write(Convert.ToDouble(_weights[i, j]));
-            }
-        }
-
-        // Write visible biases
-        for (int i = 0; i < VisibleSize; i++)
-        {
-            writer.Write(Convert.ToDouble(_visibleBiases[i]));
-        }
-
-        // Write hidden biases
-        for (int i = 0; i < HiddenSize; i++)
-        {
-            writer.Write(Convert.ToDouble(_hiddenBiases[i]));
-        }
-
-        // Write configuration parameters
-        writer.Write(Convert.ToDouble(_learningRate));
-        writer.Write(_cdSteps);
-
-        // Write activation type
-        bool hasVectorActivation = _vectorActivation != null;
-        writer.Write(hasVectorActivation);
-
-        if (hasVectorActivation)
-        {
-            writer.Write((_vectorActivation ?? throw new InvalidOperationException("Vector activation not initialized.")).GetType().FullName ?? "Unknown");
-        }
-        else if (_scalarActivation != null)
-        {
-            writer.Write(_scalarActivation.GetType().FullName ?? "Unknown");
-        }
-        else
-        {
-            writer.Write("None");
-        }
-    }
 
     /// <summary>
     /// Deserializes RBM-specific data from a binary reader.
@@ -1296,63 +1216,7 @@ public class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, ITraining
     /// without needing to retrain it from scratch.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read layer sizes (and validate they match)
-        int storedVisibleSize = reader.ReadInt32();
-        int storedHiddenSize = reader.ReadInt32();
 
-        if (storedVisibleSize != VisibleSize || storedHiddenSize != HiddenSize)
-        {
-            throw new InvalidOperationException(
-                $"Size mismatch during deserialization. Expected {VisibleSize}x{HiddenSize}, " +
-                $"but found {storedVisibleSize}x{storedHiddenSize}."
-            );
-        }
-
-        // Read weights
-        for (int i = 0; i < HiddenSize; i++)
-        {
-            for (int j = 0; j < VisibleSize; j++)
-            {
-                _weights[i, j] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-
-        // Read visible biases
-        for (int i = 0; i < VisibleSize; i++)
-        {
-            _visibleBiases[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read hidden biases
-        for (int i = 0; i < HiddenSize; i++)
-        {
-            _hiddenBiases[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read configuration parameters
-        _learningRate = NumOps.FromDouble(reader.ReadDouble());
-        _cdSteps = reader.ReadInt32();
-
-        // Read activation type
-        bool hasVectorActivation = reader.ReadBoolean();
-        string activationType = reader.ReadString();
-
-        if (hasVectorActivation)
-        {
-            // Default to sigmoid if the exact type can't be recreated
-            if (_vectorActivation == null)
-            {
-                _vectorActivation = new SigmoidActivation<T>();
-            }
-        }
-        else if (activationType != "None" && _scalarActivation == null)
-        {
-            // Default to sigmoid if the exact type can't be recreated
-            _scalarActivation = new SigmoidActivation<T>();
-        }
-    }
 
     /// <summary>
     /// Sets the training parameters for the RBM.
@@ -1437,22 +1301,5 @@ public class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, ITraining
             ["Output"] = Predict(input)
         };
         return activations;
-    }
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Determine which constructor to use based on whether we're using scalar or vector activations
-        if (_vectorActivation != null)
-        {
-            // Use the vector activation constructor
-            return new RestrictedBoltzmannMachine<T>(
-                Architecture, VisibleSize, HiddenSize, Convert.ToDouble(_learningRate), _cdSteps, _vectorActivation, LossFunction);
-        }
-        else
-        {
-            // Use the scalar activation constructor
-            return new RestrictedBoltzmannMachine<T>(
-                Architecture, VisibleSize, HiddenSize, Convert.ToDouble(_learningRate), _cdSteps, _scalarActivation, LossFunction);
-        }
     }
 }

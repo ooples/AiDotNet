@@ -60,7 +60,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("InternImage: Exploring Large-Scale Vision Foundation Models with Deformable Convolutions", "https://arxiv.org/abs/2211.05778", Year = 2023, Authors = "Wang et al.")]
-public class InternImage<T> : Common.SemanticSegmentationBase<T>
+public partial class InternImage<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly InternImageOptions _options;
 
@@ -386,68 +386,6 @@ public class InternImage<T> : Common.SemanticSegmentationBase<T>
             },
             ModelData = SerializeForMetadata()
         };
-    }
-
-    /// <summary>
-    /// Serializes InternImage-specific configuration to a binary stream.
-    /// </summary>
-    /// <param name="writer">Binary writer for persistence.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves the model's configuration so it can be restored later.
-    /// The order must match <see cref="DeserializeNetworkSpecificData"/>.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height); writer.Write(_width); writer.Write(_channels);
-        writer.Write(_numClasses); writer.Write((int)_modelSize);
-        writer.Write(_decoderDim); writer.Write(_dropRate);
-        writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty);
-        writer.Write(_encoderLayerEnd);
-        writer.Write(_channelDims.Length);
-        foreach (int dim in _channelDims) writer.Write(dim);
-        writer.Write(_depths.Length);
-        foreach (int depth in _depths) writer.Write(depth);
-    }
-
-    /// <summary>
-    /// Deserializes InternImage-specific configuration from a binary stream.
-    /// </summary>
-    /// <param name="reader">Binary reader for loading.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Reads back the saved configuration in the same order it was written.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadDouble();
-        _ = reader.ReadBoolean(); _ = reader.ReadString();
-        _ = reader.ReadInt32();
-        int channelCount = reader.ReadInt32();
-        for (int i = 0; i < channelCount; i++) _ = reader.ReadInt32();
-        int depthCount = reader.ReadInt32();
-        for (int i = 0; i < depthCount; i++) _ = reader.ReadInt32();
-    }
-
-    /// <summary>
-    /// Creates a new InternImage with the same config but fresh weights.
-    /// </summary>
-    /// <returns>A new model instance with reinitialized weights.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Used for cross-validation or ensemble training where multiple
-    /// independent copies of the same architecture are needed.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return _useNativeMode
-            ? new InternImage<T>(Architecture, null, LossFunction, _numClasses, _modelSize, _dropRate, _options)
-            : new InternImage<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
     }
 
     #endregion

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -75,7 +75,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
         Direction = TensorLayoutDirection.Input, BatchOptional = true)]
     [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
         Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-    public class InverseProblemPINN<T> : NeuralNetworkBase<T>
+    public partial class InverseProblemPINN<T> : NeuralNetworkBase<T>
     {
         private readonly IInverseProblem<T> _inverseProblem;
         private readonly IBoundaryCondition<T>[] _boundaryConditions;
@@ -89,7 +89,9 @@ namespace AiDotNet.PhysicsInformed.PINNs
         private readonly bool _usesDefaultOptimizer;
 
         // Trainable parameters (the unknowns we're trying to find)
+        [AiDotNet.Attributes.Buffer]
         private Vector<T> _parameters;
+        [AiDotNet.Attributes.Buffer]
         private Vector<T>? _parameterGradients;
 
         // Current PDE with parameters applied
@@ -779,25 +781,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
         /// <inheritdoc />
         /// <remarks>
-        /// The unknown physical coefficients this PINN is solving for. They are weights like any
-        /// other -- gradient descent updates them alongside the network's -- so the base folds them
-        /// into the count, the vector, the restore and the chunks from this one declaration.
-        /// <para>
-        /// A FRESH view every call, deliberately: the training step REPLACES <c>_parameters</c>
-        /// (<c>_parameters = Engine.Subtract(...)</c>) rather than writing into it, and a cached
-        /// view would still alias the vector from before the last step. A <c>Tensor&lt;T&gt;</c>
-        /// built over a <c>Vector&lt;T&gt;</c> shares its storage, so writes through this land in
-        /// the field itself; the field stays a <c>Vector&lt;T&gt;</c> because
-        /// <c>IInverseProblem&lt;T&gt;.CreateParameterizedPDE</c> takes one.
-        /// </para>
-        /// </remarks>
-        protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-        {
-            yield return new Tensor<T>([_parameters.Length], _parameters);
-        }
-
-        /// <inheritdoc />
-        /// <remarks>
         /// The PDE is BUILT from the coefficients rather than reading them live, so restoring them
         /// without rebuilding it leaves the model computing with the old physics while reporting
         /// the new weights.
@@ -835,51 +818,10 @@ namespace AiDotNet.PhysicsInformed.PINNs
         }
 
         /// <inheritdoc/>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            writer.Write(_parameters.Length);
-            foreach (var p in _parameters)
-            {
-                writer.Write(NumOps.ToDouble(p));
-            }
-            writer.Write(_numCollocationPoints);
-        }
+
 
         /// <inheritdoc/>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            int numParams = reader.ReadInt32();
-            if (numParams != _parameters.Length)
-            {
-                throw new InvalidOperationException("Serialized parameter count does not match.");
-            }
 
-            for (int i = 0; i < numParams; i++)
-            {
-                _parameters[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-
-            int numPoints = reader.ReadInt32();
-            if (numPoints != _numCollocationPoints)
-            {
-                throw new InvalidOperationException("Serialized collocation point count does not match.");
-            }
-
-            UpdatePDE();
-        }
-
-        /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new InverseProblemPINN<T>(
-                Architecture,
-                _inverseProblem,
-                _boundaryConditions,
-                _initialCondition,
-                _numCollocationPoints,
-                _options,
-                _optimizer);
-        }
 
         /// <inheritdoc/>
         public override bool SupportsTraining => true;

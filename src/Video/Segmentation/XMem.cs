@@ -67,7 +67,7 @@ namespace AiDotNet.Video.Segmentation;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public class XMem<T> : NeuralNetworkBase<T>
+public partial class XMem<T> : NeuralNetworkBase<T>
 {
     private readonly XMemOptions _options;
 
@@ -796,52 +796,9 @@ public class XMem<T> : NeuralNetworkBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Serialization is not supported in ONNX mode.");
 
-        writer.Write(_inputHeight);
-        writer.Write(_inputWidth);
-        writer.Write(_inputChannels);
-        writer.Write(_numFeatures);
-        writer.Write(_sensoryMemorySize);
-        writer.Write(_workingMemorySize);
-        writer.Write(_longTermMemorySize);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
 
-        for (int i = 0; i < 7; i++) _ = reader.ReadInt32();
-    }
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var copiedOptions = new XMemOptions(_options);
-        if (!_useNativeMode && _onnxModelPath is { } modelPath)
-        {
-            return new XMem<T>(
-                Architecture,
-                modelPath,
-                _sensoryMemorySize,
-                _workingMemorySize,
-                _longTermMemorySize,
-                copiedOptions);
-        }
-
-        return new XMem<T>(
-            Architecture,
-            optimizer: null,
-            _lossFunction,
-            _numFeatures,
-            _sensoryMemorySize,
-            _workingMemorySize,
-            _longTermMemorySize,
-            copiedOptions);
-    }
 
     #endregion
 }

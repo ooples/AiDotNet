@@ -42,7 +42,7 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Small-footprint Keyword Spotting Using Deep Neural Networks", "https://doi.org/10.1109/ICASSP.2014.6854370")]
-public class KeywordSpotting<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class KeywordSpotting<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     protected override int OutputFeatureWidth => Architecture.OutputSize > 0
         ? Architecture.OutputSize
@@ -107,9 +107,6 @@ public class KeywordSpotting<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T
     protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "KeywordSpotting-Native" : "KeywordSpotting-ONNX", Description = "Small-footprint Deep KWS (Chen, Parada, and Heigold, 2014)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
-    protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.MaxTextLength); w.Write(_options.DropoutRate); w.Write(_options.Language); w.Write(_options.LearningRate); w.Write(_options.LearningRateDecay); w.Write(_options.Vocabulary.Length); foreach (string label in _options.Vocabulary) w.Write(label); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.MaxTextLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); _options.LearningRate = r.ReadDouble(); _options.LearningRateDecay = r.ReadDouble(); int labelCount = r.ReadInt32(); _options.Vocabulary = new string[labelCount]; for (int i = 0; i < labelCount; i++) _options.Vocabulary[i] = r.ReadString(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new KeywordSpotting<T>(Architecture, mp, _options); return new KeywordSpotting<T>(Architecture, _options); }
 
     private (List<int> tokens, double confidence) DecodeKeywordPosteriors(Tensor<T> logits)
     {

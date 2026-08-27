@@ -52,7 +52,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2312.06640",
     Year = 2024,
     Authors = "Shangchen Zhou, Peiqing Yang, Jianyi Wang, Yihang Luo, Chen Change Loy")]
-public class Upscale4KAgent<T> : VideoSuperResolutionBase<T>
+public partial class Upscale4KAgent<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 
@@ -188,56 +188,9 @@ public class Upscale4KAgent<T> : VideoSuperResolutionBase<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.NumFeatures);
-        w.Write(_options.NumStages);
-        w.Write(_options.NumResBlocks);
-        w.Write(_options.ScaleFactor);
-        w.Write(_options.MaxAgentSteps);
-        w.Write(_options.QualityThreshold);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (VideoModelVariant)r.ReadInt32();
-        _options.NumFeatures = r.ReadInt32();
-        _options.NumStages = r.ReadInt32();
-        _options.NumResBlocks = r.ReadInt32();
-        _options.ScaleFactor = r.ReadInt32();
-        _options.MaxAgentSteps = r.ReadInt32();
-        _options.QualityThreshold = r.ReadDouble();
-        _options.DropoutRate = r.ReadDouble();
-        ScaleFactor = _options.ScaleFactor;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-        {
-            // Release any existing session before replacing it so repeated
-            // deserialize / clone round-trips don't leak native ONNX resources.
-            OnnxModel?.Dispose();
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        }
-        // Native-mode layers (with their trained weights) are already reconstructed by
-        // the base deserializer before this override runs; re-initializing here would
-        // discard them and leave the model randomly initialized.
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new Upscale4KAgent<T>(Architecture, p, new Upscale4KAgentOptions(_options));
 
-        // A clone needs optimizer state bound to the clone's parameters. Reusing this
-        // instance's optimizer would couple the two models and bypass its constructor's
-        // option-derived learning rate.
-        return new Upscale4KAgent<T>(Architecture, new Upscale4KAgentOptions(_options));
-    }
 
     #endregion
 

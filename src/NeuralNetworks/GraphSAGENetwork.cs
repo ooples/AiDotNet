@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -76,7 +76,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Inductive Representation Learning on Large Graphs", "https://arxiv.org/abs/1706.02216", Year = 2017, Authors = "William L. Hamilton, Rex Ying, Jure Leskovec")]
-public class GraphSAGENetwork<T> : GraphModelLayoutBase<T>
+public partial class GraphSAGENetwork<T> : GraphModelLayoutBase<T>
 {
     private readonly GraphSAGEOptions _options;
 
@@ -916,45 +916,12 @@ public class GraphSAGENetwork<T> : GraphModelLayoutBase<T>
     /// <summary>
     /// Serializes network-specific data to a binary writer.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(HiddenDim);
-        writer.Write(NumLayers);
-        writer.Write((int)AggregatorType);
-        writer.Write(DropoutRate);
-        writer.Write(IsLoRAEnabled);
-        writer.Write(LoRARank);
-        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
-        SerializationHelper<T>.SerializeInterface(writer, _optimizer);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data from a binary reader.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // HiddenDim
-        _ = reader.ReadInt32(); // NumLayers
-        _ = (SAGEAggregatorType)reader.ReadInt32();
-        _ = reader.ReadDouble(); // DropoutRate
-        _ = reader.ReadBoolean(); // IsLoRAEnabled
-        _ = reader.ReadInt32(); // LoRARank
-        _ = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader);
-        _ = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader);
-    }
 
-    /// <summary>
-    /// Creates a new instance of this network type.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new GraphSAGENetwork<T>(
-            architecture: Architecture,
-            aggregatorType: AggregatorType,
-            numLayers: NumLayers,
-            normalize: Normalize,
-            dropoutRate: DropoutRate);
-    }
 
     #endregion
 }

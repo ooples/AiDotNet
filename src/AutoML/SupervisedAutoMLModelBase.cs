@@ -34,7 +34,7 @@ namespace AiDotNet.AutoML;
 /// Concrete strategies (random search, Bayesian optimization, etc.) decide how to pick the next trial.
 /// </para>
 /// </remarks>
-public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLModelBase<T, TInput, TOutput>
+public abstract partial class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLModelBase<T, TInput, TOutput>
 {
     private readonly Random _random;
 

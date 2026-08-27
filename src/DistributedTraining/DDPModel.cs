@@ -68,8 +68,9 @@ namespace AiDotNet.DistributedTraining;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("PyTorch Distributed: Accelerating Data Parallel Training", "https://arxiv.org/abs/2006.15704")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
+public partial class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _computedGradients;
 
     /// <summary>
@@ -237,64 +238,6 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
     }
 
     /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize sharding configuration info
-        writer.Write(WorldSize);
-        writer.Write(Rank);
-        writer.Write(Config.AutoSyncGradients);
-        writer.Write(Config.MinimumParameterGroupSize);
-        writer.Write(Config.EnableGradientCompression);
-
-        // Serialize wrapped model
-        var modelData = WrappedModel.Serialize();
-        writer.Write(modelData.Length);
-        writer.Write(modelData);
-
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        // Read sharding configuration (for validation)
-        int savedWorldSize = reader.ReadInt32();
-        int savedRank = reader.ReadInt32();
-        reader.ReadBoolean(); // AutoSyncGradients
-        reader.ReadInt32(); // MinimumParameterGroupSize
-        reader.ReadBoolean(); // EnableGradientCompression
-
-        if (savedWorldSize != WorldSize)
-        {
-            throw new InvalidOperationException(
-                $"World size mismatch. Model was trained with {savedWorldSize} processes, " +
-                $"but current configuration has {WorldSize} processes.");
-        }
-
-        // Validate rank matches
-        if (savedRank != Rank)
-        {
-            throw new InvalidOperationException(
-                $"Rank mismatch. Model was saved on rank {savedRank}, " +
-                $"but is being loaded on rank {Rank}. This could indicate a configuration error.");
-        }
-
-        // Read wrapped model
-        int modelDataLength = reader.ReadInt32();
-        byte[] modelData = reader.ReadBytes(modelDataLength);
-        WrappedModel.Deserialize(modelData);
-
-        // Re-initialize (will set full parameters, not sharded)
-        InitializeSharding();
-    }
-
-    /// <inheritdoc/>
     public override void SaveModel(string filePath)
     {
         Config.CommunicationBackend.Barrier();
@@ -335,12 +278,5 @@ public class DDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
         {
             Config.CommunicationBackend.Barrier();
         }
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> Clone()
-    {
-        var clonedWrappedModel = WrappedModel.Clone();
-        return new DDPModel<T, TInput, TOutput>(clonedWrappedModel, Config);
     }
 }

@@ -107,6 +107,7 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
     /// During optimization, we adjust these values to make our approximation better.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _variationalMean;
 
     /// <summary>
@@ -125,6 +126,7 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
     /// A larger covariance means more uncertainty; smaller means more confidence.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _variationalCovCholesky;
 
     /// <summary>

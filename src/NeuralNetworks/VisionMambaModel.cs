@@ -96,13 +96,19 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
     private readonly VisionScanPattern _scanPattern;
 
     // Patch embedding weights (model-level state, not in Layers)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _patchProjectionWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _patchProjectionBias;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _positionalEmbedding;
 
     // Final normalization and classification head
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _finalNormGamma;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _classifierWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _classifierBias;
 
     /// <inheritdoc />
@@ -371,39 +377,9 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_imageHeight);
-        writer.Write(_imageWidth);
-        writer.Write(_patchSize);
-        writer.Write(_channels);
-        writer.Write(_modelDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numClasses);
-        writer.Write(_stateDimension);
-        writer.Write((int)_scanPattern);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new VisionMambaModel<T>(
-            Architecture, _imageHeight, _imageWidth, _patchSize, _channels,
-            _modelDimension, _numLayers, _numClasses, _stateDimension,
-            _scanPattern, LossFunction, _options);
-    }
+
 
     #endregion
 

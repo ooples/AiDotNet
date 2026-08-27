@@ -138,6 +138,7 @@ public partial class ResidualDenseBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached input for backpropagation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -156,19 +157,33 @@ public partial class ResidualDenseBlock<T> : LayerBase<T>, IShapeContract
     private Tensor<T>[]? _concatInputs;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput;
+    [ExternalState]
     private Tensor<T>? _gpuConv1Out;
+    [ExternalState]
     private Tensor<T>? _gpuX1Activated;
+    [ExternalState]
     private Tensor<T>? _gpuConcat1;
+    [ExternalState]
     private Tensor<T>? _gpuConv2Out;
+    [ExternalState]
     private Tensor<T>? _gpuX2Activated;
+    [ExternalState]
     private Tensor<T>? _gpuConcat2;
+    [ExternalState]
     private Tensor<T>? _gpuConv3Out;
+    [ExternalState]
     private Tensor<T>? _gpuX3Activated;
+    [ExternalState]
     private Tensor<T>? _gpuConcat3;
+    [ExternalState]
     private Tensor<T>? _gpuConv4Out;
+    [ExternalState]
     private Tensor<T>? _gpuX4Activated;
+    [ExternalState]
     private Tensor<T>? _gpuConcat4;
+    [ExternalState]
     private Tensor<T>? _gpuConv5Out;
     private int _gpuBatch;
     private int _gpuHeight;
@@ -815,6 +830,7 @@ public partial class ResidualDenseBlock<T> : LayerBase<T>, IShapeContract
             conv.ClearGradients();
     }
 
+    [Scratch]
     private Vector<T>? _pendingParameters;
 
     /// <inheritdoc />

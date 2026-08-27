@@ -4,8 +4,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 
-using AiDotNet.Models.Parameters;
-
 namespace AiDotNet.CausalInference;
 
 /// <summary>
@@ -68,24 +66,13 @@ namespace AiDotNet.CausalInference;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Marginal Structural Models and Causal Inference in Epidemiology", "https://doi.org/10.1097/00001648-200009000-00011")]
-public class InverseProbabilityWeighting<T> : CausalModelBase<T>
+public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
 {
 
-    /// <inheritdoc />
-    /// <remarks>The propensity-score coefficients, and the same off-by-one fix as CausalForest: the inherited count was NumFeatures, one less than the vector it was paired with.</remarks>
-    protected override void RegisterComponents()
-    {
-        RegisterParameterComponent(new VectorFieldParameterSource<T>(
-            () => _propensityCoefficients,
-            value =>
-            {
-                _propensityCoefficients = value;
-                NumFeatures = value.Length - 1;
-            }));
-    }
     /// <summary>
     /// Stores the logistic regression coefficients for propensity score estimation.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _propensityCoefficients;
 
     /// <summary>
@@ -106,16 +93,19 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
     /// <summary>
     /// Cached treatment vector from fitting.
     /// </summary>
+    [Scratch]
     private Vector<int>? _cachedTreatment;
 
     /// <summary>
     /// Cached outcome vector from fitting.
     /// </summary>
+    [Scratch]
     private Vector<T>? _cachedOutcome;
 
     /// <summary>
     /// Cached feature matrix from fitting.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _cachedFeatures;
 
     /// <summary>
@@ -706,14 +696,6 @@ public class InverseProbabilityWeighting<T> : CausalModelBase<T>
         var newModel = new InverseProbabilityWeighting<T>(_trimMin, _trimMax, _stabilizedWeights);
         newModel.SetParameters(parameters);
         return newModel;
-    }
-
-    /// <summary>
-    /// Creates a new instance of this type.
-    /// </summary>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new InverseProbabilityWeighting<T>(_trimMin, _trimMax, _stabilizedWeights);
     }
 
     /// <summary>

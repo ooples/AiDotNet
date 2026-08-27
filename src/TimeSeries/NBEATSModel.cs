@@ -1085,76 +1085,12 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
     /// <summary>
     /// Serializes model-specific data to the binary writer.
     /// </summary>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        // Write N-BEATS specific options
-        writer.Write(_options.NumStacks);
-        writer.Write(_options.NumBlocksPerStack);
-        writer.Write(_options.PolynomialDegree);
-        writer.Write(_options.LookbackWindow);
-        writer.Write(_options.ForecastHorizon);
-        writer.Write(_options.HiddenLayerSize);
-        writer.Write(_options.NumHiddenLayers);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.Epochs);
-        writer.Write(_options.BatchSize);
-        writer.Write(_options.ShareWeightsInStack);
-        writer.Write(_options.UseInterpretableBasis);
 
-        // Write all block parameters
-        writer.Write(_blocks.Count);
-        foreach (var block in _blocks)
-        {
-            Vector<T> blockParams = block.GetParameters();
-            writer.Write(blockParams.Length);
-            for (int i = 0; i < blockParams.Length; i++)
-            {
-                writer.Write(Convert.ToDouble(blockParams[i]));
-            }
-        }
-    }
 
     /// <summary>
     /// Deserializes model-specific data from the binary reader.
     /// </summary>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        // Read N-BEATS specific options
-        _options.NumStacks = reader.ReadInt32();
-        _options.NumBlocksPerStack = reader.ReadInt32();
-        _options.PolynomialDegree = reader.ReadInt32();
-        _options.LookbackWindow = reader.ReadInt32();
-        _options.ForecastHorizon = reader.ReadInt32();
-        _options.HiddenLayerSize = reader.ReadInt32();
-        _options.NumHiddenLayers = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.Epochs = reader.ReadInt32();
-        _options.BatchSize = reader.ReadInt32();
-        _options.ShareWeightsInStack = reader.ReadBoolean();
-        _options.UseInterpretableBasis = reader.ReadBoolean();
 
-        // Reinitialize blocks with loaded options
-        InitializeBlocks();
-
-        // Read all block parameters
-        int blockCount = reader.ReadInt32();
-        if (blockCount != _blocks.Count)
-        {
-            throw new InvalidOperationException(
-                $"Block count mismatch. Expected {_blocks.Count}, but serialized data contains {blockCount}.");
-        }
-
-        for (int i = 0; i < blockCount; i++)
-        {
-            int paramCount = reader.ReadInt32();
-            Vector<T> blockParams = new Vector<T>(paramCount);
-            for (int j = 0; j < paramCount; j++)
-            {
-                blockParams[j] = NumOps.FromDouble(reader.ReadDouble());
-            }
-            _blocks[i].SetParameters(blockParams);
-        }
-    }
 
     /// <summary>
     /// Gets metadata about the N-BEATS model.
@@ -1215,27 +1151,5 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
         }
         return weights;
     }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new NBEATSModel<T>(_options);
-        // Copy trained blocks (read-only after training -- safe to share by reference)
-        clone._blocks.Clear();
-        clone._blocks.AddRange(_blocks);
-        // Copy training series
-        if (_trainingSeries.Length > 0)
-            clone._trainingSeries = new Vector<T>(_trainingSeries);
-        // Copy model parameters
-        if (ModelParameters is not null && ModelParameters.Length > 0)
-            clone.ModelParameters = new Vector<T>(ModelParameters);
-        // Copy normalization parameters
-        clone._normMean = _normMean;
-        clone._normStd = _normStd;
-        return clone;
-
-
-}
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
 }

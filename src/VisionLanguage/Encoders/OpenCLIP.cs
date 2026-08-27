@@ -388,65 +388,10 @@ public partial class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisio
     }
 
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ImageEncoderModelPath ?? string.Empty);
-        writer.Write(_options.TextEncoderModelPath ?? string.Empty);
-        writer.Write(_options.ImageSize);
-        writer.Write(_options.VisionEmbeddingDim);
-        writer.Write(_options.TextEmbeddingDim);
-        writer.Write(_options.ProjectionDim);
-        writer.Write(_options.NumVisionLayers);
-        writer.Write(_options.NumTextLayers);
-        writer.Write(_options.NumVisionHeads);
-        writer.Write(_options.NumTextHeads);
-        writer.Write(_options.Temperature);
-        writer.Write(_options.DropoutRate);
-        writer.Write((int)_options.Dataset);
-        writer.Write(_options.UseCoCaVariant);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string imgPath = reader.ReadString();
-        if (!string.IsNullOrEmpty(imgPath))
-            _options.ImageEncoderModelPath = imgPath;
-        string txtPath = reader.ReadString();
-        if (!string.IsNullOrEmpty(txtPath))
-            _options.TextEncoderModelPath = txtPath;
-        _options.ImageSize = reader.ReadInt32();
-        _options.VisionEmbeddingDim = reader.ReadInt32();
-        _options.TextEmbeddingDim = reader.ReadInt32();
-        _options.ProjectionDim = reader.ReadInt32();
-        _options.NumVisionLayers = reader.ReadInt32();
-        _options.NumTextLayers = reader.ReadInt32();
-        _options.NumVisionHeads = reader.ReadInt32();
-        _options.NumTextHeads = reader.ReadInt32();
-        _options.Temperature = reader.ReadDouble();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.Dataset = (PretrainingDataset)reader.ReadInt32();
-        _options.UseCoCaVariant = reader.ReadBoolean();
 
-        if (!_useNativeMode && _options.ImageEncoderModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxImageEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-        if (_options.TextEncoderModelPath is { } tp2 && !string.IsNullOrEmpty(tp2))
-            OnnxTextEncoder = new OnnxModel<T>(tp2, _options.OnnxOptions);
-    }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (
-            !_useNativeMode
-            && _options.ImageEncoderModelPath is { } mp
-            && !string.IsNullOrEmpty(mp)
-        )
-            return new OpenCLIP<T>(Architecture, mp, new OpenCLIPOptions(_options));
-        return new OpenCLIP<T>(Architecture, new OpenCLIPOptions(_options));
-    }
 
     #endregion
 

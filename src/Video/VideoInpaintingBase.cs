@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -35,7 +35,7 @@ namespace AiDotNet.Video;
     Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output)]
-public abstract class VideoInpaintingBase<T> : VideoNeuralNetworkBase<T>, IShapeContract
+public abstract partial class VideoInpaintingBase<T> : VideoNeuralNetworkBase<T>, IShapeContract
 {
     /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
@@ -375,7 +375,22 @@ public abstract class VideoInpaintingBase<T> : VideoNeuralNetworkBase<T>, IShape
         if (_shapesProbed || Layers.Count == 0) return;
         _shapesProbed = true;
         int c = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
-        _ = PredictCore(new Tensor<T>([1, c, 32, 32]));
+
+        // Best-effort, because this runs underneath ParameterCount, which is a READ. A model whose
+        // PredictCore cannot accept this particular probe is a model whose layers stay lazy -- that
+        // is a smaller and more honest outcome than making every count, every serialization and
+        // every clone throw. E2FGVI is the case in point: its encoder wants RGB plus a one-channel
+        // hole mask, and it only synthesizes that mask when the input arrives with exactly
+        // _channels channels, so a probe at any other depth reached BlendKnownPixels with too few
+        // channels and threw "Index 3 is out of range" out of a plain ParameterCount read.
+        try
+        {
+            _ = PredictCore(new Tensor<T>([1, c, 32, 32]));
+        }
+        catch (Exception)
+        {
+            // Layers stay lazy; callers that need them resolved will drive a real forward.
+        }
     }
 
     /// <inheritdoc />

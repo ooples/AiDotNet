@@ -51,7 +51,7 @@ namespace AiDotNet.Video.Inpainting;
     "https://arxiv.org/abs/2007.10247",
     Year = 2020,
     Authors = "Yanhong Zeng, Jianlong Fu, Hongyang Chao")]
-public class STTN<T> : VideoInpaintingBase<T>
+public partial class STTN<T> : VideoInpaintingBase<T>
 {
     private readonly STTNOptions _options;
 
@@ -171,7 +171,8 @@ public class STTN<T> : VideoInpaintingBase<T>
         }
     }
 
-    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
+    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
+
 
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
@@ -202,36 +203,10 @@ public class STTN<T> : VideoInpaintingBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_options.Variant);
-        writer.Write(_options.NumFeatures);
-        writer.Write(_options.NumTransformerLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.NumScales);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.DropoutRate);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _options.Variant = (VideoModelVariant)reader.ReadInt32();
-        _options.NumFeatures = reader.ReadInt32();
-        _options.NumTransformerLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.NumScales = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.DropoutRate = reader.ReadDouble();
-    }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new STTN<T>(Architecture, p, _options);
-        return new STTN<T>(Architecture, _options);
-    }
 
     private static Tensor<T> ConcatFramesAndMasks(Tensor<T> frames, Tensor<T> masks)
     {

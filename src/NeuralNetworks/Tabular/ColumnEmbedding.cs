@@ -27,7 +27,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ComponentType(ComponentType.Encoder)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class ColumnEmbedding<T>
+public partial class ColumnEmbedding<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private IEngine Engine => AiDotNetEngine.Current;
@@ -37,7 +37,9 @@ public class ColumnEmbedding<T>
     private readonly int _embeddingDim;
     private readonly bool _learnable;
 
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _embeddings;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _embeddingGradients;
 
     /// <summary>

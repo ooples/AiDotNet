@@ -387,32 +387,6 @@ public partial class WanVideoModel<T> : VideoDiffusionModelBase<T>
 
     #endregion
 
-    #region ICloneable Implementation
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // _dit.Clone() reconstructs from the predictor's own config fields and (with the
-        // lazy-layer-materializing DiTNoisePredictor.Clone) preserves its weights — so it is
-        // correct for both a caller-injected predictor and the default variant build, with no
-        // need to re-derive the variant config or round-trip a flat foundation-scale vector.
-        return new WanVideoModel<T>(
-            dit: (DiTNoisePredictor<T>)_dit.Clone(),
-            temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
-            conditioner: _conditioner,
-            variant: _variant,
-            defaultNumFrames: DefaultNumFrames,
-            defaultFPS: DefaultFPS);
-    }
-
-    #endregion
-
     #region Metadata
 
     /// <inheritdoc />

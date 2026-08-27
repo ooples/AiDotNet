@@ -20,8 +20,51 @@ namespace AiDotNet.AutoML
     /// <typeparam name="T">The numeric type used for calculations</typeparam>
     /// <typeparam name="TInput">The input data type</typeparam>
     /// <typeparam name="TOutput">The output data type</typeparam>
-    public abstract class AutoMLModelBase<T, TInput, TOutput> : IAutoMLModel<T, TInput, TOutput>, IModelShape
+    public abstract partial class AutoMLModelBase<T, TInput, TOutput> : IAutoMLModel<T, TInput, TOutput>, IModelShape
     {
+    // --- declared state (ModelStateRegistry) ---
+    // Identical in every model base because these bases are siblings over the same interfaces rather
+    // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.
+
+    /// <summary>State that is not a parameter vector, declared once and persisted by this base.</summary>
+    private readonly AiDotNet.Models.ModelStateRegistry<T> _declaredState = new();
+    private bool _declaredStateRegistered;
+
+    /// <summary>
+    /// Declare state here that the parameter vector does not carry -- a retained training set,
+    /// fitted knots, kernel centres, an ensemble's children. Both halves of the payload are driven
+    /// by the declaration, so they cannot drift.
+    /// </summary>
+    /// <param name="state">The registry to declare into.</param>
+    protected virtual void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+    }
+    /// <summary>Generated state declarations for fields declared across this model's hierarchy.</summary>
+    /// <param name="state">The registry to declare into.</param>
+    /// <remarks>
+    /// Emitted by ModelStateGenerator into the partial model, so a model author declares nothing. The
+    /// hand-written <c>RegisterState</c> beside it exists only for state the classifier genuinely
+    /// cannot place; anything it CAN place belongs here, where it cannot be forgotten.
+    /// </remarks>
+    protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        RegisterGeneratedStateCore(state);
+    }
+
+    /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>
+    protected AiDotNet.Models.ModelStateRegistry<T> DeclaredState
+    {
+        get
+        {
+            if (!_declaredStateRegistered)
+            {
+                _declaredStateRegistered = true;
+                RegisterGeneratedState(_declaredState);
+                RegisterState(_declaredState);
+            }
+            return _declaredState;
+        }
+    }
         /// <summary>
         /// Standard key used in trial parameter dictionaries to store the model <see cref="Type"/>.
         /// Using this constant avoids typo-related runtime failures across all AutoML strategies.
@@ -752,6 +795,9 @@ namespace AiDotNet.AutoML
     /// </summary>
     public virtual void Deserialize(byte[] data)
     {
+        // Strips and applies any declared-state trailer, so the body below reads the payload
+        // exactly as it did before this existed.
+        data = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, data);
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (BestModel == null)
         {
@@ -942,17 +988,29 @@ namespace AiDotNet.AutoML
     }
 
     /// <summary>
-    /// Factory method for creating a new instance for deep copy.
-    /// Derived classes must implement this to return a new instance of themselves.
-    /// This ensures each copy has its own collections and lock object.
+    /// Creates a new instance of this model's runtime type for a deep copy to populate.
     /// </summary>
-    /// <returns>A fresh instance of the derived class with default parameters</returns>
+    /// <returns>A fresh instance of the derived class.</returns>
     /// <remarks>
-    /// When implementing this method, derived classes should create a fresh instance with default parameters,
-    /// and should not attempt to preserve runtime or initialization state from the original instance.
-    /// The deep copy logic will transfer relevant state (trial history, search space, etc.) after construction.
+    /// <para>
+    /// NO LONGER ABSTRACT, for the reason <c>CreateNewInstance</c> stopped being abstract across the
+    /// other model families: an abstract factory hook obliges every subclass to write out "build one
+    /// of me", and the recorded constructor already knows how. Fourteen models implemented it here,
+    /// each re-listing the arguments its own type happens to take, and each one a place a new
+    /// argument can be forgotten.
+    /// </para>
+    /// <para>
+    /// The clone plan replays the constructor the instance was actually built through, so this is the
+    /// same code for every model. Deep copy still transfers trial history, search space and the rest
+    /// afterwards exactly as before -- this only supplies the empty instance it fills.
+    /// </para>
+    /// <para>
+    /// Still virtual: a model whose construction the plan cannot reproduce can override, and ADN0059
+    /// names it when that is the case rather than leaving it to fail at runtime.
+    /// </para>
     /// </remarks>
-    protected abstract AutoMLModelBase<T, TInput, TOutput> CreateInstanceForCopy();
+    protected virtual AutoMLModelBase<T, TInput, TOutput> CreateInstanceForCopy()
+        => (AutoMLModelBase<T, TInput, TOutput>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
 
 
         #endregion

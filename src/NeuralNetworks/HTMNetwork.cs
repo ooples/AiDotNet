@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -50,7 +50,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Why Neurons Have Thousands of Synapses, a Theory of Sequence Memory in Neocortex", "https://doi.org/10.3389/fncir.2016.00023")]
-public class HTMNetwork<T> : VectorModelLayoutBase<T>
+public partial class HTMNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly HTMNetworkOptions _options;
 
@@ -672,123 +672,11 @@ public class HTMNetwork<T> : VectorModelLayoutBase<T>
     /// Serializes HTM-specific data to a binary writer.
     /// </summary>
     /// <param name="writer">The binary writer to write to.</param>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write HTM-specific parameters
-        writer.Write(_columnCount);
-        writer.Write(_cellsPerColumn);
-        writer.Write(NumOps.ToDouble(_sparsityThreshold));
 
-        // Serialize any additional HTM state
-
-        // Look for the temporal memory layer
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            if (Layers[i] is TemporalMemoryLayer<T> temporalMemoryLayer)
-            {
-                // Mark that we found a temporal memory layer
-                writer.Write(true);
-
-                // Serialize the temporal memory's state
-                if (temporalMemoryLayer.PreviousState != null)
-                {
-                    writer.Write(true); // Has previous state
-                    writer.Write(temporalMemoryLayer.PreviousState.Length);
-
-                    // Write each element of the previous state
-                    for (int j = 0; j < temporalMemoryLayer.PreviousState.Length; j++)
-                    {
-                        writer.Write(Convert.ToDouble(temporalMemoryLayer.PreviousState[j]));
-                    }
-                }
-                else
-                {
-                    writer.Write(false); // No previous state
-                }
-
-                break; // Stop after finding the first temporal memory layer
-            }
-        }
-
-        // If no temporal memory layer was found
-        writer.Write(false);
-    }
 
     /// <summary>
     /// Deserializes HTM-specific data from a binary reader.
     /// </summary>
     /// <param name="reader">The binary reader to read from.</param>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read HTM-specific parameters
-        _columnCount = reader.ReadInt32();
-        _cellsPerColumn = reader.ReadInt32();
-        _sparsityThreshold = NumOps.FromDouble(reader.ReadDouble());
 
-        // Deserialize additional HTM state
-
-        // Check if there was a temporal memory layer
-        bool hasTemporalMemoryLayer = reader.ReadBoolean();
-        if (hasTemporalMemoryLayer)
-        {
-            // Look for the temporal memory layer in the current network
-            for (int i = 0; i < Layers.Count; i++)
-            {
-                if (Layers[i] is TemporalMemoryLayer<T> temporalMemoryLayer)
-                {
-                    // Check if there was a previous state
-                    bool hasPreviousState = reader.ReadBoolean();
-                    if (hasPreviousState)
-                    {
-                        int stateLength = reader.ReadInt32();
-                        var previousState = new Vector<T>(stateLength);
-
-                        // Read each element of the previous state
-                        for (int j = 0; j < stateLength; j++)
-                        {
-                            previousState[j] = NumOps.FromDouble(reader.ReadDouble());
-                        }
-
-                        // Set the previous state
-                        temporalMemoryLayer.PreviousState = previousState;
-                    }
-
-                    break; // Stop after restoring the first temporal memory layer
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Creates a new instance of the HTM Network with the same architecture and configuration.
-    /// </summary>
-    /// <returns>A new HTM Network instance with the same architecture and configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the HTM Network with the same architecture and HTM-specific
-    /// parameters as the current instance. It's used in scenarios where a fresh copy of the model is needed
-    /// while maintaining the same configuration.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a brand new copy of the HTM network with the same setup.
-    /// 
-    /// Think of it like creating a clone of the network:
-    /// - The new network has the same architecture (structure)
-    /// - It has the same number of columns, cells per column, and sparsity threshold
-    /// - But it's a completely separate instance with its own state
-    /// - It starts with clean internal memory and connections
-    /// 
-    /// This is useful when you want to:
-    /// - Train the same network design on different datasets
-    /// - Compare how the same network structure learns from different sequences
-    /// - Start with a fresh network that has the same configuration but no learned patterns
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new HTMNetwork<T>(
-            this.Architecture,
-            _columnCount,
-            _cellsPerColumn,
-            NumOps.ToDouble(_sparsityThreshold));
-    }
 }

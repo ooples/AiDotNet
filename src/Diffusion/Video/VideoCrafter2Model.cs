@@ -144,25 +144,6 @@ public partial class VideoCrafter2Model<T> : VideoDiffusionModelBase<T>
 
 
 
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    public override IDiffusionModel<T> Clone()
-    {
-        var clonedOptions = GetOptions() is DiffusionModelOptions<T> options
-            ? new DiffusionModelOptions<T>(options)
-            : null;
-
-        return new VideoCrafter2Model<T>(
-            architecture: Architecture,
-            options: clonedOptions,
-            scheduler: new DDIMScheduler<T>(Scheduler.Config),
-            predictor: (VideoUNetPredictor<T>)_predictor.Clone(),
-            temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
-            conditioner: _conditioner,
-            defaultNumFrames: DefaultNumFrames,
-            defaultFPS: DefaultFPS);
-    }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

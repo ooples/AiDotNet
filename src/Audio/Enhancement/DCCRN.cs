@@ -860,24 +860,6 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     }
 
     /// <summary>
-    /// Applies complex mask to STFT.
-    /// </summary>
-    /// <summary>
-    /// Surfaces the complex-conv real/imaginary kernels as the model's raw trainable tensors so the base
-    /// gradient tape watches and updates them and GetParameters / serialization round-trip them (the same
-    /// mechanism ViT cls/pos tokens use). They are created lazily on first forward once input channel
-    /// counts are known, so this yields nothing until then; the base runs a warm-up forward before
-    /// collecting parameters, so they exist by collection time.
-    /// </summary>
-    protected override System.Collections.Generic.IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        foreach (var w in _encWr) if (w is not null) yield return w;
-        foreach (var w in _encWi) if (w is not null) yield return w;
-        foreach (var w in _decWr) if (w is not null) yield return w;
-        foreach (var w in _decWi) if (w is not null) yield return w;
-    }
-
-    /// <summary>
     /// True complex convolution (Hu 2020): for complex input carried as [B, 2*Cin, F, T] (real channels
     /// first, imaginary second) and complex kernels Wr, Wi, computes
     ///   Re(out) = conv(Xr, Wr) - conv(Xi, Wi),   Im(out) = conv(Xr, Wi) + conv(Xi, Wr)
@@ -1054,33 +1036,7 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(IsOnnxMode);
-        writer.Write(SampleRate);
-        writer.Write(_numStages);
-        writer.Write(_baseChannels);
-        writer.Write(_lstmHiddenDim);
-        writer.Write(_numLstmLayers);
-        writer.Write(_fftSize);
-        writer.Write(_hopSize);
-        writer.Write(_useComplexMask);
-        writer.Write(_kernelSize);
-        writer.Write(_stride);
-        writer.Write(EnhancementStrength);
 
-        // Persist the complex-conv kernels (Wr/Wi). These are the model's trainable weights for the conv
-        // stages but live OUTSIDE Layers (raw tensors via GetExtraTrainableTensors), so the base layer
-        // serialization above does NOT capture them — we must write them here. They are created lazily on
-        // first forward, so at serialize time they exist iff a forward/train has run; an untrained,
-        // never-forwarded model writes empty lists (count 0) and re-lazy-initializes on load. This is the
-        // write half of the PyTorch LazyModule contract: lazy on the compute path, materialized from the
-        // checkpoint on load (see DeserializeNetworkSpecificData) — no eager materialization at construction.
-        WriteComplexKernels(writer, _encWr);
-        WriteComplexKernels(writer, _encWi);
-        WriteComplexKernels(writer, _decWr);
-        WriteComplexKernels(writer, _decWi);
-    }
 
     /// <summary>Writes a list of complex-conv kernels as [count]([rank][dims...][values...] | -1 for null).</summary>
     private static void WriteComplexKernels(BinaryWriter writer, System.Collections.Generic.List<Tensor<T>?> kernels)
@@ -1122,58 +1078,7 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Restore configuration values
-        _ = reader.ReadBoolean(); // IsOnnxMode (determined by constructor, cannot change)
-        SampleRate = reader.ReadInt32();
-        _numStages = reader.ReadInt32();
-        _baseChannels = reader.ReadInt32();
-        _lstmHiddenDim = reader.ReadInt32();
-        _numLstmLayers = reader.ReadInt32();
-        _fftSize = reader.ReadInt32();
-        _hopSize = reader.ReadInt32();
-        _useComplexMask = reader.ReadBoolean();
-        _kernelSize = reader.ReadInt32();
-        _stride = reader.ReadInt32();
-        EnhancementStrength = reader.ReadDouble();
 
-        // Re-derive the internal sub-lists from the layers the BASE already reconstructed and restored
-        // trained weights into. Do NOT call InitializeNativeLayers here — it would Layers.Clear() and
-        // rebuild FRESH layers, discarding the base-restored trained weights and dropping the trained
-        // state on a clone (Clone_AfterTraining, #1221 class). Only rebuild if the base produced no layers
-        // (e.g. a bare native model with nothing serialized).
-        if (!IsOnnxMode)
-        {
-            if (Layers.Count > 0)
-                DistributeLayers();
-            else
-                InitializeNativeLayers();
-        }
-
-        // Materialize the complex-conv kernels from the checkpoint (same order they were written). These
-        // live outside Layers, so the base did not restore them; recreating them here (from the serialized
-        // shapes) carries the trained conv weights into a deserialized clone.
-        ReadComplexKernels(reader, _encWr);
-        ReadComplexKernels(reader, _encWi);
-        ReadComplexKernels(reader, _decWr);
-        ReadComplexKernels(reader, _decWi);
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DCCRN<T>(
-            Architecture,
-            sampleRate: SampleRate,
-            numStages: _numStages,
-            baseChannels: _baseChannels,
-            lstmHiddenDim: _lstmHiddenDim,
-            numLstmLayers: _numLstmLayers,
-            fftSize: _fftSize,
-            hopSize: _hopSize,
-            useComplexMask: _useComplexMask);
-    }
 
     #endregion
 

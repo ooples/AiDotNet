@@ -212,30 +212,8 @@ public partial class UniMatch<T> : OpticalFlowBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numFeatures);
-        writer.Write(_numLayers);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _numFeatures = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
 
-        // Re-link the typed role fields via the shared OpticalFlowBase helper (validates the untrusted
-        // count, then casts-or-throws each role layer) rather than allocating FRESH random-init
-        // convolutions here — the fresh convs left the typed fields (which EstimateFlow reads directly)
-        // pointing at untrained weights while the trained weights sat unused in Layers, so a
-        // cloned/loaded model predicted from random init (#1221 class). Order matches InitializeLayers:
-        // [featureExtract, ...processingBlocks, outputConv].
-        RelinkOpticalFlowLayers(_numLayers, "UniMatch", out _featureExtract, _processingBlocks, out _outputConv);
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new UniMatch<T>(Architecture, _numFeatures, _numLayers, _options);
-    }
 }

@@ -1,4 +1,5 @@
 using AiDotNet.Engines;
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -37,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class TabMBase<T>
+public abstract partial class TabMBase<T>
 {
     /// <summary>
     /// Numeric operations helper for type T.
@@ -60,14 +61,18 @@ public abstract class TabMBase<T>
     protected readonly int NumFeatures;
 
     // Feature embedding (optional)
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T>? _featureEmbeddings;  // [numFeatures, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _featureEmbeddingsGrad;
 
     // BatchEnsemble hidden layers
     private readonly List<BatchEnsembleLayer<T>> _hiddenLayers;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _embeddedInputCache;
+    [Scratch]
     private readonly List<Tensor<T>> _hiddenOutputsCache;
 
     /// <summary>
@@ -93,7 +98,7 @@ public abstract class TabMBase<T>
     /// all, so it cannot inherit that one.
     /// </remarks>
     protected virtual IEnumerable<ILayer<T>> GetExtraTrainableLayers()
-        => System.Linq.Enumerable.Empty<ILayer<T>>();
+        => AiDotNet.Models.Parameters.GeneratedParameterDiscovery.EnumerateDerivedLayers<T>(this, typeof(TabMBase<T>));
 
     /// <summary>
     /// Gets the total number of trainable parameters in the base model.

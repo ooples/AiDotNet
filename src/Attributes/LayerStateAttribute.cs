@@ -57,4 +57,45 @@ public sealed class LayerStateAttribute : Attribute
     /// </para>
     /// </remarks>
     public string? Key { get; set; }
+
+    /// <summary>
+    /// Names the field or property holding this parameter, when it is not one the generator
+    /// would look for on its own.
+    /// </summary>
+    /// <remarks>
+    /// Inference looks for <c>name</c>, <c>_name</c>, <c>m_name</c>, <c>Name</c> or <c>_Name</c> of
+    /// the parameter's type. A layer that stores the argument anywhere else could not be rescued by
+    /// the attribute either, because the same five-name rule applied to it. Two cases needed this:
+    /// <c>EdgeConditionalConvolutionalLayer</c> keeps <c>int edgeFeatures</c> in
+    /// <c>_edgeFeaturesCount</c> because <c>_edgeFeatures</c> is already a cached tensor, and
+    /// <c>SetAbstractionLayer</c> has <c>int[]</c> and <c>int[][]</c> overloads of the same
+    /// parameter that cannot share one field. The named member is still type-checked.
+    /// </remarks>
+    public string? Member { get; set; }
+
+    /// <summary>
+    /// Skips writing this parameter when its backing member is zero or negative, meaning the layer
+    /// has not resolved it yet.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For a lazily-shaped layer, a size of 0 is the TRUTH — the layer genuinely has not been given
+    /// an input yet — but it is a truth its own constructor rejects. Writing it produced a saved
+    /// state that could not be rebuilt: a <c>LayerNormalizationLayer</c> that was never forward-passed
+    /// saved <c>featureSize = 0</c> and its rebuild threw "featureSize must be positive, got 0".
+    /// </para>
+    /// <para>
+    /// Omitting the value instead makes the generated factory's <c>state.HasAll(...)</c> check fail,
+    /// so <c>TryCreate</c> returns false and the caller falls through to the path that builds the
+    /// layer lazily — which is the correct shape for a layer that has no width yet. The alternative,
+    /// calling the constructor and catching its exception, would use a throw for control flow and
+    /// hide genuine errors.
+    /// </para>
+    /// <para>
+    /// Set this ONLY on a parameter whose zero means "not yet known". A zero that is a legitimate
+    /// saved value — a padding of 0, an offset of 0 — must NOT carry it, or that value silently
+    /// stops round-tripping.
+    /// </para>
+    /// </remarks>
+    public bool OmitWhenNonPositive { get; set; }
 }

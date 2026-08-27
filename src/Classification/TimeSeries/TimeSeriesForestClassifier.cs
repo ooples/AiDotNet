@@ -72,7 +72,7 @@ namespace AiDotNet.Classification.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Vector<>))]
 [ResearchPaper("A Time Series Forest for Classification and Feature Extraction", "https://doi.org/10.1016/j.ins.2013.01.006", Year = 2013, Authors = "Houtao Deng, George Runger, Eugene Tuv, Martyanov Vladimir")]
-public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
+public partial class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
 {
 
     // Returned the tree count, its own comment calling it "simplified". An honest zero replaces a
@@ -324,110 +324,6 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
         clone.SequenceLength = SequenceLength;
         clone.NumChannels = NumChannels;
         return clone;
-    }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new TimeSeriesForestClassifier<T>(_options);
-    }
-
-    /// <inheritdoc />
-    public override byte[] Serialize()
-    {
-        var metadata = GetModelMetadata();
-        var modelDict = new Dictionary<string, object?>
-        {
-            ["SequenceLength"] = SequenceLength,
-            ["NumChannels"] = NumChannels,
-            ["IsFitted"] = _isFitted,
-            ["NumClasses"] = NumClasses,
-            ["NumFeatures"] = NumFeatures,
-            ["TaskType"] = (int)TaskType
-        };
-
-        if (ClassLabels is not null)
-        {
-            var labels = new double[ClassLabels.Length];
-            for (int i = 0; i < ClassLabels.Length; i++)
-            {
-                labels[i] = NumOps.ToDouble(ClassLabels[i]);
-            }
-            modelDict["ClassLabels"] = labels;
-        }
-
-        if (_trees is not null)
-        {
-            modelDict["TreeCount"] = _trees.Count;
-            for (int i = 0; i < _trees.Count; i++)
-            {
-                var tree = _trees[i];
-                modelDict[$"Tree_{i}_IntervalStart"] = tree.IntervalStart;
-                modelDict[$"Tree_{i}_IntervalEnd"] = tree.IntervalEnd;
-                modelDict[$"Tree_{i}_ChannelIdx"] = tree.ChannelIdx;
-                if (tree.Root is not null)
-                {
-                    modelDict[$"Tree_{i}_Root"] = SerializeTreeNode(tree.Root);
-                }
-            }
-        }
-
-        metadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelDict));
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(metadata));
-    }
-
-    /// <inheritdoc />
-    public override void Deserialize(byte[] modelData)
-    {
-        var jsonString = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
-            ?? throw new InvalidOperationException("Failed to deserialize TimeSeriesForestClassifier: invalid metadata.");
-        if (metadata.ModelData is null)
-            throw new InvalidOperationException("Failed to deserialize TimeSeriesForestClassifier: missing model data.");
-
-        var dataString = Encoding.UTF8.GetString(metadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
-            ?? throw new InvalidOperationException("Failed to deserialize TimeSeriesForestClassifier: invalid model payload.");
-
-        SequenceLength = jObj["SequenceLength"]?.ToObject<int>() ?? 0;
-        NumChannels = jObj["NumChannels"]?.ToObject<int>() ?? 1;
-        _isFitted = jObj["IsFitted"]?.ToObject<bool>() ?? false;
-        NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 0;
-        NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
-        TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
-
-        var labelsToken = jObj["ClassLabels"];
-        if (labelsToken is JArray labelsArr)
-        {
-            ClassLabels = new Vector<T>(labelsArr.Count);
-            for (int i = 0; i < labelsArr.Count; i++)
-            {
-                ClassLabels[i] = NumOps.FromDouble(labelsArr[i].Value<double>());
-            }
-        }
-
-        int treeCount = jObj["TreeCount"]?.ToObject<int>() ?? 0;
-        if (treeCount > 0)
-        {
-            _trees = new List<IntervalTree>(treeCount);
-            for (int i = 0; i < treeCount; i++)
-            {
-                var tree = new IntervalTree
-                {
-                    IntervalStart = jObj[$"Tree_{i}_IntervalStart"]?.ToObject<int>() ?? 0,
-                    IntervalEnd = jObj[$"Tree_{i}_IntervalEnd"]?.ToObject<int>() ?? 0,
-                    ChannelIdx = jObj[$"Tree_{i}_ChannelIdx"]?.ToObject<int>() ?? 0
-                };
-
-                var rootToken = jObj[$"Tree_{i}_Root"];
-                if (rootToken is not JObject rootObj)
-                    throw new InvalidOperationException(
-                        $"Failed to deserialize TimeSeriesForestClassifier: Tree_{i} has no root node.");
-
-                tree.Root = DeserializeTreeNode(rootObj);
-                _trees.Add(tree);
-            }
-        }
     }
 
     private Dictionary<string, object?> SerializeTreeNode(DecisionTreeNode node)

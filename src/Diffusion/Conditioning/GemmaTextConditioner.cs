@@ -73,9 +73,6 @@ public class GemmaTextConditioner<T> : TextConditioningBase<T>
             numLayers: GetNumLayers(_variant),
             numHeads: GetNumHeads(_variant));
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new GemmaTextConditioner<T>(Tokenizer, _variant, Architecture);
-
     /// <summary>
     /// Decoder-style models pool by extracting the embedding at the last
     /// non-pad token position. With fixed-length padded sequences (the

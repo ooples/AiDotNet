@@ -45,7 +45,7 @@ namespace AiDotNet.Finance.Portfolio;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Building Diversified Portfolios that Outperform Out of Sample", "https://doi.org/10.3905/jpm.2016.42.4.059", Year = 2016, Authors = "Marcos Lopez de Prado")]
-public class HierarchicalRiskParity<T> : PortfolioOptimizerBase<T>
+public partial class HierarchicalRiskParity<T> : PortfolioOptimizerBase<T>
 {
     #region Shared Fields
 
@@ -199,26 +199,6 @@ public class HierarchicalRiskParity<T> : PortfolioOptimizerBase<T>
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <summary>
-    /// Creates a new instance of the HierarchicalRiskParity model with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is used by the framework to clone the model's configuration
-    /// so it can create a fresh instance with identical settings.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new HierarchicalRiskParityOptions<T>
-        {
-            NumAssets = _options.NumAssets,
-            HiddenDimension = _hiddenDimension,
-            DropoutRate = _dropout
-        };
-
-        return new HierarchicalRiskParity<T>(Architecture, optionsCopy, lossFunction: _lossFunction);
-    }
 
     #endregion
 }

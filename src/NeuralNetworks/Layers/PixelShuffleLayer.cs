@@ -66,6 +66,7 @@ public partial class PixelShuffleLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached input from the last forward pass for backpropagation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>

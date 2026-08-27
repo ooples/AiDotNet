@@ -140,6 +140,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// <summary>
     /// Structural bias for attention (learned from graph structure): [numHeads, maxNodes, maxNodes]
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _structuralBias;
 
     /// <summary>
@@ -201,40 +202,62 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// <summary>
     /// The adjacency matrix defining graph structure.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _adjacencyMatrix;
 
     /// <summary>
     /// Cached values for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastQueries;
+    [Scratch]
     private Tensor<T>? _lastKeys;
+    [Scratch]
     private Tensor<T>? _lastValues;
+    [Scratch]
     private Tensor<T>? _lastAttentionWeights;
+    [Scratch]
     private Tensor<T>? _lastHeadOutputs;
+    [Scratch]
     private Tensor<T>? _lastConcatenated;
+    [Scratch]
     private Tensor<T>? _lastAttnOutput;
+    [Scratch]
     private Tensor<T>? _lastNormed1;
+    [Scratch]
     private Tensor<T>? _lastFFNHidden;
+    [Scratch]
     private Tensor<T>? _lastFFNOutput;
 
     /// <summary>
     /// Gradients for parameters.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputBiasGradient;
+    [Scratch]
     private Tensor<T>? _ffnWeights1Gradient;
+    [Scratch]
     private Tensor<T>? _ffnWeights2Gradient;
+    [Scratch]
     private Tensor<T>? _ffnBias1Gradient;
+    [Scratch]
     private Tensor<T>? _ffnBias2Gradient;
 
     private readonly int _ffnHiddenDim;
@@ -1262,37 +1285,6 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         _ffnWeights2Gradient = null;
         _ffnBias1Gradient = null;
         _ffnBias2Gradient = null;
-    }
-
-    /// <inheritdoc/>
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-        bool hasBias = _structuralBias != null;
-        writer.Write(hasBias);
-        if (hasBias)
-        {
-            var bias = _structuralBias ?? throw new InvalidOperationException("Structural bias is null during serialization.");
-            writer.Write(bias.Shape.Length);
-            foreach (var dim in bias._shape) writer.Write(dim);
-            for (int i = 0; i < bias.Length; i++)
-                writer.Write(NumOps.ToDouble(bias[i]));
-        }
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-        bool hasBias = reader.ReadBoolean();
-        if (hasBias)
-        {
-            int rank = reader.ReadInt32();
-            var shape = new int[rank];
-            for (int i = 0; i < rank; i++) shape[i] = reader.ReadInt32();
-            _structuralBias = new Tensor<T>(shape);
-            for (int i = 0; i < _structuralBias.Length; i++)
-                _structuralBias[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
     }
 
     public override void ResetState()

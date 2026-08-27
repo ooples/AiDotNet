@@ -158,6 +158,7 @@ public partial class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// The model uses these as starting points and then updates them as it processes more data.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _initialValues;
 
     /// <summary>
@@ -631,36 +632,7 @@ public partial class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private const byte SerializationVersion = 2;
 
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        // Version marker for forward-compatible deserialization
-        writer.Write(SerializationVersion);
 
-        writer.Write(Convert.ToDouble(_alpha));
-        writer.Write(Convert.ToDouble(_beta));
-        writer.Write(Convert.ToDouble(_gamma));
-        writer.Write(_initialValues.Length);
-
-        foreach (var value in _initialValues)
-        {
-            writer.Write(Convert.ToDouble(value));
-        }
-
-        // Trained state fields (added in version 2)
-        writer.Write(Convert.ToDouble(_trainedLevel));
-        writer.Write(Convert.ToDouble(_trainedTrend));
-        writer.Write(_trainedSeasonalFactors.Length);
-        foreach (var value in _trainedSeasonalFactors)
-        {
-            writer.Write(Convert.ToDouble(value));
-        }
-        writer.Write(_trainingLength);
-
-        // Fitted values for in-sample prediction via Clone
-        writer.Write(_fittedValues.Length);
-        for (int i = 0; i < _fittedValues.Length; i++)
-            writer.Write(Convert.ToDouble(_fittedValues[i]));
-    }
 
     /// <summary>
     /// Deserializes the model's core parameters from a binary reader.
@@ -683,75 +655,7 @@ public partial class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
     /// to continue using the model without having to train it again.
     /// </para>
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        // Peek at the first byte to detect version marker vs legacy format.
-        // Version 2+ writes a byte marker first; legacy (version 1) starts with a double (alpha).
-        // A double's first byte is extremely unlikely to be exactly 0x02 for typical alpha values,
-        // but we use stream position to disambiguate: if the first byte matches a known version
-        // AND there's enough remaining data for the versioned format, treat it as versioned.
-        byte firstByte = reader.ReadByte();
-        bool isVersioned = firstByte >= 2 && firstByte <= 10; // Reserve versions 2-10
 
-        if (!isVersioned)
-        {
-            // Legacy format: first byte was part of the alpha double. Seek back and read normally.
-            reader.BaseStream.Position -= 1;
-        }
-
-        _alpha = NumOps.FromDouble(reader.ReadDouble());
-        _beta = NumOps.FromDouble(reader.ReadDouble());
-        _gamma = NumOps.FromDouble(reader.ReadDouble());
-        int initialValuesLength = reader.ReadInt32();
-        _initialValues = new Vector<T>(initialValuesLength);
-
-        for (int i = 0; i < initialValuesLength; i++)
-        {
-            _initialValues[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Trained state fields (version 2+, or legacy with remaining data)
-        if (isVersioned || reader.BaseStream.Position < reader.BaseStream.Length)
-        {
-            _trainedLevel = NumOps.FromDouble(reader.ReadDouble());
-            _trainedTrend = NumOps.FromDouble(reader.ReadDouble());
-            int seasonalLength = reader.ReadInt32();
-            _trainedSeasonalFactors = new Vector<T>(seasonalLength);
-            for (int i = 0; i < seasonalLength; i++)
-            {
-                _trainedSeasonalFactors[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-            _trainingLength = reader.ReadInt32();
-
-            // Fitted values
-            if (reader.BaseStream.Position < reader.BaseStream.Length)
-            {
-                int fittedLen = reader.ReadInt32();
-                _fittedValues = new Vector<T>(fittedLen);
-                for (int i = 0; i < fittedLen; i++)
-                    _fittedValues[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-        else
-        {
-            // Seed trained state from initial values so legacy models still forecast correctly
-            _trainedLevel = _initialValues.Length > 0 ? _initialValues[0] : NumOps.Zero;
-            _trainedTrend = _initialValues.Length > 1 ? _initialValues[1] : NumOps.Zero;
-            if (Options.SeasonalPeriod > 0 && _initialValues.Length >= Options.SeasonalPeriod + 2)
-            {
-                _trainedSeasonalFactors = new Vector<T>(Options.SeasonalPeriod);
-                for (int i = 0; i < Options.SeasonalPeriod; i++)
-                {
-                    _trainedSeasonalFactors[i] = _initialValues[i + 2];
-                }
-            }
-            else
-            {
-                _trainedSeasonalFactors = Vector<T>.Empty();
-            }
-            _trainingLength = 0;
-        }
-    }
 
     /// <summary>
     /// Resets the model to its initial state.
@@ -783,24 +687,6 @@ public partial class ExponentialSmoothingModel<T> : TimeSeriesModelBase<T>
         _trainedTrend = NumOps.Zero;
         _trainedSeasonalFactors = Vector<T>.Empty();
         _trainingLength = 0;
-    }
-
-    /// <summary>
-    /// Creates a deep copy of the current exponential smoothing model, including all trained state.
-    /// </summary>
-    /// <returns>A new instance with the same trained state.</returns>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (ExponentialSmoothingModel<T>)base.Clone();
-        clone._alpha = _alpha;
-        clone._beta = _beta;
-        clone._gamma = _gamma;
-        clone._initialValues = _initialValues.Length > 0 ? _initialValues.Clone() : Vector<T>.Empty();
-        clone._trainedLevel = _trainedLevel;
-        clone._trainedTrend = _trainedTrend;
-        clone._trainedSeasonalFactors = _trainedSeasonalFactors.Length > 0 ? _trainedSeasonalFactors.Clone() : Vector<T>.Empty();
-        clone._trainingLength = _trainingLength;
-        return clone;
     }
 
     /// <summary>

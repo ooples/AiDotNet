@@ -52,9 +52,16 @@ public partial class ConvNeXtV2Block<T> : LayerBase<T>, IShapeContract
     private readonly int _intermediateChannels;
     private readonly int _kernelSize;
 
+    // The block's own input shape carries -1 for batch and length, so the chain cannot seed itself
+    // from it at all. A literal length of one kernel is enough to fix every width that matters:
+    // these children's parameters depend on the channel axis, never on sequence length.
+    [SubLayerInput("1, _kernelSize, _channels")]
     private readonly DepthwiseConv1DLayer<T> _depthwise;
+    [SubLayerInput("1, _kernelSize, _channels")]
     private readonly LayerNormalizationLayer<T> _norm;
+    [SubLayerInput("1, _kernelSize, _channels")]
     private readonly DenseLayer<T> _pointwiseExpand;
+    [SubLayerInput("1, _kernelSize, _intermediateChannels")]
     private readonly DenseLayer<T> _pointwiseProject;
 
     /// <summary>GRN scale, one per intermediate channel.</summary>

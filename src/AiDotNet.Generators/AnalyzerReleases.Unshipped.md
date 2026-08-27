@@ -32,6 +32,7 @@ ADN0053 | AiDotNet.Serialization | Error | LayerStateGenerator, Required constru
 ADN0054 | AiDotNet.Serialization | Warning | LayerStateGenerator, Hand-written GetMetadata may drift from [LayerState]
 ADN0055 | AiDotNet.Serialization | Warning | LayerStateGenerator, [LayerState] layer cannot be registered in the generated factory
 ADN0056 | AiDotNet.Serialization | Error | LayerStateGenerator, [LayerState] is only supported on a class deriving from LayerBase
+ADN0057 | AiDotNet.Serialization | Info | LayerStateGenerator, Optional constructor parameter is pinned to its default in the generated factory
 ADNTEST001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Float test scaffold rewrite was a no-op
 ADNTEST002 | AiDotNet.TestScaffold | Disabled | TestScaffoldGenerator, Generated scaffold architecture size disagrees with its InputShape
 ADNTEST003 | AiDotNet.TestScaffold | Error | TestScaffoldGenerator, Two models share a simple name with no registered owner
@@ -55,6 +56,9 @@ ADNPORT007 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Generat
 ADNPORT008 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Tensor-contract member has an incompatible signature
 ADNPORT009 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Generated forward contract is ambiguous or uses unsupported parameters
 ADNPORT010 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Stable input port identity collides across inherited/local declarations
+ADN0058 | AiDotNet.Serialization | Error | CloneAutomationAnalyzer, Clone override duplicates what the base class already does
+ADN0059 | AiDotNet.Serialization | Info | CloneAutomationAnalyzer, Model cannot be rebuilt from its own state
+ADN0060 | AiDotNet.Serialization | Error | CloneAutomationAnalyzer, Serialization is hand-written instead of declared
 ADNPORT011 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Derived/defaulted port or SameShapeAs relationship cannot be resolved
 ADNPORT012 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Input variants have indistinguishable required external signatures
 ADNBUF001 | AiDotNet.ParameterAutomation | Error | TrainableParameterGenerator, Distinct persistent fields declare the same generated buffer identity
@@ -76,3 +80,4 @@ AIDN096 | AiDotNet.FacadeConfiguration | Warning | FacadeConfigurationValidation
 AIDN097 | AiDotNet.FacadeConfiguration | Warning | FacadeConfigurationValidationGenerator, Configured value is only reachable through an accessor nobody calls
 AIDN098 | AiDotNet.ParameterAutomation | Warning | TrainableParameterGenerator, Declared parameter axis cannot be proven resolved
 AIDN099 | AiDotNet.ParameterAutomation | Warning | TrainableParameterGenerator, [TrainableParameter] on a non-partial class does nothing
+AIDN046 | AiDotNet.TestCoverage | Warning | TestScaffoldGenerator, Layer cannot be scaffolded and produces no generated tests

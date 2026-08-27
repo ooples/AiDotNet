@@ -601,33 +601,6 @@ public partial class DreamFusionModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // #1706: clone the noise predictor through its OWN Clone() (UNetNoisePredictor.Clone
-        // materializes the clone's lazy layers then copies weights). The previous fresh-construct +
-        // model-level TryShareParametersFrom left the clone's U-Net (and the NeRF DenseLayers) lazy:
-        // the share saw zero-shape tensors, fell back to SetParameters, and the clone re-RNG-
-        // initialized on its first forward and diverged from the source
-        // (Clone_ShouldProduceIdenticalOutput, maxDiff ~3e1). Only the U-Net is on the Predict
-        // (denoise) path, so passing a faithful U-Net clone makes Predict output identical; the VAE
-        // and NeRF (used by VAE-decode / 3D rendering, not by Predict) are rebuilt fresh. The prior
-        // is preserved so non-Predict behaviour is unchanged.
-        return new DreamFusionModel<T>(
-            architecture: Architecture,
-            diffusionPrior: ReferenceEquals(_diffusionPrior, this) ? null : _diffusionPrior,
-            config: _config,
-            conditioner: _conditioner,
-            unet: (UNetNoisePredictor<T>)_unet.Clone(),
-            seed: null);
-    }
-
-    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

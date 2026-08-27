@@ -89,34 +89,42 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stores the input tensor from the last forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the mean values for each sample from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastMean;
 
     /// <summary>
     /// Stores the variance values for each sample from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastVariance;
 
     /// <summary>
     /// Stores the gradients for the gamma parameters calculated during the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _gammaGradient;
 
     /// <summary>
     /// Stores the gradients for the beta parameters calculated during the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _betaGradient;
 
     private Tensor<T>? _gammaVelocity;
     private Tensor<T>? _betaVelocity;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuLastInput;
+    [ExternalState]
     private Tensor<T>? _gpuSaveMean;
+    [ExternalState]
     private Tensor<T>? _gpuSaveInvVar;
 
     /// <summary>
@@ -246,6 +254,20 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
+    /// Construction state: the feature width this layer normalizes over, kept current for BOTH
+    /// construction paths.
+    /// </summary>
+    /// <remarks>
+    /// Not readonly, and not merely an echo of the eager constructor's argument. This field is what
+    /// the generated <c>WriteConstructionState</c> saves, so a layer built through the lazy
+    /// constructor and resolved on first forward would otherwise save featureSize = 0 and fail its
+    /// own rebuild with "featureSize must be positive, got 0" -- state that describes how the layer
+    /// was CONSTRUCTED rather than what it currently is cannot round-trip a lazily-resolved layer.
+    /// Every path that sizes gamma/beta updates it.
+    /// </remarks>
+    private int _featureSize;
+
+    /// <summary>
     /// AiDotNet#1370 eager-init constructor. Pass <paramref name="featureSize"/> at
     /// construction to allocate gamma/beta immediately and resolve the layer's input
     /// and output shapes — eliminating the need for a warmup forward pass before
@@ -271,11 +293,23 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">When <paramref name="featureSize"/> is not positive.</exception>
+    /// <remarks>
+    /// BOTH parameters carry [LayerState] because the generator uses only the ATTRIBUTED set once any
+    /// parameter on a constructor is marked -- annotating featureSize alone would silently stop
+    /// epsilon being saved.
+    /// <para>
+    /// OmitWhenNonPositive is what keeps a lazily-built LayerNorm rebuildable. Such a layer has
+    /// _featureSize == 0 until its first forward, and 0 is the honest answer, but this constructor
+    /// rejects it. Omitting the key rather than saving the 0 makes the generated factory decline the
+    /// layer, and the loader falls through to the lazy path that builds it correctly.
+    /// </para>
+    /// </remarks>
     public LayerNormalizationLayer(
-        int featureSize,
-        double epsilon = NumericalStabilityHelper.LargeEpsilon)
+        [LayerState(OmitWhenNonPositive = true)] int featureSize,
+        [LayerState] double epsilon = NumericalStabilityHelper.LargeEpsilon)
         : base(new[] { featureSize }, new[] { featureSize })
     {
+        _featureSize = featureSize;
         if (featureSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(featureSize),
                 $"featureSize must be positive, got {featureSize}.");
@@ -411,6 +445,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
 
         _gamma = Tensor<T>.CreateDefault([featureSize], NumOps.One);
         _beta = Tensor<T>.CreateDefault([featureSize], NumOps.Zero);
+        _featureSize = featureSize;
         RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
         RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
     }
@@ -455,6 +490,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
 
             _gamma = gamma;
             _beta = beta;
+            _featureSize = featureSize;
             _gammaGradient = null;
             _betaGradient = null;
             _gammaVelocity = null;

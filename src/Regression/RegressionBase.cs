@@ -31,7 +31,7 @@ namespace AiDotNet.Regression;
 /// functionality.
 /// </para>
 /// </remarks>
-public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>, IModelShape,
+public abstract partial class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>, IModelShape,
     IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>,
     IParameterManifestProvider
 {
@@ -372,6 +372,49 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     /// this method, so a malicious or careless override of
     /// <see cref="Serialize"/> cannot intercept the clone path.
     /// </summary>
+    /// <summary>State that is not a coefficient vector, declared once and persisted by this base.</summary>
+    /// <remarks>
+    /// RegressionBase does not derive from <c>ModelBase</c> -- they are parallel hierarchies over the
+    /// same interfaces -- so the registry wiring is repeated here while the logic itself lives once
+    /// in <see cref="ModelStateRegistry{T}"/>.
+    /// </remarks>
+    private readonly ModelStateRegistry<T> _stateRegistry = new();
+    private bool _stateRegistered;
+
+    /// <summary>
+    /// Declare state here that the coefficient vector does not carry -- a retained training set,
+    /// fitted knots, kernel centres, an ensemble's children.
+    /// </summary>
+    /// <param name="state">The registry to declare into.</param>
+    protected virtual void RegisterState(ModelStateRegistry<T> state)
+    {
+    }
+    /// <summary>Generated state declarations for fields declared across this model's hierarchy.</summary>
+    /// <param name="state">The registry to declare into.</param>
+    /// <remarks>
+    /// Emitted by ModelStateGenerator into the partial model, so a model author declares nothing. The
+    /// hand-written <c>RegisterState</c> beside it exists only for state the classifier genuinely
+    /// cannot place; anything it CAN place belongs here, where it cannot be forgotten.
+    /// </remarks>
+    protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        RegisterGeneratedStateCore(state);
+    }
+
+    private ModelStateRegistry<T> State
+    {
+        get
+        {
+            if (!_stateRegistered)
+            {
+                _stateRegistered = true;
+                RegisterGeneratedState(_stateRegistry);
+                RegisterState(_stateRegistry);
+            }
+            return _stateRegistry;
+        }
+    }
+
     private byte[] SerializeInternalUnchecked()
     {
         var modelData = new Dictionary<string, object>
@@ -380,6 +423,19 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
             { "Intercept", Intercept ?? NumOps.Zero! },
             { "RegularizationOptions", Regularization.GetOptions() }
         };
+
+        // Carried as one base64 blob rather than as JSON members, so a matrix of training rows does
+        // not become a JSON array whose element type has to be guessed on the way back in.
+        if (State.Count > 0)
+        {
+            using var stateStream = new MemoryStream();
+            using (var stateWriter = new BinaryWriter(stateStream, Encoding.UTF8, leaveOpen: true))
+            {
+                State.WriteAll(stateWriter);
+                stateWriter.Flush();
+            }
+            modelData["DeclaredState"] = Convert.ToBase64String(stateStream.ToArray());
+        }
 
         var modelMetadata = GetModelMetadata();
         modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
@@ -432,6 +488,16 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
         if (modelDataObj == null)
         {
             throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
+        }
+
+        // Restored BEFORE the coefficients below, so a model whose declared state and coefficients
+        // describe the same fit ends with the coefficient restore as the last word.
+        var declaredState = modelDataObj["DeclaredState"]?.ToObject<string>();
+        if (!string.IsNullOrEmpty(declaredState) && State.Count > 0)
+        {
+            using var stateStream = new MemoryStream(Convert.FromBase64String(declaredState));
+            using var stateReader = new BinaryReader(stateStream, Encoding.UTF8, leaveOpen: true);
+            State.ReadAll(stateReader);
         }
 
         var coefficientsToken = modelDataObj["Coefficients"];
@@ -1020,7 +1086,18 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
     /// network before copying the data into it.
     /// </para>
     /// </remarks>
-    protected abstract IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance();
+    /// <remarks>
+    /// <para>
+    /// No longer abstract. Every concrete model used to be forced to write this, and 1147 of them
+    /// did -- each one a hand-copied list of constructor arguments that a new option could fall out
+    /// of without anything failing. The clone plan records that constructor at compile time instead,
+    /// so the base can rebuild the type and a model only overrides this when the generator says it
+    /// cannot: a constructor parameter with nothing holding its value, which the build reports by
+    /// name rather than leaving to be discovered by a clone that comes back subtly different.
+    /// </para>
+    /// </remarks>
+    protected virtual IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+        => (IFullModel<T, Matrix<T>, Vector<T>>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
 
     /// <summary>
     /// Creates a clone of the regression model.

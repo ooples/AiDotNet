@@ -1,10 +1,7 @@
-using System.Text;
 using System.Text.RegularExpressions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Serialization;
 using AiDotNet.Tensors.LinearAlgebra;
-using Newtonsoft.Json;
 using AiDotNet.Validation;
 
 namespace AiDotNet.AdversarialRobustness.Safety;
@@ -29,7 +26,7 @@ namespace AiDotNet.AdversarialRobustness.Safety;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Automated Hate Speech Detection and the Problem of Offensive Language", "https://arxiv.org/abs/1703.04009", Year = 2017, Authors = "Thomas Davidson, Dana Warmsley, Michael Macy, Ingmar Weber")]
-public class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
+public partial class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
 {
     /// <summary>
     /// Timeout for regex operations to prevent ReDoS attacks.
@@ -127,85 +124,6 @@ public class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
 
     /// <inheritdoc/>
     public override bool IsReady() => _isReady;
-
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        var data = new SerializationData
-        {
-            Threshold = NumOps.ToDouble(DetectionThreshold),
-            CategoryPatterns = _categoryPatterns
-        };
-
-        var json = JsonConvert.SerializeObject(data, Formatting.None);
-        return Encoding.UTF8.GetBytes(json);
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
-    {
-        if (data == null)
-        {
-            throw new ArgumentNullException(nameof(data));
-        }
-
-        var json = Encoding.UTF8.GetString(data);
-
-        var settings = new JsonSerializerSettings
-        {
-            TypeNameHandling = TypeNameHandling.Auto,
-            SerializationBinder = new SafeSerializationBinder()
-        };
-
-        var deserialized = JsonConvert.DeserializeObject<SerializationData>(json, settings);
-        if (deserialized != null)
-        {
-            DetectionThreshold = NumOps.FromDouble(deserialized.Threshold);
-            _categoryPatterns = deserialized.CategoryPatterns ?? new Dictionary<string, List<string>>();
-            SupportedCategories = _categoryPatterns.Keys.ToArray();
-        }
-
-        _isReady = true;
-    }
-
-    /// <inheritdoc/>
-    public override void SaveModel(string filePath)
-    {
-        Helpers.ModelPersistenceGuard.EnforceBeforeSave();
-
-        if (string.IsNullOrWhiteSpace(filePath))
-        {
-            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
-        }
-
-        var fullPath = Path.GetFullPath(filePath);
-        var directory = Path.GetDirectoryName(fullPath);
-        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
-        File.WriteAllBytes(fullPath, Serialize());
-    }
-
-    /// <inheritdoc/>
-    public override void LoadModel(string filePath)
-    {
-        Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
-
-        if (string.IsNullOrWhiteSpace(filePath))
-        {
-            throw new ArgumentException("File path cannot be null or empty.", nameof(filePath));
-        }
-
-        var fullPath = Path.GetFullPath(filePath);
-        if (!File.Exists(fullPath))
-        {
-            throw new FileNotFoundException("Model file not found.", fullPath);
-        }
-
-        Deserialize(File.ReadAllBytes(fullPath));
-    }
 
     /// <summary>
     /// Adds a detection pattern for a category.
@@ -335,12 +253,4 @@ public class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
         SupportedCategories = _categoryPatterns.Keys.ToArray();
     }
 
-    /// <summary>
-    /// Serialization data structure.
-    /// </summary>
-    private class SerializationData
-    {
-        public double Threshold { get; set; }
-        public Dictionary<string, List<string>>? CategoryPatterns { get; set; }
-    }
 }

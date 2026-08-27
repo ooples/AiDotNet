@@ -154,41 +154,60 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// <summary>
     /// The adjacency matrix defining graph structure (interpreted as directed).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _adjacencyMatrix;
 
     /// <summary>
     /// The adjacency matrix reshaped to 3D for batched operations.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _adjForBatch;
 
     /// <summary>
     /// Cached values for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastIncoming;
+    [Scratch]
     private Tensor<T>? _lastOutgoing;
+    [Scratch]
     private Tensor<T>? _lastSelf;
+    [Scratch]
     private Tensor<T>? _lastCombined;
+    [Scratch]
     private Tensor<T>? _lastGates;
 
     /// <summary>
     /// Gradients.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _incomingWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outgoingWeightsGradient;
+    [Scratch]
     private Tensor<T>? _selfWeightsGradient;
+    [Scratch]
     private Tensor<T>? _combinationWeightsGradient;
+    [Scratch]
     private Tensor<T>? _incomingBiasGradient;
+    [Scratch]
     private Tensor<T>? _outgoingBiasGradient;
+    [Scratch]
     private Tensor<T>? _selfBiasGradient;
+    [Scratch]
     private Tensor<T>? _combinationBiasGradient;
+    [Scratch]
     private Tensor<T>? _gateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _gateBiasGradient;
 
     public override bool SupportsTraining => true;

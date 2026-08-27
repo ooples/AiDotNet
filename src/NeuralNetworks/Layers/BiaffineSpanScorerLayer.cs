@@ -110,13 +110,21 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>, IShapeContract
     private readonly DropoutLayer<T>? _startDropout;
     private readonly DropoutLayer<T>? _endDropout;
 
+    // Declared as well as registered, following FullyConnectedLayer: the constructor registration
+    // keeps the tape pointing at these instances, and the declaration gives the generated setter
+    // permission to REBIND the fields. The base setter alone would update only its private registry
+    // and leave these three fields pointing at the pre-restore tensors, which Forward reads directly.
+
     /// <summary>Bilinear tensor U, stored as [C, d, d].</summary>
+    [AiDotNet.Attributes.TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _bilinear;
 
     /// <summary>Additive weight W over the concatenated endpoints, stored as [2d, C].</summary>
+    [AiDotNet.Attributes.TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _additive;
 
     /// <summary>Per-category bias b, stored as [C].</summary>
+    [AiDotNet.Attributes.TrainableParameter(Role = PersistentTensorRole.Biases)]
     private Tensor<T> _bias;
 
     /// <inheritdoc/>
@@ -341,80 +349,20 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>, IShapeContract
         return batch > 1 ? Engine.TensorBroadcastTo(reshaped, [batch, rows, cols]) : reshaped;
     }
 
-    /// <summary>Concatenates a boundary stack's parameters in layer order.</summary>
-    private static Vector<T> StackParameters(DenseLayer<T>[] layers)
-    {
-        int total = 0;
-        foreach (var layer in layers) total += layer.GetParameters().Length;
-
-        var flat = new Vector<T>(total);
-        int k = 0;
-        foreach (var layer in layers)
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++) flat[k++] = p[i];
-        }
-        return flat;
-    }
-
-    /// <summary>Distributes a flat slice back across a boundary stack, in the same order.</summary>
-    private static void SetStackParameters(DenseLayer<T>[] layers, Vector<T> source, ref int offset)
-    {
-        foreach (var layer in layers)
-        {
-            int count = layer.GetParameters().Length;
-            var slice = new Vector<T>(count);
-            for (int i = 0; i < count; i++) slice[i] = source[offset++];
-            layer.SetParameters(slice);
-        }
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Includes the boundary FFNNs' tensors as well as this layer's own, because the base
-    /// implementation does not recurse into registered sub-layers.
-    /// </remarks>
-    public override IReadOnlyList<Tensor<T>> GetTrainableParameters()
-    {
-        var result = new List<Tensor<T>>();
-        foreach (var layer in _startFfnn) result.AddRange(layer.GetTrainableParameters());
-        foreach (var layer in _endFfnn) result.AddRange(layer.GetTrainableParameters());
-        result.Add(_bilinear);
-        result.Add(_additive);
-        result.Add(_bias);
-        return result;
-    }
-
-    /// <inheritdoc/>
-    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
-    {
-        int startCount = 0, endCount = 0;
-        foreach (var layer in _startFfnn) startCount += layer.GetTrainableParameters().Count;
-        foreach (var layer in _endFfnn) endCount += layer.GetTrainableParameters().Count;
-        int expected = startCount + endCount + 3;
-
-        if (parameters.Count != expected)
-            throw new ArgumentException($"Expected {expected} trainable tensors, got {parameters.Count}.", nameof(parameters));
-
-        int cursor = 0;
-        foreach (var layer in _startFfnn)
-        {
-            int n = layer.GetTrainableParameters().Count;
-            layer.SetTrainableParameters(parameters.Skip(cursor).Take(n).ToList());
-            cursor += n;
-        }
-        foreach (var layer in _endFfnn)
-        {
-            int n = layer.GetTrainableParameters().Count;
-            layer.SetTrainableParameters(parameters.Skip(cursor).Take(n).ToList());
-            cursor += n;
-        }
-
-        int at = cursor;
-        _bilinear = parameters[at];
-        _additive = parameters[at + 1];
-        _bias = parameters[at + 2];
-    }
+    // The boundary FFNNs' tensors used to be listed as this layer's own, on the stated grounds that
+    // "the base implementation does not recurse into registered sub-layers". That is true of the
+    // base GetTrainableParameters and false of the walk ParameterCount, GetParameters and
+    // SetParameters are built from, which appends every registered sub-layer no declaration already
+    // covers and detects duplicates by LAYER reference — so it could not tell that the children's
+    // tensors had already arrived through this list. All eight were counted twice.
+    //
+    // The composed order differs from the old one: that walk partitions by role, so this layer's own
+    // three tensors now precede the children instead of following them. Nothing depended on the old
+    // order, because the doubled count meant no previously written checkpoint of this layer was
+    // correct to begin with.
+    //
+    // StackParameters and SetStackParameters went with them: both were already unreachable, left
+    // behind by an earlier GetParameters/SetParameters override that no longer exists.
 
     /// <inheritdoc/>
     /// <remarks>

@@ -54,7 +54,7 @@ namespace AiDotNet.Clustering.Hierarchical;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("A Comparison of Document Clustering Techniques", "https://www.cs.cmu.edu/~dunja/KDDpapers/Steinbach_IR.pdf")]
-public class BisectingKMeans<T> : ClusteringBase<T>
+public partial class BisectingKMeans<T> : ClusteringBase<T>
 {
     private readonly BisectingKMeansOptions<T> _options;
 
@@ -85,23 +85,6 @@ public class BisectingKMeans<T> : ClusteringBase<T>
     public IReadOnlyList<BisectionNode>? Hierarchy => _hierarchy?.AsReadOnly();
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new BisectingKMeans<T>(new BisectingKMeansOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            MaxIterations = _options.MaxIterations,
-            Tolerance = _options.Tolerance,
-            Seed = _options.Seed,
-            NumBisectionTrials = _options.NumBisectionTrials,
-            ClusterSelection = _options.ClusterSelection,
-            MinClusterSizeForBisection = _options.MinClusterSizeForBisection,
-            BuildHierarchy = _options.BuildHierarchy,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

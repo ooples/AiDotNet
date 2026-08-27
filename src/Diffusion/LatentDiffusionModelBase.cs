@@ -23,7 +23,7 @@ namespace AiDotNet.Diffusion;
 /// (for guided generation from text or images).
 /// </para>
 /// </remarks>
-public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILatentDiffusionModel<T>
+public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILatentDiffusionModel<T>
 {
     /// <summary>
     /// The default guidance scale for classifier-free guidance.

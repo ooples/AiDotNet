@@ -97,13 +97,4 @@ public class ClinicalBERTNER<T> : TransformerNERBase<T>
             "ClinicalBERT-NER", "Alsentzer et al., NAACL 2019 Clinical NLP Workshop", optimizer)
     {
     }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new TransformerNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new ClinicalBERTNER<T>(Architecture, p, optionsCopy);
-        return new ClinicalBERTNER<T>(Architecture, optionsCopy);
-    }
 }

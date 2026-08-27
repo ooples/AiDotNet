@@ -41,7 +41,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// - ANP: Adds attention for better predictions
 /// </para>
 /// </remarks>
-public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public abstract partial class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
     private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
@@ -335,7 +335,7 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Neural Processes", "https://arxiv.org/abs/1807.01622")]
-public class NeuralProcessModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
+public partial class NeuralProcessModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
 {
 
     /// <inheritdoc />
@@ -343,10 +343,10 @@ public class NeuralProcessModel<T, TInput, TOutput> : MetaLearningModelBase<T, T
     protected override void RegisterComponents()
     {
         RegisterParameterComponent(new VectorFieldParameterSource<T>(
-            () => _params,
-            value => _params = value));
+            () => _parameters,
+            value => _parameters = value));
     }
-    private Vector<T> _params;
+    private Vector<T> _parameters;
     private readonly Vector<T>? _contextRepresentation;
 
     public Vector<T>? AdaptedSupportFeatures => _contextRepresentation;
@@ -358,24 +358,18 @@ public class NeuralProcessModel<T, TInput, TOutput> : MetaLearningModelBase<T, T
         Vector<T>? contextRepresentation)
         : base(model)
     {
-        _params = parameters;
+        _parameters = parameters;
         _contextRepresentation = contextRepresentation;
     }
 
     public override TOutput Predict(TInput input)
     {
-        InterfaceGuard.Parameterizable(BaseModel).SetParameters(_params);
+        InterfaceGuard.Parameterizable(BaseModel).SetParameters(_parameters);
         return BaseModel.Predict(input);
     }
 
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
     {
         return new NeuralProcessModel<T, TInput, TOutput>(BaseModel, parameters, _contextRepresentation);
-    }
-
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        return new NeuralProcessModel<T, TInput, TOutput>(
-            BaseModel.DeepCopy(), _params.Clone(), _contextRepresentation?.Clone());
     }
 }

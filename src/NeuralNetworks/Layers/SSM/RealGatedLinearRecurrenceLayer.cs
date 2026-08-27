@@ -123,26 +123,44 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeCon
     private Tensor<T> _outputProjectionBias;
 
     // Cached values
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastProjectedInput;
+    [Scratch]
     private Tensor<T>? _lastRecurrenceGate;
+    [Scratch]
     private Tensor<T>? _lastInputGate;
+    [Scratch]
     private Tensor<T>? _lastHiddenStates;
+    [Scratch]
     private Tensor<T>? _lastDecayFactors;
+    [Scratch]
     private Tensor<T>? _lastRecurrenceOutput;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _inputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _inputProjectionBiasGradient;
+    [Scratch]
     private Tensor<T>? _recurrenceGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _recurrenceGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _inputGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _inputGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _valueProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _decayParamGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />
@@ -173,6 +191,9 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeCon
     /// In Griffin, this is typically equal to the model dimension, but can be configured independently.</para>
     /// </remarks>
     public int RecurrenceDimension => _recurrenceDimension;
+
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
 
     /// <summary>
     /// Creates a new Real-Gated Linear Recurrence Unit (RG-LRU) layer.
@@ -207,6 +228,7 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeCon
             [-1, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (modelDimension <= 0)

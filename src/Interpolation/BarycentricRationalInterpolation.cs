@@ -16,7 +16,7 @@ namespace AiDotNet.Interpolation;
 /// and efficient, especially when dealing with many data points.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public class BarycentricRationalInterpolation<T> : IInterpolation<T>
+public partial class BarycentricRationalInterpolation<T> : IInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the data points.
@@ -36,6 +36,7 @@ public class BarycentricRationalInterpolation<T> : IInterpolation<T>
     /// values between points. They're calculated once when you create the interpolation object and then
     /// used for all interpolation calculations.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _weights;
 
     /// <summary>

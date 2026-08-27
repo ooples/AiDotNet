@@ -48,7 +48,7 @@ namespace AiDotNet.Finance.Risk;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TabTransformer: Tabular Data Modeling Using Contextual Embeddings", "https://arxiv.org/abs/2012.06678", Year = 2021, Authors = "Xin Huang, Ashish Khetan, Milan Cvitkovic, Zohar Karnin")]
-public class TabTransformer<T> : RiskModelBase<T>
+public partial class TabTransformer<T> : RiskModelBase<T>
 {
     #region Shared Fields
 
@@ -264,31 +264,6 @@ public class TabTransformer<T> : RiskModelBase<T>
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <summary>
-    /// Creates a new instance of the TabTransformer model with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is used by the framework to clone the model setup
-    /// so it can create a fresh instance with identical settings.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new TabTransformerOptions<T>
-        {
-            NumFeatures = _options.NumFeatures,
-            ConfidenceLevel = _options.ConfidenceLevel,
-            TimeHorizon = _options.TimeHorizon,
-            HiddenDimension = _options.HiddenDimension,
-            NumHeads = _options.NumHeads,
-            NumLayers = _options.NumLayers,
-            NumCategoricalFeatures = _options.NumCategoricalFeatures,
-            DropoutRate = _options.DropoutRate
-        };
-
-        return new TabTransformer<T>(Architecture, options, _optimizer, LossFunction);
-    }
 
     #endregion
 }

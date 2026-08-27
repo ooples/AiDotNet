@@ -64,6 +64,7 @@ public class AIMGenerator<T> : SyntheticTabularGeneratorBase<T>
     private readonly List<MarginalMeasurement> _measurements = new();
 
     // Synthetic data representation (probabilities over discretized space)
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _syntheticData;
     private int _numCols;
 

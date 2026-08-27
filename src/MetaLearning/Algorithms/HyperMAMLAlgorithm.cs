@@ -96,6 +96,7 @@ public partial class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     private readonly HyperMAMLOptions<T, TInput, TOutput> _hyperMAMLOptions;
 
     /// <summary>Parameters for the initialization hypernetwork.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _hypernetParams = new Vector<T>(0);
 
     /// <inheritdoc/>
@@ -276,9 +277,10 @@ public partial class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
 }
 
 /// <summary>Adapted model wrapper for HyperMAML.</summary>
-internal class HyperMAMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+internal partial class HyperMAMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private readonly IFullModel<T, TInput, TOutput> _model;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _params;
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();

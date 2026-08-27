@@ -41,7 +41,7 @@ namespace AiDotNet.AutoML.NAS
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("FBNet: Hardware-Aware Efficient ConvNet Design via Differentiable NAS", "https://arxiv.org/abs/1812.03443")]
-    public class FBNet<T> : NasAutoMLModelBase<T>
+    public partial class FBNet<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;
         private readonly SearchSpaceBase<T> _nasSearchSpace;
@@ -264,18 +264,6 @@ namespace AiDotNet.AutoML.NAS
             CancellationToken cancellationToken)
         {
             return DeriveArchitecture();
-        }
-
-        protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
-        {
-            return new FBNet<T>(
-                _nasSearchSpace,
-                _numLayers,
-                targetPlatform: _targetPlatform,
-                latencyWeight: _ops.ToDouble(_latencyWeight),
-                initialTemperature: _initialTemperature,
-                inputChannels: _inputChannels,
-                spatialSize: _spatialSize);
         }
     }
 }

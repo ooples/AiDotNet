@@ -42,7 +42,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Lumina-T2X: Transforming Text into Any Modality with Flow Matching", "https://arxiv.org/abs/2405.05945")]
-public class FlagDiTPredictor<T> : NoisePredictorBase<T>
+public partial class FlagDiTPredictor<T> : NoisePredictorBase<T>
 {
     /// <summary>Patch size (p): a p×p block of the latent becomes one token (paper uses 2).</summary>
     private const int PatchSize = 2;
@@ -375,43 +375,4 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
         return offset + count;
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
-    public override INoisePredictor<T> Clone()
-    {
-        var clone = new FlagDiTPredictor<T>(_inputChannels, _hiddenSize, _numLayers, _numHeads,
-            _numKVHeads, _contextDim, _latentSize);
-
-        // #1711: the LazyDense projections and the deferAllocation GQA attention resolve+allocate
-        // their weights on the FIRST FORWARD (EnsureInitializedFromInput), a different entry than the
-        // SetParameters path. A naive SetParameters(GetParameters()) clone leaves the fresh clone's
-        // first real forward to re-resolve and RNG-initialize those weights, discarding the copied
-        // values and diverging from the source. Probe-forward the clone to materialize every weight
-        // through the same path the source used, THEN copy the source's weights layer-by-layer (never
-        // materializing one contiguous multi-billion-parameter vector — the GetParameters flat path
-        // OOMs at Flag-DiT / Lumina scale). Gated on the source having been forwarded.
-        if (_patchEmbed.IsInitialized)
-        {
-            var probe = new Tensor<T>(new[] { 1, _inputChannels, _latentSize, _latentSize });
-            // Probe WITH conditioning when the source materialized its context path, so the clone's
-            // context projection + cross-attention K/V layers allocate too (else they stay lazy and
-            // re-init with fresh RNG on the first conditioned forward, diverging from the source).
-            Tensor<T>? probeConditioning = _contextProj.IsInitialized
-                ? new Tensor<T>(new[] { 1, 1, _contextDim })
-                : null;
-            clone.PredictNoise(probe, timestep: 0, conditioning: probeConditioning);
-
-            using var src = FlagDiTLayerSequence().GetEnumerator();
-            using var dst = clone.FlagDiTLayerSequence().GetEnumerator();
-            while (src.MoveNext() && dst.MoveNext())
-                dst.Current.SetParameters(src.Current.GetParameters());
-
-            // The probe forward traced a compiled plan over the clone's random init; drop it so the
-            // next real forward re-traces against the copied weights.
-            clone.InvalidateCompiledPlans();
-        }
-        return clone;
-    }
 }

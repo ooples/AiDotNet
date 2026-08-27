@@ -275,17 +275,8 @@ internal class SecondOrderMatrixModel : LinearVectorModel, ISecondOrderGradientC
         return gradients;
     }
 
-    public override IFullModel<double, Matrix<double>, Vector<double>> DeepCopy()
-    {
-        var copy = new SecondOrderMatrixModel((int)ParameterCount - 1);
-        copy.SetParameters(GetParameters());
-        return copy;
-    }
-
-    public override IFullModel<double, Matrix<double>, Vector<double>> Clone()
-    {
-        return DeepCopy();
-    }
+    // Clone is NOT overridden: the base already defines Clone() => DeepCopy(), so repeating it here
+    // adds nothing and becomes a cycle the moment DeepCopy is the one that goes.
 }
 
 internal class TensorEmbeddingModel : IFullModel<double, Matrix<double>, Tensor<double>>,
@@ -537,13 +528,6 @@ internal sealed class IdentityEmbeddingModel : LinearVectorModel
         var embedding = new Vector<double>(_featureCount);
         for (int j = 0; j < _featureCount && j < input.Columns; j++) embedding[j] = input[0, j];
         return embedding;
-    }
-
-    public override IFullModel<double, Matrix<double>, Vector<double>> DeepCopy()
-    {
-        var copy = new IdentityEmbeddingModel(_featureCount);
-        copy.SetParameters(GetParameters());
-        return copy;
     }
 
     /// <inheritdoc />

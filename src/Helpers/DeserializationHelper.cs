@@ -42,9 +42,38 @@ public static class DeserializationHelper
 
     static DeserializationHelper()
     {
-        // Automatically discover and register all ILayer<T> implementations
-        var layerTypes = Assembly.GetExecutingAssembly()
-            .GetTypes()
+        // Automatically discover and register all ILayer<T> implementations.
+        //
+        // GetTypes() THROWS ReflectionTypeLoadException when individual types cannot be loaded, and
+        // its partial results silently omit exactly those. A layer dropped that way is indis-
+        // tinguishable, later, from one that was never written: CreateLayerFromType reports it as
+        // "not supported for deserialization", which sends the reader looking for a missing
+        // registration instead of a missing dependency. Catch it, keep what did load, and say what
+        // did not -- the same reason every other silent skip in this work was made loud.
+        Type[] discovered;
+        try
+        {
+            discovered = Assembly.GetExecutingAssembly().GetTypes();
+        }
+        catch (ReflectionTypeLoadException ex)
+        {
+            discovered = ex.Types.Where(t => t is not null).Select(t => t!).ToArray();
+
+            var unloadable = (ex.LoaderExceptions ?? Array.Empty<Exception?>())
+                .Where(e => e is not null)
+                .Select(e => e!.Message)
+                .Distinct(StringComparer.Ordinal)
+                .Take(5)
+                .ToArray();
+
+            System.Diagnostics.Trace.TraceError(
+                "Layer discovery could not load every type in the assembly, so any layer among them "
+                + "will later be reported as 'not supported for deserialization' when the real cause "
+                + "is a load failure. First load errors: "
+                + (unloadable.Length == 0 ? "(none reported)" : string.Join(" | ", unloadable)));
+        }
+
+        var layerTypes = discovered
             .Where(t => !t.IsAbstract && t.GetInterfaces()
                 .Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ILayer<>)));
 
@@ -138,19 +167,56 @@ public static class DeserializationHelper
             // [LayerState] reconstructs constructor arguments, but some layers also have
             // behavior-affecting post-construction configuration. Restore it before returning;
             // otherwise the generated factory bypasses the explicit legacy branches below.
-            if (generatedLayer is EmbeddingLayer<T> generatedEmbedding)
-                RestoreEmbeddingConfiguration(generatedEmbedding, additionalParams);
-            else if (generatedLayer is MultiHeadAttentionLayer<T> generatedAttention)
-                RestoreMultiHeadAttentionConfiguration(generatedAttention, additionalParams);
-
             // THE SAME LAZY PRE-RESOLVE THE OTHER PATHS GET. Returning straight from here bypassed
             // the block at the end of this method, so a lazy layer rebuilt through
             // GeneratedLayerFactories stayed unresolved: SetParameters then received a layer whose
             // ParameterCount is 0 and rejected the saved vector. The generated path is now the
             // majority path, which makes this the common case rather than an edge one.
-            PreResolveLazyShape((ILayer<T>)generatedLayer, inputShape);
+            // Pattern-matched rather than cast: TryCreate's out parameter is now `object?`, so the
+            // cast would be the compiler pointing at a real hole. A factory that returned true
+            // while handing back null, or something that is not an ILayer<T>, is a generator bug
+            // and saying so beats a NullReferenceException three frames away.
+            if (generatedLayer is not ILayer<T> generatedAsLayer)
+            {
+                throw new InvalidOperationException(
+                    $"The generated factory for '{layerType}' reported success but produced "
+                        + (generatedLayer is null
+                            ? "null."
+                            : $"a {generatedLayer.GetType().Name}, which is not an ILayer<{typeof(T).Name}>."));
+            }
 
-            return (ILayer<T>)generatedLayer;
+            RestorePostConstructionConfiguration(generatedAsLayer, additionalParams);
+            PreResolveLazyShape(generatedAsLayer, inputShape);
+
+            return generatedAsLayer;
+        }
+
+        // The registry, for the same reason the clone path consults it (LayerCloning.cs:309): the
+        // generated table above is compiled from AiDotNet's own source, so it can only ever name
+        // layers AiDotNet ships. A layer in a consumer's assembly has no entry and never can.
+        //
+        // Cloning got this tier and deserialization did not, which left the two halves of one
+        // mechanism disagreeing: a consumer's layer could be cloned but not loaded from a payload,
+        // even though both rebuild from the same recorded construction state. WriteConstructionState
+        // is called by GetMetadata (LayerBase.cs:6634), so `additionalParams` here holds exactly the
+        // values the clone path passes in its bag.
+        {
+            Type closedLayerType = openGenericType.IsGenericTypeDefinition
+                ? openGenericType.MakeGenericType(typeof(T))
+                : openGenericType;
+
+            if (AiDotNet.Serialization.LayerFactoryRegistry<T>.TryCreate(
+                    closedLayerType,
+                    genericDefForValidation,
+                    new AiDotNet.Serialization.LayerStateBag(additionalParams, layerType),
+                    TryRestoreActivation<T>(additionalParams),
+                    TryRestoreVectorActivation<T>(additionalParams),
+                    out var registeredLayer)
+                && registeredLayer is ILayer<T> registeredAsLayer)
+            {
+                PreResolveLazyShape(registeredAsLayer, inputShape);
+                return registeredAsLayer;
+            }
         }
 
         // Validate input/output shapes (skip for shape-agnostic layers)
@@ -3490,6 +3556,32 @@ public static class DeserializationHelper
                     "Layer will resolve via SetParameters or first Forward.");
             }
         }
+
+        // A RESOLVED PARENT CAN STILL HOLD UNRESOLVED CHILDREN, and the block above asks only about
+        // the parent. A composite that takes its width as a constructor argument reports
+        // IsShapeResolved = true the moment it is rebuilt, so it skipped pre-resolve entirely while
+        // the lazy sub-layer it registered stayed a placeholder: CifAlignmentLayer came back holding
+        // an _alphaPredictor with no weights, answered ParameterCount 0 instead of 66, and
+        // SetParameters dropped all 66 trained values without a word. The parent's own shape is not
+        // evidence about its children.
+        //
+        // EnsureParametersMaterialized already recurses through GetSubLayers and is idempotent, so
+        // this drives the mechanism that was always there rather than adding a second one.
+        if (layer is NeuralNetworks.Layers.LayerBase<T> composite)
+        {
+            try
+            {
+                composite.MaterializeParameters();
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
+            {
+                // Same contract as above: a child that cannot be sized from the parent's width still
+                // has SetParameters' self-resolve ahead of it. Traced, never swallowed.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"DeserializationHelper: MaterializeParameters failed for {composite.GetType().Name}: " +
+                    $"{ex.GetType().Name}: {ex.Message}. Sub-layers will resolve via SetParameters or first Forward.");
+            }
+        }
     }
 
     private static object CreateDenseLayer<T>(Type type, int[] inputShape, int[] outputShape, Dictionary<string, object>? additionalParams)
@@ -4159,6 +4251,64 @@ public static class DeserializationHelper
                     $"'{scaleStr}'. Expected 'true' or 'false'.");
             embedding.ScaleBySqrtDimension = scaleVal;
         }
+    }
+
+    /// <summary>
+    /// Restores behavior selected after construction for every generated layer factory.
+    /// </summary>
+    /// <remarks>
+    /// Generated factories own constructor state, but a few reusable layer protocols intentionally
+    /// configure behavior after construction. Keeping that protocol here prevents each layer from
+    /// needing a serialization/clone override and ensures newly generated factories do not bypass it.
+    /// </remarks>
+    private static void RestorePostConstructionConfiguration<T>(
+        ILayer<T> layer,
+        Dictionary<string, object>? additionalParams)
+    {
+        if (layer is EmbeddingLayer<T> embedding)
+        {
+            RestoreEmbeddingConfiguration(embedding, additionalParams);
+        }
+
+        if (layer is MultiHeadAttentionLayer<T> attention)
+        {
+            RestoreMultiHeadAttentionConfiguration(attention, additionalParams);
+            return;
+        }
+
+        string? positionalEncoding = TryGetString(additionalParams, "PositionalEncoding");
+        if (string.IsNullOrWhiteSpace(positionalEncoding)
+            || !Enum.TryParse<Enums.PositionalEncodingType>(
+                positionalEncoding, ignoreCase: true, out var positionalType)
+            || positionalType == Enums.PositionalEncodingType.None)
+        {
+            return;
+        }
+
+        // ConfigurePositionalEncoding is a common layer protocol (GQA, cached/paged attention,
+        // flash attention). Discovering the protocol by its public signature keeps this restoration
+        // generic; a new implementation gets round-trip support without another type switch.
+        MethodInfo? configure = layer.GetType().GetMethod(
+            "ConfigurePositionalEncoding",
+            BindingFlags.Public | BindingFlags.Instance,
+            binder: null,
+            types: new[] { typeof(Enums.PositionalEncodingType), typeof(double), typeof(int) },
+            modifiers: null);
+        if (configure is null)
+        {
+            throw new InvalidOperationException(
+                $"Layer '{layer.GetType().Name}' persisted positional encoding '{positionalEncoding}' "
+                + "but does not expose ConfigurePositionalEncoding(PositionalEncodingType, double, int).");
+        }
+
+        double ropeTheta = TryGetDouble(additionalParams, "RoPETheta")
+            ?? TryGetDouble(additionalParams, "RopeTheta")
+            ?? 10000.0;
+        int maxSequenceLength = TryGetInt(additionalParams, "PositionalMaxSequenceLength")
+            ?? TryGetInt(additionalParams, "MaxSequenceLength")
+            ?? TryGetInt(additionalParams, "SequenceLength")
+            ?? 2048;
+        configure.Invoke(layer, new object[] { positionalType, ropeTheta, maxSequenceLength });
     }
 
     private static void RestoreMultiHeadAttentionConfiguration<T>(

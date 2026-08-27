@@ -113,6 +113,7 @@ public partial class MbPAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// [OutputDimension * FeatureDimension weights | OutputDimension biases]. This — and only this —
     /// is what local adaptation modifies.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _outputParams;
 
     /// <inheritdoc/>

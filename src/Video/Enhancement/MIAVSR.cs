@@ -57,7 +57,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2401.06312",
     Year = 2024,
     Authors = "Xingyu Zhou, Leheng Zhang, Xiaorui Zhao, Keze Wang, Leida Li, Shuhang Gu")]
-public class MIAVSR<T> : VideoSuperResolutionBase<T>
+public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 
@@ -182,49 +182,9 @@ public class MIAVSR<T> : VideoSuperResolutionBase<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.NumFeatures);
-        w.Write(_options.NumResBlocks);
-        w.Write(_options.ScaleFactor);
-        w.Write(_options.WindowSize);
-        w.Write(_options.NumHeads);
-        w.Write(_options.InterMaskRatio);
-        w.Write(_options.IntraMaskRatio);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (VideoModelVariant)r.ReadInt32();
-        _options.NumFeatures = r.ReadInt32();
-        _options.NumResBlocks = r.ReadInt32();
-        _options.ScaleFactor = r.ReadInt32();
-        _options.WindowSize = r.ReadInt32();
-        _options.NumHeads = r.ReadInt32();
-        _options.InterMaskRatio = r.ReadDouble();
-        _options.IntraMaskRatio = r.ReadDouble();
-        _options.DropoutRate = r.ReadDouble();
-        ScaleFactor = _options.ScaleFactor;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        // Native-mode layers (with their trained weights) are already reconstructed by
-        // the base deserializer before this override runs; re-initializing here would
-        // discard them and leave the model randomly initialized.
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new MIAVSR<T>(Architecture, mp, _options);
-        return new MIAVSR<T>(Architecture, _options);
-    }
+
 
     #endregion
 

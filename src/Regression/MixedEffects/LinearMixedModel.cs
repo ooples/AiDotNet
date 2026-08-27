@@ -84,11 +84,14 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// List of random effect specifications.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private readonly List<RandomEffect<T>> _randomEffects;
 
     /// <summary>
     /// Fixed effects coefficients.
     /// </summary>
+    [AiDotNet.Attributes.Buffer(
+        Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Vector<T>? _fixedEffects;
 
     /// <summary>
@@ -820,95 +823,4 @@ public partial class LinearMixedModel<T> : RegressionBase<T>
         }
         return variance / (v.Length - 1);
     }
-
-    /// <summary>
-    /// Gets the model type.
-    /// </summary>
-
-    /// <summary>
-    /// Creates a new instance of the model with the same configuration.
-    /// </summary>
-    /// <returns>A new instance of LinearMixedModel.</returns>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        var newModel = new LinearMixedModel<T>(_options, Regularization);
-
-        // Copy random effect specifications
-        foreach (var re in _randomEffects)
-        {
-            if (re.RandomSlopeColumns != null)
-            {
-                newModel.AddRandomSlope(re.Name, re.GroupColumnIndex, re.RandomSlopeColumns, re.IsRandomIntercept);
-            }
-            else if (re.IsRandomIntercept)
-            {
-                newModel.AddRandomIntercept(re.Name, re.GroupColumnIndex);
-            }
-        }
-
-        return newModel;
-    }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        if (_useOLS)
-        {
-            // Manual clone for OLS path — copy coefficients directly
-            var clone = new LinearMixedModel<T>(_options, Regularization);
-            clone._useOLS = true;
-            clone.Coefficients = new Vector<T>(Coefficients);
-            clone.Intercept = Intercept;
-            clone.TrainingFeatureCount = TrainingFeatureCount;
-            // Add a dummy random effect to prevent "no random effects" error
-            if (_randomEffects.Count > 0)
-            {
-                foreach (var re in _randomEffects)
-                    clone.AddRandomIntercept(re.Name, re.GroupColumnIndex);
-            }
-            return clone;
-        }
-        // base.Clone() copies Coefficients and knows nothing about the mixed-effects state, so a
-        // clone of a REML fit used to predict by throwing "Model must be trained". Everything the
-        // prediction path reads has to come across.
-        var copy = (LinearMixedModel<T>)CreateNewInstance();
-
-        copy._useOLS = false;
-        copy.Coefficients = new Vector<T>(Coefficients);
-        copy.Intercept = Intercept;
-        copy.TrainingFeatureCount = TrainingFeatureCount;
-
-        copy._nObservations = _nObservations;
-        copy._nFixedParams = _nFixedParams;
-        copy._fixedEffects = _fixedEffects is null ? null : new Vector<T>(_fixedEffects);
-        copy._residualVariance = _residualVariance;
-        copy._varianceDecomposition = _varianceDecomposition;
-
-        copy._logLikelihood = _logLikelihood;
-
-        // CreateNewInstance re-declares the random effects but not their FITTED state, so the
-        // per-group coefficients and covariance estimates have to be carried across by hand.
-        for (int i = 0; i < _randomEffects.Count && i < copy._randomEffects.Count; i++)
-        {
-            var source = _randomEffects[i];
-            var target = copy._randomEffects[i];
-
-            target.CovarianceMatrix = source.CovarianceMatrix;
-
-            if (source.GroupCoefficients is null)
-            {
-                target.GroupCoefficients = null;
-                continue;
-            }
-
-            target.GroupCoefficients = new Dictionary<double, Vector<T>>();
-            foreach (var entry in source.GroupCoefficients)
-            {
-                target.GroupCoefficients[entry.Key] = new Vector<T>(entry.Value);
-            }
-        }
-
-        return copy;
-    }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 }

@@ -611,43 +611,6 @@ public partial class LagLlama<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a fresh copy of the Lag-Llama architecture.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new LagLlamaOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            IntermediateSize = _intermediateSize,
-            LagIndices = (int[])_lagIndices.Clone(),
-            DropoutRate = _dropout,
-            DistributionOutput = _distributionOutput,
-            UseRoPE = _useRoPE
-        };
-
-        // ONNX mode cloning is not supported - throw explicitly rather than silently
-        // changing behavior by returning a native-mode clone
-        if (!_useNativeMode && OnnxSession is not null)
-        {
-            throw new NotSupportedException(
-                "CreateNewInstance is not supported for ONNX-backed LagLlama models. " +
-                "ONNX sessions cannot be cloned. To create a new instance, load the model " +
-                "from the original ONNX file using the ONNX constructor.");
-        }
-
-        return new LagLlama<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Writes Lag-Llama-specific configuration during serialization.
     /// </summary>
     /// <remarks>
@@ -655,21 +618,7 @@ public partial class LagLlama<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> Saves all the configuration needed to reconstruct this model.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_intermediateSize);
-        writer.Write(_lagIndices.Length);
-        foreach (var lag in _lagIndices)
-            writer.Write(lag);
-        writer.Write(_dropout);
-        writer.Write(_distributionOutput);
-        writer.Write(_useRoPE);
-    }
+
 
     /// <summary>
     /// Reads Lag-Llama-specific configuration during deserialization.
@@ -679,28 +628,7 @@ public partial class LagLlama<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> Loads the configuration that was saved during serialization.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _intermediateSize = reader.ReadInt32();
-        int lagCount = reader.ReadInt32();
-        _lagIndices = new int[lagCount];
-        for (int i = 0; i < lagCount; i++)
-            _lagIndices[i] = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _distributionOutput = reader.ReadString();
-        _useRoPE = reader.ReadBoolean();
 
-        // The base deserializer has already recreated every layer in Layers with the
-        // copied weights. Re-point the cached projection/transformer/head references at
-        // those layers; otherwise they keep pointing at the stale random-initialized
-        // layers from CreateNewInstance and a clone diverges from the original.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

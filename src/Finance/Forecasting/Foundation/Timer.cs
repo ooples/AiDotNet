@@ -608,32 +608,6 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
         };
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Timer model, CreateNewInstance builds and wires up model components. This sets up the Timer architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new TimerOptions<T>(_options)
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            PatchStride = _patchStride,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            DropoutRate = _dropout,
-            MaskRatio = _maskRatio,
-            UseAutoregressiveDecoding = _useAutoregressiveDecoding,
-            GenerationTemperature = _generationTemperature
-        };
-
-        return new Timer<T>(Architecture, options, _numFeatures, _optimizer, _lossFunction);
-    }
-
     /// <summary>
     /// Writes Timer-specific configuration during serialization.
     /// </summary>
@@ -641,21 +615,7 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
     /// <para><b>For Beginners:</b> Saves all the configuration needed to reconstruct this model.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_patchLength);
-        writer.Write(_patchStride);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_dropout);
-        writer.Write(_maskRatio);
-        writer.Write(_useAutoregressiveDecoding);
-        writer.Write(_generationTemperature);
-        writer.Write(_numFeatures);
-    }
+
 
     /// <summary>
     /// Reads Timer-specific configuration during deserialization.
@@ -664,26 +624,7 @@ public partial class Timer<T> : TimeSeriesFoundationModelBase<T>
     /// <para><b>For Beginners:</b> Loads the configuration that was saved during serialization.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _patchLength = reader.ReadInt32();
-        _patchStride = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _maskRatio = reader.ReadDouble();
-        _useAutoregressiveDecoding = reader.ReadBoolean();
-        _generationTemperature = reader.ReadDouble();
-        _numFeatures = reader.ReadInt32();
 
-        // Recompute _numPatches from deserialized values to keep derived field in sync
-        // Use same logic as constructor: (_contextLength - _patchLength) / _patchStride + 1
-        int computedPatches = (_contextLength - _patchLength) / _patchStride + 1;
-        _numPatches = Math.Max(0, computedPatches); // Clamp to zero if negative
-    }
 
     #endregion
 

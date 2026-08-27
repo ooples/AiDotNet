@@ -33,6 +33,14 @@ public class RandomEffect<T>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// Initializes an empty random effect for state restoration.
+    /// </summary>
+    public RandomEffect()
+    {
+        GroupCoefficients = [];
+    }
+
+    /// <summary>
     /// Gets or sets the name of this random effect.
     /// </summary>
     public string Name { get; set; } = string.Empty;

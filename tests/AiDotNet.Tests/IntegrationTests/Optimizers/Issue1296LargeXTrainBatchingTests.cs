@@ -63,7 +63,7 @@ namespace AiDotNet.Tests.IntegrationTests.Optimizers;
 // shard where it runs alone — keeping the budget assertion at full strength instead of relaxing it.
 [Xunit.Trait("Category", "SerialPerf")]
 [Collection("NonParallelIntegration")]
-public class Issue1296LargeXTrainBatchingTests
+public partial class Issue1296LargeXTrainBatchingTests
 {
     private readonly ITestOutputHelper _output;
 
@@ -571,7 +571,7 @@ public class Issue1296LargeXTrainBatchingTests
     /// to guarantee the #1296 fix (skipping the pre-epoch full-batch Train)
     /// can't silently regress.
     /// </summary>
-    private sealed class TrainCallCountingTransformer : Transformer<float>
+    private sealed partial class TrainCallCountingTransformer : Transformer<float>
     {
         public int TrainCallCount { get; private set; }
 

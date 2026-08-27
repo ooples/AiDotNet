@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.Engines;
+﻿using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -50,7 +50,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Hybrid Computing Using a Neural Network with Dynamic External Memory", "https://www.nature.com/articles/nature20101", Year = 2016, Authors = "Alex Graves, Greg Wayne, Malcolm Reynolds, Tim Harley, Ivo Danihelka, Agnieszka Grabska-Barwinska, Sergio Gomez Colmenarejo, Edward Grefenstette, Tiago Ramalho, John Agapiou, Adrià Puigdomènech Badia, Karl Moritz Hermann, Yori Zwols, Georg Ostrovski, Adam Cain, Helen King, Christopher Summerfield, Phil Blunsom, Koray Kavukcuoglu, Demis Hassabis")]
-public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxiliaryLossLayer<T>
+public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly DifferentiableNeuralComputerOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -234,6 +234,7 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
     /// complex information over long periods, unlike regular neural networks.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Matrix<T> _memory;
 
     /// <summary>
@@ -256,6 +257,7 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
     /// valuable information it might need later.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Vector<T> _usageFree;
 
     /// <summary>
@@ -279,6 +281,7 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
     /// This focused writing allows the system to organize information in a way it can find later.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Vector<T> _writeWeighting;
 
     /// <summary>
@@ -302,6 +305,7 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
     /// This allows the system to retrieve relevant information it previously stored.
     /// </para>
     /// </remarks>
+    [Scratch]
     private List<Vector<T>> _readWeightings;
 
     /// <summary>
@@ -326,6 +330,7 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
     /// following the sequence in which information was stored.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Vector<T> _precedenceWeighting;
 
     /// <summary>
@@ -350,6 +355,7 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
     /// algorithm-like reasoning.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Matrix<T> _temporalLinkMatrix;
 
     /// <summary>
@@ -420,6 +426,7 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
     /// to produce its final output for a given input.
     /// </para>
     /// </remarks>
+    [Scratch]
     private List<Vector<T>> _readVectors;
 
     /// <summary>
@@ -441,8 +448,10 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
     // matrix is read/written by the legacy Serialize/Deserialize paths only.
     // _lastCombinedVector was a backward-pass cache for the manual matmul that
     // the new Layers-chain projection no longer needs.
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputWeights;
 #pragma warning disable CS0169
+    [Scratch]
     private Vector<T>? _lastCombinedVector;
 #pragma warning restore CS0169
 
@@ -1642,256 +1651,6 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
     }
 
     /// <summary>
-    /// Serializes Differentiable Neural Computer-specific data to a binary writer.
-    /// </summary>
-    /// <param name="writer">The BinaryWriter to write the data to.</param>
-    /// <remarks>
-    /// <para>
-    /// This method writes DNC-specific configuration and state data to a binary stream. It includes
-    /// properties such as memory size, memory word size, controller size, read heads count, and the
-    /// current state of the memory matrix, usage vector, and other memory tracking structures.
-    /// </para>
-    /// <para><b>For Beginners:</b> This saves the special configuration and current state of your DNC.
-    /// 
-    /// It's like taking a snapshot of the DNC that includes:
-    /// - Its structural configuration (memory size, read heads, etc.)
-    /// - The current contents of memory
-    /// - The current state of all memory tracking systems
-    /// - The current state of all memory connections
-    /// 
-    /// This allows you to save both the network's learned parameters and its current memory state,
-    /// so you can resume from exactly the same state later.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write DNC-specific properties
-        writer.Write(_memorySize);
-        writer.Write(_memoryWordSize);
-        writer.Write(_controllerSize);
-        writer.Write(_readHeads);
-        writer.Write(IsTrainingMode);
-
-        // Write memory matrix
-        for (int i = 0; i < _memorySize; i++)
-        {
-            for (int j = 0; j < _memoryWordSize; j++)
-            {
-                writer.Write(Convert.ToDouble(_memory[i, j]));
-            }
-        }
-
-        // Write usage free vector
-        for (int i = 0; i < _memorySize; i++)
-        {
-            writer.Write(Convert.ToDouble(_usageFree[i]));
-        }
-
-        // Write write weighting
-        for (int i = 0; i < _memorySize; i++)
-        {
-            writer.Write(Convert.ToDouble(_writeWeighting[i]));
-        }
-
-        // Write output weights
-        writer.Write(_outputWeights.Shape[0]);
-        writer.Write(_outputWeights.Shape[1]);
-        for (int i = 0; i < _outputWeights.Shape[0]; i++)
-            for (int j = 0; j < _outputWeights.Shape[1]; j++)
-                writer.Write(Convert.ToDouble(_outputWeights[i, j]));
-
-        // Write read weightings
-        writer.Write(_readWeightings.Count);
-        foreach (var readWeighting in _readWeightings)
-        {
-            for (int i = 0; i < _memorySize; i++)
-            {
-                writer.Write(Convert.ToDouble(readWeighting[i]));
-            }
-        }
-
-        // Write precedence weighting
-        for (int i = 0; i < _memorySize; i++)
-        {
-            writer.Write(Convert.ToDouble(_precedenceWeighting[i]));
-        }
-
-        // Write temporal link matrix
-        for (int i = 0; i < _memorySize; i++)
-        {
-            for (int j = 0; j < _memorySize; j++)
-            {
-                writer.Write(Convert.ToDouble(_temporalLinkMatrix[i, j]));
-            }
-        }
-
-        // Write read vectors
-        writer.Write(_readVectors.Count);
-        foreach (var readVector in _readVectors)
-        {
-            for (int i = 0; i < _memoryWordSize; i++)
-            {
-                writer.Write(Convert.ToDouble(readVector[i]));
-            }
-        }
-
-        // THE CONTROLLER'S CARRIED STATE IS PART OF THE SNAPSHOT. Restoring memory, usage and links
-        // while the recurrence restarts from zero does not resume the saved DNC: mid-sequence, the
-        // controller's hidden and cell state are as much of the machine's state as the memory
-        // matrix is. Appended after the existing fields so a payload written before the recurrent
-        // controller existed simply ends above and restores to a zero controller state, which is
-        // what such a payload actually described.
-        WriteControllerState(writer, _controllerHidden);
-        WriteControllerState(writer, _controllerCell);
-    }
-
-    private static void WriteControllerState(BinaryWriter writer, Tensor<T>? state)
-    {
-        if (state is null)
-        {
-            writer.Write(0);
-            return;
-        }
-
-        writer.Write(state.Length);
-        for (int i = 0; i < state.Length; i++)
-            writer.Write(Convert.ToDouble(state[i]));
-    }
-
-    private Tensor<T>? ReadControllerState(BinaryReader reader)
-    {
-        int length = reader.ReadInt32();
-        if (length <= 0)
-            return null;
-
-        var state = new Tensor<T>([1, length]);
-        for (int i = 0; i < length; i++)
-            state[i] = NumOps.FromDouble(reader.ReadDouble());
-        return state;
-    }
-
-    /// <summary>
-    /// Deserializes Differentiable Neural Computer-specific data from a binary reader.
-    /// </summary>
-    /// <param name="reader">The BinaryReader to read the data from.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reads DNC-specific configuration and state data from a binary stream. It retrieves
-    /// properties such as memory size, memory word size, controller size, read heads count, and the
-    /// saved state of the memory matrix, usage vector, and other memory tracking structures.
-    /// </para>
-    /// <para><b>For Beginners:</b> This restores the special configuration and state of your DNC from saved data.
-    /// 
-    /// It's like restoring a snapshot of the DNC that includes:
-    /// - Its structural configuration (memory size, read heads, etc.)
-    /// - The saved contents of memory
-    /// - The saved state of all memory tracking systems
-    /// - The saved state of all memory connections
-    /// 
-    /// This allows you to resume from exactly the same state that was saved,
-    /// with both the network's learned parameters and its memory contents intact.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read DNC-specific properties
-        int memorySize = reader.ReadInt32();
-        int memoryWordSize = reader.ReadInt32();
-        int controllerSize = reader.ReadInt32();
-        int readHeads = reader.ReadInt32();
-
-        // Check if configuration matches
-        if (memorySize != _memorySize || memoryWordSize != _memoryWordSize ||
-            controllerSize != _controllerSize || readHeads != _readHeads)
-        {
-            Console.WriteLine("Warning: Loaded DNC has different configuration than the current instance.");
-        }
-
-        // Read training mode
-        IsTrainingMode = reader.ReadBoolean();
-
-        // Read memory matrix
-        for (int i = 0; i < _memorySize; i++)
-        {
-            for (int j = 0; j < _memoryWordSize; j++)
-            {
-                _memory[i, j] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-
-        // Read usage free vector
-        for (int i = 0; i < _memorySize; i++)
-        {
-            _usageFree[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read write weighting
-        for (int i = 0; i < _memorySize; i++)
-        {
-            _writeWeighting[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read output weights
-        int owRows = reader.ReadInt32();
-        int owCols = reader.ReadInt32();
-        _outputWeights = new Tensor<T>([owRows, owCols]);
-        for (int i = 0; i < owRows; i++)
-            for (int j = 0; j < owCols; j++)
-                _outputWeights[i, j] = NumOps.FromDouble(reader.ReadDouble());
-
-        // Read read weightings
-        int readWeightingsCount = reader.ReadInt32();
-        _readWeightings.Clear();
-        for (int k = 0; k < readWeightingsCount; k++)
-        {
-            Vector<T> readWeighting = new Vector<T>(_memorySize);
-            for (int i = 0; i < _memorySize; i++)
-            {
-                readWeighting[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-            _readWeightings.Add(readWeighting);
-        }
-
-        // Read precedence weighting
-        for (int i = 0; i < _memorySize; i++)
-        {
-            _precedenceWeighting[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read temporal link matrix
-        for (int i = 0; i < _memorySize; i++)
-        {
-            for (int j = 0; j < _memorySize; j++)
-            {
-                _temporalLinkMatrix[i, j] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-
-        // Read read vectors
-        int readVectorsCount = reader.ReadInt32();
-        _readVectors.Clear();
-        for (int k = 0; k < readVectorsCount; k++)
-        {
-            Vector<T> readVector = new Vector<T>(_memoryWordSize);
-            for (int i = 0; i < _memoryWordSize; i++)
-            {
-                readVector[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-            _readVectors.Add(readVector);
-        }
-
-        // Appended fields, read only if the payload carries them. The model-specific section is the
-        // last thing written and the reader wraps the payload's own MemoryStream, so any remaining
-        // bytes belong to this section. A payload predating the recurrent controller ends here and
-        // leaves the controller state null, which is the zero state it described.
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-        {
-            _controllerHidden = ReadControllerState(reader);
-            _controllerCell = ReadControllerState(reader);
-        }
-    }
-
-    /// <summary>
     /// Resets the state of the Differentiable Neural Computer.
     /// </summary>
     /// <remarks>
@@ -2029,81 +1788,6 @@ public class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T>, IAuxi
         }
 
         return outputs;
-    }
-
-    /// <summary>
-    /// Creates a new instance of the differentiable neural computer model.
-    /// </summary>
-    /// <returns>A new instance of the differentiable neural computer model with the same configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the differentiable neural computer model with the same configuration as the current instance.
-    /// It is used internally during serialization/deserialization processes to create a fresh instance that can be populated
-    /// with the serialized data. The new instance will have the same architecture, memory size, memory word size,
-    /// controller size, read heads count, and activation function type as the original.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a copy of the network structure without copying the learned data.
-    /// 
-    /// Think of it like creating a blueprint copy of the DNC:
-    /// - It copies the same neural network architecture
-    /// - It sets up the same memory size (same notepad dimensions)
-    /// - It configures the same number of read heads (how many pages to look at at once)
-    /// - It uses the same controller size (brain power)
-    /// - It keeps the same activation function (how neurons respond to input)
-    /// - But it doesn't copy any of the actual memories or learned behaviors
-    /// 
-    /// This is primarily used when saving or loading models, creating an empty framework
-    /// that the saved parameters and memory state can be loaded into later.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Determine which constructor to use based on which activation function is set
-        if (_activationFunction != null)
-        {
-            return new DifferentiableNeuralComputer<T>(
-                Architecture,
-                _memorySize,
-                _memoryWordSize,
-                _controllerSize,
-                _readHeads,
-                lossFunction: _lossFunction,
-                activationFunction: _activationFunction
-            );
-        }
-        else
-        {
-            return new DifferentiableNeuralComputer<T>(
-                Architecture,
-                _memorySize,
-                _memoryWordSize,
-                _controllerSize,
-                _readHeads,
-                lossFunction: _lossFunction,
-                vectorActivationFunction: _vectorActivationFunction
-            );
-        }
-    }
-    /// <summary>
-    /// Declares the output projection, which live outside <see cref="NeuralNetworkBase{T}.Layers"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// These were in NEITHER surface. The base walks Layers, these are not in Layers, and
-    /// nothing declared them -- so they were never counted, never handed out, never restored,
-    /// and never trained through a flat-vector optimizer. Declaring them adds to the parameter
-    /// count, deliberately: the old number was not a smaller-but-correct total, it omitted real
-    /// weights.
-    /// </para>
-    /// <para>
-    /// A hook rather than a [TrainableParameter] attribute because TrainableParameterGenerator
-    /// only processes LayerBase subclasses (see its ExtendsLayerBase guard) -- the attribute
-    /// does nothing on a model. For a model, declaring through this hook IS the mechanism.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        yield return _outputWeights;
     }
 
 }

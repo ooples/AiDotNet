@@ -53,7 +53,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Learning with Continuous Classes", "https://doi.org/10.1007/BF00153760", Year = 1992, Authors = "J. Ross Quinlan")]
-public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
+public partial class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>
     /// The configuration options for the M5 model tree algorithm.
@@ -976,102 +976,6 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
             x.GetRows(rightIndices),
             y.GetElements(rightIndices)
         );
-    }
-
-    /// <summary>
-    /// Creates a new instance of the M5ModelTree with the same configuration as the current instance.
-    /// </summary>
-    /// <returns>A new M5ModelTree instance with the same options and regularization as the current instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the abstract method from the base class, allowing the creation of a new model
-    /// with the same configuration options and regularization settings. This is useful for model cloning,
-    /// ensemble methods, or cross-validation scenarios where multiple instances of the same model type
-    /// with identical configurations are needed.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a copy of the model's blueprint.
-    /// 
-    /// When you need multiple versions of the same type of model with identical settings:
-    /// - This method creates a new, empty model with the same configuration
-    /// - It's like making a copy of a recipe before you start cooking
-    /// - The new model has the same settings but no trained data
-    /// - This is useful for techniques that need multiple models, like cross-validation
-    /// 
-    /// For example, if you're testing your model on different subsets of data,
-    /// you'd want each test to use a model with identical settings.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new M5ModelTree<T>(_options, Regularization);
-    }
-
-    /// <summary>
-    /// Serializes the M5 model tree to a byte array, including linear models at leaf nodes.
-    /// </summary>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize options
-        writer.Write(_options.MaxDepth);
-        writer.Write(_options.MinSamplesSplit);
-        writer.Write(double.IsNaN(_options.MaxFeatures) ? -1 : (int)_options.MaxFeatures);
-        writer.Write(_options.Seed ?? -1);
-        writer.Write((int)_options.SplitCriterion);
-        writer.Write(_options.MinInstancesPerLeaf);
-        writer.Write(_options.UsePruning);
-        writer.Write(_options.PruningFactor);
-        writer.Write(_options.UseLinearRegressionAtLeaves);
-        writer.Write(_options.SmoothingConstant);
-
-        // Serialize feature importances
-        writer.Write(FeatureImportances.Length);
-        for (int i = 0; i < FeatureImportances.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(FeatureImportances[i]));
-        }
-
-        // Serialize tree structure including linear models
-        SerializeM5Node(writer, Root);
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the M5 model tree from a byte array, including linear models at leaf nodes.
-    /// </summary>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        // Deserialize options
-        _options.MaxDepth = reader.ReadInt32();
-        _options.MinSamplesSplit = reader.ReadInt32();
-        int maxFeatures = reader.ReadInt32();
-        _options.MaxFeatures = maxFeatures == -1 ? double.NaN : maxFeatures;
-        int seed = reader.ReadInt32();
-        _options.Seed = seed == -1 ? null : seed;
-        _options.SplitCriterion = (SplitCriterion)reader.ReadInt32();
-        _options.MinInstancesPerLeaf = reader.ReadInt32();
-        _options.UsePruning = reader.ReadBoolean();
-        _options.PruningFactor = reader.ReadDouble();
-        _options.UseLinearRegressionAtLeaves = reader.ReadBoolean();
-        _options.SmoothingConstant = reader.ReadDouble();
-
-        // Deserialize feature importances
-        int featureCount = reader.ReadInt32();
-        var importances = new T[featureCount];
-        for (int i = 0; i < featureCount; i++)
-        {
-            importances[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        FeatureImportances = new Vector<T>(importances);
-
-        // Deserialize tree structure including linear models
-        Root = DeserializeM5Node(reader);
     }
 
     /// <summary>

@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Graph)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.Projection)]
-[LayerProperty(IsTrainable = true, ChangesShape = true)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestConstructorArgs = "4, 3, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>()", TestInputShape = "1, 4")]
 // Ranks 1 and 2, the two forms ForwardTraced round-trips: a rank-1 input is reshaped to [1, inputSize]
 // and returned as [OutputShape[0]], and a rank-2 input passes straight through the matmul. Higher ranks
 // are flattened into a batch and restored from _originalInputShape, but a readout head has nothing to say
@@ -114,6 +114,7 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
     /// gradients for all weight parameters during the backward pass. These gradients are used
     /// to update the weights during the parameter update step.
     /// </remarks>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T> _weightGradients;
 
     /// <summary>
@@ -124,6 +125,7 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
     /// gradients for all bias parameters during the backward pass. These gradients are used
     /// to update the biases during the parameter update step.
     /// </remarks>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T> _biasGradients;
 
     /// <summary>
@@ -134,23 +136,29 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
     /// input tensor that was processed in the most recent forward pass. The tensor is null
     /// before the first forward pass or after a reset.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the output tensor (post-activation) from the most recent forward pass for use in backpropagation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Stores the pre-activation output tensor from the most recent forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPreActivation;
 
     private int[] _originalInputShape = [];
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput;
+    [ExternalState]
     private Tensor<T>? _gpuPreActivation;
+    [ExternalState]
     private Tensor<T>? _gpuOutput;
     private int _gpuBatchDim;
     private int _gpuInputSize;
@@ -162,6 +170,12 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
     protected override bool SupportsGpuExecution => true;
+
+    /// <summary>Construction state: the 'inputSize' the layer was built with.</summary>
+    private readonly int _inputSize;
+
+    /// <summary>Construction state: the 'outputSize' the layer was built with.</summary>
+    private readonly int _outputSize;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ReadoutLayer{T}"/> class with a scalar activation function.
@@ -193,6 +207,8 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
         IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputSize], [outputSize], scalarActivation)
     {
+        _outputSize = outputSize;
+        _inputSize = inputSize;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         _weights = new Tensor<T>([outputSize, inputSize]);
@@ -238,6 +254,8 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
         IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputSize], [outputSize], vectorActivation)
     {
+        _outputSize = outputSize;
+        _inputSize = inputSize;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         _weights = new Tensor<T>([outputSize, inputSize]);

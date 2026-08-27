@@ -59,7 +59,7 @@ namespace AiDotNet.Finance.Portfolio;
     "https://arxiv.org/abs/2510.03129",
     Year = 2025,
     Authors = "Yoontae Hwang, Stefan Zohren")]
-public class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
+public partial class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
 {
     private readonly SignatureInformedTransformerOptions<T> _options;
 
@@ -245,42 +245,5 @@ public class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
         }
 
         return Objective.ConditionalValueAtRisk(losses);
-    }
-
-    // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var copy = new SignatureInformedTransformerOptions<T>
-        {
-            NumAssets = _options.NumAssets,
-            LookbackWindow = _options.LookbackWindow,
-            Horizon = _options.Horizon,
-            SignatureLevel = _options.SignatureLevel,
-            ModelDimension = _options.ModelDimension,
-            FeedForwardDimension = _options.FeedForwardDimension,
-            NumHeads = _options.NumHeads,
-            NumLayers = _options.NumLayers,
-            RelationalHiddenDimension = _options.RelationalHiddenDimension,
-            Temperature = _options.Temperature,
-            CVaRAlpha = _options.CVaRAlpha,
-            DropoutRate = _options.DropoutRate,
-            LearningRate = _options.LearningRate,
-            BatchSize = _options.BatchSize,
-            MaxEpochs = _options.MaxEpochs,
-            EarlyStoppingPatience = _options.EarlyStoppingPatience,
-            TransactionCostBasisPoints = _options.TransactionCostBasisPoints,
-        };
-
-        // LossFunction always carries across. Architecture carries across ONLY when it holds no
-        // layers: InitializeLayers adds Architecture.Layers into Layers BY REFERENCE, and ILayer<T>
-        // has no Clone, so a layer-carrying architecture would give the clone the SAME layer objects
-        // as its source and training either would mutate both. See the matching note in
-        // GraphAttentionPortfolio.CreateNewInstance.
-        bool architectureCarriesLayers = Architecture.Layers is not null && Architecture.Layers.Count > 0;
-
-        return architectureCarriesLayers
-            ? new SignatureInformedTransformer<T>(copy, null, LossFunction)
-            : new SignatureInformedTransformer<T>(copy, Architecture, LossFunction);
     }
 }

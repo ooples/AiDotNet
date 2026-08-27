@@ -78,13 +78,4 @@ public class RoBERTaNER<T> : TransformerNERBase<T>
             "RoBERTa-NER", "Liu et al., 2019", optimizer)
     {
     }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new TransformerNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new RoBERTaNER<T>(Architecture, p, optionsCopy);
-        return new RoBERTaNER<T>(Architecture, optionsCopy);
-    }
 }

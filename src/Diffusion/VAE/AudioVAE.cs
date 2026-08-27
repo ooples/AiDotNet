@@ -677,27 +677,6 @@ public partial class AudioVAE<T> : VAEModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IVAEModel<T> Clone()
-    {
-        var clone = new AudioVAE<T>(
-            _melChannels,
-            _latentChannels,
-            _baseChannels,
-            _channelMultipliers,
-            _numResBlocks);
-
-        // Preserve trained weights
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
-    }
-
     #endregion
 
     protected override Vector<T> GetParameterGradients()

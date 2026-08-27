@@ -602,60 +602,6 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
 
     public override int FeatureCount => _options.StateSize;
 
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize policy network
-        var policyBytes = _policyNetwork.Serialize();
-        writer.Write(policyBytes.Length);
-        writer.Write(policyBytes);
-
-        // Serialize value network
-        var valueBytes = _valueNetwork.Serialize();
-        writer.Write(valueBytes.Length);
-        writer.Write(valueBytes);
-
-        // Serialize old policy network
-        var oldPolicyBytes = _oldPolicyNetwork.Serialize();
-        writer.Write(oldPolicyBytes.Length);
-        writer.Write(oldPolicyBytes);
-
-        return ms.ToArray();
-    }
-
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        // Deserialize policy network
-        var policyLength = reader.ReadInt32();
-        var policyBytes = reader.ReadBytes(policyLength);
-        _policyNetwork.Deserialize(policyBytes);
-
-        // Deserialize value network
-        var valueLength = reader.ReadInt32();
-        var valueBytes = reader.ReadBytes(valueLength);
-        _valueNetwork.Deserialize(valueBytes);
-
-        // Deserialize old policy network
-        var oldPolicyLength = reader.ReadInt32();
-        var oldPolicyBytes = reader.ReadBytes(oldPolicyLength);
-        _oldPolicyNetwork.Deserialize(oldPolicyBytes);
-    }
-
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        // Preserve the learned policy: a fresh TRPOAgent re-initialises its policy and
-        // value networks with new random weights, so without copying the trained
-        // parameters the clone would implement a different policy than the original.
-        var clone = new TRPOAgent<T>(_options, _optimizer);
-        clone.SetParameters(GetParameters());
-        return clone;
-    }
-
     /// <summary>
     /// Computes gradients of the loss with respect to this agent's parameters, without updating them.
     /// </summary>

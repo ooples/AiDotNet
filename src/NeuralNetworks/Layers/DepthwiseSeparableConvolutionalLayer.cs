@@ -171,6 +171,7 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
     /// this helps the layer learn precisely from its mistakes.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -202,6 +203,7 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
     /// so it can improve both steps independently.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastDepthwiseOutput;
 
     /// <summary>
@@ -222,6 +224,7 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
     /// Like keeping track of your final answer to see exactly where you went wrong.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -243,6 +246,7 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
     /// to calculate how much the curve changed things.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastPreActivation;
 
     /// <summary>
@@ -263,6 +267,7 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
     /// Think of it like a to-do list of adjustments for each filter.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _depthwiseKernelsGradient;
 
     /// <summary>
@@ -283,6 +288,7 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
     /// Similar to the depthwise gradients, but for the mixing step rather than the filtering step.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _pointwiseKernelsGradient;
 
     /// <summary>
@@ -303,35 +309,53 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
     /// Adjusting biases can help fine-tune the sensitivity of feature detectors.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
     #region GPU Training Fields
+    [ExternalState]
     private Tensor<T>? _gpuLastInput;
+    [ExternalState]
     private Tensor<T>? _gpuLastOutput;
 
     // GPU weight buffers
+    [ExternalState]
     private Tensor<T>? _gpuDepthwiseKernels;
+    [ExternalState]
     private Tensor<T>? _gpuPointwiseKernels;
+    [ExternalState]
     private Tensor<T>? _gpuBiases;
 
     // GPU gradient buffers
+    [ExternalState]
     private Tensor<T>? _gpuDepthwiseKernelsGradient;
+    [ExternalState]
     private Tensor<T>? _gpuPointwiseKernelsGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesGradient;
 
     // GPU velocity buffers (SGD momentum)
+    [ExternalState]
     private Tensor<T>? _gpuDepthwiseKernelsVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuPointwiseKernelsVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesVelocity;
 
     // GPU Adam first moment buffers
+    [ExternalState]
     private Tensor<T>? _gpuDepthwiseKernelsM;
+    [ExternalState]
     private Tensor<T>? _gpuPointwiseKernelsM;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesM;
 
     // GPU Adam second moment buffers
+    [ExternalState]
     private Tensor<T>? _gpuDepthwiseKernelsV;
+    [ExternalState]
     private Tensor<T>? _gpuPointwiseKernelsV;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesV;
     #endregion
 

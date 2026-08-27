@@ -58,7 +58,7 @@ namespace AiDotNet.Clustering.Partitioning;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Web-Scale K-Means Clustering", "https://doi.org/10.1145/1772690.1772862", Year = 2010, Authors = "David Sculley")]
-public class MiniBatchKMeans<T> : ClusteringBase<T>
+public partial class MiniBatchKMeans<T> : ClusteringBase<T>
 {
     private readonly MiniBatchKMeansOptions<T> _options;
 
@@ -96,23 +96,6 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
     public int NumIterations => _numIterations;
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new MiniBatchKMeans<T>(new MiniBatchKMeansOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            MaxIterations = _options.MaxIterations,
-            Tolerance = _options.Tolerance,
-            Seed = _options.Seed,
-            NumInitializations = _options.NumInitializations,
-            BatchSize = _options.BatchSize,
-            InitMethod = _options.InitMethod,
-            MaxNoImprovement = _options.MaxNoImprovement,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

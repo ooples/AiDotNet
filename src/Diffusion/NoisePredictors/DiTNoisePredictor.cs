@@ -74,16 +74,8 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Scalable Diffusion Models with Transformers", "https://arxiv.org/abs/2212.09748")]
-public class DiTNoisePredictor<T> : NoisePredictorBase<T>
+public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
 {
-
-    /// <inheritdoc />
-    /// <remarks>DiT builds its blocks lazily, so nothing is reflectable until this runs. Without it
-    /// SiTPredictor, which derives from this type, reported 0 parameters against a real 49,328.</remarks>
-    protected override void EnsureParametersReady()
-    {
-        EnsureLayersInitialized();
-    }
 
     /// <inheritdoc />
     protected override void EnsureParameterStructureReady()
@@ -245,6 +237,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <summary>
     /// Cached input for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -258,8 +251,11 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     // Reallocated whenever the [B, seq, hidden] shape changes. Used only on the no-tape
     // inference forward (ForwardScratchGate.Enabled). Bit-identical to the allocating path.
     // ──────────────────────────────────────────────────────────────────────────
+    [Scratch]
     private Tensor<T>? _adaLnScaledScratch;   // TensorMultiply(x, 1+scale)
+    [Scratch]
     private Tensor<T>? _adaLnOutScratch;       // TensorAdd(scaled, shift)
+    [Scratch]
     private Tensor<T>? _gateScratch;           // TensorMultiply(residual, gate)
 
     /// <summary>Element-wise shape-array equality for the #1672 scratch-reuse decision.</summary>
@@ -1326,30 +1322,6 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         return false;
     }
 
-    /// <inheritdoc />
-    public override INoisePredictor<T> Clone()
-    {
-        var clone = new DiTNoisePredictor<T>(
-            inputChannels: _inputChannels,
-            hiddenSize: _hiddenSize,
-            numLayers: _numLayers,
-            numHeads: _numHeads,
-            patchSize: _patchSize,
-            contextDim: _contextDim,
-            mlpRatio: _mlpRatio,
-            latentSpatialSize: _latentSpatialSize,
-            seed: _seed);
-
-        // Carry the test-only resident-threshold override so an eager fallback takes the same
-        // (fp16-resident vs fp32) path as the source — otherwise a small test clone would materialize fp32
-        // while the source is resident, masking the resident clone round-trip under test (#1764). Null in
-        // production, so this is a no-op there.
-        clone.ResidentThresholdOverrideForTests = ResidentThresholdOverrideForTests;
-
-        ProbeMaterializeAndCopyInto(clone);
-        return clone;
-    }
-
     /// <summary>
     /// Shares this predictor's trained weights with <paramref name="clone"/> through the central
     /// copy-on-write path, falling back to a materialize-and-copy forward only when the generated
@@ -1471,9 +1443,6 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
 
     /// <inheritdoc />
     public override int ContextDimension => _contextDim;
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
     protected override Vector<T> GetParameterGradients()
     {

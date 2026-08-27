@@ -62,7 +62,28 @@ public class LocallyWeightedRegressionOptions : NonLinearRegressionOptions
     /// If your predictions seem too generalized and miss obvious patterns, try decreasing it.
     /// </para>
     /// </remarks>
-    public double Bandwidth { get; set; } = 1.0;
+    public double Bandwidth { get; set; } = 0.0;
+
+    /// <summary>
+    /// The span: the fraction of the training set included in each local fit.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is LOESS's smoothing parameter as Cleveland and Devlin define it. Each local fit uses the
+    /// q = floor(Span * n) nearest neighbours of the query point, and the kernel is scaled by the
+    /// distance to the q-th of them -- so the neighbourhood is wide where the data are sparse and
+    /// narrow where they are dense. 0.75 is the paper's usual starting value.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> smaller spans follow the data more closely and wiggle more; larger spans
+    /// are smoother. Unlike a fixed bandwidth, a span adapts itself to how crowded each region is.
+    /// </para>
+    /// <para>
+    /// Setting <see cref="Bandwidth"/> to a positive value overrides this and returns the model to
+    /// fixed-bandwidth kernel regression, which is what it did before the span existed.
+    /// </para>
+    /// </remarks>
+    public double Span { get; set; } = 0.75;
 
     /// <summary>
     /// Gets or sets the matrix decomposition method used to solve the weighted least squares

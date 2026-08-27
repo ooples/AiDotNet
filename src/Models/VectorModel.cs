@@ -74,11 +74,11 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             () => Coefficients,
             value =>
             {
-                // Coefficients is get-only, so restore writes THROUGH it rather than replacing
-                // it -- the same thing the hand-written SetParameters did. The base fold has
-                // already rejected a wrong-length vector by this point.
-                for (int i = 0; i < Coefficients.Length; i++) Coefficients[i] = value[i];
+                Coefficients = value;
             }));
+        RegisterParameterComponent(new ScalarParameterSource<T>(
+            () => Intercept,
+            value => Intercept = value));
     }
     /// <summary>
     /// Relative singular-value tolerance used by the rank-revealing SVD fallback.
@@ -115,7 +115,10 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
     /// These coefficients make the model interpretable - you can see exactly how each feature affects the prediction.
     /// </para>
     /// </remarks>
-    public Vector<T> Coefficients { get; }
+    public Vector<T> Coefficients { get; private set; }
+
+    /// <summary>Gets the fitted constant term of the linear regression model.</summary>
+    public T Intercept { get; private set; }
 
     /// <summary>
     /// Cached feature importance to avoid recreating on every GetModelMetadata() call.
@@ -159,6 +162,7 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
     {
         Guard.NotNull(coefficients);
         Coefficients = coefficients;
+        Intercept = NumOps.Zero;
         _defaultLossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
     }
 
@@ -310,7 +314,7 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
 
         // Compute gradient w.r.t. coefficients: ∂L/∂coefficients = (1/n) * X^T * ∂L/∂y_pred
         // Pre-extract columns from input for Engine.DotProduct
-        var gradients = new Vector<T>(Coefficients.Length);
+        var gradients = new Vector<T>(Coefficients.Length + 1);
         for (int j = 0; j < Coefficients.Length; j++)
         {
             var col = new Vector<T>(input.Rows);
@@ -321,6 +325,13 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             // gradient[j] = (1/n) * X[:,j] · predictionGradient
             gradients[j] = NumOps.Divide(Engine.DotProduct(col, predictionGradient), NumOps.FromDouble(input.Rows));
         }
+        T interceptGradient = NumOps.Zero;
+        for (int i = 0; i < predictionGradient.Length; i++)
+        {
+            interceptGradient = NumOps.Add(interceptGradient, predictionGradient[i]);
+        }
+        gradients[Coefficients.Length] = NumOps.Divide(
+            interceptGradient, NumOps.FromDouble(input.Rows));
 
         return gradients;
     }
@@ -348,10 +359,10 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
     {
         if (gradients == null)
             throw new ArgumentNullException(nameof(gradients));
-        if (gradients.Length != Coefficients.Length)
+        if (gradients.Length != Coefficients.Length + 1)
         {
             throw new ArgumentException(
-                $"Gradient vector length ({gradients.Length}) must match coefficient count ({Coefficients.Length})",
+                $"Gradient vector length ({gradients.Length}) must match coefficient count plus intercept ({Coefficients.Length + 1})",
                 nameof(gradients));
         }
 
@@ -361,6 +372,8 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             T update = NumOps.Multiply(learningRate, gradients[i]);
             Coefficients[i] = NumOps.Subtract(Coefficients[i], update);
         }
+        Intercept = NumOps.Subtract(
+            Intercept, NumOps.Multiply(learningRate, gradients[Coefficients.Length]));
 
         // Invalidate cached feature importance since coefficients changed
         _cachedFeatureImportance = null;
@@ -405,7 +418,7 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             throw new ArgumentException($"Input vector length ({input.Length}) must match coefficients length ({Coefficients.Length}).", nameof(input));
         }
 
-        return Engine.DotProduct(Coefficients, input);
+        return NumOps.Add(Engine.DotProduct(Coefficients, input), Intercept);
     }
 
     /// <summary>
@@ -466,10 +479,41 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
 
         try
         {
-            // Implement a simple linear regression using the normal equation
-            // (X^T * X)^-1 * X^T * y
-            Matrix<T> XTranspose = X.Transpose();
-            Matrix<T> XTX = XTranspose * X;
+            // Bishop's linear-regression model includes a constant basis function. Solve the slopes on
+            // centered data, then recover the intercept from the feature and target means. Besides being
+            // algebraically equivalent to augmenting X with a column of ones, centering keeps a uniform
+            // target translation entirely in the intercept and improves the normal equation's conditioning.
+            var featureMeans = new Vector<T>(X.Columns);
+            T targetMean = NumOps.Zero;
+            for (int row = 0; row < X.Rows; row++)
+            {
+                targetMean = NumOps.Add(targetMean, y[row]);
+                for (int column = 0; column < X.Columns; column++)
+                {
+                    featureMeans[column] = NumOps.Add(featureMeans[column], X[row, column]);
+                }
+            }
+
+            T sampleCount = NumOps.FromDouble(X.Rows);
+            targetMean = NumOps.Divide(targetMean, sampleCount);
+            for (int column = 0; column < X.Columns; column++)
+            {
+                featureMeans[column] = NumOps.Divide(featureMeans[column], sampleCount);
+            }
+
+            var centeredX = new Matrix<T>(X.Rows, X.Columns);
+            var centeredY = new Vector<T>(y.Length);
+            for (int row = 0; row < X.Rows; row++)
+            {
+                centeredY[row] = NumOps.Subtract(y[row], targetMean);
+                for (int column = 0; column < X.Columns; column++)
+                {
+                    centeredX[row, column] = NumOps.Subtract(X[row, column], featureMeans[column]);
+                }
+            }
+
+            Matrix<T> XTranspose = centeredX.Transpose();
+            Matrix<T> XTX = XTranspose * centeredX;
 
             // Normal equations are fast for a full-rank system. When rank deficient, use a
             // scale-aware truncated SVD of X itself. Unlike an absolute ridge on X^T·X, this is
@@ -478,18 +522,24 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             if (XTX.IsInvertible())
             {
                 Matrix<T> XTXInverse = XTX.Inverse();
-                Matrix<T> XTY = XTranspose * Matrix<T>.FromVector(y);
+                Matrix<T> XTY = XTranspose * Matrix<T>.FromVector(centeredY);
                 newCoefficients = (XTXInverse * XTY).GetColumn(0);
             }
             else
             {
-                newCoefficients = SolveMinimumNorm(X, y);
+                newCoefficients = SolveMinimumNorm(centeredX, centeredY);
             }
 
             // Update the coefficients
             for (int i = 0; i < FeatureCount; i++)
             {
                 Coefficients[i] = newCoefficients[i];
+            }
+            Intercept = targetMean;
+            for (int column = 0; column < FeatureCount; column++)
+            {
+                Intercept = NumOps.Subtract(
+                    Intercept, NumOps.Multiply(featureMeans[column], newCoefficients[column]));
             }
 
             // Invalidate cached feature importance
@@ -643,136 +693,6 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
                 { "MinCoefficient", (object?)min ?? (object)0.0 }
             }
         };
-    }
-
-    /// <summary>
-    /// Serializes the model to a byte array.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method serializes the model to a byte array by writing the number of coefficients and then each coefficient 
-    /// value. The serialization format is simple: first an integer indicating the number of coefficients, followed by each 
-    /// coefficient as a double. This allows the model to be stored or transmitted and later reconstructed using the 
-    /// Deserialize method.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method converts the model to a byte array that can be saved or transmitted.
-    /// 
-    /// The Serialize method:
-    /// - Converts the model to a compact binary format
-    /// - Writes the number of coefficients and each coefficient value
-    /// - Returns a byte array that can be stored or transmitted
-    /// 
-    /// The serialization format is:
-    /// 1. An integer with the number of coefficients
-    /// 2. Each coefficient value as a double
-    /// 
-    /// This method is useful when:
-    /// - Saving models to files or databases
-    /// - Sending models over a network
-    /// - Persisting models between application runs
-    /// 
-    /// The resulting byte array can be converted back to a model using Deserialize.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        ModelPersistenceGuard.EnforceBeforeSerialize();
-        using MemoryStream ms = new MemoryStream();
-        using BinaryWriter writer = new BinaryWriter(ms);
-
-        // Write a version number for forward compatibility
-        writer.Write(1); // Version 1
-
-        // Write the number of coefficients
-        writer.Write(Coefficients.Length);
-
-        // Write each coefficient
-        for (int i = 0; i < Coefficients.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(Coefficients[i]));
-        }
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the model from a byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized model.</param>
-    /// <exception cref="ArgumentNullException">Thrown when data is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when data is empty or invalid.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the serialized coefficients count doesn't match the model's coefficients count.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method deserializes the model from a byte array by reading the number of coefficients and then each coefficient 
-    /// value. It expects the same format as produced by the Serialize method: first an integer indicating the number of 
-    /// coefficients, followed by each coefficient as a double. This allows a model that was previously serialized to be 
-    /// reconstructed.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method reconstructs a model from a byte array created by Serialize.
-    /// 
-    /// The Deserialize method:
-    /// - Takes a byte array containing a serialized model
-    /// - Reads the number of coefficients and each coefficient value
-    /// - Updates the model's coefficients with the deserialized values
-    /// 
-    /// It expects the same format created by Serialize:
-    /// 1. An integer with the number of coefficients
-    /// 2. Each coefficient value as a double
-    /// 
-    /// This method is useful when:
-    /// - Loading models from files or databases
-    /// - Receiving models over a network
-    /// - Restoring models from persistent storage
-    /// 
-    /// Note that this method updates the existing model's coefficients rather than
-    /// creating a new model, which is different from most other methods in this class.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        ModelPersistenceGuard.EnforceBeforeDeserialize();
-        if (data == null)
-        {
-            throw new ArgumentNullException(nameof(data));
-        }
-
-        if (data.Length == 0)
-        {
-            throw new ArgumentException("Serialized data cannot be empty.", nameof(data));
-        }
-
-        try
-        {
-            using MemoryStream ms = new MemoryStream(data);
-            using BinaryReader reader = new BinaryReader(ms);
-
-            // Read version number
-            int version = reader.ReadInt32();
-
-            // Read the number of coefficients
-            int length = reader.ReadInt32();
-
-            // Validate coefficient count
-            if (length != Coefficients.Length)
-            {
-                throw new InvalidOperationException($"Serialized coefficients count ({length}) doesn't match model's coefficients count ({Coefficients.Length}).");
-            }
-
-            // Read each coefficient
-            for (int i = 0; i < length; i++)
-            {
-                Coefficients[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-
-            // Invalidate cached feature importance
-            _cachedFeatureImportance = null;
-        }
-        catch (Exception ex) when (!(ex is ArgumentNullException || ex is ArgumentException || ex is InvalidOperationException))
-        {
-            throw new ArgumentException("Failed to deserialize the model. The data may be corrupted or in an invalid format.", nameof(data), ex);
-        }
     }
 
     /// <summary>
@@ -988,8 +908,22 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             throw new ArgumentNullException(nameof(parameters));
         }
 
-        // Create a new model with the provided parameters
-        // Allow different sizes to support genetic algorithm optimization which may resize models
+        // The registered parameter vector is [coefficients..., intercept]. Preserve the historical
+        // coefficients-only form for callers that deliberately resize a genetic candidate.
+        if (parameters.Length == FeatureCount + 1)
+        {
+            var coefficients = new Vector<T>(FeatureCount);
+            for (int i = 0; i < FeatureCount; i++)
+            {
+                coefficients[i] = parameters[i];
+            }
+
+            return new VectorModel<T>(coefficients)
+            {
+                Intercept = parameters[FeatureCount]
+            };
+        }
+
         return new VectorModel<T>(parameters);
     }
 
@@ -1027,45 +961,6 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
                 yield return i;
             }
         }
-    }
-
-    /// <summary>
-    /// Creates a deep copy of this model.
-    /// </summary>
-    /// <returns>A new instance with the same coefficients.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a deep copy of the model by creating a new VectorModel with a new coefficients vector that has 
-    /// the same values as the original. This ensures that modifications to the copy do not affect the original model. This 
-    /// method is useful when you need to create a duplicate of a model for experimentation or as part of genetic algorithm 
-    /// operations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates an exact duplicate of the model.
-    /// 
-    /// The DeepCopy method:
-    /// - Creates a new model with the same coefficients as this one
-    /// - Ensures the new model is completely independent of the original
-    /// - Creates a "deep copy" where all data is duplicated, not just references
-    /// 
-    /// This method is useful when:
-    /// - You need to create a duplicate of a model for experimentation
-    /// - You want to ensure changes to one model don't affect another
-    /// - You're implementing algorithms that require model copies
-    /// 
-    /// For example, you might copy a model before mutating it to preserve the original.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
-    {
-        // Create a new coefficients vector with the same values
-        Vector<T> clonedCoefficients = new Vector<T>(Coefficients.Length);
-        for (int i = 0; i < Coefficients.Length; i++)
-        {
-            clonedCoefficients[i] = Coefficients[i];
-        }
-
-        // Create a new model with the cloned coefficients
-        return new VectorModel<T>(clonedCoefficients);
     }
 
     public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
@@ -1146,6 +1041,7 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
 #pragma warning disable CS0618
 
     protected readonly HashSet<InterpretationMethod> _enabledMethods = new();
+    [AiDotNet.Attributes.TrainableParameter]
     protected Vector<int>? _sensitiveFeatures;
     protected readonly List<FairnessMetric> _fairnessMetrics = new();
     [ExternalState]

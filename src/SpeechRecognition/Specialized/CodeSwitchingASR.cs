@@ -597,49 +597,6 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
         AdditionalInfo = BaseAudioMetadataInfo()
     };
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds);
-        w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers);
-        w.Write(_options.NumAttentionHeads); w.Write(_options.NumMels);
-        w.Write(_options.MandarinCharVocabSize); w.Write(_options.EnglishBpeVocabSize); w.Write(_options.VocabSize);
-        w.Write(_options.MaxTextLength); w.Write(_options.DropoutRate); w.Write(_options.Language);
-        w.Write(_options.CtcWeight); w.Write(_options.LidWeight);
-        w.Write(_options.DecoderDim); w.Write(_options.NumDecoderLayers);
-        w.Write(_options.SharedLidAttention);
-    }
-
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32();
-        _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32();
-        _options.NumAttentionHeads = r.ReadInt32(); _options.NumMels = r.ReadInt32();
-        _options.MandarinCharVocabSize = r.ReadInt32(); _options.EnglishBpeVocabSize = r.ReadInt32(); _options.VocabSize = r.ReadInt32();
-        _options.MaxTextLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
-        _options.Language = r.ReadString();
-        _options.CtcWeight = r.ReadDouble(); _options.LidWeight = r.ReadDouble();
-        _options.DecoderDim = r.ReadInt32(); _options.NumDecoderLayers = r.ReadInt32();
-        _options.SharedLidAttention = r.ReadBoolean();
-
-        base.SampleRate = _options.SampleRate;
-        base.NumMels = _options.NumMels;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-
-        // The base deserializer replaced every entry of Layers, so the sub-network views point at
-        // discarded weights until they are rebound.
-        if (_useNativeMode) BindSubNetworkViews(customLayers: Architecture.Layers is { Count: > 0 });
-    }
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => !_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)
-            ? new CodeSwitchingASR<T>(Architecture, mp, _options)
-            : new CodeSwitchingASR<T>(Architecture, _options);
-
     #endregion
 
     #region Decoding helpers

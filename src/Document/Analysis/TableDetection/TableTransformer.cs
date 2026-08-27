@@ -57,7 +57,6 @@ namespace AiDotNet.Document.Analysis.TableDetection;
 [ResearchPaper("PubTables-1M: Towards Comprehensive Table Extraction from Unstructured Documents", "https://doi.org/10.48550/arXiv.2110.00061", Year = 2022, Authors = "Brandon Smock, Rohith Pesala, Robin Abraham")]
 public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor<T>
 {
-
     private readonly TableTransformerOptions _options;
 
     /// <inheritdoc/>
@@ -87,6 +86,7 @@ public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableE
     private readonly List<ILayer<T>> _structureHead = [];
 
     // Learnable object queries
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _objectQueries;
 
     // Task mode - tracks whether we're doing detection or structure recognition
@@ -1040,132 +1040,6 @@ public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableE
         };
     }
 
-    /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_hiddenDim);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numDecoderLayers);
-        writer.Write(_numHeads);
-        writer.Write(_numQueries);
-        writer.Write(_numTableClasses);
-        writer.Write(_numStructureClasses);
-        writer.Write(ImageSize);
-        writer.Write(_useNativeMode);
-        writer.Write(_onnxDetectionModelPath ?? string.Empty);
-        writer.Write(_onnxStructureModelPath ?? string.Empty);
-    }
-
-    /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int hiddenDim = reader.ReadInt32();
-        int numEncoderLayers = reader.ReadInt32();
-        int numDecoderLayers = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-        int numQueries = reader.ReadInt32();
-        int numTableClasses = reader.ReadInt32();
-        int numStructureClasses = reader.ReadInt32();
-        int imageSize = reader.ReadInt32();
-        bool useNativeMode = reader.ReadBoolean();
-        string? detectionModelPath = null;
-        string? structureModelPath = null;
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-        {
-            detectionModelPath = reader.ReadString();
-            if (reader.BaseStream.Position < reader.BaseStream.Length)
-            {
-                structureModelPath = reader.ReadString();
-            }
-        }
-
-        _hiddenDim = hiddenDim;
-        _numEncoderLayers = numEncoderLayers;
-        _numDecoderLayers = numDecoderLayers;
-        _numHeads = numHeads;
-        _numQueries = numQueries;
-        _numTableClasses = numTableClasses;
-        _numStructureClasses = numStructureClasses;
-        _useNativeMode = useNativeMode;
-        ImageSize = imageSize;
-        if (!string.IsNullOrWhiteSpace(detectionModelPath))
-        {
-            _onnxDetectionModelPath = detectionModelPath;
-        }
-        else if (_useNativeMode)
-        {
-            _onnxDetectionModelPath = null;
-        }
-
-        if (!string.IsNullOrWhiteSpace(structureModelPath))
-        {
-            _onnxStructureModelPath = structureModelPath;
-        }
-        else if (_useNativeMode)
-        {
-            _onnxStructureModelPath = null;
-        }
-
-        if (_useNativeMode && _objectQueries is null)
-        {
-            InitializeObjectQueries();
-        }
-
-        if (!_useNativeMode)
-        {
-            if (!string.IsNullOrWhiteSpace(_onnxDetectionModelPath)
-                && !string.IsNullOrWhiteSpace(_onnxStructureModelPath))
-            {
-                InitializeOnnxSessions();
-            }
-            else if (_onnxDetectionSession is null || _onnxStructureSession is null)
-            {
-                throw new InvalidOperationException(
-                    "Missing ONNX model paths required to restore TableTransformer.");
-            }
-        }
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new TableTransformer<T>(
-                Architecture,
-                ImageSize,
-                _hiddenDim,
-                _numEncoderLayers,
-                _numDecoderLayers,
-                _numHeads,
-                _numQueries);
-        }
-
-        if (string.IsNullOrWhiteSpace(_onnxDetectionModelPath) || string.IsNullOrWhiteSpace(_onnxStructureModelPath))
-        {
-            throw new InvalidOperationException(
-                "Missing ONNX model paths required to clone TableTransformer.");
-        }
-
-        var detectionModelPath = _onnxDetectionModelPath
-            ?? throw new InvalidOperationException(
-                "Missing ONNX detection model path required to clone TableTransformer.");
-        var structureModelPath = _onnxStructureModelPath
-            ?? throw new InvalidOperationException(
-                "Missing ONNX structure model path required to clone TableTransformer.");
-
-        return new TableTransformer<T>(
-            Architecture,
-            detectionModelPath,
-            structureModelPath,
-            ImageSize,
-            _hiddenDim,
-            _numEncoderLayers,
-            _numDecoderLayers,
-            _numHeads,
-            _numQueries);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation
@@ -1206,7 +1080,8 @@ public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableE
         }
     }
 
-    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+
 
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights

@@ -55,35 +55,51 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
 
     private Tensor<T> _gamma;
     private Tensor<T> _beta;
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastMean;
+    [Scratch]
     private Tensor<T>? _lastVariance;
+    [Scratch]
     private Tensor<T>? _gammaGradient;
+    [Scratch]
     private Tensor<T>? _betaGradient;
 
     #region GPU Training Fields
 
     // Cached GPU tensors for GPU-resident training
+    [ExternalState]
     private Tensor<T>? _gpuLastInput;
 
     // GPU weight buffers
+    [ExternalState]
     private Tensor<T>? _gpuGamma;
+    [ExternalState]
     private Tensor<T>? _gpuBeta;
 
     // GPU gradient buffers
+    [ExternalState]
     private Tensor<T>? _gpuGammaGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBetaGradient;
 
     // GPU optimizer state buffers (velocity/momentum)
+    [ExternalState]
     private Tensor<T>? _gpuGammaVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBetaVelocity;
 
     // GPU optimizer state buffers (first moment for Adam)
+    [ExternalState]
     private Tensor<T>? _gpuGammaM;
+    [ExternalState]
     private Tensor<T>? _gpuBetaM;
 
     // GPU optimizer state buffers (second moment for Adam)
+    [ExternalState]
     private Tensor<T>? _gpuGammaV;
+    [ExternalState]
     private Tensor<T>? _gpuBetaV;
 
     #endregion

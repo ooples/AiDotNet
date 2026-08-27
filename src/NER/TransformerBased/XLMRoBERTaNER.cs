@@ -85,13 +85,4 @@ public class XLMRoBERTaNER<T> : TransformerNERBase<T>
             "XLM-RoBERTa-NER", "Conneau et al., ACL 2020", optimizer)
     {
     }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new TransformerNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new XLMRoBERTaNER<T>(Architecture, p, optionsCopy);
-        return new XLMRoBERTaNER<T>(Architecture, optionsCopy);
-    }
 }

@@ -80,6 +80,7 @@ public partial class ResidualLayer<T> : LayerBase<T>, IShapeContract
     /// or when you explicitly reset the layer.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -91,6 +92,7 @@ public partial class ResidualLayer<T> : LayerBase<T>, IShapeContract
     /// to avoid recomputing and potentially corrupting the inner layer's state. It is cleared when ResetState() is called.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInnerOutput;
 
     /// <summary>

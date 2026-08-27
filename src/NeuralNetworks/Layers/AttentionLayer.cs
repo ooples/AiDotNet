@@ -115,21 +115,25 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// <summary>
     /// The last input processed by the layer.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// The cached query input from the last forward pass (for cross-attention backward).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastQueryInput;
 
     /// <summary>
     /// The cached key input from the last forward pass (for cross-attention backward).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastKeyInput;
 
     /// <summary>
     /// The cached value input from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastValueInput;
 
     /// <summary>
@@ -145,11 +149,13 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// <summary>
     /// The cached attention mask from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastMask;
 
     /// <summary>
     /// The last attention weights computed by the layer.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastAttentionWeights;
 
     /// <summary>
@@ -170,6 +176,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// <summary>
     /// Cached attention output before output projection (Wo), used for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastAttentionOutput;
 
     /// <summary>
@@ -187,29 +194,39 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// <summary>
     /// Gradient of the weight tensor for the value transformation.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _dWv;
 
     /// <summary>
     /// Gradient of the weight tensor for the key transformation.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _dWk;
 
     /// <summary>
     /// Gradient of the weight tensor for the query transformation.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _dWq;
 
     /// <summary>
     /// Gradient of the weight tensor for the output projection.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _dWo;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput;
+    [ExternalState]
     private Tensor<T>? _gpuQ;
+    [ExternalState]
     private Tensor<T>? _gpuK;
+    [ExternalState]
     private Tensor<T>? _gpuV;
+    [ExternalState]
     private Tensor<T>? _gpuAttnOutput;
+    [ExternalState]
     private Tensor<T>? _gpuAttnWeights;
     private int[]? _gpuInputShape;
     private int _gpuBatchSize;

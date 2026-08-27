@@ -683,31 +683,6 @@ public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
         ModelData = SerializeForMetadata()
     };
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_inChannels); writer.Write(_numClasses); writer.Write(_stateDim);
-        writer.Write(_dropRate); writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty);
-        writer.Write(_channelDims.Length); foreach (int d in _channelDims) writer.Write(d);
-        writer.Write(_depths.Length); foreach (int d in _depths) writer.Write(d);
-    }
-
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadDouble(); _ = reader.ReadBoolean(); _ = reader.ReadString();
-        int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32();
-        int dd = reader.ReadInt32(); for (int i = 0; i < dd; i++) _ = reader.ReadInt32();
-
-        // Layers has already been rebuilt with the loaded weights; re-point the typed
-        // references at them so Forward uses the loaded layers, not the ctor's fresh ones.
-        if (_useNativeMode && Layers.Count > 0)
-            ExtractLayerReferences();
-    }
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new SegMamba<T>(Architecture, _optimizer, LossFunction, _numClasses, _dropRate, _options)
-        : new SegMamba<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
-
     // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and flips _disposed,
     // and SegMamba owns no other unmanaged resource.
     #endregion

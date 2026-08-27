@@ -800,36 +800,9 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
         ModelData = SerializeForMetadata()
     };
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height);
-        writer.Write(_width);
-        writer.Write(_channels);
-        writer.Write(_numFeatures);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _height = reader.ReadInt32();
-        _width = reader.ReadInt32();
-        _channels = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Do not pass the live Architecture instance (its Layers list can be populated
-        // during lazy shape resolution).  A fresh blueprint gives clone/serialization
-        // an independent layer graph while preserving every public architecture field.
-        var architecture = new NeuralNetworkArchitecture<T>(
-            Architecture.InputType, Architecture.TaskType, Architecture.Complexity,
-            Architecture.InputSize, Architecture.InputHeight, Architecture.InputWidth,
-            Architecture.InputDepth, Architecture.OutputSize, inputFrames: Architecture.InputFrames,
-            shouldReturnFullSequence: Architecture.ShouldReturnFullSequence,
-            imageEmbeddingDim: Architecture.ImageEmbeddingDim,
-            textEmbeddingDim: Architecture.TextEmbeddingDim);
-        return new E2FGVI<T>(architecture, _numFeatures, _options);
-    }
+
 
     #endregion
 

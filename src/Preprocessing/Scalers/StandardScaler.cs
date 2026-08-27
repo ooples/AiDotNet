@@ -29,8 +29,10 @@ namespace AiDotNet.Preprocessing.Scalers;
 public class StandardScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     [JsonProperty]
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _mean;
     [JsonProperty]
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _stdDev;
     [JsonProperty]
     private readonly bool _withMean;

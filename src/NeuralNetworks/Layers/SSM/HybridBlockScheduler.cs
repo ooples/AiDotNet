@@ -115,7 +115,9 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>, IShapeContract
     private readonly Tensor<T>[] _normBetas;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
     private Tensor<T>[]? _lastNormedInputs;
     private Tensor<T>[]? _lastBlockOutputs;

@@ -37,7 +37,9 @@ public class VerticalPartyClient<T> : FederatedLearningComponentBase<T>, IVertic
     private Tensor<T> _biasEmbed = new Tensor<T>(new[] { 0 });
 
     // Cached for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastHidden;
 
     /// <inheritdoc/>

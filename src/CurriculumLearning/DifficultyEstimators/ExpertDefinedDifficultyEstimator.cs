@@ -31,9 +31,10 @@ namespace AiDotNet.CurriculumLearning.DifficultyEstimators;
 /// <item><description><b>Dataset metadata:</b> Difficulty stored with sample data</description></item>
 /// </list>
 /// </remarks>
-public class ExpertDefinedDifficultyEstimator<T, TInput, TOutput> : DifficultyEstimatorBase<T, TInput, TOutput>
+public partial class ExpertDefinedDifficultyEstimator<T, TInput, TOutput> : DifficultyEstimatorBase<T, TInput, TOutput>
 {
     private readonly Func<TInput, TOutput, T>? _difficultyFunction;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T>? _precomputedDifficulties;
     private readonly bool _normalize;
 

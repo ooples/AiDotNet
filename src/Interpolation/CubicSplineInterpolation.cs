@@ -15,7 +15,7 @@ namespace AiDotNet.Interpolation;
 /// dots with a flexible curve rather than straight lines.
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
-public class CubicSplineInterpolation<T> : IInterpolation<T>
+public partial class CubicSplineInterpolation<T> : IInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the data points (independent variable).
@@ -30,21 +30,25 @@ public class CubicSplineInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The constant coefficients of the cubic polynomials (equal to the y values).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _a;
 
     /// <summary>
     /// The coefficients of the linear terms in the cubic polynomials.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _b;
 
     /// <summary>
     /// The coefficients of the quadratic terms in the cubic polynomials.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _c;
 
     /// <summary>
     /// The coefficients of the cubic terms in the cubic polynomials.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _d;
 
     /// <summary>

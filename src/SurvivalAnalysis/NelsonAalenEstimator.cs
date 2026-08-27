@@ -51,16 +51,18 @@ namespace AiDotNet.SurvivalAnalysis;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Theory of Counting Processes", "https://doi.org/10.1007/978-1-4612-4532-4")]
-public class NelsonAalenEstimator<T> : SurvivalModelBase<T>
+public partial class NelsonAalenEstimator<T> : SurvivalModelBase<T>
 {
     /// <summary>
     /// The cumulative hazard values at each event time.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _cumulativeHazard;
 
     /// <summary>
     /// The variance estimates at each event time.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _variance;
 
     /// <summary>
@@ -257,18 +259,6 @@ public class NelsonAalenEstimator<T> : SurvivalModelBase<T>
     }
 
     /// <inheritdoc />
-    protected override void RegisterComponents()
-    {
-        base.RegisterComponents();
-        RegisterParameterComponent(
-            "cumulative-hazard",
-            new AiDotNet.Models.Parameters.VectorFieldParameterSource<T>(
-                () => _cumulativeHazard,
-                parameters => _cumulativeHazard = new Vector<T>(parameters.ToArray())),
-            AiDotNet.Models.Parameters.ParameterSlotRole.LearnedState);
-    }
-
-    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var copy = new NelsonAalenEstimator<T>();
@@ -276,89 +266,4 @@ public class NelsonAalenEstimator<T> : SurvivalModelBase<T>
         return copy;
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new NelsonAalenEstimator<T>();
-    }
-
-    /// <summary>
-    /// Clones the fitted estimator, carrying over the non-parametric fitted state.
-    /// </summary>
-    /// <remarks>
-    /// The base <see cref="SurvivalModelBase{T}.DeepCopy"/> transfers only NumFeatures / IsFitted
-    /// plus the <see cref="GetParameters"/>/<see cref="SetParameters"/> vector (the cumulative
-    /// hazard values). It never invokes this model's overridden <see cref="Serialize"/>, so the
-    /// event-time grid, variance estimates, and baseline survival curve would be lost — leaving a
-    /// clone whose <see cref="Predict"/> (via median survival time) sees a null event-time grid and
-    /// returns zeros, diverging from the original (Clone_ShouldProduceSamePredictions). Nelson-Aalen
-    /// is non-parametric: its "model" is the step function defined by the event times and the
-    /// cumulative hazard accumulated at each. Carry all fitted state onto the clone as INDEPENDENT
-    /// vectors. The previous version shared the references, arguing that Fit reassigns rather than
-    /// mutates -- but EventTimes, BaselineSurvival, CumulativeHazard and Variance are all public and
-    /// mutable, so any caller writing through one of them on either estimator changed both.
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
-    {
-        var copy = base.DeepCopy();
-        if (copy is NelsonAalenEstimator<T> na)
-        {
-            na.TrainedEventTimes = TrainedEventTimes?.Clone();
-            na._cumulativeHazard = _cumulativeHazard?.Clone();
-            na._variance = _variance?.Clone();
-            na.BaselineSurvivalFunction = BaselineSurvivalFunction?.Clone();
-        }
-        return copy;
-    }
-
-    /// <inheritdoc />
-    public override byte[] Serialize()
-    {
-        var data = new Dictionary<string, object>
-        {
-            { "NumFeatures", NumFeatures },
-            { "IsFitted", IsFitted },
-            { "EventTimes", TrainedEventTimes?.ToArray()?.Select(NumOps.ToDouble).ToArray() ?? Array.Empty<double>() },
-            { "CumulativeHazard", _cumulativeHazard?.ToArray()?.Select(NumOps.ToDouble).ToArray() ?? Array.Empty<double>() },
-            { "Variance", _variance?.ToArray()?.Select(NumOps.ToDouble).ToArray() ?? Array.Empty<double>() }
-        };
-
-        var metadata = GetModelMetadata();
-        metadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(data));
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(metadata));
-    }
-
-    /// <inheritdoc />
-    public override void Deserialize(byte[] modelData)
-    {
-        var json = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(json);
-
-        if (metadata?.ModelData is null)
-            throw new InvalidOperationException("Invalid model data.");
-
-        var dataJson = Encoding.UTF8.GetString(metadata.ModelData);
-        var data = JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(dataJson);
-
-        if (data is null)
-            throw new InvalidOperationException("Invalid model data.");
-
-        NumFeatures = data["NumFeatures"]?.ToObject<int>() ?? 0;
-        IsFitted = data["IsFitted"]?.ToObject<bool>() ?? false;
-
-        var eventTimes = data["EventTimes"]?.ToObject<double[]>() ?? Array.Empty<double>();
-        var cumHazard = data["CumulativeHazard"]?.ToObject<double[]>() ?? Array.Empty<double>();
-        var variance = data["Variance"]?.ToObject<double[]>() ?? Array.Empty<double>();
-
-        TrainedEventTimes = new Vector<T>(eventTimes.Length);
-        _cumulativeHazard = new Vector<T>(cumHazard.Length);
-        _variance = new Vector<T>(variance.Length);
-
-        for (int i = 0; i < eventTimes.Length; i++)
-            TrainedEventTimes[i] = NumOps.FromDouble(eventTimes[i]);
-        for (int i = 0; i < cumHazard.Length; i++)
-            _cumulativeHazard[i] = NumOps.FromDouble(cumHazard[i]);
-        for (int i = 0; i < variance.Length; i++)
-            _variance[i] = NumOps.FromDouble(variance[i]);
-    }
 }

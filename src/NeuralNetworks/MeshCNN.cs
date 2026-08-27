@@ -54,7 +54,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MeshCNN: A Network with an Edge", "https://arxiv.org/abs/1809.05910", Year = 2019, Authors = "Rana Hanocka, Amir Hertz, Noa Fish, Raja Giryes, Shachar Fleishman, Daniel Cohen-Or")]
-public class MeshCNN<T> : GraphModelLayoutBase<T>
+public partial class MeshCNN<T> : GraphModelLayoutBase<T>
 {
     /// <summary>
     /// The loss function used to compute training loss.
@@ -490,113 +490,5 @@ public class MeshCNN<T> : GraphModelLayoutBase<T>
             },
             ModelData = SerializeForMetadata()
         };
-    }
-
-    /// <summary>
-    /// Serializes network-specific data.
-    /// </summary>
-    /// <param name="writer">Binary writer.</param>
-    /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.NumClasses);
-        writer.Write(_options.InputFeatures);
-        writer.Write(_options.NumNeighbors);
-        writer.Write(_options.UseBatchNorm);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.UseGlobalAveragePooling);
-
-        writer.Write(_options.ConvChannels.Length);
-        foreach (var ch in _options.ConvChannels)
-            writer.Write(ch);
-
-        writer.Write(_options.PoolTargets.Length);
-        foreach (var pt in _options.PoolTargets)
-            writer.Write(pt);
-
-        writer.Write(_options.FullyConnectedSizes.Length);
-        foreach (var fc in _options.FullyConnectedSizes)
-            writer.Write(fc);
-
-        // Per-mesh adjacency is NOT model state — write empty marker for backward compat
-        writer.Write(0);
-        writer.Write(0);
-    }
-
-    /// <summary>
-    /// Deserializes network-specific data.
-    /// </summary>
-    /// <param name="reader">Binary reader.</param>
-    /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _options.NumClasses = reader.ReadInt32();
-        _options.InputFeatures = reader.ReadInt32();
-        _options.NumNeighbors = reader.ReadInt32();
-        _options.UseBatchNorm = reader.ReadBoolean();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.UseGlobalAveragePooling = reader.ReadBoolean();
-
-        int convLen = reader.ReadInt32();
-        _options.ConvChannels = new int[convLen];
-        for (int i = 0; i < convLen; i++)
-            _options.ConvChannels[i] = reader.ReadInt32();
-
-        int poolLen = reader.ReadInt32();
-        _options.PoolTargets = new int[poolLen];
-        for (int i = 0; i < poolLen; i++)
-            _options.PoolTargets[i] = reader.ReadInt32();
-
-        int fcLen = reader.ReadInt32();
-        _options.FullyConnectedSizes = new int[fcLen];
-        for (int i = 0; i < fcLen; i++)
-            _options.FullyConnectedSizes[i] = reader.ReadInt32();
-
-        // Skip adjacency data from older serialized models (per-mesh adjacency is NOT model state)
-        // Callers must call SetEdgeAdjacency() for each new mesh sample
-        _currentEdgeAdjacency = null;
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-        {
-            int adjRows = reader.ReadInt32();
-            int adjCols = reader.ReadInt32();
-            if (adjRows > 0 && adjCols > 0)
-            {
-                // Skip the adjacency data but don't restore it
-                for (int r = 0; r < adjRows; r++)
-                    for (int c = 0; c < adjCols; c++)
-                        reader.ReadInt32();
-            }
-        }
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// MeshCNN's per-mesh edge adjacency is intentionally NOT serialized as model
-    /// state (see <see cref="SerializeNetworkSpecificData"/>) because real workloads
-    /// supply a fresh adjacency per mesh sample via <see cref="SetEdgeAdjacency"/>.
-    /// However, <see cref="Clone"/> consumers expect to call <c>Predict</c> on the
-    /// clone with the same input the original was using, so we propagate the live
-    /// adjacency to the clone alongside the serialized weights. This preserves
-    /// "clone reproduces original on the same input" without changing the on-disk
-    /// model format.
-    /// </remarks>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
-    {
-        var clone = base.Clone();
-        if (clone is MeshCNN<T> meshClone && _currentEdgeAdjacency is not null)
-        {
-            meshClone.SetEdgeAdjacency(_currentEdgeAdjacency);
-        }
-        return clone;
-    }
-
-    /// <summary>
-    /// Creates a new instance for cloning.
-    /// </summary>
-    /// <returns>New MeshCNN instance.</returns>
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new MeshCNN<T>(_options, _optimizer, _lossFunction);
     }
 }

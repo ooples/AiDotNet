@@ -1087,28 +1087,10 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.EmbeddingDimension);
-        writer.Write(_dataWidth);
-        writer.Write(_numClasses);
-        writer.Write(IsFitted);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32();
-        _dataWidth = reader.ReadInt32();
-        _numClasses = reader.ReadInt32();
-        IsFitted = reader.ReadBoolean();
-    }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TableGANGenerator<T>(Architecture, _options);
-    }
 
     /// <inheritdoc />
     public override Dictionary<string, T> GetFeatureImportance()

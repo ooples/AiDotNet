@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
-public class NeuralNetworkBaseIntegrationTests
+public partial class NeuralNetworkBaseIntegrationTests
 {
     private static Tensor<float> CreateRandomTensor(int[] shape, int seed = 42)
     {
@@ -191,7 +191,7 @@ public class NeuralNetworkBaseIntegrationTests
         Assert.Contains("Arrays cannot shrink", arrayException.Message, StringComparison.Ordinal);
     }
 
-    private sealed class TestNeuralNetwork : VectorModelLayoutBase<float>
+    private sealed partial class TestNeuralNetwork : VectorModelLayoutBase<float>
     {
         public TestNeuralNetwork(NeuralNetworkArchitecture<float> architecture)
             : base(architecture, new MeanSquaredErrorLoss<float>())
@@ -293,18 +293,13 @@ public class NeuralNetworkBaseIntegrationTests
         protected override void DeserializeNetworkSpecificData(BinaryReader reader)
         {
         }
-
-        protected override IFullModel<float, Tensor<float>, Tensor<float>> CreateNewInstance()
-        {
-            return new TestNeuralNetwork(Architecture);
-        }
     }
 
     [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Features,
         Direction = AiDotNet.Attributes.TensorLayoutDirection.Input)]
     [AiDotNet.Attributes.TensorLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Features,
         Direction = AiDotNet.Attributes.TensorLayoutDirection.Output)]
-    private sealed class PredictCoreOverrideNetwork : NeuralNetworkBase<float>
+    private sealed partial class PredictCoreOverrideNetwork : NeuralNetworkBase<float>
     {
         public PredictCoreOverrideNetwork(NeuralNetworkArchitecture<float> architecture)
             : base(architecture, new MeanSquaredErrorLoss<float>())
@@ -334,8 +329,5 @@ public class NeuralNetworkBaseIntegrationTests
         protected override void DeserializeNetworkSpecificData(BinaryReader reader)
         {
         }
-
-        protected override IFullModel<float, Tensor<float>, Tensor<float>> CreateNewInstance()
-            => new PredictCoreOverrideNetwork(Architecture);
     }
 }

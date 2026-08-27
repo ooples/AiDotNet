@@ -480,12 +480,6 @@ public partial class Stockformer<T> : CrossSectionalGraphModelBase<T>
         }
     }
 
-    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
-    // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new Stockformer<T>(_options) { AssetGraph = AssetGraph, AssetEmbedding = AssetEmbedding };
-
     /// <summary>Builds the architecture descriptor the financial base requires.</summary>
     /// <remarks>
     /// <para>

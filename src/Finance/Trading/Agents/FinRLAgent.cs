@@ -49,7 +49,7 @@ public partial class FinRLAgent<T> : TradingAgentBase<T>
 
     #region Fields
 
-    private readonly FinRLAgentOptions<T> _options;
+    private readonly TradingAgentOptions<T> _options;
     private readonly TradingAgentBase<T> _innerAgent;
     private readonly FinRLAlgorithm _algorithm;
     private readonly NeuralNetworkArchitecture<T> _primaryArchitecture;
@@ -93,7 +93,7 @@ public partial class FinRLAgent<T> : TradingAgentBase<T>
         NeuralNetworkArchitecture<T>? secondaryArchitecture = null)
         : base(options)
     {
-        _options = options as FinRLAgentOptions<T> ?? new FinRLAgentOptions<T>();
+        _options = options;
 
         _algorithm = algorithm;
         Guard.NotNull(primaryArchitecture);
@@ -219,47 +219,6 @@ public partial class FinRLAgent<T> : TradingAgentBase<T>
 
     #region Serialization
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinRLAgent model, Serialize saves or restores model-specific settings. This lets the FinRLAgent architecture be reused later.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        writer.Write((int)_algorithm);
-        var innerData = _innerAgent.Serialize();
-        writer.Write(innerData.Length);
-        writer.Write(innerData);
-
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinRLAgent model, Deserialize saves or restores model-specific settings. This lets the FinRLAgent architecture be reused later.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        var algorithm = (FinRLAlgorithm)reader.ReadInt32();
-        if (algorithm != _algorithm)
-        {
-            throw new InvalidOperationException($"Cannot deserialize {algorithm} data into {_algorithm} agent.");
-        }
-
-        int innerLength = reader.ReadInt32();
-        var innerData = reader.ReadBytes(innerLength);
-        _innerAgent.Deserialize(innerData);
-    }
-
     #endregion
 
     #region Model Metadata
@@ -276,19 +235,6 @@ public partial class FinRLAgent<T> : TradingAgentBase<T>
         innerMetadata.AdditionalInfo["WrapperType"] = "FinRL";
         innerMetadata.AdditionalInfo["Algorithm"] = _algorithm.ToString();
         return innerMetadata;
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinRLAgent model, Clone performs a supporting step in the workflow. It keeps the FinRLAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new FinRLAgent<T>(_primaryArchitecture, TradingOptions, _algorithm, _secondaryArchitecture);
-        clone.SetParameters(GetParameters());
-        return clone;
     }
 
 

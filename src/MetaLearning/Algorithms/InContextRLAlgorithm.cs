@@ -67,9 +67,11 @@ public partial class InContextRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<
     private readonly int _compressedDim;
 
     /// <summary>Context encoder parameters: gradient → context entry.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _contextEncoderParams;
 
     /// <summary>Context-to-parameter modulation projection.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _modulationParams;
 
     /// <inheritdoc/>

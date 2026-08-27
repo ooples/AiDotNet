@@ -89,46 +89,6 @@ public partial class StyDiffModel<T> : LatentDiffusionModelBase<T>
             baseChannels: 128, channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocksPerLevel: 2, seed: seed);
     }
 
-
-
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    public override IDiffusionModel<T> Clone()
-    {
-        var optionsCopy = new DiffusionModelOptions<T>((DiffusionModelOptions<T>)Options);
-
-        // Fast path: O(1) copy-on-write share when the default clone is structurally identical
-        // (the common foundation-scale case the COW lever targets — no re-materialization/OOM).
-        var clone = new StyDiffModel<T>(
-            architecture: Architecture,
-            options: optionsCopy,
-            scheduler: Scheduler,
-            conditioner: _conditioner,
-            seed: null);
-        if (clone.TryShareParametersFrom(this)) return clone;
-        // Structure mismatch ⇒ custom architecture/predictor/VAE the default clone can't reproduce;
-        // rebuild faithfully from this instance's configuration so the clone is observationally
-        // identical instead of throwing on a parameter-count mismatch.
-        var rebuilt = new StyDiffModel<T>(
-            architecture: Architecture,
-            options: new DiffusionModelOptions<T>((DiffusionModelOptions<T>)Options),
-            scheduler: Scheduler,
-            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            seed: null);
-        // The cloned sub-models have the same materialized structure as the source. Bind the rebuilt
-        // model to the exact same Tensor objects through DiffusionModelBase's reference-counted COW
-        // path, rather than creating new CloneShared tensor wrappers. The wrappers preserve values but
-        // have independent tensor identity/version state, so the CPU packed-weight cache can take a
-        // different cold path in the clone; DDIM compounds that small first-step reduction difference
-        // across its denoising loop (the Linux CI failure was 3.43e-5). ShareWeightsFrom preserves both
-        // values and inference-cache identity while EnsureOwnWeights still detaches either model before
-        // training or SetParameters, keeping clone independence.
-        rebuilt.ShareWeightsFrom(this);
-        return rebuilt;
-    }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T> { Name = "StyDiff", Version = "1.0",

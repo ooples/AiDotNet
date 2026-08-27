@@ -56,21 +56,15 @@ public class TabPFNRegression<T> : TabPFNBase<T>
     private readonly int _outputDimension;
     private readonly FullyConnectedLayer<T> _regressionHead;
 
+    [Scratch]
     private Tensor<T>? _backboneOutputCache;
+    [Scratch]
     private Tensor<T>? _predictionsCache;
 
     /// <summary>
     /// Gets the output dimension.
     /// </summary>
     public int OutputDimension => _outputDimension;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <inheritdoc />
-    /// <remarks>The head, folded after the shared backbone by the base's single traversal.</remarks>
-    protected override IEnumerable<ILayer<T>> GetExtraTrainableLayers()
-        => new ILayer<T>[] { _regressionHead };
 
     /// <summary>
     /// Initializes a new instance of the TabPFNRegression class.

@@ -63,7 +63,7 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Isolation Forest", "https://doi.org/10.1109/ICDM.2008.17", Year = 2008, Authors = "Fei Tony Liu, Kai Ming Ting, Zhi-Hua Zhou")]
-public class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
+public partial class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
 {
     private readonly TimeSeriesIsolationForestOptions<T> _options;
 
@@ -523,64 +523,10 @@ public class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        // Write options
-        writer.Write(_options.NumTrees);
-        writer.Write(_options.SampleSize ?? 256);
-        writer.Write(_options.MaxDepth ?? -1);
-        writer.Write(_options.ContaminationRate);
-        writer.Write(_options.LagFeatures);
-        writer.Write(_options.RollingWindowSize);
-        writer.Write(_options.UseSeasonalDecomposition);
-        writer.Write(_options.SeasonalPeriod);
-        writer.Write(_options.UseTrendFeatures);
-        writer.Write(_options.RandomSeed ?? 42);
 
-        // Write computed values
-        writer.Write(_anomalyThreshold);
-        writer.Write(_effectiveSampleSize);
-        writer.Write(_effectiveMaxDepth);
-
-        // Write forest
-        writer.Write(_forest?.Count ?? 0);
-        if (_forest != null)
-        {
-            foreach (var tree in _forest)
-            {
-                SerializeTree(writer, tree);
-            }
-        }
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        // Read options (skip, they're set via constructor)
-        _ = reader.ReadInt32(); // NumTrees
-        _ = reader.ReadInt32(); // SampleSize
-        _ = reader.ReadInt32(); // MaxDepth
-        _ = reader.ReadDouble(); // ContaminationRate
-        _ = reader.ReadInt32(); // LagFeatures
-        _ = reader.ReadInt32(); // RollingWindowSize
-        _ = reader.ReadBoolean(); // UseSeasonalDecomposition
-        _ = reader.ReadInt32(); // SeasonalPeriod
-        _ = reader.ReadBoolean(); // UseTrendFeatures
-        _ = reader.ReadInt32(); // RandomSeed
 
-        // Read computed values
-        _anomalyThreshold = reader.ReadDouble();
-        _effectiveSampleSize = reader.ReadInt32();
-        _effectiveMaxDepth = reader.ReadInt32();
-
-        // Read forest
-        int forestSize = reader.ReadInt32();
-        _forest = new List<IsolationTree<T>>();
-        for (int i = 0; i < forestSize; i++)
-        {
-            _forest.Add(DeserializeTree(reader));
-        }
-    }
 
     private void SerializeTree(BinaryWriter writer, IsolationTree<T> tree)
     {

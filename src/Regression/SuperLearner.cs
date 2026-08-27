@@ -62,7 +62,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Super Learner", "https://doi.org/10.2202/1544-6115.1309", Year = 2007, Authors = "Mark J. van der Laan, Eric C. Polley, Alan E. Hubbard")]
-public class SuperLearner<T> : NonLinearRegressionBase<T>
+public partial class SuperLearner<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
     /// Initializes a new instance with a default base model.
@@ -80,6 +80,7 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Meta-learner weights or coefficients.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _metaWeights;
 
     /// <summary>
@@ -90,6 +91,7 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Cross-validation performance of each base model.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _cvPerformance;
 
     /// <summary>
@@ -966,119 +968,6 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
     {
         return Enumerable.Range(0, _numFeatures > 0 ? _numFeatures : 0);
     }
-
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Options
-        writer.Write(_options.NumFolds);
-        writer.Write((int)_options.MetaLearnerType);
-        writer.Write(_numFeatures);
-
-        // Meta weights
-        writer.Write(_metaWeights?.Length ?? 0);
-        if (_metaWeights != null)
-        {
-            foreach (var w in _metaWeights)
-            {
-                writer.Write(NumOps.ToDouble(w));
-            }
-        }
-        writer.Write(NumOps.ToDouble(_metaIntercept));
-
-        // Normalization params
-        writer.Write(_predMeans?.Length ?? 0);
-        if (_predMeans != null && _predStds != null)
-        {
-            foreach (var mean in _predMeans)
-            {
-                writer.Write(NumOps.ToDouble(mean));
-            }
-            foreach (var std in _predStds)
-            {
-                writer.Write(NumOps.ToDouble(std));
-            }
-        }
-
-        // Note: Base models need to be serialized separately in a real implementation
-
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        int baseLen = reader.ReadInt32();
-        base.Deserialize(reader.ReadBytes(baseLen));
-
-        _options.NumFolds = reader.ReadInt32();
-        _options.MetaLearnerType = (SuperLearnerMetaLearner)reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-
-        int numWeights = reader.ReadInt32();
-        if (numWeights > 0)
-        {
-            _metaWeights = new Vector<T>(numWeights);
-            for (int i = 0; i < numWeights; i++)
-            {
-                _metaWeights[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-        _metaIntercept = NumOps.FromDouble(reader.ReadDouble());
-
-        int numMeans = reader.ReadInt32();
-        if (numMeans > 0)
-        {
-            _predMeans = new Vector<T>(numMeans);
-            _predStds = new Vector<T>(numMeans);
-            for (int i = 0; i < numMeans; i++)
-            {
-                _predMeans[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-            for (int i = 0; i < numMeans; i++)
-            {
-                _predStds[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-    }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        // Clone each base model
-        var clonedModels = new List<IFullModel<T, Matrix<T>, Vector<T>>>();
-        foreach (var model in _baseModels)
-            clonedModels.Add(model.Clone());
-
-        var clone = new SuperLearner<T>(clonedModels, _options, Regularization);
-        if (SupportVectors.Rows > 0)
-            clone.SupportVectors = SupportVectors.Clone();
-        if (Alphas.Length > 0)
-            clone.Alphas = new Vector<T>(Alphas);
-        clone.B = B;
-        clone._metaIntercept = _metaIntercept;
-        clone._numFeatures = _numFeatures;
-        if (_metaWeights is not null)
-            clone._metaWeights = new Vector<T>(_metaWeights);
-        if (_cvPerformance is not null)
-            clone._cvPerformance = new Vector<T>(_cvPerformance);
-        if (_predMeans is not null)
-            clone._predMeans = new Vector<T>(_predMeans);
-        if (_predStds is not null)
-            clone._predStds = new Vector<T>(_predStds);
-        return clone;
-    }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <inheritdoc/>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()

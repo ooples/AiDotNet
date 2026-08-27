@@ -50,7 +50,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Fast Conformer with Linearly Scalable Attention for Efficient Speech Recognition", "https://doi.org/10.48550/arXiv.2305.05084", Year = 2023, Authors = "Dima Rekesh, Nithin Rao Koluguri, Samuel Kriman, Somshubra Majumdar, Vahid Noroozi, He Huang, Oleksii Hrinchuk, Krishna Puvvada, Ankur Kumar, Jagadeesh Balam, Boris Ginsburg")]
-public class FastConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class FastConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     #region Fields
 
@@ -221,47 +221,9 @@ public class FastConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.Variant);
-        w.Write(_options.EncoderDim); w.Write(_options.NumLayers);
-        w.Write(_options.NumHeads); w.Write(_options.FeedForwardDim);
-        w.Write(_options.ConvKernelSize); w.Write(_options.DownsampleFactor);
-        w.Write(_options.NumMels); w.Write(_options.VocabSize);
-        w.Write(_options.DropoutRate); w.Write(_options.Language);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.Variant = r.ReadString();
-        _options.EncoderDim = r.ReadInt32(); _options.NumLayers = r.ReadInt32();
-        _options.NumHeads = r.ReadInt32(); _options.FeedForwardDim = r.ReadInt32();
-        _options.ConvKernelSize = r.ReadInt32(); _options.DownsampleFactor = r.ReadInt32();
-        _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } modelPath && !string.IsNullOrEmpty(modelPath))
-            return new FastConformer<T>(Architecture, modelPath, new FastConformerOptions(_options));
 
-        // A NON-ADAMW OPTIMIZER IS FORWARDED RATHER THAN DROPPED. The pattern-match rebuilds an AdamW
-        // from its options, which is the right thing when it matches -- the clone gets an independent
-        // optimizer with the same configuration. But the null on the other branch silently discarded a
-        // caller-supplied optimizer of any other type, so cloning an SGD- or Lion-trained model handed
-        // back one that had quietly reverted to the default. There is no generic way to deep-copy an
-        // arbitrary IGradientBasedOptimizer, so the instance is passed through: shared optimizer state
-        // between clone and original is a real limitation, and it is a smaller one than losing the
-        // caller's choice of algorithm without saying so.
-        var cloneOptimizer = _optimizer?.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
-            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options))
-            : _optimizer;
-        return new FastConformer<T>(Architecture, new FastConformerOptions(_options), cloneOptimizer);
-    }
 
     #endregion
 

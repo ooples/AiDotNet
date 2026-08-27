@@ -133,33 +133,56 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastQuery;
+    [Scratch]
     private Tensor<T>? _lastKey;
+    [Scratch]
     private Tensor<T>? _lastValue;
+    [Scratch]
     private Tensor<T>? _lastBeta;
+    [Scratch]
     private Tensor<T>? _lastAlpha;
+    [Scratch]
     private Tensor<T>? _lastHouseholderVecs;
+    [Scratch]
     private Tensor<T>? _lastRecurrenceOutput;
+    [Scratch]
     private Tensor<T>? _lastOutputGate;
+    [Scratch]
     private Tensor<T>? _lastOutputGateRaw;
     [Scratch]
     private readonly List<Tensor<T>> _recurrenceInitialStates = [];
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _betaWeightsGradient;
+    [Scratch]
     private Tensor<T>? _betaBiasGradient;
+    [Scratch]
     private Tensor<T>? _alphaWeightsGradient;
+    [Scratch]
     private Tensor<T>? _alphaBiasGradient;
+    [Scratch]
     private Tensor<T>? _householderWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />
@@ -184,6 +207,9 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
     /// Gets the number of Householder reflections per timestep.
     /// </summary>
     public int NumHouseholders => _numHouseholders;
+
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
 
     /// <summary>
     /// Creates a new Gated DeltaProduct layer.
@@ -216,6 +242,7 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

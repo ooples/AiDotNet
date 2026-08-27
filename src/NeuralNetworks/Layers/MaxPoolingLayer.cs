@@ -144,6 +144,7 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stores the last input tensor from the forward pass for use in autodiff backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -390,38 +391,6 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
             return Engine.Reshape(output4D, actualOutputShape);
         }
         return output4D;
-    }
-
-    /// <summary>
-    /// Saves the layer's configuration to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer to write the data to.</param>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method saves the layer's settings (pool size and stride)
-    /// so that you can reload the exact same layer later. It's like saving your game
-    /// progress so you can continue from where you left off.
-    /// </remarks>
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-        writer.Write(PoolSize);
-        writer.Write(Stride);
-    }
-
-    /// <summary>
-    /// Loads the layer's configuration from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader to read the data from.</param>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method loads previously saved settings for the layer.
-    /// It's the counterpart to Serialize - if Serialize is like saving your game,
-    /// Deserialize is like loading that saved game.
-    /// </remarks>
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-        PoolSize = reader.ReadInt32();
-        Stride = reader.ReadInt32();
     }
 
     /// <summary>

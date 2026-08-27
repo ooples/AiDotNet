@@ -94,27 +94,6 @@ public partial class IDMVTONModel<T> : LatentDiffusionModelBase<T>
 
 
 
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    public override IDiffusionModel<T> Clone()
-    {
-        // Clone the ACTUAL predictor and VAE (mirrors MultiDiffusionModel/SpotDiffusionModel): the
-        // previous code passed only conditioner/seed, so the clone rebuilt the DEFAULT-sized UNet/VAE
-        // while this model may hold a custom-sized predictor/vae, making GetParameters() mismatch and
-        // clone.SetParameters throw "Expected X, got Y". Pass the cloned predictor/VAE (+ same
-        // architecture/options/scheduler) so the clone is structurally identical to the source.
-        var clone = new IDMVTONModel<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            seed: null);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
-    }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T> { Name = "IDM-VTON", Version = "1.0",

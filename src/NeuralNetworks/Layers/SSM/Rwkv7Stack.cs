@@ -47,6 +47,24 @@ public partial class Rwkv7Stack<T> : LayerBase<T>, IShapeContract
 {
     private readonly List<RWKV7Block<T>> _blocks;
 
+    /// <summary>Construction state: the 'numLayers' the layer was built with.</summary>
+    private readonly int _numLayers;
+
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
+
+    /// <summary>Construction state: the 'ffnMultiplier' the layer was built with.</summary>
+    private readonly double _ffnMultiplier;
+
+    /// <summary>Construction state: the 'globalIclrMultiplier' the layer was built with.</summary>
+    private readonly double _globalIclrMultiplier;
+
+    /// <summary>Construction state: the 'modelDimension' the layer was built with.</summary>
+    private readonly int _modelDimension;
+
+    /// <summary>Construction state: the 'numHeads' the layer was built with.</summary>
+    private readonly int _numHeads;
+
     /// <summary>Creates a stack of RWKV-7 blocks sharing one value-residual chain.</summary>
     /// <param name="numLayers">Number of blocks. Must be at least one.</param>
     /// <param name="sequenceLength">Maximum sequence length.</param>
@@ -67,6 +85,12 @@ public partial class Rwkv7Stack<T> : LayerBase<T>, IShapeContract
         : base([sequenceLength, modelDimension], [sequenceLength, modelDimension],
                (IActivationFunction<T>)new IdentityActivation<T>())
     {
+        _numHeads = numHeads;
+        _modelDimension = modelDimension;
+        _globalIclrMultiplier = globalIclrMultiplier;
+        _ffnMultiplier = ffnMultiplier;
+        _sequenceLength = sequenceLength;
+        _numLayers = numLayers;
         if (numLayers < 1)
             throw new ArgumentOutOfRangeException(nameof(numLayers), "An RWKV-7 stack needs at least one block.");
 

@@ -18,7 +18,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "8, 2, 2, 4, 4, 2")]
 [ElementWiseShape(Note = "Attention and MLP residuals preserve the token grid and hidden width.")]
-public class SVTRMixingBlockLayer<T> : LayerBase<T>
+public partial class SVTRMixingBlockLayer<T> : LayerBase<T>
 {
     private readonly int _hiddenSize;
     private readonly int _numHeads;

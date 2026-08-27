@@ -27,7 +27,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class ContrastivePretraining<T>
+public partial class ContrastivePretraining<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private IEngine Engine => AiDotNetEngine.Current;
@@ -38,12 +38,16 @@ public class ContrastivePretraining<T>
     private readonly double _temperature;
 
     // Projection head for contrastive learning
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _projectionWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _projectionBias;
     private readonly int _projectionDim;
 
     // Cached values
+    [Scratch]
     private Tensor<T>? _originalEmbeddingsCache;
+    [Scratch]
     private Tensor<T>? _corruptedEmbeddingsCache;
     private int[]? _corruptedIndicesCache;
 

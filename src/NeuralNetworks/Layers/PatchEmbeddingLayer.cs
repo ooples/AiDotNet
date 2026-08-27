@@ -174,6 +174,7 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached input from the forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -196,20 +197,25 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private bool _paramsLoadedViaSetParameters;
 
+    [Scratch]
     private Tensor<T>? _projectionWeightsGradient;
 
     /// <summary>
     /// Gradients for projection bias calculated during backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _projectionBiasGradient;
 
     /// <summary>
     /// Cached pre-activation tensor from forward pass for use in activation derivative calculation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPreActivation;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput;
+    [ExternalState]
     private Tensor<T>? _gpuPatchesFlat;
     private int _gpuBatchSize;
     private bool _gpuHasBatch;
@@ -217,15 +223,25 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     #region GPU Weight Storage Fields
 
     // GPU tensors for GPU-resident training
+    [ExternalState]
     private Tensor<T>? _gpuWeights;
+    [ExternalState]
     private Tensor<T>? _gpuBias;
+    [ExternalState]
     private Tensor<T>? _gpuWeightGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBiasGradient;
+    [ExternalState]
     private Tensor<T>? _gpuWeightVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBiasVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuWeightM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightV;
+    [ExternalState]
     private Tensor<T>? _gpuBiasM;
+    [ExternalState]
     private Tensor<T>? _gpuBiasV;
 
     #endregion

@@ -56,7 +56,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/1905.02716",
     Year = 2019,
     Authors = "Xintao Wang, Kelvin C.K. Chan, Ke Yu, Chao Dong, Chen Change Loy")]
-public class EDVR<T> : VideoSuperResolutionBase<T>
+public partial class EDVR<T> : VideoSuperResolutionBase<T>
 {
     private readonly EDVROptions _options;
 
@@ -303,18 +303,9 @@ public class EDVR<T> : VideoSuperResolutionBase<T>
         ModelData = _useNativeMode ? this.Serialize() : []
     };
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numFeatures); writer.Write(_numFrames); writer.Write(_numBlocks); writer.Write(_scaleFactor);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        for (int i = 0; i < 4; i++) _ = reader.ReadInt32();
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new EDVR<T>(Architecture, _optimizer, _lossFunction, _numFeatures, _numFrames, _numBlocks, _scaleFactor);
+
 
     #endregion
 

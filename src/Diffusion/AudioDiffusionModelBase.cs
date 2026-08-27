@@ -30,7 +30,7 @@ namespace AiDotNet.Diffusion;
 /// 5. A vocoder converts the spectrogram back to audio
 /// </para>
 /// </remarks>
-public abstract class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, IAudioDiffusionModel<T>
+public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelBase<T>, IAudioDiffusionModel<T>
 {
     /// <summary>
     /// Sample rate in Hz.

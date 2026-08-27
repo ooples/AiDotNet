@@ -107,7 +107,9 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     private int[]? _originalInputShape;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput3D;
+    [ExternalState]
     private Tensor<T>? _gpuNormalized1;
 
     /// <summary>
@@ -324,30 +326,6 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         parameters.AddRange(_norm2.GetTrainableParameters());
         return parameters;
     }
-
-
-    public override void Serialize(BinaryWriter writer)
-    {
-        // Persist _embeddingSize so Deserialize can re-resolve sublayers
-        // before SetParameters runs. The composite param vector layout
-        // requires _embeddingSize to compute sublayer sizes; without
-        // it, SetParameters throws (sublayers haven't been constructed).
-        writer.Write(_embeddingSize);
-        base.Serialize(writer);
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        int savedEmbeddingSize = reader.ReadInt32();
-        if (!_isInitialized && savedEmbeddingSize > 0)
-        {
-            // ResolveFromShape with [embeddingSize] triggers
-            // EnsureInitialized which constructs the sublayers.
-            ResolveFromShape(new[] { savedEmbeddingSize });
-        }
-        base.Deserialize(reader);
-    }
-
     public override Vector<T> GetParameterGradients()
     {
         if (!_isInitialized) return new Vector<T>(0);

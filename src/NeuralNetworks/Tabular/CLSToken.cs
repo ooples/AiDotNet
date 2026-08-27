@@ -28,13 +28,15 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ComponentType(ComponentType.Encoder)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class CLSToken<T>
+public partial class CLSToken<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private IEngine Engine => AiDotNetEngine.Current;
     private readonly Random _random;
 
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _clsEmbedding;
+    [Scratch]
     private Tensor<T> _clsGradient;
 
     /// <summary>

@@ -83,6 +83,7 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
     // Head parameters (frozen during inner loop)
     private Vector<T> _headWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _headBias;
 
     // Body parameters (adapted per-task)

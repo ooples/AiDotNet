@@ -38,7 +38,7 @@ namespace AiDotNet.LossFunctions;
 /// short way round the clock, which is what lets the model learn phase at all.</para>
 /// </remarks>
 /// <typeparam name="T">Numeric type (float / double).</typeparam>
-public sealed class APNet2GeneratorLoss<T> : LossFunctionBase<T>
+public sealed partial class APNet2GeneratorLoss<T> : LossFunctionBase<T>
 {
     private const double TwoPi = 2.0 * Math.PI;
     private const double HalfPi = Math.PI / 2.0;
@@ -56,7 +56,9 @@ public sealed class APNet2GeneratorLoss<T> : LossFunctionBase<T>
     // Constant bases, built once. They carry no gradient, and rebuilding a [nFft, bins] pair on
     // every training step would cost more than the loss itself.
     private Tensor<T>? _window;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _dftCos;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _dftSin;
     private Tensor<T>? _melTransposed;
 

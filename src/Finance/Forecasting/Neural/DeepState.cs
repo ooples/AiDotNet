@@ -561,47 +561,6 @@ public partial class DeepState<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a fresh copy of the model architecture.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new DeepStateOptions<T>
-        {
-            LookbackWindow = _lookbackWindow,
-            ForecastHorizon = _forecastHorizon,
-            StateDimension = _stateDimension,
-            HiddenDimension = _hiddenDimension,
-            NumRnnLayers = _numRnnLayers,
-            SeasonalPeriods = _seasonalPeriods,
-            UseTrend = _useTrend,
-            UseSeasonality = _useSeasonality,
-            DropoutRate = _dropout
-        };
-
-        if (_useNativeMode)
-        {
-            return new DeepState<T>(Architecture, options);
-        }
-        else
-        {
-            // Use null-coalescing throw to satisfy null analysis across all framework targets
-            string onnxPath = OnnxModelPath ?? throw new InvalidOperationException(
-                "Cannot create new instance from ONNX mode when OnnxModelPath is not available.");
-            if (onnxPath.Length == 0)
-            {
-                throw new InvalidOperationException(
-                    "Cannot create new instance from ONNX mode when OnnxModelPath is empty.");
-            }
-            return new DeepState<T>(Architecture, onnxPath, options);
-        }
-    }
-
-    /// <summary>
     /// Writes DeepState-specific configuration during serialization.
     /// </summary>
     /// <remarks>
@@ -609,21 +568,7 @@ public partial class DeepState<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> Saves all the configuration needed to reconstruct this model.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_lookbackWindow);
-        writer.Write(_forecastHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_stateDimension);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numRnnLayers);
-        writer.Write(_seasonalPeriods.Length);
-        foreach (var period in _seasonalPeriods)
-            writer.Write(period);
-        writer.Write(_useTrend);
-        writer.Write(_useSeasonality);
-        writer.Write(_dropout);
-    }
+
 
     /// <summary>
     /// Reads DeepState-specific configuration during deserialization.
@@ -633,26 +578,7 @@ public partial class DeepState<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> Loads the configuration that was saved during serialization.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _lookbackWindow = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _stateDimension = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numRnnLayers = reader.ReadInt32();
-        int numPeriods = reader.ReadInt32();
-        _seasonalPeriods = new int[numPeriods];
-        for (int i = 0; i < numPeriods; i++)
-            _seasonalPeriods[i] = reader.ReadInt32();
-        _useTrend = reader.ReadBoolean();
-        _useSeasonality = reader.ReadBoolean();
-        _dropout = reader.ReadDouble();
 
-        // Re-bind cached layer references so a deserialized/cloned model runs on
-        // the restored layers, not the construction-time random ones.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

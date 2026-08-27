@@ -45,7 +45,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Marta Garnelo, Dan Rosenbaum, Christopher Maddison, et al.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class CNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
+public partial class CNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly CNPOptions<T, TInput, TOutput> _cnpOptions;
 

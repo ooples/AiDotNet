@@ -34,7 +34,7 @@ namespace AiDotNet.Video;
     Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output)]
-public abstract class VideoStabilizationBase<T> : VideoNeuralNetworkBase<T>, IShapeContract
+public abstract partial class VideoStabilizationBase<T> : VideoNeuralNetworkBase<T>, IShapeContract
 {
     /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)

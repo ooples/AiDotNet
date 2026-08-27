@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Autodiff;
 using AiDotNet.Attributes;
 
@@ -66,26 +66,42 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputWeights;  // [attentionDim, embeddingDim]
 
     // Residual projection (if dimensions don't match)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _residualWeights;  // [embeddingDim, embeddingDim] if needed
 
     // Gradients
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _queryWeightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _keyWeightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _valueWeightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputWeightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _residualWeightsGrad;
 
     // Cached values
+    [Scratch]
     private Tensor<T>? _inputCache;
+    [Scratch]
     private Tensor<T>? _queriesCache;
+    [Scratch]
     private Tensor<T>? _keysCache;
+    [Scratch]
     private Tensor<T>? _valuesCache;
+    [Scratch]
     private Tensor<T>? _attentionScoresCache;
+    [Scratch]
     private Tensor<T>? _attendedCache;
+    [Scratch]
     private Tensor<T>? _preActivationCache;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <summary>Construction state: the 'initScale' the layer was built with.</summary>
+    private readonly double _initScale;
 
     /// <summary>
     /// Initializes an interacting layer.
@@ -103,6 +119,7 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
         double initScale = 0.02)
         : base([embeddingDim], [embeddingDim])
     {
+        _initScale = initScale;
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
         _attentionDim = attentionDim ?? embeddingDim;

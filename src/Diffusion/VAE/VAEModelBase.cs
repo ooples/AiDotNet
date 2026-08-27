@@ -1,4 +1,4 @@
-﻿using AiDotNet.Autodiff;
+using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -23,10 +23,53 @@ namespace AiDotNet.Diffusion.VAE;
 /// They are essential for efficient latent diffusion models like Stable Diffusion.
 /// </para>
 /// </remarks>
-public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape,
+public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     AiDotNet.Models.Parameters.IParameterManifestProvider,
     AiDotNet.Models.Parameters.IParameterSurfaceLifecycle
 {
+    // --- declared state (ModelStateRegistry) ---
+    // Identical in every model base because these bases are siblings over the same interfaces rather
+    // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.
+
+    /// <summary>State that is not a parameter vector, declared once and persisted by this base.</summary>
+    private readonly AiDotNet.Models.ModelStateRegistry<T> _declaredState = new();
+    private bool _declaredStateRegistered;
+
+    /// <summary>
+    /// Declare state here that the parameter vector does not carry -- a retained training set,
+    /// fitted knots, kernel centres, an ensemble's children. Both halves of the payload are driven
+    /// by the declaration, so they cannot drift.
+    /// </summary>
+    /// <param name="state">The registry to declare into.</param>
+    protected virtual void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+    }
+    /// <summary>Generated state declarations for fields declared across this model's hierarchy.</summary>
+    /// <param name="state">The registry to declare into.</param>
+    /// <remarks>
+    /// Emitted by ModelStateGenerator into the partial model, so a model author declares nothing. The
+    /// hand-written <c>RegisterState</c> beside it exists only for state the classifier genuinely
+    /// cannot place; anything it CAN place belongs here, where it cannot be forgotten.
+    /// </remarks>
+    protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        RegisterGeneratedStateCore(state);
+    }
+
+    /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>
+    protected AiDotNet.Models.ModelStateRegistry<T> DeclaredState
+    {
+        get
+        {
+            if (!_declaredStateRegistered)
+            {
+                _declaredStateRegistered = true;
+                RegisterGeneratedState(_declaredState);
+                RegisterState(_declaredState);
+            }
+            return _declaredState;
+        }
+    }
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
     /// </summary>
@@ -239,19 +282,18 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     }
 
     /// <summary>
-    /// Streams the VAE's trainable weight tensors per-tensor without
+    /// Streams the VAE's registered parameter state in canonical stable-ID order without
     /// materialising a flat aggregate, mirroring PyTorch's
-    /// <c>nn.Module.parameters()</c> generator pattern. Default
-    /// implementation yields a single chunk wrapping
-    /// <see cref="GetParameters"/>; subclasses with separable
-    /// encoder/decoder weight stores can override to yield each piece
-    /// independently.
+    /// <c>nn.Module.parameters()</c> generator pattern. The shared registry lifecycle prepares
+    /// and materialises lazy sources before enumeration, so every VAE exposes the same complete
+    /// surface through flat reads, chunk reads, cloning, and checkpointing without model-specific
+    /// plumbing.
     /// </summary>
     public virtual IEnumerable<Tensor<T>> GetParameterChunks()
     {
-        var p = GetParameters();
-        if (p.Length == 0) yield break;
-        yield return new Tensor<T>(new[] { p.Length }, p);
+        EnsureComponentsRegistered();
+        foreach (var chunk in _parameterRegistry.GetParameterStateChunks())
+            yield return chunk.Tensor;
     }
 
     /// <summary>
@@ -480,12 +522,15 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape,
         ModelPersistenceGuard.EnforceBeforeSerialize();
         using var stream = new MemoryStream();
         SaveState(stream);
-        return stream.ToArray();
+        return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, stream.ToArray());
     }
 
     /// <inheritdoc />
     public virtual void Deserialize(byte[] data)
     {
+        // Strips and applies any declared-state trailer, so the body below reads the payload
+        // exactly as it did before this existed.
+        data = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, data);
         ThrowIfDisposed();
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         using var stream = new MemoryStream(data);
@@ -684,7 +729,29 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     #region ICloneable<IFullModel<T, Tensor<T>, Tensor<T>>> Implementation
 
     /// <inheritdoc />
-    public abstract IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy();
+    /// <remarks>
+    /// <para>
+    /// No longer abstract. Declaring it abstract here is what produced 267 hand-written DeepCopy and
+    /// Clone pairs across this family -- one per model, each re-listing the constructor arguments
+    /// its type happens to take. The clone plan records that constructor at compile time, so the
+    /// rebuild is the same code for every model and a new argument cannot be forgotten in 266 places.
+    /// </para>
+    /// <para>
+    /// Configuration is rebuilt, learned state is carried through the model's own Serialize and
+    /// Deserialize -- the public, overridable pair, so a model that persists something extra keeps
+    /// it. The guard is told this is an internal operation because a clone is not a save.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            byte[] state = Serialize();
+            var copy = (VAEModelBase<T>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
+            copy.Deserialize(state);
+            return copy;
+        }
+    }
 
     /// <inheritdoc />
     IFullModel<T, Tensor<T>, Tensor<T>> ICloneable<IFullModel<T, Tensor<T>, Tensor<T>>>.Clone()
@@ -696,7 +763,7 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     /// Creates a deep copy of the VAE model.
     /// </summary>
     /// <returns>A new instance with the same parameters.</returns>
-    public abstract IVAEModel<T> Clone();
+    public virtual IVAEModel<T> Clone() => (IVAEModel<T>)DeepCopy();
 
     #endregion
 

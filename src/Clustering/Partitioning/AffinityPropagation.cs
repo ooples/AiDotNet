@@ -53,7 +53,7 @@ namespace AiDotNet.Clustering.Partitioning;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Clustering by Passing Messages Between Data Points", "https://doi.org/10.1126/science.1136800", Year = 2007, Authors = "Brendan J. Frey, Delbert Dueck")]
-public class AffinityPropagation<T> : ClusteringBase<T>
+public partial class AffinityPropagation<T> : ClusteringBase<T>
 {
     private readonly AffinityPropagationOptions<T> _options;
 
@@ -83,20 +83,6 @@ public class AffinityPropagation<T> : ClusteringBase<T>
     public T[,]? SimilarityMatrix => _similarityMatrix;
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new AffinityPropagation<T>(new AffinityPropagationOptions<T>
-        {
-            Damping = _options.Damping,
-            Preference = _options.Preference,
-            MaxIterations = _options.MaxIterations,
-            ConvergenceIterations = _options.ConvergenceIterations,
-            AffinityType = _options.AffinityType,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

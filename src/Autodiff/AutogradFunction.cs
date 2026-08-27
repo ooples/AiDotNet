@@ -77,13 +77,26 @@ public abstract class AutogradFunction<T>
                     var inputGrads = Backward(ctx, gradOutput);
                     for (int i = 0; i < inputTensors.Length && i < inputGrads.Length; i++)
                     {
-                        if (inputGrads[i] is not null)
+                        if (inputGrads[i] is null) continue;
+
+                        // An IDENTITY function returns one of its own inputs, and the gradient map is
+                        // keyed by tensor identity, so output and input are the SAME key. Accumulating
+                        // there adds the gradient to itself: the tensor-parallel copy region made the
+                        // analytical input VJP exactly 2x the finite-difference one. The input's
+                        // gradient IS what Backward returned -- already carrying whatever that
+                        // function does to it, such as an all-reduce -- so it replaces rather than
+                        // adds. Returning a fresh tensor instead would break the alias the caller
+                        // relies on and disconnect the input from the graph entirely.
+                        if (ReferenceEquals(inputTensors[i], output))
                         {
-                            if (grads.TryGetValue(inputTensors[i], out var existing))
-                                eng.TensorAddInPlace(existing, inputGrads[i]);
-                            else
-                                grads[inputTensors[i]] = inputGrads[i];
+                            grads[inputTensors[i]] = inputGrads[i];
+                            continue;
                         }
+
+                        if (grads.TryGetValue(inputTensors[i], out var existing))
+                            eng.TensorAddInPlace(existing, inputGrads[i]);
+                        else
+                            grads[inputTensors[i]] = inputGrads[i];
                     }
                 },
                 InputCount = 0xFF,

@@ -34,7 +34,7 @@ namespace AiDotNet.Diffusion;
 /// 3. Score Distillation: Use 2D diffusion knowledge to guide 3D optimization
 /// </para>
 /// </remarks>
-public abstract class ThreeDDiffusionModelBase<T> : LatentDiffusionModelBase<T>, I3DDiffusionModel<T>
+public abstract partial class ThreeDDiffusionModelBase<T> : LatentDiffusionModelBase<T>, I3DDiffusionModel<T>
 {
     /// <summary>
     /// Default number of points in generated point clouds.

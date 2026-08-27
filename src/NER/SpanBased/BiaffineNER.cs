@@ -79,7 +79,6 @@ namespace AiDotNet.NER.SpanBased;
     Authors = "Juntao Yu, Bernd Bohnet, Massimo Poesio")]
 public class BiaffineNER<T> : SpanBasedNERBase<T>
 {
-
     /// <summary>
     /// Creates a Biaffine-NER model in ONNX inference mode.
     /// </summary>
@@ -129,18 +128,6 @@ public class BiaffineNER<T> : SpanBasedNERBase<T>
             biLstmLayers: BiaffineOptions.BiLstmLayers,
             biLstmDropout: BiaffineOptions.BiLstmDropout,
             embeddingsDropout: BiaffineOptions.EmbeddingsDropout);
-    }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Preserve the Biaffine-specific BiLSTM widths/dropouts as well as the shared span options.
-        // Down-casting to SpanBasedNEROptions here rebuilt clones with the paper defaults, so a
-        // conformance-sized model and its clone had different topology and decoded different labels.
-        var optionsCopy = new BiaffineNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new BiaffineNER<T>(Architecture, p, optionsCopy);
-        return new BiaffineNER<T>(Architecture, optionsCopy);
     }
 
     /// <summary>

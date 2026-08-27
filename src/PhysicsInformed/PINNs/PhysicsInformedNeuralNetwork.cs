@@ -93,7 +93,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
         Direction = TensorLayoutDirection.Input, BatchOptional = true)]
     [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
         Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-    public class PhysicsInformedNeuralNetwork<T> : NeuralNetworkBase<T>
+    public partial class PhysicsInformedNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         private readonly PhysicsInformedNeuralNetworkOptions _options;
 
@@ -638,82 +638,13 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// Serializes PINN-specific data.
         /// </summary>
         /// <param name="writer">Binary writer.</param>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            writer.Write(_numCollocationPoints);
-            writer.Write(_pdeSpecification.InputDimension);
-            writer.Write(_pdeSpecification.OutputDimension);
 
-            if (_collocationPoints == null)
-            {
-                writer.Write(false);
-                return;
-            }
-
-            writer.Write(true);
-            writer.Write(_collocationPoints.GetLength(0));
-            writer.Write(_collocationPoints.GetLength(1));
-
-            for (int i = 0; i < _collocationPoints.GetLength(0); i++)
-            {
-                for (int j = 0; j < _collocationPoints.GetLength(1); j++)
-                {
-                    SerializationHelper<T>.WriteValue(writer, _collocationPoints[i, j]);
-                }
-            }
-        }
 
         /// <summary>
         /// Deserializes PINN-specific data.
         /// </summary>
         /// <param name="reader">Binary reader.</param>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            int storedCollocationCount = reader.ReadInt32();
-            int storedInputDim = reader.ReadInt32();
-            int storedOutputDim = reader.ReadInt32();
 
-            if (storedCollocationCount != _numCollocationPoints ||
-                storedInputDim != _pdeSpecification.InputDimension ||
-                storedOutputDim != _pdeSpecification.OutputDimension)
-            {
-                throw new InvalidOperationException("Serialized PINN configuration does not match the current instance.");
-            }
-
-            bool hasPoints = reader.ReadBoolean();
-            if (!hasPoints)
-            {
-                _collocationPoints = null;
-                return;
-            }
-
-            int rows = reader.ReadInt32();
-            int cols = reader.ReadInt32();
-            _collocationPoints = new T[rows, cols];
-
-            for (int i = 0; i < rows; i++)
-            {
-                for (int j = 0; j < cols; j++)
-                {
-                    _collocationPoints[i, j] = SerializationHelper<T>.ReadValue(reader);
-                }
-            }
-        }
-
-        /// <summary>
-        /// Creates a new instance with the same configuration.
-        /// </summary>
-        /// <returns>New PINN instance.</returns>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new PhysicsInformedNeuralNetwork<T>(
-                Architecture,
-                _pdeSpecification,
-                _boundaryConditions,
-                _initialCondition,
-                _numCollocationPoints,
-                _optimizer);
-        }
 
         /// <summary>
         /// Indicates whether this PINN supports training.

@@ -62,6 +62,9 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>, IShapeContrac
     /// <param name="updateFrequencies">Update frequencies for each level (f1, f2, ..., fk)</param>
     /// <param name="learningRates">Learning rates per level</param>
     /// <param name="engine">The computation engine for vectorized operations. Defaults to CPU if not specified.</param>
+    /// <summary>Construction state: kept so the generated clone factory can rebuild this layer.</summary>
+    private readonly int _hiddenDim;
+
     public ContinuumMemorySystemLayer(
         int[] inputShape,
         int hiddenDim,
@@ -71,6 +74,7 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>, IShapeContrac
         IEngine? engine = null)
         : base(inputShape, new[] { hiddenDim })
     {
+        _hiddenDim = hiddenDim;
 
         // Validate inputs
         if (inputShape == null || inputShape.Length == 0)

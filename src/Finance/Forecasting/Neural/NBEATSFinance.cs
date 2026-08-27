@@ -592,21 +592,6 @@ public partial class NBEATSFinance<T> : ForecastingModelBase<T>
         };
     }
 
-    /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <returns>A new N-BEATS model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This creates a fresh copy of the model with the same settings
-    /// but new (randomly initialized) weights.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new NBEATSFinance<T>(Architecture, new NBEATSModelOptions<T>(_options));
-    }
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
     {
         bool clipGradients = _options.GradientClipNorm > 0.0;
@@ -637,18 +622,7 @@ public partial class NBEATSFinance<T> : ForecastingModelBase<T>
     /// can be loaded later with the same configuration.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_lookbackWindow);
-        writer.Write(_forecastHorizon);
-        writer.Write(_numStacks);
-        writer.Write(_numBlocksPerStack);
-        writer.Write(_hiddenSize);
-        writer.Write(_numHiddenLayers);
-        writer.Write(_polynomialDegree);
-        writer.Write(_useInterpretableBasis);
-        writer.Write(_shareWeightsInStack);
-    }
+
 
     /// <summary>
     /// Reads N-BEATS-specific configuration during deserialization.
@@ -659,31 +633,7 @@ public partial class NBEATSFinance<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> This reads back N-BEATS settings when loading a saved model.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _lookbackWindow = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _numStacks = reader.ReadInt32();
-        _numBlocksPerStack = reader.ReadInt32();
-        _hiddenSize = reader.ReadInt32();
-        _numHiddenLayers = reader.ReadInt32();
-        _polynomialDegree = reader.ReadInt32();
-        _useInterpretableBasis = reader.ReadBoolean();
-        _shareWeightsInStack = reader.ReadBoolean();
 
-        // Validate deserialized values
-        if (_lookbackWindow < 1)
-            throw new InvalidOperationException($"Deserialized lookbackWindow ({_lookbackWindow}) must be at least 1.");
-        if (_forecastHorizon < 1)
-            throw new InvalidOperationException($"Deserialized forecastHorizon ({_forecastHorizon}) must be at least 1.");
-        if (_numStacks < 1)
-            throw new InvalidOperationException($"Deserialized numStacks ({_numStacks}) must be at least 1.");
-        if (_numBlocksPerStack < 1)
-            throw new InvalidOperationException($"Deserialized numBlocksPerStack ({_numBlocksPerStack}) must be at least 1.");
-
-        // Extract layer references from deserialized layers
-        ExtractLayerReferences();
-    }
 
     #endregion
 

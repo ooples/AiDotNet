@@ -41,6 +41,7 @@ public partial class TemporalSelfAttention<T> : LayerBase<T>, IShapeContract
     private readonly int _numFrames;
     private readonly int _spatialSize;
     private readonly MultiHeadAttentionLayer<T> _temporalAttention;
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <inheritdoc />

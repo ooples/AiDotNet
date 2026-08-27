@@ -38,7 +38,7 @@ namespace AiDotNet.WaveletFunctions;
 /// vanishing moments but wider support.
 /// </para>
 /// </remarks>
-public class DaubechiesWavelet<T> : WaveletFunctionBase<T>
+public partial class DaubechiesWavelet<T> : WaveletFunctionBase<T>
 {
     /// <summary>
     /// The order of the Daubechies wavelet.
@@ -48,11 +48,13 @@ public class DaubechiesWavelet<T> : WaveletFunctionBase<T>
     /// <summary>
     /// The scaling function coefficients of the Daubechies wavelet.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _scalingCoefficients;
 
     /// <summary>
     /// The wavelet function coefficients of the Daubechies wavelet.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _waveletCoefficients;
 
     /// <summary>

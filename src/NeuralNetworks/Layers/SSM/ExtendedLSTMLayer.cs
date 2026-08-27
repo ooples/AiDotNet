@@ -126,16 +126,27 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastCellStates;
+    [Scratch]
     private Tensor<T>? _lastNormStates;
+    [Scratch]
     private Tensor<T>? _lastInputGates;
+    [Scratch]
     private Tensor<T>? _lastForgetGates;
+    [Scratch]
     private Tensor<T>? _lastOutputGates;
+    [Scratch]
     private Tensor<T>? _lastQ;
+    [Scratch]
     private Tensor<T>? _lastK;
+    [Scratch]
     private Tensor<T>? _lastV;
+    [Scratch]
     private Tensor<T>? _lastHiddenPreProj;
     private int[]? _originalInputShape;
 
@@ -149,20 +160,33 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
     // ever updates. Standardization (mean 0, var 1) with fixed gamma/beta keeps
     // the layer output unit-scale without introducing extra trainable parameters
     // (which would change the serialized parameter layout).
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _outputNormGamma;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _outputNormBeta;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _inputGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _inputGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _forgetGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _forgetGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />
@@ -182,6 +206,9 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
     /// Gets the dimension per head.
     /// </summary>
     public int HeadDimension => _headDimension;
+
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
 
     /// <summary>
     /// Creates a new Extended LSTM (xLSTM) layer using the mLSTM (matrix memory) variant.
@@ -208,6 +235,7 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (modelDimension <= 0)

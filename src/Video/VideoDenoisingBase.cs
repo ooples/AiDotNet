@@ -35,7 +35,7 @@ namespace AiDotNet.Video;
     Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output)]
-public abstract class VideoDenoisingBase<T> : VideoNeuralNetworkBase<T>, IShapeContract
+public abstract partial class VideoDenoisingBase<T> : VideoNeuralNetworkBase<T>, IShapeContract
 {
     /// <summary>
     /// Video denoisers accept public frame tensors on the unsigned 8-bit pixel scale.

@@ -72,11 +72,13 @@ public partial class MetaLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     /// Low-rank basis vectors stored as a flat vector of length rank * paramDim.
     /// Basis vector i occupies indices [i*paramDim, (i+1)*paramDim).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _loraBasis;
 
     /// <summary>
     /// Meta-learned initial coefficients for the low-rank basis (length = rank).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _loraCoeffInit;
 
     private readonly int _paramDim;

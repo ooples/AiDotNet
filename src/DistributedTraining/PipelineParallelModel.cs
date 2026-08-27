@@ -73,7 +73,7 @@ namespace AiDotNet.DistributedTraining;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ResearchPaper("GPipe: Efficient Training of Giant Neural Networks", "https://arxiv.org/abs/1811.06965")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
+public partial class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
     private readonly int _microBatchCount;
     private readonly IPipelinePartitionStrategy<T>? _partitionStrategy;
@@ -102,6 +102,7 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
 
     // Cached weight gradients from BackwardInput for fallback accumulation when model
     // does not support IPipelineDecomposableModel (emulated B/W split).
+    [Scratch]
     private readonly Dictionary<int, Vector<T>> _cachedWeightGradients = new();
 
     // Whether the wrapped model supports true B/W decomposition
@@ -1391,61 +1392,6 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
     }
 
     /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        EnsureShardingInitialized();
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-        writer.Write(WorldSize);
-        writer.Write(Rank);
-        writer.Write(_microBatchCount);
-        writer.Write(Config.AutoSyncGradients);
-        writer.Write(Config.MinimumParameterGroupSize);
-        writer.Write(Config.EnableGradientCompression);
-        writer.Write(_schedule.Name);
-        writer.Write(_checkpointConfig.Enabled);
-        writer.Write(_checkpointConfig.CheckpointEveryNLayers);
-        writer.Write(_virtualStagesPerRank);
-        var modelData = WrappedModel.Serialize();
-        writer.Write(modelData.Length);
-        writer.Write(modelData);
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-        int savedWorldSize = reader.ReadInt32();
-        int savedRank = reader.ReadInt32();
-        int savedMicroBatchCount = reader.ReadInt32();
-        reader.ReadBoolean(); // AutoSyncGradients
-        reader.ReadInt32(); // MinimumParameterGroupSize
-        reader.ReadBoolean(); // EnableGradientCompression
-        reader.ReadString(); // Schedule name (informational)
-        reader.ReadBoolean(); // Checkpointing enabled
-        reader.ReadInt32(); // CheckpointEveryNLayers
-        reader.ReadInt32(); // VirtualStagesPerRank (informational)
-
-        if (savedWorldSize != WorldSize)
-            throw new InvalidOperationException($"World size mismatch: {savedWorldSize} vs {WorldSize}");
-        if (savedRank != Rank)
-            throw new InvalidOperationException($"Rank mismatch: {savedRank} vs {Rank}");
-        if (savedMicroBatchCount != _microBatchCount)
-            throw new InvalidOperationException($"Micro-batch count mismatch: saved model was trained with {savedMicroBatchCount}, but current instance configured with {_microBatchCount}");
-
-        int modelDataLength = reader.ReadInt32();
-        byte[] modelData = reader.ReadBytes(modelDataLength);
-        WrappedModel.Deserialize(modelData);
-
-        // EnsureShardingInitialized calls OnBeforeInitializeSharding (which sets _numStages
-        // and other derived state) before InitializeSharding. Calling InitializeSharding
-        // directly would skip that setup and cause divide-by-zero.
-        EnsureShardingInitialized();
-    }
-
-    /// <inheritdoc/>
     public override void SaveModel(string filePath)
     {
         Config.CommunicationBackend.Barrier();
@@ -1471,13 +1417,5 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         {
             Config.CommunicationBackend.Barrier();
         }
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> Clone()
-    {
-        return new PipelineParallelModel<T, TInput, TOutput>(
-            WrappedModel.Clone(), Config, _microBatchCount,
-            _partitionStrategy, _schedule, _checkpointConfig);
     }
 }

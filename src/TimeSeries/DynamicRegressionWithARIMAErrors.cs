@@ -183,6 +183,7 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// The model learns these coefficients from your historical data to quantify relationships
     /// between external factors and what you're predicting.
     /// </remarks>
+    [AiDotNet.Attributes.Scratch]
     private Vector<T> _regressionCoefficients;
 
     /// <summary>
@@ -198,6 +199,7 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// 
     /// These coefficients are applied to the regression residuals (errors), not to the original time series.
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _arCoefficients;
 
     /// <summary>
@@ -212,6 +214,7 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// 
     /// This helps the model correct for systematic errors in its predictions.
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _maCoefficients;
 
     /// <summary>
@@ -1306,33 +1309,7 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// 
     /// This allows the model to be fully reconstructed later.
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        writer.Write(_regressionCoefficients.Length);
-        for (int i = 0; i < _regressionCoefficients.Length; i++)
-            writer.Write(Convert.ToDouble(_regressionCoefficients[i]));
 
-        writer.Write(_arCoefficients.Length);
-        for (int i = 0; i < _arCoefficients.Length; i++)
-            writer.Write(Convert.ToDouble(_arCoefficients[i]));
-
-        writer.Write(_maCoefficients.Length);
-        for (int i = 0; i < _maCoefficients.Length; i++)
-            writer.Write(Convert.ToDouble(_maCoefficients[i]));
-
-        writer.Write(_differenced.Length);
-        for (int i = 0; i < _differenced.Length; i++)
-            writer.Write(Convert.ToDouble(_differenced[i]));
-
-        writer.Write(Convert.ToDouble(_intercept));
-
-        writer.Write(JsonConvert.SerializeObject(Options));
-
-        // Serialize training series for in-sample predictions
-        writer.Write(_trainingSeries.Length);
-        for (int i = 0; i < _trainingSeries.Length; i++)
-            writer.Write(Convert.ToDouble(_trainingSeries[i]));
-    }
 
     /// <summary>
     /// Deserializes the model's state from a binary stream.
@@ -1357,45 +1334,7 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// 
     /// After deserialization, the model is ready to make predictions as if it had just been trained.
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        int regressionCoefficientsLength = reader.ReadInt32();
-        _regressionCoefficients = new Vector<T>(regressionCoefficientsLength);
-        for (int i = 0; i < regressionCoefficientsLength; i++)
-            _regressionCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
 
-        int arCoefficientsLength = reader.ReadInt32();
-        _arCoefficients = new Vector<T>(arCoefficientsLength);
-        for (int i = 0; i < arCoefficientsLength; i++)
-            _arCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
-
-        int maCoeffientsLength = reader.ReadInt32();
-        _maCoefficients = new Vector<T>(maCoeffientsLength);
-        for (int i = 0; i < maCoeffientsLength; i++)
-            _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
-
-        int differencedLength = reader.ReadInt32();
-        _differenced = new Vector<T>(differencedLength);
-        for (int i = 0; i < differencedLength; i++)
-            _differenced[i] = NumOps.FromDouble(reader.ReadDouble());
-
-        _intercept = NumOps.FromDouble(reader.ReadDouble());
-
-        string optionsJson = reader.ReadString();
-
-        // Deserialize training series (post-patch field)
-        try
-        {
-            int tsLen = reader.ReadInt32();
-            _trainingSeries = new Vector<T>(tsLen);
-            for (int i = 0; i < tsLen; i++)
-                _trainingSeries[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        catch (EndOfStreamException)
-        {
-            _trainingSeries = Vector<T>.Empty();
-        }
-    }
 
     /// <summary>
     /// Resets the model to its untrained state.
@@ -1469,77 +1408,6 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
         };
 
         return new DynamicRegressionWithARIMAErrors<T>(optionsClone);
-    }
-
-    /// <summary>
-    /// Creates a deep copy of the current model.
-    /// </summary>
-    /// <returns>A new instance of the model with the same state and parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a complete copy of the model, including its configuration and trained parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates an exact duplicate of your trained model.
-    /// 
-    /// Unlike CreateInstance(), which creates a blank model with the same settings,
-    /// Clone() creates a complete copy including:
-    /// - The model configuration (AR order, MA order, etc.)
-    /// - All trained regression coefficients
-    /// - All trained AR and MA coefficients
-    /// - Differencing information and intercept value
-    /// 
-    /// This is useful for:
-    /// - Creating a backup before experimenting with a model
-    /// - Using the same trained model in multiple scenarios
-    /// - Creating ensemble models that use variations of the same base model
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (DynamicRegressionWithARIMAErrors<T>)CreateInstance();
-
-        // Copy regression coefficients
-        for (int i = 0; i < _regressionCoefficients.Length; i++)
-        {
-            clone._regressionCoefficients[i] = _regressionCoefficients[i];
-        }
-
-        // Copy AR coefficients
-        for (int i = 0; i < _arCoefficients.Length; i++)
-        {
-            clone._arCoefficients[i] = _arCoefficients[i];
-        }
-
-        // Copy MA coefficients
-        for (int i = 0; i < _maCoefficients.Length; i++)
-        {
-            clone._maCoefficients[i] = _maCoefficients[i];
-        }
-
-        // Copy differenced values
-        clone._differenced = new Vector<T>(_differenced.Length);
-        for (int i = 0; i < _differenced.Length; i++)
-        {
-            clone._differenced[i] = _differenced[i];
-        }
-
-        // Copy intercept
-        clone._intercept = _intercept;
-
-        // Copy training series for in-sample predictions
-        if (_trainingSeries.Length > 0)
-        {
-            clone._trainingSeries = new Vector<T>(_trainingSeries.Length);
-            for (int i = 0; i < _trainingSeries.Length; i++)
-                clone._trainingSeries[i] = _trainingSeries[i];
-        }
-
-        // Copy trained state
-        clone.IsTrained = IsTrained;
-        if (ModelParameters.Length > 0)
-            clone.ModelParameters = ModelParameters.Clone();
-
-        return clone;
     }
 
     /// <summary>

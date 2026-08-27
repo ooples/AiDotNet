@@ -202,26 +202,31 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached gradient for kernels computed during backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _kernelsGradient;
 
     /// <summary>
     /// Cached gradient for biases computed during backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
     /// Cached input from the last forward pass, needed for backward computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Cached output from the last forward pass (before activation), needed for backward computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPreActivation;
 
     /// <summary>
     /// Cached output from the last forward pass (after activation).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -247,27 +252,39 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
     #endregion
 
     #region GPU Training Fields
+    [ExternalState]
     private Tensor<T>? _gpuLastInput;
+    [ExternalState]
     private Tensor<T>? _gpuLastOutput;
 
     // GPU weight buffers
+    [ExternalState]
     private Tensor<T>? _gpuKernels;
+    [ExternalState]
     private Tensor<T>? _gpuBiases;
 
     // GPU gradient buffers
+    [ExternalState]
     private Tensor<T>? _gpuKernelsGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesGradient;
 
     // GPU velocity buffers (SGD momentum)
+    [ExternalState]
     private Tensor<T>? _gpuKernelsVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesVelocity;
 
     // GPU Adam first moment buffers
+    [ExternalState]
     private Tensor<T>? _gpuKernelsM;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesM;
 
     // GPU Adam second moment buffers
+    [ExternalState]
     private Tensor<T>? _gpuKernelsV;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesV;
     #endregion
 
@@ -889,43 +906,6 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
     /// <returns>The kernel tensor.</returns>
     public Tensor<T> GetFilters() => _kernels;
 
-    /// <summary>
-    /// Creates a deep copy of the layer with the same configuration and parameters.
-    /// </summary>
-    /// <returns>A new instance of the <see cref="Conv3DLayer{T}"/> with identical configuration and parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// The clone is completely independent from the original layer. Changes to one
-    /// will not affect the other.
-    /// </para>
-    /// </remarks>
-    public override LayerBase<T> Clone()
-    {
-        Conv3DLayer<T> copy;
-
-        if (UsingVectorActivation)
-        {
-            copy = new Conv3DLayer<T>(
-                OutputChannels,
-                KernelSize,
-                Stride,
-                Padding,
-                VectorActivation!);
-        }
-        else
-        {
-            copy = new Conv3DLayer<T>(
-                OutputChannels,
-                KernelSize,
-                Stride,
-                Padding,
-                ScalarActivation);
-        }
-
-        copy.SetParameters(GetParameters());
-        return copy;
-    }
-
     #endregion
 
     #region State Management
@@ -951,78 +931,6 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
     #endregion
 
     #region Serialization
-
-    /// <summary>
-    /// Serializes the layer to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer to serialize to.</param>
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-        writer.Write(InputChannels);
-        writer.Write(OutputChannels);
-        writer.Write(KernelSize);
-        writer.Write(Stride);
-        writer.Write(Padding);
-        writer.Write(_inputDepth);
-        writer.Write(_inputHeight);
-        writer.Write(_inputWidth);
-
-        var kernelArray = _kernels.ToArray();
-        for (int i = 0; i < kernelArray.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(kernelArray[i]));
-        }
-
-        var biasArray = _biases.ToArray();
-        for (int i = 0; i < biasArray.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(biasArray[i]));
-        }
-    }
-
-    /// <summary>
-    /// Deserializes the layer from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader to deserialize from.</param>
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-        InputChannels = reader.ReadInt32();
-        OutputChannels = reader.ReadInt32();
-        KernelSize = reader.ReadInt32();
-        Stride = reader.ReadInt32();
-        Padding = reader.ReadInt32();
-        _inputDepth = reader.ReadInt32();
-        _inputHeight = reader.ReadInt32();
-        _inputWidth = reader.ReadInt32();
-
-        _kernels = new Tensor<T>([OutputChannels, InputChannels, KernelSize, KernelSize, KernelSize]);
-        var kernelArray = new T[_kernels.Length];
-        for (int i = 0; i < kernelArray.Length; i++)
-        {
-            kernelArray[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        _kernels = new Tensor<T>(kernelArray, _kernels._shape);
-
-        _biases = new Tensor<T>([OutputChannels]);
-        var biasArray = new T[_biases.Length];
-        for (int i = 0; i < biasArray.Length; i++)
-        {
-            biasArray[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        _biases = new Tensor<T>(biasArray, _biases._shape);
-
-        // Re-register the freshly-created tensors as trainable parameters. Deserialize replaces the
-        // field references outright, so without this the registry either stays empty -- a lazily
-        // constructed layer has never registered anything, and GetParameters() then reports zero
-        // parameters and silently discards every restored weight -- or still points at the tensors
-        // from a prior forward, so optimizers and tape training update dead references while Forward
-        // reads the new ones. ConvolutionalLayer does the same for the 2-D case.
-        ClearRegisteredParameters();
-        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
-    }
 
     #endregion
 

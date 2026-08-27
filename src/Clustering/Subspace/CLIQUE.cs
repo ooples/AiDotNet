@@ -51,7 +51,7 @@ namespace AiDotNet.Clustering.Subspace;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Automatic Subspace Clustering of High Dimensional Data for Data Mining Applications", "https://doi.org/10.1145/276304.276314", Year = 1998, Authors = "Rakesh Agrawal, Johannes Gehrke, Dimitrios Gunopulos, Prabhakar Raghavan")]
-public class CLIQUE<T> : ClusteringBase<T>
+public partial class CLIQUE<T> : ClusteringBase<T>
 {
     private readonly CLIQUEOptions<T> _options;
 
@@ -94,74 +94,6 @@ public class CLIQUE<T> : ClusteringBase<T>
             Points = c.Points,
             NumUnits = c.DenseUnits.Count
         }).ToList().AsReadOnly();
-
-    /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new CLIQUE<T>(new CLIQUEOptions<T>
-        {
-            MaxIterations = _options.MaxIterations,
-            Tolerance = _options.Tolerance,
-            Seed = _options.Seed,
-            NumIntervals = _options.NumIntervals,
-            DensityThreshold = _options.DensityThreshold,
-            MinPoints = _options.MinPoints,
-            MaxSubspaceDimensions = _options.MaxSubspaceDimensions,
-            UseAprioriPruning = _options.UseAprioriPruning
-        });
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (CLIQUE<T>)CreateNewInstance();
-        clone._minBounds = _minBounds.ToArray();
-        clone._maxBounds = _maxBounds.ToArray();
-        clone._intervalWidths = _intervalWidths.ToArray();
-
-        if (_subspaceClustersInternal is not null)
-        {
-            clone._subspaceClustersInternal = _subspaceClustersInternal.Select(c => new SubspaceClusterInternal
-            {
-                ClusterId = c.ClusterId,
-                Dimensions = c.Dimensions.ToArray(),
-                DenseUnits = c.DenseUnits.Select(u => new DenseUnit
-                {
-                    Dimensions = u.Dimensions.ToArray(),
-                    Cells = u.Cells.ToArray(),
-                    Count = u.Count,
-                    Points = new List<int>(u.Points)
-                }).ToList(),
-                Points = new HashSet<int>(c.Points)
-            }).ToList();
-        }
-
-        clone.NumClusters = NumClusters;
-        clone.NumFeatures = NumFeatures;
-        clone.IsTrained = IsTrained;
-
-        if (Labels is not null)
-        {
-            clone.Labels = new Vector<T>(Labels.Length);
-            for (int i = 0; i < Labels.Length; i++)
-                clone.Labels[i] = Labels[i];
-        }
-
-        if (ClusterCenters is not null)
-        {
-            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
-            for (int i = 0; i < ClusterCenters.Rows; i++)
-                for (int j = 0; j < ClusterCenters.Columns; j++)
-                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
-        }
-
-        return clone;
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

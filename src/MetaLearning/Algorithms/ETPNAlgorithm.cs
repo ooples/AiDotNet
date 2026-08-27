@@ -65,6 +65,7 @@ public partial class ETPNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private readonly int _compressedDim;
 
     /// <summary>Transform projection: compressedDim × transformDim.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _transformParams;
 
     /// <inheritdoc/>

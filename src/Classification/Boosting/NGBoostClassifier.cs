@@ -80,6 +80,7 @@ public partial class NGBoostClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Initial log-odds values for each class.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _initialLogOdds;
 
     /// <summary>
@@ -537,116 +538,5 @@ public partial class NGBoostClassifier<T> : EnsembleClassifierBase<T>
                 { "UseNaturalGradient", _options.UseNaturalGradient }
             }
         };
-    }
-
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Options
-        writer.Write(_options.NumberOfIterations);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.SubsampleRatio);
-        writer.Write(_options.UseNaturalGradient);
-        writer.Write(_options.MaxDepth);
-        writer.Write(_options.MinSamplesSplit);
-        writer.Write(_options.MaxFeatures);
-        writer.Write((int)_options.SplitCriterion);
-        writer.Write(_options.EarlyStoppingRounds.HasValue);
-        if (_options.EarlyStoppingRounds.HasValue)
-            writer.Write(_options.EarlyStoppingRounds.Value);
-        writer.Write(_options.Verbose);
-        writer.Write(_options.VerboseEval);
-        writer.Write(_options.Seed.HasValue);
-        if (_options.Seed.HasValue)
-            writer.Write(_options.Seed.Value);
-
-        // Class info
-        writer.Write(_numClasses);
-        for (int c = 0; c < _numClasses; c++)
-        {
-            writer.Write(NumOps.ToDouble(_initialLogOdds[c]));
-        }
-
-        // Trees
-        writer.Write(_trees.Count);
-        foreach (var iterTrees in _trees)
-        {
-            for (int c = 0; c < _numClasses; c++)
-            {
-                byte[] treeData = iterTrees[c].Serialize();
-                writer.Write(treeData.Length);
-                writer.Write(treeData);
-            }
-        }
-
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        int baseLen = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseLen);
-        base.Deserialize(baseData);
-
-        // Options
-        _options.NumberOfIterations = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.SubsampleRatio = reader.ReadDouble();
-        _options.UseNaturalGradient = reader.ReadBoolean();
-        _options.MaxDepth = reader.ReadInt32();
-        _options.MinSamplesSplit = reader.ReadInt32();
-        _options.MaxFeatures = reader.ReadDouble();
-        _options.SplitCriterion = (Enums.SplitCriterion)reader.ReadInt32();
-        if (reader.ReadBoolean())
-            _options.EarlyStoppingRounds = reader.ReadInt32();
-        else
-            _options.EarlyStoppingRounds = null;
-        _options.Verbose = reader.ReadBoolean();
-        _options.VerboseEval = reader.ReadInt32();
-        if (reader.ReadBoolean())
-            _options.Seed = reader.ReadInt32();
-        else
-            _options.Seed = null;
-
-        // Class info
-        _numClasses = reader.ReadInt32();
-        _initialLogOdds = new Vector<T>(_numClasses);
-        for (int c = 0; c < _numClasses; c++)
-        {
-            _initialLogOdds[c] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Trees
-        int numIter = reader.ReadInt32();
-        _trees.Clear();
-        for (int iter = 0; iter < numIter; iter++)
-        {
-            var iterTrees = new DecisionTreeRegression<T>[_numClasses];
-            for (int c = 0; c < _numClasses; c++)
-            {
-                int treeLen = reader.ReadInt32();
-                byte[] treeData = reader.ReadBytes(treeLen);
-                iterTrees[c] = new DecisionTreeRegression<T>(new DecisionTreeOptions());
-                iterTrees[c].Deserialize(treeData);
-            }
-            _trees.Add(iterTrees);
-        }
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new NGBoostClassifier<T>(_options, Regularization);
     }
 }

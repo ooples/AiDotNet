@@ -43,7 +43,7 @@ namespace AiDotNet.Audio.SourceSeparation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Music Source Separation with Band-Split RNN", "https://doi.org/10.48550/arXiv.2209.15174", Year = 2023, Authors = "Yi Luo, Jianwei Yu")]
-public class BandSplitRNN<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
+public partial class BandSplitRNN<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -248,28 +248,9 @@ public class BandSplitRNN<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.FftSize); w.Write(_options.HopLength); w.Write(_options.NumFreqBins);
-        w.Write(_options.NumBands); w.Write(_options.BandRnnHiddenSize); w.Write(_options.NumBandRnnLayers);
-        w.Write(_options.SequenceRnnHiddenSize); w.Write(_options.NumSequenceRnnLayers); w.Write(_options.FusionDim);
-        w.Write(_options.NumStems); w.Write(_options.DropoutRate);
-        w.Write(_options.Sources.Length); foreach (var s in _options.Sources) w.Write(s);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.FftSize = r.ReadInt32(); _options.HopLength = r.ReadInt32(); _options.NumFreqBins = r.ReadInt32();
-        _options.NumBands = r.ReadInt32(); _options.BandRnnHiddenSize = r.ReadInt32(); _options.NumBandRnnLayers = r.ReadInt32();
-        _options.SequenceRnnHiddenSize = r.ReadInt32(); _options.NumSequenceRnnLayers = r.ReadInt32(); _options.FusionDim = r.ReadInt32();
-        _options.NumStems = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
-        int n = r.ReadInt32(); _options.Sources = new string[n]; for (int i = 0; i < n; i++) _options.Sources[i] = r.ReadString();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new BandSplitRNN<T>(Architecture, _options);
+
 
     #endregion
 

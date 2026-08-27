@@ -590,34 +590,6 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this network type.
-    /// </summary>
-    /// <returns>A new TSMixer instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This factory method creates a copy of the model structure,
-    /// useful for ensemble methods or hyperparameter search.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new TSMixerOptions<T>
-        {
-            SequenceLength = _sequenceLength,
-            PredictionHorizon = _predictionHorizon,
-            NumFeatures = _numFeatures,
-            HiddenDimension = _hiddenDim,
-            NumBlocks = _numBlocks,
-            FeedForwardExpansion = _feedForwardExpansion,
-            FeaturesFirst = _featuresFirst,
-            UseRevIN = _useRevIN,
-            Dropout = _dropout
-        };
-
-        return new TSMixer<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Serializes network-specific data for persistence.
     /// </summary>
     /// <param name="writer">Binary writer for output.</param>
@@ -627,19 +599,7 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
     /// into a format that can be saved to disk and loaded later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_predictionHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_hiddenDim);
-        writer.Write(_numBlocks);
-        writer.Write(_feedForwardExpansion);
-        writer.Write(_featuresFirst);
-        writer.Write(_useRevIN);
-        writer.Write(_dropout);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data from persistence.
@@ -651,19 +611,7 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
     /// from a saved format. Called when loading a model from disk.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _predictionHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _hiddenDim = reader.ReadInt32();
-        _numBlocks = reader.ReadInt32();
-        _feedForwardExpansion = reader.ReadDouble();
-        _featuresFirst = reader.ReadBoolean();
-        _useRevIN = reader.ReadBoolean();
-        _dropout = reader.ReadDouble();
-        _useNativeMode = reader.ReadBoolean();
-    }
+
 
     #endregion
 

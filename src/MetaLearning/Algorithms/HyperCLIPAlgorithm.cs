@@ -61,6 +61,7 @@ public partial class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     private const double SpsaLearningRateMultiplier = 0.1;
 
     /// <summary>Projection weights: task projection (embDim × projDim) + param projection (embDim × projDim).</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _projectionWeights;
 
     /// <inheritdoc/>

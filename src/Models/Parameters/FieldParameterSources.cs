@@ -378,6 +378,17 @@ public sealed class ComponentCollectionParameterSource<T> : IParameterSource<T>,
         }
     }
 
+    /// <summary>Whether this live collection currently owns a particular component instance.</summary>
+    internal bool ContainsCurrent(IParameterSource<T>? candidate)
+    {
+        if (candidate is null) return false;
+        foreach (var member in Members())
+        {
+            if (ReferenceEquals(member, candidate)) return true;
+        }
+        return false;
+    }
+
     /// <inheritdoc />
     public void PrepareParameterSurface(ParameterSurfaceIntent intent)
     {

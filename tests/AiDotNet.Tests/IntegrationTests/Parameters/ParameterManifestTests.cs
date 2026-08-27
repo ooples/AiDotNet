@@ -324,6 +324,38 @@ public class ParameterManifestTests
     }
 
     [Fact]
+    public async Task MatchingRestore_UsesStableIdsForMultipleVariableComponents()
+    {
+        await Task.Yield();
+        double[] first = Array.Empty<double>();
+        double[] second = Array.Empty<double>();
+        var registry = new ParameterComponentRegistry<double>();
+        registry.Register("first", new VariableLengthParameterSource<double>(
+            () => first.Length,
+            () => new Vector<double>(first),
+            values => first = values.ToArray()));
+        registry.Register("second", new VariableLengthParameterSource<double>(
+            () => second.Length,
+            () => new Vector<double>(second),
+            values => second = values.ToArray()));
+        var checkpointLayout = new ParameterLayoutSnapshot(new[]
+        {
+            new ParameterSlotDescriptor(
+                "first", ParameterSlotRole.LearnedState, ParameterReadiness.Materialized,
+                parameterCount: 2, offset: 0, shape: new[] { 2 }),
+            new ParameterSlotDescriptor(
+                "second", ParameterSlotRole.LearnedState, ParameterReadiness.Materialized,
+                parameterCount: 1, offset: 2, shape: new[] { 1 })
+        });
+
+        registry.SetMatchingParameters(
+            new Vector<double>(new[] { 10d, 11d, 20d }), checkpointLayout);
+
+        Assert.Equal(new[] { 10d, 11d }, first);
+        Assert.Equal(new[] { 20d }, second);
+    }
+
+    [Fact]
     public async Task LayoutSnapshot_CannotBeMutatedThroughItsPublicSlotCollection()
     {
         await Task.Yield();
@@ -452,6 +484,32 @@ public class ParameterManifestTests
         });
 
         Assert.NotEqual(unmaterialized.Fingerprint, materialized.Fingerprint);
+        Assert.Equal(unmaterialized.DeclaredLayoutFingerprint,
+            materialized.DeclaredLayoutFingerprint);
+    }
+
+    [Fact]
+    public void DeclaredLayoutFingerprint_StillRejectsSemanticOrShapeChanges()
+    {
+        static ParameterLayoutSnapshot Snapshot(
+            ParameterSlotRole role,
+            int[] shape,
+            ParameterOwnership ownership = ParameterOwnership.Owned) => new(new[]
+        {
+            new ParameterSlotDescriptor(
+                "weight", role, ParameterReadiness.Materialized, 12,
+                shape: shape, elementType: "System.Single", ownership: ownership)
+        });
+
+        var baseline = Snapshot(ParameterSlotRole.Trainable, new[] { 2, 6 });
+
+        Assert.NotEqual(baseline.DeclaredLayoutFingerprint,
+            Snapshot(ParameterSlotRole.Buffer, new[] { 2, 6 }).DeclaredLayoutFingerprint);
+        Assert.NotEqual(baseline.DeclaredLayoutFingerprint,
+            Snapshot(ParameterSlotRole.Trainable, new[] { 3, 4 }).DeclaredLayoutFingerprint);
+        Assert.NotEqual(baseline.DeclaredLayoutFingerprint,
+            Snapshot(ParameterSlotRole.Trainable, new[] { 2, 6 }, ParameterOwnership.Alias)
+                .DeclaredLayoutFingerprint);
     }
 
     [Fact]
@@ -806,6 +864,26 @@ public class ParameterManifestTests
         Assert.Equal(
             layer.GetParameters().Length,
             layer.GetParameterLayout().Sum(slot => slot.ParameterCount ?? 0));
+    }
+
+    [Fact]
+    public async Task LayerManifest_ResolvesDeclaredCompositeChildShapesBeforeValueRead()
+    {
+        await Task.Yield();
+        using var layer = new TransformerEncoderBlock<double>(
+            hiddenSize: 8,
+            numHeads: 2,
+            ffnDim: 16);
+
+        var layout = layer.GetParameterLayout();
+
+        Assert.DoesNotContain(layout, slot =>
+            slot.Readiness == ParameterReadiness.ShapeDeferred || !slot.ParameterCount.HasValue);
+        Assert.Contains(layout, slot =>
+            slot.Readiness == ParameterReadiness.ShapeResolvedUnmaterialized);
+        Assert.Equal(
+            layout.Sum(slot => slot.ParameterCount!.Value),
+            layer.GetParameters().Length);
     }
 
     [Fact]
@@ -1189,6 +1267,56 @@ public class ParameterManifestTests
         Assert.Equal(1, measurement.Flat);
 #endif
     }
+
+    [Fact]
+    public async Task BidirectionalLazyLstm_CloneBeforeMaterialization_KeepsIndependentManifests()
+    {
+        await Task.Yield();
+
+        // Regression: LayerBase.Clone used to MemberwiseClone, so a clone taken while the inner
+        // LSTM was still lazy shared the source's mutable parameter registry and manifest. When the
+        // two directions later initialized, one registration pass overwrote the other's manifest and
+        // a subsequent clone handed back fresh-random gate weights instead of the trained ones.
+        var source = new BidirectionalLayer<double>(
+            new LSTMLayer<double>(8),
+            activationFunction: (IActivationFunction<double>?)null);
+
+        // Clone BEFORE either direction is materialized.
+        var earlyClone = (BidirectionalLayer<double>)source.Clone();
+
+        var input = Tensor<double>.CreateRandom(2, 3, 4);
+        source.Forward(input);
+        earlyClone.Forward(input);
+
+        // Neither manifest may have been clobbered by the other's registration pass.
+        Assert.Equal(source.GetParameters().Length, source.ParameterCount);
+        Assert.Equal(earlyClone.GetParameters().Length, earlyClone.ParameterCount);
+        Assert.Equal(
+            source.GetParameters().Length,
+            source.GetParameterLayout().Sum(slot => slot.ParameterCount ?? 0));
+
+        // Guard against a vacuous pass: every assertion below is trivially true on an empty vector.
+        Assert.NotEmpty(source.GetParameters().ToArray());
+        Assert.Equal(source.ParameterCount, earlyClone.ParameterCount);
+
+        // A clone taken after materialization must carry the source's weights, not fresh-random ones.
+        var trained = source.GetParameters();
+        for (int i = 0; i < trained.Length; i++)
+        {
+            trained[i] = 0.25 + (i * 0.001);
+        }
+        source.SetParameters(trained);
+
+        var lateClone = (BidirectionalLayer<double>)source.Clone();
+        Assert.Equal(trained.ToArray(), lateClone.GetParameters().ToArray());
+
+        // And the clone must be independent: mutating it must not write through to the source.
+        var mutated = lateClone.GetParameters();
+        mutated[0] = -99.0;
+        lateClone.SetParameters(mutated);
+        Assert.Equal(trained[0], source.GetParameters()[0]);
+    }
+
 }
 
 internal sealed class ContractProbeSource : IParameterSource<double>, IParameterLayoutSource

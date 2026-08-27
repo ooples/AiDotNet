@@ -232,24 +232,6 @@ public partial class InvestLM<T> : FinancialNLPModelBase<T>
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <summary>
-    /// Executes CreateNewInstance for the InvestLM.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the InvestLM model, CreateNewInstance builds and wires up model components. This sets up the InvestLM architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new ModelOptions.InvestLMOptions<T>
-        {
-            MaxSequenceLength = MaxSequenceLength,
-            VocabularySize = VocabularySize,
-            HiddenDimension = HiddenDimension
-        };
-        return new InvestLM<T>(Architecture, options, _optimizer, LossFunction);
-    }
 
     /// <summary>
     /// Executes SerializeModelSpecificData for the InvestLM.
@@ -259,10 +241,7 @@ public partial class InvestLM<T> : FinancialNLPModelBase<T>
     /// <b>For Beginners:</b> In the InvestLM model, SerializeModelSpecificData saves or restores model-specific settings. This lets the InvestLM architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeModelSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_dropout);
-    }
+
 
     /// <summary>
     /// Executes DeserializeModelSpecificData for the InvestLM.
@@ -272,10 +251,7 @@ public partial class InvestLM<T> : FinancialNLPModelBase<T>
     /// <b>For Beginners:</b> In the InvestLM model, DeserializeModelSpecificData saves or restores model-specific settings. This lets the InvestLM architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeModelSpecificData(BinaryReader reader)
-    {
-        _dropout = reader.ReadDouble();
-    }
+
 
     /// <summary>
     /// Executes ForecastNative for the InvestLM.

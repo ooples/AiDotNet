@@ -64,7 +64,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("TimeMAE: Self-Supervised Representations of Time Series with Decoupled Masked Autoencoders", "https://arxiv.org/abs/2303.00320")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
+public partial class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 
@@ -285,56 +285,10 @@ public class TimeMAE<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var opts = new TimeMAEOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            HiddenDimension = _hiddenDimension,
-            NumEncoderLayers = _numEncoderLayers,
-            NumDecoderLayers = _numDecoderLayers,
-            NumHeads = _numHeads,
-            MaskRatio = _maskRatio,
-            DropoutRate = _dropout,
-            LearningRate = _options.LearningRate
-        };
 
-        // Preserve ONNX mode if the original instance was created with an ONNX model
-        if (!_useNativeMode && OnnxModelPath is not null)
-            return new TimeMAE<T>(Architecture, OnnxModelPath, opts);
-
-        return new TimeMAE<T>(Architecture, opts);
-    }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_patchLength);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numDecoderLayers);
-        writer.Write(_numHeads);
-        writer.Write(_maskRatio);
-        writer.Write(_dropout);
-    }
 
-    /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _patchLength = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numEncoderLayers = reader.ReadInt32();
-        _numDecoderLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _maskRatio = reader.ReadDouble();
-        _dropout = reader.ReadDouble();
-    }
 
     #endregion
 

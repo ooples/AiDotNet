@@ -487,20 +487,6 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of the TimeMachine model with the same configuration.
-    /// </summary>
-    /// <returns>A new TimeMachine instance.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Creates a fresh copy of the model with
-    /// randomly initialized weights but the same architecture.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TimeMachine<T>(Architecture, new TimeMachineOptions<T>(_options), _numFeatures);
-    }
-
-    /// <summary>
     /// Serializes TimeMachine-specific data for model persistence.
     /// </summary>
     /// <param name="writer">The binary writer to serialize data to.</param>
@@ -509,16 +495,7 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
     /// can be reconstructed later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_modelDimension);
-        writer.Write(_stateDimension);
-        writer.Write(_expandFactor);
-        writer.Write(_convKernelSize);
-        writer.Write(_useReversibleNormalization);
-    }
+
 
     /// <summary>
     /// Deserializes TimeMachine-specific data when loading a saved model.
@@ -529,16 +506,7 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
     /// loading a previously saved model.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _modelDimension = reader.ReadInt32();
-        _stateDimension = reader.ReadInt32();
-        _expandFactor = reader.ReadInt32();
-        _convKernelSize = reader.ReadInt32();
-        _useReversibleNormalization = reader.ReadBoolean();
-    }
+
 
     #endregion
 

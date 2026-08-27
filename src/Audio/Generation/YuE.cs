@@ -43,7 +43,7 @@ namespace AiDotNet.Audio.Generation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("YuE: Open Music Foundation Models for Full-Song Generation", "https://arxiv.org/abs/2503.08638", Year = 2025, Authors = "Ruibin Yuan, Hanfeng Lin, Ge Zhang, Jiahao Pan, Jiatong Shi, Tian Yuan, Yinghao Ma, Xingjian Du, Haohe Liu, Yiming Liang, Ziyang Ma, Siqi Zheng, Zuoxian Liang, Ziyu Wang, Chenghua Lin, Tianyu Zheng, Yizhi Li, Yifei Yuan, Shangda Wu, Yifu Sun, Peng Li, Wenye Ma, Jie Fu, Roger Dannenberg, Xie Chen, Emmanouil Benetos, Wenwu Wang, Wei Xue, Yike Guo")]
-public class YuE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
+public partial class YuE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -295,36 +295,9 @@ public class YuE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.MaxDurationSeconds);
-        w.Write(_options.SemanticDim); w.Write(_options.NumSemanticLayers);
-        w.Write(_options.NumSemanticHeads); w.Write(_options.AcousticDim);
-        w.Write(_options.NumAcousticLayers); w.Write(_options.NumAcousticHeads);
-        w.Write(_options.LyricsVocabSize); w.Write(_options.SemanticVocabSize);
-        w.Write(_options.AcousticCodebookSize); w.Write(_options.NumAcousticQuantizers);
-        w.Write(_options.NumStyleTags); w.Write(_options.StyleEmbeddingDim);
-        w.Write(_options.Temperature); w.Write(_options.TopP);
-        w.Write(_options.RepetitionPenalty); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.MaxDurationSeconds = r.ReadDouble();
-        _options.SemanticDim = r.ReadInt32(); _options.NumSemanticLayers = r.ReadInt32();
-        _options.NumSemanticHeads = r.ReadInt32(); _options.AcousticDim = r.ReadInt32();
-        _options.NumAcousticLayers = r.ReadInt32(); _options.NumAcousticHeads = r.ReadInt32();
-        _options.LyricsVocabSize = r.ReadInt32(); _options.SemanticVocabSize = r.ReadInt32();
-        _options.AcousticCodebookSize = r.ReadInt32(); _options.NumAcousticQuantizers = r.ReadInt32();
-        _options.NumStyleTags = r.ReadInt32(); _options.StyleEmbeddingDim = r.ReadInt32();
-        _options.Temperature = r.ReadDouble(); _options.TopP = r.ReadDouble();
-        _options.RepetitionPenalty = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new YuE<T>(Architecture, _options);
+
 
     #endregion
 

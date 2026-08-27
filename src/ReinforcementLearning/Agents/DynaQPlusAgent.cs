@@ -40,7 +40,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
     "https://doi.org/10.1016/B978-1-55860-213-7.50013-X",
     Year = 1991,
     Authors = "Sutton, R. S.")]
-public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
+public partial class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private DynaQPlusOptions<T> _options;
 
@@ -226,38 +226,6 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
                 () => _qTable));
     }
     public override int FeatureCount => _options.StateSize;
-    public override byte[] Serialize()
-    {
-        var state = new
-        {
-            QTable = _qTable,
-            Model = _model,
-            TimeSteps = _timeSteps,
-            VisitedStateActions = _visitedStateActions,
-            Epsilon = _epsilon,
-            TotalSteps = _totalSteps,
-            Options = _options
-        };
-        string json = JsonConvert.SerializeObject(state);
-        return System.Text.Encoding.UTF8.GetBytes(json);
-    }
-
-    public override void Deserialize(byte[] data)
-    {
-        string json = System.Text.Encoding.UTF8.GetString(data);
-        var state = JsonConvert.DeserializeObject<dynamic>(json);
-        if (state is null)
-        {
-            throw new InvalidOperationException("Deserialization returned null");
-        }
-
-        _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
-        _model = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, (string, T)>>>(state.Model.ToString()) ?? new Dictionary<string, Dictionary<int, (string, T)>>();
-        _timeSteps = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, int>>>(state.TimeSteps.ToString()) ?? new Dictionary<string, Dictionary<int, int>>();
-        _visitedStateActions = JsonConvert.DeserializeObject<List<(string, int)>>(state.VisitedStateActions.ToString()) ?? new List<(string, int)>();
-        _epsilon = state.Epsilon;
-        _totalSteps = state.TotalSteps;
-    }
     /// <summary>
     /// The Q-table's <c>(state, action)</c> entries in a fixed order.
     /// </summary>
@@ -283,53 +251,6 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         }
 
         return entries;
-    }
-
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new DynaQPlusAgent<T>(_options);
-
-        // Deep copy Q-table
-        foreach (var stateEntry in _qTable)
-        {
-            clone._qTable[stateEntry.Key] = new Dictionary<int, T>();
-            foreach (var actionEntry in stateEntry.Value)
-            {
-                clone._qTable[stateEntry.Key][actionEntry.Key] = actionEntry.Value;
-            }
-        }
-
-        // Deep copy model
-        foreach (var stateEntry in _model)
-        {
-            clone._model[stateEntry.Key] = new Dictionary<int, (string, T)>();
-            foreach (var actionEntry in stateEntry.Value)
-            {
-                clone._model[stateEntry.Key][actionEntry.Key] = actionEntry.Value;
-            }
-        }
-
-        // Deep copy time steps
-        foreach (var stateEntry in _timeSteps)
-        {
-            clone._timeSteps[stateEntry.Key] = new Dictionary<int, int>();
-            foreach (var actionEntry in stateEntry.Value)
-            {
-                clone._timeSteps[stateEntry.Key][actionEntry.Key] = actionEntry.Value;
-            }
-        }
-
-        // Deep copy visited state-actions
-        foreach (var stateAction in _visitedStateActions)
-        {
-            clone._visitedStateActions.Add(stateAction);
-        }
-
-        // Copy scalar values
-        clone._epsilon = _epsilon;
-        clone._totalSteps = _totalSteps;
-
-        return clone;
     }
     public override void SaveModel(string filepath)
     {

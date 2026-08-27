@@ -43,7 +43,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Joint Beat and Downbeat Tracking with Recurrent Neural Networks", "https://doi.org/10.5281/zenodo.1160264", Year = 2016, Authors = "Sebastian Böck, Florian Krebs, Gerhard Widmer")]
-public class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
+public partial class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
 {
     #region Fields
 
@@ -302,33 +302,9 @@ public class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
                 MaxGradientNorm = _options.MaxGradientNorm
             });
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.FftSize); w.Write(_options.HopLength);
-        w.Write(_options.NumBands); w.Write(_options.RnnHiddenSize); w.Write(_options.NumRnnLayers);
-        w.Write(_options.PeakThreshold); w.Write(_options.MinBeatInterval); w.Write(_options.DropoutRate);
-        w.Write(_options.LearningRate); w.Write(_options.MaxGradientNorm);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.FftSize = r.ReadInt32(); _options.HopLength = r.ReadInt32();
-        _options.NumBands = r.ReadInt32(); _options.RnnHiddenSize = r.ReadInt32(); _options.NumRnnLayers = r.ReadInt32();
-        _options.PeakThreshold = r.ReadDouble(); _options.MinBeatInterval = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
-        // Appended, so guarded: absent from payloads written before these were configurable.
-        if (r.BaseStream.Position < r.BaseStream.Length) _options.LearningRate = r.ReadDouble();
-        if (r.BaseStream.Position < r.BaseStream.Length) _options.MaxGradientNorm = r.ReadDouble();
 
-        // Rebuilt from the RESTORED options. Only when we own it -- an injected optimizer is the
-        // caller's object and replacing it here would discard their configuration on every load.
-        if (_useNativeMode && _optimizerIsDefault) _optimizer = CreateDefaultOptimizer();
 
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new MadmomBeatTracker<T>(Architecture, _options);
 
     #endregion
 

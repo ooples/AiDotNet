@@ -49,7 +49,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Generalized Linear Models", "https://doi.org/10.1007/978-1-4899-3242-6")]
-public class PoissonRegression<T> : RegressionBase<T>
+public partial class PoissonRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the Poisson regression model.
@@ -359,111 +359,5 @@ public class PoissonRegression<T> : RegressionBase<T>
         }
 
         return predictions;
-    }
-
-    /// <summary>
-    /// Serializes the model to a byte array.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model data.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method serializes both the base class data and the Poisson regression specific options,
-    /// including maximum iterations and convergence tolerance.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// Serialization converts the model's internal state into a format that can be saved to disk or
-    /// transmitted over a network. This allows you to save a trained model and load it later without
-    /// having to retrain it. Think of it like saving your progress in a video game.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize PoissonRegression specific options
-        writer.Write(_options.MaxIterations);
-        writer.Write(Convert.ToDouble(_options.Tolerance));
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the model from a byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized model data.</param>
-    /// <remarks>
-    /// <para>
-    /// This method deserializes both the base class data and the Poisson regression specific options,
-    /// reconstructing the model's state from the serialized data.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// Deserialization is the opposite of serialization - it takes the saved model data and reconstructs
-    /// the model's internal state. This allows you to load a previously trained model and use it to make
-    /// predictions without having to retrain it. It's like loading a saved game to continue where you left off.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize PoissonRegression specific options
-        _options.MaxIterations = reader.ReadInt32();
-        _options.Tolerance = Convert.ToDouble(reader.ReadDouble());
-    }
-
-    /// <summary>
-    /// Creates a new instance of the Poisson Regression model with the same configuration.
-    /// </summary>
-    /// <returns>A new instance of the Poisson Regression model.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method creates a deep copy of the current Poisson Regression model, including its options,
-    /// coefficients, intercept, and regularization settings. The new instance is completely independent of the original,
-    /// allowing modifications without affecting the original model.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// This method creates an exact copy of your trained model.
-    /// 
-    /// Think of it like making a perfect duplicate:
-    /// - It copies all the configuration settings (like maximum iterations and tolerance)
-    /// - It preserves the coefficients (the weights for each feature)
-    /// - It maintains the intercept (the starting point of your model)
-    /// 
-    /// Creating a copy is useful when you want to:
-    /// - Create a backup before further modifying the model
-    /// - Create variations of the same model for different purposes
-    /// - Share the model with others while keeping your original intact
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        var newModel = new PoissonRegression<T>(_options, Regularization);
-
-        // Copy coefficients if they exist
-        if (Coefficients != null)
-        {
-            newModel.Coefficients = Coefficients.Clone();
-        }
-
-        // Copy the intercept
-        newModel.Intercept = Intercept;
-
-        return newModel;
     }
 }

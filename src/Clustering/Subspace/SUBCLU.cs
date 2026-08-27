@@ -55,7 +55,7 @@ namespace AiDotNet.Clustering.Subspace;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Density-Connected Subspace Clustering for High-Dimensional Data", "https://doi.org/10.1137/1.9781611972740.23", Year = 2004, Authors = "Karin Kailing, Hans-Peter Kriegel, Peer Kroger")]
-public class SUBCLU<T> : ClusteringBase<T>
+public partial class SUBCLU<T> : ClusteringBase<T>
 {
     private readonly SUBCLUOptions<T> _options;
     private double[]? _normMeans;
@@ -64,6 +64,7 @@ public class SUBCLU<T> : ClusteringBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
     private List<SubspaceClusterInfo>? _subspaceClusterInfos;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _trainingData;
 
     /// <summary>
@@ -87,78 +88,6 @@ public class SUBCLU<T> : ClusteringBase<T>
             Points = c.Points,
             NumUnits = 1
         }).ToList().AsReadOnly();
-
-    /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new SUBCLU<T>(new SUBCLUOptions<T>
-        {
-            MaxIterations = _options.MaxIterations,
-            Tolerance = _options.Tolerance,
-            Seed = _options.Seed,
-            Epsilon = _options.Epsilon,
-            MinPoints = _options.MinPoints,
-            MaxSubspaceDimensions = _options.MaxSubspaceDimensions,
-            MinClusterSize = _options.MinClusterSize
-        });
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (SUBCLU<T>)CreateNewInstance();
-
-        if (_trainingData is not null)
-        {
-            clone._trainingData = new Matrix<T>(_trainingData.Rows, _trainingData.Columns);
-            for (int i = 0; i < _trainingData.Rows; i++)
-                for (int j = 0; j < _trainingData.Columns; j++)
-                    clone._trainingData[i, j] = _trainingData[i, j];
-        }
-
-        if (_subspaceClusterInfos is not null)
-        {
-            clone._subspaceClusterInfos = _subspaceClusterInfos.Select(c => new SubspaceClusterInfo
-            {
-                ClusterId = c.ClusterId,
-                Dimensions = c.Dimensions.ToArray(),
-                Points = new HashSet<int>(c.Points),
-                CorePoints = new HashSet<int>(c.CorePoints)
-            }).ToList();
-        }
-
-        clone.NumClusters = NumClusters;
-        clone.NumFeatures = NumFeatures;
-        clone.IsTrained = IsTrained;
-
-        if (Labels is not null)
-        {
-            clone.Labels = new Vector<T>(Labels.Length);
-            for (int i = 0; i < Labels.Length; i++)
-                clone.Labels[i] = Labels[i];
-        }
-
-        if (ClusterCenters is not null)
-        {
-            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
-            for (int i = 0; i < ClusterCenters.Rows; i++)
-                for (int j = 0; j < ClusterCenters.Columns; j++)
-                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
-        }
-
-        // Copy normalization state so Predict works correctly on the clone
-        if (_normMeans is not null)
-            clone._normMeans = (double[])_normMeans.Clone();
-        if (_normStds is not null)
-            clone._normStds = (double[])_normStds.Clone();
-
-        return clone;
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

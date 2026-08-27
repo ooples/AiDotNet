@@ -38,7 +38,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
+public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
     /// Describes this RMSprop instance for the fused kernel (Tensors
@@ -567,88 +567,6 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
-    }
-
-    /// <summary>
-    /// Serializes the RMSProp optimizer to a byte array for storage or transmission.
-    /// </summary>
-    /// <returns>A byte array containing the serialized optimizer.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method overrides the base implementation to include RMSProp-specific information in the serialization.
-    /// It first serializes the base class data, then adds the iteration count, squared gradient vector, and options.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves the current state of the optimizer so it can be restored later.
-    /// 
-    /// It's like taking a snapshot of the optimizer:
-    /// - First, it saves all the general optimizer information
-    /// - Then, it saves the RMSProp-specific state and settings
-    /// - It packages everything into a format that can be saved to a file or sent over a network
-    /// 
-    /// This allows you to:
-    /// - Save a trained optimizer to use later
-    /// - Share an optimizer with others
-    /// - Create a backup before making changes
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using MemoryStream ms = new MemoryStream();
-        using BinaryWriter writer = new BinaryWriter(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize RootMeanSquarePropagationOptimizer specific data
-        writer.Write(_t);
-        writer.Write(JsonConvert.SerializeObject(_squaredGradient));
-        writer.Write(JsonConvert.SerializeObject(_options));
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Reconstructs the RMSProp optimizer from a serialized byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized optimizer.</param>
-    /// <exception cref="InvalidOperationException">Thrown when the data cannot be deserialized.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method overrides the base implementation to handle RMSProp-specific information during deserialization.
-    /// It first deserializes the base class data, then reconstructs the iteration count, squared gradient vector,
-    /// and options.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method restores the optimizer from a previously saved state.
-    /// 
-    /// It's like restoring from a snapshot:
-    /// - First, it loads all the general optimizer information
-    /// - Then, it loads the RMSProp-specific state and settings
-    /// - It reconstructs the optimizer to the exact state it was in when saved
-    /// 
-    /// This allows you to:
-    /// - Continue working with an optimizer you previously saved
-    /// - Use an optimizer that someone else created and shared
-    /// - Revert to a backup if needed
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using MemoryStream ms = new MemoryStream(data);
-        using BinaryReader reader = new BinaryReader(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize RootMeanSquarePropagationOptimizer specific data
-        _t = reader.ReadInt32();
-        _squaredGradient = JsonConvert.DeserializeObject<Vector<T>>(reader.ReadString())
-            ?? throw new InvalidOperationException("Failed to deserialize _squaredGradient.");
-        _options = JsonConvert.DeserializeObject<RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>>(reader.ReadString())
-            ?? throw new InvalidOperationException("Failed to deserialize _options.");
     }
 
     /// <summary>

@@ -76,6 +76,7 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
     /// to maximize the evidence lower bound (ELBO).
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _variationalMean;
 
     /// <summary>
@@ -88,6 +89,7 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
     /// and to ensure the covariance remains positive definite.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _variationalCovCholesky;
 
     /// <summary>

@@ -46,7 +46,7 @@ namespace AiDotNet.AnomalyDetection.DistanceBased;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("LOCI: Fast Outlier Detection Using the Local Correlation Integral", "https://doi.org/10.1109/ICDE.2003.1260802", Year = 2003, Authors = "Spiros Papadimitriou, Hiroyuki Kitagawa, Phillip B. Gibbons, Christos Faloutsos")]
-public class LOCIDetector<T> : AnomalyDetectorBase<T>
+public partial class LOCIDetector<T> : AnomalyDetectorBase<T>
 {
     /// <summary>Number of radius steps used to sweep from zero to <c>_maxRadius</c>.</summary>
     private const int NumRadiiSteps = 20;

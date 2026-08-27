@@ -323,4 +323,131 @@ public class TabularFamilySurfaceTests
         Assert.Equal(withoutNorm.ParameterCount + expectedNormParameters, withNorm.ParameterCount);
         Assert.Equal(withNorm.ParameterCount, withNorm.GetParameters().Length);
     }
+
+    /// <summary>Every Tabular family, paired with a way to obtain one prediction from it.</summary>
+    public static IEnumerable<object[]> FamiliesWithPredict()
+    {
+        yield return PredictRow("AutoInt", () => new AutoIntRegression<double>(4),
+            model => ((AutoIntRegression<double>)model).Predict(CreateNumericalFeatures()));
+        yield return PredictRow("GANDALF", () => new GANDALFRegression<double>(4),
+            model => ((GANDALFRegression<double>)model).Predict(CreateNumericalFeatures()));
+        yield return PredictRow("Mambular", () => new MambularRegression<double>(4),
+            model => ((MambularRegression<double>)model).Predict(CreateNumericalFeatures()));
+        yield return PredictRow("NODE", () => new NODERegression<double>(4),
+            model => ((NODERegression<double>)model).Predict(CreateNumericalFeatures()));
+        yield return PredictRow("SAINT", () => new SAINTRegression<double>(4),
+            model => ((SAINTRegression<double>)model).Predict(CreateNumericalFeatures()));
+        yield return PredictRow("TabDPT", () => new TabDPTRegression<double>(4),
+            model => ((TabDPTRegression<double>)model).Predict(CreateNumericalFeatures()));
+        yield return PredictRow("TabPFN", () => new TabPFNRegression<double>(4),
+            model => ((TabPFNRegression<double>)model).Predict(CreateNumericalFeatures()));
+        yield return PredictRow("TabR", () => new TabRRegression<double>(4),
+            model =>
+            {
+                var tabR = (TabRRegression<double>)model;
+                var features = CreateNumericalFeatures();
+                tabR.BuildIndex(features);
+                return tabR.Predict(features);
+            });
+        yield return PredictRow(
+            "TabTransformer",
+            () => new TabTransformerRegression<double>(4, 1,
+                new TabTransformerOptions<double> { CategoricalCardinalities = [5, 3] }),
+            model => ((TabTransformerRegression<double>)model).Predict(
+                CreateNumericalFeatures(), CreateCategoricalIndices()));
+        yield return PredictRow("FTTransformer", () => new FTTransformerRegression<double>(4),
+            model => ((FTTransformerRegression<double>)model).Predict(CreateNumericalFeatures()));
+    }
+
+    private static object[] PredictRow(
+        string name,
+        Func<IParameterSource<double>> factory,
+        Func<IParameterSource<double>, Tensor<double>> predict)
+        => new object[] { name, factory, predict };
+
+    /// <summary>The leading values of a prediction, so a failure names what was produced.</summary>
+    private static IEnumerable<string> Describe(Tensor<double> prediction)
+    {
+        int shown = Math.Min(prediction.Length, 4);
+        for (int i = 0; i < shown; i++) yield return prediction[i].ToString("R");
+    }
+
+    /// <summary>
+    /// Two instances given the SAME parameter vector must compute the same prediction.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every other test in this file walks a single traversal and compares it with itself: the count
+    /// comes from the registry, the vector comes from the registry, so a weight the registry never
+    /// visits is absent from BOTH sides and the comparison still balances. A component class that is
+    /// neither a layer nor a model — a nested block reached only through a field — can hold half the
+    /// architecture's weights and leave every one of those assertions green.
+    /// </para>
+    /// <para>
+    /// Prediction is the surface that cannot be fooled that way, because it reads the weights
+    /// directly rather than through the registry. Two freshly constructed instances start from
+    /// independent random initialisation, so any value that did not travel in the vector still
+    /// differs between them afterwards, and the two predictions separate. Identical predictions mean
+    /// the vector carried everything the forward pass consulted.
+    /// </para>
+    /// <para>
+    /// The pre-copy inequality is asserted first so the test cannot pass vacuously: if construction
+    /// were deterministic, matching predictions afterwards would prove nothing at all.
+    /// </para>
+    /// </remarks>
+    [Theory(Timeout = 120000)]
+    [MemberData(nameof(FamiliesWithPredict))]
+    public async Task SharedParameterVector_ProducesTheSamePrediction(
+        string name,
+        Func<IParameterSource<double>> factory,
+        Func<IParameterSource<double>, Tensor<double>> predict)
+    {
+        await Task.Yield();
+        var source = factory();
+        var target = factory();
+
+        var atInitialisation = predict(source);
+
+        // A distinctive vector, so what the forward pass reads cannot be confused with either
+        // instance's initialisation.
+        var checkpoint = source.GetParameters();
+        for (int i = 0; i < checkpoint.Length; i++) checkpoint[i] = (i % 97 - 48) / 100.0;
+
+        source.SetParameters(checkpoint);
+        target.SetParameters(checkpoint);
+
+        var sourceAfter = predict(source);
+        var targetAfter = predict(target);
+
+        Assert.Equal(sourceAfter.Length, targetAfter.Length);
+        for (int i = 0; i < sourceAfter.Length; i++)
+        {
+            Assert.Equal(sourceAfter[i], targetAfter[i], precision: 10);
+        }
+
+        // The comparison above only means something if the prediction reads the vector at all. A
+        // model whose output ignored its parameters would satisfy it no matter how much of the
+        // architecture the vector had failed to reach, so require the output to respond to a change
+        // of vector. Two changes are offered rather than one because a saturating output activation
+        // can hold a single pair of vectors at the same clamped value while still being driven by
+        // them; responding to either change establishes the dependency the assertion above needs.
+        var alternate = new Vector<double>(checkpoint.Length);
+        for (int i = 0; i < alternate.Length; i++) alternate[i] = (i % 61 - 30) / 50.0 + 0.37;
+        source.SetParameters(alternate);
+        var sourceAlternate = predict(source);
+
+        bool outputMoved = false;
+        for (int i = 0; i < sourceAfter.Length && !outputMoved; i++)
+        {
+            outputMoved = Math.Abs(sourceAfter[i] - sourceAlternate[i]) > 1e-12
+                || Math.Abs(sourceAfter[i] - atInitialisation[i]) > 1e-12;
+        }
+
+        Assert.True(outputMoved,
+            $"{name} predicted the same values from its initialisation and from two different " +
+            "parameter vectors, so its output does not depend on its parameters and the agreement " +
+            $"asserted above is vacuous. At initialisation it predicted " +
+            $"[{string.Join(", ", Describe(atInitialisation))}]; after restore it predicted " +
+            $"[{string.Join(", ", Describe(sourceAfter))}].");
+    }
 }

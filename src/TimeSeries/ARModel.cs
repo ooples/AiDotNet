@@ -77,6 +77,7 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     /// Larger coefficients mean stronger influence from that time period.
     /// These values are learned during training to best fit your historical data.
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _arCoefficients;
     private T _seriesMean;
 
@@ -438,21 +439,7 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     /// 
     /// This allows the model to be fully reconstructed later.
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        writer.Write(_arOrder);
-        for (int i = 0; i < _arOrder; i++)
-        {
-            writer.Write(Convert.ToDouble(_arCoefficients[i]));
-        }
 
-        // Serialize training series for in-sample prediction support
-        writer.Write(_trainedSeries.Length);
-        for (int i = 0; i < _trainedSeries.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_trainedSeries[i]));
-        }
-    }
 
     /// <summary>
     /// Deserializes the model's state from a binary stream.
@@ -473,34 +460,7 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     /// 
     /// After deserialization, the model is ready to make predictions as if it had just been trained.
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        _arOrder = reader.ReadInt32();
-        _arCoefficients = new Vector<T>(_arOrder);
-        for (int i = 0; i < _arOrder; i++)
-        {
-            _arCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
 
-        // Deserialize training series if available (backward-compatible)
-        _trainedSeries = Vector<T>.Empty();
-        try
-        {
-            int seriesLength = reader.ReadInt32();
-            if (seriesLength > 0)
-            {
-                _trainedSeries = new Vector<T>(seriesLength);
-                for (int i = 0; i < seriesLength; i++)
-                {
-                    _trainedSeries[i] = NumOps.FromDouble(reader.ReadDouble());
-                }
-            }
-        }
-        catch (EndOfStreamException)
-        {
-            // Older serialized models don't include training series — leave empty
-        }
-    }
 
     /// <summary>
     /// Creates a new instance of the AR model with the same options.
@@ -697,57 +657,6 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     {
         _arCoefficients = Vector<T>.Empty();
         _trainedSeries = Vector<T>.Empty();
-    }
-
-    /// <summary>
-    /// Creates a deep copy of the current model.
-    /// </summary>
-    /// <returns>A new instance of the AR model with the same state and parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a complete copy of the model, including its configuration and trained coefficients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates an exact duplicate of your trained model.
-    /// 
-    /// Unlike CreateInstance(), which creates a blank model with the same settings,
-    /// Clone() creates a complete copy including:
-    /// - The model configuration (AR order, etc.)
-    /// - All trained coefficients and internal state
-    /// 
-    /// This is useful for:
-    /// - Creating a backup before experimenting with a model
-    /// - Using the same trained model in multiple scenarios
-    /// - Creating ensemble models that use variations of the same base model
-    /// 
-    /// Think of it like photocopying a completed notebook - you get all the written content
-    /// as well as the structure of the notebook itself.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new ARModel<T>((ARModelOptions<T>)Options);
-
-        // Copy trained coefficients
-        if (_arCoefficients.Length > 0)
-        {
-            clone._arCoefficients = new Vector<T>(_arCoefficients.Length);
-            for (int i = 0; i < _arCoefficients.Length; i++)
-            {
-                clone._arCoefficients[i] = _arCoefficients[i];
-            }
-        }
-
-        // Copy stored training series
-        if (_trainedSeries.Length > 0)
-        {
-            clone._trainedSeries = new Vector<T>(_trainedSeries.Length);
-            for (int i = 0; i < _trainedSeries.Length; i++)
-            {
-                clone._trainedSeries[i] = _trainedSeries[i];
-            }
-        }
-
-        return clone;
     }
 
     /// <summary>

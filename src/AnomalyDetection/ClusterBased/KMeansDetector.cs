@@ -46,6 +46,7 @@ public partial class KMeansDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;
     private readonly int _maxIterations;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _centroids;
     private int[]? _clusterSizes;
     private int _totalSamples;

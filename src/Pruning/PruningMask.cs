@@ -26,8 +26,9 @@ namespace AiDotNet.Pruning;
 /// This helps create smaller, faster models that still work well!
 /// </para>
 /// </remarks>
-public class PruningMask<T> : IPruningMask<T>
+public partial class PruningMask<T> : IPruningMask<T>
 {
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Matrix<T> _mask;
     private readonly INumericOperations<T> _numOps;
 

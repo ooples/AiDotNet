@@ -29,7 +29,7 @@ namespace AiDotNet.NeuralNetworks;
 /// a network designed for text, or having layers that don't match up in size.
 /// </para>
 /// </remarks>
-public class NeuralNetworkArchitecture<T>
+public class NeuralNetworkArchitecture<T> : IConfigurationCloneable
 {
     /// <summary>
     /// Gets the optional list of predefined layers for the neural network.
@@ -1178,6 +1178,19 @@ public class NeuralNetworkArchitecture<T>
     public bool IsLayerOnly { get; private set; }
 
     /// <summary>
+    /// Gets whether this architecture is an internal snapshot of a layer graph that was already
+    /// validated when the source network was constructed.
+    /// </summary>
+    /// <remarks>
+    /// Runtime shape reconciliation may change a layer's reported shape from its original
+    /// per-sample declaration to a batched forward shape. Re-validating those runtime snapshots as
+    /// if they were a newly authored architecture can reject a valid graph. This flag is set only by
+    /// <see cref="IConfigurationCloneable.CloneConfiguration"/>; user-created architectures still
+    /// receive the normal validation.
+    /// </remarks>
+    internal bool IsValidatedCloneSnapshot { get; private set; }
+
+    /// <summary>
     /// Creates a "layer-only" architecture stub for sub-modules and detection
     /// backbones whose input contract is owned by a parent network. Every
     /// dimension is sentinel <c>-1</c>; <see cref="IsLayerOnly"/> returns
@@ -1208,5 +1221,97 @@ public class NeuralNetworkArchitecture<T>
             frames: 0);
         stub.IsLayerOnly = true;
         return stub;
+    }
+
+    /// <summary>
+    /// Rebuilds this blueprint with independent layer objects and no copied runtime parameters.
+    /// </summary>
+    /// <remarks>
+    /// A <see cref="NeuralNetwork{T}"/> stores the architecture supplied to its constructor and uses
+    /// the architecture's layer objects directly. The generic clone engine therefore cannot pass the
+    /// same architecture to a new network: that would make both networks own the same mutable layers.
+    /// Layer construction metadata is already the generated, central contract used by serialization,
+    /// so use it here as well instead of adding per-layer clone overrides.
+    /// </remarks>
+    object IConfigurationCloneable.CloneConfiguration() => CloneForModelConstruction();
+
+    /// <summary>
+    /// Creates an independent architecture for another model that must not share this instance's
+    /// mutable layer objects.
+    /// </summary>
+    internal NeuralNetworkArchitecture<T> CloneForModelConstruction()
+    {
+        if (IsLayerOnly)
+        {
+            var layerOnly = CreateLayerOnly();
+            layerOnly._randomSeed = _randomSeed;
+            layerOnly.UseAutodiff = UseAutodiff;
+            layerOnly.IsInitialized = IsInitialized;
+            return layerOnly;
+        }
+
+        var layerCopies = new List<ILayer<T>>(Layers.Count);
+        foreach (var layer in Layers)
+        {
+            if (layer is not LayerBase<T> layerBase)
+            {
+                throw new NotSupportedException(
+                    $"Layer '{layer.GetType().FullName}' does not derive from LayerBase and cannot "
+                    + "publish generated construction metadata.");
+            }
+
+            var metadata = layerBase.GetMetadata().ToDictionary(
+                pair => pair.Key,
+                pair => (object)pair.Value,
+                StringComparer.Ordinal);
+            Type runtimeLayerType = layer.GetType();
+            Type registryLayerType = runtimeLayerType.IsGenericType
+                ? runtimeLayerType.GetGenericTypeDefinition()
+                : runtimeLayerType;
+            string layerType = registryLayerType.FullName ?? registryLayerType.Name;
+            layerCopies.Add(DeserializationHelper.CreateLayerFromType<T>(
+                layerType,
+                layer.GetInputShape(),
+                layer.GetOutputShape(),
+                metadata));
+        }
+
+        NeuralNetworkArchitecture<T> copy;
+        if (GetType() == typeof(NeuralNetworkArchitecture<T>))
+        {
+            copy = new NeuralNetworkArchitecture<T>(
+                inputType: InputType,
+                taskType: TaskType,
+                complexity: Complexity,
+                inputSize: InputSize,
+                inputHeight: InputHeight,
+                inputWidth: InputWidth,
+                inputDepth: InputDepth,
+                outputSize: OutputSize,
+                layers: layerCopies,
+                shouldReturnFullSequence: ShouldReturnFullSequence,
+                imageEmbeddingDim: ImageEmbeddingDim,
+                textEmbeddingDim: TextEmbeddingDim,
+                inputFrames: InputFrames);
+        }
+        else
+        {
+            // Preserve a derived architecture's semantic configuration. Rebuilding every blueprint as
+            // NeuralNetworkArchitecture erased subtype-only values (for example CodeSynthesisArchitecture's
+            // dimensions and UseDataFlow), so constructor replay rejected the result and silently selected
+            // a model's parameterless/default constructor. The generated clone plan already knows how to
+            // reconstruct the runtime subtype; replace only its initially carried layer references with the
+            // independently rebuilt graph above.
+            copy = (NeuralNetworkArchitecture<T>)CloneEngine.CopyConfiguration(this);
+            copy.Layers.Clear();
+            copy.Layers.AddRange(layerCopies);
+        }
+
+        copy._randomSeed = _randomSeed;
+        copy.UseAutodiff = UseAutodiff;
+        copy.IsInitialized = IsInitialized;
+        copy.IsValidatedCloneSnapshot = true;
+
+        return copy;
     }
 }

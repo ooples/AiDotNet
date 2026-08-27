@@ -19,7 +19,7 @@ namespace AiDotNet.DistributedTraining.Layers;
 /// </summary>
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
-[LayerProperty(IsTrainable = true, ChangesShape = true)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestConstructorArgs = "new AiDotNet.DistributedTraining.InMemoryCommunicationBackend<double>(0, 1), 4, 8", TestInputShape = "1, 4")]
 // Rank 2 [Batch, Features] and nothing else, read off ForwardTraced's own arithmetic: the matmul is
 // against a rank-2 weightT ([inputSize, localOut]) and the bias is broadcast from a rank-2
 // [1, _localOutputSize]. Those two shapes only line up with a rank-2 activation, so no other rank is
@@ -46,6 +46,9 @@ public sealed partial class ColumnParallelLinear<T> : LayerBase<T>, IShapeContra
     public override bool SupportsTraining => true;
     public int LocalOutputSize => _localOutputSize;
 
+    /// <summary>Construction state: the 'outputSize' the layer was built with.</summary>
+    private readonly int _outputSize;
+
     public ColumnParallelLinear(
         ICommunicationBackend<T> backend,
         int inputSize,
@@ -56,6 +59,7 @@ public sealed partial class ColumnParallelLinear<T> : LayerBase<T>, IShapeContra
                [gatherOutput ? outputSize : ShardCount(outputSize, backend.WorldSize, backend.Rank)],
                activationFunction ?? new AiDotNet.ActivationFunctions.IdentityActivation<T>())
     {
+        _outputSize = outputSize;
         _backend = backend;
         _f = new CopyToTensorParallelRegion<T>(backend);
         _gather = new GatherFromTensorParallelRegion<T>(backend, outputSize);

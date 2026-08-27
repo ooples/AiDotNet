@@ -126,14 +126,6 @@ public partial class DiffWaveModel<T> : DiffusionModelBase<T>
     /// </summary>
     private DiffWaveNetwork<T> _network;
 
-    /// <summary>
-    /// Last audio input shape seen by <see cref="PredictNoise"/>. Used by
-    /// <see cref="Clone"/> to replay lazy DenseLayer shape resolution on
-    /// the cloned network so its layers have the same parameter layout
-    /// as the original before parameters are copied across.
-    /// </summary>
-    private int[]? _lastInputShape;
-
     #endregion
 
     #region Properties
@@ -348,14 +340,6 @@ public partial class DiffWaveModel<T> : DiffusionModelBase<T>
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep)
     {
-        // Remember the input shape so Clone() can replay lazy shape
-        // resolution on the cloned network — the downstream DenseLayers
-        // project the LAST tensor dim, so their parameter count depends
-        // on the audio's time axis. Without this, the clone's layers
-        // would lazily initialize to a different shape on first Predict
-        // and SetParameters would reject the original's parameter
-        // vector with an "Expected X parameters, got Y" mismatch.
-        _lastInputShape = (int[])noisySample._shape.Clone();
         return _network.Forward(noisySample, timestep, null);
     }
 
@@ -368,32 +352,6 @@ public partial class DiffWaveModel<T> : DiffusionModelBase<T>
     #endregion
 
     #region ICloneable Implementation
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        var clone = new DiffWaveModel<T>(
-            residualChannels: _residualChannels,
-            residualLayers: _residualLayers,
-            dilationCycle: _dilationCycle,
-            melChannels: _melChannels,
-            sampleRate: SampleRate,
-            seed: null);
-
-        if (_lastInputShape is not null)
-        {
-            clone._network.ResolveLayerShapesFor(_lastInputShape);
-            clone._lastInputShape = (int[])_lastInputShape.Clone();
-        }
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
-    }
 
     #endregion
 
@@ -517,6 +475,10 @@ public class DiffWaveNetwork<T> : IParameterSource<T>
         // a 2-layer FC MLP. The MLP is per-sample (no time axis), so a
         // plain DenseLayer is paper-correct here — NOT a Conv1D.
         _diffusionEmbedding = new DenseLayer<T>(residualChannels, (IActivationFunction<T>?)null);
+        // The sinusoidal embedding width is an architectural constant, not a data-dependent
+        // shape. Declare it at construction so manifests, checkpoints, and generated clones all
+        // expose the same parameter surface before the first forward pass.
+        _diffusionEmbedding.ResolveShapesOnly([128]);
 
         // Residual blocks with varying dilation
         _residualBlocks = new List<DiffWaveResidualBlock<T>>();
@@ -551,25 +513,6 @@ public class DiffWaveNetwork<T> : IParameterSource<T>
         // because Conv1D has kernel*C_in*C_out + C_out params, not
         // T-dependent params like the old DenseLayer-projects-T-axis
         // anti-pattern.
-    }
-
-    /// <summary>
-    /// Replays the lazy shape-resolution pass that would happen on the
-    /// first <see cref="Forward"/> with the given audio shape, without
-    /// keeping the dummy output. Used by <see cref="DiffWaveModel{T}.Clone"/>
-    /// to make the cloned network's layers match the original's parameter
-    /// layout before <c>SetParameters</c> validates the count.
-    /// </summary>
-    internal void ResolveLayerShapesFor(int[] audioShape)
-    {
-        if (audioShape is null) throw new ArgumentNullException(nameof(audioShape));
-        if (audioShape.Length < 1)
-        {
-            throw new ArgumentException(
-                "Audio shape must have at least one dimension.", nameof(audioShape));
-        }
-        var dummyAudio = new Tensor<T>(audioShape);
-        _ = Forward(dummyAudio, timestep: 0, melCondition: null);
     }
 
     /// <summary>
@@ -854,6 +797,9 @@ public class DiffWaveResidualBlock<T>
         // residualChannels-dim per-sample embedding to residualChannels
         // (then broadcast-added across the time axis inside Forward).
         _diffusionProj = new DenseLayer<T>(channels, (IActivationFunction<T>?)null);
+        // The parent MLP emits exactly residualChannels values. Resolve this construction-known
+        // dimension once instead of making clone/checkpoint layout depend on a warm-up forward.
+        _diffusionProj.ResolveShapesOnly([channels]);
 
         // Mel conditioning — Kong 2020 §3.3: optional global conditioner
         // (mel-spectrogram, upsampled to audio rate) projected via 1×1

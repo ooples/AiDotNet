@@ -110,7 +110,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
 
     // Causal structure: adjacency matrix W (numFeatures x numFeatures)
     // W[i,j] > 0 means feature i causally influences feature j
-    [Buffer(Name = "causal-adjacency")]
+    [Buffer(Name = "causal-adjacency", Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Matrix<T>? _adjacency;
 
     // Augmented Lagrangian parameters for NOTEARS DAG constraint
@@ -1394,38 +1394,10 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.EmbeddingDimension);
-        writer.Write(_options.HiddenDimensions.Length);
-        foreach (var dim in _options.HiddenDimensions)
-        {
-            writer.Write(dim);
-        }
-        writer.Write(_options.BatchSize);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.DAGPenaltyWeight);
-        writer.Write(_options.SparsityWeight);
-        writer.Write(_options.GradientPenaltyWeight);
-        writer.Write(_options.DiscriminatorDropout);
-        writer.Write(_options.DiscriminatorSteps);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Options are reconstructed from serialized data
-    }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new CausalGANGenerator<T>(
-            Architecture,
-            _options,
-            _generatorOptimizer,
-            _lossFunction);
-    }
 
     /// <inheritdoc/>
     public override Dictionary<string, T> GetFeatureImportance()

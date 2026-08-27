@@ -68,12 +68,14 @@ public partial class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     /// [group_0_comp_0, group_0_comp_1, ..., group_G_comp_R]
     /// Each component has length paramsPerGroup.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _rankComponents;
 
     /// <summary>
     /// Selection logits β for each (group, component) pair.
     /// Length = numGroups * maxRank.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _selectionLogits;
 
     private readonly int _paramDim;

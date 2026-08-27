@@ -16,7 +16,7 @@ namespace AiDotNet.Interpolation;
 /// of change.
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
-public class HermiteInterpolation<T> : IInterpolation<T>
+public partial class HermiteInterpolation<T> : IInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the data points (independent variable).
@@ -31,6 +31,7 @@ public class HermiteInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The slopes (derivatives) at each data point.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _m;
 
     /// <summary>

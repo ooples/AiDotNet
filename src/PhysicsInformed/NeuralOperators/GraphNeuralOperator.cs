@@ -398,55 +398,13 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// Serializes graph operator-specific data.
         /// </summary>
         /// <param name="writer">Binary writer.</param>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            writer.Write(_numMessagePassingLayers);
-            writer.Write(_hiddenDim);
-            writer.Write(_inputDim);
-            writer.Write(_normalizeAdjacency);
-            writer.Write(_graphLayers.Count);
 
-            foreach (var layer in _graphLayers)
-            {
-                SerializationHelper<T>.SerializeVector(writer, layer.GetParameters());
-            }
-        }
 
         /// <summary>
         /// Deserializes graph operator-specific data.
         /// </summary>
         /// <param name="reader">Binary reader.</param>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            int storedLayers = reader.ReadInt32();
-            int storedHidden = reader.ReadInt32();
-            int storedInputDim = reader.ReadInt32();
-            bool storedNormalize = reader.ReadBoolean();
-            int storedLayerCount = reader.ReadInt32();
 
-            if (storedLayers != _numMessagePassingLayers ||
-                storedHidden != _hiddenDim ||
-                storedInputDim != _inputDim ||
-                storedNormalize != _normalizeAdjacency ||
-                storedLayerCount != _graphLayers.Count)
-            {
-                throw new InvalidOperationException("Serialized graph operator configuration does not match the current instance.");
-            }
-
-            foreach (var layer in _graphLayers)
-            {
-                layer.SetParameters(SerializationHelper<T>.DeserializeVector(reader));
-            }
-        }
-
-        /// <summary>
-        /// Creates a new instance with the same configuration.
-        /// </summary>
-        /// <returns>New graph operator instance.</returns>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new GraphNeuralOperator<T>(Architecture, _numMessagePassingLayers, _hiddenDim, null, _inputDim, _normalizeAdjacency);
-        }
 
 
         public Tensor<T> Forward(Tensor<T> nodeFeatures, Tensor<T> adjacencyMatrix)

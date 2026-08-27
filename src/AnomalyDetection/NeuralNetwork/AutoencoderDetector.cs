@@ -56,9 +56,13 @@ public partial class AutoencoderDetector<T> : AnomalyDetectorBase<T>
     private readonly int _batchSize;
 
     // Weights for the simple autoencoder
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _encoderWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _encoderBias;
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _decoderWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _decoderBias;
 
     private int _inputDim;

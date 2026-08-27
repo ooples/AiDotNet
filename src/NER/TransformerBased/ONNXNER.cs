@@ -102,13 +102,4 @@ public class ONNXNER<T> : TransformerNERBase<T>
             "ONNX-NER", "ONNX Runtime", optimizer)
     {
     }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new TransformerNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new ONNXNER<T>(Architecture, p, optionsCopy);
-        return new ONNXNER<T>(Architecture, optionsCopy);
-    }
 }

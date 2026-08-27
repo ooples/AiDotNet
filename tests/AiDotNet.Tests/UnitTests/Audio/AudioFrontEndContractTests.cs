@@ -66,9 +66,6 @@ public sealed class AudioFrontEndContractTests
         protected override void DeserializeNetworkSpecificData(BinaryReader reader)
         {
         }
-
-        protected override IFullModel<double, Tensor<double>, Tensor<double>> CreateNewInstance()
-            => new BareAudioModel(Architecture);
     }
 
     private static BareAudioModel CreateModel()

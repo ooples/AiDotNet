@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("SimCSE: Simple Contrastive Learning of Sentence Embeddings", "https://arxiv.org/abs/2104.08821", Year = 2022, Authors = "Tianyu Gao, Xingcheng Yao, Danqi Chen")]
-    public class SimCSE<T> : TransformerEmbeddingNetwork<T>
+    public partial class SimCSE<T> : TransformerEmbeddingNetwork<T>
     {
         private readonly SimCSEOptions _options;
 
@@ -161,26 +161,6 @@ namespace AiDotNet.NeuralNetworks
 
         #region Methods
 
-        /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new SimCSE<T>(
-                Architecture,
-                null,
-                null,
-                _simCseType,
-                _vocabSize,
-                EmbeddingDimension,
-                MaxTokens,
-                _numLayers,
-                _numHeads,
-                _feedForwardDim,
-                _dropoutRate,
-                PoolingStrategy.ClsToken,
-                LossFunction,
-                Convert.ToDouble(MaxGradNorm));
-        }
-
         /// <summary>
         /// Retrieves detailed metadata about the SimCSE configuration.
         /// </summary>
@@ -196,28 +176,10 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <inheritdoc/>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            base.SerializeNetworkSpecificData(writer);
-            writer.Write((int)_simCseType);
-            writer.Write(_dropoutRate);
-            writer.Write(_vocabSize);
-            writer.Write(_numLayers);
-            writer.Write(_numHeads);
-            writer.Write(_feedForwardDim);
-        }
+
 
         /// <inheritdoc/>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            base.DeserializeNetworkSpecificData(reader);
-            _simCseType = (SimCSEType)reader.ReadInt32();
-            _dropoutRate = reader.ReadDouble();
-            _vocabSize = reader.ReadInt32();
-            _numLayers = reader.ReadInt32();
-            _numHeads = reader.ReadInt32();
-            _feedForwardDim = reader.ReadInt32();
-        }
+
 
         /// <inheritdoc/>
         public override Vector<T> Embed(string text)

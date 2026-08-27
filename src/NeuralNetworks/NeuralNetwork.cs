@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Learning Internal Representations by Error Propagation", "https://doi.org/10.21236/ADA164453")]
-public class NeuralNetwork<T> : SequentialVectorModelLayoutBase<T>
+public partial class NeuralNetwork<T> : SequentialVectorModelLayoutBase<T>
 {
     private readonly NeuralNetworkDefaultOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -165,7 +165,10 @@ public class NeuralNetwork<T> : SequentialVectorModelLayoutBase<T>
         {
             // Use the layers provided by the user
             Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
+            if (!Architecture.IsValidatedCloneSnapshot)
+            {
+                ValidateCustomLayers(Layers);
+            }
         }
         else
         {
@@ -372,9 +375,7 @@ public class NeuralNetwork<T> : SequentialVectorModelLayoutBase<T>
     /// beyond what the base class already saves.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-    }
+
 
     /// <summary>
     /// Deserializes neural network-specific data from a binary reader.
@@ -396,38 +397,5 @@ public class NeuralNetwork<T> : SequentialVectorModelLayoutBase<T>
     /// beyond what the base class already loads.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-    }
 
-    /// <summary>
-    /// Creates a new instance of the neural network with the same architecture.
-    /// </summary>
-    /// <returns>A new instance of the neural network.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new neural network with the same architecture as the current instance.
-    /// The new instance is initialized with fresh layers and parameters, making it useful for
-    /// creating multiple networks with the same structure or for resetting a network while preserving its architecture.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a brand new neural network with the same structure.
-    /// 
-    /// This is useful when you want to:
-    /// - Start over with a fresh network but keep the same structure
-    /// - Create multiple networks with identical layouts
-    /// - Reset a network to its initial state
-    /// 
-    /// The new network will have:
-    /// - The same number of layers and neurons
-    /// - The same activation functions
-    /// - Newly initialized weights and biases
-    /// 
-    /// Think of it like creating a twin of your neural network, but with a "blank slate" -
-    /// it has the same structure but hasn't learned anything yet.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new NeuralNetwork<T>(Architecture);
-    }
 }

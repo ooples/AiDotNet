@@ -62,7 +62,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("DART: Dropouts meet Multiple Additive Regression Trees", "https://arxiv.org/abs/1505.01866", Year = 2015, Authors = "K. V. Rashmi, Ran Gilad-Bachrach")]
-public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
+public partial class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>
     /// Individual tree structures.
@@ -679,39 +679,6 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
         };
     }
 
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Options
-        writer.Write(_options.NumberOfIterations);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.MaxDepth);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_numFeatures);
-
-        // Trees
-        writer.Write(_trees.Count);
-        foreach (var tree in _trees)
-        {
-            SerializeTree(writer, tree);
-        }
-
-        // Tree weights
-        foreach (var weight in _treeWeights)
-        {
-            writer.Write(NumOps.ToDouble(weight));
-        }
-
-        return ms.ToArray();
-    }
-
     private void SerializeTree(BinaryWriter writer, DARTTree tree)
     {
         writer.Write(tree.IsConstant);
@@ -739,35 +706,6 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
         else
         {
             writer.Write(NumOps.ToDouble(tree.LeafValue));
-        }
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        int baseLen = reader.ReadInt32();
-        base.Deserialize(reader.ReadBytes(baseLen));
-
-        _options.NumberOfIterations = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.MaxDepth = reader.ReadInt32();
-        _options.DropoutRate = reader.ReadDouble();
-        _numFeatures = reader.ReadInt32();
-
-        int numTrees = reader.ReadInt32();
-        _trees = [];
-        for (int t = 0; t < numTrees; t++)
-        {
-            _trees.Add(DeserializeTree(reader));
-        }
-
-        _treeWeights = [];
-        for (int t = 0; t < numTrees; t++)
-        {
-            _treeWeights.Add(NumOps.FromDouble(reader.ReadDouble()));
         }
     }
 
@@ -802,19 +740,6 @@ public class DARTRegression<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         return tree;
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new DARTRegression<T>(_options, Regularization);
-    }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new DARTRegression<T>(_options, Regularization);
-        clone.Deserialize(Serialize());
-        return clone;
     }
 
     /// <summary>

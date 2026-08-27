@@ -175,27 +175,7 @@ public class CodeT5<T> : CodeModelBase<T>
             optimizerName: _optimizer.GetType().Name);
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        CodeModelArchitectureSerialization.Write(
-            writer,
-            CodeArchitecture,
-            includeUseDataFlow: false,
-            includeEncoderDecoderLayerCounts: true);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        CodeModelArchitectureSerialization.ReadAndValidate(
-            reader,
-            CodeArchitecture,
-            modelName: "CodeT5",
-            includeUseDataFlow: false,
-            includeEncoderDecoderLayerCounts: true);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new CodeT5<T>(CodeArchitecture, LossFunction, optimizer: null, tokenizer: Tokenizer);
-    }
+
 }

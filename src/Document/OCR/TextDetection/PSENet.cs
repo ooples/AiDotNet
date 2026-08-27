@@ -56,7 +56,6 @@ namespace AiDotNet.Document.OCR.TextDetection;
 [ResearchPaper("Shape Robust Text Detection with Progressive Scale Expansion Network", "https://doi.org/10.48550/arXiv.1903.12473", Year = 2019, Authors = "Wenhai Wang, Enze Xie, Xiang Li, Wenbo Hou, Tong Lu, Gang Yu, Shuai Shao")]
 public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 {
-
     private readonly PSENetOptions _options;
 
     /// <inheritdoc/>
@@ -160,7 +159,14 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         _backboneChannels = backboneChannels;
         _featureChannels = featureChannels;
         _numKernels = numKernels;
-        _optimizer = optimizer ?? CreateDefaultOptimizer();
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                // The detector's multi-million-parameter ResNet/FPN stack needs the bounded
+                // fine-tuning step used by the established PSENet training path; Adam's generic
+                // 1e-3 first step overshoots the BCE-with-logits objective.
+                InitialLearningRate = 1e-4
+            });
 
         ImageSize = imageSize;
 
@@ -206,7 +212,11 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         _backboneChannels = backboneChannels;
         _featureChannels = featureChannels;
         _numKernels = numKernels;
-        _optimizer = optimizer ?? CreateDefaultOptimizer();
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-4
+            });
 
         ImageSize = imageSize;
 
@@ -240,21 +250,6 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     }
 
     #endregion
-
-    private AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
-    {
-        // The native ResNet/FPN detector has more than three million parameters at the bounded
-        // conformance size. Adam's generic 1e-3 default moves all of them on its first bias-corrected
-        // step and overshoots otherwise well-posed BCE-with-logits targets. A 1e-4 detector fine-tuning
-        // rate keeps the step clipped and descending; callers that supply an optimizer remain untouched.
-        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = 1e-4,
-                EnableGradientClipping = true,
-                MaxGradientNorm = 1.0,
-            });
-    }
 
     #region ITextDetector Implementation
 
@@ -577,32 +572,10 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_backboneChannels);
-        writer.Write(_featureChannels);
-        writer.Write(_numKernels);
-        writer.Write(ImageSize);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int backboneChannels = reader.ReadInt32();
-        int featureChannels = reader.ReadInt32();
-        int numKernels = reader.ReadInt32();
-        int imageSize = reader.ReadInt32();
-        bool useNativeMode = reader.ReadBoolean();
 
-        ImageSize = imageSize;
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new PSENet<T>(Architecture, ImageSize, _backboneChannels, _featureChannels, _numKernels);
-    }
 
     #endregion
 
@@ -665,7 +638,8 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         SetTrainingMode(false);
     }
 
-    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+
 
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights

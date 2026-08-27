@@ -418,107 +418,20 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
         return scores;
     }
 
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        writer.Write(_options.WindowSize);
-        writer.Write(_numOps.ToDouble(_anomalyThreshold));
+    // SerializeCore / DeserializeCore are DELETED, not reimplemented.
+    //
+    // TimeSeriesModelBase already round-trips declared state: Serialize ends with
+    // ModelStateEnvelope.Append(DeclaredState, ...) and Deserialize begins with the matching
+    // Extract, so _anomalyThreshold, _fcWeights, _fcBias, _options, _trainingSeries and now
+    // _convLayers all travel by name. The deleted pair wrote most of those a SECOND time by hand,
+    // and wrote _convLayers in a form that could not be restored: DeserializeCore rebuilt each
+    // convolution with the placeholder constructor, so _outputChannels and _kernelSize stayed 0,
+    // 96 kernel values collapsed to 1, and the model's prediction changed sign across a round trip.
+    //
+    // The base could not be used before because SerializeCore was ABSTRACT -- every time series
+    // model was required to hand-write both halves. It is virtual and empty now, so this model
+    // declares its state and writes no serialization at all.
 
-        // Serialize conv layers
-        writer.Write(_convLayers.Count);
-        foreach (var conv in _convLayers)
-        {
-            conv.Serialize(writer);
-        }
-
-        // Serialize FC weights tensor
-        writer.Write(_fcWeights.Shape.Length);
-        foreach (int dim in _fcWeights._shape)
-            writer.Write(dim);
-        writer.Write(_fcWeights.Length);
-        for (int i = 0; i < _fcWeights.Length; i++)
-            writer.Write(_numOps.ToDouble(_fcWeights[i]));
-
-        // Serialize FC bias tensor
-        writer.Write(_fcBias.Shape.Length);
-        foreach (int dim in _fcBias._shape)
-            writer.Write(dim);
-        writer.Write(_fcBias.Length);
-        for (int i = 0; i < _fcBias.Length; i++)
-            writer.Write(_numOps.ToDouble(_fcBias[i]));
-
-        // Serialize training series
-        writer.Write(_trainingSeries.Length);
-        for (int i = 0; i < _trainingSeries.Length; i++)
-            writer.Write(_numOps.ToDouble(_trainingSeries[i]));
-    }
-
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        int savedWindowSize = reader.ReadInt32();
-        if (savedWindowSize != _options.WindowSize)
-        {
-            throw new InvalidOperationException(
-                $"Serialized WindowSize ({savedWindowSize}) doesn't match options ({_options.WindowSize})");
-        }
-        _anomalyThreshold = _numOps.FromDouble(reader.ReadDouble());
-
-        // Deserialize conv layers
-        int convLayerCount = reader.ReadInt32();
-        _convLayers.Clear();
-        for (int i = 0; i < convLayerCount; i++)
-        {
-            var layer = new ConvLayerTensor<T>();
-            layer.Deserialize(reader);
-            _convLayers.Add(layer);
-        }
-
-        // Deserialize FC weights tensor
-        int weightsRank = reader.ReadInt32();
-        int[] weightsShape = new int[weightsRank];
-        for (int i = 0; i < weightsRank; i++)
-            weightsShape[i] = reader.ReadInt32();
-        int weightsLength = reader.ReadInt32();
-        _fcWeights = new Tensor<T>(weightsShape);
-        // Clamp by tensor length but consume all serialized values to keep stream aligned
-        for (int i = 0; i < weightsLength; i++)
-        {
-            double v = reader.ReadDouble();
-            if (i < _fcWeights.Length)
-                _fcWeights[i] = _numOps.FromDouble(v);
-        }
-
-        // Deserialize FC bias tensor
-        int biasRank = reader.ReadInt32();
-        int[] biasShape = new int[biasRank];
-        for (int i = 0; i < biasRank; i++)
-            biasShape[i] = reader.ReadInt32();
-        int biasLength = reader.ReadInt32();
-        _fcBias = new Tensor<T>(biasShape);
-        // Clamp by tensor length but consume all serialized values to keep stream aligned
-        for (int i = 0; i < biasLength; i++)
-        {
-            double v = reader.ReadDouble();
-            if (i < _fcBias.Length)
-                _fcBias[i] = _numOps.FromDouble(v);
-        }
-
-        // Initialize gradient accumulators
-        _fcWeightsGrad = new Tensor<T>(weightsShape);
-        _fcBiasGrad = new Tensor<T>(biasShape);
-
-        // Deserialize training series (post-patch field)
-        try
-        {
-            int tsLen = reader.ReadInt32();
-            _trainingSeries = new Vector<T>(tsLen);
-            for (int i = 0; i < tsLen; i++)
-                _trainingSeries[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
-        catch (EndOfStreamException)
-        {
-            _trainingSeries = Vector<T>.Empty();
-        }
-    }
 
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -632,16 +545,22 @@ internal partial class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, 
 
     private int _outputChannels;
     private int _kernelSize;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _kernels;  // [outputChannels, kernelSize]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _biases;   // [outputChannels]
 
     // Cached state for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastPreActivations;  // [outputChannels, numPositions] before ReLU
     private int _lastNumPositions;
 
     // Stored gradients for UpdateParameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _kernelGradients;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _biasGradients;
 
     public override bool SupportsTraining => true;
@@ -744,45 +663,5 @@ internal partial class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, 
         _lastPreActivations = null;
         _kernelGradients = null;
         _biasGradients = null;
-    }
-
-    public override void Serialize(BinaryWriter writer)
-    {
-        writer.Write(_outputChannels);
-        writer.Write(_kernelSize);
-        writer.Write(_kernels.Shape.Length);
-        foreach (int dim in _kernels._shape) writer.Write(dim);
-        writer.Write(_kernels.Length);
-        for (int i = 0; i < _kernels.Length; i++) writer.Write(NumOps.ToDouble(_kernels[i]));
-        writer.Write(_biases.Shape.Length);
-        foreach (int dim in _biases._shape) writer.Write(dim);
-        writer.Write(_biases.Length);
-        for (int i = 0; i < _biases.Length; i++) writer.Write(NumOps.ToDouble(_biases[i]));
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        _outputChannels = reader.ReadInt32();
-        _kernelSize = reader.ReadInt32();
-
-        int kernelsRank = reader.ReadInt32();
-        int[] kernelsShape = new int[kernelsRank];
-        for (int i = 0; i < kernelsRank; i++) kernelsShape[i] = reader.ReadInt32();
-        int kernelsLength = reader.ReadInt32();
-        _kernels = new Tensor<T>(kernelsShape);
-        if (kernelsLength != _kernels.Length)
-            throw new InvalidOperationException(
-                $"Serialized kernel length ({kernelsLength}) does not match tensor shape ({_kernels.Length}).");
-        for (int i = 0; i < kernelsLength; i++) _kernels[i] = NumOps.FromDouble(reader.ReadDouble());
-
-        int biasesRank = reader.ReadInt32();
-        int[] biasesShape = new int[biasesRank];
-        for (int i = 0; i < biasesRank; i++) biasesShape[i] = reader.ReadInt32();
-        int biasesLength = reader.ReadInt32();
-        _biases = new Tensor<T>(biasesShape);
-        if (biasesLength != _biases.Length)
-            throw new InvalidOperationException(
-                $"Serialized bias length ({biasesLength}) does not match tensor shape ({_biases.Length}).");
-        for (int i = 0; i < biasesLength; i++) _biases[i] = NumOps.FromDouble(reader.ReadDouble());
     }
 }

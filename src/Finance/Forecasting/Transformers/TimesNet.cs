@@ -605,35 +605,6 @@ public partial class TimesNet<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <returns>A new TimesNet model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This creates a fresh copy of the model with the same settings
-    /// but new (randomly initialized) weights. Useful for ensemble training or cross-validation.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new TimesNetOptions<T>
-        {
-            SequenceLength = _sequenceLength,
-            PredictionHorizon = _predictionHorizon,
-            NumFeatures = _numFeatures,
-            ModelDimension = _modelDimension,
-            FeedForwardDimension = _feedForwardDimension,
-            NumLayers = _numLayers,
-            TopK = _topK,
-            ConvKernelSize = _convKernelSize,
-            Dropout = _dropout,
-            UseInstanceNormalization = _useInstanceNormalization
-        };
-
-        return new TimesNet<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Writes TimesNet-specific configuration during serialization.
     /// </summary>
     /// <param name="writer">Binary writer for output.</param>
@@ -643,19 +614,7 @@ public partial class TimesNet<T> : ForecastingModelBase<T>
     /// to a file so the model can be loaded later with the same configuration.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_predictionHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_modelDimension);
-        writer.Write(_feedForwardDimension);
-        writer.Write(_numLayers);
-        writer.Write(_topK);
-        writer.Write(_convKernelSize);
-        writer.Write(_dropout);
-        writer.Write(_useInstanceNormalization);
-    }
+
 
     /// <summary>
     /// Reads TimesNet-specific configuration during deserialization.
@@ -667,33 +626,7 @@ public partial class TimesNet<T> : ForecastingModelBase<T>
     /// and restores the model configuration.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _predictionHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _modelDimension = reader.ReadInt32();
-        _feedForwardDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _topK = reader.ReadInt32();
-        _convKernelSize = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _useInstanceNormalization = reader.ReadBoolean();
 
-        // Re-bind the typed layer-reference fields against the freshly
-        // deserialized Layers list. Without this, Forward() sees null for
-        // _embeddingLayer / _outputProjection / etc. and short-circuits to
-        // returning the input unchanged — which makes the cloned network
-        // produce all-zero output and breaks Clone_ShouldProduceIdenticalOutput.
-        _embeddingLayer = null;
-        _convLayers.Clear();
-        _ffnLayers.Clear();
-        _dropoutLayers.Clear();
-        _normLayers.Clear();
-        _finalNorm = null;
-        _outputProjection = null;
-        ExtractLayerReferences();
-    }
 
     #endregion
 

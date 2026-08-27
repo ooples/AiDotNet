@@ -86,8 +86,11 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     private readonly List<ILayer<T>> _temporalEncoderLayers = [];
     private readonly List<ILayer<T>> _textEncoderLayers = [];
     private readonly List<ILayer<T>> _projectionLayers = [];
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visionClsToken;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visionPositionalEmbeddings;
+    [Scratch]
     private Tensor<T>? _temporalPositionalEmbeddings;
     private Tensor<T>? _textPositionalEmbeddings;
     private ILayer<T>? _patchEmbedding;
@@ -97,6 +100,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     private ILayer<T>? _captionHead;
 
     // Gradient checkpointing: cached frames from the last forward pass for backward recomputation
+    [Scratch]
     private List<Tensor<T>>? _cachedTrainingFrames;
 
 
@@ -1571,58 +1575,6 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         }
     }
 
-    /// <summary>
-    /// Declares the CLS token and the three positional embedding tables, which live outside
-    /// <see cref="NeuralNetworkBase{T}.Layers"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Declared in the order the deleted GetParameters concatenated them: vision CLS token, vision
-    /// positional embeddings, temporal positional embeddings, text positional embeddings.
-    /// </para>
-    /// <para>
-    /// This replaces 220 lines: ParameterCount, GetParameters, SetParameters, UpdateParameters and
-    /// SIX private helpers built only to serve them -- AppendLayerListParameters,
-    /// AppendSingleLayerParameters, AppendMatrixParameters and their Update counterparts. Every one
-    /// of those walked the same towers and tables the base already walks, each maintaining its own
-    /// running offset, and any of them could have been edited without the others.
-    /// </para>
-    /// <para>
-    /// The towers need no declaration and must not get one: <c>_frameEncoderLayers</c>,
-    /// <c>_temporalEncoderLayers</c>, <c>_textEncoderLayers</c> and the five projections are all
-    /// filled FROM <c>Layers</c> (<c>Layers[idx++]</c>), so they are typed views of layers the base
-    /// walk already reaches, and declaring them would double-count.
-    /// </para>
-    /// <para>
-    /// The tables became <c>Tensor&lt;T&gt;</c> because a <c>Matrix&lt;T&gt;</c> is invisible to the
-    /// trainable-parameter walk -- the reason these surfaces had to be hand-written at all. The
-    /// forward path, the initializer and the serializer took matrices only to serve these four
-    /// fields and now take tensors; nothing else called them.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        if (_visionClsToken is not null)
-        {
-            yield return _visionClsToken;
-        }
-
-        if (_visionPositionalEmbeddings is not null)
-        {
-            yield return _visionPositionalEmbeddings;
-        }
-
-        if (_temporalPositionalEmbeddings is not null)
-        {
-            yield return _temporalPositionalEmbeddings;
-        }
-
-        if (_textPositionalEmbeddings is not null)
-        {
-            yield return _textPositionalEmbeddings;
-        }
-    }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -1649,91 +1601,10 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_embeddingDimension);
-        writer.Write(_maxSequenceLength);
-        writer.Write(_imageSize);
-        writer.Write(_visionHiddenDim);
-        writer.Write(_textHiddenDim);
-        writer.Write(_numFrameEncoderLayers);
-        writer.Write(_numTemporalLayers);
-        writer.Write(_numTextLayers);
-        writer.Write(_numHeads);
-        writer.Write(_patchSize);
-        writer.Write(_vocabularySize);
-        writer.Write(_numFrames);
-        writer.Write(_frameRate);
-        writer.Write((int)_temporalAggregation);
-        writer.Write(_useNativeMode);
 
-        // Serialize positional embeddings and CLS token
-        SerializeMatrix(writer, _visionClsToken);
-        SerializeMatrix(writer, _visionPositionalEmbeddings);
-        SerializeMatrix(writer, _temporalPositionalEmbeddings);
-        SerializeMatrix(writer, _textPositionalEmbeddings);
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // embeddingDim (already set by CreateNewInstance)
-        _ = reader.ReadInt32(); // maxSeqLen
-        _ = reader.ReadInt32(); // imageSize
-        _ = reader.ReadInt32(); // visionHiddenDim
-        _ = reader.ReadInt32(); // textHiddenDim
-        _ = reader.ReadInt32(); // numFrameEncoderLayers
-        _ = reader.ReadInt32(); // numTemporalLayers
-        _ = reader.ReadInt32(); // numTextLayers
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadInt32(); // patchSize
-        _ = reader.ReadInt32(); // vocabularySize
-        _ = reader.ReadInt32(); // numFrames
-        _ = reader.ReadDouble(); // frameRate
-        _temporalAggregation = (TemporalAggregationType)reader.ReadInt32();
-        _useNativeMode = reader.ReadBoolean();
 
-        // Restore positional embeddings and CLS token
-        _visionClsToken = DeserializeMatrix(reader);
-        _visionPositionalEmbeddings = DeserializeMatrix(reader);
-        _temporalPositionalEmbeddings = DeserializeMatrix(reader);
-        _textPositionalEmbeddings = DeserializeMatrix(reader);
-
-        // Re-distribute deserialized layers to internal sub-lists.
-        // Base class Deserialize() cleared and recreated all layers, so the internal
-        // references (_patchEmbedding, _frameEncoderLayers, etc.) are now stale.
-        _frameEncoderLayers.Clear();
-        _temporalEncoderLayers.Clear();
-        _textEncoderLayers.Clear();
-        _projectionLayers.Clear();
-
-        int expectedLayers = 1 + _numFrameEncoderLayers + _numTemporalLayers + 1 + 1 + _numTextLayers + 1 + 1;
-        if (Layers.Count < expectedLayers)
-        {
-            throw new InvalidOperationException(
-                $"Deserialized {Layers.Count} layers but VideoCLIP requires {expectedLayers} " +
-                $"(1 patch + {_numFrameEncoderLayers} frame + {_numTemporalLayers} temporal + " +
-                $"1 proj + 1 embed + {_numTextLayers} text + 1 proj + 1 caption).");
-        }
-
-        int idx = 0;
-        _patchEmbedding = Layers[idx++];
-
-        for (int i = 0; i < _numFrameEncoderLayers; i++)
-            _frameEncoderLayers.Add(Layers[idx++]);
-
-        for (int i = 0; i < _numTemporalLayers; i++)
-            _temporalEncoderLayers.Add(Layers[idx++]);
-
-        _videoProjection = Layers[idx++];
-        _textTokenEmbedding = Layers[idx++];
-
-        for (int i = 0; i < _numTextLayers; i++)
-            _textEncoderLayers.Add(Layers[idx++]);
-
-        _textProjection = Layers[idx++];
-        _captionHead = Layers[idx++];
-    }
 
     private static void SerializeMatrix(BinaryWriter writer, Tensor<T>? matrix)
     {
@@ -1763,46 +1634,6 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
             for (int c = 0; c < cols; c++)
                 matrix[r, c] = ops.FromDouble(reader.ReadDouble());
         return matrix;
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new VideoCLIPNeuralNetwork<T>(
-            Architecture,
-            _imageSize,
-            channels: 3,
-            _patchSize,
-            _vocabularySize,
-            _maxSequenceLength,
-            _embeddingDimension,
-            _visionHiddenDim,
-            _textHiddenDim,
-            _numFrameEncoderLayers,
-            _numTemporalLayers,
-            _numTextLayers,
-            _numHeads,
-            _numFrames,
-            _frameRate,
-            _temporalAggregation,
-            // Carry the configured tokenizer and loss function into the clone. Without them the
-            // clone falls back to the constructor defaults — most critically
-            // lossFunction => CrossEntropyWithLogitsLoss, which is wrong for a unit-norm embedding
-            // output: it routes the embedding through softmax and computes class-CE against a
-            // continuous target, plateauing at a ~136 baseline regardless of training. A clone must
-            // be functionally identical to its source, so a paper-faithful CosineSimilarityLoss +
-            // Adam(5e-5, β=0.9/0.98) configuration would otherwise be silently lost on Clone().
-            tokenizer: _tokenizer,
-            // Give the clone its OWN optimizer carrying the same configuration, NOT the source's
-            // instance: AdamOptimizer is stateful (moment/step buffers) and constructed bound to a
-            // model, so sharing it would leak optimizer state into the clone and keep the clone's
-            // optimizer pointed at the source model. Rebuild from the captured options (model-
-            // unbound) so the clone trains with the same hyperparameters but fresh state. Falls back
-            // to the constructor's default optimizer if the source's options aren't Adam-shaped.
-            optimizer: _optimizer.GetOptions() is AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> adamOptions
-                ? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(null, adamOptions)
-                : null,
-            lossFunction: _lossFunction);
     }
 
     /// <inheritdoc/>

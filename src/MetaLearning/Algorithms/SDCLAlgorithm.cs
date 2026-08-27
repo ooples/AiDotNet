@@ -65,6 +65,7 @@ public partial class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private readonly int _paramDim;
 
     /// <summary>Teacher model parameters (EMA of student).</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _teacherParams;
 
     /// <inheritdoc/>

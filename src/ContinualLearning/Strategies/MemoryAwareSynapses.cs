@@ -169,6 +169,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     private readonly bool _useL1Norm;
 
     // Accumulated importance across tasks (Ω)
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _omega;
 
     // Optimal parameters from the last completed task (θ*)

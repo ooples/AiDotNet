@@ -42,7 +42,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("AudioLDM: Text-to-Audio Generation with Latent Diffusion Models", "https://arxiv.org/abs/2301.12503", Year = 2023, Authors = "Haohe Liu, Zehua Chen, Yi Yuan, Xinhao Mei, Xubo Liu, Danilo Mandic, Wenwu Wang, Mark D. Plumbley")]
-public class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
+public partial class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
 
@@ -269,39 +269,9 @@ public class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.NumMels); w.Write(_options.FftSize); w.Write(_options.HopLength);
-        w.Write(_options.LatentDim); w.Write(_options.ClassifierDim); w.Write(_options.NumClassifierLayers);
-        w.Write(_options.Threshold); w.Write(_options.DetectionWindowSize); w.Write(_options.WindowOverlap);
-        w.Write(_options.DropoutRate);
-        w.Write(ClassLabels.Count);
-        foreach (var label in ClassLabels) w.Write(label);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.FftSize = r.ReadInt32(); _options.HopLength = r.ReadInt32();
-        _options.LatentDim = r.ReadInt32(); _options.ClassifierDim = r.ReadInt32(); _options.NumClassifierLayers = r.ReadInt32();
-        _options.Threshold = r.ReadDouble(); _options.DetectionWindowSize = r.ReadDouble(); _options.WindowOverlap = r.ReadDouble();
-        _options.DropoutRate = r.ReadDouble();
-        int numLabels = r.ReadInt32();
-        var labels = new string[numLabels]; for (int i = 0; i < numLabels; i++) labels[i] = r.ReadString();
-        ClassLabels = labels;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-        else if (_useNativeMode)
-            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new AudioLDMClassifier<T>(Architecture, mp, _options);
-        return new AudioLDMClassifier<T>(Architecture, _options);
-    }
+
 
     #endregion
 

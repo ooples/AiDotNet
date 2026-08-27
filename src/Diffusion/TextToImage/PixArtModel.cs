@@ -589,37 +589,6 @@ public partial class PixArtModel<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Clone the ACTUAL DiT/VAE (see InstaFlowModel/MultiDiffusionModel): passing only modelSize/
-        // conditioner/seed rebuilt InitializeLayers' DEFAULT-sized, lazily-unresolved DiT/VAE, so once the
-        // source resolved its lazy layers via a forward pass ShareWeightsFrom threw on the layer-count/
-        // shape mismatch (or the clone diverged). Passing the resolved DiT/VAE makes the clone
-        // structurally identical so the copy-on-write share below lines up 1:1.
-        var clone = new PixArtModel<T>(
-            architecture: Architecture,
-            modelSize: _modelSize,
-            conditioner: _conditioner,
-            scheduler: Scheduler,
-            dit: (DiTNoisePredictor<T>)_dit.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            seed: null);
-
-        // Copy-on-write: share this model's weight tensors with the clone instead of deep-copying all
-        // parameters (PixArt-α is ~600M params / ~2.4 GB). The clone gets identical weights at O(1);
-        // either model copies its own set lazily on the first weight write (training).
-        clone.ShareWeightsFrom(this);
-
-        return clone;
-    }
-
     #endregion
 
     #region Metadata

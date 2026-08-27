@@ -57,6 +57,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
+// See the note on ObliviousDecisionTreeLayer. The convolutions are built on the first forward,
+// so without a declared input shape this layer could never be driven and its parameters never
+// existed to be measured.
+// DualTensor, because that is the signature that actually exercises this module. The single-tensor
+// overload is the first-frame path and returns the input untouched, so a single-input harness drives
+// the convolutions not at all and no gradient can reach them.
+[LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3,
+    ApiShape = LayerApiShape.DualTensor,
+    TestInputShape = "4, 8, 8", TestConstructorArgs = "3")]
 public partial class TemporalProcessorModule<T> : LayerBase<T>, IShapeContract
 {
     #region Fields
@@ -122,9 +131,6 @@ public partial class TemporalProcessorModule<T> : LayerBase<T>, IShapeContract
     {
         if (current is null) throw new ArgumentNullException(nameof(current));
 
-        // First frame: no temporal context exists, so pass the spatial features through untouched.
-        if (warpedPrevious is null) return current;
-
         var shape = current.Shape;
         if (shape.Length is not (3 or 4))
         {
@@ -138,7 +144,15 @@ public partial class TemporalProcessorModule<T> : LayerBase<T>, IShapeContract
         int height = shape[shape.Length - 2];
         int width = shape[shape.Length - 1];
 
+        // Sized from the CURRENT features, before the first-frame path returns. EnsureResolved needs
+        // nothing but `current` -- the channel width is right there -- and returning ahead of it left
+        // a module that had run a forward still holding no parameters at all. A decoder that
+        // processed only a first frame therefore checkpointed none of this module's weights, and
+        // nothing reported it, because a count of zero reads the same as a layer that owns nothing.
         EnsureResolved(current, channels);
+
+        // First frame: no temporal context exists, so pass the spatial features through untouched.
+        if (warpedPrevious is null) return current;
 
         // 1. Interpolation — bring the previous features onto the current spatial grid.
         var prev = warpedPrevious;

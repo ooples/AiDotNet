@@ -49,6 +49,7 @@ public partial class STDiTBlock<T> : LayerBase<T>, IShapeContract
     private readonly LayerNormalizationLayer<T> _crossNorm;
     private readonly LayerNormalizationLayer<T> _ffnNorm;
 
+    [Scratch]
     private Tensor<T>? _lastInput;
     private Tensor<T>? _afterSpatial;
     private Tensor<T>? _afterTemporal;
@@ -72,6 +73,9 @@ public partial class STDiTBlock<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public int ContextDim => _contextDim;
 
+    /// <summary>Construction state: the 'ffnMultiplier' the layer was built with.</summary>
+    private readonly int _ffnMultiplier;
+
     /// <summary>
     /// Initializes a new STDiT block.
     /// </summary>
@@ -92,6 +96,7 @@ public partial class STDiTBlock<T> : LayerBase<T>, IShapeContract
             new[] { 1, numFrames * spatialSize * spatialSize, channels },
             new[] { 1, numFrames * spatialSize * spatialSize, channels })
     {
+        _ffnMultiplier = ffnMultiplier;
         if (channels <= 0)
             throw new ArgumentOutOfRangeException(nameof(channels), "Channels must be positive.");
         if (numHeads <= 0)

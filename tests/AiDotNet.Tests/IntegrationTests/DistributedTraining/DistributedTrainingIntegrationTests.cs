@@ -2045,6 +2045,41 @@ public class DistributedTrainingIntegrationTests
         backend.Shutdown();
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task HybridShardedModel_Deserialize_RejectsDifferentGeneratedTopology()
+    {
+        await Task.Yield();
+        var envId = Guid.NewGuid().ToString();
+        var backend = new InMemoryCommunicationBackend<double>(0, 4, envId);
+        backend.Initialize();
+        var config = new ShardingConfiguration<double>(backend);
+
+        try
+        {
+            var source = new HybridShardedModel<double, Vector<double>, Vector<double>>(
+                new MockDistributedModel(8), config,
+                pipelineParallelSize: 2, tensorParallelSize: 2, dataParallelSize: 1);
+            var payload = source.Serialize();
+            Assert.Equal(2, source.GetModelMetadata().Properties["PipelineParallelSize"]);
+            Assert.True(BitConverter.ToInt32(payload, 14) > 0,
+                "The shared serializer must emit constructor-derived strategy compatibility values.");
+
+            var incompatible = new HybridShardedModel<double, Vector<double>, Vector<double>>(
+                new MockDistributedModel(8), config,
+                pipelineParallelSize: 1, tensorParallelSize: 2, dataParallelSize: 2);
+            _ = incompatible.LocalParameterShard;
+            Assert.Equal(1, incompatible.GetModelMetadata().Properties["PipelineParallelSize"]);
+
+            var error = Assert.Throws<InvalidOperationException>(() => incompatible.Deserialize(payload));
+            Assert.Contains("Sharding strategy setting", error.Message, StringComparison.Ordinal);
+            Assert.Contains("mismatch", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            backend.Shutdown();
+        }
+    }
+
     #endregion
 
     #region Edge Cases Tests

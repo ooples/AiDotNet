@@ -96,13 +96,16 @@ public partial class FeatureTransformerLayer<T> : LayerBase<T>, IShapeContract
     private readonly List<GhostBatchNormalization<T>> _stepBNLayers;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _inputCache;
     private readonly List<Tensor<T>> _intermediateOutputs = [];
 
     // Cached constant 0/1 selection matrices for the GLU column split (see ApplyGLU). They depend
     // only on the input width, so they're built once and reused across forward passes instead of
     // being reallocated + refilled (O(dim^2)) every call.
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _gluValueSelector;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _gluGateSelector;
     private int _gluCachedFullDim = -1;
 

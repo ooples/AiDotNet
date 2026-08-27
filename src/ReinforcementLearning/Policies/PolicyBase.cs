@@ -13,7 +13,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// Provides common functionality for numeric operations, random number generation, and resource management.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-    public abstract class PolicyBase<T> : ModelBase<T, Vector<T>, Vector<T>>, IPolicy<T>
+    public abstract partial class PolicyBase<T> : ModelBase<T, Vector<T>, Vector<T>>, IPolicy<T>
     {
 
         // NumOps inherited from ModelBase

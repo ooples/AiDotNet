@@ -259,80 +259,6 @@ public partial class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         };
     }
 
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        writer.Write(_options.StateSize);
-        writer.Write(_options.ActionSize);
-        writer.Write(NumOps.ToDouble(LearningRate));
-        writer.Write(NumOps.ToDouble(DiscountFactor));
-        writer.Write(_epsilon);
-        writer.Write(_steps);
-
-        var qNetworkBytes = _qNetwork.Serialize();
-        writer.Write(qNetworkBytes.Length);
-        writer.Write(qNetworkBytes);
-
-        var targetNetworkBytes = _targetNetwork.Serialize();
-        writer.Write(targetNetworkBytes.Length);
-        writer.Write(targetNetworkBytes);
-
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        reader.ReadInt32(); // stateSize
-        reader.ReadInt32(); // actionSize
-        reader.ReadDouble(); // learningRate
-        reader.ReadDouble(); // discountFactor
-        _epsilon = reader.ReadDouble();
-        _steps = reader.ReadInt32();
-
-        var qNetworkLength = reader.ReadInt32();
-        var qNetworkBytes = reader.ReadBytes(qNetworkLength);
-        _qNetwork.Deserialize(qNetworkBytes);
-
-        var targetNetworkLength = reader.ReadInt32();
-        var targetNetworkBytes = reader.ReadBytes(targetNetworkLength);
-        _targetNetwork.Deserialize(targetNetworkBytes);
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clonedOptions = new DuelingDQNOptions<T>
-        {
-            StateSize = _options.StateSize,
-            ActionSize = _options.ActionSize,
-            LearningRate = LearningRate,
-            DiscountFactor = DiscountFactor,
-            LossFunction = LossFunction,
-            EpsilonStart = _epsilon,
-            EpsilonEnd = _options.EpsilonEnd,
-            EpsilonDecay = _options.EpsilonDecay,
-            BatchSize = _options.BatchSize,
-            ReplayBufferSize = _options.ReplayBufferSize,
-            TargetUpdateFrequency = _options.TargetUpdateFrequency,
-            WarmupSteps = _options.WarmupSteps,
-            SharedLayers = _options.SharedLayers,
-            ValueStreamLayers = _options.ValueStreamLayers,
-            AdvantageStreamLayers = _options.AdvantageStreamLayers,
-            Seed = _options.Seed
-        };
-
-        var clone = new DuelingDQNAgent<T>(clonedOptions);
-        clone.SetParameters(GetParameters());
-        return clone;
-    }
-
 
 
     // Helper methods
@@ -395,14 +321,23 @@ internal class DuelingNetwork<T> : IParameterSource<T>
     private readonly int _stateSize;
     private readonly int _actionSize;
 
+    [Scratch]
     private Vector<T>? _lastSharedOutput;
+    [Scratch]
     private Vector<T>? _lastValueOutput;
+    [Scratch]
     private Vector<T>? _lastAdvantageOutput;
+    [Scratch]
     private readonly List<Vector<T>> _lastSharedInputs = new();
+    [Scratch]
     private readonly List<Vector<T>> _lastSharedOutputs = new();
+    [Scratch]
     private readonly List<Vector<T>> _lastValueInputs = new();
+    [Scratch]
     private readonly List<Vector<T>> _lastValueOutputs = new();
+    [Scratch]
     private readonly List<Vector<T>> _lastAdvantageInputs = new();
+    [Scratch]
     private readonly List<Vector<T>> _lastAdvantageOutputs = new();
 
     public DuelingNetwork(

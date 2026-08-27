@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -69,7 +69,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Graph Attention Networks", "https://arxiv.org/abs/1710.10903", Year = 2018, Authors = "Petar Velickovic, Guillem Cucurull, Arantxa Casanova, Adriana Romero, Pietro Lio, Yoshua Bengio")]
-public class GraphAttentionNetwork<T> : GraphModelLayoutBase<T>
+public partial class GraphAttentionNetwork<T> : GraphModelLayoutBase<T>
 {
     private readonly GraphAttentionNetworkOptions _options;
 
@@ -901,53 +901,13 @@ public class GraphAttentionNetwork<T> : GraphModelLayoutBase<T>
     /// Serializes network-specific data to a binary writer.
     /// </summary>
     /// <param name="writer">The binary writer to serialize to.</param>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Serialize GAT-specific configuration
-        writer.Write(NumHeads);
-        writer.Write(HiddenDim);
-        writer.Write(NumLayers);
-        writer.Write(DropoutRate);
-        writer.Write(IsLoRAEnabled);
-        writer.Write(LoRARank);
 
-        // Serialize loss function and optimizer
-        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
-        SerializationHelper<T>.SerializeInterface(writer, _optimizer);
-    }
 
     /// <summary>
     /// Deserializes network-specific data from a binary reader.
     /// </summary>
     /// <param name="reader">The binary reader to deserialize from.</param>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Note: The readonly fields are set in constructor, so we just read and discard
-        // to maintain stream position. For full deserialization, use Load method.
-        var numHeads = reader.ReadInt32();
-        var hiddenDim = reader.ReadInt32();
-        var numLayers = reader.ReadInt32();
-        var dropoutRate = reader.ReadDouble();
-        var isLoRAEnabled = reader.ReadBoolean();
-        var loraRank = reader.ReadInt32();
 
-        // Deserialize loss function and optimizer
-        _ = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader);
-        _ = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader);
-    }
-
-    /// <summary>
-    /// Creates a new instance of this network type for cloning or deserialization.
-    /// </summary>
-    /// <returns>A new GraphAttentionNetwork instance.</returns>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new GraphAttentionNetwork<T>(
-            architecture: Architecture,
-            numHeads: NumHeads,
-            numLayers: NumLayers,
-            dropoutRate: DropoutRate);
-    }
 
     #endregion
 }

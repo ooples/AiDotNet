@@ -46,7 +46,7 @@ namespace AiDotNet.Audio.Effects;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Real Time Speech Enhancement in the Waveform Domain", "https://doi.org/10.48550/arXiv.2006.12847", Year = 2020, Authors = "Alexandre Défossez, Gabriel Synnaeve, Yossi Adi")]
-public class DemucsNoise<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+public partial class DemucsNoise<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -205,35 +205,9 @@ public class DemucsNoise<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.Variant);
-        w.Write(_options.HiddenChannels); w.Write(_options.Depth);
-        w.Write(_options.LSTMHiddenSize); w.Write(_options.NumLSTMLayers);
-        w.Write(_options.ChannelGrowth); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.Variant = r.ReadString();
-        _options.HiddenChannels = r.ReadInt32(); _options.Depth = r.ReadInt32();
-        _options.LSTMHiddenSize = r.ReadInt32(); _options.NumLSTMLayers = r.ReadInt32();
-        _options.ChannelGrowth = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-        {
-            OnnxEncoder?.Dispose();
-            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-        }
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new DemucsNoise<T>(Architecture, mp, _options);
-        return new DemucsNoise<T>(Architecture, _options);
-    }
+
 
     #endregion
 

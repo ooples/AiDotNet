@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("3D U-Net: Learning Dense Volumetric Segmentation from Sparse Annotation", "https://arxiv.org/abs/1606.06650", Year = 2016, Authors = "Ozgun Cicek, Ahmed Abdulkadir, Soeren S. Lienkamp, Thomas Brox, Olaf Ronneberger")]
-public class UNet3D<T> : VolumetricModelLayoutBase<T>
+public partial class UNet3D<T> : VolumetricModelLayoutBase<T>
 {
     private readonly UNet3DOptions _options;
 
@@ -302,41 +302,12 @@ public class UNet3D<T> : VolumetricModelLayoutBase<T>
     /// </summary>
     /// <param name="writer">The binary writer to serialize to.</param>
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(VoxelResolution);
-        writer.Write(NumEncoderBlocks);
-        writer.Write(BaseFilters);
-        writer.Write(NumClasses);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data from a binary stream.
     /// </summary>
     /// <param name="reader">The binary reader to deserialize from.</param>
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        VoxelResolution = reader.ReadInt32();
-        NumEncoderBlocks = reader.ReadInt32();
-        BaseFilters = reader.ReadInt32();
-        NumClasses = reader.ReadInt32();
-    }
 
-    /// <summary>
-    /// Creates a new instance of this model type for cloning purposes.
-    /// </summary>
-    /// <returns>A new <see cref="UNet3D{T}"/> instance with the same configuration.</returns>
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new UNet3D<T>(
-            Architecture,
-            VoxelResolution,
-            NumEncoderBlocks,
-            BaseFilters,
-            _optimizer,
-            _lossFunction,
-            MaxGradNormValue);
-    }
 }

@@ -46,7 +46,7 @@ namespace AiDotNet.Optimizers;
 /// </example>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
+public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
     /// The options specific to the AdamW optimizer.
@@ -954,94 +954,6 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
-    }
-
-    /// <summary>
-    /// Serializes the optimizer's state into a byte array.
-    /// </summary>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
-
-            writer.Write(_t);
-            writer.Write(_m.Length);
-            foreach (var value in _m)
-            {
-                writer.Write(Convert.ToDouble(value));
-            }
-            writer.Write(_v.Length);
-            foreach (var value in _v)
-            {
-                writer.Write(Convert.ToDouble(value));
-            }
-
-            // Serialize vMax if AMSGrad is enabled
-            writer.Write(_vMax != null);
-            if (_vMax != null)
-            {
-                writer.Write(_vMax.Length);
-                foreach (var value in _vMax)
-                {
-                    writer.Write(Convert.ToDouble(value));
-                }
-            }
-
-            return ms.ToArray();
-        }
-    }
-
-    /// <summary>
-    /// Deserializes the optimizer's state from a byte array.
-    /// </summary>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<AdamWOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-            _t = reader.ReadInt32();
-            int mLength = reader.ReadInt32();
-            _m = new Vector<T>(mLength);
-            for (int i = 0; i < mLength; i++)
-            {
-                _m[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-            int vLength = reader.ReadInt32();
-            _v = new Vector<T>(vLength);
-            for (int i = 0; i < vLength; i++)
-            {
-                _v[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-
-            // Deserialize vMax if present
-            bool hasVMax = reader.ReadBoolean();
-            if (hasVMax)
-            {
-                int vMaxLength = reader.ReadInt32();
-                _vMax = new Vector<T>(vMaxLength);
-                for (int i = 0; i < vMaxLength; i++)
-                {
-                    _vMax[i] = NumOps.FromDouble(reader.ReadDouble());
-                }
-            }
-
-            InitializeAdaptiveParameters();
-        }
     }
 
     /// <summary>

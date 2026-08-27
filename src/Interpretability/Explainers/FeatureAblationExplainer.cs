@@ -37,12 +37,13 @@ namespace AiDotNet.Interpretability.Explainers;
 /// - Debugging models by finding unexpected important features
 /// </para>
 /// </remarks>
-public class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAblationExplanation<T>>, IGlobalExplainer<T, GlobalFeatureAblationResult<T>>, IGlobalAttributionExplainer<T>, IGPUAcceleratedExplainer<T>
+public partial class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAblationExplanation<T>>, IGlobalExplainer<T, GlobalFeatureAblationResult<T>>, IGlobalAttributionExplainer<T>, IGPUAcceleratedExplainer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly Func<Vector<T>, Vector<T>> _predictFunction;
     private readonly Func<Tensor<T>, Tensor<T>>? _tensorPredictFunction;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T>? _baseline;
     private readonly int[][]? _featureGroups;
     private readonly string[]? _featureNames;

@@ -141,6 +141,7 @@ public partial class MeanLayer<T> : LayerBase<T>, IShapeContract
     /// This field stores the input tensor from the most recent forward pass, which is needed
     /// during the backward pass for gradient calculation.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -150,6 +151,7 @@ public partial class MeanLayer<T> : LayerBase<T>, IShapeContract
     /// This field stores the output tensor from the most recent forward pass, which may be
     /// useful for certain operations or debugging.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>

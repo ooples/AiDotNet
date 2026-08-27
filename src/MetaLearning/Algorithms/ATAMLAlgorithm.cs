@@ -70,6 +70,7 @@ public partial class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     private readonly int _compressedDim;
 
     /// <summary>Attention projection: compressedDim × attentionDim.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _attentionParams;
 
     /// <inheritdoc/>

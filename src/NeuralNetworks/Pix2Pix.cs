@@ -705,68 +705,10 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(NumOps.ToDouble(_l1Lambda));
 
-        // Serialize loss histories
-        writer.Write(_generatorLosses.Count);
-        foreach (var loss in _generatorLosses)
-            writer.Write(NumOps.ToDouble(loss));
-
-        writer.Write(_discriminatorLosses.Count);
-        foreach (var loss in _discriminatorLosses)
-            writer.Write(NumOps.ToDouble(loss));
-
-        var generatorBytes = Generator.Serialize();
-        writer.Write(generatorBytes.Length);
-        writer.Write(generatorBytes);
-
-        var discriminatorBytes = Discriminator.Serialize();
-        writer.Write(discriminatorBytes.Length);
-        writer.Write(discriminatorBytes);
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        double l1Val = reader.ReadDouble();
-        if (l1Val < 0 || double.IsNaN(l1Val) || double.IsInfinity(l1Val))
-            throw new InvalidOperationException($"Deserialized invalid l1Lambda: {l1Val}");
-        _l1Lambda = NumOps.FromDouble(l1Val);
 
-        // Deserialize loss histories
-        _generatorLosses.Clear();
-        int genLossCount = reader.ReadInt32();
-        for (int i = 0; i < genLossCount; i++)
-            _generatorLosses.Add(NumOps.FromDouble(reader.ReadDouble()));
-
-        _discriminatorLosses.Clear();
-        int discLossCount = reader.ReadInt32();
-        for (int i = 0; i < discLossCount; i++)
-            _discriminatorLosses.Add(NumOps.FromDouble(reader.ReadDouble()));
-
-        int generatorDataLength = reader.ReadInt32();
-        byte[] generatorData = reader.ReadBytes(generatorDataLength);
-        Generator.Deserialize(generatorData);
-
-        int discriminatorDataLength = reader.ReadInt32();
-        byte[] discriminatorData = reader.ReadBytes(discriminatorDataLength);
-        Discriminator.Deserialize(discriminatorData);
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new Pix2Pix<T>(
-            Generator.Architecture,
-            Discriminator.Architecture,
-            Architecture.InputType,
-            null, // Use default optimizer
-            null, // Use default optimizer
-            _lossFunction,
-            NumOps.ToDouble(_l1Lambda));
-    }
 
     // UpdateParameters split the vector between Generator and Discriminator; GetExtraTrainableLayers
     // yields the same two in the same order, so the base reproduces the split. Removed under AIDN082.

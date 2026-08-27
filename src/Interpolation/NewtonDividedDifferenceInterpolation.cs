@@ -18,7 +18,7 @@ namespace AiDotNet.Interpolation;
 /// Think of it like connecting dots with a smooth curve instead of straight lines or steps.
 /// </para>
 /// </remarks>
-public class NewtonDividedDifferenceInterpolation<T> : IInterpolation<T>
+public partial class NewtonDividedDifferenceInterpolation<T> : IInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the known data points.
@@ -28,6 +28,7 @@ public class NewtonDividedDifferenceInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The coefficients of the Newton polynomial, calculated from the input data.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _coefficients;
 
     /// <summary>

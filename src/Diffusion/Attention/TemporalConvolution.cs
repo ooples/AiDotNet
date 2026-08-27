@@ -37,6 +37,7 @@ public partial class TemporalConvolution<T> : LayerBase<T>, IShapeContract
     private readonly bool _causal;
     private readonly DenseLayer<T> _conv;
     private readonly LayerNormalizationLayer<T> _norm;
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)

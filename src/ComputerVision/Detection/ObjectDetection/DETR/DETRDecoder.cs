@@ -21,7 +21,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
 /// - FFN (feed-forward network) for each query
 /// </para>
 /// </remarks>
-internal class DETRDecoder<T>
+internal partial class DETRDecoder<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _numLayers;
@@ -29,6 +29,7 @@ internal class DETRDecoder<T>
     private readonly int _numHeads;
     private readonly int _numQueries;
     private readonly List<DecoderLayer<T>> _layers;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _queryEmbed;  // Learnable query embeddings
     private readonly Dense<T> _classHead;
     private readonly Dense<T> _boxHead;

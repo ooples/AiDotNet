@@ -88,13 +88,4 @@ public class SciBERTNER<T> : TransformerNERBase<T>
             "SciBERT-NER", "Beltagy et al., EMNLP 2019", optimizer)
     {
     }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new TransformerNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new SciBERTNER<T>(Architecture, p, optionsCopy);
-        return new SciBERTNER<T>(Architecture, optionsCopy);
-    }
 }

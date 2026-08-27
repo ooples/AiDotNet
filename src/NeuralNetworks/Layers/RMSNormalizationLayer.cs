@@ -100,6 +100,9 @@ public partial class RMSNormalizationLayer<T> : LayerBase<T>, IShapeContract
         _gamma = new Tensor<T>([0]);
     }
 
+    /// <summary>Construction state: the 'featureSize' the layer was built with.</summary>
+    private readonly int _featureSize;
+
     /// <summary>
     /// AiDotNet#1370 eager-init constructor. Pass <paramref name="featureSize"/> at
     /// construction to allocate γ immediately and resolve the layer's input + output
@@ -116,9 +119,12 @@ public partial class RMSNormalizationLayer<T> : LayerBase<T>, IShapeContract
     /// via the default implementation — no override needed.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">When <paramref name="featureSize"/> is not positive.</exception>
-    public RMSNormalizationLayer(int featureSize, double epsilon = 1e-6)
+    public RMSNormalizationLayer(
+        [LayerState(OmitWhenNonPositive = true)] int featureSize,
+        double epsilon = 1e-6)
         : base(new[] { featureSize }, new[] { featureSize })
     {
+        _featureSize = featureSize;
         if (featureSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(featureSize),
                 $"featureSize must be positive, got {featureSize}.");

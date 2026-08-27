@@ -161,7 +161,9 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
 
 
     // Cached tensors for hot-loop operations (avoid per-call allocation)
+    [Scratch]
     private Tensor<T>? _cachedOnes;
+    [Scratch]
     private Tensor<T>? _cachedZeros;
 
     /// <summary>
@@ -229,6 +231,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// This helps the network gradually improve its performance on the given task.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _weightGradients;
 
     /// <summary>
@@ -249,6 +252,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// The network uses these gradients to update the biases after processing a batch of examples.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _biasGradients;
 
     /// <summary>
@@ -266,6 +270,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// or when you explicitly reset the layer.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -287,6 +292,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// understand how changes to its parameters affect the overall network performance.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -308,6 +314,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// This is the key internal state that determines when neurons fire.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T> _membranePotential;
 
     /// <summary>
@@ -329,6 +336,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// This prevents unrealistically rapid firing and better matches biological neurons.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T> _refractoryCountdown;
 
     /// <summary>
@@ -349,6 +357,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// similar to how real neurons in the brain work.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T> _spikes;
 
     /// <summary>
@@ -370,6 +379,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// This is only used when _neuronType is Izhikevich.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _recoveryVariable;
 
     /// <summary>
@@ -467,6 +477,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// This adaptation mimics how real neurons get "tired" when stimulated continuously.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _adaptationVariable;
 
     /// <summary>
@@ -583,6 +594,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// This is part of the most detailed biophysical model of neuron behavior.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _nGate;
 
     /// <summary>
@@ -603,6 +615,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// These channels are primarily responsible for generating the spike.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _mGate;
 
     /// <summary>
@@ -624,6 +637,7 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     /// This inactivation mechanism is crucial for the neuron to return to its resting state.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _hGate;
 
     /// <summary>
@@ -1589,173 +1603,6 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
         _weightGradients.Fill(NumOps.Zero);
         _biasGradients = new Tensor<T>([_bias.Shape[0]]);
         _biasGradients.Fill(NumOps.Zero);
-    }
-
-    /// <summary>
-    /// Serializes the layer's parameters and state to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer to write to.</param>
-    /// <remarks>
-    /// <para>
-    /// This method writes the layer's parameters, including neuron type, time constants, weights, biases,
-    /// and model-specific parameters, to a binary stream. This allows the layer to be saved to disk for later use.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves the layer's configuration and parameters to a file.
-    /// 
-    /// The serialization includes:
-    /// - Basic parameters (neuron type, time constant, refractory period)
-    /// - All weights and biases
-    /// - Model-specific parameters like those for Izhikevich or AdEx models
-    /// 
-    /// This allows you to:
-    /// - Save a trained model to disk
-    /// - Load it later for inference or continued training
-    /// - Transfer the model to another application
-    /// </para>
-    /// </remarks>
-    public override void Serialize(BinaryWriter writer)
-    {
-        // Write neuron type and parameters
-        writer.Write((int)_neuronType);
-        writer.Write(NumOps.ToDouble(_tau));
-        writer.Write(NumOps.ToDouble(_refractoryPeriod));
-
-        // Write weights and biases from tensors
-        int inputSize = _weights.Shape[0];
-        int outputSize = _weights.Shape[1];
-        for (int i = 0; i < inputSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                writer.Write(Convert.ToDouble(_weights[i, j]));
-            }
-        }
-
-        for (int i = 0; i < _bias.Shape[0]; i++)
-        {
-            writer.Write(Convert.ToDouble(_bias[i]));
-        }
-
-        // Write model-specific parameters
-        if (_neuronType == SpikingNeuronType.Izhikevich)
-        {
-            writer.Write(NumOps.ToDouble(_a));
-            writer.Write(NumOps.ToDouble(_b));
-            writer.Write(NumOps.ToDouble(_c));
-            writer.Write(NumOps.ToDouble(_d));
-        }
-        else if (_neuronType == SpikingNeuronType.AdaptiveExponential)
-        {
-            writer.Write(NumOps.ToDouble(_deltaT));
-            writer.Write(NumOps.ToDouble(_vT));
-            writer.Write(NumOps.ToDouble(_tauw));
-            writer.Write(NumOps.ToDouble(_a_adex));
-            writer.Write(NumOps.ToDouble(_b_adex));
-        }
-    }
-
-    /// <summary>
-    /// Deserializes the layer's parameters and state from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader to read from.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reads the layer's parameters from a binary stream, including neuron type, time constants,
-    /// weights, biases, and model-specific parameters. This allows a previously saved layer to be loaded from disk.
-    /// It also initializes any model-specific variables needed for the selected neuron type.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads the layer's configuration and parameters from a file.
-    /// 
-    /// The deserialization reads:
-    /// - Basic parameters (neuron type, time constant, refractory period)
-    /// - All weights and biases
-    /// - Model-specific parameters for the particular neuron type
-    /// 
-    /// It also initializes any special variables needed for the specific neuron model.
-    /// This lets you load a previously saved model and continue using or training it.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(BinaryReader reader)
-    {
-        // Read neuron type and parameters
-        _neuronType = (SpikingNeuronType)reader.ReadInt32();
-        _tau = NumOps.FromDouble(reader.ReadDouble());
-        _refractoryPeriod = NumOps.FromDouble(reader.ReadDouble());
-
-        // Read weights and biases into tensors
-        int inputSize = _weights.Shape[0];
-        int outputSize = _weights.Shape[1];
-        for (int i = 0; i < inputSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                _weights[i, j] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-
-        for (int i = 0; i < _bias.Shape[0]; i++)
-        {
-            _bias[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read model-specific parameters
-        if (_neuronType == SpikingNeuronType.Izhikevich)
-        {
-            _a = NumOps.FromDouble(reader.ReadDouble());
-            _b = NumOps.FromDouble(reader.ReadDouble());
-            _c = NumOps.FromDouble(reader.ReadDouble());
-            _d = NumOps.FromDouble(reader.ReadDouble());
-
-            // Initialize recovery variable if needed
-            if (_recoveryVariable == null)
-            {
-                _recoveryVariable = new Tensor<T>([OutputShape[0]]);
-                _recoveryVariable.Fill(NumOps.Zero);
-            }
-        }
-        else if (_neuronType == SpikingNeuronType.AdaptiveExponential)
-        {
-            _deltaT = NumOps.FromDouble(reader.ReadDouble());
-            _vT = NumOps.FromDouble(reader.ReadDouble());
-            _tauw = NumOps.FromDouble(reader.ReadDouble());
-            _a_adex = NumOps.FromDouble(reader.ReadDouble());
-            _b_adex = NumOps.FromDouble(reader.ReadDouble());
-
-            // Initialize adaptation variable if needed
-            if (_adaptationVariable == null)
-            {
-                _adaptationVariable = new Tensor<T>([OutputShape[0]]);
-                _adaptationVariable.Fill(NumOps.Zero);
-            }
-        }
-        else if (_neuronType == SpikingNeuronType.HodgkinHuxley)
-        {
-            // Initialize gate variables if needed using Tensor<T>
-            int gateSize = OutputShape[0];
-            if (_nGate == null)
-            {
-                _nGate = new Tensor<T>([gateSize]);
-                _nGate.Fill(NumOps.FromDouble(0.32));
-            }
-            if (_mGate == null)
-            {
-                _mGate = new Tensor<T>([gateSize]);
-                _mGate.Fill(NumOps.FromDouble(0.05));
-            }
-            if (_hGate == null)
-            {
-                _hGate = new Tensor<T>([gateSize]);
-                _hGate.Fill(NumOps.FromDouble(0.60));
-            }
-        }
-
-        // Initialize state variables using Tensor<T>
-        _membranePotential = new Tensor<T>([OutputShape[0]]);
-        _membranePotential.Fill(NumOps.Zero);
-        _refractoryCountdown = new Tensor<T>([OutputShape[0]]);
-        _refractoryCountdown.Fill(NumOps.Zero);
-        _spikes = new Tensor<T>([OutputShape[0]]);
-        _spikes.Fill(NumOps.Zero);
     }
 
 

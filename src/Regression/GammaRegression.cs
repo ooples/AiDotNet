@@ -63,7 +63,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Generalized Linear Models", "https://doi.org/10.1007/978-1-4899-3242-6")]
-public class GammaRegression<T> : RegressionBase<T>
+public partial class GammaRegression<T> : RegressionBase<T>
 {
     private const double MuFloor = 1e-10;
     private const double MuCeiling = 1e10;
@@ -481,127 +481,5 @@ public class GammaRegression<T> : RegressionBase<T>
         for (int i = 0; i < predictions.Length; i++)
             predictions[i] = NumOps.Add(predictions[i], Intercept);
         return predictions;
-    }
-
-    /// <summary>
-    /// Serializes the model to a byte array.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model data.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method serializes both the base class data and the Gamma regression specific options,
-    /// including link function, maximum iterations, convergence tolerance, and dispersion parameter.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// Serialization converts the model's internal state into a format that can be saved to disk or
-    /// transmitted over a network. This allows you to save a trained model and load it later without
-    /// having to retrain it. Think of it like saving your progress in a video game.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize GammaRegression specific options
-        writer.Write(_options.MaxIterations);
-        writer.Write(_options.Tolerance);
-        writer.Write((int)_options.LinkFunction);
-        writer.Write((int)_options.DecompositionType);
-        writer.Write(_options.InitialDispersion);
-        writer.Write(NumOps.ToDouble(_dispersion));
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the model from a byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized model data.</param>
-    /// <remarks>
-    /// <para>
-    /// This method deserializes both the base class data and the Gamma regression specific options,
-    /// reconstructing the model's state from the serialized data.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// Deserialization is the opposite of serialization - it takes the saved model data and reconstructs
-    /// the model's internal state. This allows you to load a previously trained model and use it to make
-    /// predictions without having to retrain it. It's like loading a saved game to continue where you left off.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize GammaRegression specific options
-        _options.MaxIterations = reader.ReadInt32();
-        _options.Tolerance = reader.ReadDouble();
-        _options.LinkFunction = (GammaLinkFunction)reader.ReadInt32();
-        _options.DecompositionType = (MatrixDecompositionType)reader.ReadInt32();
-        _options.InitialDispersion = reader.ReadDouble();
-        _dispersion = NumOps.FromDouble(reader.ReadDouble());
-    }
-
-    /// <summary>
-    /// Creates a new instance of the Gamma Regression model with the same configuration.
-    /// </summary>
-    /// <returns>A new instance of the Gamma Regression model.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a deep copy of the current Gamma Regression model, including its options,
-    /// coefficients, intercept, dispersion, and regularization settings.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// This method creates an exact copy of your trained model.
-    ///
-    /// Think of it like making a perfect duplicate:
-    /// - It copies all the configuration settings (like link function, maximum iterations, and tolerance)
-    /// - It preserves the coefficients (the weights for each feature)
-    /// - It maintains the intercept and dispersion parameter
-    ///
-    /// Creating a copy is useful when you want to:
-    /// - Create a backup before further modifying the model
-    /// - Create variations of the same model for different purposes
-    /// - Share the model with others while keeping your original intact
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        var newOptions = new GammaRegressionOptions<T>
-        {
-            MaxIterations = _options.MaxIterations,
-            Tolerance = _options.Tolerance,
-            LinkFunction = _options.LinkFunction,
-            DecompositionType = _options.DecompositionType,
-            InitialDispersion = _options.InitialDispersion
-        };
-
-        var newModel = new GammaRegression<T>(newOptions, Regularization);
-
-        // Copy coefficients if they exist
-        if (Coefficients != null)
-        {
-            newModel.Coefficients = Coefficients.Clone();
-        }
-
-        // Copy the intercept and dispersion
-        newModel.Intercept = Intercept;
-        newModel._dispersion = _dispersion;
-
-        return newModel;
     }
 }

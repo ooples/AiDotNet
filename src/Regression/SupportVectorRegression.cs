@@ -59,7 +59,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("A Tutorial on Support Vector Regression", "https://doi.org/10.1023/B:STCO.0000035301.49549.88", Year = 2004, Authors = "Alex J. Smola, Bernhard Scholkopf")]
-public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
+public partial class SupportVectorRegression<T> : NonLinearRegressionBase<T>
 {
     /// <inheritdoc/>
     /// <summary>
@@ -177,6 +177,7 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     }
 
     private bool _useOLS;
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _olsCoefficients;
 
 
@@ -494,117 +495,6 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         metadata.AdditionalInfo["RegularizationType"] = Regularization.GetType().Name;
 
         return metadata;
-    }
-
-    /// <summary>
-    /// Serializes the support vector regression model to a byte array for storage or transmission.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model data.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method converts the model, including its coefficients, support vectors, and configuration options, into a 
-    /// byte array. This enables the model to be saved to a file, stored in a database, or transmitted over a network.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves the model to computer memory so you can use it later.
-    /// 
-    /// Think of it like taking a snapshot of the model:
-    /// - It captures all the important values, settings, and support vectors
-    /// - It converts them into a format that can be easily stored
-    /// - The resulting byte array can be saved to a file or database
-    /// 
-    /// This is useful when you want to:
-    /// - Train the model once and use it many times
-    /// - Share the model with others
-    /// - Use the model in a different application
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new SupportVectorRegression<T>(_options, Regularization);
-        clone.Deserialize(Serialize());
-        return clone;
-    }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize SVR specific data
-        writer.Write(_options.Epsilon);
-        writer.Write(_options.C);
-
-        // OLS state
-        writer.Write(_useOLS);
-        if (_useOLS && _olsCoefficients is not null)
-        {
-            writer.Write(_olsCoefficients.Length);
-            for (int j = 0; j < _olsCoefficients.Length; j++)
-                writer.Write(NumOps.ToDouble(_olsCoefficients[j]));
-            writer.Write(NumOps.ToDouble(_olsIntercept));
-        }
-        else
-        {
-            writer.Write(0);
-        }
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the support vector regression model from a byte array.
-    /// </summary>
-    /// <param name="modelData">The byte array containing the serialized model data.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reconstructs the model from a byte array created by the Serialize method. It restores 
-    /// the model's coefficients, support vectors, and configuration options, allowing a previously saved model 
-    /// to be loaded and used for predictions.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads a saved model from computer memory.
-    /// 
-    /// Think of it like opening a saved document:
-    /// - It takes the byte array created by the Serialize method
-    /// - It rebuilds all the settings, support vectors, and coefficients
-    /// - The model is then ready to use for making predictions
-    /// 
-    /// This allows you to:
-    /// - Use a previously trained model without having to train it again
-    /// - Load models that others have shared with you
-    /// - Use the same model across different applications
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize SVR specific data
-        _options.Epsilon = reader.ReadDouble();
-        _options.C = reader.ReadDouble();
-
-        // OLS state
-        _useOLS = reader.ReadBoolean();
-        int olsCount = reader.ReadInt32();
-        if (olsCount > 0)
-        {
-            _olsCoefficients = new Vector<T>(olsCount);
-            for (int j = 0; j < olsCount; j++)
-                _olsCoefficients[j] = NumOps.FromDouble(reader.ReadDouble());
-            _olsIntercept = NumOps.FromDouble(reader.ReadDouble());
-        }
     }
 
     /// <summary>

@@ -40,6 +40,7 @@ public class SelfPacedScheduler<T> : CurriculumSchedulerBase<T>, ISelfPacedSched
     private readonly T _maxLambda;
     private T _currentLambda;
     private T _lambdaGrowthRate;
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _sampleWeights;
 
     /// <summary>

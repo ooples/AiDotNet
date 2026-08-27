@@ -59,6 +59,11 @@ public class FluxDoubleStreamPredictor<T> : MMDiTNoisePredictor<T>
     // Retained for a type-correct Clone().
     private readonly FluxPredictorVariant _variant;
     private readonly int _fluxInputChannels;
+    private readonly int _fluxHiddenSize;
+    private readonly int _fluxNumJointLayers;
+    private readonly int _fluxNumSingleLayers;
+    private readonly int _fluxNumHeads;
+    private readonly int _fluxPatchSize;
     private readonly int _fluxContextDim;
     private readonly int? _fluxSeed;
 
@@ -75,31 +80,55 @@ public class FluxDoubleStreamPredictor<T> : MMDiTNoisePredictor<T>
         int inputChannels = 16,
         int contextDim = 4096,
         int? seed = null)
+        : this(
+            inputChannels, FLUX_HIDDEN_SIZE, FLUX_NUM_JOINT_LAYERS,
+            FLUX_NUM_SINGLE_LAYERS, FLUX_NUM_HEADS,
+            patchSize: 2, contextDim: contextDim, variant: variant, seed: seed)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a configurable FLUX double-stream predictor while retaining paper-scale defaults
+    /// on the established constructor.
+    /// </summary>
+    /// <param name="inputChannels">Latent channel count.</param>
+    /// <param name="hiddenSize">Transformer width.</param>
+    /// <param name="numJointLayers">Number of double-stream blocks.</param>
+    /// <param name="numSingleLayers">Number of single-stream blocks.</param>
+    /// <param name="numHeads">Attention head count.</param>
+    /// <param name="patchSize">Latent patch size (default: 2).</param>
+    /// <param name="contextDim">Text-conditioning dimension (default: 4096, T5-XXL).</param>
+    /// <param name="variant">FLUX variant (Dev / Schnell). Default: Dev.</param>
+    /// <param name="seed">Optional random seed.</param>
+    public FluxDoubleStreamPredictor(
+        int inputChannels,
+        int hiddenSize,
+        int numJointLayers,
+        int numSingleLayers,
+        int numHeads,
+        int patchSize = 2,
+        int contextDim = 4096,
+        FluxPredictorVariant variant = FluxPredictorVariant.Dev,
+        int? seed = null)
         : base(
             inputChannels: inputChannels,
-            hiddenSize: FLUX_HIDDEN_SIZE,
-            numJointLayers: FLUX_NUM_JOINT_LAYERS,
-            numSingleLayers: FLUX_NUM_SINGLE_LAYERS,
-            numHeads: FLUX_NUM_HEADS,
+            hiddenSize: hiddenSize,
+            numJointLayers: numJointLayers,
+            numSingleLayers: numSingleLayers,
+            numHeads: numHeads,
+            patchSize: patchSize,
             contextDim: contextDim,
             seed: seed)
     {
         _variant = variant;
         _fluxInputChannels = inputChannels;
+        _fluxHiddenSize = hiddenSize;
+        _fluxNumJointLayers = numJointLayers;
+        _fluxNumSingleLayers = numSingleLayers;
+        _fluxNumHeads = numHeads;
+        _fluxPatchSize = patchSize;
         _fluxContextDim = contextDim;
         _fluxSeed = seed;
     }
 
-    /// <inheritdoc />
-    public override INoisePredictor<T> Clone()
-    {
-        var clone = new FluxDoubleStreamPredictor<T>(_variant, _fluxInputChannels, _fluxContextDim, _fluxSeed);
-        // #1711: MMDiT LazyDense weights resolve via the FORWARD path; ProbeMaterializeAndCopyInto
-        // probe-forwards the clone then copies, instead of a naive re-RNG-initializing copy.
-        ProbeMaterializeAndCopyInto(clone);
-        return clone;
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 }

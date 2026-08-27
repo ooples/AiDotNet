@@ -94,15 +94,6 @@ public class TinyBERTNER<T> : TransformerNERBase<T>
     {
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new TransformerNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new TinyBERTNER<T>(Architecture, p, optionsCopy);
-        return new TinyBERTNER<T>(Architecture, optionsCopy);
-    }
-
     private static TransformerNEROptions CreateTinyBERTDefaults()
     {
         return new TransformerNEROptions

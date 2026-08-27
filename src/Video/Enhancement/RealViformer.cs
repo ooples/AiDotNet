@@ -57,7 +57,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2407.13987",
     Year = 2024,
     Authors = "Yuehan Zhang, Angela Yao")]
-public class RealViformer<T> : VideoSuperResolutionBase<T>
+public partial class RealViformer<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 
@@ -179,37 +179,9 @@ public class RealViformer<T> : VideoSuperResolutionBase<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.NumFeatures);
-        w.Write(_options.NumResBlocks);
-        w.Write(_options.ScaleFactor);
-        w.Write(_options.ChannelReductionRatio);
-        w.Write(_options.SparseTopKFactor);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (VideoModelVariant)r.ReadInt32();
-        _options.NumFeatures = r.ReadInt32();
-        _options.NumResBlocks = r.ReadInt32();
-        _options.ScaleFactor = r.ReadInt32();
-        _options.ChannelReductionRatio = r.ReadInt32();
-        _options.SparseTopKFactor = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new RealViformer<T>(Architecture, _options);
+
 
     #endregion
 

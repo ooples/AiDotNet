@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Learning Long-Term Dependencies with Gradient Descent is Difficult", "https://doi.org/10.1109/72.279181")]
-public class RecurrentNeuralNetwork<T> : SequenceModelLayoutBase<T>
+public partial class RecurrentNeuralNetwork<T> : SequenceModelLayoutBase<T>
 {
     private readonly RecurrentNeuralNetworkOptions _options;
 
@@ -341,90 +341,7 @@ public class RecurrentNeuralNetwork<T> : SequenceModelLayoutBase<T>
         return metadata;
     }
 
-    /// <summary>
-    /// Serializes network-specific data for the Recurrent Neural Network.
-    /// </summary>
-    /// <param name="writer">The BinaryWriter to write the data to.</param>
-    /// <remarks>
-    /// <para>
-    /// This method writes the specific configuration and state of the RNN to a binary stream.
-    /// It includes RNN-specific parameters that are essential for later reconstruction of the network.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves the unique settings of your RNN.
-    /// 
-    /// It writes:
-    /// - The size of the hidden state (which determines the network's memory capacity)
-    /// - The length of sequences the network is designed to handle
-    /// - Any other RNN-specific parameters
-    /// 
-    /// Saving these details allows you to recreate the exact same network structure later.
-    /// It's like writing down a recipe so you can make the same dish again in the future.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(Convert.ToDouble(_learningRate));
-    }
 
-    /// <summary>
-    /// Deserializes network-specific data for the Recurrent Neural Network.
-    /// </summary>
-    /// <param name="reader">The BinaryReader to read the data from.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reads the specific configuration and state of the RNN from a binary stream.
-    /// It reconstructs the RNN-specific parameters to match the state of the network when it was serialized.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads the unique settings of your RNN.
-    /// 
-    /// It reads:
-    /// - The size of the hidden state (which determines the network's memory capacity)
-    /// - The length of sequences the network is designed to handle
-    /// - Any other RNN-specific parameters
-    /// 
-    /// Loading these details allows you to recreate the exact same network structure that was previously saved.
-    /// It's like following a recipe to recreate a dish exactly as it was made before.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _learningRate = NumOps.FromDouble(reader.ReadDouble());
-    }
 
-    /// <summary>
-    /// Creates a new instance of the recurrent neural network with the same configuration.
-    /// </summary>
-    /// <returns>
-    /// A new instance of <see cref="RecurrentNeuralNetwork{T}"/> with the same configuration as the current instance.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new recurrent neural network that has the same configuration as the current instance.
-    /// It's used for model persistence, cloning, and transferring the model's configuration to new instances.
-    /// The new instance will have the same architecture and learning rate as the original,
-    /// but will not share parameter values unless they are explicitly copied after creation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method makes a fresh copy of the current model with the same settings.
-    /// 
-    /// It's like creating a blueprint copy of your network that can be used to:
-    /// - Save your model's settings
-    /// - Create a new identical model
-    /// - Transfer your model's configuration to another system
-    /// 
-    /// This is useful when you want to:
-    /// - Create multiple similar recurrent neural networks
-    /// - Save a model's configuration for later use
-    /// - Reset a model while keeping its settings
-    /// 
-    /// Note that while the settings are copied, the learned parameters (like the weights that determine
-    /// how the network processes sequences) are not automatically transferred, so the new instance
-    /// will need training or parameter copying to match the performance of the original.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Create a new instance with the cloned architecture and the same learning rate
-        double learningRate = Convert.ToDouble(_learningRate);
-        return new RecurrentNeuralNetwork<T>(Architecture, learningRate, LossFunction);
-    }
+
 }

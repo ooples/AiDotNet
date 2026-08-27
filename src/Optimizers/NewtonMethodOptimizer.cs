@@ -25,7 +25,7 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
+public partial class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
     /// Declines to fuse, always.
@@ -465,68 +465,6 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             "Newton's method requires computing and inverting the Hessian matrix which is " +
             "memory-intensive (O(n^2)) and complex on GPU. " +
             "Use CPU-based UpdateParameters or consider using Adam/AdamW for GPU-resident training.");
-    }
-
-    /// <summary>
-    /// Serializes the current state of the optimizer into a byte array.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method saves the current state of the optimizer, including its base class state, options, and iteration count.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like taking a snapshot of your current position, all your tools, and your strategy for exploring the valley.
-    /// You can use this snapshot later to continue your exploration from exactly where you left off.
-    /// </para>
-    /// </remarks>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
-
-            writer.Write(_iteration);
-
-            return ms.ToArray();
-        }
-    }
-
-    /// <summary>
-    /// Deserializes a byte array to restore the optimizer's state.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method restores the optimizer's state from a previously serialized byte array, including its base class state, options, and iteration count.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like using a snapshot you took earlier to set up your exploration exactly as it was at that point.
-    /// You're restoring all your tools, your position in the valley, and your strategy to continue your search from where you left off.
-    /// </para>
-    /// </remarks>
-    /// <param name="data">The byte array containing the serialized optimizer state.</param>
-    /// <exception cref="InvalidOperationException">Thrown when the optimizer options cannot be deserialized.</exception>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<NewtonMethodOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-            _iteration = reader.ReadInt32();
-        }
     }
 
     /// <inheritdoc />

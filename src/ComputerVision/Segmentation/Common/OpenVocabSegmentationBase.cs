@@ -19,7 +19,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 /// Models extending this base class: SAN, CAT-Seg, SED, Open-Vocabulary SAM, Grounded SAM 2, Mask-Adapter.
 /// </para>
 /// </remarks>
-public abstract class OpenVocabSegmentationBase<T> : SegmentationModelBase<T>, IOpenVocabSegmentation<T>
+public abstract partial class OpenVocabSegmentationBase<T> : SegmentationModelBase<T>, IOpenVocabSegmentation<T>
 {
     // protected and mutable so a derived model can read them and restore them on deserialization -
     // see PanopticSegmentationBase._numStuffClasses for why private/readonly makes a base unadoptable.

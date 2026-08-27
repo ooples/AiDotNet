@@ -166,19 +166,6 @@ public sealed class HarRvModel<T> : RegressionBase<T>
         return Convert.ToDouble(model.ForecastAnnualizedVol(rv, periodsPerYear));
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        var model = new HarRvModel<T>(Options, Regularization);
-        if (Coefficients is not null)
-        {
-            model.Coefficients = Coefficients.Clone();
-        }
-
-        model.Intercept = Intercept;
-        return model;
-    }
-
     /// <summary>The HAR feature row at time <paramref name="t"/>: [daily RV, weekly avg, monthly avg].</summary>
     private T[] HarRow(IReadOnlyList<T> rv, int t) =>
     [

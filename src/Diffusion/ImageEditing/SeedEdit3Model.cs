@@ -106,25 +106,6 @@ public partial class SeedEdit3Model<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Delegate to the predictor/VAE's own Clone implementations, which resolve
-        // their internal lazy shapes on BOTH source and clone before copying weights.
-        // Re-constructing a fresh model with a new seed and calling
-        // SetParameters(GetParameters()) re-hits the lazy-init bug: GetParameters() on a
-        // still-unresolved source under-counts the lazy DenseLayer params and the fresh
-        // model re-resolves (with a different seed) on its first Predict, diverging from
-        // the original. Mirrors ImprovedConsistencyModel / RealESRGAN (PR #1555 / #1562).
-        return new SeedEdit3Model<T>(
-            predictor: (SiTPredictor<T>)_predictor.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner);
-    }
-
-    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

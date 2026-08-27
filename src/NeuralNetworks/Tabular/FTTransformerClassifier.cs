@@ -51,17 +51,15 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     Authors = "Gorishniy, Y., Rubachev, I., Khrulkov, V., & Babenko, A.")]
 public class FTTransformerClassifier<T> : FTTransformerBase<T>
 {
-
-    /// <inheritdoc />
-    /// <remarks>The classification head. Everything else -- the tokenizer, the encoder stack and the final norm -- is the shared backbone, and the base folds this after it in all three surfaces.</remarks>
-    protected override IEnumerable<ILayer<T>> GetExtraTrainableLayers()
-        => new ILayer<T>[] { _classificationHead };
     private readonly int _numClasses;
     private readonly FullyConnectedLayer<T> _classificationHead;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _clsOutputCache;
+    [Scratch]
     private Tensor<T>? _logitsCache;
+    [Scratch]
     private Tensor<T>? _probabilitiesCache;
 
     /// <summary>

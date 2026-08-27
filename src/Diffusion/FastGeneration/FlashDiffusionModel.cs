@@ -120,22 +120,6 @@ public partial class FlashDiffusionModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Lazy-preserving Clone (recipe from #1596): delegate to the predictor's and VAE's own Clone()
-        // (preserves materialized weights, reconstructs from actual config) instead of rebuilding a
-        // default-scale model and SetParameters(GetParameters()), which mismatches an injected non-default
-        // variant and re-randomizes the clone's unmaterialized lazy weights.
-        return new FlashDiffusionModel<T>(
-            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner);
-    }
-
-    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

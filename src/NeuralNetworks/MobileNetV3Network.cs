@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Searching for MobileNetV3", "https://arxiv.org/abs/1905.02244", Year = 2019, Authors = "Andrew Howard, Mark Sandler, Grace Chu, Liang-Chieh Chen, Bo Chen, Mingxing Tan, Weijun Wang, Yukun Zhu, Ruoming Pang, Vijay Vasudevan, Quoc V. Le, Hartwig Adam")]
-public class MobileNetV3Network<T> : ImageClassifierModelLayoutBase<T>
+public partial class MobileNetV3Network<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly MobileNetV3Options _options;
 
@@ -277,64 +277,10 @@ public class MobileNetV3Network<T> : ImageClassifierModelLayoutBase<T>
     }
 
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_configuration.Variant);
-        writer.Write((int)_configuration.WidthMultiplier);
-        writer.Write(_configuration.InputChannels);
-        writer.Write(_configuration.InputHeight);
-        writer.Write(_configuration.InputWidth);
-        writer.Write(_configuration.NumClasses);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        var variant = (MobileNetV3Variant)reader.ReadInt32();
-        var widthMultiplier = (MobileNetV3WidthMultiplier)reader.ReadInt32();
-        var inputChannels = reader.ReadInt32();
-        var inputHeight = reader.ReadInt32();
-        var inputWidth = reader.ReadInt32();
-        var numClasses = reader.ReadInt32();
 
-        if (variant != _configuration.Variant ||
-            widthMultiplier != _configuration.WidthMultiplier ||
-            inputChannels != _configuration.InputChannels ||
-            inputHeight != _configuration.InputHeight ||
-            inputWidth != _configuration.InputWidth ||
-            numClasses != _configuration.NumClasses)
-        {
-            throw new InvalidDataException("Serialized MobileNetV3 configuration does not match current configuration.");
-        }
-    }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var config = new MobileNetV3Configuration(
-            _configuration.Variant,
-            _configuration.NumClasses,
-            _configuration.WidthMultiplier,
-            _configuration.InputHeight,
-            _configuration.InputWidth,
-            _configuration.InputChannels);
-
-        return new MobileNetV3Network<T>(Architecture, config, _optimizer, _lossFunction);
-    }
-
-    /// <inheritdoc />
-    public override void Deserialize(byte[] data)
-    {
-        base.Deserialize(data);
-        // Restore eval mode after deserialization (training/eval state is not serialized).
-        SetAllLayersEvalMode();
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
-    {
-        return DeepCopy();
-    }
 
     /// <summary>
     /// Gets the layer at the specified index.

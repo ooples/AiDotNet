@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
@@ -12,7 +12,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+[LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, new AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<double>(2, 4), new AiDotNet.NeuralNetworks.Layers.MoEFeedForwardLayer<double>(8, 16, 2, 1)")]
 // Pre-LN residual block, so shape preservation is structural rather than incidental: ForwardTraced is two
 // `Engine.TensorAdd(residual, sublayerOut)` pairs, and each one only types when the sublayer returned the
 // residual's exact shape. That holds whatever attention implementation is injected - a sublayer that
@@ -44,6 +44,9 @@ public partial class MoEDecoderBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>The model (input/output) feature dimension.</summary>
     public int HiddenSize => _hiddenSize;
 
+    /// <summary>Construction state: the 'rmsNormEpsilon' the layer was built with.</summary>
+    private readonly double _rmsNormEpsilon;
+
     /// <summary>Creates a MoE pre-LN decoder block.</summary>
     /// <param name="hiddenSize">Input/output feature dimension.</param>
     /// <param name="attention">Pre-constructed self-attention sublayer.</param>
@@ -52,6 +55,7 @@ public partial class MoEDecoderBlock<T> : LayerBase<T>, IShapeContract
     public MoEDecoderBlock(int hiddenSize, LayerBase<T> attention, MoEFeedForwardLayer<T> moe, double rmsNormEpsilon = 1e-6)
         : base(new[] { -1, hiddenSize }, new[] { -1, hiddenSize })
     {
+        _rmsNormEpsilon = rmsNormEpsilon;
         Guard.NotNull(attention);
         Guard.NotNull(moe);
         _hiddenSize = hiddenSize;

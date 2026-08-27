@@ -128,6 +128,7 @@ public partial class UpsamplingLayer<T> : LayerBase<T>, IShapeContract
     /// to improve its performance on future inputs.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>

@@ -126,11 +126,13 @@ public partial class AutoencoderKL<T> : VAEModelBase<T>
     /// <summary>
     /// Cached mean from last encoding.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedMean;
 
     /// <summary>
     /// Cached log variance from last encoding.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedLogVar;
 
     /// <summary>
@@ -501,30 +503,6 @@ public partial class AutoencoderKL<T> : VAEModelBase<T>
     #endregion
 
     #region Cloning
-
-    /// <inheritdoc />
-    public override IVAEModel<T> Clone()
-    {
-        var clone = new AutoencoderKL<T>(
-            _inputChannels,
-            _latentChannels,
-            _baseChannels,
-            _channelMults,
-            numResBlocks: 2,
-            numGroups: 32,
-            _latentScaleFactor,
-            inputSpatialSize: 512,
-            LossFunction);
-
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
 
     #endregion
 

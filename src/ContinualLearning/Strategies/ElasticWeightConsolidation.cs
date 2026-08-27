@@ -127,10 +127,13 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
     private readonly List<Vector<T>> _taskFisherInfo;
 
     // For online EWC: single accumulated importance matrix
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _accumulatedFisher;
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _consolidatedParameters;
 
     // Cached gradients for Fisher computation
+    [Scratch]
     private readonly List<Vector<T>> _gradientCache;
 
     /// <summary>

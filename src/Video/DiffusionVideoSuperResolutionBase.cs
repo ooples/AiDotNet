@@ -40,7 +40,7 @@ namespace AiDotNet.Video;
 /// belong on this base.
 /// </para>
 /// </remarks>
-public abstract class DiffusionVideoSuperResolutionBase<T> : VideoDiffusionModelBase<T>, IVideoSuperResolution<T>
+public abstract partial class DiffusionVideoSuperResolutionBase<T> : VideoDiffusionModelBase<T>, IVideoSuperResolution<T>
 {
     private RAFTFlowCache? _flowCache;
 

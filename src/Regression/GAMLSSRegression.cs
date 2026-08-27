@@ -65,7 +65,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Generalized additive models for location, scale and shape", "https://doi.org/10.1111/j.1467-9876.2005.00510.x", Year = 2005, Authors = "Robert A. Rigby, D. Mikis Stasinopoulos")]
-public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
+public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     // Bounds on the scale/shape linear predictors (log-link parameters such as σ and ν).
     // The RS algorithm of Rigby &amp; Stasinopoulos (2005), like the reference gamlss R package,
@@ -82,16 +82,19 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Coefficients for the location parameter model.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _locationCoefficients;
 
     /// <summary>
     /// Coefficients for the scale parameter model.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _scaleCoefficients;
 
     /// <summary>
     /// Coefficients for the shape parameter model (if applicable).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _shapeCoefficients;
 
     /// <summary>
@@ -766,40 +769,6 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         };
     }
 
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Options
-        writer.Write((int)_options.DistributionFamily);
-        writer.Write((int)_options.LocationModelType);
-        writer.Write((int)_options.ScaleModelType);
-        writer.Write((int)_options.ShapeModelType);
-
-        // Y standardization
-        writer.Write(NumOps.ToDouble(_yMean));
-        writer.Write(NumOps.ToDouble(_yStd));
-
-        // State
-        writer.Write(_numFeatures);
-        writer.Write(NumOps.ToDouble(_locationIntercept));
-        writer.Write(NumOps.ToDouble(_scaleIntercept));
-        writer.Write(NumOps.ToDouble(_shapeIntercept));
-
-        // Coefficients
-        SerializeVector(writer, _locationCoefficients);
-        SerializeVector(writer, _scaleCoefficients);
-        SerializeVector(writer, _shapeCoefficients);
-
-        return ms.ToArray();
-    }
-
     private void SerializeVector(BinaryWriter writer, Vector<T>? vec)
     {
         writer.Write(vec != null);
@@ -811,38 +780,6 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
                 writer.Write(NumOps.ToDouble(vec[i]));
             }
         }
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        int baseLen = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseLen);
-        base.Deserialize(baseData);
-
-        // Options
-        _options.DistributionFamily = (GAMLSSDistributionFamily)reader.ReadInt32();
-        _options.LocationModelType = (GAMLSSModelType)reader.ReadInt32();
-        _options.ScaleModelType = (GAMLSSModelType)reader.ReadInt32();
-        _options.ShapeModelType = (GAMLSSModelType)reader.ReadInt32();
-
-        // Y standardization
-        _yMean = NumOps.FromDouble(reader.ReadDouble());
-        _yStd = NumOps.FromDouble(reader.ReadDouble());
-
-        // State
-        _numFeatures = reader.ReadInt32();
-        _locationIntercept = NumOps.FromDouble(reader.ReadDouble());
-        _scaleIntercept = NumOps.FromDouble(reader.ReadDouble());
-        _shapeIntercept = NumOps.FromDouble(reader.ReadDouble());
-
-        // Coefficients
-        _locationCoefficients = DeserializeVector(reader);
-        _scaleCoefficients = DeserializeVector(reader);
-        _shapeCoefficients = DeserializeVector(reader);
     }
 
     private Vector<T>? DeserializeVector(BinaryReader reader)
@@ -859,20 +796,4 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         return vec;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new GAMLSSRegression<T>(_options, Regularization);
-    }
-
-    /// <summary>
-    /// Creates a deep copy via serialization to preserve private coefficient state.
-    /// </summary>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new GAMLSSRegression<T>(_options, Regularization);
-        var data = Serialize();
-        clone.Deserialize(data);
-        return clone;
-    }
 }

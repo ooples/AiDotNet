@@ -88,7 +88,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         Direction = TensorLayoutDirection.Input, BatchOptional = true)]
     [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
         Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-    public class HamiltonianNeuralNetwork<T> : NeuralNetworkBase<T>, ITrainingObjectiveProvider<T>
+    public partial class HamiltonianNeuralNetwork<T> : NeuralNetworkBase<T>, ITrainingObjectiveProvider<T>
     {
         private readonly HamiltonianNeuralNetworkOptions _options;
 
@@ -490,36 +490,13 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// Serializes Hamiltonian-specific data.
         /// </summary>
         /// <param name="writer">Binary writer.</param>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            writer.Write(_stateDim);
-        }
+
 
         /// <summary>
         /// Deserializes Hamiltonian-specific data.
         /// </summary>
         /// <param name="reader">Binary reader.</param>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            int storedStateDim = reader.ReadInt32();
-            if (storedStateDim != _stateDim)
-            {
-                throw new InvalidOperationException("Serialized Hamiltonian configuration does not match the current instance.");
-            }
-        }
 
-        /// <summary>
-        /// Creates a new instance with the same configuration.
-        /// </summary>
-        /// <returns>New Hamiltonian network instance.</returns>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new HamiltonianNeuralNetwork<T>(
-                Architecture,
-                _stateDim,
-                _optimizer,
-                new HamiltonianNeuralNetworkOptions(_options));
-        }
 
         /// <summary>
         /// Indicates whether this model supports training.

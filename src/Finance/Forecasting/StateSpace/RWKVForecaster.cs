@@ -375,39 +375,10 @@ public partial class RWKVForecaster<T> : ForecastingModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new RWKVForecaster<T>(Architecture, new RWKVForecastingOptions<T>(_options), _numFeatures);
-    }
+
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_modelDimension);
-        writer.Write(_numHeads);
-        writer.Write(_numLayers);
-        writer.Write(_dropout);
-        writer.Write(_numFeatures);
-    }
 
-    /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _modelDimension = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _numFeatures = reader.ReadInt32();
-
-        // Re-point cached layer references at the freshly deserialized Layers;
-        // otherwise a clone's forward uses the stale random-initialized layers
-        // created by CreateNewInstance and diverges from the original.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

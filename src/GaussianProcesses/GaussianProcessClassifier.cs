@@ -68,6 +68,7 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
     /// and each column is one feature (measurement) about that example.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _X;
 
     /// <summary>
@@ -80,11 +81,13 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
     /// sigmoid (logistic) function.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _y;
 
     /// <summary>
     /// The original class labels from training (before transformation).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _originalLabels;
 
     /// <summary>
@@ -97,6 +100,7 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
     /// pairs of training examples.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _K;
 
     /// <summary>
@@ -109,6 +113,7 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
     /// The magnitude indicates confidence - larger absolute values mean stronger predictions.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _f;
 
     /// <summary>
@@ -121,6 +126,7 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
     /// calculate uncertainties. Higher values on the diagonal indicate more certainty at those points.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Matrix<T> _W;
 
     /// <summary>

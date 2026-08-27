@@ -83,19 +83,27 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stores the last input tensor processed by the layer.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the last encoder output tensor used by the layer.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastEncoderOutput;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuDecoderInput;
+    [ExternalState]
     private Tensor<T>? _gpuEncoderOutput;
+    [ExternalState]
     private Tensor<T>? _gpuNormalized1;
+    [ExternalState]
     private Tensor<T>? _gpuNormalized2;
+    [ExternalState]
     private Tensor<T>? _gpuResidual1;
+    [ExternalState]
     private Tensor<T>? _gpuResidual2;
 
     /// <summary>
@@ -106,11 +114,13 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stores the gradient with respect to the input from the last backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInputGradient;
 
     /// <summary>
     /// Stores the gradient with respect to the encoder output from the last backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastEncoderOutputGradient;
 
     /// <summary>
@@ -127,65 +137,6 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
-
-    public override void Serialize(BinaryWriter writer)
-    {
-        // Refuse to write malformed checkpoints. The lazy ctor leaves
-        // InputSize at -1 until the first forward (or a Deserialize
-        // round-trip) resolves it; serializing before that would emit a
-        // sentinel that Deserialize can't decode and that Set/GetParameters
-        // can't slice. Fail fast at the writer rather than producing a
-        // checkpoint that errors later at load time.
-        if (InputSize <= 0 || _feedForward2 is null)
-        {
-            throw new InvalidOperationException(
-                $"DecoderLayer.Serialize: layer must be shape-resolved before " +
-                $"serialization (InputSize={InputSize}, _feedForward2 " +
-                $"{(_feedForward2 is null ? "null" : "non-null")}). Run a " +
-                $"forward pass first so OnFirstForward materializes _feedForward2 " +
-                $"and resolves InputSize from the input shape.");
-        }
-
-        // Persist resolved InputSize so Deserialize can re-resolve the
-        // lazily-constructed _feedForward2 on the load side.
-        writer.Write(InputSize);
-        base.Serialize(writer);
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        int savedInputSize = reader.ReadInt32();
-        // Reject malformed checkpoints up front. A Serialize from this
-        // class is now guaranteed to write InputSize > 0 (see the guard
-        // above), but a stream from an older build or a hand-crafted
-        // payload could contain anything; refusing here prevents
-        // ResolveFromShape / base.Deserialize / SetParameters from
-        // mutating layer state on bad input.
-        if (savedInputSize <= 0)
-        {
-            throw new InvalidDataException(
-                $"DecoderLayer.Deserialize: saved InputSize ({savedInputSize}) must be positive. " +
-                $"Stream is malformed or comes from an older build that emitted unresolved " +
-                $"layers. Discard the checkpoint or regenerate it from a shape-resolved layer.");
-        }
-
-        if (!IsShapeResolved)
-        {
-            ResolveFromShape(new[] { savedInputSize });
-        }
-        else if (savedInputSize != InputSize)
-        {
-            // Already-resolved instance with a mismatched persisted input
-            // size — silently loading would assign weights for a different
-            // (inputSize, …) factorization and produce garbage on first
-            // Forward. Fail fast with an actionable message.
-            throw new InvalidDataException(
-                $"DecoderLayer.Deserialize: saved InputSize ({savedInputSize}) does not match " +
-                $"the already-resolved layer's InputSize ({InputSize}). Recreate the layer to " +
-                $"match the saved shape, or load into a fresh (unresolved) instance.");
-        }
-        base.Deserialize(reader);
-    }
 
     /// <summary>
     /// Returns <see cref="_feedForward2"/> if it has been constructed; throws
@@ -231,6 +182,12 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
+    /// <summary>Construction state: the 'attentionSize' the layer was built with.</summary>
+    private readonly int _attentionSize;
+
+    /// <summary>Construction state: the 'feedForwardSize' the layer was built with.</summary>
+    private readonly int _feedForwardSize;
+
     /// <summary>
     /// Initializes a new instance of the DecoderLayer class with scalar activation.
     /// </summary>
@@ -242,6 +199,8 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
     public DecoderLayer(int attentionSize, int feedForwardSize, IActivationFunction<T>? activation = null)
         : base(new[] { -1 }, new[] { -1 }, activation ?? new ReLUActivation<T>())
     {
+        _feedForwardSize = feedForwardSize;
+        _attentionSize = attentionSize;
         _selfAttention = new AttentionLayer<T>(attentionSize, (IVectorActivationFunction<T>?)null);
         _crossAttention = new AttentionLayer<T>(attentionSize, activation);
 
@@ -383,6 +342,8 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
     public DecoderLayer(int attentionSize, int feedForwardSize, IVectorActivationFunction<T> activation)
         : base(new[] { -1 }, new[] { -1 }, activation ?? new ReLUActivation<T>())
     {
+        _feedForwardSize = feedForwardSize;
+        _attentionSize = attentionSize;
         _selfAttention = new AttentionLayer<T>(attentionSize, (IVectorActivationFunction<T>?)null);
         _crossAttention = new AttentionLayer<T>(attentionSize, activation);
 

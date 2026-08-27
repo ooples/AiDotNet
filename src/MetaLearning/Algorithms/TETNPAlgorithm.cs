@@ -47,6 +47,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 public partial class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly TETNPOptions<T, TInput, TOutput> _algoOptions;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _relPosParams;
     private readonly int _numBands;
     private readonly int _numHeads;

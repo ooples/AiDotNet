@@ -90,6 +90,7 @@ public partial class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// and uses each past time period.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _arParameters;
 
     /// <summary>
@@ -112,6 +113,7 @@ public partial class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// adjusts based on each past prediction error.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _maParameters;
 
     /// <summary>
@@ -652,33 +654,7 @@ public partial class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// having to start from scratch.
     /// </para>
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        // Write model parameters
-        SerializationHelper<T>.SerializeVector(writer, _arParameters);
-        SerializationHelper<T>.SerializeVector(writer, _maParameters);
 
-        // Write intervention effects
-        writer.Write(_interventionEffects.Count);
-        foreach (var effect in _interventionEffects)
-        {
-            writer.Write(effect.StartIndex);
-            writer.Write(effect.Duration);
-            writer.Write(Convert.ToDouble(effect.Effect));
-        }
-
-        // Write options
-        writer.Write(_iaOptions.AROrder);
-        writer.Write(_iaOptions.MAOrder);
-
-        // Write training series for in-sample predictions
-        if (_y is not null)
-            SerializationHelper<T>.SerializeVector(writer, _y);
-        else
-            writer.Write(0);
-
-        SerializationHelper<T>.SerializeVector(writer, _residuals);
-    }
 
     /// <summary>
     /// Deserializes the model's core parameters from a binary reader.
@@ -706,41 +682,7 @@ public partial class InterventionAnalysisModel<T> : TimeSeriesModelBase<T>
     /// to continue using the model without having to train it again.
     /// </para>
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        // Read model parameters
-        _arParameters = SerializationHelper<T>.DeserializeVector(reader);
-        _maParameters = SerializationHelper<T>.DeserializeVector(reader);
 
-        // Read intervention effects
-        int effectCount = reader.ReadInt32();
-        _interventionEffects = new List<InterventionEffect<T>>();
-        for (int i = 0; i < effectCount; i++)
-        {
-            _interventionEffects.Add(new InterventionEffect<T>
-            {
-                StartIndex = reader.ReadInt32(),
-                Duration = reader.ReadInt32(),
-                Effect = reader.ReadDouble()
-            });
-        }
-
-        // Read options
-        _iaOptions.AROrder = reader.ReadInt32();
-        _iaOptions.MAOrder = reader.ReadInt32();
-
-        // Read training series (post-patch field)
-        try
-        {
-            _y = SerializationHelper<T>.DeserializeVector(reader);
-            _residuals = SerializationHelper<T>.DeserializeVector(reader);
-        }
-        catch (EndOfStreamException)
-        {
-            // Older models don't include training series
-            _residuals = Vector<T>.Empty();
-        }
-    }
 
     /// <summary>
     /// Resets the model to its initial state.

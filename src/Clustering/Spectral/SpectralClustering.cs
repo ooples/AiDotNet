@@ -49,7 +49,7 @@ namespace AiDotNet.Clustering.Spectral;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("On Spectral Clustering: Analysis and an algorithm", "https://proceedings.neurips.cc/paper/2001/hash/801272ee79cfde7fa5960571fee36b9b-Abstract.html", Year = 2002, Authors = "Andrew Ng, Michael Jordan, Yair Weiss")]
-public class SpectralClustering<T> : ClusteringBase<T>
+public partial class SpectralClustering<T> : ClusteringBase<T>
 {
     private readonly SpectralOptions<T> _options;
 
@@ -80,22 +80,6 @@ public class SpectralClustering<T> : ClusteringBase<T>
     public T[,]? AffinityMatrix => _affinityMatrix;
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new SpectralClustering<T>(new SpectralOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            Affinity = _options.Affinity,
-            Gamma = _options.Gamma,
-            NumNeighbors = _options.NumNeighbors,
-            EigenSolver = _options.EigenSolver,
-            Normalization = _options.Normalization,
-            AssignLabels = _options.AssignLabels,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

@@ -117,6 +117,9 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     public int NumCores => _numCores;
 
+    /// <summary>Construction state: the 'ttRank' the layer was built with.</summary>
+    private readonly int _ttRank;
+
     /// <summary>
     /// Initializes a new LoRETTA adapter wrapping an existing layer.
     /// </summary>
@@ -157,6 +160,7 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         bool freezeBaseLayer = true)
         : base(baseLayer, ttRank, alpha, freezeBaseLayer)
     {
+        _ttRank = ttRank;
         if (ttRank <= 0)
         {
             throw new ArgumentException("TT-rank must be positive", nameof(ttRank));

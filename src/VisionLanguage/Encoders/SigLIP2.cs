@@ -97,7 +97,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2025,
     Authors = "Tschannen et al."
 )]
-public class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
+public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     #region Fields
 
@@ -616,87 +616,10 @@ public class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     }
 
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ImageEncoderModelPath ?? string.Empty);
-        writer.Write(_options.TextEncoderModelPath ?? string.Empty);
-        writer.Write(_options.ImageSize);
-        writer.Write(_options.VisionEmbeddingDim);
-        writer.Write(_options.TextEmbeddingDim);
-        writer.Write(_options.ProjectionDim);
-        writer.Write(_options.NumVisionLayers);
-        writer.Write(_options.NumTextLayers);
-        writer.Write(_options.NumVisionHeads);
-        writer.Write(_options.NumTextHeads);
-        writer.Write(_options.Temperature);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.SigmoidBias);
-        writer.Write(_options.Multilingual);
-        writer.Write(_options.CaptioningLossWeight);
-        writer.Write(_options.SelfSupervisedLossWeight);
-        writer.Write(_options.MimMaskRatio);
-        writer.Write(_options.NumCaptioningDecoderLayers);
-        writer.Write(_options.NumCaptioningDecoderHeads);
-        writer.Write(_options.CaptioningDecoderDim);
-        writer.Write(_options.MaxCaptionLength);
-        writer.Write(_options.MimDecoderDim);
-        writer.Write(_options.NumMimDecoderLayers);
-        writer.Write(_options.IncludeCaptioningDecoder);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string imgPath = reader.ReadString();
-        if (!string.IsNullOrEmpty(imgPath))
-            _options.ImageEncoderModelPath = imgPath;
-        string txtPath = reader.ReadString();
-        if (!string.IsNullOrEmpty(txtPath))
-            _options.TextEncoderModelPath = txtPath;
-        _options.ImageSize = reader.ReadInt32();
-        _options.VisionEmbeddingDim = reader.ReadInt32();
-        _options.TextEmbeddingDim = reader.ReadInt32();
-        _options.ProjectionDim = reader.ReadInt32();
-        _options.NumVisionLayers = reader.ReadInt32();
-        _options.NumTextLayers = reader.ReadInt32();
-        _options.NumVisionHeads = reader.ReadInt32();
-        _options.NumTextHeads = reader.ReadInt32();
-        _options.Temperature = reader.ReadDouble();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.SigmoidBias = reader.ReadDouble();
-        _options.Multilingual = reader.ReadBoolean();
-        _options.CaptioningLossWeight = reader.ReadDouble();
-        _options.SelfSupervisedLossWeight = reader.ReadDouble();
-        _options.MimMaskRatio = reader.ReadDouble();
-        _options.NumCaptioningDecoderLayers = reader.ReadInt32();
-        _options.NumCaptioningDecoderHeads = reader.ReadInt32();
-        _options.CaptioningDecoderDim = reader.ReadInt32();
-        _options.MaxCaptionLength = reader.ReadInt32();
-        _options.MimDecoderDim = reader.ReadInt32();
-        _options.NumMimDecoderLayers = reader.ReadInt32();
-        _options.IncludeCaptioningDecoder = reader.ReadBoolean();
 
-        if (!_useNativeMode && _options.ImageEncoderModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxImageEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-        if (_options.TextEncoderModelPath is { } tp2 && !string.IsNullOrEmpty(tp2))
-            OnnxTextEncoder = new OnnxModel<T>(tp2, _options.OnnxOptions);
-
-        ComputeLayerBoundaries();
-    }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (
-            !_useNativeMode
-            && _options.ImageEncoderModelPath is { } mp
-            && !string.IsNullOrEmpty(mp)
-        )
-            return new SigLIP2<T>(Architecture, mp, _options);
-        return new SigLIP2<T>(Architecture, _options);
-    }
 
     #endregion
 

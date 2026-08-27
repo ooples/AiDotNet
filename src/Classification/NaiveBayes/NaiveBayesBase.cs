@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 using AiDotNet.Interfaces;
@@ -24,7 +25,7 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// and picks the class with the highest probability.
 /// </para>
 /// </remarks>
-public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>,
+public abstract partial class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>
 {
 
@@ -56,11 +57,13 @@ public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>,
     /// <summary>
     /// Stores the log prior probabilities for each class.
     /// </summary>
+    [Buffer]
     protected Vector<T>? LogPriors { get; set; }
 
     /// <summary>
     /// Stores the count of samples per class during training.
     /// </summary>
+    [Buffer]
     protected int[]? ClassCounts { get; set; }
 
     /// <summary>

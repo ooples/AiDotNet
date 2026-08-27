@@ -52,7 +52,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2205.07230",
     Year = 2022,
     Authors = "Liying Lu, Ruizheng Wu, Huaijia Lin, Jiangbo Lu, Jiaya Jia")]
-public class SwinVFI<T> : FrameInterpolationBase<T>
+public partial class SwinVFI<T> : FrameInterpolationBase<T>
 {
     #region Fields
 
@@ -177,41 +177,9 @@ public class SwinVFI<T> : FrameInterpolationBase<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.NumFeatures);
-        w.Write(_options.NumSwinBlocks);
-        w.Write(_options.NumHeads);
-        w.Write(_options.WindowSize);
-        w.Write(_options.NumStages);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (VideoModelVariant)r.ReadInt32();
-        _options.NumFeatures = r.ReadInt32();
-        _options.NumSwinBlocks = r.ReadInt32();
-        _options.NumHeads = r.ReadInt32();
-        _options.WindowSize = r.ReadInt32();
-        _options.NumStages = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new SwinVFI<T>(Architecture, p, _options);
-        return new SwinVFI<T>(Architecture, _options);
-    }
+
 
     #endregion
 

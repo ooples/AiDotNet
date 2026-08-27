@@ -329,22 +329,6 @@ public partial class StableCascadeModel<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-                                return new StableCascadeModel<T>(
-            priorUnet: (UNetNoisePredictor<T>)_priorUnet.Clone(),
-            decoderUnet: (UNetNoisePredictor<T>)_decoderUnet.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

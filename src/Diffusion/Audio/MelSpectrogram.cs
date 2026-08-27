@@ -46,7 +46,7 @@ namespace AiDotNet.Diffusion.Audio;
 /// </remarks>
 [ComponentType(ComponentType.Encoder)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class MelSpectrogram<T>
+public partial class MelSpectrogram<T>
 {
     /// <summary>
     /// Provides numeric operations for the specific type T.
@@ -101,11 +101,13 @@ public class MelSpectrogram<T>
     /// <summary>
     /// Mel filterbank matrix [nMels, nFreqs].
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _melFilterbank;
 
     /// <summary>
     /// Window tensor for IEngine operations.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _windowTensor;
 
     /// <summary>

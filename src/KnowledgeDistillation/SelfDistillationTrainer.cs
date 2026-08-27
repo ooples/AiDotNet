@@ -66,6 +66,7 @@ namespace AiDotNet.KnowledgeDistillation;
 public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Vector<T>, Vector<T>>
 {
     private readonly int _generations;
+    [Scratch]
     private Dictionary<Vector<T>, Vector<T>>? _cachedTeacherPredictions;
     private Func<Vector<T>, Vector<T>>? _studentForward;
 
