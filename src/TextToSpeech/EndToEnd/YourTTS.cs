@@ -81,7 +81,7 @@ public class YourTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         _options = options ?? new YourTTSOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperOptimizer();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -186,6 +186,30 @@ public class YourTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
+
+    /// <summary>
+    /// Builds the optimizer the paper prescribes: AdamW at the configured learning rate with
+    /// beta = (Beta1, Beta2) and decoupled weight decay. Casanova et al. 2022 keeps VITS's optimizer recipe.
+    /// </summary>
+    /// <remarks>
+    /// Constructing AdamW with no options at all took the library defaults -- lr 1e-3 and
+    /// beta = (0.9, 0.999) -- rather than the published recipe, and the resulting steps drove the
+    /// loss UP on this stack across the conformance budget. Every coefficient stays a caller-visible
+    /// option, and passing an explicit optimizer still bypasses this entirely.
+    /// </remarks>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = _options.Beta1,
+                Beta2 = _options.Beta2,
+                Epsilon = _options.Epsilon,
+                WeightDecay = _options.WeightDecay,
+                UseAMSGrad = false,
+                UseAdaptiveBetas = false,
+            });
 
     protected override void InitializeLayers()
     {

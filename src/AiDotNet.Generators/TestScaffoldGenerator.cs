@@ -12930,7 +12930,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // ProDiff's official 2,000-step linear warmup is even more conservative: its
                     // first two L1 updates straddle the initial Adam transient, while 15 updates
                     // produce a strict decrease under the unchanged paper schedule and threshold.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "AudioLM" or "IndexTTS2" or "ProDiff" or "SpeechT5" or "StyleTTS" or "StyleTTS2" or "Vocos" or "WaveGrad" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    // VITS, VITS2 and YourTTS join for the identical reason, and they are the
+                    // stack StyleTTS above is DERIVED FROM. They used to construct AdamW with no
+                    // options at all, so they trained at the library default 1e-3 instead of the
+                    // 2e-4 / beta = (0.8, 0.99) their papers specify; that overshoot is why their
+                    // Training_ShouldReduceLoss went the wrong way. With the published recipe in
+                    // place the trajectory is healthy over the 6-step training probe, and only the
+                    // 2-step memorization window is unrepresentative - measured step 1 = 0.614678
+                    // rising to step 2 = 0.646797, the same first-update hump Vocos records at the
+                    // same 2e-4 rate. Fifteen steps clear it (measured ~2.5 s for the pair, so the
+                    // added steps are free). The DEFAULT 1 % decrease threshold is untouched.
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "AudioLM" or "IndexTTS2" or "ProDiff" or "SpeechT5" or "StyleTTS" or "StyleTTS2" or "Vocos" or "WaveGrad" or "VITS" or "VITS2" or "YourTTS" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                 }
                 // The VAE+flow+decoder stack is init-sensitive: a poorly-scaled init
                 // (inherited from the order-dependent process-shared RNG when sibling

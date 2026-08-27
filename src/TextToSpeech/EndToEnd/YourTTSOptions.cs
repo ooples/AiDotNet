@@ -10,6 +10,7 @@ public class YourTTSOptions : EndToEndTtsOptions
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public YourTTSOptions(YourTTSOptions other)
+        : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
@@ -25,8 +26,21 @@ public class YourTTSOptions : EndToEndTtsOptions
         HopSize = 256;
         HiddenDim = 192;
         NumFlowSteps = 4;
+        // VITS2 (Kong et al. 2023) and YourTTS (Casanova et al. 2022) both keep VITS's
+        // optimizer recipe: AdamW, beta = (0.8, 0.99), weight decay 0.01, lr 2e-4.
+        LearningRate = 2e-4;
+        WeightDecay = 0.01;
     }
 
     public int SpeakerEmbeddingDim { get; set; } = 256;
     public int NumLanguages { get; set; } = 16;
+
+    /// <summary>First AdamW moment coefficient used by the released YourTTS recipe.</summary>
+    public double Beta1 { get; set; } = 0.8;
+
+    /// <summary>Second AdamW moment coefficient used by the released YourTTS recipe.</summary>
+    public double Beta2 { get; set; } = 0.99;
+
+    /// <summary>AdamW numerical-stability epsilon used by the released YourTTS recipe.</summary>
+    public double Epsilon { get; set; } = 1e-9;
 }
