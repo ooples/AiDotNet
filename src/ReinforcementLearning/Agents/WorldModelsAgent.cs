@@ -81,9 +81,11 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     // M: RNN for temporal modeling
     private INeuralNetwork<T> _rnnNetwork;
+    [AiDotNet.Attributes.Scratch]
     private Vector<T> _rnnHiddenState;
 
     // C: Controller (simple linear policy)
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _controllerWeights;
 
     private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
@@ -582,148 +584,6 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     public override int FeatureCount => _options.ObservationWidth * _options.ObservationHeight * _options.ObservationChannels;
-
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Write metadata
-        writer.Write(_options.ObservationWidth);
-        writer.Write(_options.ObservationHeight);
-        writer.Write(_options.ObservationChannels);
-        writer.Write(_options.LatentSize);
-        writer.Write(_options.RNNHiddenSize);
-        writer.Write(_options.ActionSize);
-
-        // Write training state
-        writer.Write(_updateCount);
-
-        // Write VAE encoder
-        var encoderBytes = _vaeEncoder.Serialize();
-        writer.Write(encoderBytes.Length);
-        writer.Write(encoderBytes);
-
-        // Write VAE decoder
-        var decoderBytes = _vaeDecoder.Serialize();
-        writer.Write(decoderBytes.Length);
-        writer.Write(decoderBytes);
-
-        // Write RNN network
-        var rnnBytes = _rnnNetwork.Serialize();
-        writer.Write(rnnBytes.Length);
-        writer.Write(rnnBytes);
-
-        // Write controller weights
-        writer.Write(_controllerWeights.Rows);
-        writer.Write(_controllerWeights.Columns);
-        for (int i = 0; i < _controllerWeights.Rows; i++)
-        {
-            for (int j = 0; j < _controllerWeights.Columns; j++)
-            {
-                writer.Write(NumOps.ToDouble(_controllerWeights[i, j]));
-            }
-        }
-
-        // Write RNN hidden state
-        writer.Write(_rnnHiddenState.Length);
-        for (int i = 0; i < _rnnHiddenState.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(_rnnHiddenState[i]));
-        }
-
-        return ms.ToArray();
-    }
-
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        // Read and validate metadata
-        var obsWidth = reader.ReadInt32();
-        var obsHeight = reader.ReadInt32();
-        var obsChannels = reader.ReadInt32();
-        var latentSize = reader.ReadInt32();
-        var rnnHiddenSize = reader.ReadInt32();
-        var actionSize = reader.ReadInt32();
-
-        if (obsWidth != _options.ObservationWidth || obsHeight != _options.ObservationHeight ||
-            obsChannels != _options.ObservationChannels || actionSize != _options.ActionSize)
-            throw new InvalidOperationException("Serialized model dimensions don't match current options");
-
-        // Read training state
-        _updateCount = reader.ReadInt32();
-
-        // Read VAE encoder
-        var encoderLength = reader.ReadInt32();
-        var encoderBytes = reader.ReadBytes(encoderLength);
-        _vaeEncoder.Deserialize(encoderBytes);
-
-        // Read VAE decoder
-        var decoderLength = reader.ReadInt32();
-        var decoderBytes = reader.ReadBytes(decoderLength);
-        _vaeDecoder.Deserialize(decoderBytes);
-
-        // Read RNN network
-        var rnnLength = reader.ReadInt32();
-        var rnnBytes = reader.ReadBytes(rnnLength);
-        _rnnNetwork.Deserialize(rnnBytes);
-
-        // Read controller weights
-        var rows = reader.ReadInt32();
-        var cols = reader.ReadInt32();
-        _controllerWeights = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                _controllerWeights[i, j] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-
-        // Read RNN hidden state
-        var hiddenLength = reader.ReadInt32();
-        _rnnHiddenState = new Vector<T>(hiddenLength);
-        for (int i = 0; i < hiddenLength; i++)
-        {
-            _rnnHiddenState[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-    }
-
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        // The fresh constructor reproduces the VAE/RNN network ARCHITECTURE exactly (deterministic
-        // per-layer seeds), but Train() now UPDATES those networks' weights (the VAE encoder/decoder
-        // and the MDN-RNN are trained, not just the controller). So we must copy the learned network
-        // parameters onto the clone — otherwise it would keep the seed-initial weights and produce a
-        // different world model / policy than the trained original (Clone_ShouldProduceSamePolicy).
-        // GetParameters/SetParameters round-trip the network weights in-place WITHOUT rebuilding the
-        // layer graph, so the RandomSeed pins (and thus tensor shapes) are preserved — unlike a full
-        // serialization round-trip. The trained controller weights are copied separately below.
-        var clone = new WorldModelsAgent<T>(_options);
-        clone.SetParameters(GetParameters());
-
-        var controllerCopy = new Matrix<T>(_controllerWeights.Rows, _controllerWeights.Columns);
-        for (int i = 0; i < _controllerWeights.Rows; i++)
-        {
-            for (int j = 0; j < _controllerWeights.Columns; j++)
-            {
-                controllerCopy[i, j] = _controllerWeights[i, j];
-            }
-        }
-        clone._controllerWeights = controllerCopy;
-
-        var hiddenCopy = new Vector<T>(_rnnHiddenState.Length);
-        for (int i = 0; i < _rnnHiddenState.Length; i++)
-        {
-            hiddenCopy[i] = _rnnHiddenState[i];
-        }
-        clone._rnnHiddenState = hiddenCopy;
-
-        clone._updateCount = _updateCount;
-        return clone;
-    }
 
     public override void SaveModel(string filepath)
     {

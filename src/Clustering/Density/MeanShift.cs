@@ -59,7 +59,7 @@ namespace AiDotNet.Clustering.Density;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Mean Shift: A Robust Approach toward Feature Space Analysis", "https://doi.org/10.1109/34.1000236", Year = 2002, Authors = "Dorin Comaniciu, Peter Meer")]
-public class MeanShift<T> : ClusteringBase<T>
+public partial class MeanShift<T> : ClusteringBase<T>
 {
     private readonly MeanShiftOptions<T> _options;
 
@@ -83,23 +83,6 @@ public class MeanShift<T> : ClusteringBase<T>
     public T Bandwidth => _bandwidth;
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new MeanShift<T>(new MeanShiftOptions<T>
-        {
-            Bandwidth = _options.Bandwidth,
-            BandwidthQuantile = _options.BandwidthQuantile,
-            ClusterMergeThreshold = _options.ClusterMergeThreshold,
-            BinSeeding = _options.BinSeeding,
-            ClusterAll = _options.ClusterAll,
-            MinBinFrequency = _options.MinBinFrequency,
-            Algorithm = _options.Algorithm,
-            LeafSize = _options.LeafSize,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

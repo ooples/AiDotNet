@@ -197,6 +197,9 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
     /// </param>
     /// <param name="activationFunction">Optional activation function applied to the final output.</param>
     /// <exception cref="ArgumentException">Thrown when parameters are invalid.</exception>
+    /// <summary>Construction state: kept so the generated clone factory can rebuild this layer.</summary>
+    private readonly int _sequenceLength;
+
     public HedgehogLayer(
         int sequenceLength,
         int modelDimension = 256,
@@ -209,6 +212,7 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

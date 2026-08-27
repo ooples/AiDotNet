@@ -401,11 +401,6 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
         return Task.FromResult(sampled);
     }
 
-    protected override AutoMLModelBase<T, TInput, TOutput> CreateInstanceForCopy()
-    {
-        return new MultiFidelityAutoML<T, TInput, TOutput>(Random, _options);
-    }
-
     private static double[] ResolveFidelityFractions(AutoMLMultiFidelityOptions options)
     {
         if (options is null)

@@ -24,7 +24,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
+public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
     /// The options specific to the Adam optimizer.
@@ -1429,130 +1429,6 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
-    }
-
-    /// <summary>
-    /// Serializes the optimizer's state into a byte array.
-    /// </summary>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method saves the optimizer's current state into a compact form.
-    /// It's like taking a snapshot of the optimizer's memory and settings, which can be used later to recreate its exact state.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            // Serialize base class data
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            // Serialize AdamOptimizerOptions
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
-
-            // Serialize Adam-specific data
-            writer.Write(_t);
-            writer.Write(_m.Length);
-            foreach (var value in _m)
-            {
-                writer.Write(Convert.ToDouble(value));
-            }
-            writer.Write(_v.Length);
-            foreach (var value in _v)
-            {
-                writer.Write(Convert.ToDouble(value));
-            }
-
-            // Serialize the AMSGrad running-max buffer. A length of -1
-            // encodes "not yet allocated" (the AMSGrad option is off or
-            // the optimizer hasn't seen its first update); any
-            // non-negative length is the actual element count followed
-            // by that many doubles. Without this, a checkpoint restored
-            // on an AMSGrad optimizer would resume with a fresh empty
-            // v̂_max and diverge from uninterrupted training.
-            // (PR #1350 round-2 review.)
-            writer.Write(_vMaxVector?.Length ?? -1);
-            if (_vMaxVector is not null)
-            {
-                foreach (var value in _vMaxVector)
-                {
-                    writer.Write(Convert.ToDouble(value));
-                }
-            }
-
-            return ms.ToArray();
-        }
-    }
-
-    /// <summary>
-    /// Deserializes the optimizer's state from a byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized optimizer state.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method rebuilds the optimizer's state from a saved snapshot.
-    /// It's like restoring the optimizer's memory and settings from a backup, allowing you to continue from where you left off.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            // Deserialize base class data
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            // Deserialize AdamOptimizerOptions
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<AdamOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-            // Deserialize Adam-specific data
-            _t = reader.ReadInt32();
-            int mLength = reader.ReadInt32();
-            _m = new Vector<T>(mLength);
-            for (int i = 0; i < mLength; i++)
-            {
-                _m[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-            int vLength = reader.ReadInt32();
-            _v = new Vector<T>(vLength);
-            for (int i = 0; i < vLength; i++)
-            {
-                _v[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-
-            // Restore the AMSGrad running-max buffer if present in the
-            // checkpoint. Length -1 indicates "not yet allocated" (the
-            // sentinel emitted by Serialize when UseAMSGrad is off or the
-            // optimizer hadn't taken its first AMSGrad step yet); any
-            // non-negative length is a real vector. Older checkpoints
-            // without this trailing field will fail the ReadInt32 here —
-            // matching the broader Serialize/Deserialize contract that
-            // older checkpoints aren't forward-compatible across schema
-            // changes. (PR #1350 round-2 review.)
-            int vMaxLength = reader.ReadInt32();
-            if (vMaxLength < 0)
-            {
-                _vMaxVector = null;
-            }
-            else
-            {
-                _vMaxVector = new Vector<T>(vMaxLength);
-                for (int i = 0; i < vMaxLength; i++)
-                {
-                    _vMaxVector[i] = NumOps.FromDouble(reader.ReadDouble());
-                }
-            }
-
-            // Initialize adaptive parameters from deserialized options
-            InitializeAdaptiveParameters();
-        }
     }
 
     /// <summary>

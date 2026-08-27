@@ -50,7 +50,7 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2017,
     Authors = "Wang et al."
 )]
-public class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
+public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly TacotronOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -344,54 +344,10 @@ public class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     }
 
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.MelChannels);
-        writer.Write(_options.HopSize);
-        writer.Write(_options.HiddenDim);
-        writer.Write(_options.EncoderDim);
-        writer.Write(_options.DecoderDim);
-        writer.Write(_options.NumEncoderLayers);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.CbhgBankSize);
-        writer.Write(_options.OutputsPerStep);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.MelChannels = reader.ReadInt32();
-        _options.HopSize = reader.ReadInt32();
-        _options.HiddenDim = reader.ReadInt32();
-        _options.EncoderDim = reader.ReadInt32();
-        _options.DecoderDim = reader.ReadInt32();
-        _options.NumEncoderLayers = reader.ReadInt32();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.CbhgBankSize = reader.ReadInt32();
-        _options.OutputsPerStep = reader.ReadInt32();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new Tacotron<T>(Architecture, mp, _options);
-        return new Tacotron<T>(Architecture, _options);
-    }
 
     private void ThrowIfDisposed()
     {

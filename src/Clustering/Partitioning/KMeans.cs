@@ -52,7 +52,7 @@ namespace AiDotNet.Clustering.Partitioning;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Some methods for classification and analysis of multivariate observations", "https://projecteuclid.org/proceedings/berkeley-symposium-on-mathematical-statistics-and-probability/Proceedings-of-the-Fifth-Berkeley-Symposium-on-Mathematical-Statistics-and/Chapter/0/bsmsp/1200512992", Year = 1967, Authors = "James MacQueen")]
-public class KMeans<T> : ClusteringBase<T>
+public partial class KMeans<T> : ClusteringBase<T>
 {
     private readonly KMeansOptions<T> _options;
 
@@ -89,21 +89,6 @@ public class KMeans<T> : ClusteringBase<T>
     public int NumIterations => _numIterations;
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new KMeans<T>(new KMeansOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            MaxIterations = _options.MaxIterations,
-            Tolerance = _options.Tolerance,
-            Seed = _options.Seed,
-            NumInitializations = _options.NumInitializations,
-            InitMethod = _options.InitMethod,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

@@ -114,7 +114,7 @@ namespace AiDotNet.NER.SequenceLabeling;
     "https://arxiv.org/abs/1603.01354",
     Year = 2016,
     Authors = "Xuezhe Ma, Eduard Hovy")]
-public class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
+public partial class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
 {
     #region Fields
 
@@ -446,17 +446,6 @@ public class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         return modelOutput;
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new CNNBiLSTMCRFOptions(_options);
-
-        if (!_useNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new CNNBiLSTMCRF<T>(Architecture, p, optionsCopy);
-
-        return new CNNBiLSTMCRF<T>(Architecture, optionsCopy);
-    }
-
     #endregion
 
     #region Metadata and Serialization
@@ -481,64 +470,10 @@ public class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     }
 
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.EmbeddingDimension);
-        w.Write(_options.HiddenDimension);
-        w.Write(_options.NumLSTMLayers);
-        w.Write(_options.NumLabels);
-        w.Write(_options.MaxSequenceLength);
-        w.Write(_options.UseCRF);
-        w.Write(_options.CharEmbeddingDimension);
-        w.Write(_options.CharCNNFilters);
-        w.Write(_options.CharCNNKernelSize);
-        w.Write(_options.DropoutRate);
-        w.Write(_options.LearningRate);
-        w.Write(_options.LabelNames.Length);
-        foreach (var label in _options.LabelNames)
-            w.Write(label);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (NERModelVariant)r.ReadInt32();
-        _options.EmbeddingDimension = r.ReadInt32();
-        _options.HiddenDimension = r.ReadInt32();
-        _options.NumLSTMLayers = r.ReadInt32();
-        _options.NumLabels = r.ReadInt32();
-        _options.MaxSequenceLength = r.ReadInt32();
-        _options.UseCRF = r.ReadBoolean();
-        _options.CharEmbeddingDimension = r.ReadInt32();
-        _options.CharCNNFilters = r.ReadInt32();
-        _options.CharCNNKernelSize = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble();
-        _options.LearningRate = r.ReadDouble();
-        int labelCount = r.ReadInt32();
-        _options.LabelNames = new string[labelCount];
-        for (int i = 0; i < labelCount; i++)
-            _options.LabelNames[i] = r.ReadString();
 
-        ApplyOptionsToBase();
-
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-        {
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        }
-        // Native mode: do NOT clear+re-init Layers here. See the matching
-        // comment in BiLSTMCRF.DeserializeNetworkSpecificData — the base
-        // class already recreated every layer and called SetParameters
-        // with the saved trained weights; wiping them here drops those
-        // weights and replaces them with fresh random-init, which
-        // caused the Clone / DeepCopy round-trip to silently return a
-        // randomly-initialised model.
-    }
 
     #endregion
 

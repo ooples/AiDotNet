@@ -115,22 +115,6 @@ public partial class SD3FlashModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // #1711: delegate to predictor/VAE Clone (probe-forward + copy); MMDiT LazyDense weights resolve
-        // via the FORWARD path so a model-level SetParameters(GetParameters()) clone re-RNG-initialized.
-        var clone = new SD3FlashModel<T>(
-            conditioner: _conditioner,
-            predictor: (MMDiTXNoisePredictor<T>)_predictor.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            seed: null);
-        return clone;
-    }
-
-    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

@@ -74,7 +74,7 @@ namespace AiDotNet.Video.Segmentation;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public class SAM2<T> : NeuralNetworkBase<T>
+public partial class SAM2<T> : NeuralNetworkBase<T>
 {
     private readonly SAM2Options _options;
 
@@ -1438,43 +1438,10 @@ public class SAM2<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height);
-        writer.Write(_width);
-        writer.Write(_channels);
-        writer.Write(_numFeatures);
-        writer.Write(_memoryBankSize);
-        writer.Write((int)_modelSize);
-        writer.Write(_useNativeMode);
-        writer.Write(_onnxModelPath ?? string.Empty);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // height
-        _ = reader.ReadInt32(); // width
-        _ = reader.ReadInt32(); // channels
-        _ = reader.ReadInt32(); // numFeatures
-        _ = reader.ReadInt32(); // memoryBankSize
-        _ = reader.ReadInt32(); // modelSize
-        _ = reader.ReadBoolean(); // useNativeMode
-        _ = reader.ReadString(); // onnxModelPath
-    }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new SAM2<T>(Architecture, _optimizer, LossFunction, _modelSize, _memoryBankSize);
-        }
-        else
-        {
-            return new SAM2<T>(Architecture, _onnxModelPath!, _modelSize, _memoryBankSize);
-        }
-    }
 
     #endregion
 }

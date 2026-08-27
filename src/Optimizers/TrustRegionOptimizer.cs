@@ -29,7 +29,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
+public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
     /// Describes this optimizer for the compiled fused-training kernel.
@@ -764,75 +764,6 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
         throw new NotSupportedException(
             "Use Step(TapeStepContext) instead. Trust Region with Hessian-vector products " +
             "is implemented via TapeStepContext.HessianVectorProduct().");
-    }
-
-    /// <summary>
-    /// Serializes the current state of the optimizer into a byte array.
-    /// </summary>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    /// <remarks>
-    /// This method saves the current state of the optimizer, including its base class state and
-    /// specific Trust Region optimizer properties. This allows the optimizer's state to be stored
-    /// or transmitted and later reconstructed.
-    /// 
-    /// <para><b>For Beginners:</b> This is like taking a snapshot of the optimizer:
-    /// - It captures all the important information about the optimizer's current state.
-    /// - This snapshot can be saved or sent somewhere else.
-    /// - Later, you can use this snapshot to recreate the optimizer exactly as it was.
-    /// - It's useful for things like saving progress, or moving the optimization process to a different machine.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
-
-            writer.Write(_iteration);
-            writer.Write(Convert.ToDouble(_trustRegionRadius));
-
-            return ms.ToArray();
-        }
-    }
-
-    /// <summary>
-    /// Deserializes the optimizer's state from a byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized optimizer state.</param>
-    /// <exception cref="InvalidOperationException">Thrown when deserialization of optimizer options fails.</exception>
-    /// <remarks>
-    /// This method reconstructs the optimizer's state from a serialized byte array. It restores both
-    /// the base class state and the specific properties of the Trust Region optimizer.
-    /// 
-    /// <para><b>For Beginners:</b> This is like reconstructing the optimizer from a snapshot:
-    /// - It takes the snapshot (byte array) created by the Serialize method.
-    /// - From this snapshot, it rebuilds the optimizer to the exact state it was in when serialized.
-    /// - This is useful for resuming a paused optimization process or moving it to a different machine.
-    /// - If there's a problem reading the optimizer's settings, it will raise an error to let you know.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<TrustRegionOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-            _iteration = reader.ReadInt32();
-            _trustRegionRadius = NumOps.FromDouble(reader.ReadDouble());
-        }
     }
 
     /// <inheritdoc />

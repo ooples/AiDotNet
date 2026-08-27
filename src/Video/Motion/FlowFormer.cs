@@ -58,7 +58,7 @@ namespace AiDotNet.Video.Motion;
     "https://arxiv.org/abs/2203.16194",
     Year = 2022,
     Authors = "Zhaoyang Huang, Xiaoyu Shi, Chao Zhang, Qiang Wang, Ka Chun Cheung, Hongwei Qin, Jifeng Dai, Hongsheng Li")]
-public class FlowFormer<T> : OpticalFlowBase<T>
+public partial class FlowFormer<T> : OpticalFlowBase<T>
 {
     private readonly FlowFormerOptions _options;
 
@@ -349,19 +349,9 @@ public class FlowFormer<T> : OpticalFlowBase<T>
         ModelData = _useNativeMode ? this.Serialize() : []
     };
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_embedDim); writer.Write(_numLayers); writer.Write(_numIterations);
-        writer.Write(_imageHeight); writer.Write(_imageWidth);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        for (int i = 0; i < 5; i++) _ = reader.ReadInt32();
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new FlowFormer<T>(Architecture, _optimizer, _lossFunction, _embedDim, _numLayers, _numIterations);
+
 
     #endregion
 

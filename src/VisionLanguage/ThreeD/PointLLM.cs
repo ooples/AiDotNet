@@ -60,7 +60,7 @@ namespace AiDotNet.VisionLanguage.ThreeD;
     Year = 2024,
     Authors = "Xu et al."
 )]
-public class PointLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
+public partial class PointLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {
     private readonly PointLLMOptions _options;
 
@@ -377,42 +377,9 @@ public class PointLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageMode
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.ImageSize);
-        writer.Write(_options.VisionDim);
-        writer.Write(_options.DecoderDim);
-        writer.Write(_options.NumVisionLayers);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.MaxPoints);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.ImageSize = reader.ReadInt32();
-        _options.VisionDim = reader.ReadInt32();
-        _options.DecoderDim = reader.ReadInt32();
-        _options.NumVisionLayers = reader.ReadInt32();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.MaxPoints = reader.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new PointLLM<T>(Architecture, mp, _options);
-        return new PointLLM<T>(Architecture, _options);
-    }
+
 
     private void ThrowIfDisposed()
     {

@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Gated Delta Networks: Improving Mamba2 with Delta Rule", "https://arxiv.org/abs/2412.06464", Year = 2024, Authors = "Songlin Yang, Jan Kautz, Ali Hatamizadeh")]
-public class GatedDeltaNetLanguageModel<T> : TokenLanguageModelLayoutBase<T>
+public partial class GatedDeltaNetLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly GatedDeltaNetOptions _options;
     private readonly int _vocabSize;
@@ -171,35 +171,9 @@ public class GatedDeltaNetLanguageModel<T> : TokenLanguageModelLayoutBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_vocabSize);
-        writer.Write(_modelDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_maxSeqLength);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var cloneOptimizer = _optimizer.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> optimizerOptions
-            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                null,
-                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(optimizerOptions))
-            : null;
-        return new GatedDeltaNetLanguageModel<T>(
-            Architecture, _vocabSize, _modelDimension, _numLayers, _numHeads,
-            _maxSeqLength, LossFunction, new GatedDeltaNetOptions(_options), cloneOptimizer);
-    }
+
 
     #endregion
 }

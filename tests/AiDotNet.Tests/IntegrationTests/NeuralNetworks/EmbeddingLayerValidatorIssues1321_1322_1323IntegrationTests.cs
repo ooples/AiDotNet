@@ -33,7 +33,7 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks;
 /// LayerCategory.Embedding as broadcast-input; the fit detector returns
 /// empty calibration with a Trace warning instead of throwing.
 /// </summary>
-public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
+public partial class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
 {
     // ====================================================================
     // ISSUE #1321 — TransformerArchitecture.ValidateInputDimensions
@@ -576,7 +576,7 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
     /// </summary>
     [TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
     [TensorLayout(TensorAxis.Classes, Direction = TensorLayoutDirection.Output)]
-    private sealed class NameOnlyEmbeddingLayer : LayerBase<float>, IShapeContract
+    private sealed partial class NameOnlyEmbeddingLayer : LayerBase<float>, IShapeContract
     {
         private readonly int _vocabSize;
 
@@ -704,7 +704,7 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
     [TensorLayout(TensorAxis.Batch, TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
     [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
         Direction = TensorLayoutDirection.Output)]
-    private sealed class CustomTokenEmbeddingLayer : LayerBase<float>, IShapeContract
+    private sealed partial class CustomTokenEmbeddingLayer : LayerBase<float>, IShapeContract
     {
         private readonly int _vocabSize;
         private readonly int _embeddingDim;

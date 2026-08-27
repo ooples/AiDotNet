@@ -55,7 +55,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2312.00853",
     Year = 2024,
     Authors = "Yang Zheng, Xiaoming Zhu, Jianlong Wu, Liqiang Nie")]
-public class MGLDVSR<T> : VideoSuperResolutionBase<T>
+public partial class MGLDVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 
@@ -176,43 +176,9 @@ public class MGLDVSR<T> : VideoSuperResolutionBase<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.NumFeatures);
-        w.Write(_options.NumDenoisingSteps);
-        w.Write(_options.NumResBlocks);
-        w.Write(_options.ScaleFactor);
-        w.Write(_options.LatentDim);
-        w.Write(_options.MotionGuidanceWeight);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (VideoModelVariant)r.ReadInt32();
-        _options.NumFeatures = r.ReadInt32();
-        _options.NumDenoisingSteps = r.ReadInt32();
-        _options.NumResBlocks = r.ReadInt32();
-        _options.ScaleFactor = r.ReadInt32();
-        _options.LatentDim = r.ReadInt32();
-        _options.MotionGuidanceWeight = r.ReadDouble();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (IsOnnxMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new MGLDVSR<T>(Architecture, mp, _options);
-        return new MGLDVSR<T>(Architecture, _options);
-    }
+
 
     #endregion
 

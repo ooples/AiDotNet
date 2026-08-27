@@ -57,7 +57,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Interactive;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Segment Everything Everywhere All at Once", "https://arxiv.org/abs/2304.06718", Year = 2023, Authors = "Zou et al.")]
-public class SEEM<T> : Common.PromptableSegmentationBase<T>
+public partial class SEEM<T> : Common.PromptableSegmentationBase<T>
 {
     private readonly SEEMOptions _options;
     public override ModelOptions GetOptions() => _options;
@@ -295,65 +295,6 @@ public class SEEM<T> : Common.PromptableSegmentationBase<T>
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "SEEM" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = SerializeForMetadata()
     };
-
-    /// <summary>
-    /// Writes configuration to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    { writer.Write(_height); writer.Write(_width); writer.Write(_channels); writer.Write(_numClasses); writer.Write((int)_modelSize); writer.Write(_decoderDim); writer.Write(_dropRate); writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty); writer.Write(_encoderLayerEnd); writer.Write(_channelDims.Length); foreach (int d in _channelDims) writer.Write(d); writer.Write(_depths.Length); foreach (int d in _depths) writer.Write(d); }
-
-    /// <summary>
-    /// Reads configuration from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _height = reader.ReadInt32();
-        _width = reader.ReadInt32();
-        _channels = reader.ReadInt32();
-        _numClasses = reader.ReadInt32();
-        _modelSize = (SEEMModelSize)reader.ReadInt32();
-        _decoderDim = reader.ReadInt32();
-        _dropRate = reader.ReadDouble();
-        _useNativeMode = reader.ReadBoolean();
-        _onnxModelPath = reader.ReadString();
-        _encoderLayerEnd = reader.ReadInt32();
-        int dc = reader.ReadInt32();
-        _channelDims = new int[dc];
-        for (int i = 0; i < dc; i++) _channelDims[i] = reader.ReadInt32();
-        int dd = reader.ReadInt32();
-        _depths = new int[dd];
-        for (int i = 0; i < dd; i++) _depths[i] = reader.ReadInt32();
-    }
-
-    /// <summary>
-    /// Creates a new instance with the same configuration but fresh weights.
-    /// </summary>
-    /// <returns>A new model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new SEEMOptions(_options);
-        return _useNativeMode
-            ? new SEEM<T>(Architecture, optimizer: null, lossFunction: LossFunction,
-                numClasses: _numClasses, modelSize: _modelSize, dropRate: _dropRate, options: options)
-            : new SEEM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, options);
-    }
 
     // Dispose is inherited from SegmentationModelBase, which already disposes the ONNX session.
     // SEEM owns no further unmanaged resources.

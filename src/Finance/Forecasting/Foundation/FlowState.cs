@@ -286,57 +286,10 @@ public partial class FlowState<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new FlowState<T>(Architecture, new FlowStateOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            StateDimension = _stateDimension,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            DropoutRate = _dropout,
-            SSMRank = _ssmRank,
-            UseDiscretization = _useDiscretization,
-            ModelSize = _modelSize
-        });
-    }
+
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_stateDimension);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numLayers);
-        writer.Write(_dropout);
-        writer.Write(_ssmRank);
-        writer.Write(_useDiscretization);
-        writer.Write((int)_modelSize);
-    }
 
-    /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _stateDimension = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _ssmRank = reader.ReadInt32();
-        _useDiscretization = reader.ReadBoolean();
-        _modelSize = (FoundationModelSize)reader.ReadInt32();
-
-        // The base deserializer has already recreated every layer in Layers with
-        // the copied weights before reaching this point. Re-point the cached
-        // _inputProjection / _ssmLayers / _outputProjection references at those
-        // freshly deserialized layer objects; otherwise they keep pointing at the
-        // stale random-initialized layers created by CreateNewInstance, and the
-        // clone's forward diverges from the original at the very first layer.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

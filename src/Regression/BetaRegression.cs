@@ -64,7 +64,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Beta Regression for Modelling Rates and Proportions", "https://doi.org/10.1080/0266476042000214501", Year = 2004, Authors = "Silvia L. P. Ferrari, Francisco Cribari-Neto")]
-public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
+public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     private const double MuFloor = 1e-10;
     private const double MuCeiling = 1.0 - 1e-10;
@@ -74,6 +74,7 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Coefficients for the mean (μ) model.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _meanCoefficients;
 
     /// <summary>
@@ -86,6 +87,7 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Coefficients for the precision (φ) model (if variable precision).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _precisionCoefficients;
 
     /// <summary>
@@ -728,32 +730,6 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
         };
     }
 
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        writer.Write((int)_options.LinkFunction);
-        writer.Write(_options.ModelVariablePrecision);
-        // The y-scaling parameters, the OLS flag and the duplicate OLS coefficient block that used to be
-        // written here are gone: the model no longer rescales its target or fits least squares, so there is
-        // no transform to restore. The mean coefficients are written once, below, like any other parameter.
-        writer.Write(_options.CompressBoundaryValues);
-        writer.Write(_numFeatures);
-        writer.Write(NumOps.ToDouble(_meanIntercept));
-        writer.Write(NumOps.ToDouble(_precisionIntercept));
-
-        WriteVector(writer, _meanCoefficients);
-        WriteVector(writer, _precisionCoefficients);
-
-        return ms.ToArray();
-    }
-
     private void WriteVector(BinaryWriter w, Vector<T>? v)
     {
         w.Write(v != null);
@@ -764,27 +740,6 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
         }
     }
 
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        int baseLen = reader.ReadInt32();
-        base.Deserialize(reader.ReadBytes(baseLen));
-
-        _options.LinkFunction = (BetaLinkFunction)reader.ReadInt32();
-        _options.ModelVariablePrecision = reader.ReadBoolean();
-        // See Serialize: no y-scaling parameters, no OLS flag, no duplicate coefficient block.
-        _options.CompressBoundaryValues = reader.ReadBoolean();
-        _numFeatures = reader.ReadInt32();
-        _meanIntercept = NumOps.FromDouble(reader.ReadDouble());
-        _precisionIntercept = NumOps.FromDouble(reader.ReadDouble());
-
-        _meanCoefficients = ReadVector(reader);
-        _precisionCoefficients = ReadVector(reader);
-    }
-
     private Vector<T>? ReadVector(BinaryReader r)
     {
         if (!r.ReadBoolean()) return null;
@@ -792,18 +747,5 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
         var v = new Vector<T>(len);
         for (int i = 0; i < len; i++) v[i] = NumOps.FromDouble(r.ReadDouble());
         return v;
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new BetaRegression<T>(_options, Regularization);
-    }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new BetaRegression<T>(_options, Regularization);
-        clone.Deserialize(Serialize());
-        return clone;
     }
 }

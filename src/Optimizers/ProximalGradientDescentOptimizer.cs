@@ -35,7 +35,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
+public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
     /// Describes this optimizer for the compiled fused-training kernel.
@@ -189,11 +189,51 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// Think of it as adding a preference for simpler, more stable solutions that are less likely to overfit.
     /// </para>
     /// </remarks>
-    private IRegularization<T, TInput, TOutput> _regularization;
+    // Initialized at declaration so the backing field is definitely assigned: the constructor
+    // assigns through the property below, which the compiler cannot see through. The identity
+    // operator is the correct stand-in -- it is what BuildProximalOperator returns for options
+    // carrying no regularization -- and the constructor overwrites it either way.
+    private IRegularization<T, TInput, TOutput> _regularizationOperator
+        = new NoRegularization<T, TInput, TOutput>();
+
+    /// <summary>Strength the cached proximal operator was built from, for staleness detection.</summary>
+    private double? _regularizationBuiltForStrength;
+
+    /// <summary>
+    /// The proximal operator, rebuilt whenever the options it derives from have moved underneath it.
+    /// </summary>
+    /// <remarks>
+    /// A property rather than a plain field because RESTORE MUTATES THE OPTIONS IN PLACE. The state
+    /// registry carries RegularizationStrength as a scalar and writes it straight onto the existing
+    /// options object; it never reassigns the options or routes through UpdateOptions, so a field
+    /// cached at construction would survive a restore describing a different strength and the
+    /// optimizer would resume training with the algorithm it was built with rather than the one that
+    /// was saved. The hand-written Deserialize this replaces rebuilt the operator explicitly; deriving
+    /// it here keeps that guarantee no matter which restore path runs.
+    /// </remarks>
+    private IRegularization<T, TInput, TOutput> _regularization
+    {
+        get
+        {
+            if (_options is not null
+                && !Nullable.Equals(_regularizationBuiltForStrength, _options.RegularizationStrength))
+            {
+                _regularizationOperator = BuildProximalOperator(_options);
+                _regularizationBuiltForStrength = _options.RegularizationStrength;
+            }
+            return _regularizationOperator;
+        }
+        set
+        {
+            _regularizationOperator = value;
+            _regularizationBuiltForStrength = _options?.RegularizationStrength;
+        }
+    }
 
     /// <summary>
     /// Stores the pre-update parameters for approximate reverse updates.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T>? _previousParameters;
 
     /// <summary>
@@ -653,89 +693,6 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
-    }
-
-    /// <summary>
-    /// Serializes the proximal gradient descent optimizer to a byte array for storage or transmission.
-    /// </summary>
-    /// <returns>A byte array containing the serialized optimizer.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method overrides the base implementation to include PGD-specific information in the serialization.
-    /// It first serializes the base class data, then adds the PGD options and iteration count.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves the current state of the optimizer so it can be restored later.
-    /// 
-    /// It's like taking a snapshot of the optimizer:
-    /// - First, it saves all the general optimizer information
-    /// - Then, it saves the PGD-specific settings and state
-    /// - It packages everything into a format that can be saved to a file or sent over a network
-    /// 
-    /// This allows you to:
-    /// - Save a trained optimizer to use later
-    /// - Share an optimizer with others
-    /// - Create a backup before making changes
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
-
-            writer.Write(_iteration);
-
-            return ms.ToArray();
-        }
-    }
-
-    /// <summary>
-    /// Reconstructs the proximal gradient descent optimizer from a serialized byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized optimizer.</param>
-    /// <exception cref="InvalidOperationException">Thrown when the options cannot be deserialized.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method overrides the base implementation to handle PGD-specific information during deserialization.
-    /// It first deserializes the base class data, then reconstructs the PGD options and iteration count.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method restores the optimizer from a previously saved state.
-    /// 
-    /// It's like restoring from a snapshot:
-    /// - First, it loads all the general optimizer information
-    /// - Then, it loads the PGD-specific settings and state
-    /// - It reconstructs the optimizer to the exact state it was in when saved
-    /// 
-    /// This allows you to:
-    /// - Continue working with an optimizer you previously saved
-    /// - Use an optimizer that someone else created and shared
-    /// - Revert to a backup if needed
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-            // Same reason as UpdateOptions: a restored optimizer that kept the constructor's operator would
-            // resume training with a different algorithm from the one that was serialized.
-            _regularization = BuildProximalOperator(_options);
-
-            _iteration = reader.ReadInt32();
-        }
     }
 
     /// <summary>

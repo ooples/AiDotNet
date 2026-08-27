@@ -113,13 +113,4 @@ public class BERTNER<T> : TransformerNERBase<T>
             "BERT-NER", "Devlin et al., NAACL 2019", optimizer)
     {
     }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new TransformerNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new BERTNER<T>(Architecture, p, optionsCopy);
-        return new BERTNER<T>(Architecture, optionsCopy);
-    }
 }

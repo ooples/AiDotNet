@@ -40,6 +40,7 @@ public sealed partial class InternImageBlockLayer<T> : LayerBase<T>, IShapeContr
     private readonly ConvolutionalLayer<T> _project;
     private readonly LayerBase<T>[] _parameterLayers;
     private readonly LayerBase<T>[] _allLayers;
+    [Scratch]
     private Vector<T>? _pendingParameters;
 
     /// <summary>Creates an InternImage block for a fixed channel width.</summary>

@@ -120,32 +120,6 @@ public partial class SDXLTurboModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Delegate to the predictor/VAE's own Clone implementations, which
-        // resolve their internal lazy shape inference on BOTH source and clone
-        // before copying weights. Constructing a fresh SDXLTurboModel here and
-        // calling SetParameters(GetParameters()) re-hits the lazy-init bug:
-        // GetParameters() on the unresolved source under-counts the UNet's
-        // top-level time-embedding DenseLayer params, while the fresh clone's
-        // SetParameters checks parameters.Length against the resolved
-        // (arch-derived) ParameterCount and throws — surfaced as
-        // SDXLTurboModel_GetSetParameters_RoundTrips / Clone_CreatesIndependentCopy
-        // failures in the Unit-03 Diffusion/Encoding shard. Same fix pattern
-        // as ImprovedConsistencyModel.Clone (commit 7ab314796, PR #1555).
-        var predictorClone = (UNetNoisePredictor<T>)_predictor.Clone();
-        var vaeClone = (StandardVAE<T>)_vae.Clone();
-        return new SDXLTurboModel<T>(
-            predictor: predictorClone,
-            vae: vaeClone,
-            conditioner: _conditioner,
-            seed: null);
-    }
-
-    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

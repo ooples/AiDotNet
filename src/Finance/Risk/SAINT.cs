@@ -49,7 +49,7 @@ namespace AiDotNet.Finance.Risk;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SAINT: Improved Neural Networks for Tabular Data via Row Attention and Contrastive Pre-Training", "https://arxiv.org/abs/2106.01342", Year = 2021, Authors = "Gowthami Somepalli, Micah Goldblum, Avi Schwarzschild, C. Bayan Bruss, Tom Goldstein")]
-public class SAINT<T> : RiskModelBase<T>
+public partial class SAINT<T> : RiskModelBase<T>
 {
     #region Shared Fields
 
@@ -215,31 +215,6 @@ public class SAINT<T> : RiskModelBase<T>
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <summary>
-    /// Creates a new instance of the SAINT model with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is used by the framework to clone the model's setup
-    /// so it can create a fresh instance with identical settings.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new SAINTOptions<T>
-        {
-            NumFeatures = _options.NumFeatures,
-            ConfidenceLevel = _options.ConfidenceLevel,
-            TimeHorizon = _options.TimeHorizon,
-            HiddenDimension = _options.HiddenDimension,
-            NumHeads = _options.NumHeads,
-            NumLayers = _options.NumLayers,
-            BatchSize = _options.BatchSize,
-            DropoutRate = _options.DropoutRate
-        };
-
-        return new SAINT<T>(Architecture, options, _optimizer, LossFunction);
-    }
 
     #endregion
 }

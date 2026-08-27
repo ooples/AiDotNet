@@ -71,7 +71,7 @@ namespace AiDotNet.Classification.Ensemble;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Random Forests", "https://doi.org/10.1023/A:1010933404324", Year = 2001, Authors = "Leo Breiman")]
-public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClassifier<T>
+public partial class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClassifier<T>
 {
     /// <summary>
     /// Gets the Random Forest specific options.
@@ -386,85 +386,6 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new RandomForestClassifier<T>(new RandomForestClassifierOptions<T>
-        {
-            NEstimators = Options.NEstimators,
-            MaxDepth = Options.MaxDepth,
-            MinSamplesSplit = Options.MinSamplesSplit,
-            MinSamplesLeaf = Options.MinSamplesLeaf,
-            MaxFeatures = Options.MaxFeatures,
-            // MaxFeatureCount takes PRECEDENCE over MaxFeatures when set, so omitting it here
-            // silently retrained the clone by the rule instead of the caller's explicit count.
-            MaxFeatureCount = Options.MaxFeatureCount,
-            Criterion = Options.Criterion,
-            Bootstrap = Options.Bootstrap,
-            OobScore = Options.OobScore,
-            NJobs = Options.NJobs,
-            Seed = Options.Seed,
-            MinImpurityDecrease = Options.MinImpurityDecrease
-        });
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new RandomForestClassifier<T>(new RandomForestClassifierOptions<T>
-        {
-            NEstimators = Options.NEstimators,
-            MaxDepth = Options.MaxDepth,
-            MinSamplesSplit = Options.MinSamplesSplit,
-            MinSamplesLeaf = Options.MinSamplesLeaf,
-            MaxFeatures = Options.MaxFeatures,
-            // MaxFeatureCount takes PRECEDENCE over MaxFeatures when set, so omitting it here
-            // silently retrained the clone by the rule instead of the caller's explicit count.
-            MaxFeatureCount = Options.MaxFeatureCount,
-            Criterion = Options.Criterion,
-            Bootstrap = Options.Bootstrap,
-            OobScore = Options.OobScore,
-            NJobs = Options.NJobs,
-            Seed = Options.Seed,
-            MinImpurityDecrease = Options.MinImpurityDecrease
-        });
-
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-        clone.OobScore_ = OobScore_;
-
-        if (ClassLabels != null)
-        {
-            clone.ClassLabels = new Vector<T>(ClassLabels.Length);
-            for (int i = 0; i < ClassLabels.Length; i++)
-            {
-                clone.ClassLabels[i] = ClassLabels[i];
-            }
-        }
-
-        if (FeatureImportances != null)
-        {
-            clone.FeatureImportances = new Vector<T>(FeatureImportances.Length);
-            for (int i = 0; i < FeatureImportances.Length; i++)
-            {
-                clone.FeatureImportances[i] = FeatureImportances[i];
-            }
-        }
-
-        // Clone all estimators
-        foreach (var estimator in Estimators)
-        {
-            // No type test: IClassifier<T> derives from IFullModel<T, Matrix<T>, Vector<T>>, so the
-            // check was always true and its else-branch unreachable. Testing it suggested some
-            // estimator might not be cloneable and be skipped -- which would drop trees from the
-            // forest silently. Every estimator is cloned.
-            clone.Estimators.Add((IClassifier<T>)estimator.Clone());
-        }
-
-        return clone;
-    }
-
-    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = base.GetModelMetadata();
@@ -480,106 +401,5 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
         metadata.AdditionalInfo["TotalNodes"] = NodeCount;
         metadata.AdditionalInfo["TotalLeaves"] = LeafCount;
         return metadata;
-    }
-
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        var modelData = new Dictionary<string, object>
-        {
-            { "NumClasses", NumClasses },
-            { "NumFeatures", NumFeatures },
-            { "TaskType", (int)TaskType },
-            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
-            { "RegularizationOptions", Regularization.GetOptions() },
-            { "OobScore_", OobScore_ }
-        };
-
-        // Serialize FeatureImportances
-        if (FeatureImportances is not null)
-        {
-            var fiArray = new double[FeatureImportances.Length];
-            for (int i = 0; i < FeatureImportances.Length; i++)
-                fiArray[i] = NumOps.ToDouble(FeatureImportances[i]);
-            modelData["FeatureImportances"] = fiArray;
-        }
-
-        // Serialize each estimator (DecisionTreeClassifier) as base64
-        modelData["EstimatorCount"] = Estimators.Count;
-        for (int i = 0; i < Estimators.Count; i++)
-        {
-            if (Estimators[i] is IFullModel<T, Matrix<T>, Vector<T>> fullModel)
-            {
-                modelData[$"Estimator_{i}"] = Convert.ToBase64String(fullModel.Serialize());
-            }
-        }
-
-        var modelMetadata = GetModelMetadata();
-        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        var jsonString = Encoding.UTF8.GetString(modelData);
-        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-
-        if (modelMetadata == null || modelMetadata.ModelData == null)
-            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
-
-        var modelDataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
-        var modelDataObj = JsonConvert.DeserializeObject<JObject>(modelDataString);
-
-        if (modelDataObj == null)
-            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
-
-        NumClasses = modelDataObj["NumClasses"]?.ToObject<int>() ?? 0;
-        NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
-        TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
-
-        var classLabelsToken = modelDataObj["ClassLabels"];
-        if (classLabelsToken is not null)
-        {
-            var classLabelsAsDoubles = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (classLabelsAsDoubles.Length > 0)
-            {
-                ClassLabels = new Vector<T>(classLabelsAsDoubles.Length);
-                for (int i = 0; i < classLabelsAsDoubles.Length; i++)
-                    ClassLabels[i] = NumOps.FromDouble(classLabelsAsDoubles[i]);
-            }
-        }
-
-        OobScore_ = modelDataObj["OobScore_"]?.ToObject<double>() ?? 0.0;
-
-        // Deserialize FeatureImportances
-        var fiToken = modelDataObj["FeatureImportances"];
-        if (fiToken is not null)
-        {
-            var fiArray = fiToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (fiArray.Length > 0)
-            {
-                FeatureImportances = new Vector<T>(fiArray.Length);
-                for (int i = 0; i < fiArray.Length; i++)
-                    FeatureImportances[i] = NumOps.FromDouble(fiArray[i]);
-            }
-        }
-
-        // Deserialize estimators
-        int estimatorCount = modelDataObj["EstimatorCount"]?.ToObject<int>() ?? 0;
-        Estimators.Clear();
-        for (int i = 0; i < estimatorCount; i++)
-        {
-            var estToken = modelDataObj[$"Estimator_{i}"]?.ToObject<string>();
-            if (estToken is null)
-            {
-                throw new InvalidOperationException(
-                    $"Deserialization failed: Estimator_{i} is missing (expected {estimatorCount} estimators).");
-            }
-            var estBytes = Convert.FromBase64String(estToken);
-            var tree = new DecisionTreeClassifier<T>();
-            tree.Deserialize(estBytes);
-            Estimators.Add(tree);
-        }
     }
 }

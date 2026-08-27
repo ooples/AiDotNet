@@ -29,7 +29,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
     "https://arxiv.org/abs/2109.01163",
     Year = 2021,
     Authors = "Burchi and Vielzeuf")]
-public class EfficientConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class EfficientConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly EfficientConformerOptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -258,85 +258,6 @@ public class EfficientConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
             ["Language"] = _options.Language
         }
     };
-
-    /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.MaxAudioLengthSeconds);
-        writer.Write(_options.EncoderDim);
-        writer.Write(_options.NumEncoderLayers);
-        writer.Write(_options.NumAttentionHeads);
-        writer.Write(_options.FeedForwardExpansionFactor);
-        writer.Write(_options.DownsamplingFactor);
-        writer.Write(_options.NumMels);
-        writer.Write(_options.VocabSize);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.Language);
-        writer.Write(_options.UseLayerNormalization);
-        writer.Write(_options.ConvKernelSize);
-        writer.Write(_options.InitialAttentionGroupSize);
-    }
-
-    /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string modelPath = reader.ReadString();
-        if (!string.IsNullOrEmpty(modelPath))
-            _options.ModelPath = modelPath;
-
-        _options.SampleRate = reader.ReadInt32();
-        _options.MaxAudioLengthSeconds = reader.ReadInt32();
-        _options.EncoderDim = reader.ReadInt32();
-        _options.NumEncoderLayers = reader.ReadInt32();
-        _options.NumAttentionHeads = reader.ReadInt32();
-        _options.FeedForwardExpansionFactor = reader.ReadInt32();
-        _options.DownsamplingFactor = reader.ReadInt32();
-        _options.NumMels = reader.ReadInt32();
-        _options.VocabSize = reader.ReadInt32();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.Language = reader.ReadString();
-
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-            _options.UseLayerNormalization = reader.ReadBoolean();
-        if (reader.BaseStream.Position + sizeof(int) <= reader.BaseStream.Length)
-            _options.ConvKernelSize = reader.ReadInt32();
-        if (reader.BaseStream.Position + sizeof(int) <= reader.BaseStream.Length)
-            _options.InitialAttentionGroupSize = reader.ReadInt32();
-
-        base.SampleRate = _options.SampleRate;
-        base.NumMels = _options.NumMels;
-        SetLossFunction(new CTCLoss<T>(_options.VocabSize, blankIndex: 0, inputsAreLogProbs: true));
-
-        if (!_useNativeMode && _options.ModelPath is { Length: > 0 } path)
-            OnnxEncoder = new OnnxModel<T>(path, _options.OnnxOptions);
-    }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { Length: > 0 } modelPath)
-            return new EfficientConformer<T>(
-                Architecture,
-                modelPath,
-                new EfficientConformerOptions(_options));
-
-        var cloneOptimizer =
-            _optimizer?.GetOptions()
-                is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> optimizerOptions
-                ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                    null,
-                    new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(optimizerOptions))
-                : null;
-        return new EfficientConformer<T>(
-            Architecture,
-            new EfficientConformerOptions(_options),
-            cloneOptimizer);
-    }
-
     private static int ResolveFinalEncoderDimension(EfficientConformerOptions options)
     {
         int heads = Math.Max(1, options.NumAttentionHeads);

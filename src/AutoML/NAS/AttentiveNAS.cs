@@ -39,7 +39,7 @@ namespace AiDotNet.AutoML.NAS
     [ModelComplexity(ModelComplexity.VeryHigh)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("AttentiveNAS: Improving Neural Architecture Search via Attentive Sampling", "https://arxiv.org/abs/2011.09011")]
-    public class AttentiveNAS<T> : NasAutoMLModelBase<T>
+    public partial class AttentiveNAS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;
         private readonly SearchSpaceBase<T> _nasSearchSpace;
@@ -51,7 +51,9 @@ namespace AiDotNet.AutoML.NAS
         private readonly List<int> _elasticKernelSizes;
 
         // Attention module parameters
+        [AiDotNet.Attributes.TrainableParameter]
         private readonly Tensor<T> _attentionWeights;
+        [AiDotNet.Attributes.TrainableParameter]
         private readonly Matrix<T> _attentionGradients;
         private readonly int _attentionHiddenSize;
 
@@ -413,16 +415,6 @@ namespace AiDotNet.AutoML.NAS
             var context = new Vector<T>(_attentionHiddenSize);
             var config = AttentiveSample(context);
             return ConfigToArchitecture(config);
-        }
-
-        protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
-        {
-            return new AttentiveNAS<T>(
-                _nasSearchSpace,
-                elasticDepths: new List<int>(_elasticDepths),
-                elasticWidthMultipliers: new List<double>(_elasticWidthMultipliers),
-                elasticKernelSizes: new List<int>(_elasticKernelSizes),
-                attentionHiddenSize: _attentionHiddenSize);
         }
     }
 

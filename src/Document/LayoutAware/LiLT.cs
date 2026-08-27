@@ -948,53 +948,6 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         };
     }
 
-    /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_hiddenDim);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_vocabSize);
-        writer.Write(MaxSequenceLength);
-        writer.Write(_numClasses);
-        writer.Write(_textBackbone);
-        writer.Write(_useNativeMode);
-    }
-
-    /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int hiddenDim = reader.ReadInt32();
-        int numLayers = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-        int vocabSize = reader.ReadInt32();
-        int maxSeqLen = reader.ReadInt32();
-        int numClasses = reader.ReadInt32();
-        string textBackbone = reader.ReadString();
-        bool useNativeMode = reader.ReadBoolean();
-
-        _hiddenDim = hiddenDim;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
-        _numClasses = numClasses;
-        _textBackbone = textBackbone;
-        _useNativeMode = useNativeMode;
-        MaxSequenceLength = maxSeqLen;
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException(
-                "Deep copy is not supported for ONNX LiLT instances. Create a new instance with model paths instead.");
-        }
-        return new LiLT<T>(Architecture, _tokenizer, _numClasses, MaxSequenceLength,
-            _hiddenDim, _numLayers, _numHeads, _vocabSize, _textBackbone, _optimizer, LossFunction);
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation
@@ -1284,7 +1237,8 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         }
     }
 
-    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+
 
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights

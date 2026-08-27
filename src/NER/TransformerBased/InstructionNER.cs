@@ -103,13 +103,4 @@ public class InstructionNER<T> : TransformerNERBase<T>
             "InstructionNER", "Wang et al., ACL 2022", optimizer)
     {
     }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new TransformerNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new InstructionNER<T>(Architecture, p, optionsCopy);
-        return new InstructionNER<T>(Architecture, optionsCopy);
-    }
 }

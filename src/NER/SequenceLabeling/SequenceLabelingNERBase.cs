@@ -60,7 +60,7 @@ namespace AiDotNet.NER.SequenceLabeling;
 /// like "New York City" (B-LOC, I-LOC, I-LOC).
 /// </para>
 /// </remarks>
-public abstract class SequenceLabelingNERBase<T> : NERNeuralNetworkBase<T>
+public abstract partial class SequenceLabelingNERBase<T> : NERNeuralNetworkBase<T>
 {
     /// <summary>
     /// Gets or sets whether to use CRF (Conditional Random Field) decoding for label sequence prediction.

@@ -83,11 +83,14 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// List of random effect specifications.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private readonly List<RandomEffect<T>> _randomEffects;
 
     /// <summary>
     /// Fixed effects coefficients.
     /// </summary>
+    [AiDotNet.Attributes.Buffer(
+        Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Vector<T>? _fixedEffects;
 
     /// <summary>
@@ -1035,100 +1038,4 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         return (x - 0.5) * Math.Log(x) - x + 0.5 * Math.Log(2 * Math.PI) +
                1.0 / (12.0 * x) - 1.0 / (360.0 * x * x * x);
     }
-
-    /// <summary>
-    /// Gets the model type.
-    /// </summary>
-
-    /// <summary>
-    /// Creates a new instance of the model with the same configuration.
-    /// </summary>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        var newModel = new GeneralizedLinearMixedModel<T>(_options, Regularization);
-
-        // Copy random effect specifications
-        foreach (var re in _randomEffects)
-        {
-            if (re.RandomSlopeColumns != null)
-            {
-                newModel.AddRandomSlope(re.Name, re.GroupColumnIndex, re.RandomSlopeColumns, re.IsRandomIntercept);
-            }
-            else if (re.IsRandomIntercept)
-            {
-                newModel.AddRandomIntercept(re.Name, re.GroupColumnIndex);
-            }
-        }
-
-        return newModel;
-    }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new GeneralizedLinearMixedModel<T>(_options, Regularization)
-        {
-            Coefficients = Coefficients.Clone(),
-            Intercept = Intercept,
-            TrainingFeatureCount = TrainingFeatureCount,
-            _fixedEffects = _fixedEffects?.Clone(),
-            _varianceDecomposition = CloneVarianceDecomposition(_varianceDecomposition),
-            _dispersion = _dispersion,
-            _logLikelihood = _logLikelihood,
-            _nObservations = _nObservations,
-            _nFixedParams = _nFixedParams,
-        };
-
-        foreach (var randomEffect in _randomEffects)
-        {
-            clone._randomEffects.Add(CloneRandomEffect(randomEffect));
-        }
-
-        return clone;
-    }
-
-    private static RandomEffect<T> CloneRandomEffect(RandomEffect<T> source)
-    {
-        RandomEffect<T> clone = source.RandomSlopeColumns is null
-            ? new RandomEffect<T>(source.Name, source.GroupColumnIndex)
-            : new RandomEffect<T>(
-                source.Name,
-                source.GroupColumnIndex,
-                (int[])source.RandomSlopeColumns.Clone(),
-                source.IsRandomIntercept);
-
-        clone.IsRandomIntercept = source.IsRandomIntercept;
-        clone.CovarianceMatrix = source.CovarianceMatrix?.Clone();
-        clone.GroupCoefficients = source.GroupCoefficients?.ToDictionary(
-            pair => pair.Key,
-            pair => pair.Value.Clone());
-        return clone;
-    }
-
-    private static VarianceDecomposition<T>? CloneVarianceDecomposition(
-        VarianceDecomposition<T>? source)
-    {
-        if (source is null) return null;
-
-        return new VarianceDecomposition<T>
-        {
-            ResidualVariance = CloneVarianceComponent(source.ResidualVariance),
-            RandomEffectVariances = source.RandomEffectVariances
-                .Select(CloneVarianceComponent)
-                .ToList(),
-        };
-    }
-
-    private static VarianceComponent<T> CloneVarianceComponent(VarianceComponent<T> source)
-        => new()
-        {
-            Name = source.Name,
-            Variance = source.Variance,
-            StandardError = source.StandardError,
-            ConfidenceIntervalLower = source.ConfidenceIntervalLower,
-            ConfidenceIntervalUpper = source.ConfidenceIntervalUpper,
-            CovarianceMatrix = source.CovarianceMatrix?.Clone(),
-            CorrelationMatrix = source.CorrelationMatrix?.Clone(),
-        };
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 }

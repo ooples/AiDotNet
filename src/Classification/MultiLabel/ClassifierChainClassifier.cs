@@ -73,7 +73,7 @@ namespace AiDotNet.Classification.MultiLabel;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 [ResearchPaper("Classifier Chains for Multi-Label Classification", "https://doi.org/10.1007/s10994-011-5256-5", Year = 2011, Authors = "Jesse Read, Bernhard Pfahringer, Geoff Holmes, Eibe Frank")]
-public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
+public partial class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
 {
 
     /// <inheritdoc />
@@ -473,75 +473,6 @@ public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
 
     #region Serialization
 
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        var classifierTypes = new List<string>();
-        var classifierData = new List<string>();
-        if (_chainClassifiers is not null)
-        {
-            foreach (var clf in _chainClassifiers)
-            {
-                var (typeName, data) = ClassifierRegistry<T>.SerializeClassifier(clf);
-                classifierTypes.Add(typeName);
-                classifierData.Add(data);
-            }
-        }
-
-        var modelDict = new Dictionary<string, object?>
-        {
-            { "NumLabels", NumLabels },
-            { "NumFeatures", NumFeatures },
-            { "NumClasses", NumClasses },
-            { "TaskType", (int)TaskType },
-            { "LabelNames", LabelNames },
-            { "ChainOrder", _chainOrder },
-            { "ClassifierTypes", classifierTypes },
-            { "ClassifierData", classifierData }
-        };
-
-        var metadata = GetModelMetadata();
-        metadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelDict));
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(metadata));
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        var jsonString = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
-            ?? throw new InvalidOperationException("Failed to deserialize ClassifierChainClassifier: invalid metadata.");
-        if (metadata.ModelData is null)
-            throw new InvalidOperationException("Failed to deserialize ClassifierChainClassifier: missing model data.");
-
-        var dataString = Encoding.UTF8.GetString(metadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
-            ?? throw new InvalidOperationException("Failed to deserialize ClassifierChainClassifier: invalid model payload.");
-
-        NumLabels = jObj["NumLabels"]?.ToObject<int>() ?? 0;
-        NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
-        NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 2;
-        TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
-        LabelNames = jObj["LabelNames"]?.ToObject<string[]>();
-        _chainOrder = jObj["ChainOrder"]?.ToObject<int[]>();
-
-        var types = jObj["ClassifierTypes"]?.ToObject<string[]>();
-        var data = jObj["ClassifierData"]?.ToObject<string[]>();
-        if (types is null || data is null || types.Length != data.Length)
-            throw new InvalidOperationException(
-                "Failed to deserialize ClassifierChainClassifier: classifier types/data arrays are missing or mismatched.");
-
-        if (_chainOrder is not null && _chainOrder.Length != types.Length)
-            throw new InvalidOperationException(
-                $"Failed to deserialize ClassifierChainClassifier: ChainOrder length ({_chainOrder.Length}) does not match classifier count ({types.Length}).");
-
-        _chainClassifiers = new IClassifier<T>[types.Length];
-        for (int i = 0; i < types.Length; i++)
-        {
-            _chainClassifiers[i] = ClassifierRegistry<T>.DeserializeClassifier(types[i], data[i]);
-        }
-    }
-
     #endregion
 
     #region Abstract Method Implementations
@@ -639,52 +570,6 @@ public class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
 
             ((IGradientComputable<T, Matrix<T>, Vector<T>>)classifier).ApplyGradients(classifierGradients, learningRate);
         }
-    }
-
-    /// <summary>
-    /// Creates a new instance of this classifier with default configuration.
-    /// </summary>
-    /// <returns>A new ClassifierChainClassifier instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is used internally for operations like cloning or serialization.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Matrix<T>> CreateNewInstance()
-    {
-        return new ClassifierChainClassifier<T>(_classifierFactory, _specifiedOrder, _useRandomOrder, null, Options, Regularization);
-    }
-
-    /// <summary>
-    /// Creates a deep copy of this classifier.
-    /// </summary>
-    /// <returns>A new instance with the same parameters and state.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Cloning creates an independent copy of the classifier,
-    /// including all its chain classifiers and the chain order.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Matrix<T>> Clone()
-    {
-        var clone = new ClassifierChainClassifier<T>(
-            _classifierFactory, _specifiedOrder, _useRandomOrder, _random.Next(), Options, Regularization);
-        clone.NumLabels = NumLabels;
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-        clone._chainOrder = _chainOrder?.ToArray();
-
-        if (_chainClassifiers is not null)
-        {
-            clone._chainClassifiers = new IClassifier<T>[_chainClassifiers.Length];
-            for (int i = 0; i < _chainClassifiers.Length; i++)
-            {
-                clone._chainClassifiers[i] = (IClassifier<T>)_chainClassifiers[i].Clone();
-            }
-        }
-
-        return clone;
     }
 
     #endregion

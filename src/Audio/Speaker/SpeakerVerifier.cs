@@ -528,63 +528,12 @@ public partial class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVer
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(SampleRate);
-        writer.Write(EmbeddingDimension);
-        writer.Write(NumOps.ToDouble(DefaultThreshold));
-        writer.Write(_useNativeMode);
-        writer.Write(_hiddenDim);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numHeads);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        SampleRate = reader.ReadInt32();
-        EmbeddingDimension = reader.ReadInt32();
-        _ = reader.ReadDouble(); // DefaultThreshold
-        _ = reader.ReadBoolean(); // useNativeMode
-        _ = reader.ReadInt32(); // hiddenDim
-        _ = reader.ReadInt32(); // numEncoderLayers
-        _ = reader.ReadInt32(); // numHeads
 
-        // Base deserialization replaces this instance's layer objects. Re-point the extractor
-        // at those restored (possibly trained) layers so Predict and Train remain one model.
-        _embeddingExtractor.Layers.Clear();
-        _embeddingExtractor.Layers.AddRange(Layers);
-    }
-
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _embeddingModelPath is not null)
-        {
-            return new SpeakerVerifier<T>(
-                Architecture,
-                _embeddingModelPath,
-                SampleRate,
-                EmbeddingDimension,
-                NumOps.ToDouble(DefaultThreshold));
-        }
-        else
-        {
-            return new SpeakerVerifier<T>(
-                Architecture,
-                SampleRate,
-                EmbeddingDimension,
-                NumOps.ToDouble(DefaultThreshold),
-                _hiddenDim,
-                _numEncoderLayers,
-                _numHeads,
-                lossFunction: _lossFunction);
-        }
-    }
 
     #endregion
 

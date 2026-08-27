@@ -1178,17 +1178,7 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
         ModelData = SerializeForMetadata()
     };
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height);
-        writer.Write(_width);
-        writer.Write(_channels);
-        writer.Write(_numFrames);
-        writer.Write(_hiddenDim);
-        writer.Write(_numLayers);
-        writer.Write(_numInferenceSteps);
-        writer.Write(_guidanceScale);
-    }
+
 
     /// <summary>
     /// Restores model configuration from serialized data.
@@ -1204,36 +1194,7 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
     /// as when it was saved, including all the learned weights.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read serialized configuration values
-        _height = reader.ReadInt32();
-        _width = reader.ReadInt32();
-        _channels = reader.ReadInt32();
-        _numFrames = reader.ReadInt32();
-        _hiddenDim = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numInferenceSteps = reader.ReadInt32();
-        _guidanceScale = reader.ReadDouble();
-        GuidanceScale = _guidanceScale;
-        _numHeads = 16;
-        _headDim = _hiddenDim / _numHeads;
 
-        // Re-initialize noise schedule with restored inference steps
-        (_betas, _alphasCumprod) = InitializeNoiseSchedule(_numInferenceSteps);
-
-        // The layers (with their trained weights) are already reconstructed by the base
-        // DeserializeInternalUnchecked before this override runs. Do NOT clear Layers +
-        // call InitializeLayers — that would discard the deserialized weights and
-        // re-randomize the model. Instead re-point the cached DiT/VAE layer references
-        // (_patchEmbed, _ditQKV, _ditAttnProj, _ditFFN1/2, _textProjection, _timeEmbed,
-        // _finalLayer, _vaeDecoder, _vaeEncoder) at the freshly deserialized Layers so
-        // the forward pass routes through the loaded weights.
-        ExtractLayerReferences();
-    }
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new OpenSora<T>(Architecture, _numFrames, _hiddenDim, _numLayers, _numInferenceSteps, _guidanceScale);
 
     #endregion
 }

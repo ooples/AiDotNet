@@ -48,16 +48,13 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     Authors = "Gorishniy, Y., Rubachev, I., Khrulkov, V., & Babenko, A.")]
 public class FTTransformerRegression<T> : FTTransformerBase<T>
 {
-
-    /// <inheritdoc />
-    /// <remarks>The regression head, folded after the shared backbone by the base.</remarks>
-    protected override IEnumerable<ILayer<T>> GetExtraTrainableLayers()
-        => new ILayer<T>[] { _regressionHead };
     private readonly int _outputDimension;
     private readonly FullyConnectedLayer<T> _regressionHead;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _clsOutputCache;
+    [Scratch]
     private Tensor<T>? _predictionsCache;
 
     /// <summary>
@@ -98,7 +95,9 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
         _regressionHead = new FullyConnectedLayer<T>(
             EmbeddingDimension,
             outputDimension,
-            (IActivationFunction<T>?)null);  // No activation for regression
+            // No activation for regression -- stated as Identity rather than passed as null, which
+            // FullyConnectedLayer resolves to ReLU and would clamp the head to non-negative outputs.
+            new IdentityActivation<T>());
     }
 
     /// <summary>

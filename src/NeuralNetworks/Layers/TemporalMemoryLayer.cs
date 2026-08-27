@@ -125,6 +125,7 @@ public partial class TemporalMemoryLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     private readonly int CellsPerColumn;
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>

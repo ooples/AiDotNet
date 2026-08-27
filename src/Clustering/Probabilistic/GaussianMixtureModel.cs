@@ -55,15 +55,19 @@ namespace AiDotNet.Clustering.Probabilistic;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Maximum Likelihood from Incomplete Data via the EM Algorithm", "https://doi.org/10.1111/j.2517-6161.1977.tb01600.x")]
-public class GaussianMixtureModel<T> : ClusteringBase<T>
+public partial class GaussianMixtureModel<T> : ClusteringBase<T>
 {
     private readonly GMMOptions<T> _options;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _weights;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _means;
+    [AiDotNet.Attributes.FittedParameter]
     private Tensor<T>? _covariances;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _responsibilities;
     private T _lowerBound = MathHelper.GetNumericOperations<T>().Zero;
 
@@ -102,54 +106,6 @@ public class GaussianMixtureModel<T> : ClusteringBase<T>
     /// Gets the lower bound (ELBO) from the last training.
     /// </summary>
     public T LowerBound => _lowerBound;
-
-    /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new GaussianMixtureModel<T>(new GMMOptions<T>
-        {
-            NumComponents = _options.NumComponents,
-            CovarianceType = _options.CovarianceType,
-            Tolerance = _options.Tolerance,
-            MaxIterations = _options.MaxIterations,
-            NumInitializations = _options.NumInitializations,
-            InitMethod = _options.InitMethod,
-            RegularizationCovariance = _options.RegularizationCovariance
-        });
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (GaussianMixtureModel<T>)CreateNewInstance();
-        clone.NumFeatures = NumFeatures;
-        clone.NumClusters = NumClusters;
-        clone.IsTrained = IsTrained;
-        clone.Labels = Labels is not null ? new Vector<T>(Labels) : null;
-        clone.Inertia = Inertia;
-
-        if (ClusterCenters is not null)
-        {
-            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
-            for (int i = 0; i < ClusterCenters.Rows; i++)
-                for (int j = 0; j < ClusterCenters.Columns; j++)
-                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
-        }
-
-        if (_weights is not null)
-            clone._weights = _weights.Clone();
-        if (_means is not null)
-            clone._means = _means.Clone();
-        if (_covariances is not null)
-            clone._covariances = _covariances.Clone();
-
-        return clone;
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

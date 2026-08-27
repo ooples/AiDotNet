@@ -282,10 +282,8 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>
         ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
     };
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new TimeDiff<T>(Architecture, new TimeDiffOptions<T> { ContextLength = _contextLength, ForecastHorizon = _forecastHorizon, HiddenDimension = _hiddenDimension, NumLayers = _numLayers, NumHeads = _numHeads, DiffusionSteps = _diffusionSteps, DropoutRate = _dropout, BetaStart = _betaStart, BetaEnd = _betaEnd, UseFutureMixup = _useFutureMixup, UseAutoregressiveInit = _useAutoregressiveInit });
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_contextLength); writer.Write(_forecastHorizon); writer.Write(_hiddenDimension); writer.Write(_numLayers); writer.Write(_numHeads); writer.Write(_diffusionSteps); writer.Write(_dropout); writer.Write(_betaStart); writer.Write(_betaEnd); writer.Write(_useFutureMixup); writer.Write(_useAutoregressiveInit); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _contextLength = reader.ReadInt32(); _forecastHorizon = reader.ReadInt32(); _hiddenDimension = reader.ReadInt32(); _numLayers = reader.ReadInt32(); _numHeads = reader.ReadInt32(); _diffusionSteps = reader.ReadInt32(); _dropout = reader.ReadDouble(); _betaStart = reader.ReadDouble(); _betaEnd = reader.ReadDouble(); _useFutureMixup = reader.ReadBoolean(); _useAutoregressiveInit = reader.ReadBoolean(); ComputeNoiseSchedule(); }
+
 
     #endregion
 

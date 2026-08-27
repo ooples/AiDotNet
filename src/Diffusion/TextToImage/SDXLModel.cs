@@ -1095,29 +1095,6 @@ public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Clone U-Net with trained weights
-                // Clone VAE with trained weights
-                return new SDXLModel<T>(
-            options: null,
-            scheduler: null,
-            unet: (UNetNoisePredictor<T>)_unet.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner1: _conditioner1,
-            conditioner2: _conditioner2,
-            refiner: _refiner,
-            useDualEncoder: _useDualEncoder,
-            crossAttentionDim: _crossAttentionDim);
-    }
-
     #endregion
 
     #region Metadata

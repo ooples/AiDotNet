@@ -79,7 +79,12 @@ public abstract class DistributionBase<T> : ISamplingDistribution<T>
     public abstract Matrix<T> FisherInformation();
 
     /// <inheritdoc/>
-    public abstract IParametricDistribution<T> Clone();
+    /// <remarks>
+    /// A distribution carries no learned tensors -- its parameters ARE its configuration -- so
+    /// rebuilding it from the recorded constructor is the whole copy, with no state to reload.
+    /// </remarks>
+    public virtual IParametricDistribution<T> Clone()
+        => (IParametricDistribution<T>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
 
     /// <inheritdoc/>
     public abstract T Sample(Random random);

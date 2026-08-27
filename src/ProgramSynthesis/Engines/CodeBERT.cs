@@ -201,27 +201,7 @@ public class CodeBERT<T> : CodeModelBase<T>
             optimizerName: _optimizer.GetType().Name);
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        CodeModelArchitectureSerialization.Write(
-            writer,
-            CodeArchitecture,
-            includeUseDataFlow: false,
-            includeEncoderDecoderLayerCounts: false);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        CodeModelArchitectureSerialization.ReadAndValidate(
-            reader,
-            CodeArchitecture,
-            modelName: "CodeBERT",
-            includeUseDataFlow: false,
-            includeEncoderDecoderLayerCounts: false);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new CodeBERT<T>(CodeArchitecture, LossFunction, optimizer: null, tokenizer: Tokenizer);
-    }
+
 }

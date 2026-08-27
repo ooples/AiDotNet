@@ -50,8 +50,9 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ResearchPaper("Learning Internal Representations by Error Propagation", "https://doi.org/10.21236/ADA164453")]
-public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
+[ResearchPaper("Learning Internal Representations by Error Propagation", "https://doi.org/10.21236/ADA164453")]
+[CustomSerializationFormat]
+public partial class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
 {
     private const int TargetScalingTrailerMagic = 0x4E4E5254; // "NNRT"
     private const int TargetScalingTrailerVersion = 1;
@@ -968,34 +969,6 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
         return ms.ToArray();
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        // Copy the trained state directly rather than round-tripping through Serialize/Deserialize.
-        // Two problems with the round trip: the clone was handed THIS instance's options object, so
-        // both models aliased one configuration — and Train mutates it (LayerSizes[0] is rewritten
-        // to the observed feature count) — while Deserialize then reassigned LayerSizes on that
-        // shared instance. The result was a clone whose weight shapes disagreed with its layer
-        // sizes, which surfaced as a dimension mismatch on the first forward pass.
-        var clonedOptions = CopyOptions(_options);
-
-        var clone = new NeuralNetworkRegression<T>(clonedOptions, Regularization);
-
-        clone._weights.Clear();
-        foreach (var weight in _weights) clone._weights.Add(weight.Clone());
-
-        clone._biases.Clear();
-        foreach (var bias in _biases) clone._biases.Add(bias.Clone());
-
-        clone._useOLS = _useOLS;
-        clone._olsCoefficients = _olsCoefficients?.Clone();
-        clone._olsIntercept = _olsIntercept;
-        clone._targetMean = _targetMean;
-        clone._targetScale = _targetScale;
-
-        return clone;
-    }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <summary>
     /// Deserializes the model from a byte array.

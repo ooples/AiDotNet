@@ -47,9 +47,14 @@ public class MMDiTXNoisePredictor<T> : MMDiTNoisePredictor<T>
     private readonly int _mmxPatchSize;
     private readonly int _mmxContextDim;
     private readonly int? _mmxSeed;
-    private readonly int _mmxHiddenOverride;
-    private readonly int _mmxLayersOverride;
-    private readonly int _mmxHeadsOverride;
+    // Keep constructor inputs under the generator's parameter-name convention. These values are
+    // semantically different from the resolved base dimensions: zero means "use the variant
+    // default", while a positive value is an explicit override that must survive configuration
+    // reconstruction. Hiding them behind an unrelated `mmx` prefix made the clone plan emit the
+    // declared defaults and silently rebuild a tiny injected predictor at foundation scale.
+    private readonly int _hiddenSizeOverride;
+    private readonly int _numLayersOverride;
+    private readonly int _numHeadsOverride;
 
     /// <summary>
     /// Initializes a new MMDiT-X (SD3.5) predictor on the faithful MMDiT
@@ -87,28 +92,10 @@ public class MMDiTXNoisePredictor<T> : MMDiTNoisePredictor<T>
         _mmxPatchSize = patchSize;
         _mmxContextDim = contextDim;
         _mmxSeed = seed;
-        _mmxHiddenOverride = hiddenSizeOverride;
-        _mmxLayersOverride = numLayersOverride;
-        _mmxHeadsOverride = numHeadsOverride;
+        _hiddenSizeOverride = hiddenSizeOverride;
+        _numLayersOverride = numLayersOverride;
+        _numHeadsOverride = numHeadsOverride;
     }
-
-    /// <inheritdoc />
-    public override INoisePredictor<T> Clone()
-    {
-        var clone = new MMDiTXNoisePredictor<T>(
-            _variant, _mmxInputChannels, _mmxPatchSize, _mmxContextDim, _mmxSeed,
-            _mmxHiddenOverride, _mmxLayersOverride, _mmxHeadsOverride);
-        // #1706: probe-materialize the clone through the forward path, THEN copy weights — the same
-        // pattern the base MMDiTNoisePredictor.Clone uses. The previous TryShareParametersFrom /
-        // SetParameters path copied onto unmaterialized lazy layers, which then re-RNG-initialized
-        // on the clone's first real forward and diverged from the source (HiDream
-        // Clone_ShouldProduceIdenticalOutput, maxDiff ~7e2).
-        ProbeMaterializeAndCopyInto(clone);
-        return clone;
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
     // SD3.5 variant dimensions. hidden % heads == 0 for each (2048%16=128, 2560%20=128).
     private static int GetHiddenSize(MMDiTXVariant variant) => variant switch

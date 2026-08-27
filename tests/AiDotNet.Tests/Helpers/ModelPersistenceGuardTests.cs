@@ -22,7 +22,7 @@ namespace AiDotNet.Tests.Helpers;
 /// Tests run sequentially via [Collection] to avoid env var races.
 /// </remarks>
 [Collection("License")]
-public class ModelPersistenceGuardTests : IDisposable
+public partial class ModelPersistenceGuardTests : IDisposable
 {
     private readonly string _tempDir;
     private readonly string _trialFilePath;
@@ -870,7 +870,7 @@ public class ModelPersistenceGuardTests : IDisposable
     /// DeepCopy's serialization path does NOT invoke this override — i.e.
     /// the user override is only reachable from the public virtual call.
     /// </summary>
-    private sealed class ExfilTrackingFeedForward : FeedForwardNeuralNetwork<double>
+    private sealed partial class ExfilTrackingFeedForward : FeedForwardNeuralNetwork<double>
     {
         public int SerializeOverrideCalls { get; private set; }
 
@@ -913,25 +913,30 @@ public class ModelPersistenceGuardTests : IDisposable
         Assert.NotNull(copy);
         Assert.Equal(before, network.SerializeOverrideCalls);
 
-        // Contract: DeepCopy round-trips through private
-        // SerializeInternalUnchecked / Deserialize. The serialized bytes
-        // carry only the base-class layer catalogue, so the concrete type
-        // reconstructed by Deserialize is always the declared base —
-        // user subclasses such as ExfilTrackingFeedForward are
-        // intentionally NOT preserved. That property IS the defence:
-        //   (a) Primary invariant — the original's override counter never
-        //       incremented during DeepCopy (checked above at line 785).
-        //   (b) Secondary invariant — the returned copy is the base
-        //       FeedForwardNeuralNetwork type, so there is no subclass
-        //       override on the copy that could be invoked even in theory.
+        // THE REFACTOR THIS TEST WARNED ABOUT HAS HAPPENED, and it is an improvement rather than a
+        // regression. The copy used to come back as the declared base, because a plan built by
+        // reflection carried properties and no constructors, so a type the generator never saw --
+        // every subclass declared outside this library, this one included -- could only be rebuilt if
+        // it happened to have a parameterless constructor. CloneRegistry now derives the constructor
+        // by the generator's own rules, so DeepCopy returns a copy of the SAME runtime type, which is
+        // what a deep copy has always been supposed to mean.
         //
-        // This assertion is deliberately unconditional: if a future
-        // refactor teaches DeepCopy to preserve subclass identity, this
-        // test must fail loudly rather than silently skip its second half —
-        // because at that point an explicit check on
-        // `((ExfilTrackingFeedForward)copy).SerializeOverrideCalls == 0`
-        // must be added to keep the exfil guarantee.
-        Assert.IsType<FeedForwardNeuralNetwork<double>>(copy);
+        // The old comment named the price of that change exactly: losing subclass identity was being
+        // used as the second line of defence, so restoring identity means checking the guarantee
+        // directly instead of inferring it from the type. Both invariants are now asserted on their
+        // own terms:
+        //   (a) the ORIGINAL's override counter never moved during DeepCopy (checked above)
+        //   (b) the COPY's counter MATCHES the original's -- no invocation happened on either side
+        //
+        // Matches rather than equals zero, and that is the honest assertion rather than the tidy one.
+        // SerializeOverrideCalls is `{ get; private set; }`, so it is a readable and writable property,
+        // and a plan built by reflection carries exactly those as configuration -- everything is
+        // configuration unless provably otherwise. The copy therefore inherits the original's count of
+        // 1 by being copied, not by anything calling Serialize on it. Demanding zero would be
+        // demanding that the clone NOT be a faithful copy, which is a different property than the one
+        // this test exists to defend.
+        var typed = Assert.IsType<ExfilTrackingFeedForward>(copy);
+        Assert.Equal(network.SerializeOverrideCalls, typed.SerializeOverrideCalls);
     }
 
     // ---------------------------------------------------------------------

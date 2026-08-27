@@ -56,7 +56,7 @@ namespace AiDotNet.Clustering.Hierarchical;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("BIRCH: An Efficient Data Clustering Method for Very Large Databases", "https://doi.org/10.1145/233269.233324", Year = 1996, Authors = "Tian Zhang, Raghu Ramakrishnan, Miron Livny")]
-public class BIRCH<T> : ClusteringBase<T>
+public partial class BIRCH<T> : ClusteringBase<T>
 {
     private readonly BIRCHOptions<T> _options;
 
@@ -81,19 +81,6 @@ public class BIRCH<T> : ClusteringBase<T>
     public IReadOnlyList<CFEntry>? LeafEntries => _leafEntries?.AsReadOnly();
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new BIRCH<T>(new BIRCHOptions<T>
-        {
-            Threshold = _options.Threshold,
-            BranchingFactor = _options.BranchingFactor,
-            NumClusters = _options.NumClusters,
-            ComputeLabels = _options.ComputeLabels,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

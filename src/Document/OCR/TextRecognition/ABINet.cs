@@ -75,6 +75,7 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
         return LossFunction.ComputeTapeLoss(trainingPrediction, trainingTarget).Data.Span[0];
     }
 
+    /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
     #region Fields
@@ -647,19 +648,7 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_visionDim);
-        writer.Write(_languageDim);
-        writer.Write(_visionLayers);
-        writer.Write(_languageLayers);
-        writer.Write(_numIterations);
-        writer.Write(_imageHeight);
-        writer.Write(ImageSize);
-        writer.Write(MaxSequenceLength);
-        writer.Write(_charset);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <inheritdoc/>
     /// <summary>
@@ -694,31 +683,7 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
         }
     }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int visionDim = reader.ReadInt32();
-        int languageDim = reader.ReadInt32();
-        int visionLayers = reader.ReadInt32();
-        int languageLayers = reader.ReadInt32();
-        int numIterations = reader.ReadInt32();
-        int imageHeight = reader.ReadInt32();
-        int imageSize = reader.ReadInt32();
-        int maxSeqLen = reader.ReadInt32();
-        string charset = reader.ReadString();
-        bool useNativeMode = reader.ReadBoolean();
 
-        ImageSize = imageSize;
-        base.MaxSequenceLength = maxSeqLen;
-    
-        RebindBranchLayers();
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new ABINet<T>(Architecture, ImageSize, _imageHeight, MaxSequenceLength, _visionDim, _languageDim,
-            _visionLayers, _languageLayers, _numIterations, _charset);
-    }
 
     #endregion
 
@@ -872,7 +837,8 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
         }
     }
 
-    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+
 
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights

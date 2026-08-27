@@ -234,6 +234,7 @@ public partial class FlattenLayer<T> : LayerBase<T>, IBatchAwareShapeContract
     /// This is automatically cleared between training batches to save memory.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     // GPU-resident cached tensors for GPU training pipeline

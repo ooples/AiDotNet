@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ComponentType(ComponentType.Regularizer)]
 [PipelineStage(PipelineStage.Training)]
-public class GhostBatchNormalization<T>
+public partial class GhostBatchNormalization<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _numFeatures;
@@ -44,19 +44,27 @@ public class GhostBatchNormalization<T>
     private readonly double _epsilon;
 
     // Learnable parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _gamma; // Scale parameter
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _beta;  // Shift parameter
 
     // Running statistics for inference
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _runningMean;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _runningVar;
 
     // Gradients
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _gammaGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _betaGrad;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _inputCache;
+    [Scratch]
     private Tensor<T>? _normalizedCache;
 
     // Training vs inference mode. Propagated by the owning composite layer

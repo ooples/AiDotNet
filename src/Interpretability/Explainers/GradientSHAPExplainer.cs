@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
@@ -43,6 +44,7 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly Func<Vector<T>, Vector<T>> _predictFunction;
+    [Scratch]
     private readonly Func<Vector<T>, int, Vector<T>>? _gradientFunction;
     private readonly Matrix<T> _backgroundData;
     private readonly int _numSamples;

@@ -61,7 +61,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SegFormer: Simple and Efficient Design for Semantic Segmentation with Transformers", "https://arxiv.org/abs/2105.15203", Year = 2021, Authors = "Enze Xie, Wenhai Wang, Zhiding Yu, Anima Anandkumar, Jose M. Alvarez, Ping Luo")]
-public class SegFormer<T> : Common.SemanticSegmentationBase<T>
+public partial class SegFormer<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly SegFormerOptions _options;
 
@@ -596,40 +596,7 @@ public class SegFormer<T> : Common.SemanticSegmentationBase<T>
     /// match the reading order in <see cref="DeserializeNetworkSpecificData"/>.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height);
-        writer.Write(_width);
-        writer.Write(_channels);
-        writer.Write(_numClasses);
-        writer.Write((int)_modelSize);
-        writer.Write(_decoderDim);
-        writer.Write(_dropRate);
-        writer.Write(_useNativeMode);
-        writer.Write(_onnxModelPath ?? string.Empty);
-        writer.Write(_encoderLayerEnd);
 
-        // Write embed dims
-        writer.Write(_embedDims.Length);
-        foreach (int dim in _embedDims)
-        {
-            writer.Write(dim);
-        }
-
-        // Write depths
-        writer.Write(_depths.Length);
-        foreach (int depth in _depths)
-        {
-            writer.Write(depth);
-        }
-
-        // Write num heads
-        writer.Write(_numHeads.Length);
-        foreach (int head in _numHeads)
-        {
-            writer.Write(head);
-        }
-    }
 
     /// <summary>
     /// Reads SegFormer-specific configuration values from a binary stream during model loading.
@@ -644,67 +611,7 @@ public class SegFormer<T> : Common.SemanticSegmentationBase<T>
     /// are consumed to advance the reader position.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // height
-        _ = reader.ReadInt32(); // width
-        _ = reader.ReadInt32(); // channels
-        _ = reader.ReadInt32(); // numClasses
-        _ = reader.ReadInt32(); // modelSize
-        _ = reader.ReadInt32(); // decoderDim
-        _ = reader.ReadDouble(); // dropRate
-        _ = reader.ReadBoolean(); // useNativeMode
-        _ = reader.ReadString(); // onnxModelPath
-        _ = reader.ReadInt32(); // encoderLayerEnd
 
-        // Read embed dims
-        int embedCount = reader.ReadInt32();
-        for (int i = 0; i < embedCount; i++)
-        {
-            _ = reader.ReadInt32();
-        }
-
-        // Read depths
-        int depthCount = reader.ReadInt32();
-        for (int i = 0; i < depthCount; i++)
-        {
-            _ = reader.ReadInt32();
-        }
-
-        // Read num heads
-        int headCount = reader.ReadInt32();
-        for (int i = 0; i < headCount; i++)
-        {
-            _ = reader.ReadInt32();
-        }
-    }
-
-    /// <summary>
-    /// Creates a new SegFormer instance with the same configuration as this one but freshly
-    /// initialized weights.
-    /// </summary>
-    /// <returns>A new <see cref="SegFormer{T}"/> model with the same architecture, model size,
-    /// number of classes, and other settings, but with reinitialized layer weights.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This creates a "copy" of the model's configuration (same size,
-    /// same number of classes, same input dimensions) but with fresh random weights. It's used
-    /// internally by the framework for operations like cross-validation, where multiple independent
-    /// copies of the same model architecture need to be trained separately. In native mode it
-    /// creates a new trainable model; in ONNX mode it reloads from the same ONNX file.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new SegFormer<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options);
-        }
-        else
-        {
-            return new SegFormer<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
-        }
-    }
 
     /// <summary>
     /// Releases managed resources held by this SegFormer instance, including the ONNX inference session.

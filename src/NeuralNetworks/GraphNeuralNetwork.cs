@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
@@ -51,7 +51,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Semi-Supervised Classification with Graph Convolutional Networks", "https://arxiv.org/abs/1609.02907", Year = 2017, Authors = "Thomas N. Kipf, Max Welling")]
-public class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliaryLossLayer<T>
+public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly GraphNeuralNetworkOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -1134,124 +1134,5 @@ public class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliaryLossLaye
             activationTypes.Add(_finalActivationLayerVectorActivation.GetType().Name);
 
         return activationTypes.Distinct();
-    }
-
-    /// <summary>
-    /// Serializes Graph Neural Network-specific data to a binary writer.
-    /// </summary>
-    /// <param name="writer">The BinaryWriter to write the data to.</param>
-    /// <remarks>
-    /// <para>
-    /// This method writes the Graph Neural Network's specific configuration data to a binary stream.
-    /// This includes activation function types and any other GNN-specific parameters. This data
-    /// is needed to reconstruct the GNN when deserializing.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves the special configuration of your GNN.
-    /// 
-    /// Think of it like writing down the recipe for your neural network:
-    /// - What activation functions it uses at different stages
-    /// - How its graph-specific components are configured
-    /// - Any other special settings that make this GNN unique
-    /// 
-    /// These details are crucial because they define how your GNN processes information,
-    /// and they need to be saved along with the weights for the model to work correctly
-    /// when loaded later.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Serialize activation functions if they exist
-        SerializationHelper<T>.SerializeInterface(writer, _graphConvolutionalScalarActivation);
-        SerializationHelper<T>.SerializeInterface(writer, _activationLayerScalarActivation);
-        SerializationHelper<T>.SerializeInterface(writer, _finalDenseLayerScalarActivation);
-        SerializationHelper<T>.SerializeInterface(writer, _finalActivationLayerScalarActivation);
-
-        SerializationHelper<T>.SerializeInterface(writer, _graphConvolutionalVectorActivation);
-        SerializationHelper<T>.SerializeInterface(writer, _activationLayerVectorActivation);
-        SerializationHelper<T>.SerializeInterface(writer, _finalDenseLayerVectorActivation);
-        SerializationHelper<T>.SerializeInterface(writer, _finalActivationLayerVectorActivation);
-    }
-
-    /// <summary>
-    /// Deserializes Graph Neural Network-specific data from a binary reader.
-    /// </summary>
-    /// <param name="reader">The BinaryReader to read the data from.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reads the Graph Neural Network's specific configuration data from a binary stream.
-    /// This includes activation function types and any other GNN-specific parameters. After reading this data,
-    /// the GNN's state is fully restored to what it was when saved.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved GNN configuration.
-    /// 
-    /// Think of it like following a recipe to rebuild your neural network:
-    /// - Reading what activation functions were used at different stages
-    /// - Setting up the graph-specific components with the right configuration
-    /// - Restoring any other special settings that make this GNN unique
-    /// 
-    /// This ensures that your loaded model will process information exactly the same way
-    /// as when you saved it.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Deserialize activation functions
-        _graphConvolutionalScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
-        _activationLayerScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
-        _finalDenseLayerScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
-        _finalActivationLayerScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
-
-        _graphConvolutionalVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
-        _activationLayerVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
-        _finalDenseLayerVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
-        _finalActivationLayerVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
-    }
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new GraphNeuralNetworkOptions(_options);
-
-        // Create a new instance with the same architecture and activation functions
-        // Determine which constructor to use based on which activation functions are set
-        bool hasVectorActivations = _graphConvolutionalVectorActivation != null ||
-                                    _activationLayerVectorActivation != null ||
-                                    _finalDenseLayerVectorActivation != null ||
-                                    _finalActivationLayerVectorActivation != null;
-
-        bool hasScalarActivations = _graphConvolutionalScalarActivation != null ||
-                                    _activationLayerScalarActivation != null ||
-                                    _finalDenseLayerScalarActivation != null ||
-                                    _finalActivationLayerScalarActivation != null;
-
-        // Validate that we don't have a mix of vector and scalar activations
-        if (hasVectorActivations && hasScalarActivations)
-        {
-            throw new InvalidOperationException(
-                "Cannot create new instance with mixed vector and scalar activation functions. " +
-                "All activation functions must be either vector-based or scalar-based, not a combination of both.");
-        }
-
-        if (hasVectorActivations)
-        {
-            return new GraphNeuralNetwork<T>(
-                Architecture,
-                lossFunction: LossFunction,
-                graphConvolutionalVectorActivation: _graphConvolutionalVectorActivation,
-                activationLayerVectorActivation: _activationLayerVectorActivation,
-                finalDenseLayerVectorActivation: _finalDenseLayerVectorActivation,
-                finalActivationLayerVectorActivation: _finalActivationLayerVectorActivation,
-                options: options);
-        }
-        else
-        {
-            return new GraphNeuralNetwork<T>(
-                Architecture,
-                lossFunction: LossFunction,
-                graphConvolutionalActivation: _graphConvolutionalScalarActivation,
-                activationLayerActivation: _activationLayerScalarActivation,
-                finalDenseLayerActivation: _finalDenseLayerScalarActivation,
-                finalActivationLayerActivation: _finalActivationLayerScalarActivation,
-                options: options);
-        }
     }
 }

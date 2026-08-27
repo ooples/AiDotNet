@@ -53,7 +53,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2111.12704",
     Year = 2022,
     Authors = "Kelvin C.K. Chan, Shangchen Zhou, Xiangyu Xu, Chen Change Loy")]
-public class RealBasicVSRSharp<T> : VideoSuperResolutionBase<T>
+public partial class RealBasicVSRSharp<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 
@@ -177,39 +177,9 @@ public class RealBasicVSRSharp<T> : VideoSuperResolutionBase<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.NumFeatures);
-        w.Write(_options.NumResBlocks);
-        w.Write(_options.CleaningModuleBlocks);
-        w.Write(_options.ScaleFactor);
-        w.Write(_options.NumFrames);
-        w.Write(_options.PerceptualWeight);
-        w.Write(_options.GANWeight);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.NumFeatures = r.ReadInt32();
-        _options.NumResBlocks = r.ReadInt32();
-        _options.CleaningModuleBlocks = r.ReadInt32();
-        _options.ScaleFactor = r.ReadInt32();
-        _options.NumFrames = r.ReadInt32();
-        _options.PerceptualWeight = r.ReadDouble();
-        _options.GANWeight = r.ReadDouble();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new RealBasicVSRSharp<T>(Architecture, _options);
+
 
     #endregion
 

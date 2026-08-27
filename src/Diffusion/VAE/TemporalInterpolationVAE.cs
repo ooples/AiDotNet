@@ -198,19 +198,6 @@ public partial class TemporalInterpolationVAE<T> : VAEModelBase<T>
         return x;
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        var clone = new TemporalInterpolationVAE<T>(
-            inputChannels: _inputChannels,
-            latentChannels: _latentChannels,
-            baseChannels: _baseChannels,
-            interpolationFactor: _interpolationFactor,
-            latentScaleFactor: _latentScaleFactor);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
-    }
-
     /// <summary>
     /// Interpolates between two latent frames to generate an intermediate frame.
     /// </summary>
@@ -259,19 +246,6 @@ public partial class TemporalInterpolationVAE<T> : VAEModelBase<T>
         var result = (int[])shape.Clone();
         result[^1] = lastDim;
         return result;
-    }
-
-    /// <inheritdoc />
-    public override IVAEModel<T> Clone()
-    {
-        var clone = new TemporalInterpolationVAE<T>(
-            inputChannels: _inputChannels,
-            latentChannels: _latentChannels,
-            baseChannels: _baseChannels,
-            interpolationFactor: _interpolationFactor,
-            latentScaleFactor: _latentScaleFactor);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
     }
 
     protected override Vector<T> GetParameterGradients()

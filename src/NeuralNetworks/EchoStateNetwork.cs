@@ -151,6 +151,7 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     /// it's what allows the network to "remember" past inputs when processing new ones.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _reservoirState;
 
     /// <summary>
@@ -344,11 +345,13 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     /// <summary>
     /// The weight matrix for input-to-reservoir connections.
     /// </summary>
+    [AiDotNet.Attributes.FrozenParameter]
     private Matrix<T> _inputWeights;
 
     /// <summary>
     /// The weight matrix for reservoir-to-reservoir connections.
     /// </summary>
+    [AiDotNet.Attributes.FrozenParameter]
     private Matrix<T> _reservoirWeights;
 
     /// <summary>
@@ -363,21 +366,25 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     /// <summary>
     /// The weight matrix for reservoir-to-output connections.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputWeights;
 
     /// <summary>
     /// The bias vector for the reservoir.
     /// </summary>
+    [AiDotNet.Attributes.FrozenParameter]
     private Vector<T> _reservoirBias;
 
     /// <summary>
     /// The bias vector for the output layer.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _outputBias;
 
     /// <summary>
     /// The current state of the reservoir.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _currentState;
 
     /// <summary>
@@ -414,11 +421,13 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     /// <summary>
     /// Collected states during training for regression.
     /// </summary>
+    [Scratch]
     private List<Vector<T>> _collectedStates;
 
     /// <summary>
     /// Collected targets during training for regression.
     /// </summary>
+    [Scratch]
     private List<Vector<T>> _collectedTargets;
 
     /// <summary>
@@ -1112,36 +1121,6 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <summary>
-    /// Declares the readout -- the ESN's only trainable parameters.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// An Echo State Network trains ONLY its output layer. The input and reservoir weights are drawn
-    /// once and left fixed; that is the defining property of reservoir computing (Jaeger 2001), not
-    /// an omission, so <c>_inputWeights</c> and <c>_reservoirWeights</c> are deliberately absent
-    /// here and stay <c>Matrix&lt;T&gt;</c>. Declared weights-then-bias, the order the deleted
-    /// GetParameters produced.
-    /// </para>
-    /// <para>
-    /// This replaces four members that each restated that layout: a ParameterCount formula, a
-    /// GetParameters copying the readout out element by element, a SetParameters copying it back,
-    /// and a GetParameterChunks that built a SEPARATE pair of tensors and copied into those. That
-    /// last one is why <c>_outputWeights</c> is now a <c>Tensor&lt;T&gt;</c>: the base restores by
-    /// writing THROUGH the declared tensors, so a chunk that is a copy would be written and then
-    /// discarded, leaving the model on its old readout while reporting the new one.
-    /// </para>
-    /// <para>
-    /// The bias stays a <c>Vector&lt;T&gt;</c> -- a tensor built over a vector shares its storage,
-    /// so writes through this view land in the field itself.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        yield return _outputWeights;
-        yield return new Tensor<T>([_outputBias.Length], _outputBias);
-    }
-
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
@@ -1695,82 +1674,7 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     /// This allows you to save the network and reload it later exactly as it was.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write basic configuration
-        writer.Write(_reservoirSize);
-        writer.Write(NumOps.ToDouble(_spectralRadius));
-        writer.Write(NumOps.ToDouble(_sparsity));
-        writer.Write(_inputSize);
-        writer.Write(_outputSize);
-        writer.Write(Convert.ToDouble(_leakingRate));
-        writer.Write(Convert.ToDouble(_regularization));
-        writer.Write(_warmupPeriod);
 
-        // Write activation function information
-        // Write scalar activation function flags
-        writer.Write(_reservoirInputScalarActivation != null);
-        writer.Write(_reservoirOutputScalarActivation != null);
-        writer.Write(_reservoirScalarActivation != null);
-        writer.Write(_outputScalarActivation != null);
-
-        // Write vector activation function flags
-        writer.Write(_reservoirInputVectorActivation != null);
-        writer.Write(_reservoirOutputVectorActivation != null);
-        writer.Write(_reservoirVectorActivation != null);
-        writer.Write(_outputVectorActivation != null);
-
-        // Serialize activation functions if present
-        if (_reservoirInputScalarActivation != null)
-        {
-            SerializationHelper<T>.SerializeInterface(writer, _reservoirInputScalarActivation);
-        }
-
-        if (_reservoirOutputScalarActivation != null)
-        {
-            SerializationHelper<T>.SerializeInterface(writer, _reservoirOutputScalarActivation);
-        }
-
-        if (_reservoirScalarActivation != null)
-        {
-            SerializationHelper<T>.SerializeInterface(writer, _reservoirScalarActivation);
-        }
-
-        if (_outputScalarActivation != null)
-        {
-            SerializationHelper<T>.SerializeInterface(writer, _outputScalarActivation);
-        }
-
-        if (_reservoirInputVectorActivation != null)
-        {
-            SerializationHelper<T>.SerializeInterface(writer, _reservoirInputVectorActivation);
-        }
-
-        if (_reservoirOutputVectorActivation != null)
-        {
-            SerializationHelper<T>.SerializeInterface(writer, _reservoirOutputVectorActivation);
-        }
-
-        if (_reservoirVectorActivation != null)
-        {
-            SerializationHelper<T>.SerializeInterface(writer, _reservoirVectorActivation);
-        }
-
-        if (_outputVectorActivation != null)
-        {
-            SerializationHelper<T>.SerializeInterface(writer, _outputVectorActivation);
-        }
-
-        // Write weight matrices and bias vectors
-        SerializeMatrix(writer, _inputWeights);
-        SerializeMatrix(writer, _reservoirWeights);
-        SerializeTensor2D(writer, _outputWeights);
-        SerializeVector(writer, _reservoirBias);
-        SerializeVector(writer, _outputBias);
-
-        // Write current state
-        SerializeVector(writer, _currentState);
-    }
 
     /// <summary>
     /// Serializes a matrix to a binary writer.
@@ -1865,87 +1769,7 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     /// This allows you to continue using the network exactly where you left off.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read basic configuration
-        _reservoirSize = reader.ReadInt32();
-        _spectralRadius = NumOps.FromDouble(reader.ReadDouble());
-        _sparsity = NumOps.FromDouble(reader.ReadDouble());
-        _inputSize = reader.ReadInt32();
-        _outputSize = reader.ReadInt32();
-        _leakingRate = NumOps.FromDouble(reader.ReadDouble());
-        _regularization = NumOps.FromDouble(reader.ReadDouble());
-        _warmupPeriod = reader.ReadInt32();
 
-        // Read activation function flags
-        bool hasReservoirInputScalarActivation = reader.ReadBoolean();
-        bool hasReservoirOutputScalarActivation = reader.ReadBoolean();
-        bool hasReservoirScalarActivation = reader.ReadBoolean();
-        bool hasOutputScalarActivation = reader.ReadBoolean();
-
-        bool hasReservoirInputVectorActivation = reader.ReadBoolean();
-        bool hasReservoirOutputVectorActivation = reader.ReadBoolean();
-        bool hasReservoirVectorActivation = reader.ReadBoolean();
-        bool hasOutputVectorActivation = reader.ReadBoolean();
-
-        // Deserialize activation functions if present
-        if (hasReservoirInputScalarActivation)
-        {
-            _reservoirInputScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
-        }
-
-        if (hasReservoirOutputScalarActivation)
-        {
-            _reservoirOutputScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
-        }
-
-        if (hasReservoirScalarActivation)
-        {
-            _reservoirScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
-        }
-
-        if (hasOutputScalarActivation)
-        {
-            _outputScalarActivation = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
-        }
-
-        if (hasReservoirInputVectorActivation)
-        {
-            _reservoirInputVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
-        }
-
-        if (hasReservoirOutputVectorActivation)
-        {
-            _reservoirOutputVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
-        }
-
-        if (hasReservoirVectorActivation)
-        {
-            _reservoirVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
-        }
-
-        if (hasOutputVectorActivation)
-        {
-            _outputVectorActivation = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
-        }
-
-        // Read weight matrices and bias vectors
-        _inputWeights = DeserializeMatrix(reader);
-        _reservoirWeights = DeserializeMatrix(reader);
-        _outputWeights = DeserializeTensor2D(reader);
-        _reservoirBias = DeserializeVector(reader);
-        _outputBias = DeserializeVector(reader);
-
-        // Read current state
-        _currentState = DeserializeVector(reader);
-
-        // Initialize training collections
-        _collectedStates = new List<Vector<T>>();
-        _collectedTargets = new List<Vector<T>>();
-        _isTraining = false;
-
-        RefreshReservoirWeightCaches();
-    }
 
     /// <summary>
     /// Deserializes a matrix from a binary reader.
@@ -1987,67 +1811,5 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
         }
 
         return vector;
-    }
-
-    /// <summary>
-    /// Creates a new instance of the EchoStateNetwork with the same configuration as the current instance.
-    /// </summary>
-    /// <returns>A new EchoStateNetwork instance with the same architecture and configuration as the current instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the EchoStateNetwork with the same architecture, reservoir size,
-    /// spectral radius, sparsity, and activation functions as the current instance. This is useful for model cloning,
-    /// ensemble methods, or cross-validation scenarios where multiple instances of the same model with identical
-    /// configurations are needed.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a fresh copy of the ESN's blueprint.
-    /// 
-    /// When you need multiple versions of the same type of ESN with identical settings:
-    /// - This method creates a new, empty ESN with the same configuration
-    /// - It's like making a copy of your pool design before building it
-    /// - The new ESN has the same structure but no trained data
-    /// - This is useful for techniques that need multiple models, like ensemble methods
-    /// 
-    /// For example, when training on different data streams,
-    /// you'd want each ESN to have the same architecture and reservoir properties.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_reservoirInputVectorActivation != null || _reservoirOutputVectorActivation != null ||
-            _reservoirVectorActivation != null || _outputVectorActivation != null)
-        {
-            // If using vector activations
-            return new EchoStateNetwork<T>(
-                Architecture,
-                _reservoirSize,
-                NumOps.ToDouble(_spectralRadius),
-                NumOps.ToDouble(_sparsity),
-                Convert.ToDouble(_leakingRate),
-                Convert.ToDouble(_regularization),
-                _warmupPeriod,
-                _lossFunction,
-                _reservoirInputVectorActivation,
-                _reservoirOutputVectorActivation,
-                _reservoirVectorActivation,
-                _outputVectorActivation);
-        }
-        else
-        {
-            // If using scalar activations
-            return new EchoStateNetwork<T>(
-                Architecture,
-                _reservoirSize,
-                NumOps.ToDouble(_spectralRadius),
-                NumOps.ToDouble(_sparsity),
-                Convert.ToDouble(_leakingRate),
-                Convert.ToDouble(_regularization),
-                _warmupPeriod,
-                _lossFunction,
-                _reservoirInputScalarActivation,
-                _reservoirOutputScalarActivation,
-                _reservoirScalarActivation,
-                _outputScalarActivation);
-        }
     }
 }

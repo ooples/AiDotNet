@@ -54,7 +54,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2512.23709",
     Year = 2025,
     Authors = "Hau-Shiang Shiu, Chin-Yang Lin, Zhixiang Wang, Chi-Wei Hsiao, Po-Fan Yu, Yu-Chih Chen, Yu-Lun Liu")]
-public class StreamDiffVSR<T> : VideoSuperResolutionBase<T>
+public partial class StreamDiffVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 
@@ -197,43 +197,9 @@ public class StreamDiffVSR<T> : VideoSuperResolutionBase<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.NumFeatures);
-        w.Write(_options.NumDenoisingSteps);
-        w.Write(_options.NumResBlocks);
-        w.Write(_options.TemporalRadius);
-        w.Write(_options.ScaleFactor);
-        w.Write(_options.LatentDim);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (VideoModelVariant)r.ReadInt32();
-        _options.NumFeatures = r.ReadInt32();
-        _options.NumDenoisingSteps = r.ReadInt32();
-        _options.NumResBlocks = r.ReadInt32();
-        _options.TemporalRadius = r.ReadInt32();
-        _options.ScaleFactor = r.ReadInt32();
-        _options.LatentDim = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new StreamDiffVSR<T>(Architecture, p, _options);
-        return new StreamDiffVSR<T>(Architecture, _options);
-    }
+
 
     #endregion
 

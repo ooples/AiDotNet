@@ -55,7 +55,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Unbiased Recursive Partitioning: A Conditional Inference Framework", "https://doi.org/10.1198/106186006X133933")]
-public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegressionBase<T>
+public partial class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>
     /// Initializes a new instance with default settings.
@@ -605,107 +605,6 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
     }
 
     /// <summary>
-    /// Serializes the model to a byte array.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method serializes the model to a byte array for storage or transmission.
-    /// It includes all necessary information to reconstruct the model, including options,
-    /// the tree structure, and feature importances.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves the model to binary data that can be stored or shared.
-    /// 
-    /// Serialization converts the model into a compact format that:
-    /// - Can be saved to a file
-    /// - Can be sent over a network
-    /// - Can be stored in a database
-    /// - Can be loaded later to make predictions without retraining
-    /// 
-    /// The saved data includes:
-    /// - All the model's settings (like max depth)
-    /// - The entire structure of the decision tree
-    /// - The feature importance scores
-    /// 
-    /// This is like taking a snapshot of the model for future use.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize options
-        writer.Write(_options.MaxDepth);
-        writer.Write(_options.MinSamplesSplit);
-        writer.Write(_options.SignificanceLevel);
-        writer.Write(_options.Seed ?? -1);
-        writer.Write(_options.MinSamplesLeaf);
-
-        // Serialize the tree structure
-        SerializeNode(writer, _root);
-
-        // Serialize feature importances
-        writer.Write(FeatureImportances.Length);
-        foreach (var importance in FeatureImportances)
-        {
-            writer.Write(Convert.ToDouble(importance));
-        }
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the model from a byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized model.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reconstructs the model from a serialized byte array. It reads the options,
-    /// tree structure, and feature importances from the byte array and rebuilds the model.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved model from binary data.
-    /// 
-    /// Deserialization converts the binary data back into a working model:
-    /// - It loads all the model's settings
-    /// - It reconstructs the entire decision tree
-    /// - It restores the feature importance scores
-    /// 
-    /// This allows you to:
-    /// - Use a model that was trained earlier
-    /// - Share models between different applications
-    /// - Deploy models to production environments
-    /// 
-    /// It's like restoring the model from a snapshot so you can use it again without retraining.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        // Deserialize options
-        _options.MaxDepth = reader.ReadInt32();
-        _options.MinSamplesSplit = reader.ReadInt32();
-        _options.SignificanceLevel = reader.ReadDouble();
-        int seed = reader.ReadInt32();
-        _options.Seed = seed == -1 ? null : seed;
-        _options.MinSamplesLeaf = reader.ReadInt32();
-
-        // Deserialize the tree structure
-        _root = DeserializeNode(reader);
-
-        // Deserialize feature importances
-        int importanceCount = reader.ReadInt32();
-        var importances = new T[importanceCount];
-        for (int i = 0; i < importanceCount; i++)
-        {
-            importances[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        FeatureImportances = new Vector<T>(importances);
-    }
-
-    /// <summary>
     /// Serializes a tree node to a binary writer.
     /// </summary>
     /// <param name="writer">The binary writer to write to.</param>
@@ -800,45 +699,4 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
         return node;
     }
 
-    /// <summary>
-    /// Creates a new instance of the conditional inference tree regression model with the same configuration.
-    /// </summary>
-    /// <returns>
-    /// A new instance of <see cref="ConditionalInferenceTreeRegression{T}"/> with the same configuration as the current instance.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new conditional inference tree regression model that has the same configuration 
-    /// as the current instance. It's used for model persistence, cloning, and transferring the model's 
-    /// configuration to new instances.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method makes a fresh copy of the current model with the same settings.
-    /// 
-    /// It's like creating a blueprint copy of your model that can be used to:
-    /// - Save your model's settings
-    /// - Create a new identical model
-    /// - Transfer your model's configuration to another system
-    /// 
-    /// This is useful when you want to:
-    /// - Create multiple similar models
-    /// - Save a model's configuration for later use
-    /// - Reset a model while keeping its settings
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        // Create and return a new instance with the same configuration
-        return new ConditionalInferenceTreeRegression<T>(_options, Regularization);
-    }
-
-    /// <summary>
-    /// Creates a deep copy via serialization to ensure the private _root tree is preserved.
-    /// </summary>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new ConditionalInferenceTreeRegression<T>(_options, Regularization);
-        var data = Serialize();
-        clone.Deserialize(data);
-        return clone;
-    }
 }

@@ -612,40 +612,10 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_backboneChannels);
-        writer.Write(_numClasses);
-        writer.Write(_hiddenDim);
-        writer.Write(ImageSize);
-        writer.Write(_useTextFeatures);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int backboneChannels = reader.ReadInt32();
-        int numClasses = reader.ReadInt32();
-        int hiddenDim = reader.ReadInt32();
-        int imageSize = reader.ReadInt32();
-        bool useTextFeatures = reader.ReadBoolean();
-        bool useNativeMode = reader.ReadBoolean();
 
-        ImageSize = imageSize;
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DocBank<T>(
-            Architecture,
-            ImageSize,
-            _backboneChannels,
-            _numClasses,
-            _hiddenDim,
-            _useTextFeatures);
-    }
 
     #endregion
 

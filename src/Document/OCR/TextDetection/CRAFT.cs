@@ -452,30 +452,10 @@ public partial class CRAFT<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_backboneChannels);
-        writer.Write(_upscaleChannels);
-        writer.Write(ImageSize);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int backboneChannels = reader.ReadInt32();
-        int upscaleChannels = reader.ReadInt32();
-        int imageSize = reader.ReadInt32();
-        bool useNativeMode = reader.ReadBoolean();
 
-        ImageSize = imageSize;
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new CRAFT<T>(Architecture, ImageSize, _backboneChannels, _upscaleChannels);
-    }
 
     #endregion
 

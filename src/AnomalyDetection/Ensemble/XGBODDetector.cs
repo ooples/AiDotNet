@@ -52,6 +52,7 @@ public partial class XGBODDetector<T> : AnomalyDetectorBase<T>
     private readonly int _nEstimators;
     private readonly int _boostingRounds;
     private List<IAnomalyDetector<T>>? _baseDetectors;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _weights; // Simplified boosting weights
     [Buffer]
     private Vector<T>? _featureMean;

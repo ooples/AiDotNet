@@ -126,21 +126,6 @@ public partial class TSDSRModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Lazy-preserving Clone (recipe from #1596): delegate to the predictor's and VAE's own Clone()
-        // instead of rebuild-at-default-scale + SetParameters(GetParameters()), which re-randomizes
-        // the clone's unmaterialized lazy weights.
-        return new TSDSRModel<T>(
-            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner);
-    }
-
-    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

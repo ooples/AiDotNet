@@ -67,7 +67,7 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Exploratory Undersampling for Class-Imbalance Learning", "https://doi.org/10.1109/TSMCB.2008.2007853", Year = 2009, Authors = "Xu-Ying Liu, Jianxin Wu, Zhi-Hua Zhou")]
-public class EasyEnsembleClassifier<T> : ClassifierBase<T>
+public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
 {
 
     // Returned _subClassifiers.Count. Same as its two siblings.
@@ -670,19 +670,6 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model type.
-    /// </summary>
-    /// <returns>New instance with same hyperparameters.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Creates an untrained copy with the same settings.</para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new EasyEnsembleClassifier<T>(_nSubsets, _nEstimatorsPerSubset, _maxDepth,
-            _learningRate, _samplingStrategy, _softVoting);
-    }
-
-    /// <summary>
     /// Gets feature importance based on weak learner usage.
     /// </summary>
     /// <returns>Dictionary mapping feature names to importance scores.</returns>
@@ -716,114 +703,6 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Serializes the trained model state including all AdaBoost sub-classifiers.
-    /// </summary>
-    public override byte[] Serialize()
-    {
-        var modelData = new Dictionary<string, object>
-        {
-            { "NumClasses", NumClasses },
-            { "NumFeatures", NumFeatures },
-            { "TaskType", (int)TaskType },
-            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
-            { "SubClassifierCount", _subClassifiers.Count },
-            { "SoftVoting", _softVoting }
-        };
-
-        for (int i = 0; i < _subClassifiers.Count; i++)
-        {
-            var sub = _subClassifiers[i];
-            var subDict = new Dictionary<string, object>
-            {
-                { "Alphas", sub.Alphas.ToArray() },
-                { "LearnerCount", sub.WeakLearners.Count }
-            };
-
-            for (int j = 0; j < sub.WeakLearners.Count; j++)
-            {
-                var wl = sub.WeakLearners[j];
-                subDict[$"Learner_{j}"] = new Dictionary<string, object>
-                {
-                    { "FeatureIndex", wl.FeatureIndex },
-                    { "Threshold", wl.Threshold },
-                    { "Polarity", wl.Polarity }
-                };
-            }
-
-            modelData[$"Sub_{i}"] = subDict;
-        }
-
-        var modelMetadata = GetModelMetadata();
-        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
-    }
-
-    /// <summary>
-    /// Deserializes the trained model state including all AdaBoost sub-classifiers.
-    /// </summary>
-    public override void Deserialize(byte[] modelData)
-    {
-        var jsonString = Encoding.UTF8.GetString(modelData);
-        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-        if (modelMetadata?.ModelData is null)
-            throw new InvalidOperationException("Deserialization failed: invalid model data.");
-
-        var dataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
-        var dataObj = JsonConvert.DeserializeObject<JObject>(dataString);
-        if (dataObj is null)
-            throw new InvalidOperationException("Deserialization failed: invalid model data.");
-
-        NumClasses = dataObj["NumClasses"]?.ToObject<int>() ?? 0;
-        NumFeatures = dataObj["NumFeatures"]?.ToObject<int>() ?? 0;
-        TaskType = (ClassificationTaskType)(dataObj["TaskType"]?.ToObject<int>() ?? 0);
-        _softVoting = dataObj["SoftVoting"]?.ToObject<bool>() ?? _softVoting;
-
-        var classLabelsToken = dataObj["ClassLabels"];
-        if (classLabelsToken is not null)
-        {
-            var arr = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (arr.Length > 0)
-            {
-                ClassLabels = new Vector<T>(arr.Length);
-                for (int i = 0; i < arr.Length; i++)
-                    ClassLabels[i] = NumOps.FromDouble(arr[i]);
-            }
-        }
-
-        _subClassifiers.Clear();
-        int subCount = dataObj["SubClassifierCount"]?.ToObject<int>() ?? 0;
-        for (int i = 0; i < subCount; i++)
-        {
-            if (dataObj[$"Sub_{i}"] is JObject subJObj)
-            {
-                var sub = new AdaBoostSubClassifier();
-
-                var alphasToken = subJObj["Alphas"];
-                if (alphasToken is not null)
-                {
-                    sub.Alphas = alphasToken.ToObject<List<double>>() ?? [];
-                }
-
-                int learnerCount = subJObj["LearnerCount"]?.ToObject<int>() ?? 0;
-                for (int j = 0; j < learnerCount; j++)
-                {
-                    if (subJObj[$"Learner_{j}"] is JObject wlObj)
-                    {
-                        sub.WeakLearners.Add(new WeakLearner
-                        {
-                            FeatureIndex = wlObj["FeatureIndex"]?.ToObject<int>() ?? 0,
-                            Threshold = wlObj["Threshold"]?.ToObject<double>() ?? 0,
-                            Polarity = wlObj["Polarity"]?.ToObject<int>() ?? 1
-                        });
-                    }
-                }
-
-                _subClassifiers.Add(sub);
-            }
-        }
     }
 
     /// <summary>

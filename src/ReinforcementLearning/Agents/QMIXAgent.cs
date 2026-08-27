@@ -698,52 +698,6 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
 
     public override int FeatureCount => _options.StateSize;
 
-    public override byte[] Serialize()
-    {
-        var parameters = GetParameters();
-        var state = new
-        {
-            Parameters = parameters,
-            NumAgents = _options.NumAgents,
-            StateSize = _options.StateSize,
-            ActionSize = _options.ActionSize
-        };
-        string json = JsonConvert.SerializeObject(state);
-        return System.Text.Encoding.UTF8.GetBytes(json);
-    }
-
-    public override void Deserialize(byte[] data)
-    {
-        if (data is null || data.Length == 0)
-        {
-            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
-        }
-
-        string json = System.Text.Encoding.UTF8.GetString(data);
-        var state = JsonConvert.DeserializeObject<dynamic>(json);
-        if (state is null)
-        {
-            throw new InvalidOperationException("Deserialization returned null");
-        }
-
-        var parameters = JsonConvert.DeserializeObject<Vector<T>>(state.Parameters.ToString());
-        if (parameters is not null)
-        {
-            SetParameters(parameters);
-        }
-    }
-
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clonedAgent = new QMIXAgent<T>(_options, _optimizer);
-
-        // Copy trained network parameters to the cloned agent
-        var currentParams = GetParameters();
-        clonedAgent.SetParameters(currentParams);
-
-        return clonedAgent;
-    }
-
     /// <summary>
     /// Computes gradients of the loss with respect to this agent's parameters, without updating them.
     /// </summary>

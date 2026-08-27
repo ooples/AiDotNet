@@ -62,12 +62,15 @@ public partial class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBas
     private readonly int _compressedDim;
 
     /// <summary>Context encoder: compressedDim → contextDim.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _encoderParams;
 
     /// <summary>Learned attention query vector: contextDim.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _queryVector;
 
     /// <summary>Modulation projection: contextDim → compressedDim.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _modulationParams;
 
     /// <inheritdoc/>

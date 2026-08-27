@@ -55,7 +55,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Long Short-Term Memory", "https://www.bioinf.jku.at/publications/older/2604.pdf", Year = 1997, Authors = "Sepp Hochreiter, Jurgen Schmidhuber")]
-public class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
+public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
 {
     private readonly LSTMOptions _options;
 
@@ -1827,9 +1827,7 @@ public class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// - Load the model later for additional training or making predictions
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-    }
+
 
     /// <summary>
     /// Deserializes LSTM-specific data from a binary reader.
@@ -1854,62 +1852,5 @@ public class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// - Apply a trained model to new data for predictions
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-    }
 
-    /// <summary>
-    /// Creates a new instance of the LSTM Neural Network with the same architecture and configuration.
-    /// </summary>
-    /// <returns>A new LSTM Neural Network instance with the same architecture and configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the LSTM Neural Network with the same architecture and activation
-    /// functions as the current instance. It's used in scenarios where a fresh copy of the model is needed
-    /// while maintaining the same configuration.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a brand new copy of the LSTM network with the same setup.
-    /// 
-    /// Think of it like creating a clone of the network:
-    /// - The new network has the same architecture (structure)
-    /// - It has the same activation functions for all gates
-    /// - It uses the same loss function
-    /// - But it's a completely separate instance with its own parameters
-    /// 
-    /// This is useful when you want to:
-    /// - Create multiple networks with identical settings
-    /// - Compare how different initializations affect learning
-    /// - Set up ensemble learning with multiple similar networks
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Determine which constructor to use based on whether we're using scalar or vector activations
-        if (VectorActivation != null || ForgetGateVectorActivation != null ||
-            InputGateVectorActivation != null || CellGateVectorActivation != null ||
-            OutputGateVectorActivation != null)
-        {
-            // Use the vector activation constructor
-            return new LSTMNeuralNetwork<T>(
-                this.Architecture,
-                LossFunction,
-                VectorActivation,
-                ForgetGateVectorActivation,
-                InputGateVectorActivation,
-                CellGateVectorActivation,
-                OutputGateVectorActivation);
-        }
-        else
-        {
-            // Use the scalar activation constructor
-            return new LSTMNeuralNetwork<T>(
-                this.Architecture,
-                LossFunction,
-                ScalarActivation,
-                ForgetGateActivation,
-                InputGateActivation,
-                CellGateActivation,
-                OutputGateActivation);
-        }
-    }
 }

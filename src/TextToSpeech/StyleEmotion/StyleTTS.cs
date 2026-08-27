@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
     Year = 2022,
     Authors = "Li et al."
 )]
-public class StyleTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class StyleTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly StyleTTSOptions _options;
 
@@ -192,52 +192,9 @@ public class StyleTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.MelChannels);
-        writer.Write(_options.HopSize);
-        writer.Write(_options.HiddenDim);
-        writer.Write(_options.StyleDim);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.NumEncoderLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.NumStyleDiffusionSteps);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.MelChannels = reader.ReadInt32();
-        _options.HopSize = reader.ReadInt32();
-        _options.HiddenDim = reader.ReadInt32();
-        _options.StyleDim = reader.ReadInt32();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.NumEncoderLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.NumStyleDiffusionSteps = reader.ReadInt32();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new StyleTTS<T>(Architecture, mp, _options);
-        return new StyleTTS<T>(Architecture, _options);
-    }
+
 
     private void ThrowIfDisposed()
     {

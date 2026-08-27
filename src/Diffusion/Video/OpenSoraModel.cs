@@ -335,23 +335,6 @@ public partial class OpenSoraModel<T> : VideoDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-                return new OpenSoraModel<T>(
-            dit: (DiTNoisePredictor<T>)_dit.Clone(),
-            temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
-            conditioner: _conditioner,
-            defaultNumFrames: DefaultNumFrames,
-            defaultFPS: DefaultFPS);
-    }
-
     #endregion
 
     #region Metadata

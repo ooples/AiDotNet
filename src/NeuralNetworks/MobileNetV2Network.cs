@@ -69,7 +69,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MobileNetV2: Inverted Residuals and Linear Bottlenecks", "https://arxiv.org/abs/1801.04381", Year = 2018, Authors = "Mark Sandler, Andrew Howard, Menglong Zhu, Andrey Zhmoginov, Liang-Chieh Chen")]
-public class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
+public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly MobileNetV2Options _options;
 
@@ -396,14 +396,7 @@ public class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
     }
 
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_configuration.WidthMultiplier);
-        writer.Write(_configuration.InputChannels);
-        writer.Write(_configuration.InputHeight);
-        writer.Write(_configuration.InputWidth);
-        writer.Write(_configuration.NumClasses);
-    }
+
 
     /// <summary>
     /// Deserializes and validates network-specific configuration data.
@@ -428,61 +421,7 @@ public class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
     /// desired configuration, then call <see cref="NeuralNetworkBase{T}.Load"/> on that instance.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read serialized configuration values
-        var widthMultiplier = (MobileNetV2WidthMultiplier)reader.ReadInt32();
-        var inputChannels = reader.ReadInt32();
-        var inputHeight = reader.ReadInt32();
-        var inputWidth = reader.ReadInt32();
-        var numClasses = reader.ReadInt32();
 
-        // Validate configuration matches - layer structure depends on these values
-        // and cannot be changed after construction
-        if (widthMultiplier != _configuration.WidthMultiplier ||
-            inputChannels != _configuration.InputChannels ||
-            inputHeight != _configuration.InputHeight ||
-            inputWidth != _configuration.InputWidth ||
-            numClasses != _configuration.NumClasses)
-        {
-            throw new InvalidDataException(
-                $"Serialized MobileNetV2 configuration (WidthMultiplier={widthMultiplier}, InputChannels={inputChannels}, " +
-                $"InputHeight={inputHeight}, InputWidth={inputWidth}, NumClasses={numClasses}) does not match current configuration " +
-                $"(WidthMultiplier={_configuration.WidthMultiplier}, InputChannels={_configuration.InputChannels}, " +
-                $"InputHeight={_configuration.InputHeight}, InputWidth={_configuration.InputWidth}, " +
-                $"NumClasses={_configuration.NumClasses}). Create a new network with matching configuration to load this model.");
-        }
-    }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var config = new MobileNetV2Configuration(
-            _configuration.WidthMultiplier,
-            _configuration.NumClasses,
-            _configuration.InputHeight,
-            _configuration.InputWidth,
-            _configuration.InputChannels);
-
-        return new MobileNetV2Network<T>(
-            Architecture,
-            config,
-            lossFunction: _lossFunction,
-            options: new MobileNetV2Options(_options));
-    }
-
-    /// <inheritdoc />
-    public override void Deserialize(byte[] data)
-    {
-        base.Deserialize(data);
-        SetAllLayersEvalMode();
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
-    {
-        return DeepCopy();
-    }
 
     /// <summary>
     /// Gets the layer at the specified index.

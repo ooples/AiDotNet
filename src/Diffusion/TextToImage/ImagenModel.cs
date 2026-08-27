@@ -343,23 +343,6 @@ public partial class ImagenModel<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-                                return new ImagenModel<T>(
-            baseUnet: (UNetNoisePredictor<T>)_baseUnet.Clone(),
-            superRes1Unet: (UNetNoisePredictor<T>)_superRes1Unet.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            dynamicThresholdPercentile: _dynamicThresholdPercentile);
-    }
-
     #endregion
 
     #region Metadata

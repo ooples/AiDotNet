@@ -51,7 +51,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Connectionist Temporal Classification: Labelling Unsegmented Sequence Data with Recurrent Neural Networks", "https://dl.acm.org/doi/10.1145/1143844.1143891", Year = 2006, Authors = "Alex Graves, Santiago Fernandez, Faustino Gomez, Jurgen Schmidhuber")]
-public class CTCDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class CTCDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -226,30 +226,9 @@ public class CTCDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.Variant);
-        w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers);
-        w.Write(_options.NumAttentionHeads); w.Write(_options.FeedForwardDim);
-        w.Write(_options.NumMels); w.Write(_options.VocabSize);
-        w.Write(_options.BeamWidth); w.Write(_options.DropoutRate);
-        w.Write(_options.Language); w.Write(_options.BlankTokenIndex);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.Variant = r.ReadString();
-        _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32();
-        _options.NumAttentionHeads = r.ReadInt32(); _options.FeedForwardDim = r.ReadInt32();
-        _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32();
-        _options.BeamWidth = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
-        _options.Language = r.ReadString(); _options.BlankTokenIndex = r.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new CTCDecoder<T>(Architecture, _options);
+
 
     #endregion
 

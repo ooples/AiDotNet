@@ -46,7 +46,7 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Efficient Sequence Transduction by Jointly Predicting Tokens and Durations", "https://arxiv.org/abs/2304.06795", Year = 2023, Authors = "Xu et al.")]
-public class ParakeetTDT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class ParakeetTDT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly ParakeetTDTOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
@@ -115,15 +115,8 @@ public class ParakeetTDT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "ParakeetTDT-Native" : "ParakeetTDT-ONNX", Description = "Parakeet-TDT: 1.1B Fast Conformer + Token-and-Duration Transducer (NVIDIA, 2024)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
-    protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.PredictionDim); w.Write(_options.JointDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.FeedForwardDim); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.MaxTextLength); w.Write(_options.DropoutRate); w.Write(_options.Language); w.Write(_options.MaxDurationTokens); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.PredictionDim = r.ReadInt32(); _options.JointDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.FeedForwardDim = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.MaxTextLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); _options.MaxDurationTokens = r.ReadInt32(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var copiedOptions = new ParakeetTDTOptions(_options);
-        if (!_useNativeMode && copiedOptions.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new ParakeetTDT<T>(Architecture, mp, copiedOptions);
-        return new ParakeetTDT<T>(Architecture, copiedOptions);
-    }
+
+
 
     /// <summary>
     /// TDT greedy decode with confidence: emits token + skips frames based on duration prediction.

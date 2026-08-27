@@ -58,21 +58,33 @@ public partial class GANomalyDetector<T> : AnomalyDetectorBase<T>
     private readonly double _learningRate;
 
     // Encoder weights
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _encW1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _encB1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _encW2;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _encB2;
 
     // Decoder weights
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _decW1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _decB1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _decW2;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _decB2;
 
     // Re-encoder weights (separate encoder for reconstruction)
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _reEncW1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _reEncB1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _reEncW2;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _reEncB2;
 
     private int _inputDim;

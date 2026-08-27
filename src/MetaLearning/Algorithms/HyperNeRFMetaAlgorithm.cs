@@ -67,6 +67,7 @@ public partial class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBas
     private readonly int _groupSize;
 
     /// <summary>Conditioning MLP weights: (peDim + latentDim) × numGroups.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _conditioningWeights;
 
     /// <summary>Pre-computed positional encodings per group.</summary>

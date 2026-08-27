@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
@@ -1013,117 +1013,12 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(SampleRate);
-        writer.Write(NumMels);
-        writer.Write(_speakingRate);
-        writer.Write(_vocabSize);
-        writer.Write(_embeddingDim);
-        writer.Write(_encoderDim);
-        writer.Write(_decoderDim);
-        writer.Write(_attentionDim);
-        writer.Write(_prenetDim);
-        writer.Write(_postnetEmbeddingDim);
-        writer.Write(_numEncoderConvLayers);
-        writer.Write(_numPostnetConvLayers);
-        writer.Write(_numMelsPerFrame);
-        writer.Write(_maxDecoderSteps);
-        writer.Write(_stopThreshold);
-        writer.Write(_fftSize);
-        writer.Write(_hopLength);
-        writer.Write(_griffinLimIterations);
-        // Added at the tail for backward compatibility with model payloads
-        // written before attentionFilters was persisted.
-        writer.Write(_attentionFilters);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Note: _useNativeMode is readonly and set at construction
-        // Deserialized models operate in native mode
-        _ = reader.ReadBoolean(); // useNativeMode (read but not assigned)
 
-        // Restore audio configuration
-        SampleRate = reader.ReadInt32();
-        NumMels = reader.ReadInt32();
-        _speakingRate = reader.ReadDouble();
-
-        // Restore architecture parameters
-        _vocabSize = reader.ReadInt32();
-        _embeddingDim = reader.ReadInt32();
-        _encoderDim = reader.ReadInt32();
-        _decoderDim = reader.ReadInt32();
-        _attentionDim = reader.ReadInt32();
-        _prenetDim = reader.ReadInt32();
-        _postnetEmbeddingDim = reader.ReadInt32();
-        _numEncoderConvLayers = reader.ReadInt32();
-        _numPostnetConvLayers = reader.ReadInt32();
-        _numMelsPerFrame = reader.ReadInt32();
-        _maxDecoderSteps = reader.ReadInt32();
-        _stopThreshold = reader.ReadDouble();
-        _fftSize = reader.ReadInt32();
-        _hopLength = reader.ReadInt32();
-        _griffinLimIterations = reader.ReadInt32();
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-            _attentionFilters = reader.ReadInt32();
-
-        // Base deserialization has recreated the published Layers list by this
-        // point. Rebind native component views to those restored instances.
-        if (_useNativeMode)
-            BindNativeLayersFromPublishedList();
-    }
-
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _acousticModelPath is not null)
-        {
-            return new Tacotron2Model<T>(
-                Architecture,
-                _acousticModelPath,
-                _vocoderPath,
-                SampleRate,
-                NumMels,
-                _speakingRate,
-                _maxDecoderSteps,
-                _stopThreshold,
-                _fftSize,
-                _hopLength,
-                _griffinLimIterations);
-        }
-        else
-        {
-            return new Tacotron2Model<T>(
-                Architecture,
-                SampleRate,
-                NumMels,
-                _speakingRate,
-                _vocabSize,
-                _embeddingDim,
-                _encoderDim,
-                _decoderDim,
-                _attentionDim,
-                _attentionFilters,
-                _prenetDim,
-                _postnetEmbeddingDim,
-                _numEncoderConvLayers,
-                _numPostnetConvLayers,
-                _numMelsPerFrame,
-                _maxDecoderSteps,
-                _stopThreshold,
-                _fftSize,
-                _hopLength,
-                _griffinLimIterations,
-                lossFunction: _lossFunction);
-        }
-    }
 
     #endregion
 

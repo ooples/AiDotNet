@@ -338,35 +338,9 @@ public partial class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudio
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.InputSampleRate); w.Write(_options.OutputSampleRate);
-        w.Write(_options.UpsampleFactor); w.Write(_options.Variant);
-        w.Write(_options.HiddenDim); w.Write(_options.NumResBlocks);
-        w.Write(_options.NumHeads); w.Write(_options.NumAttentionLayers);
-        w.Write(_options.DropoutRate);
-        w.Write(_options.LearningRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.InputSampleRate = r.ReadInt32(); _options.OutputSampleRate = r.ReadInt32();
-        _options.UpsampleFactor = r.ReadInt32(); _options.Variant = r.ReadString();
-        _options.HiddenDim = r.ReadInt32(); _options.NumResBlocks = r.ReadInt32(); _numBlocks = _options.NumResBlocks;
-        _options.NumHeads = r.ReadInt32(); _options.NumAttentionLayers = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble();
-        _options.LearningRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new AudioSuperResolution<T>(Architecture, mp, _options);
-        return new AudioSuperResolution<T>(Architecture, _options);
-    }
+
 
     #endregion
 

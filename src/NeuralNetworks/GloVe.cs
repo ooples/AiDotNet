@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.Low)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("GloVe: Global Vectors for Word Representation", "https://nlp.stanford.edu/pubs/glove.pdf", Year = 2014, Authors = "Jeffrey Pennington, Richard Socher, Christopher D. Manning")]
-    public class GloVe<T> : TextEmbeddingModelLayoutBase<T>, IEmbeddingModel<T>
+    public partial class GloVe<T> : TextEmbeddingModelLayoutBase<T>, IEmbeddingModel<T>
     {
         private readonly GloVeOptions _options;
 
@@ -508,20 +508,6 @@ namespace AiDotNet.NeuralNetworks
             return Task.FromResult(EmbedBatch(texts));
         }
 
-        /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new GloVe<T>(
-                Architecture,
-                _tokenizer,
-                null, // Fresh optimizer for new instance
-                _vocabSize,
-                _embeddingDimension,
-                _maxTokens,
-                _lossFunction,
-                Convert.ToDouble(MaxGradNorm));
-        }
-
         /// <summary>
         /// Returns technical details and configuration info about the GloVe model.
         /// </summary>
@@ -542,21 +528,9 @@ namespace AiDotNet.NeuralNetworks
             };
         }
 
-        /// <inheritdoc/>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            writer.Write(_vocabSize);
-            writer.Write(_embeddingDimension);
-            writer.Write(_maxTokens);
-        }
 
-        /// <inheritdoc/>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            _vocabSize = reader.ReadInt32();
-            _embeddingDimension = reader.ReadInt32();
-            _maxTokens = reader.ReadInt32();
-        }
+
+
 
         #endregion
     }

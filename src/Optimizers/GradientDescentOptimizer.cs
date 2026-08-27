@@ -29,7 +29,7 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
+public partial class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <inheritdoc/>
     /// <remarks>
@@ -369,79 +369,6 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _gdOptions;
-    }
-
-    /// <summary>
-    /// Converts the current state of the Gradient Descent optimizer into a byte array for storage or transmission.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method serializes both the base class data and the Gradient Descent-specific options.
-    /// It uses a combination of binary serialization for efficiency and JSON serialization for flexibility.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like packing up your hiking gear and writing down your plan:
-    /// 
-    /// - It saves all the important information about the optimizer's current state
-    /// - This saved information can be used later to recreate the optimizer exactly as it is now
-    /// - It's useful for saving your progress or sharing your optimizer setup with others
-    /// 
-    /// Think of it as creating a detailed snapshot of your hiking journey that you can use to continue 
-    /// from the same point later or allow someone else to follow your exact path.
-    /// </para>
-    /// </remarks>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    public override byte[] Serialize()
-    {
-        using MemoryStream ms = new MemoryStream();
-        using BinaryWriter writer = new BinaryWriter(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize GradientDescentOptions
-        string optionsJson = JsonConvert.SerializeObject(_gdOptions);
-        writer.Write(optionsJson);
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Restores the state of the Gradient Descent optimizer from a byte array.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method deserializes both the base class data and the Gradient Descent-specific options
-    /// from a byte array, typically created by the Serialize method. It reconstructs the optimizer's
-    /// state, including all settings and progress information.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like unpacking your hiking gear and reading your saved plan:
-    /// 
-    /// - It takes the saved information (byte array) and uses it to set up the optimizer
-    /// - This allows you to continue optimizing from where you left off, or use someone else's setup
-    /// - It's the reverse process of Serialize, turning the saved data back into a working optimizer
-    /// 
-    /// Imagine you're starting a hike using a very detailed guide someone else wrote. This method
-    /// helps you set everything up exactly as described in that guide.
-    /// </para>
-    /// </remarks>
-    /// <param name="data">The byte array containing the serialized optimizer state.</param>
-    /// <exception cref="InvalidOperationException">Thrown when deserialization of optimizer options fails.</exception>
-    public override void Deserialize(byte[] data)
-    {
-        using MemoryStream ms = new MemoryStream(data);
-        using BinaryReader reader = new BinaryReader(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize GradientDescentOptions
-        string optionsJson = reader.ReadString();
-        _gdOptions = JsonConvert.DeserializeObject<GradientDescentOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-            ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
     }
 
     /// <summary>

@@ -131,26 +131,44 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastProjectedInput;
+    [Scratch]
     private Tensor<T>? _lastHiddenStatesReal;
+    [Scratch]
     private Tensor<T>? _lastHiddenStatesImag;
+    [Scratch]
     private Tensor<T>? _lastScanOutputReal;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _aRealGradient;
+    [Scratch]
     private Tensor<T>? _aImagGradient;
+    [Scratch]
     private Tensor<T>? _bRealGradient;
+    [Scratch]
     private Tensor<T>? _bImagGradient;
+    [Scratch]
     private Tensor<T>? _cRealGradient;
+    [Scratch]
     private Tensor<T>? _cImagGradient;
+    [Scratch]
     private Tensor<T>? _dParamGradient;
+    [Scratch]
     private Tensor<T>? _logDeltaGradient;
+    [Scratch]
     private Tensor<T>? _inputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _inputProjectionBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />
@@ -171,6 +189,9 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
     /// are 64 (as in the S5 paper) for a good balance of expressivity and efficiency.</para>
     /// </remarks>
     public int StateDimension => _stateDimension;
+
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
 
     /// <summary>
     /// Creates a new S5 (Simplified State Space) layer.
@@ -201,6 +222,7 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)
@@ -420,6 +442,7 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
     }
 
     private T[,,]? _cachedKernel = null;
+    [Scratch]
     private Vector<T>? _cachedDelta = null;
 
     private Tensor<T> MIMOParallelScan(Tensor<T> u, int batchSize, int seqLen)

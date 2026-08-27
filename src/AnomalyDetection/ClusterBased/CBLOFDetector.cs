@@ -51,6 +51,7 @@ public partial class CBLOFDetector<T> : AnomalyDetectorBase<T>
     private readonly int _nClusters;
     private readonly double _alpha;
     private readonly int _beta;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _centroids;
     private int[]? _clusterSizes;
     private bool[]? _isLargeCluster;

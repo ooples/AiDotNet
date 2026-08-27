@@ -465,30 +465,6 @@ public partial class Zero123Model<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Lazy-preserving Clone (recipe from #1596): inject the UNet's and VAE's own lazy-preserving
-        // Clone() so the clone's UNet/VAE are MATERIALIZED targets. The default ctor builds a lazy
-        // foundation-scale UNet whose weights only allocate on first forward, so the old
-        // SetParameters(GetParameters()) had no tensors to write into and the clone re-randomized.
-        // The image/pose encoders are eager (allocated in their ctors), so SetParameters still copies
-        // their trained values correctly.
-        var clone = new Zero123Model<T>(
-            unet: (UNetNoisePredictor<T>)_unet.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            seed: null);
-
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
-    }
-
     #endregion
 }
 

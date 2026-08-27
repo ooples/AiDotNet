@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Deep Octonion Networks", "https://arxiv.org/abs/1903.08478", Year = 2019, Authors = "Jiasong Wu et al.")]
-public class OctonionNeuralNetwork<T> : VectorModelLayoutBase<T>
+public partial class OctonionNeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly OctonionNeuralNetworkOptions _options;
 
@@ -310,54 +310,9 @@ public class OctonionNeuralNetwork<T> : VectorModelLayoutBase<T>
         };
     }
 
-    /// <summary>
-    /// Serializes octonion neural network-specific data to a binary writer.
-    /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_optimizer.GetType().FullName ?? "AdamOptimizer");
-        writer.Write(_lossFunction.GetType().FullName ?? "MeanSquaredErrorLoss");
-    }
 
-    /// <summary>
-    /// Deserializes octonion neural network-specific data from a binary reader.
-    /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read type names for forward compatibility and validation
-        string optimizerType = reader.ReadString();
-        string lossFunctionType = reader.ReadString();
 
-        // Note: Optimizer and loss function instances should be provided during construction.
-        // The type names are read for data integrity verification but new instances
-        // need to be created via the constructor or a dedicated factory method.
-        _ = optimizerType;
-        _ = lossFunctionType;
-    }
 
-    /// <summary>
-    /// Creates a new instance of the OctonionNeuralNetwork with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This creates a fresh network instance with a new optimizer to avoid state conflicts.
-    /// Sharing an optimizer instance between networks would cause training issues since
-    /// the optimizer maintains internal state (momentum, adaptive learning rates, etc.)
-    /// that is specific to each network's parameters.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Pass null for optimizer to create a fresh optimizer for the new instance.
-        // Sharing optimizer instances between networks causes state conflicts since
-        // optimizers maintain internal state (momentum, etc.) tied to specific parameters.
-        return new OctonionNeuralNetwork<T>(
-            Architecture,
-            null, // Create fresh optimizer - don't share _optimizer
-            _lossFunction,
-            Convert.ToDouble(MaxGradNorm),
-            new OctonionNeuralNetworkOptions(_options));
-    }
 
     /// <summary>
     /// Indicates whether this network supports training.

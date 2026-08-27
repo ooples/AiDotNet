@@ -163,6 +163,72 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
     }
 
     /// <summary>
+    /// Projects an already weighted directed graph onto a DAG by retaining the strongest edges
+    /// whose insertion does not close a directed cycle.
+    /// </summary>
+    /// <remarks>
+    /// Pairwise direction learners can orient every pair consistently in isolation while the
+    /// combined orientations still form a longer cycle. Sorting by absolute learned strength and
+    /// rejecting only cycle-closing edges preserves the strongest evidence and supplies the DAG
+    /// guarantee advertised by the common causal-graph contract.
+    /// </remarks>
+    protected Matrix<T> ProjectWeightedGraphToDag(Matrix<T> weights)
+    {
+        int d = weights.Rows;
+        var candidates = new List<(int From, int To, T Weight, double Strength)>();
+        for (int from = 0; from < d; from++)
+        {
+            for (int to = 0; to < d; to++)
+            {
+                if (from == to) continue;
+                T weight = weights[from, to];
+                double strength = Math.Abs(NumOps.ToDouble(weight));
+                if (strength > 0.0 && !double.IsNaN(strength) && !double.IsInfinity(strength))
+                    candidates.Add((from, to, weight, strength));
+            }
+        }
+
+        candidates.Sort((left, right) =>
+        {
+            int byStrength = right.Strength.CompareTo(left.Strength);
+            if (byStrength != 0) return byStrength;
+            int byFrom = left.From.CompareTo(right.From);
+            return byFrom != 0 ? byFrom : left.To.CompareTo(right.To);
+        });
+
+        var result = new Matrix<T>(d, d);
+        var adjacency = new List<int>[d];
+        for (int i = 0; i < d; i++) adjacency[i] = new List<int>();
+
+        bool CanReach(int start, int target)
+        {
+            var seen = new bool[d];
+            var pending = new Stack<int>();
+            pending.Push(start);
+            while (pending.Count > 0)
+            {
+                int node = pending.Pop();
+                if (node == target) return true;
+                if (seen[node]) continue;
+                seen[node] = true;
+                for (int i = 0; i < adjacency[node].Count; i++)
+                    pending.Push(adjacency[node][i]);
+            }
+            return false;
+        }
+
+        foreach (var candidate in candidates)
+        {
+            // Adding from->to closes a cycle exactly when to already reaches from.
+            if (CanReach(candidate.To, candidate.From)) continue;
+            result[candidate.From, candidate.To] = candidate.Weight;
+            adjacency[candidate.From].Add(candidate.To);
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// Builds the final weighted adjacency matrix from learned edge probabilities and covariance.
     /// Uses learned P for directionality when training converged, falls back to asymmetric
     /// covariance ratio for directionality otherwise.

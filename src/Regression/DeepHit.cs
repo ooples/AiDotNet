@@ -65,7 +65,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("DeepHit: A Deep Learning Approach to Survival Analysis with Competing Risks", "https://ojs.aaai.org/index.php/AAAI/article/view/11842", Year = 2018, Authors = "Changhee Lee, William R. Zame, Jinsung Yoon, Mihaela van der Schaar")]
-public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
+public partial class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>
     /// Shared network weights.
@@ -80,11 +80,13 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Cause-specific network weights (one list per cause).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private List<List<Matrix<T>>> _causeWeights;
 
     /// <summary>
     /// Cause-specific network biases (one list per cause).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private List<List<Vector<T>>> _causeBiases;
 
     /// <summary>
@@ -1576,65 +1578,6 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         };
     }
 
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Options
-        writer.Write(_options.NumTimeBins);
-        writer.Write(_effectiveTimeBins);
-        writer.Write(_options.NumSharedLayers);
-        writer.Write(_options.NumCauseLayers);
-        writer.Write(_options.HiddenLayerSize);
-        writer.Write(_options.NumRisks);
-        writer.Write(_options.Activation.GetType().AssemblyQualifiedName ?? _options.Activation.GetType().FullName ?? _options.Activation.GetType().Name);
-        writer.Write(_numFeatures);
-
-        // Time bins
-        writer.Write(_timeBinEdges?.Length ?? 0);
-        if (_timeBinEdges != null)
-        {
-            foreach (var t in _timeBinEdges)
-            {
-                writer.Write(NumOps.ToDouble(t));
-            }
-        }
-
-        // Shared weights and biases
-        SerializeLayerList(writer, _sharedWeights, _sharedBiases);
-
-        // Cause-specific weights and biases
-        for (int k = 0; k < _options.NumRisks; k++)
-        {
-            SerializeLayerList(writer, _causeWeights[k], _causeBiases[k]);
-        }
-
-        // Output weights and biases
-        for (int k = 0; k < _options.NumRisks; k++)
-        {
-            SerializeWeights(writer, _outputWeights[k]);
-            SerializeBiases(writer, _outputBiases[k]);
-        }
-
-        // Feature standardization, which replaces the OLS coefficient block written here before. It is
-        // part of the fitted model: a restored network fed raw features would see inputs on a completely
-        // different scale from the ones it was trained on.
-        writer.Write(_featureMean is not null && _featureStd is not null);
-        if (_featureMean is not null && _featureStd is not null)
-        {
-            SerializeBiases(writer, _featureMean);
-            SerializeBiases(writer, _featureStd);
-        }
-
-        return ms.ToArray();
-    }
-
     private void SerializeLayerList(BinaryWriter writer, List<Matrix<T>> weights, List<Vector<T>> biases)
     {
         writer.Write(weights.Count);
@@ -1664,81 +1607,6 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         for (int i = 0; i < b.Length; i++)
         {
             writer.Write(NumOps.ToDouble(b[i]));
-        }
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        int baseLen = reader.ReadInt32();
-        base.Deserialize(reader.ReadBytes(baseLen));
-
-        _options.NumTimeBins = reader.ReadInt32();
-        _effectiveTimeBins = reader.ReadInt32();
-        _options.NumSharedLayers = reader.ReadInt32();
-        _options.NumCauseLayers = reader.ReadInt32();
-        _options.HiddenLayerSize = reader.ReadInt32();
-        _options.NumRisks = reader.ReadInt32();
-        string activationTypeName = reader.ReadString();
-        var activationType = Type.GetType(activationTypeName);
-        if (activationType is not null
-            && typeof(IActivationFunction<T>).IsAssignableFrom(activationType)
-            && activationType.Namespace is not null
-            && activationType.Namespace.StartsWith("AiDotNet.", StringComparison.Ordinal))
-        {
-            _options.Activation = (IActivationFunction<T>)(Activator.CreateInstance(activationType) ?? new ReLUActivation<T>());
-        }
-        else
-        {
-            _options.Activation = new ReLUActivation<T>();
-        }
-        _numFeatures = reader.ReadInt32();
-
-        int timeBinLen = reader.ReadInt32();
-        if (timeBinLen > 0)
-        {
-            _timeBinEdges = new Vector<T>(timeBinLen);
-            for (int i = 0; i < timeBinLen; i++)
-            {
-                _timeBinEdges[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-
-        // Shared weights and biases
-        (_sharedWeights, _sharedBiases) = DeserializeLayerList(reader);
-
-        // Cause-specific weights and biases
-        _causeWeights = [];
-        _causeBiases = [];
-        for (int k = 0; k < _options.NumRisks; k++)
-        {
-            var (cw, cb) = DeserializeLayerList(reader);
-            _causeWeights.Add(cw);
-            _causeBiases.Add(cb);
-        }
-
-        // Output weights and biases
-        _outputWeights = [];
-        _outputBiases = [];
-        for (int k = 0; k < _options.NumRisks; k++)
-        {
-            _outputWeights.Add(DeserializeWeights(reader));
-            _outputBiases.Add(DeserializeBiases(reader));
-        }
-
-        // Feature standardization (see Serialize).
-        if (reader.ReadBoolean())
-        {
-            _featureMean = DeserializeBiases(reader);
-            _featureStd = DeserializeBiases(reader);
-        }
-        else
-        {
-            _featureMean = null;
-            _featureStd = null;
         }
     }
 
@@ -1785,18 +1653,5 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         return b;
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new DeepHit<T>(_options, Regularization);
-    }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new DeepHit<T>(_options, Regularization);
-        clone.Deserialize(Serialize());
-        return clone;
     }
 }

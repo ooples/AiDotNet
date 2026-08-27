@@ -867,28 +867,7 @@ finally
     /// - Preserve the memory of facts the network has learned
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Save memory configuration
-        writer.Write(_memorySize);
-        writer.Write(_embeddingSize);
 
-        // Save memory matrix contents
-        for (int i = 0; i < _memorySize; i++)
-        {
-            for (int j = 0; j < _embeddingSize; j++)
-            {
-                writer.Write(Convert.ToDouble(_memory[i, j]));
-            }
-        }
-
-        // Save each layer
-        writer.Write(Layers.Count);
-        foreach (var layer in Layers)
-        {
-            layer.Serialize(writer);
-        }
-    }
 
     /// <summary>
     /// Deserializes memory network-specific data from a binary reader.
@@ -914,39 +893,7 @@ finally
     /// - Restore the memory of facts the network had previously learned
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Load memory configuration
-        int memorySize = reader.ReadInt32();
-        int embeddingSize = reader.ReadInt32();
 
-        // Verify configuration matches
-        if (memorySize != _memorySize || embeddingSize != _embeddingSize)
-        {
-            throw new InvalidOperationException("Memory configuration in saved model does not match current configuration");
-        }
-
-        // Load memory matrix contents
-        for (int i = 0; i < _memorySize; i++)
-        {
-            for (int j = 0; j < _embeddingSize; j++)
-            {
-                _memory[i, j] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-
-        // Load layers
-        int layerCount = reader.ReadInt32();
-        if (layerCount != Layers.Count)
-        {
-            throw new InvalidOperationException("Layer count in saved model does not match current model");
-        }
-
-        for (int i = 0; i < layerCount; i++)
-        {
-            Layers[i].Deserialize(reader);
-        }
-    }
 
     /// <summary>
     /// Stores a new fact in memory.
@@ -1037,38 +984,5 @@ finally
     public Tensor<T> AnswerQuestion(Tensor<T> question)
     {
         return Predict(question);
-    }
-
-    /// <summary>
-    /// Creates a new instance of the Memory Network with the same architecture and configuration.
-    /// </summary>
-    /// <returns>A new Memory Network instance with the same architecture and configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the Memory Network with the same architecture and memory configuration
-    /// as the current instance. It's used in scenarios where a fresh copy of the model is needed
-    /// while maintaining the same configuration.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a brand new copy of the Memory Network with the same setup.
-    /// 
-    /// Think of it like creating a clone of the network:
-    /// - The new network has the same architecture (structure)
-    /// - It has the same memory size and embedding size
-    /// - But it's a completely separate instance with its own memory matrix
-    /// - The memory starts fresh (empty) rather than copying the current memory contents
-    /// 
-    /// This is useful when you want to:
-    /// - Train multiple versions of the same memory network architecture
-    /// - Start with a clean memory but the same network structure
-    /// - Compare how different training approaches affect learning with the same configuration
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Create a new instance of MemoryNetwork with the same architecture and memory configuration
-        return new MemoryNetwork<T>(
-            this.Architecture,
-            _memorySize,
-            _embeddingSize);
     }
 }

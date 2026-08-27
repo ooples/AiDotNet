@@ -45,7 +45,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("NVIDIA Canary: An Open Multilingual Large ASR Model", "https://doi.org/10.48550/arXiv.2404.02592", Year = 2024, Authors = "Ankur Rekesh, Taejin Park, Subhankar Ghosh, Kolya Malkin, Samuel Kriman, Somshubra Majumdar, Boris Ginsburg")]
-public class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -251,39 +251,9 @@ public class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.Variant);
-        w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers);
-        w.Write(_options.DecoderDim); w.Write(_options.NumDecoderLayers);
-        w.Write(_options.NumHeads); w.Write(_options.SubsamplingFactor);
-        w.Write(_options.VocabSize); w.Write(_options.BeamWidth);
-        w.Write(_options.MaxOutputTokens); w.Write(_options.TargetLanguage);
-        w.Write(_options.SupportedLanguages.Length);
-        foreach (var l in _options.SupportedLanguages) w.Write(l);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.Variant = r.ReadString();
-        _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32();
-        _options.DecoderDim = r.ReadInt32(); _options.NumDecoderLayers = r.ReadInt32();
-        _options.NumHeads = r.ReadInt32(); _options.SubsamplingFactor = r.ReadInt32();
-        _options.VocabSize = r.ReadInt32(); _options.BeamWidth = r.ReadInt32();
-        _options.MaxOutputTokens = r.ReadInt32(); _options.TargetLanguage = r.ReadString();
-        int numLangs = r.ReadInt32();
-        var langs = new string[numLangs]; for (int i = 0; i < numLangs; i++) langs[i] = r.ReadString();
-        _options.SupportedLanguages = langs;
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new Canary<T>(Architecture, _options);
+
 
     #endregion
 

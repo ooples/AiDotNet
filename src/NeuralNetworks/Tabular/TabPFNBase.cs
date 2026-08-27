@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using System.Collections.Generic;
@@ -37,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class TabPFNBase<T> : IParameterSource<T>
+public abstract partial class TabPFNBase<T> : IParameterSource<T>
 {
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
@@ -51,6 +52,7 @@ public abstract class TabPFNBase<T> : IParameterSource<T>
     // Input encoding
     private readonly FullyConnectedLayer<T> _featureEncoder;
     private readonly FullyConnectedLayer<T>[] _categoricalEncoders;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _positionalEncoding;
 
     // Transformer backbone
@@ -65,8 +67,11 @@ public abstract class TabPFNBase<T> : IParameterSource<T>
     private Tensor<T>? _contextLabels;
 
     // Cached values
+    [Scratch]
     private Tensor<T>? _encodedInputCache;
+    [Scratch]
     private Tensor<T>? _transformerOutputCache;
+    [Scratch]
     private Tensor<T>? _mlpOutputCache;
 
     /// <summary>
@@ -108,7 +113,7 @@ public abstract class TabPFNBase<T> : IParameterSource<T>
     /// </para>
     /// </remarks>
     protected virtual IEnumerable<ILayer<T>> GetExtraTrainableLayers()
-        => System.Linq.Enumerable.Empty<ILayer<T>>();
+        => AiDotNet.Models.Parameters.GeneratedParameterDiscovery.EnumerateDerivedLayers<T>(this, typeof(TabPFNBase<T>));
 
     /// <summary>
     /// The single ordered traversal of this model's parameter-bearing components.
@@ -544,7 +549,7 @@ public abstract class TabPFNBase<T> : IParameterSource<T>
     /// <summary>
     /// TabPFN-specific transformer block with causal masking for in-context learning.
     /// </summary>
-    private sealed class TabPFNTransformerBlock<TBlock> : IParameterSource<TBlock>
+    private sealed partial class TabPFNTransformerBlock<TBlock> : IParameterSource<TBlock>
     {
         private static readonly INumericOperations<TBlock> NumOps = MathHelper.GetNumericOperations<TBlock>();
 
@@ -555,9 +560,13 @@ public abstract class TabPFNBase<T> : IParameterSource<T>
         private readonly double _dropoutRate;
 
         // Attention weights
+        [AiDotNet.Attributes.TrainableParameter]
         private Tensor<TBlock> _queryWeights;
+        [AiDotNet.Attributes.TrainableParameter]
         private Tensor<TBlock> _keyWeights;
+        [AiDotNet.Attributes.TrainableParameter]
         private Tensor<TBlock> _valueWeights;
+        [AiDotNet.Attributes.TrainableParameter]
         private Tensor<TBlock> _outputWeights;
 
         // Attention gradients
@@ -575,7 +584,9 @@ public abstract class TabPFNBase<T> : IParameterSource<T>
         private readonly LayerNormalizationLayer<TBlock> _norm2;
 
         // Cached values
+        [Scratch]
         private Tensor<TBlock>? _inputCache;
+        [Scratch]
         private Tensor<TBlock>? _attentionOutputCache;
 
         /// <summary>

@@ -877,25 +877,6 @@ public partial class ShapEModel<T> : ThreeDDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Clone the predictor to preserve trained weights
-                return new ShapEModel<T>(
-            options: null,
-            scheduler: null,
-            latentPredictor: (DiTNoisePredictor<T>)_latentPredictor.Clone(),
-            conditioner: _conditioner,
-            useSDFMode: _useSDFMode,
-            defaultPointCount: DefaultPointCount);
-    }
-
     #endregion
 
     #region Metadata

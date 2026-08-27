@@ -37,6 +37,7 @@ namespace AiDotNet.Diffusion.Schedulers;
 [PipelineStage(PipelineStage.Training)]
 public sealed class LMSDiscreteScheduler<T> : NoiseSchedulerBase<T>
 {
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _sigmas;
     private readonly List<Vector<T>> _derivativeHistory = [];
     private readonly int _order;

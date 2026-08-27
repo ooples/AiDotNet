@@ -1,4 +1,4 @@
-﻿global using AiDotNet.LossFunctions;
+global using AiDotNet.LossFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Reducing the Dimensionality of Data with Neural Networks", "https://doi.org/10.1126/science.1127647")]
-public class Autoencoder<T> : VectorModelLayoutBase<T>, IAuxiliaryLossLayer<T>
+public partial class Autoencoder<T> : VectorModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly AutoencoderOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -958,13 +958,7 @@ public class Autoencoder<T> : VectorModelLayoutBase<T>, IAuxiliaryLossLayer<T>
     /// It's like writing down a detailed recipe so you can make the same dish again in the future.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(EncodedSize);
-        writer.Write(Convert.ToDouble(_learningRate));
-        writer.Write(_epochs);
-        writer.Write(_batchSize);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data for the Autoencoder.
@@ -987,49 +981,5 @@ public class Autoencoder<T> : VectorModelLayoutBase<T>, IAuxiliaryLossLayer<T>
     /// It's like following a detailed recipe to recreate a dish exactly as it was made before.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        EncodedSize = reader.ReadInt32();
-        _learningRate = NumOps.FromDouble(reader.ReadDouble());
-        _epochs = reader.ReadInt32();
-        _batchSize = reader.ReadInt32();
-    }
 
-    /// <summary>
-    /// Creates a new instance of the autoencoder model.
-    /// </summary>
-    /// <returns>A new instance of the autoencoder model with the same configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the autoencoder model with the same configuration as the current instance.
-    /// It is used internally during serialization/deserialization processes to create a fresh instance that can be populated
-    /// with the serialized data. The new instance will have the same architecture, learning rate, epochs, batch size,
-    /// and loss function as the original.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a copy of the model structure without copying the learned data.
-    /// 
-    /// Think of it like creating a blueprint of the autoencoder:
-    /// - It copies the same overall design (how many layers, how they're arranged)
-    /// - It preserves settings like learning rate and batch size
-    /// - It keeps the same encoded size (compression level)
-    /// - But it doesn't copy any of the learned knowledge yet
-    /// 
-    /// This is primarily used when saving or loading models, creating a framework that the saved parameters
-    /// can be loaded into later.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var clone = new Autoencoder<T>(
-            Architecture,
-            _epochs,
-            _batchSize,
-            lossFunction: _lossFunction
-        );
-        // Carry sparse-training configuration into the new instance
-        clone.UseAuxiliaryLoss = UseAuxiliaryLoss;
-        clone.AuxiliaryLossWeight = AuxiliaryLossWeight;
-        clone._sparsityParameter = _sparsityParameter;
-        return clone;
-    }
 }

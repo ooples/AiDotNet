@@ -561,127 +561,6 @@ public partial class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         };
     }
 
-    /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_cnnChannels);
-        writer.Write(_rnnHiddenSize);
-        writer.Write(_rnnLayers);
-        writer.Write(ImageSize);
-        writer.Write(MaxSequenceLength);
-        writer.Write(_charset);
-        writer.Write(_useNativeMode);
-        writer.Write(_onnxModelPath ?? string.Empty);
-    }
-
-    /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int cnnChannels = reader.ReadInt32();
-        int rnnHiddenSize = reader.ReadInt32();
-        int rnnLayers = reader.ReadInt32();
-        int imageSize = reader.ReadInt32();
-        int maxSeqLen = reader.ReadInt32();
-        string charset = reader.ReadString();
-        bool useNativeMode = reader.ReadBoolean();
-        string? onnxModelPath = null;
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-        {
-            onnxModelPath = reader.ReadString();
-        }
-
-        _cnnChannels = cnnChannels;
-        _rnnHiddenSize = rnnHiddenSize;
-        _rnnLayers = rnnLayers;
-        _charset = charset;
-        _useNativeMode = useNativeMode;
-        _onnxModelPath = string.IsNullOrWhiteSpace(onnxModelPath) ? null : onnxModelPath;
-
-        ImageSize = imageSize;
-        base.MaxSequenceLength = maxSeqLen;
-
-        // Native-mode layers (with their trained weights) are already reconstructed by
-        // the base DeserializeInternalUnchecked before this override runs, so do NOT
-        // clear + re-initialize them here — that would discard the deserialized weights
-        // and leave the model randomly initialized. (In ONNX mode InitializeLayers is a
-        // no-op, so dropping the call changes nothing there.)
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode)
-        {
-            string onnxModelPath = _onnxModelPath ?? throw new InvalidOperationException(
-                "Missing ONNX model path required to clone CRNN instance.");
-            if (string.IsNullOrWhiteSpace(onnxModelPath))
-            {
-                throw new InvalidOperationException(
-                    "Missing ONNX model path required to clone CRNN instance.");
-            }
-
-            return new CRNN<T>(
-                Architecture,
-                onnxModelPath,
-                ImageSize,
-                MaxSequenceLength,
-                _cnnChannels,
-                _rnnHiddenSize,
-                _rnnLayers,
-                _charset,
-                optimizer: null,
-                lossFunction: LossFunction);
-        }
-
-        return new CRNN<T>(
-            Architecture,
-            ImageSize,
-            MaxSequenceLength,
-            _cnnChannels,
-            _rnnHiddenSize,
-            _rnnLayers,
-            _charset,
-            optimizer: null,
-            lossFunction: LossFunction);
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// CRNN's convolutional and dense layers resolve their parameter shapes on
-    /// the first image forward. Recreate that resolved state before copying so
-    /// a clone cannot silently retain freshly initialized lazy weights.
-    /// </remarks>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        var copy = (CRNN<T>)CreateNewInstance();
-        if (copy.Layers.Count != Layers.Count)
-            throw new InvalidOperationException("CRNN clone layer topology does not match the source model.");
-
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            var source = Layers[i];
-            var destination = copy.Layers[i];
-            int[] inputShape = source.GetInputShape();
-            if (destination is LayerBase<T> destinationBase &&
-                !destinationBase.IsShapeResolved &&
-                inputShape.Length > 0 &&
-                Array.TrueForAll(inputShape, dimension => dimension > 0))
-            {
-                destinationBase.ResolveFromShape(inputShape);
-            }
-
-            destination.SetParameters(source.GetParameters());
-            if (source is ILayerSerializationExtras<T> sourceExtras &&
-                destination is ILayerSerializationExtras<T> destinationExtras)
-            {
-                destinationExtras.SetExtraParameters(sourceExtras.GetExtraParameters());
-            }
-        }
-
-        copy.SetTrainingMode(false);
-        return copy;
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation
@@ -758,7 +637,8 @@ public partial class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         }
     }
 
-    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+
 
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights

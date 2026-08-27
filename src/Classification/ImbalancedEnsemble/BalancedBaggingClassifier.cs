@@ -76,7 +76,7 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
     "https://doi.org/10.1007/s10115-008-0180-z",
     Year = 2009,
     Authors = "Shohei Hido, Hisashi Kashima")]
-public class BalancedBaggingClassifier<T> : ClassifierBase<T>
+public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
 {
 
     // Returned _baseClassifiers.Count -- the NUMBER of estimators, not a parameter. No restore
@@ -566,19 +566,6 @@ public class BalancedBaggingClassifier<T> : ClassifierBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model type.
-    /// </summary>
-    /// <returns>New instance with same hyperparameters.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Creates an untrained copy with the same settings.</para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new BalancedBaggingClassifier<T>(_nEstimators, _maxDepth, _minSamplesSplit,
-            _minSamplesLeaf, _samplingRatio, _bootstrapMinority);
-    }
-
-    /// <summary>
     /// Gets feature importance based on split usage.
     /// </summary>
     /// <returns>Dictionary mapping feature names to importance scores.</returns>
@@ -624,72 +611,6 @@ public class BalancedBaggingClassifier<T> : ClassifierBase<T>
         importance[node.FeatureIndex] += 1;
         CountFeatureUsage(node.LeftChild, importance);
         CountFeatureUsage(node.RightChild, importance);
-    }
-
-    /// <summary>
-    /// Serializes the trained model state including all base classifier trees.
-    /// </summary>
-    public override byte[] Serialize()
-    {
-        var modelData = new Dictionary<string, object>
-        {
-            { "NumClasses", NumClasses },
-            { "NumFeatures", NumFeatures },
-            { "TaskType", (int)TaskType },
-            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
-            { "ClassifierCount", _baseClassifiers.Count }
-        };
-
-        for (int i = 0; i < _baseClassifiers.Count; i++)
-        {
-            modelData[$"Classifier_{i}"] = SerializeTreeNode(_baseClassifiers[i]);
-        }
-
-        var modelMetadata = GetModelMetadata();
-        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
-    }
-
-    /// <summary>
-    /// Deserializes the trained model state including all base classifier trees.
-    /// </summary>
-    public override void Deserialize(byte[] modelData)
-    {
-        var jsonString = Encoding.UTF8.GetString(modelData);
-        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-        if (modelMetadata?.ModelData is null)
-            throw new InvalidOperationException("Deserialization failed: invalid model data.");
-
-        var dataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
-        var dataObj = JsonConvert.DeserializeObject<JObject>(dataString);
-        if (dataObj is null)
-            throw new InvalidOperationException("Deserialization failed: invalid model data.");
-
-        NumClasses = dataObj["NumClasses"]?.ToObject<int>() ?? 0;
-        NumFeatures = dataObj["NumFeatures"]?.ToObject<int>() ?? 0;
-        TaskType = (ClassificationTaskType)(dataObj["TaskType"]?.ToObject<int>() ?? 0);
-
-        var classLabelsToken = dataObj["ClassLabels"];
-        if (classLabelsToken is not null)
-        {
-            var arr = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (arr.Length > 0)
-            {
-                ClassLabels = new Vector<T>(arr.Length);
-                for (int i = 0; i < arr.Length; i++)
-                    ClassLabels[i] = NumOps.FromDouble(arr[i]);
-            }
-        }
-
-        _baseClassifiers.Clear();
-        int count = dataObj["ClassifierCount"]?.ToObject<int>() ?? 0;
-        for (int i = 0; i < count; i++)
-        {
-            if (dataObj[$"Classifier_{i}"] is JObject jObj)
-            {
-                _baseClassifiers.Add(DeserializeTreeNode(jObj));
-            }
-        }
     }
 
     private static Dictionary<string, object?> SerializeTreeNode(DecisionTreeNode node)

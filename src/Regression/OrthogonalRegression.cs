@@ -50,7 +50,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Total Least Squares and Errors-in-Variables Modeling", "https://doi.org/10.1007/978-94-017-3552-0")]
-public class OrthogonalRegression<T> : RegressionBase<T>
+public partial class OrthogonalRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the orthogonal regression model.
@@ -288,130 +288,5 @@ public class OrthogonalRegression<T> : RegressionBase<T>
             ssRes = NumOps.Add(ssRes, NumOps.Multiply(residual, residual));
         }
         return ssRes;
-    }
-
-    /// <summary>
-    /// Gets the type of the model.
-    /// </summary>
-    /// <returns>The model type identifier for orthogonal regression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method is used for model identification and serialization purposes.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// This method simply returns an identifier that indicates this is an orthogonal regression model.
-    /// It's used internally by the library to keep track of different types of models.
-    /// </para>
-    /// </remarks>
-
-    /// <summary>
-    /// Serializes the model to a byte array.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model data.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method serializes both the base class data and the orthogonal regression specific options,
-    /// including tolerance, maximum iterations, and whether to scale variables.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// Serialization converts the model's internal state into a format that can be saved to disk or
-    /// transmitted over a network. This allows you to save a trained model and load it later without
-    /// having to retrain it. Think of it like saving your progress in a video game.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize OrthogonalRegression specific options
-        writer.Write(_options.Tolerance);
-        writer.Write(_options.MaxIterations);
-        writer.Write(_options.ScaleVariables);
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the model from a byte array.
-    /// </summary>
-    /// <param name="modelData">The byte array containing the serialized model data.</param>
-    /// <remarks>
-    /// <para>
-    /// This method deserializes both the base class data and the orthogonal regression specific options,
-    /// reconstructing the model's state from the serialized data.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// Deserialization is the opposite of serialization - it takes the saved model data and reconstructs
-    /// the model's internal state. This allows you to load a previously trained model and use it to make
-    /// predictions without having to retrain it. It's like loading a saved game to continue where you left off.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize OrthogonalRegression specific options
-        _options.Tolerance = reader.ReadDouble();
-        _options.MaxIterations = reader.ReadInt32();
-        _options.ScaleVariables = reader.ReadBoolean();
-    }
-
-    /// <summary>
-    /// Creates a new instance of the Orthogonal Regression model with the same configuration.
-    /// </summary>
-    /// <returns>A new instance of the Orthogonal Regression model.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the creation fails or required components are null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method creates a deep copy of the current Orthogonal Regression model, including its options,
-    /// coefficients, intercept, and regularization settings. The new instance is completely independent of the original,
-    /// allowing modifications without affecting the original model.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// This method creates an exact copy of your trained model.
-    /// 
-    /// Think of it like making a perfect duplicate:
-    /// - It copies all the configuration settings (like tolerance and whether to scale variables)
-    /// - It preserves the coefficients (the weights for each feature)
-    /// - It maintains the intercept (the starting point of your regression line or plane)
-    /// - It includes the same regularization settings to prevent overfitting
-    /// 
-    /// Creating a copy is useful when you want to:
-    /// - Create a backup before making changes to the model
-    /// - Create variations of the same model for different purposes
-    /// - Share the model with others while keeping your original intact
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        // Create a new instance with the same options and regularization
-        var newModel = new OrthogonalRegression<T>(_options, Regularization);
-
-        // Copy coefficients if they exist
-        if (Coefficients != null)
-        {
-            newModel.Coefficients = Coefficients.Clone();
-        }
-
-        // Copy the intercept
-        newModel.Intercept = Intercept;
-
-        return newModel;
     }
 }

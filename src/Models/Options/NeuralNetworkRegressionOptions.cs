@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace AiDotNet.Models.Options;
 
 /// <summary>
@@ -428,5 +430,6 @@ public class NeuralNetworkRegressionOptions<T, TInput, TOutput> : NonLinearRegre
     /// explore different optimizers as you gain experience.
     /// </para>
     /// </remarks>
+    [JsonIgnore]
     public Func<IFullModel<T, TInput, TOutput>, IOptimizer<T, TInput, TOutput>>? OptimizerFactory { get; set; }
 }

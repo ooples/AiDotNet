@@ -78,7 +78,7 @@ namespace AiDotNet.Classification;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Regression Models for Ordinal Data", "https://doi.org/10.1111/j.2517-6161.1980.tb01109.x", Year = 1980, Authors = "Peter McCullagh")]
-public class OrdinalRegression<T> : ClassifierBase<T>,
+public partial class OrdinalRegression<T> : ClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
 
@@ -106,12 +106,14 @@ public class OrdinalRegression<T> : ClassifierBase<T>,
     /// <summary>
     /// Feature coefficients (β). Shared across all thresholds (proportional odds assumption).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _coefficients = new Vector<T>(0);
 
     /// <summary>
     /// Threshold parameters (α_1, α_2, ..., α_{K-1}) where K is the number of classes.
     /// These are in increasing order: α_1 < α_2 < ... < α_{K-1}.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _thresholds = new Vector<T>(0);
 
     /// <summary>
@@ -774,39 +776,6 @@ public class OrdinalRegression<T> : ClassifierBase<T>,
         newModel.SetParameters(parameters);
         return newModel;
     }
-
-    /// <summary>
-    /// Creates a new instance of the same type as this classifier.
-    /// </summary>
-    /// <returns>A new instance of the same classifier type.</returns>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new OrdinalRegression<T>(_options, Regularization);
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (OrdinalRegression<T>)CreateNewInstance();
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.ClassLabels = ClassLabels?.Clone();
-        clone.TaskType = TaskType;
-
-        if (_coefficients is not null)
-        {
-            clone._coefficients = new Vector<T>(_coefficients);
-        }
-        if (_thresholds is not null)
-        {
-            clone._thresholds = new Vector<T>(_thresholds);
-        }
-
-        return clone;
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <summary>
     /// Computes gradients for the model parameters.

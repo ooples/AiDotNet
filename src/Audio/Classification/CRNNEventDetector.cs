@@ -63,7 +63,7 @@ namespace AiDotNet.Audio.Classification;
 // Title corrected to the published plural form ("Networks"). The arXiv id was already correct — this
 // entry surfaced in the citation audit only because the recorded title did not match arXiv's exactly.
 [ResearchPaper("Convolutional Recurrent Neural Networks for Polyphonic Sound Event Detection", "https://arxiv.org/abs/1702.06286", Year = 2017, Authors = "Emre Cakir, Giambattista Parascandolo, Toni Heittola, Heikki Huttunen, Tuomas Virtanen")]
-public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
+public partial class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
 
@@ -338,46 +338,9 @@ public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.NumMels);
-        w.Write(_options.FftSize); w.Write(_options.HopLength);
-        w.Write(_options.CNNChannels.Length);
-        foreach (int ch in _options.CNNChannels) w.Write(ch);
-        w.Write(_options.RNNHiddenSize); w.Write(_options.NumRNNLayers);
-        w.Write(_options.Threshold); w.Write(_options.DetectionWindowSize);
-        w.Write(_options.WindowOverlap); w.Write(_options.DropoutRate);
-        w.Write((int)_options.FMin); w.Write((int)_options.FMax);
-        w.Write(ClassLabels.Count);
-        foreach (var label in ClassLabels) w.Write(label);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.NumMels = r.ReadInt32();
-        _options.FftSize = r.ReadInt32(); _options.HopLength = r.ReadInt32();
-        int nch = r.ReadInt32(); _options.CNNChannels = new int[nch];
-        for (int i = 0; i < nch; i++) _options.CNNChannels[i] = r.ReadInt32();
-        _options.RNNHiddenSize = r.ReadInt32(); _options.NumRNNLayers = r.ReadInt32();
-        _options.Threshold = r.ReadDouble(); _options.DetectionWindowSize = r.ReadDouble();
-        _options.WindowOverlap = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
-        _options.FMin = r.ReadInt32(); _options.FMax = r.ReadInt32();
-        int numLabels = r.ReadInt32(); var labels = new string[numLabels];
-        for (int i = 0; i < numLabels; i++) labels[i] = r.ReadString();
-        ClassLabels = labels;
-        _melSpectrogram = new MelSpectrogram<T>(sampleRate: _options.SampleRate, nMels: _options.NumMels,
-            nFft: _options.FftSize, hopLength: _options.HopLength, fMin: _options.FMin, fMax: _options.FMax, logMel: true);
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new CRNNEventDetector<T>(Architecture, mp, _options);
-        return new CRNNEventDetector<T>(Architecture, _options);
-    }
+
 
     #endregion
 

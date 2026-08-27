@@ -41,7 +41,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
     "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
-public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
+public partial class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 {
     private OnPolicyMonteCarloOptions<T> _options;
 
@@ -312,62 +312,6 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
     }
 
     public override int FeatureCount => _options.StateSize;
-
-    public override byte[] Serialize()
-    {
-        var state = new
-        {
-            QTable = _qTable,
-            Returns = _returns,
-            Epsilon = _epsilon,
-            Options = _options
-        };
-        string json = JsonConvert.SerializeObject(state);
-        return System.Text.Encoding.UTF8.GetBytes(json);
-    }
-
-    public override void Deserialize(byte[] data)
-    {
-        if (data is null || data.Length == 0)
-        {
-            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
-        }
-
-        string json = System.Text.Encoding.UTF8.GetString(data);
-        var state = JsonConvert.DeserializeObject<dynamic>(json);
-        if (state is null)
-        {
-            throw new InvalidOperationException("Deserialization returned null");
-        }
-
-        _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
-        _returns = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, List<T>>>>(state.Returns.ToString()) ?? new Dictionary<string, Dictionary<int, List<T>>>();
-        _epsilon = state.Epsilon;
-    }
-
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new OnPolicyMonteCarloAgent<T>(_options);
-
-        // Deep copy Q-table
-        foreach (var kvp in _qTable)
-        {
-            clone._qTable[kvp.Key] = new Dictionary<int, T>(kvp.Value);
-        }
-
-        // Deep copy returns
-        foreach (var kvp in _returns)
-        {
-            clone._returns[kvp.Key] = new Dictionary<int, List<T>>();
-            foreach (var returnKvp in kvp.Value)
-            {
-                clone._returns[kvp.Key][returnKvp.Key] = new List<T>(returnKvp.Value);
-            }
-        }
-
-        clone._epsilon = _epsilon;
-        return clone;
-    }
 
     public override void SaveModel(string filepath)
     {

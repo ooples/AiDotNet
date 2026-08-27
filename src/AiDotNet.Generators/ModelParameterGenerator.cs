@@ -55,6 +55,8 @@ public class ModelParameterGenerator : IIncrementalGenerator
     private const string ExtraTensorsHook = "GetExtraTrainableTensors";
     private const string ExtraLayersHook = "GetExtraTrainableLayers";
     private const string RebindLayerAliasesHook = "RebindLayerAliases";
+    private const string AdditionalLayerGroupsHook = "GetGeneratedAdditionalLayerGroups";
+    private const string NestedNetworkLayerViewsHook = "GetGeneratedNestedNetworkLayerViews";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -126,6 +128,8 @@ public class ModelParameterGenerator : IIncrementalGenerator
             bool emitTensors = onNetworkTrunk && !DeclaresOwn(classSymbol, ExtraTensorsHook);
             bool emitLayers = onNetworkTrunk && !DeclaresOwn(classSymbol, ExtraLayersHook);
             bool emitLayerAliasRebinding = onNetworkTrunk && !DeclaresLayerAliasRebinding(classSymbol);
+            bool publishesFlatParameterGradients = PublishesFlatParameterGradients(classSymbol);
+            bool publishesParameterGradients = PublishesParameterGradients(classSymbol);
             if (!hasRegistry && !emitTensors && !emitLayers && !emitLayerAliasRebinding) continue;
 
             if (!processed.Add(classSymbol.ToDisplayString())) continue;
@@ -134,7 +138,12 @@ public class ModelParameterGenerator : IIncrementalGenerator
             {
                 var tensors = new List<string>();
                 var layerGroups = new List<string>();
+                var nestedNetworkLayerViews = new List<string>();
+                var additionalLayerGroups = new List<string>();
                 var layerAliasRebinders = new List<string>();
+                var layerAliasCopiers = new List<string>();
+                var trainableTensorCopiers = new List<string>();
+                var ownedTensorEnumerators = new List<string>();
                 var persistentFields = new List<(string Name, string SourceExpression, string Role, string Availability)>();
                 foreach (var member in classSymbol.GetMembers())
                 {
@@ -142,12 +151,8 @@ public class ModelParameterGenerator : IIncrementalGenerator
                     {
                         if (tf.IsStatic || tf.IsConst || tf.IsImplicitlyDeclared || tf.AssociatedSymbol is not null)
                             continue;
-                        if (emitLayerAliasRebinding)
-                        {
-                            var rebinder = LayerAliasRebinderFor(tf, elem);
-                            if (rebinder is not null) layerAliasRebinders.Add(rebinder);
-                        }
                         var classification = ParameterMemberSemanticModel.Classify(tf);
+                        var trainableCopier = TrainableTensorCopierFor(tf, elem, classification.Kind);
                         if (IsNonOptimizerPersistentState(classification.Kind) && hasRegistry)
                         {
                             var persistentSource = SourceExpressionFor(
@@ -164,10 +169,43 @@ public class ModelParameterGenerator : IIncrementalGenerator
                                 continue;
                             }
                         }
+
+                        // A declared non-trainable nested model is state, not an optimizer/module branch.
+                        // In particular, DQN target networks are [Buffer] snapshots: walking their layers
+                        // doubles ParameterCount and lets clone alias reconciliation mutate the online graph.
+                        if (classification.Kind is not ParameterMemberSemanticModel.Kind.Unclassified
+                            and not ParameterMemberSemanticModel.Kind.Trainable)
+                        {
+                            continue;
+                        }
+
+                        if (emitLayerAliasRebinding)
+                        {
+                            var rebinder = LayerAliasRebinderFor(tf, elem);
+                            if (rebinder is not null) layerAliasRebinders.Add(rebinder);
+                            var copier = LayerAliasCopierFor(tf, elem);
+                            if (copier is not null) layerAliasCopiers.Add(copier);
+                        }
+                        var additionalGroup = AdditionalLayerGroupFor(tf, elem, classSymbol);
+                        if (additionalGroup is not null) additionalLayerGroups.Add(additionalGroup);
+                        if (trainableCopier is not null) trainableTensorCopiers.Add(trainableCopier);
                         if (emitTensors)
                         {
                             var nestedTensors = NestedNetworkTensorAccessorFor(tf.Type, tf.Name, elem);
                             if (nestedTensors is not null) tensors.Add(nestedTensors);
+                            if (publishesParameterGradients)
+                            {
+                                var ownedEnumerator = OwnedTensorEnumeratorAccessorFor(
+                                    tf.Type, tf.Name, elem);
+                                if (ownedEnumerator is not null)
+                                    ownedTensorEnumerators.Add(ownedEnumerator);
+                            }
+                            if (publishesFlatParameterGradients)
+                            {
+                                var nestedRecord = NestedParameterRecordTensorAccessorFor(
+                                    tf.Type, tf.Name, elem);
+                                if (nestedRecord is not null) tensors.Add(nestedRecord);
+                            }
                         }
                         var tensorAccessor = classification.Kind == ParameterMemberSemanticModel.Kind.Trainable
                             ? TensorAccessorFor(tf.Type, tf.Name, elem)
@@ -178,21 +216,19 @@ public class ModelParameterGenerator : IIncrementalGenerator
                             continue;
                         }
                         if (!emitLayers) continue;
-                        var acc = LayerAccessorFor(tf.Type, tf.Name, elem);
+                        var nestedNetworkLayers = NestedNetworkLayerAccessorFor(tf.Type, tf.Name, elem);
+                        var acc = nestedNetworkLayers ?? LayerAccessorFor(tf.Type, tf.Name, elem);
                         if (acc is not null) layerGroups.Add(acc);
+                        if (nestedNetworkLayers is not null)
+                            nestedNetworkLayerViews.Add(nestedNetworkLayers);
                     }
                     else if (member is IPropertySymbol tp)
                     {
                         // Sub-networks are conventionally exposed as properties (GAN's Generator and
                         // Discriminator, StyleGAN's MappingNetwork). Fields alone would miss them.
                         if (tp.IsStatic || tp.IsImplicitlyDeclared || tp.GetMethod is null) continue;
-                        if (emitLayerAliasRebinding)
-                        {
-                            var rebinder = LayerAliasRebinderFor(tp, elem);
-                            if (rebinder is not null) layerAliasRebinders.Add(rebinder);
-                        }
-                        if (!emitLayers) continue;
                         var classification = ParameterMemberSemanticModel.Classify(tp);
+                        var trainableCopier = TrainableTensorCopierFor(tp, elem, classification.Kind);
                         if (IsNonOptimizerPersistentState(classification.Kind) && hasRegistry)
                         {
                             var persistentSource = SourceExpressionFor(
@@ -209,10 +245,41 @@ public class ModelParameterGenerator : IIncrementalGenerator
                                 continue;
                             }
                         }
+
+                        if (classification.Kind is not ParameterMemberSemanticModel.Kind.Unclassified
+                            and not ParameterMemberSemanticModel.Kind.Trainable)
+                        {
+                            continue;
+                        }
+
+                        if (emitLayerAliasRebinding)
+                        {
+                            var rebinder = LayerAliasRebinderFor(tp, elem);
+                            if (rebinder is not null) layerAliasRebinders.Add(rebinder);
+                            var copier = LayerAliasCopierFor(tp, elem);
+                            if (copier is not null) layerAliasCopiers.Add(copier);
+                        }
+                        var additionalGroup = AdditionalLayerGroupFor(tp, elem, classSymbol);
+                        if (additionalGroup is not null) additionalLayerGroups.Add(additionalGroup);
+                        if (!emitLayers) continue;
+                        if (trainableCopier is not null) trainableTensorCopiers.Add(trainableCopier);
                         if (emitTensors)
                         {
                             var nestedTensors = NestedNetworkTensorAccessorFor(tp.Type, tp.Name, elem);
                             if (nestedTensors is not null) tensors.Add(nestedTensors);
+                            if (publishesParameterGradients)
+                            {
+                                var ownedEnumerator = OwnedTensorEnumeratorAccessorFor(
+                                    tp.Type, tp.Name, elem);
+                                if (ownedEnumerator is not null)
+                                    ownedTensorEnumerators.Add(ownedEnumerator);
+                            }
+                            if (publishesFlatParameterGradients)
+                            {
+                                var nestedRecord = NestedParameterRecordTensorAccessorFor(
+                                    tp.Type, tp.Name, elem);
+                                if (nestedRecord is not null) tensors.Add(nestedRecord);
+                            }
                         }
                         if (classification.Kind == ParameterMemberSemanticModel.Kind.Trainable)
                         {
@@ -224,17 +291,39 @@ public class ModelParameterGenerator : IIncrementalGenerator
                             }
                         }
                         if (classification.IsDeclared) continue;
-                        var acc = LayerAccessorFor(tp.Type, tp.Name, elem);
+                        var nestedNetworkLayers = NestedNetworkLayerAccessorFor(tp.Type, tp.Name, elem);
+                        var acc = nestedNetworkLayers ?? LayerAccessorFor(tp.Type, tp.Name, elem);
                         if (acc is not null) layerGroups.Add(acc);
+                        if (nestedNetworkLayers is not null)
+                            nestedNetworkLayerViews.Add(nestedNetworkLayers);
                     }
                 }
 
-                if (tensors.Count > 0 || layerGroups.Count > 0 || layerAliasRebinders.Count > 0)
+                // Publishing model-owned gradients is an explicit claim that the class owns an
+                // optimizer surface. Recover unclassified, non-null numeric storage not already
+                // admitted by attributes, then append nested records that expose their own stable
+                // EnumerateTensors contract. Attribute-backed tensors retain declaration order;
+                // inferred storage follows them, matching the model's checked gradient surface.
+                if (emitTensors && publishesParameterGradients)
+                {
+                    if (!publishesFlatParameterGradients
+                        || (tensors.Count == 0 && layerGroups.Count == 0
+                            && additionalLayerGroups.Count == 0))
+                    {
+                        tensors.AddRange(InferredFlatGradientTensorAccessors(classSymbol, elem));
+                    }
+                    tensors.AddRange(ownedTensorEnumerators);
+                }
+
+                if (tensors.Count > 0 || layerGroups.Count > 0 || layerAliasRebinders.Count > 0
+                    || layerAliasCopiers.Count > 0 || trainableTensorCopiers.Count > 0
+                    || additionalLayerGroups.Count > 0)
                 {
                     context.AddSource(
                         HintName(classSymbol) + ".ModelExtraTensors.g.cs",
                         GenerateExtraTensorsSource(
-                            classSymbol, elem, tensors, layerGroups, layerAliasRebinders));
+                            classSymbol, elem, tensors, layerGroups, nestedNetworkLayerViews, layerAliasRebinders,
+                            layerAliasCopiers, trainableTensorCopiers, additionalLayerGroups));
                 }
                 if (persistentFields.Count > 0)
                 {
@@ -248,6 +337,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
 
             var fields = new List<(string Name, string SourceExpression, string Role, string Availability)>();
             var components = new List<(string Name, string SourceExpression, string Role, string Availability)>();
+            var manualRegistrations = ParameterMemberSemanticModel.GetRegistrationClassifications(classSymbol);
             foreach (var member in classSymbol.GetMembers())
             {
                 // A member that IS a parameterized component, or a collection of them. Every
@@ -256,14 +346,28 @@ public class ModelParameterGenerator : IIncrementalGenerator
                 // discovery. The collection form is re-read on each access rather than snapshotted,
                 // because members are routinely added after the one lazy registration has run.
                 var classification = ParameterMemberSemanticModel.Classify(member);
+                if (manualRegistrations.ContainsKey(member.Name))
+                {
+                    // One owner per member. Legacy RegisterComponents overrides remain valid while
+                    // they are migrated, but the generated chain must never register the same
+                    // storage a second time. The semantic analyzer separately validates conflicts.
+                    continue;
+                }
+
+                var memberType = MemberType(member);
                 if (member is IFieldSymbol or IPropertySymbol
                     && !member.IsStatic && !member.IsImplicitlyDeclared
+                    && memberType is not null
+                    // Tensor/Matrix/Vector implement IParameterSource<T> as a convenience, but they
+                    // are raw numeric STORAGE rather than nested model components. Their role must
+                    // be declared explicitly and is handled by SourceExpressionFor below.
+                    && !ParameterMemberSemanticModel.IsNumericStateStorage(memberType)
                     && classification.Kind is not ParameterMemberSemanticModel.Kind.Scratch
                         and not ParameterMemberSemanticModel.Kind.Alias
                         and not ParameterMemberSemanticModel.Kind.External
                         and not ParameterMemberSemanticModel.Kind.Conflicting)
                 {
-                    var kind = ComponentKindFor(MemberType(member), elem);
+                    var kind = ComponentKindFor(memberType, elem);
                     if (kind == "one")
                     {
                         components.Add((member.Name,
@@ -409,7 +513,11 @@ public class ModelParameterGenerator : IIncrementalGenerator
 
     private static string GenerateExtraTensorsSource(INamedTypeSymbol classSymbol, string elem,
                                                      List<string> tensors, List<string> layerGroups,
-                                                     List<string> layerAliasRebinders)
+                                                     List<string> nestedNetworkLayerViews,
+                                                     List<string> layerAliasRebinders,
+                                                     List<string> layerAliasCopiers,
+                                                     List<string> trainableTensorCopiers,
+                                                     List<string> additionalLayerGroups)
     {
         var sb = OpenPartial(classSymbol, out var closers);
 
@@ -424,6 +532,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// rather than yielded -- an unfitted model has no weights there yet. Declare");
             sb.AppendLine($"    /// {ExtraTensorsHook}() by hand to take ownership and this disappears.");
             sb.AppendLine("    /// </remarks>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine($"    protected override global::System.Collections.Generic.IEnumerable<Tensor<{elem}>> {ExtraTensorsHook}()");
             sb.AppendLine("    {");
             sb.AppendLine($"        foreach (var __t in base.{ExtraTensorsHook}()) yield return __t;");
@@ -459,6 +568,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// twice in ParameterCount and emit them twice from GetParameters.");
             sb.AppendLine("    /// </para>");
             sb.AppendLine("    /// </remarks>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine("    protected override global::System.Collections.Generic.IEnumerable<"
                           + "global::AiDotNet.NeuralNetworks.Layers.LayerBase<" + elem + ">?> GetExtraTrainableLayers()");
             sb.AppendLine("    {");
@@ -494,6 +604,25 @@ public class ModelParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    }");
         }
 
+        if (nestedNetworkLayerViews.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("    /// <summary>Auto-generated live layer views owned by nested networks.</summary>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelParameterGenerator\", \"1.0.0\")]");
+            sb.AppendLine("    protected override global::System.Collections.Generic.IEnumerable<"
+                          + "global::AiDotNet.Interfaces.ILayer<" + elem + ">?> "
+                          + NestedNetworkLayerViewsHook + "()");
+            sb.AppendLine("    {");
+            foreach (var group in nestedNetworkLayerViews)
+            {
+                sb.AppendLine($"        foreach (var __layer in {group})");
+                sb.AppendLine("        {");
+                sb.AppendLine("            yield return __layer;");
+                sb.AppendLine("        }");
+            }
+            sb.AppendLine("    }");
+        }
+
         if (layerAliasRebinders.Count > 0)
         {
             if (tensors.Count > 0 || layerGroups.Count > 0) sb.AppendLine();
@@ -501,6 +630,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// Auto-generated: rebinds named fields and collection views when the canonical");
             sb.AppendLine("    /// <c>Layers</c> graph is replaced by deserialization or eager cloning.");
             sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelParameterGenerator\", \"1.0.0\")]");
             sb.AppendLine($"    protected override void {RebindLayerAliasesHook}(");
             sb.AppendLine($"        global::System.Collections.Generic.IReadOnlyList<global::AiDotNet.Interfaces.ILayer<{elem}>> previousLayers,");
             sb.AppendLine($"        global::System.Collections.Generic.IReadOnlyList<global::AiDotNet.Interfaces.ILayer<{elem}>> replacementLayers)");
@@ -508,6 +638,64 @@ public class ModelParameterGenerator : IIncrementalGenerator
             sb.AppendLine($"        base.{RebindLayerAliasesHook}(previousLayers, replacementLayers);");
             foreach (var rebinder in layerAliasRebinders)
                 sb.AppendLine("        " + rebinder);
+            sb.AppendLine("    }");
+        }
+
+        if (layerAliasCopiers.Count > 0)
+        {
+            if (tensors.Count > 0 || layerGroups.Count > 0 || layerAliasRebinders.Count > 0)
+                sb.AppendLine();
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// Auto-generated: transfers the source model's canonical-layer alias map to a clone");
+            sb.AppendLine("    /// whose canonical Layers graph has already been reconstructed.");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelParameterGenerator\", \"1.0.0\")]");
+            sb.AppendLine("    protected override void CopyGeneratedLayerAliasesTo(");
+            sb.AppendLine($"        global::AiDotNet.NeuralNetworks.NeuralNetworkBase<{elem}> destination)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        base.CopyGeneratedLayerAliasesTo(destination);");
+            sb.AppendLine($"        if (destination is not {classSymbol.ToDisplayString()} __destination)");
+            sb.AppendLine("            throw new global::System.InvalidOperationException(\"Generated layer aliases can only be copied between models of the same concrete type.\");");
+            foreach (var copier in layerAliasCopiers)
+                sb.AppendLine("        " + copier);
+            sb.AppendLine("    }");
+        }
+
+        if (trainableTensorCopiers.Count > 0)
+        {
+            if (tensors.Count > 0 || layerGroups.Count > 0 || layerAliasRebinders.Count > 0
+                || layerAliasCopiers.Count > 0)
+                sb.AppendLine();
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// Auto-generated: transfers model-owned trainable tensors that live outside Layers.");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelParameterGenerator\", \"1.0.0\")]");
+            sb.AppendLine("    protected override void CopyGeneratedTrainableTensorsTo(");
+            sb.AppendLine($"        global::AiDotNet.NeuralNetworks.NeuralNetworkBase<{elem}> destination)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        base.CopyGeneratedTrainableTensorsTo(destination);");
+            sb.AppendLine($"        if (destination is not {classSymbol.ToDisplayString()} __destination)");
+            sb.AppendLine("            throw new global::System.InvalidOperationException(\"Generated trainable tensors can only be copied between models of the same concrete type.\");");
+            foreach (var copier in trainableTensorCopiers)
+                sb.AppendLine("        " + copier);
+            sb.AppendLine("    }");
+        }
+
+        if (additionalLayerGroups.Count > 0)
+        {
+            if (tensors.Count > 0 || layerGroups.Count > 0 || layerAliasRebinders.Count > 0
+                || layerAliasCopiers.Count > 0 || trainableTensorCopiers.Count > 0)
+                sb.AppendLine();
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// Auto-generated: describes stable layer-member groups so the base can rebuild");
+            sb.AppendLine("    /// fitted auxiliary topology during save/load without a model serialization hook.");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelParameterGenerator\", \"1.0.0\")]");
+            sb.AppendLine("    protected override global::System.Collections.Generic.IEnumerable<GeneratedAdditionalLayerGroup> " + AdditionalLayerGroupsHook + "()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        foreach (var __group in base." + AdditionalLayerGroupsHook + "()) yield return __group;");
+            foreach (var group in additionalLayerGroups)
+                sb.AppendLine("        yield return " + group + ";");
             sb.AppendLine("    }");
         }
 
@@ -530,6 +718,20 @@ public class ModelParameterGenerator : IIncrementalGenerator
     private static string? LayerAccessorFor(ITypeSymbol type, string name, string elem)
     {
         var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+
+        if (IsLayerGraphOf(bare, elem))
+        {
+            return $"{name}?.ToLayerList() ?? " +
+                   $"(global::System.Collections.Generic.IEnumerable<global::AiDotNet.Interfaces.ILayer<{elem}>>)" +
+                   $"global::System.Array.Empty<global::AiDotNet.Interfaces.ILayer<{elem}>>()";
+        }
+
+        // A model helper may own a real layer graph without itself being a LayerBase. Detection
+        // backbones commonly encapsulate stages this way and expose the ownership boundary through
+        // a conventional zero-argument EnumerateLayers method. Consume that declaration just like a
+        // direct layer field so optimizer, checkpoint and clone surfaces all see one graph.
+        if (HasConventionalLayerEnumerator(bare, elem))
+            return $"{name}.EnumerateLayers()";
 
         // A sub-network: yield the layers it owns.
         for (var c = bare as INamedTypeSymbol; c is not null; c = c.BaseType)
@@ -568,6 +770,14 @@ public class ModelParameterGenerator : IIncrementalGenerator
         }
         if (element is null) return null;
 
+        var concreteElement = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        if (HasConventionalLayerEnumerator(concreteElement, elem))
+        {
+            string elementName = concreteElement.ToDisplayString();
+            return $"({name} ?? (global::System.Collections.Generic.IEnumerable<{elementName}>)" +
+                   $"global::System.Array.Empty<{elementName}>()).SelectMany(__owner => __owner.EnumerateLayers())";
+        }
+
         // A collection of sub-networks owns a collection of layer collections. Flatten those in
         // the author's stable collection order so multi-scale networks and expert banks do not
         // disappear merely because the network boundary is one level deeper.
@@ -582,9 +792,61 @@ public class ModelParameterGenerator : IIncrementalGenerator
             }
         }
 
+        var nestedElement = LayerCollectionElementType(element);
+        if (nestedElement is not null && IsLayerOf(
+                nestedElement.WithNullableAnnotation(NullableAnnotation.NotAnnotated), elem))
+        {
+            string outerElementName = element.ToDisplayString();
+            return $"({name} ?? (global::System.Collections.Generic.IEnumerable<{outerElementName}>)" +
+                   $"global::System.Array.Empty<{outerElementName}>()).SelectMany(__layers => __layers)";
+        }
+
         if (!IsLayerOf(element, elem)) return null;
         var et = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
         return $"{name} ?? (global::System.Collections.Generic.IEnumerable<{et}>)global::System.Array.Empty<{et}>()";
+    }
+
+    /// <summary>Returns the live layer view for a nested network or network collection.</summary>
+    private static string? NestedNetworkLayerAccessorFor(ITypeSymbol type, string name, string elem)
+    {
+        var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        for (var current = bare as INamedTypeSymbol; current is not null; current = current.BaseType)
+        {
+            if (current.OriginalDefinition.ToDisplayString()
+                .StartsWith("AiDotNet.NeuralNetworks.NeuralNetworkBase<", System.StringComparison.Ordinal))
+                return $"EnumerateNestedNetworkLayers({name})";
+        }
+
+        ITypeSymbol? element = CollectionElementType(bare);
+        if (element is null) return null;
+        element = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        for (var current = element as INamedTypeSymbol; current is not null; current = current.BaseType)
+        {
+            if (!current.OriginalDefinition.ToDisplayString()
+                    .StartsWith("AiDotNet.NeuralNetworks.NeuralNetworkBase<", System.StringComparison.Ordinal))
+                continue;
+
+            string networkType = element.ToDisplayString();
+            return $"({name} ?? (global::System.Collections.Generic.IEnumerable<{networkType}>)"
+                   + $"global::System.Array.Empty<{networkType}>()).SelectMany(__n => EnumerateNestedNetworkLayers(__n))";
+        }
+
+        return null;
+    }
+
+    private static bool HasConventionalLayerEnumerator(ITypeSymbol type, string elem)
+    {
+        if (type is not INamedTypeSymbol named) return false;
+        foreach (var method in named.GetMembers("EnumerateLayers").OfType<IMethodSymbol>())
+        {
+            if (method.IsStatic || method.Parameters.Length != 0
+                || method.DeclaredAccessibility is not (Accessibility.Public or Accessibility.Internal))
+                continue;
+            var element = CollectionElementType(method.ReturnType)
+                ?.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+            if (element is not null && IsLayerOf(element, elem)) return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -621,6 +883,215 @@ public class ModelParameterGenerator : IIncrementalGenerator
     }
 
     /// <summary>
+    /// Discovers a collection of nested parameter records from a declaration inside the record.
+    /// </summary>
+    /// <remarks>
+    /// A nested record is opted in by at least one <c>[TrainableParameter]</c> member. Once opted in,
+    /// its non-null public Tensor/Vector properties are storage, not arbitrary model fields; private
+    /// storage still requires the annotation. This is the collection analogue of a layer's generated
+    /// parameter walk and is what lets explicit representations such as Gaussian splats participate
+    /// without a model-owned <c>GetExtraTrainableTensors</c> override.
+    /// </remarks>
+    private static string? NestedParameterRecordTensorAccessorFor(
+        ITypeSymbol collectionType,
+        string name,
+        string elem)
+    {
+        var element = CollectionElementType(collectionType)
+            ?.WithNullableAnnotation(NullableAnnotation.NotAnnotated) as INamedTypeSymbol;
+        if (element is null || element.TypeKind != TypeKind.Class) return null;
+
+        var annotatedStorage = element.GetMembers()
+            .Where(member => ParameterMemberSemanticModel.Classify(member).Kind
+                == ParameterMemberSemanticModel.Kind.Trainable)
+            .ToList();
+        if (annotatedStorage.Count == 0) return null;
+
+        var slots = new List<(string Name, ITypeSymbol Type, int Position)>();
+        foreach (var member in element.GetMembers())
+        {
+            ITypeSymbol? memberType = null;
+            bool include = false;
+            if (member is IFieldSymbol field && !field.IsStatic && !field.IsImplicitlyDeclared)
+            {
+                memberType = field.Type;
+                include = ParameterMemberSemanticModel.Classify(field).Kind
+                    == ParameterMemberSemanticModel.Kind.Trainable
+                    && field.DeclaredAccessibility != Accessibility.Private;
+            }
+            else if (member is IPropertySymbol property
+                && !property.IsStatic && !property.IsIndexer && property.GetMethod is not null
+                && property.DeclaredAccessibility == Accessibility.Public)
+            {
+                memberType = property.Type;
+                include = !AliasesAccessibleAnnotatedStorage(property, annotatedStorage);
+            }
+
+            if (!include || memberType is null
+                || memberType.NullableAnnotation == NullableAnnotation.Annotated
+                || NumericFamilyFor(memberType, elem) is not ("Tensor" or "Vector"))
+            {
+                continue;
+            }
+
+            int position = member.Locations.FirstOrDefault(location => location.IsInSource)
+                ?.SourceSpan.Start ?? int.MaxValue;
+            slots.Add((member.Name, memberType, position));
+        }
+
+        if (slots.Count == 0) return null;
+        slots = slots
+            .OrderBy(slot => ParameterSemanticOrder(slot.Name))
+            .ThenBy(slot => slot.Position)
+            .ToList();
+
+        var expressions = new List<string>(slots.Count);
+        foreach (var slot in slots)
+        {
+            var access = $"__item.{slot.Name}";
+            expressions.Add(NumericFamilyFor(slot.Type, elem) == "Tensor"
+                ? access
+                : $"new Tensor<{elem}>([{access}.Length], {access})");
+        }
+
+        var elementName = element.ToDisplayString();
+        return $"({name} ?? (global::System.Collections.Generic.IEnumerable<{elementName}>)"
+            + $"global::System.Array.Empty<{elementName}>()).SelectMany(__item => "
+            + $"new Tensor<{elem}>?[] {{ {string.Join(", ", expressions)} }})";
+    }
+
+    /// <summary>
+    /// Discovers a nested owned-record collection that explicitly publishes its tensor order.
+    /// </summary>
+    private static string? OwnedTensorEnumeratorAccessorFor(
+        ITypeSymbol collectionType,
+        string name,
+        string elem)
+    {
+        var element = CollectionElementType(collectionType)
+            ?.WithNullableAnnotation(NullableAnnotation.NotAnnotated) as INamedTypeSymbol;
+        if (element is null) return null;
+
+        var enumerator = element.GetMembers("EnumerateTensors")
+            .OfType<IMethodSymbol>()
+            .FirstOrDefault(method => !method.IsStatic && method.Parameters.Length == 0
+                && method.DeclaredAccessibility != Accessibility.Private
+                && CollectionElementType(method.ReturnType) is ITypeSymbol returned
+                && NumericFamilyFor(returned, elem) == "Tensor");
+        if (enumerator is null) return null;
+
+        string elementName = element.ToDisplayString();
+        return $"({name} ?? (global::System.Collections.Generic.IEnumerable<{elementName}>)"
+            + $"global::System.Array.Empty<{elementName}>()).SelectMany(__item => __item.EnumerateTensors())";
+    }
+
+    private static bool AliasesAccessibleAnnotatedStorage(
+        IPropertySymbol property,
+        IReadOnlyList<ISymbol> annotatedStorage)
+    {
+        var annotatedNames = new HashSet<string>(
+            annotatedStorage
+                .Where(member => member.DeclaredAccessibility != Accessibility.Private)
+                .Select(member => member.Name),
+            System.StringComparer.Ordinal);
+        foreach (var syntaxReference in property.DeclaringSyntaxReferences)
+        {
+            if (syntaxReference.GetSyntax() is not PropertyDeclarationSyntax declaration) continue;
+            if (declaration.ExpressionBody?.Expression is IdentifierNameSyntax expression
+                && annotatedNames.Contains(expression.Identifier.ValueText))
+            {
+                return true;
+            }
+
+            if (declaration.AccessorList is null) continue;
+            var getter = declaration.AccessorList.Accessors.FirstOrDefault(accessor =>
+                accessor.Keyword.ValueText == "get");
+            if (getter?.ExpressionBody?.Expression is IdentifierNameSyntax getterExpression
+                && annotatedNames.Contains(getterExpression.Identifier.ValueText))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Infers direct numeric storage only for a class that explicitly publishes a checked flat
+    /// gradient and has no other discoverable optimizer surface.
+    /// </summary>
+    private static IEnumerable<string> InferredFlatGradientTensorAccessors(
+        INamedTypeSymbol type,
+        string elem)
+    {
+        return type.GetMembers()
+            .Where(member => !member.IsStatic && !member.IsImplicitlyDeclared)
+            .Select(member => (Member: member, Type: MemberType(member)))
+            .Where(candidate => candidate.Type is not null
+                && candidate.Type.NullableAnnotation != NullableAnnotation.Annotated
+                && NumericFamilyFor(candidate.Type, elem) is "Tensor" or "Vector"
+                && ParameterMemberSemanticModel.Classify(candidate.Member).Kind
+                    is ParameterMemberSemanticModel.Kind.Unclassified)
+            .OrderBy(candidate => ParameterSemanticOrder(candidate.Member.Name))
+            .ThenBy(candidate => candidate.Member.Locations
+                .FirstOrDefault(location => location.IsInSource)?.SourceSpan.Start ?? int.MaxValue)
+            .Select(candidate => candidate.Type is null
+                ? null
+                : TensorAccessorFor(candidate.Type, candidate.Member.Name, elem))
+            .Where(accessor => accessor is not null)
+            .Select(accessor => accessor ?? string.Empty);
+    }
+
+    private static bool PublishesFlatParameterGradients(INamedTypeSymbol type)
+        => PublishesParameterGradients(type, flatOnly: true);
+
+    private static bool PublishesParameterGradients(INamedTypeSymbol type)
+        => PublishesParameterGradients(type, flatOnly: false);
+
+    private static bool PublishesParameterGradients(INamedTypeSymbol type, bool flatOnly)
+    {
+        foreach (var syntaxReference in type.DeclaringSyntaxReferences)
+        {
+            if (syntaxReference.GetSyntax() is not ClassDeclarationSyntax declaration) continue;
+            if (declaration.DescendantNodes().OfType<InvocationExpressionSyntax>().Any(invocation =>
+                invocation.Expression switch
+                {
+                    IdentifierNameSyntax identifier =>
+                        identifier.Identifier.ValueText == "PublishFlatParameterGradients"
+                        || (!flatOnly && identifier.Identifier.ValueText == "PublishParameterGradients"),
+                    MemberAccessExpressionSyntax { Name: IdentifierNameSyntax identifier } =>
+                        identifier.Identifier.ValueText == "PublishFlatParameterGradients"
+                        || (!flatOnly && identifier.Identifier.ValueText == "PublishParameterGradients"),
+                    _ => false,
+                }))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Stable family order for conventional flat-gradient records. It affects ordering only; entry
+    /// into the generated graph still requires the explicit publish/annotation evidence above.
+    /// </summary>
+    private static int ParameterSemanticOrder(string name)
+    {
+        string key = name.TrimStart('_').ToLowerInvariant();
+        if (key.Contains("weight")) return 0;
+        if (key.Contains("position")) return 10;
+        if (key.Contains("rotation")) return 20;
+        if (key.Contains("scale")) return 30;
+        if (key.Contains("opacity")) return 40;
+        if (key.Contains("color")) return 50;
+        if (key.Contains("visible") && key.Contains("bias")) return 60;
+        if (key.Contains("hidden") && key.Contains("bias")) return 70;
+        if (key.Contains("bias")) return 80;
+        return 100;
+    }
+
+    /// <summary>
     /// Emits type-safe lifecycle repair for a field/property that may be a view into Layers.
     /// Independent layer ownership is preserved because the base helpers only replace references
     /// found in the previous canonical graph.
@@ -630,6 +1101,24 @@ public class ModelParameterGenerator : IIncrementalGenerator
         var type = MemberType(member);
         if (type is null) return null;
         var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+
+        if (IsNeuralNetworkBase(bare))
+        {
+            return $"RebindNestedNetworkCanonicalLayerAliases({member.Name}, previousLayers, replacementLayers, nameof({member.Name}));";
+        }
+
+        if (IsLayerGraphOf(bare, elem))
+        {
+            bool writable = member switch
+            {
+                IFieldSymbol field => !field.IsReadOnly,
+                IPropertySymbol property => property.SetMethod is not null && !property.SetMethod.IsInitOnly,
+                _ => false,
+            };
+            return writable
+                ? $"{member.Name} = RebindLayerGraphAlias({member.Name}, previousLayers, replacementLayers, nameof({member.Name}));"
+                : $"ValidateReadonlyLayerGraphAlias({member.Name}, previousLayers, replacementLayers, nameof({member.Name}));";
+        }
 
         if (IsLayerOf(bare, elem))
         {
@@ -648,11 +1137,185 @@ public class ModelParameterGenerator : IIncrementalGenerator
         }
 
         var element = LayerCollectionElementType(bare);
-        if (element is null || !IsLayerOf(
-                element.WithNullableAnnotation(NullableAnnotation.NotAnnotated), elem))
+        if (element is null)
+            return null;
+
+        var nestedElement = LayerCollectionElementType(
+            element.WithNullableAnnotation(NullableAnnotation.NotAnnotated));
+        if (nestedElement is not null && IsLayerOf(
+                nestedElement.WithNullableAnnotation(NullableAnnotation.NotAnnotated), elem))
+        {
+            return $"RebindNestedLayerAliasCollections({member.Name}, previousLayers, replacementLayers, nameof({member.Name}));";
+        }
+
+        if (!IsLayerOf(element.WithNullableAnnotation(NullableAnnotation.NotAnnotated), elem))
             return null;
 
         return $"RebindLayerAliasCollection({member.Name}, previousLayers, replacementLayers, nameof({member.Name}));";
+    }
+
+    /// <summary>
+    /// Emits one stable auxiliary-layer ownership group. Canonical Layers aliases are filtered by
+    /// the base at runtime; the replacement callback therefore handles only independently-owned
+    /// layers and can rebuild lists whose fitted count differs from the constructor count.
+    /// </summary>
+    private static string? AdditionalLayerGroupFor(
+        ISymbol member,
+        string elem,
+        INamedTypeSymbol owner)
+    {
+        var type = MemberType(member);
+        if (type is null) return null;
+        var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        string id = owner.ToDisplayString() + "::" + member.Name;
+
+        if (IsLayerOf(bare, elem))
+        {
+            bool writable = member switch
+            {
+                IFieldSymbol field => !field.IsReadOnly,
+                IPropertySymbol property => property.SetMethod is not null && !property.SetMethod.IsInitOnly,
+                _ => false,
+            };
+            bool nullable = ParameterMemberSemanticModel.IsNullable(member);
+            string replace = writable
+                ? nullable
+                    ? $"__layers => {member.Name} = RestoreGeneratedAdditionalLayer({member.Name}, __layers, nameof({member.Name}))"
+                    : $"__layers => {member.Name} = RestoreRequiredGeneratedAdditionalLayer({member.Name}, __layers, nameof({member.Name}))"
+                : "null";
+            return $"new GeneratedAdditionalLayerGroup(\"{id}\", " +
+                   $"() => new global::AiDotNet.Interfaces.ILayer<{elem}>?[] {{ {member.Name} }}, {replace})";
+        }
+
+        if (bare is not INamedTypeSymbol { Name: "List", TypeArguments.Length: 1 } list)
+            return null;
+        var element = list.TypeArguments[0].WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        if (!IsLayerOf(element, elem)) return null;
+        string elementName = element.ToDisplayString();
+        bool collectionNullable = ParameterMemberSemanticModel.IsNullable(member);
+        bool collectionWritable = member switch
+        {
+            IFieldSymbol field => !field.IsReadOnly,
+            IPropertySymbol property => property.SetMethod is not null && !property.SetMethod.IsInitOnly,
+            _ => false,
+        };
+        string getter = collectionNullable
+            ? $"() => {member.Name} ?? (global::System.Collections.Generic.IEnumerable<{elementName}>)global::System.Array.Empty<{elementName}>()"
+            : $"() => {member.Name}";
+        string collectionReplace = collectionNullable
+            ? collectionWritable
+                ? $"__layers => {member.Name} = RestoreGeneratedAdditionalLayerCollection({member.Name}, __layers, nameof({member.Name}))"
+                : "null"
+            : $"__layers => ReplaceGeneratedAdditionalLayerCollection({member.Name}, __layers, nameof({member.Name}))";
+
+        return $"new GeneratedAdditionalLayerGroup(\"{id}\", {getter}, {collectionReplace})";
+    }
+
+    /// <summary>
+    /// Emits source-driven alias transfer for clone paths. Unlike replacement-time rebinding, this
+    /// also repairs aliases created only after fitting, where a fresh destination has no old alias
+    /// instance whose identity could reveal the canonical layer index.
+    /// </summary>
+    private static string? LayerAliasCopierFor(ISymbol member, string elem)
+    {
+        var type = MemberType(member);
+        if (type is null) return null;
+        var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+
+        // A nested NeuralNetworkBase is a layer-graph view, not an independent serialized copy of
+        // those layers. ModelStateGenerator restores readonly child models in place, which can
+        // replace the child's canonical Layers list after the parent constructor already aliased
+        // that list into its own Layers (SpeakerVerifier is the minimal example). Emit the same
+        // source-driven canonical-index repair used for ordinary layer fields so parent and child
+        // return to one graph before parameters are cloned.
+        if (IsNeuralNetworkBase(bare))
+        {
+            return $"CopyNestedNetworkCanonicalLayerAliases({member.Name}, __destination.{member.Name}, Layers, __destination.Layers, nameof({member.Name}));";
+        }
+
+        if (IsLayerGraphOf(bare, elem))
+        {
+            bool writable = member switch
+            {
+                IFieldSymbol field => !field.IsReadOnly,
+                IPropertySymbol property => property.SetMethod is not null && !property.SetMethod.IsInitOnly,
+                _ => false,
+            };
+            return writable
+                ? $"__destination.{member.Name} = CopyLayerGraphAlias({member.Name}, __destination.{member.Name}, Layers, __destination.Layers, nameof({member.Name}));"
+                : $"ValidateCopiedReadonlyLayerGraphAlias({member.Name}, __destination.{member.Name}, Layers, __destination.Layers, nameof({member.Name}));";
+        }
+
+        if (IsLayerOf(bare, elem))
+        {
+            bool writable = member switch
+            {
+                IFieldSymbol field => !field.IsReadOnly,
+                IPropertySymbol property => property.SetMethod is not null && !property.SetMethod.IsInitOnly,
+                _ => false,
+            };
+            bool nullable = ParameterMemberSemanticModel.IsNullable(member);
+            if (!writable)
+            {
+                return $"ValidateCopiedReadonlyLayerAlias({member.Name}, __destination.{member.Name}, Layers, __destination.Layers, nameof({member.Name}));";
+            }
+
+            return nullable
+                ? $"__destination.{member.Name} = CopyLayerAlias({member.Name}, __destination.{member.Name}, Layers, __destination.Layers, nameof({member.Name}));"
+                : $"__destination.{member.Name} = CopyRequiredLayerAlias({member.Name}, __destination.{member.Name}, Layers, __destination.Layers, nameof({member.Name}));";
+        }
+
+        var element = LayerCollectionElementType(bare);
+        if (element is null)
+            return null;
+
+        var nestedElement = LayerCollectionElementType(
+            element.WithNullableAnnotation(NullableAnnotation.NotAnnotated));
+        if (nestedElement is not null && IsLayerOf(
+                nestedElement.WithNullableAnnotation(NullableAnnotation.NotAnnotated), elem))
+        {
+            return $"CopyNestedLayerAliasCollections({member.Name}, __destination.{member.Name}, Layers, __destination.Layers, nameof({member.Name}));";
+        }
+
+        if (!IsLayerOf(element.WithNullableAnnotation(NullableAnnotation.NotAnnotated), elem))
+            return null;
+
+        return $"CopyLayerAliasCollection({member.Name}, __destination.{member.Name}, Layers, __destination.Layers, nameof({member.Name}));";
+    }
+
+    /// <summary>Emits clone transfer for one explicitly-declared model-owned tensor or vector.</summary>
+    private static string? TrainableTensorCopierFor(
+        ISymbol member,
+        string elem,
+        ParameterMemberSemanticModel.Kind kind)
+    {
+        if (kind != ParameterMemberSemanticModel.Kind.Trainable) return null;
+        var type = MemberType(member);
+        if (type is null) return null;
+        string? family = NumericFamilyFor(type, elem);
+        if (family is not ("Tensor" or "Vector")) return null;
+
+        bool writable = member switch
+        {
+            IFieldSymbol field => !field.IsReadOnly,
+            IPropertySymbol property => property.SetMethod is not null && !property.SetMethod.IsInitOnly,
+            _ => false,
+        };
+        bool nullable = ParameterMemberSemanticModel.IsNullable(member);
+        if (family == "Vector")
+        {
+            return writable
+                ? nullable
+                    ? $"__destination.{member.Name} = CloneGeneratedTrainableVector({member.Name});"
+                    : $"__destination.{member.Name} = CloneRequiredGeneratedTrainableVector({member.Name});"
+                : $"CopyGeneratedTrainableVectorValues({member.Name}, __destination.{member.Name}, nameof({member.Name}));";
+        }
+
+        return writable
+            ? nullable
+                ? $"__destination.{member.Name} = CloneGeneratedTrainableTensor({member.Name});"
+                : $"__destination.{member.Name} = CloneRequiredGeneratedTrainableTensor({member.Name});"
+            : $"CopyGeneratedTrainableTensorValues({member.Name}, __destination.{member.Name}, nameof({member.Name}));";
     }
 
     /// <summary>Returns the element type for a supported layer collection shape.</summary>
@@ -670,6 +1333,18 @@ public class ModelParameterGenerator : IIncrementalGenerator
             || open.StartsWith("System.Collections.Generic.IEnumerable<", System.StringComparison.Ordinal)
             ? named.TypeArguments[0]
             : null;
+    }
+
+    /// <summary>LayerGraph&lt;T&gt; over the model's element type.</summary>
+    private static bool IsLayerGraphOf(ITypeSymbol type, string elem)
+    {
+        if (type is not INamedTypeSymbol named || named.TypeArguments.Length != 1)
+            return false;
+
+        var original = named.OriginalDefinition;
+        return original.MetadataName == "LayerGraph`1"
+            && original.ContainingNamespace.ToDisplayString() == "AiDotNet.NeuralNetworks.Graph"
+            && named.TypeArguments[0].ToDisplayString() == elem;
     }
 
     /// <summary>ILayer&lt;T&gt; or a LayerBase&lt;T&gt; subclass over the model's element type.</summary>
@@ -941,6 +1616,13 @@ public class ModelParameterGenerator : IIncrementalGenerator
         if (NumericFamilyFor(type, elem) == "Tensor")
             return $"new Tensor<{elem}>?[] {{ {name} }}";
 
+        // NeuralNetworkBase's extension hook is tensor-shaped, but a model-owned Vector is valid
+        // trainable storage too. Tensor's vector constructor is a write-through view, so generated
+        // discovery can expose it without a concrete parameter-ownership override.
+        if (NumericFamilyFor(type, elem) == "Vector")
+            return $"{name} is null ? global::System.Array.Empty<Tensor<{elem}>?>() : "
+                + $"new Tensor<{elem}>?[] {{ new Tensor<{elem}>([{name}.Length], {name}) }}";
+
         var element = CollectionElementType(type);
         if (element is not null && NumericFamilyFor(element, elem) == "Tensor")
             return $"global::AiDotNet.Models.Parameters.ParameterCollectionOrdering.PresentNonNull({name})";
@@ -1033,9 +1715,60 @@ public class ModelParameterGenerator : IIncrementalGenerator
             }
         }
 
-        return kind == ParameterMemberSemanticModel.Kind.Fitted
-            ? "global::AiDotNet.Models.Parameters.ParameterAvailability.Fit"
-            : "global::AiDotNet.Models.Parameters.ParameterAvailability.Construction";
+        if (kind == ParameterMemberSemanticModel.Kind.Fitted)
+            return "global::AiDotNet.Models.Parameters.ParameterAvailability.Fit";
+
+        // A buffer holding no value at construction is produced by Fit, and calling it
+        // "Construction" is simply false. The distinction is not cosmetic: an ABSENT buffer is
+        // normalized by availability, and Construction sends it to ConditionalAbsent — "an optional
+        // branch that is switched off" — so a freshly built model reported a concrete zero-parameter
+        // surface instead of one whose parameters had not been fitted yet. That is exactly the
+        // ambiguity ParameterCountContractTests rejects, and it failed all eight of the classifiers
+        // that store fit-produced state this way (the five NaiveBayes variants, KNeighbors, Voting,
+        // SelfTraining) while SupportVectorClassifier — structurally identical, but annotated
+        // [Buffer(Availability = Fit)] by hand — passed.
+        //
+        // Derived rather than annotated, for the same reason ParametersAreConstructionSized is: the
+        // declaration already answers the question. A buffer that is nullable and has no initializer
+        // holds null until something assigns it, and for a buffer that something is Fit. Anything
+        // with a construction-time value keeps Construction, so this only reclassifies members for
+        // which Construction could not have been true.
+        if (kind == ParameterMemberSemanticModel.Kind.Buffer && !HasConstructionValue(member))
+            return "global::AiDotNet.Models.Parameters.ParameterAvailability.Fit";
+
+        return "global::AiDotNet.Models.Parameters.ParameterAvailability.Construction";
+    }
+
+    /// <summary>
+    /// Whether a member already holds a value once the constructor has run.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately conservative: it answers true unless the member is BOTH nullable-annotated and
+    /// without an initializer. A non-nullable member always has some value, and an initialized one
+    /// has it before Fit is ever called, so neither can be described as fit-produced.
+    /// </remarks>
+    private static bool HasConstructionValue(ISymbol member)
+    {
+        var nullability = member switch
+        {
+            IFieldSymbol field => field.NullableAnnotation,
+            IPropertySymbol property => property.NullableAnnotation,
+            _ => NullableAnnotation.None
+        };
+
+        if (nullability != NullableAnnotation.Annotated) return true;
+
+        foreach (var reference in member.DeclaringSyntaxReferences)
+        {
+            switch (reference.GetSyntax())
+            {
+                case VariableDeclaratorSyntax { Initializer: not null }:
+                case PropertyDeclarationSyntax { Initializer: not null }:
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     private static string GenerateSource(INamedTypeSymbol classSymbol, string elem,
@@ -1076,6 +1809,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
         sb.AppendLine("    /// <summary>");
         sb.AppendLine("    /// Auto-generated stable-ID registration for this model's weight-bearing members.");
         sb.AppendLine("    /// </summary>");
+        sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelParameterGenerator\", \"1.0.0\")]");
         sb.AppendLine($"    void global::AiDotNet.Models.Parameters.IGeneratedParameterRegistrar<{elem}>.RegisterGeneratedParameters(");
         sb.AppendLine($"        global::AiDotNet.Models.Parameters.ParameterComponentRegistry<{elem}> registry)");
         sb.AppendLine("    {");
@@ -1083,6 +1817,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    /// <summary>Composes this type's generated parameter fields with inherited fields.</summary>");
+        sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.ModelParameterGenerator\", \"1.0.0\")]");
         sb.AppendLine("    protected override void RegisterGeneratedParameterComponents(");
         sb.AppendLine($"        global::AiDotNet.Models.Parameters.ParameterComponentRegistry<{elem}> registry)");
         sb.AppendLine("    {");

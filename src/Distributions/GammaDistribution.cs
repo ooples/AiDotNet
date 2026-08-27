@@ -200,12 +200,6 @@ public class GammaDistribution<T> : DistributionBase<T>
     }
 
     /// <inheritdoc/>
-    public override IParametricDistribution<T> Clone()
-    {
-        return new GammaDistribution<T>(_shape, _rate);
-    }
-
-    /// <inheritdoc/>
     public override T Sample(Random random)
     {
         double alpha = NumOps.ToDouble(_shape);

@@ -23,7 +23,7 @@ namespace AiDotNet.Classification.Ordinal;
 /// Predicting 4 stars when the truth is 5 stars is a smaller error than predicting 1 star.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-public abstract class OrdinalClassifierBase<T> : ClassifierBase<T>, IOrdinalClassifier<T>
+public abstract partial class OrdinalClassifierBase<T> : ClassifierBase<T>, IOrdinalClassifier<T>
 {
     /// <summary>
     /// The learned thresholds that separate ordinal classes.

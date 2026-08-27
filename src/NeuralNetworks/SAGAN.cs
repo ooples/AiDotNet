@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Self-Attention Generative Adversarial Networks", "https://arxiv.org/abs/1805.08318", Year = 2019, Authors = "Han Zhang, Ian Goodfellow, Dimitris Metaxas, Augustus Odena")]
-public class SAGAN<T> : GenerativeAdversarialNetwork<T>
+public partial class SAGAN<T> : GenerativeAdversarialNetwork<T>
 {
     private readonly SAGANOptions _options;
     private readonly int _latentSize;
@@ -205,27 +205,6 @@ public class SAGAN<T> : GenerativeAdversarialNetwork<T>
                architecture.InputWidth > 0 ? architecture.InputWidth : 64,
                numClasses, options: options)
     {
-    }
-
-    /// <summary>
-    /// Constructs a fresh SAGAN with the same hyperparameters so Clone / DeepCopy
-    /// rebuilds both architectures from scratch (rather than reusing layer instances
-    /// whose shape state was resolved by the original's forward pass, which the
-    /// CNN clone-path validation rejects). Mirrors <see cref="DCGAN{T}"/>.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new SAGAN<T>(
-            _latentSize,
-            _imageChannels,
-            _imageHeight,
-            _imageWidth,
-            _numClasses,
-            _generatorChannels,
-            _discriminatorChannels,
-            _attentionLayers,
-            lossFunction: LossFunction,
-            options: _options);
     }
 
     /// <summary>

@@ -293,30 +293,9 @@ public partial class SpeakerLM<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.NumMels);
-        w.Write(_options.EmbeddingDim); w.Write(_options.LMHiddenDim);
-        w.Write(_options.NumLMLayers); w.Write(_options.NumHeads);
-        w.Write(_options.MaxSpeakers); w.Write(_options.DefaultThreshold);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.NumMels = r.ReadInt32();
-        _options.EmbeddingDim = r.ReadInt32(); _options.LMHiddenDim = r.ReadInt32();
-        _options.NumLMLayers = r.ReadInt32(); _options.NumHeads = r.ReadInt32();
-        _options.MaxSpeakers = r.ReadInt32(); _options.DefaultThreshold = r.ReadDouble();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new SpeakerLM<T>(Architecture, _options);
+
 
     #endregion
 

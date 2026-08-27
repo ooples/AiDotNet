@@ -48,13 +48,16 @@ namespace AiDotNet.MetaLearning.Models;
     Authors = "Oh, J., Yoo, H., Kim, C., & Yun, S.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class BOILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+public partial class BOILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly IFullModel<T, TInput, TOutput> _baseModel;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _adaptedBodyParams;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _headWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T>? _headBias;
     private readonly BOILOptions<T, TInput, TOutput> _options;
 

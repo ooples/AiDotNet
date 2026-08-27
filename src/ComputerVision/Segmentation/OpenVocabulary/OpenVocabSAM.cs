@@ -58,7 +58,7 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Open-Vocabulary SAM: Segment and Recognize Twenty-thousand Classes Interactively", "https://arxiv.org/abs/2401.02955", Year = 2024, Authors = "Yuan et al.")]
-public class OpenVocabSAM<T> : Common.OpenVocabSegmentationBase<T>
+public partial class OpenVocabSAM<T> : Common.OpenVocabSegmentationBase<T>
 {
     private readonly OpenVocabSAMOptions _options;
     public override ModelOptions GetOptions() => _options;
@@ -278,65 +278,6 @@ public class OpenVocabSAM<T> : Common.OpenVocabSegmentationBase<T>
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "OpenVocabSAM" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = SerializeForMetadata()
     };
-
-    /// <summary>
-    /// Writes configuration to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height); writer.Write(_width); writer.Write(_channels); writer.Write(_numClasses);
-        writer.Write(_decoderDim); writer.Write(_dropRate); writer.Write(_useNativeMode);
-        writer.Write(_onnxModelPath ?? string.Empty); writer.Write(_encoderLayerEnd);
-        writer.Write(_channelDims.Length); foreach (int d in _channelDims) writer.Write(d);
-        writer.Write(_depths.Length); foreach (int d in _depths) writer.Write(d);
-        writer.Write(_neckEmbeddingDim);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.WeightDecay);
-    }
-
-    /// <summary>
-    /// Reads configuration from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadDouble(); _ = reader.ReadBoolean(); _ = reader.ReadString();
-        _ = reader.ReadInt32();
-        int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32();
-        int dd = reader.ReadInt32(); for (int i = 0; i < dd; i++) _ = reader.ReadInt32();
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-        {
-            _options.NeckEmbeddingDimension = reader.ReadInt32();
-            _options.LearningRate = reader.ReadDouble();
-            _options.WeightDecay = reader.ReadDouble();
-        }
-    }
-
-    /// <summary>
-    /// Creates a new instance with the same configuration but fresh weights.
-    /// </summary>
-    /// <returns>A new model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new OpenVocabSAM<T>(Architecture, lossFunction: LossFunction, numClasses: _numClasses,
-            dropRate: _dropRate, options: _options)
-        : new OpenVocabSAM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
 
     /// <summary>
     /// Open-Vocabulary SAM's default optimizer is AdamW configured from the model options.

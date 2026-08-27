@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Regularization)]
 [LayerTask(LayerTask.Regularization)]
-[LayerProperty(IsTrainable = true)]
+[LayerProperty(IsTrainable = true, TestConstructorArgs = "new AiDotNet.NeuralNetworks.Layers.ReadoutLayer<double>(4, 8, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>())", TestInputShape = "1, 4")]
 // A DECORATOR: this layer rescales the inner layer's WEIGHTS and then returns
 // `_innerLayer.Forward(input)` verbatim (ForwardTraced), so it has no shape law of its own - it has the
 // inner layer's. The constructor says the same thing, chaining
@@ -90,11 +90,18 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     /// <summary>
     /// The left singular vector used for power iteration to compute the spectral norm.
     /// </summary>
+    // A BUFFER, not scratch. Power iteration starts from a RANDOM vector and refines it, and the
+    // spectral norm it converges to is what divides the weights -- so a layer that regenerates it
+    // on load computes a different norm and predicts differently from the model that was saved.
+    // Marked scratch, it was dropped from the checkpoint and the restored layer's output moved
+    // from 0.664 to 0.355. This is the same reason PyTorch registers u and v as buffers.
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _u;
 
     /// <summary>
     /// The right singular vector used for power iteration.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _v;
 
     /// <summary>
@@ -110,16 +117,19 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     /// <summary>
     /// Cached input from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Cached output from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Original weights stored during Forward, to be restored after Backward.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _originalParameters;
 
     /// <summary>
@@ -144,7 +154,9 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     /// <summary>
     /// GPU-resident power iteration vectors.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _uGpu;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _vGpu;
 
     /// <summary>
@@ -159,7 +171,69 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
         _powerIterations = powerIterations;
         _epsilon = NumOps.FromDouble(1e-12);
 
-        // u and v are lazily initialized based on the actual weight matrix shape.
+        // Built HERE rather than on the first forward, whenever the inner layer can already say how
+        // many weights it has. A buffer is registered only if it is non-null, so leaving these until
+        // the first forward meant a freshly constructed layer had no slot for them -- and a restore
+        // therefore had nowhere to put the saved vectors and silently kept its own random ones. With
+        // a single power iteration by default the norm depends heavily on where it starts, so that
+        // is the difference between a reloaded model and the one that was saved.
+        SeedPowerIteration();
+    }
+
+    /// <summary>
+    /// Builds the iteration vectors and refines them once, so sigma is meaningful from the start.
+    /// </summary>
+    /// <remarks>
+    /// Power iteration begins at a RANDOM vector, and u^T W v on a random pair is an arbitrary
+    /// bilinear form -- near zero or negative as easily as not -- so dividing by it does not
+    /// normalize anything. In eval the vectors are deliberately frozen, which means a layer used for
+    /// inference before it ever trained divided its weights by that arbitrary number: the output
+    /// swung between -1.99 and 3.15 across a serialize round trip purely on which random pair each
+    /// instance drew. PyTorch leaves them random until the first training forward and inherits the
+    /// same hole; seeding here closes it.
+    /// </remarks>
+    private void SeedPowerIteration()
+    {
+        if (_innerLayer is not LayerBase<T> innerBase) return;
+
+        Tensor<T>? weight = null;
+        try
+        {
+            var tensors = innerBase.GetTrainableParameters();
+            for (int i = 0; i < tensors.Count; i++)
+            {
+                if (tensors[i] is { } candidate && candidate.Shape.Length >= 2) { weight = candidate; break; }
+            }
+        }
+        catch (Exception)
+        {
+            // A lazy inner layer cannot be asked yet; the first forward seeds it instead.
+            return;
+        }
+
+        if (weight is null || weight.Length == 0) return;
+
+        int rows = weight.Shape[0];
+        int cols = weight.Length / rows;
+        EnsurePowerIterationVectors(rows, cols);
+        RefinePowerIterationVectors(
+            weight.Shape.Length == 2 ? weight : Engine.Reshape(weight, [rows, cols]), force: true);
+    }
+
+    /// <summary>Weights the inner layer holds, or zero while it cannot yet say.</summary>
+    private int InnerWeightCount()
+    {
+        try
+        {
+            int paramCount = _innerLayer.GetParameters().Length;
+            return paramCount == 0 ? 0 : paramCount - GetBiasCount(paramCount);
+        }
+        catch (Exception)
+        {
+            // A lazy inner layer that has not resolved cannot be asked yet; the first forward will
+            // build the vectors as before.
+            return 0;
+        }
     }
 
     /// <summary>
@@ -273,74 +347,138 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     {
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
-        // Get weights from inner layer
-        var parameters = _innerLayer.GetParameters();
-        int paramCount = parameters.Length;
-
-        if (paramCount == 0)
+        // The normalization runs on the inner layer's LIVE weight tensor and the quotient is bound
+        // back in its place, which is how PyTorch's spectral_norm parametrization works. The previous
+        // form copied the weights into a Vector, divided the numbers with NumOps and wrote them back
+        // through SetParameters, so the tape never saw the division: sigma depends on W, and the
+        // analytical gradient was missing that dependence entirely while finite differences measured
+        // it. It also meant the layer mutated the module it wraps.
+        if (_innerLayer is not LayerBase<T> innerBase)
         {
-            // No parameters to normalize, just forward through inner layer
-            var result = _innerLayer.Forward(input);
-            _lastOutput = result;
-            return result;
+            var passthrough = _innerLayer.Forward(input);
+            _lastOutput = passthrough;
+            return passthrough;
         }
 
-        // Store original parameters to restore after Backward
-        _originalParameters = parameters.Clone();
-
-        int biasCount = GetBiasCount(paramCount);
-        int weightCount = paramCount - biasCount;
-
-        // Reshape weight parameters into 2D matrix for spectral norm computation
-        // Use square-ish shape to minimize condition number issues
-        int rows = (int)Math.Ceiling(Math.Sqrt(weightCount));
-        int cols = (weightCount + rows - 1) / rows;
-
-        // Create weight tensor [rows, cols] with zero-padding if needed
-        var weights = new Tensor<T>([rows, cols]);
-        for (int i = 0; i < rows; i++)
+        // A lazy Dense/Convolution layer may expose a rank-two placeholder whose first dimension is
+        // zero until it sees an input. Resolve it from the real input before inspecting the weight
+        // shape; otherwise `weight.Length / weight.Shape[0]` divides by zero during the wrapper's
+        // first forward (and therefore during clone verification too).
+        if (!innerBase.IsShapeResolved)
         {
-            for (int j = 0; j < cols; j++)
+            var inputShape = input.Shape.ToArray();
+            try
             {
-                int idx = i * cols + j;
-                weights[new int[] { i, j }] = idx < weightCount ? parameters[idx] : NumOps.Zero;
+                innerBase.ResolveFromShape(inputShape);
+            }
+            catch (Exception) when (inputShape.Length > 1)
+            {
+                try { innerBase.ResolveFromShape(inputShape.Skip(1).ToArray()); }
+                catch (Exception) { /* The unnormalized first forward below can materialize it. */ }
             }
         }
 
+        var tensors = innerBase.GetTrainableParameters();
+        int weightIndex = -1;
+        for (int i = 0; i < tensors.Count; i++)
+        {
+            if (tensors[i] is { } candidate && candidate.Shape.Length >= 2
+                && candidate.Shape[0] > 0 && candidate.Length > 0)
+            {
+                weightIndex = i;
+                break;
+            }
+        }
+
+        if (weightIndex < 0)
+        {
+            var unnormalized = _innerLayer.Forward(input);
+            _lastOutput = unnormalized;
+            return unnormalized;
+        }
+
+        var weight = tensors[weightIndex];
+        int rows = weight.Shape[0];
+        int cols = weight.Length / rows;
+        var matrix = weight.Shape.Length == 2 ? weight : Engine.Reshape(weight, [rows, cols]);
+
         EnsurePowerIterationVectors(rows, cols);
 
-        // Compute spectral norm
-        T spectralNorm = ComputeSpectralNorm(weights);
-        T normPlusEps = NumOps.Add(spectralNorm, _epsilon);
+        // Power iteration refines u and v from the CURRENT weights and, per the paper and every
+        // reference implementation, contributes no gradient of its own: it is an estimate of the
+        // singular vectors, not a function being differentiated. Detaching keeps sigma's gradient to
+        // the weight alone. Updated only while training, so inference is reproducible.
+        RefinePowerIterationVectors(matrix);
 
-        // Normalize weight parameters by spectral norm
-        var normalizedParams = new Vector<T>(paramCount);
-        for (int i = 0; i < weightCount; i++)
-        {
-            normalizedParams[i] = NumOps.Divide(parameters[i], normPlusEps);
-        }
+        var u = _u ?? throw new InvalidOperationException("Power iteration vector u has not been initialized.");
+        var v = _v ?? throw new InvalidOperationException("Power iteration vector v has not been initialized.");
 
-        // Copy bias parameters unchanged
-        for (int i = weightCount; i < paramCount; i++)
-        {
-            normalizedParams[i] = parameters[i];
-        }
+        // sigma = u^T W v, built from the live weight so the tape carries d(sigma)/dW.
+        var wv = Engine.TensorMatMul(matrix, Engine.Reshape(v, [cols, 1]));          // [rows, 1]
+        var sigma = Engine.TensorMatMul(Engine.Reshape(u, [1, rows]), wv);           // [1, 1]
 
-        _innerLayer.SetParameters(normalizedParams);
-        _normalizedWeightsApplied = true;
+        var epsilon = new Tensor<T>([1, 1]);
+        epsilon[0, 0] = _epsilon;
+        var denominator = Engine.TensorAdd(sigma, epsilon);
 
+        // TensorDivide broadcasts on its own since AiDotNet.Tensors #919, so the explicit
+        // Broadcast* variant is the older spelling of the same operation.
+        var normalizedMatrix = Engine.TensorDivide(matrix, denominator);
+        var normalizedWeight = weight.Shape.Length == 2
+            ? normalizedMatrix
+            : Engine.Reshape(normalizedMatrix, weight.Shape.ToArray());
+
+        var rebound = new Tensor<T>[tensors.Count];
+        for (int i = 0; i < tensors.Count; i++) rebound[i] = tensors[i];
+        rebound[weightIndex] = normalizedWeight;
+
+        var originals = new Tensor<T>[tensors.Count];
+        for (int i = 0; i < tensors.Count; i++) originals[i] = tensors[i];
+
+        innerBase.SetTrainableParameters(rebound);
         try
         {
-            // Forward through inner layer with normalized weights
             _lastOutput = _innerLayer.Forward(input);
             return _lastOutput;
         }
-        catch
+        finally
         {
-            // Restore original weights on exception
-            RestoreOriginalWeights();
-            throw;
+            // The wrapped layer keeps the weights it came with. Leaving the quotient bound would
+            // divide them again on the next pass, which is how they used to decay pass over pass.
+            innerBase.SetTrainableParameters(originals);
         }
+    }
+
+    /// <summary>Refines u and v from the current weights, outside the gradient graph.</summary>
+    /// <param name="matrix">The weight matrix to iterate against.</param>
+    /// <param name="force">Refine even outside training, used once at construction.</param>
+    private void RefinePowerIterationVectors(Tensor<T> matrix, bool force = false)
+    {
+        if (!force && !IsTrainingMode) return;
+
+        int rows = matrix.Shape[0];
+        int cols = matrix.Shape[1];
+        var u = _u;
+        var v = _v;
+        if (u is null || v is null) return;
+
+        // Values only: a detached copy, so nothing here reaches the tape.
+        var detached = Tensor<T>.FromVector(matrix.ToVector()).Reshape(rows, cols);
+        var transposed = Engine.TensorTranspose(detached);
+
+        for (int iteration = 0; iteration < _powerIterations; iteration++)
+        {
+            var next = Engine.TensorMatMul(transposed, u.Reshape(rows, 1)).Reshape(cols);
+            NormalizeVector(ref next);
+            v = next;
+
+            var refreshed = Engine.TensorMatMul(detached, v.Reshape(cols, 1)).Reshape(rows);
+            NormalizeVector(ref refreshed);
+            u = refreshed;
+        }
+
+        _u = u;
+        _v = v;
     }
 
     /// <summary>
@@ -432,11 +570,10 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
             }
             throw new InvalidOperationException("Inner layer does not support ForwardGpu.");
         }
-        catch
+        finally
         {
-            // Restore original weights on exception
+            // Same reason as the traced path above: the inner weights must not stay normalized.
             RestoreOriginalWeights();
-            throw;
         }
     }
 
@@ -517,50 +654,6 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
         _lastOutput = null;
         RestoreOriginalWeights();
         _innerLayer.ResetState();
-    }
-
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-        // Serialize power iteration vectors for deterministic deserialization
-        bool hasU = _u != null;
-        writer.Write(hasU);
-        if (hasU && _u != null)
-        {
-            writer.Write(_u.Length);
-            for (int i = 0; i < _u.Length; i++)
-                writer.Write(NumOps.ToDouble(_u[i]));
-        }
-        bool hasV = _v != null;
-        writer.Write(hasV);
-        if (hasV && _v != null)
-        {
-            writer.Write(_v.Length);
-            for (int i = 0; i < _v.Length; i++)
-                writer.Write(NumOps.ToDouble(_v[i]));
-        }
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-        // Restore power iteration vectors
-        bool hasU = reader.ReadBoolean();
-        if (hasU)
-        {
-            int uLen = reader.ReadInt32();
-            _u = new Tensor<T>([uLen]);
-            for (int i = 0; i < uLen; i++)
-                _u[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        bool hasV = reader.ReadBoolean();
-        if (hasV)
-        {
-            int vLen = reader.ReadInt32();
-            _v = new Tensor<T>([vLen]);
-            for (int i = 0; i < vLen; i++)
-                _v[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
     }
 
     /// <summary>

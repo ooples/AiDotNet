@@ -38,7 +38,7 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Alternatives to the Median Absolute Deviation", "https://doi.org/10.1080/01621459.1993.10476408")]
-public class ModifiedZScoreDetector<T> : AnomalyDetectorBase<T>
+public partial class ModifiedZScoreDetector<T> : AnomalyDetectorBase<T>
 {
     /// <summary>
     /// Scaling factor to make MAD comparable to standard deviation for normal distributions.

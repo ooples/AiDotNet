@@ -48,7 +48,7 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2021,
     Authors = "Shen et al."
 )]
-public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
+public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly ForwardTacotronOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -262,46 +262,9 @@ public class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.MelChannels);
-        writer.Write(_options.HiddenDim);
-        writer.Write(_options.NumEncoderLayers);
-        writer.Write(_options.NumDecoderLayers);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.MelChannels = reader.ReadInt32();
-        _options.HiddenDim = reader.ReadInt32();
-        _options.NumEncoderLayers = reader.ReadInt32();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new ForwardTacotron<T>(Architecture, mp, new ForwardTacotronOptions(_options));
 
-        var cloneOptimizer = _optimizer?.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
-            ? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options))
-            : null;
-        return new ForwardTacotron<T>(Architecture, new ForwardTacotronOptions(_options), cloneOptimizer);
-    }
 
     private void ThrowIfDisposed()
     {

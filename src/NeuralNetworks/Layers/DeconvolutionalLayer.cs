@@ -117,6 +117,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// so you can adjust them if the dish didn't turn out perfectly.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -137,6 +138,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// and adjust its internal values to make better outputs next time.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -158,6 +160,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// to make the output better next time.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _kernelsGradient;
 
     /// <summary>
@@ -179,10 +182,13 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// to make the output better next time.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput;
+    [ExternalState]
     private Tensor<T>? _gpuOutput;
     private int[]? _gpuInputShape4D;
     private bool _gpuAddedBatchDimension;

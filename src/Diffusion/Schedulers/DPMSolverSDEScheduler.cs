@@ -37,7 +37,9 @@ namespace AiDotNet.Diffusion.Schedulers;
 [PipelineStage(PipelineStage.Training)]
 public sealed class DPMSolverSDEScheduler<T> : NoiseSchedulerBase<T>
 {
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _sigmas;
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _previousDerivative;
     private readonly Random _random;
 

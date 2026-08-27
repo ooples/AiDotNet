@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.SyntheticData;
 
@@ -35,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ComponentType(ComponentType.Encoder)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class TabularDataTransformer<T>
+public class TabularDataTransformer<T> : IModelSerializer
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -328,6 +329,42 @@ public class TabularDataTransformer<T>
             }
             _categoricalColumnInfos.Add(new CategoricalColumnInfo(categories, categoryToIndex));
         }
+    }
+
+    /// <inheritdoc />
+    public byte[] Serialize()
+    {
+        using var stream = new System.IO.MemoryStream();
+        using (var writer = new System.IO.BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            Serialize(writer);
+        }
+
+        return stream.ToArray();
+    }
+
+    /// <inheritdoc />
+    public void Deserialize(byte[] data)
+    {
+        if (data is null) throw new ArgumentNullException(nameof(data));
+
+        using var stream = new System.IO.MemoryStream(data, writable: false);
+        using var reader = new System.IO.BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: false);
+        Deserialize(reader);
+    }
+
+    /// <inheritdoc />
+    public void SaveModel(string filePath)
+    {
+        if (filePath is null) throw new ArgumentNullException(nameof(filePath));
+        System.IO.File.WriteAllBytes(filePath, Serialize());
+    }
+
+    /// <inheritdoc />
+    public void LoadModel(string filePath)
+    {
+        if (filePath is null) throw new ArgumentNullException(nameof(filePath));
+        Deserialize(System.IO.File.ReadAllBytes(filePath));
     }
 
     private static void WriteDoubleArray(System.IO.BinaryWriter writer, double[] values)

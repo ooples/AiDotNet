@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Attention Is All You Need", "https://arxiv.org/abs/1706.03762", Year = 2017, Authors = "Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin")]
-public class Transformer<T> : TokenLanguageModelLayoutBase<T>, IAuxiliaryLossLayer<T>, AiDotNet.Interfaces.ILanguageModel<T>
+public partial class Transformer<T> : TokenLanguageModelLayoutBase<T>, IAuxiliaryLossLayer<T>, AiDotNet.Interfaces.ILanguageModel<T>
 {
     private readonly TransformerOptions _options;
 
@@ -1081,26 +1081,7 @@ public class Transformer<T> : TokenLanguageModelLayoutBase<T>, IAuxiliaryLossLay
     /// This allows you to save your trained Transformer and use it again later without having to retrain it.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write Transformer-specific architecture details
-        writer.Write(_transformerArchitecture.NumHeads);
-        writer.Write(_transformerArchitecture.NumEncoderLayers);
-        writer.Write(_transformerArchitecture.NumDecoderLayers);
-        writer.Write(_transformerArchitecture.MaxSequenceLength);
-        writer.Write(_transformerArchitecture.VocabularySize);
-        writer.Write(Convert.ToDouble(_transformerArchitecture.DropoutRate));
 
-        // Write loss function and optimizer types
-        SerializationHelper<T>.SerializeInterface(writer, LossFunction);
-        SerializationHelper<T>.SerializeInterface(writer, _optimizer);
-
-        // Opt-in logits head marker (trailing so older readers that stop after the optimizer are
-        // unaffected; new readers guard the read on stream position). Records whether the final
-        // Softmax layer was dropped for CrossEntropyWithLogitsLoss training so inference re-applies
-        // softmax after deserialize.
-        writer.Write(_headEmitsLogits);
-    }
 
     /// <summary>
     /// Deserializes Transformer-specific data from a binary stream.
@@ -1120,80 +1101,5 @@ public class Transformer<T> : TokenLanguageModelLayoutBase<T>, IAuxiliaryLossLay
     /// This allows you to load a previously trained Transformer and use it immediately without having to retrain it.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read Transformer-specific architecture details
-        int numHeads = reader.ReadInt32();
-        int numEncoderLayers = reader.ReadInt32();
-        int numDecoderLayers = reader.ReadInt32();
-        int maxSequenceLength = reader.ReadInt32();
-        int vocabularySize = reader.ReadInt32();
-        T dropoutRate = NumOps.FromDouble(reader.ReadDouble());
 
-        // Read and reconstruct loss function and optimizer (must match serialization order).
-        LossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader)
-            ?? LossFunction;
-
-        // Match the constructor's default-optimizer policy: Vaswani 2017
-        // recipe (β₁=0.9, β₂=0.98, ε=1e-9, lr=1e-3 + NoamSchedule). Stale
-        // state-dicts written before this fix didn't serialize their
-        // optimizer; reading null-optimizer back must produce the SAME
-        // optimizer the ctor would, otherwise the deserialized model silently
-        // regresses to non-converging vanilla SGD or a different (non-paper)
-        // Adam configuration.
-        // Recipe construction routes through the same helper as the ctor
-        // and the SetBaseTrainOptimizer null-reset path so a future
-        // Vaswani-recipe change can't silently miss the deserialization
-        // fallback. Closes #1270.xEmP.
-        _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader)
-            ?? CreateDefaultVaswaniOptimizer();
-
-        // Keep the base optimizer slot in sync after deserialization too
-        // — Train() now resolves through GetOrCreateBaseOptimizer, so a
-        // load-then-resume-training flow needs the deserialized optimizer
-        // installed on both sides.
-        SetBaseTrainOptimizer(_optimizer);
-
-        // Opt-in logits-head marker (trailing field). Guard on stream position so a state-dict
-        // written before this field existed (stream ends after the optimizer) reads back with the
-        // default false (standard softmax head) instead of throwing EndOfStream.
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-            _headEmitsLogits = reader.ReadBoolean();
-    }
-
-    /// <summary>
-    /// Creates a new instance of the Transformer with the same architecture and configuration.
-    /// </summary>
-    /// <returns>A new instance of the Transformer with the same configuration as the current instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new Transformer neural network with the same architecture, loss function,
-    /// and optimizer as the current instance. The new instance has freshly initialized parameters,
-    /// making it useful for creating separate instances with identical configurations or for
-    /// resetting a network while preserving its structure.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a brand new Transformer with the same setup.
-    /// 
-    /// Think of it like creating a blueprint copy:
-    /// - It has the same architecture (number of layers, attention heads, etc.)
-    /// - It uses the same loss function to measure performance
-    /// - It uses the same optimizer to learn from data
-    /// - But it starts with fresh parameters (weights and biases)
-    /// 
-    /// This is useful when you want to:
-    /// - Start over with a fresh network but keep the same design
-    /// - Create multiple networks with identical settings for comparison
-    /// - Reset a network to its initial state
-    /// 
-    /// The new Transformer will need to be trained from scratch, as it doesn't
-    /// inherit any of the learned knowledge from the original.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new Transformer<T>(
-            _transformerArchitecture,
-            LossFunction,
-            _optimizer);
-    }
 }

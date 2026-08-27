@@ -38,6 +38,7 @@ namespace AiDotNet.Clustering.DistanceMetrics;
 [PipelineStage(PipelineStage.Evaluation)]
 public class MahalanobisDistance<T> : DistanceMetricBase<T>
 {
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _inverseCovarianceMatrix;
 
     /// <summary>

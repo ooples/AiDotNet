@@ -45,7 +45,7 @@ namespace AiDotNet.Finance.Portfolio;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Global Portfolio Optimization", "https://doi.org/10.2469/faj.v48.n5.28")]
-public class BlackLittermanNeural<T> : PortfolioOptimizerBase<T>
+public partial class BlackLittermanNeural<T> : PortfolioOptimizerBase<T>
 {
     #region Shared Fields
 
@@ -183,26 +183,6 @@ public class BlackLittermanNeural<T> : PortfolioOptimizerBase<T>
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <summary>
-    /// Creates a new instance of the BlackLittermanNeural model with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is used by the framework to clone the model's setup
-    /// so it can create a fresh instance with identical settings.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new BlackLittermanNeuralOptions<T>
-        {
-            NumAssets = _options.NumAssets,
-            HiddenDimension = _hiddenDimension,
-            DropoutRate = _dropout
-        };
-
-        return new BlackLittermanNeural<T>(Architecture, optionsCopy, lossFunction: _lossFunction);
-    }
 
     #endregion
 }

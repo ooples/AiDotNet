@@ -364,12 +364,6 @@ public partial class SLearner<T> : CausalModelBase<T>
     }
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new SLearner<T>(MaxIterations, LearningRate, Lambda);
-    }
-
-    /// <inheritdoc />
     /// <remarks>
     /// SLearner's trainable state is the bias scalar and the weight vector
     /// (covariate weights + treatment weight). Without this hook the

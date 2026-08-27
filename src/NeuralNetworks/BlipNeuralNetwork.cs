@@ -148,21 +148,25 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     /// <summary>
     /// Learnable CLS token for vision encoder.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visionClsToken;
 
     /// <summary>
     /// Learnable CLS token for text encoder.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _textClsToken;
 
     /// <summary>
     /// Vision positional embeddings.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _visionPositionalEmbeddings;
 
     /// <summary>
     /// Text positional embeddings.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _textPositionalEmbeddings;
 
     /// <summary>
@@ -1536,100 +1540,9 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
         });
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new BlipNeuralNetwork<T>(
-                Architecture,
-                _imageSize,
-                3,
-                _patchSize,
-                _vocabularySize,
-                _maxSequenceLength,
-                _embeddingDimension,
-                _hiddenDim,
-                _numLayers,
-                _numDecoderLayers,
-                _numHeads,
-                _mlpDim,
-                _tokenizer,
-                null,
-                null);
-        }
-        else
-        {
-            string visionPath = _visionEncoderPath ?? string.Empty;
-            string textPath = _textEncoderPath ?? string.Empty;
-            string decoderPath = _textDecoderPath ?? string.Empty;
-
-            if (string.IsNullOrEmpty(visionPath) || string.IsNullOrEmpty(textPath) || string.IsNullOrEmpty(decoderPath))
-            {
-                throw new InvalidOperationException("ONNX model paths required for ONNX mode.");
-            }
-
-            return new BlipNeuralNetwork<T>(
-                Architecture,
-                visionPath,
-                textPath,
-                decoderPath,
-                _tokenizer,
-                _embeddingDimension,
-                _maxSequenceLength,
-                _imageSize,
-                null,
-                null);
-        }
-    }
-
     #endregion
 
     #region Parameter Management
-
-    // UpdateParameters was overridden here to validate against ParameterCount and walk
-    // Layers by hand. Both are the base's job, and keeping it would have broken as soon as
-    // the tables below joined the count: it walked only Layers, so it would have been short
-    // by exactly their size.
-    /// <summary>
-    /// Declares the vision and text CLS tokens and both positional embedding tables, which live outside <see cref="NeuralNetworkBase{T}.Layers"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// These were in NEITHER surface. The base walks Layers, these are not in Layers, and
-    /// nothing declared them -- so they were never counted, never handed out, never restored,
-    /// and never trained through a flat-vector optimizer. Declaring them adds to the parameter
-    /// count, deliberately: the old number was not a smaller-but-correct total, it omitted real
-    /// weights.
-    /// </para>
-    /// <para>
-    /// A hook rather than a [TrainableParameter] attribute because TrainableParameterGenerator
-    /// only processes LayerBase subclasses (see its ExtendsLayerBase guard) -- the attribute
-    /// does nothing on a model. For a model, declaring through this hook IS the mechanism.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        if (_visionClsToken is not null)
-        {
-            yield return _visionClsToken;
-        }
-
-        if (_textClsToken is not null)
-        {
-            yield return _textClsToken;
-        }
-
-        if (_visionPositionalEmbeddings is not null)
-        {
-            yield return _visionPositionalEmbeddings;
-        }
-
-        if (_textPositionalEmbeddings is not null)
-        {
-            yield return _textPositionalEmbeddings;
-        }
-    }
     /// <summary>
     /// Retrieves metadata about the BLIP neural network model.
     /// </summary>
@@ -1663,40 +1576,10 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     #region Serialization
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_embeddingDimension);
-        writer.Write(_maxSequenceLength);
-        writer.Write(_imageSize);
-        writer.Write(_hiddenDim);
-        writer.Write(_numLayers);
-        writer.Write(_numDecoderLayers);
-        writer.Write(_numHeads);
-        writer.Write(_mlpDim);
-        writer.Write(_patchSize);
-        writer.Write(_vocabularySize);
-        writer.Write(_useNativeMode);
-        writer.Write(_optimizer?.GetType().Name ?? "Adam");
-        writer.Write(_lossFunction?.GetType().Name ?? "Contrastive");
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _embeddingDimension = reader.ReadInt32();
-        _maxSequenceLength = reader.ReadInt32();
-        _imageSize = reader.ReadInt32();
-        _hiddenDim = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numDecoderLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _mlpDim = reader.ReadInt32();
-        _patchSize = reader.ReadInt32();
-        _vocabularySize = reader.ReadInt32();
-        _useNativeMode = reader.ReadBoolean();
-        _ = reader.ReadString(); // optimizer type
-        _ = reader.ReadString(); // loss function type
-    }
+
 
     #endregion
 

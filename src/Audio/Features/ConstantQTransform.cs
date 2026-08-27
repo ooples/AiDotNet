@@ -365,9 +365,5 @@ public class ConstantQTransform<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         return copy;
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-        => (ConstantQTransform<T>)MemberwiseClone();
-
     #endregion
 }

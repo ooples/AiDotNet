@@ -108,9 +108,11 @@ public partial class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     private readonly NPBMLOptions<T, TInput, TOutput> _npbmlOptions;
 
     /// <summary>Parameters for the encoder (support set -> latent distribution).</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _encoderParams = new Vector<T>(0);
 
     /// <summary>Parameters for the decoder (latent + query -> predictions).</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _decoderParams = new Vector<T>(0);
 
     /// <inheritdoc/>

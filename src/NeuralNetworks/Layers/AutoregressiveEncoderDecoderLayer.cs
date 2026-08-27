@@ -23,6 +23,14 @@ public abstract class AutoregressiveEncoderDecoderLayer<T> : LayerBase<T>
     protected readonly int _decoderVocabularySize;
     protected readonly int _maximumDecoderLength;
 
+    // Generated construction factories reopen the concrete derived layer, so they cannot read the
+    // base's private ownership fields directly. Exact-type protected views let the generator bind
+    // IEnumerable/ILayer constructor arguments without exposing mutable collections publicly.
+    protected IEnumerable<ILayer<T>> EncoderLayers => _encoderLayers;
+    protected EmbeddingLayer<T> DecoderEmbedding => _decoderEmbedding;
+    protected IEnumerable<ILayer<T>> DecoderLayers => _decoderLayers;
+    protected ILayer<T> OutputLayer => _outputLayer;
+
     /// <summary>Creates an encoder-decoder composite from its independently executed branches.</summary>
     protected AutoregressiveEncoderDecoderLayer(
         IEnumerable<ILayer<T>> encoderLayers,

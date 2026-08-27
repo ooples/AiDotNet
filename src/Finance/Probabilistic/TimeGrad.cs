@@ -562,20 +562,6 @@ public partial class TimeGrad<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of the TimeGrad model with the same configuration.
-    /// </summary>
-    /// <returns>A new TimeGrad instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the TimeGrad model, CreateNewInstance builds and wires up model components. This sets up the TimeGrad architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TimeGrad<T>(Architecture, _options);
-    }
-
-    /// <summary>
     /// Serializes TimeGrad-specific data for model persistence.
     /// </summary>
     /// <param name="writer">The binary writer to serialize data to.</param>
@@ -584,17 +570,7 @@ public partial class TimeGrad<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the TimeGrad model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the TimeGrad architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numRnnLayers);
-        writer.Write(_numDiffusionSteps);
-        writer.Write(_numSamples);
-        writer.Write(_denoisingDim);
-        writer.Write(_betaSchedule);
-    }
+
 
     /// <summary>
     /// Deserializes TimeGrad-specific data when loading a saved model.
@@ -605,17 +581,7 @@ public partial class TimeGrad<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the TimeGrad model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the TimeGrad architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numRnnLayers = reader.ReadInt32();
-        _numDiffusionSteps = reader.ReadInt32();
-        _numSamples = reader.ReadInt32();
-        _denoisingDim = reader.ReadInt32();
-        _betaSchedule = reader.ReadString();
-    }
+
 
     #endregion
 

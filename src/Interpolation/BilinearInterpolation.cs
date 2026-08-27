@@ -16,7 +16,7 @@ namespace AiDotNet.Interpolation;
 /// between all four surrounding points, giving a more natural and accurate estimate.
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public class BilinearInterpolation<T> : I2DInterpolation<T>
+public partial class BilinearInterpolation<T> : I2DInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the grid points.
@@ -36,6 +36,7 @@ public class BilinearInterpolation<T> : I2DInterpolation<T>
     /// If you're thinking of a temperature map, these would be the temperature readings
     /// at each measured location.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Matrix<T> _z;
 
     /// <summary>

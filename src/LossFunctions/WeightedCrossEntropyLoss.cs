@@ -30,11 +30,12 @@ namespace AiDotNet.LossFunctions;
 [LossTask(LossTask.BinaryClassification)]
 [LossTask(LossTask.MultiLabel)]
 [LossProperty(IsNonNegative = true, ZeroForIdentical = false, SupportsClassWeights = true, HandlesImbalancedData = true, RequiresProbabilityInputs = true, ExpectedOutput = OutputType.Probabilities)]
-public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
+public partial class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
     /// The weights to apply to each sample.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _weights;
 
     /// <summary>

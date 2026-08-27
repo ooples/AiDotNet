@@ -44,7 +44,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Applied Logistic Regression", "https://doi.org/10.1002/0471722146")]
-public class LogisticRegression<T> : RegressionBase<T>
+public partial class LogisticRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// The configuration options for the logistic regression model.
@@ -407,111 +407,5 @@ public class LogisticRegression<T> : RegressionBase<T>
         T maxGradient = gradient.Max(NumOps.Abs) ?? NumOps.Zero;
         T scaledMaxGradient = NumOps.Divide(maxGradient, NumOps.FromDouble(n));
         return NumOps.LessThan(scaledMaxGradient, NumOps.FromDouble(_options.Tolerance));
-    }
-
-    /// <summary>
-    /// Serializes the logistic regression model to a byte array for storage or transmission.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model data.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method converts the entire logistic regression model, including its parameters and configuration,
-    /// into a byte array that can be stored in a file or database, or transmitted over a network. The model can
-    /// later be restored using the Deserialize method.
-    /// </para>
-    /// <para><b>For Beginners:</b> This converts the model into a format that can be saved or shared.
-    /// 
-    /// Serialization:
-    /// - Transforms the model into a sequence of bytes
-    /// - Preserves all the important information about the model
-    /// - Allows you to save the trained model to a file
-    /// - Lets you load the model later without having to retrain it
-    /// 
-    /// It's like taking a snapshot of the model that you can use later or share with others.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-        // The two class labels, so a round-tripped model can still report which category the
-        // returned probability belongs to. This slot previously held the `_useOLS` flag, which
-        // recorded that the model had quietly fitted least squares instead.
-        writer.Write(_classLabels.Count);
-        for (int i = 0; i < _classLabels.Count; i++)
-        {
-            writer.Write(NumOps.ToDouble(_classLabels[i]));
-        }
-        // Serialize LogisticRegression specific data
-        writer.Write(_options.MaxIterations);
-        writer.Write(_options.Tolerance);
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the logistic regression model from a byte array.
-    /// </summary>
-    /// <param name="modelData">A byte array containing the serialized model data.</param>
-    /// <remarks>
-    /// <para>
-    /// This method restores a logistic regression model from a serialized byte array, reconstructing its parameters
-    /// and configuration. This allows a previously trained model to be loaded from storage or after being received
-    /// over a network.
-    /// </para>
-    /// <para><b>For Beginners:</b> This rebuilds the model from a saved format.
-    /// 
-    /// Deserialization:
-    /// - Takes a sequence of bytes that represents a model
-    /// - Reconstructs the original model with all its learned patterns
-    /// - Allows you to use a previously trained model without retraining
-    /// 
-    /// Think of it like unpacking a model that was packed up for storage or shipping,
-    /// so you can use it again exactly as it was.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-        // Class labels (see Serialize)
-        int classCount = reader.ReadInt32();
-        _classLabels = new List<T>(classCount);
-        for (int i = 0; i < classCount; i++)
-        {
-            _classLabels.Add(NumOps.FromDouble(reader.ReadDouble()));
-        }
-        // Deserialize MultipleRegression specific data
-        _options.MaxIterations = reader.ReadInt32();
-        _options.Tolerance = reader.ReadDouble();
-    }
-
-    /// <summary>
-    /// Creates a new instance of the logistic regression model.
-    /// </summary>
-    /// <returns>A new instance of the logistic regression model with the same configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the logistic regression model with the same configuration as the current instance.
-    /// It is used internally during serialization/deserialization to create a new instance of the model.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a copy of the model structure without copying the learned data.
-    /// 
-    /// It's like creating a new, empty notebook with the same number of pages and section dividers as your current notebook,
-    /// but without copying any of the notes you've written. This is useful when you want to create a similar model
-    /// or when loading a saved model from a file.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new LogisticRegression<T>(_options, Regularization);
     }
 }

@@ -56,7 +56,9 @@ public partial class ARIMADetector<T> : AnomalyDetectorBase<T>
     private readonly int _p;
     private readonly int _d;
     private readonly int _q;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _arCoeffs;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _maCoeffs;
 
     private T _mean;

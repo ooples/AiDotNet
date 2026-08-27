@@ -44,7 +44,7 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Conformer: Convolution-augmented Transformer for Speech Recognition", "https://arxiv.org/abs/2005.08100", Year = 2020, Authors = "Gulati et al.")]
-public class ConformerTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class ConformerTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly ConformerTransducerOptions _options; public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
@@ -125,9 +125,8 @@ public class ConformerTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "ConformerTransducer-Native" : "ConformerTransducer-ONNX", Description = "Conformer-Transducer: Streaming ASR (Gulati+Graves)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
-    protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.FeedForwardExpansionFactor); w.Write(_options.PredictionDim); w.Write(_options.JointDim); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.DropoutRate); w.Write(_options.Language); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.FeedForwardExpansionFactor = r.ReadInt32(); _options.PredictionDim = r.ReadInt32(); _options.JointDim = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { _options.Language }; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new ConformerTransducer<T>(Architecture, mp, _options); return new ConformerTransducer<T>(Architecture, _options); }
+
+
     /// <summary>
     /// Greedy decoding on output logits. For ONNX models the prediction+joint networks are
     /// internal to the ONNX graph, so the output is already joint logits. For native mode,

@@ -90,13 +90,4 @@ public class ELECTRANER<T> : TransformerNERBase<T>
             "ELECTRA-NER", "Clark et al., ICLR 2020", optimizer)
     {
     }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new TransformerNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new ELECTRANER<T>(Architecture, p, optionsCopy);
-        return new ELECTRANER<T>(Architecture, optionsCopy);
-    }
 }

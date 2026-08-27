@@ -97,14 +97,14 @@ public class PredictorParameterStreamingTests
     }
 
     [Fact]
-    public async System.Threading.Tasks.Task UViT_ManifestReportsDeferredRatherThanParameterFree()
+    public async System.Threading.Tasks.Task UViT_ManifestReportsResolvedUnmaterialized()
     {
         await System.Threading.Tasks.Task.Yield();
 
         var predictor = UViT(7);
         var provider = Assert.IsAssignableFrom<IParameterManifestProvider>(predictor);
 
-        Assert.Equal(ParameterReadiness.ShapeDeferred, provider.ParameterLayout.Readiness);
+        Assert.Equal(ParameterReadiness.ShapeResolvedUnmaterialized, provider.ParameterLayout.Readiness);
     }
 
     [Fact]

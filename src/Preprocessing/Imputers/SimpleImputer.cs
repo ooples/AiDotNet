@@ -67,6 +67,7 @@ public class SimpleImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     // Fitted parameters: statistics for each column
     [JsonProperty]
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _statistics;
 
     /// <summary>

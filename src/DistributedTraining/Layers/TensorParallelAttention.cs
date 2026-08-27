@@ -64,6 +64,9 @@ public sealed partial class TensorParallelAttention<T> : LayerBase<T>, IShapeCon
     private readonly bool _causal;
     private readonly double _scale;
 
+    /// <summary>Construction state: the 'backend' the layer was built with.</summary>
+    private readonly AiDotNet.DistributedTraining.ICommunicationBackend<T> _backend;
+
     /// <summary>
     /// Creates a tensor-parallel attention block sharded across the ranks of <paramref name="backend"/>.
     /// </summary>
@@ -74,6 +77,7 @@ public sealed partial class TensorParallelAttention<T> : LayerBase<T>, IShapeCon
     public TensorParallelAttention(ICommunicationBackend<T> backend, int embedDim, int numHeads, bool causal = false)
         : base([embedDim], [embedDim])
     {
+        _backend = backend;
         if (backend is null) throw new ArgumentNullException(nameof(backend));
         if (embedDim <= 0) throw new ArgumentOutOfRangeException(nameof(embedDim));
         if (numHeads <= 0 || embedDim % numHeads != 0)

@@ -24,7 +24,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
+public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
     /// The options specific to the AMSGrad optimizer.
@@ -595,39 +595,6 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         return _options;
     }
 
-    /// <summary>
-    /// Converts the current state of the optimizer into a byte array for storage or transmission.
-    /// </summary>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method saves all the important information about the AMSGrad optimizer's current state.
-    /// It's like taking a snapshot of the optimizer that can be used to recreate its exact state later.
-    /// This is useful for saving progress or sharing the optimizer's state with others.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
-
-            writer.Write(_t);
-
-            // Serialize state vectors
-            SerializeVector(writer, _m);
-            SerializeVector(writer, _v);
-            SerializeVector(writer, _vHat);
-
-            return ms.ToArray();
-        }
-    }
-
     private void SerializeVector(BinaryWriter writer, Vector<T>? vector)
     {
         writer.Write(vector is not null);
@@ -655,38 +622,6 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
             return new Vector<T>(data);
         }
         return null;
-    }
-
-    /// <summary>
-    /// Restores the optimizer's state from a byte array previously created by the Serialize method.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized optimizer state.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method rebuilds the AMSGrad optimizer's state from a saved snapshot.
-    /// It's like restoring a machine to a previous configuration using a backup.
-    /// This allows you to continue optimization from where you left off or use a shared optimizer state.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<AMSGradOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-            _t = reader.ReadInt32();
-
-            // Deserialize state vectors
-            _m = DeserializeVector(reader);
-            _v = DeserializeVector(reader);
-            _vHat = DeserializeVector(reader);
-        }
     }
 
     /// <summary>

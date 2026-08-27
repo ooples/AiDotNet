@@ -54,7 +54,7 @@ namespace AiDotNet.Clustering.Hierarchical;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Hierarchical Grouping to Optimize an Objective Function", "https://doi.org/10.1080/01621459.1963.10500845")]
-public class AgglomerativeClustering<T> : ClusteringBase<T>
+public partial class AgglomerativeClustering<T> : ClusteringBase<T>
 {
     private readonly HierarchicalOptions<T> _options;
 
@@ -90,19 +90,6 @@ public class AgglomerativeClustering<T> : ClusteringBase<T>
     public LinkageMethod Linkage => _options.Linkage;
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new AgglomerativeClustering<T>(new HierarchicalOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            Linkage = _options.Linkage,
-            DistanceThreshold = _options.DistanceThreshold,
-            ComputeFullTree = _options.ComputeFullTree,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

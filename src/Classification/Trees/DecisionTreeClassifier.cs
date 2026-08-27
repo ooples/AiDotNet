@@ -47,7 +47,7 @@ namespace AiDotNet.Classification.Trees;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Classification and Regression Trees", "https://doi.org/10.1201/9781315139470")]
-public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBasedClassifier<T>
+public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBasedClassifier<T>
 {
 
     // Its own comment: "Decision trees do not have traditional numeric parameters". The base fold
@@ -544,65 +544,6 @@ public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBa
         return 1 + CountNodes(node.Left) + CountNodes(node.Right);
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new DecisionTreeClassifier<T>(new DecisionTreeClassifierOptions<T>
-        {
-            MaxDepth = Options.MaxDepth,
-            MinSamplesSplit = Options.MinSamplesSplit,
-            MinSamplesLeaf = Options.MinSamplesLeaf,
-            MaxFeatures = Options.MaxFeatures,
-            Criterion = Options.Criterion,
-            Seed = Options.Seed,
-            MinImpurityDecrease = Options.MinImpurityDecrease
-        });
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new DecisionTreeClassifier<T>(new DecisionTreeClassifierOptions<T>
-        {
-            MaxDepth = Options.MaxDepth,
-            MinSamplesSplit = Options.MinSamplesSplit,
-            MinSamplesLeaf = Options.MinSamplesLeaf,
-            MaxFeatures = Options.MaxFeatures,
-            Criterion = Options.Criterion,
-            Seed = Options.Seed,
-            MinImpurityDecrease = Options.MinImpurityDecrease
-        });
-
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-
-        if (ClassLabels != null)
-        {
-            clone.ClassLabels = new Vector<T>(ClassLabels.Length);
-            for (int i = 0; i < ClassLabels.Length; i++)
-            {
-                clone.ClassLabels[i] = ClassLabels[i];
-            }
-        }
-
-        if (FeatureImportances != null)
-        {
-            clone.FeatureImportances = new Vector<T>(FeatureImportances.Length);
-            for (int i = 0; i < FeatureImportances.Length; i++)
-            {
-                clone.FeatureImportances[i] = FeatureImportances[i];
-            }
-        }
-
-        if (_root != null)
-        {
-            clone._root = CloneNode(_root);
-        }
-
-        return clone;
-    }
-
     /// <summary>
     /// Deep clones a decision tree node.
     /// </summary>
@@ -673,43 +614,6 @@ public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBa
         return metadata;
     }
 
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        var modelData = new Dictionary<string, object>
-        {
-            { "NumClasses", NumClasses },
-            { "NumFeatures", NumFeatures },
-            { "TaskType", (int)TaskType },
-            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
-            { "RegularizationOptions", Regularization.GetOptions() }
-        };
-
-        // Serialize FeatureImportances
-        if (FeatureImportances is not null)
-        {
-            var featureImportancesArray = new double[FeatureImportances.Length];
-            for (int i = 0; i < FeatureImportances.Length; i++)
-            {
-                featureImportancesArray[i] = NumOps.ToDouble(FeatureImportances[i]);
-            }
-            modelData["FeatureImportances"] = featureImportancesArray;
-        }
-
-        // Serialize tree structure
-        if (_root is not null)
-        {
-            modelData["Tree"] = SerializeNode(_root);
-        }
-
-        var modelMetadata = GetModelMetadata();
-        modelMetadata.ModelData = System.Text.Encoding.UTF8.GetBytes(
-            Newtonsoft.Json.JsonConvert.SerializeObject(modelData));
-
-        return System.Text.Encoding.UTF8.GetBytes(
-            Newtonsoft.Json.JsonConvert.SerializeObject(modelMetadata));
-    }
-
     /// <summary>
     /// Serializes a decision node to a dictionary for JSON serialization.
     /// </summary>
@@ -745,67 +649,6 @@ public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBa
         }
 
         return nodeData;
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        var jsonString = System.Text.Encoding.UTF8.GetString(modelData);
-        var modelMetadata = Newtonsoft.Json.JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-
-        if (modelMetadata == null || modelMetadata.ModelData == null)
-        {
-            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
-        }
-
-        var modelDataString = System.Text.Encoding.UTF8.GetString(modelMetadata.ModelData);
-        var modelDataObj = Newtonsoft.Json.JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(modelDataString);
-
-        if (modelDataObj == null)
-        {
-            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
-        }
-
-        // Deserialize base properties
-        NumClasses = modelDataObj["NumClasses"]?.ToObject<int>() ?? 0;
-        NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
-        TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
-
-        var classLabelsToken = modelDataObj["ClassLabels"];
-        if (classLabelsToken is not null)
-        {
-            var classLabelsAsDoubles = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (classLabelsAsDoubles.Length > 0)
-            {
-                ClassLabels = new Vector<T>(classLabelsAsDoubles.Length);
-                for (int i = 0; i < classLabelsAsDoubles.Length; i++)
-                {
-                    ClassLabels[i] = NumOps.FromDouble(classLabelsAsDoubles[i]);
-                }
-            }
-        }
-
-        // Deserialize FeatureImportances
-        var featureImportancesToken = modelDataObj["FeatureImportances"];
-        if (featureImportancesToken is not null)
-        {
-            var featureImportancesArray = featureImportancesToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (featureImportancesArray.Length > 0)
-            {
-                FeatureImportances = new Vector<T>(featureImportancesArray.Length);
-                for (int i = 0; i < featureImportancesArray.Length; i++)
-                {
-                    FeatureImportances[i] = NumOps.FromDouble(featureImportancesArray[i]);
-                }
-            }
-        }
-
-        // Deserialize tree structure
-        var treeToken = modelDataObj["Tree"];
-        if (treeToken is not null)
-        {
-            _root = DeserializeNode(treeToken as Newtonsoft.Json.Linq.JObject);
-        }
     }
 
     /// <summary>

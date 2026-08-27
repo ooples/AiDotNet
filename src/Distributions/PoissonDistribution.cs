@@ -207,12 +207,6 @@ public class PoissonDistribution<T> : DistributionBase<T>
     }
 
     /// <inheritdoc/>
-    public override IParametricDistribution<T> Clone()
-    {
-        return new PoissonDistribution<T>(_lambda);
-    }
-
-    /// <inheritdoc/>
     public override T Sample(Random random)
     {
         double lambda = NumOps.ToDouble(_lambda);

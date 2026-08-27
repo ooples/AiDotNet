@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine Translation", "https://arxiv.org/abs/1406.1078", Year = 2014, Authors = "Kyunghyun Cho, Bart van Merrienboer, Caglar Gulcehre, Dzmitry Bahdanau, Fethi Bougares, Holger Schwenk, Yoshua Bengio")]
-public class GRUNeuralNetwork<T> : SequenceModelLayoutBase<T>
+public partial class GRUNeuralNetwork<T> : SequenceModelLayoutBase<T>
 {
     private readonly GRUOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -336,78 +336,7 @@ public class GRUNeuralNetwork<T> : SequenceModelLayoutBase<T>
         };
     }
 
-    /// <summary>
-    /// Saves GRU-specific data to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer to save to.</param>
-    /// <remarks>
-    /// <para>
-    /// This method serializes any GRU-specific data that isn't part of the base neural network.
-    /// In the case of a GRU network, this might include sequence-specific settings or state.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves special GRU settings to a file.
-    /// 
-    /// When saving the model:
-    /// - The base neural network parts are saved by other methods
-    /// - This method saves any GRU-specific settings or state
-    /// 
-    /// This ensures that when you reload the model, it will have all the same settings
-    /// and capabilities as the original.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(Convert.ToDouble(_learningRate));
-    }
 
-    /// <summary>
-    /// Loads GRU-specific data from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader to load from.</param>
-    /// <remarks>
-    /// <para>
-    /// This method deserializes GRU-specific data that was previously saved using SerializeNetworkSpecificData.
-    /// It restores any special configuration or state that is unique to GRU networks.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads special GRU settings from a file.
-    /// 
-    /// When loading a saved model:
-    /// - The base neural network parts are loaded by other methods
-    /// - This method loads any GRU-specific settings or state
-    /// 
-    /// This ensures that the loaded model functions exactly like the original one that was saved.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _learningRate = NumOps.FromDouble(reader.ReadDouble());
-    }
 
-    /// <summary>
-    /// Creates a new instance of the GRU Neural Network with the same architecture and configuration.
-    /// </summary>
-    /// <returns>A new GRU Neural Network instance with the same architecture and configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the GRU Neural Network with the same architecture as the current instance.
-    /// It's used in scenarios where a fresh copy of the model is needed while maintaining the same configuration.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a brand new copy of the neural network with the same setup.
-    /// 
-    /// Think of it like creating a clone of the network:
-    /// - The new network has the same architecture (structure)
-    /// - But it's a completely separate instance with its own parameters and learning state
-    /// 
-    /// This is useful when you need multiple instances of the same GRU model,
-    /// such as for ensemble learning or comparing different training approaches.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new GRUNeuralNetwork<T>(
-            Architecture,
-            lossFunction: LossFunction,
-            options: _options,
-            learningRate: NumOps.ToDouble(_learningRate));
-    }
+
 }

@@ -103,13 +103,4 @@ public class BLINKNER<T> : TransformerNERBase<T>
             "BLINK", "Wu et al., EMNLP 2020", optimizer)
     {
     }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new TransformerNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new BLINKNER<T>(Architecture, p, optionsCopy);
-        return new BLINKNER<T>(Architecture, optionsCopy);
-    }
 }

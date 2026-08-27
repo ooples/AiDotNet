@@ -79,7 +79,7 @@ namespace AiDotNet.NER.SequenceLabeling;
     "https://arxiv.org/abs/1508.01991",
     Year = 2015,
     Authors = "Zhiheng Huang, Wei Xu, Kai Yu")]
-public class LSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
+public partial class LSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
 {
     #region Fields
 
@@ -409,17 +409,6 @@ public class LSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         return modelOutput;
     }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new LSTMCRFOptions(_options);
-
-        if (!_useNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new LSTMCRF<T>(Architecture, p, optionsCopy);
-
-        return new LSTMCRF<T>(Architecture, optionsCopy);
-    }
-
     #endregion
 
     #region Metadata and Serialization
@@ -443,55 +432,10 @@ public class LSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     }
 
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.EmbeddingDimension);
-        w.Write(_options.HiddenDimension);
-        w.Write(_options.NumLSTMLayers);
-        w.Write(_options.NumLabels);
-        w.Write(_options.MaxSequenceLength);
-        w.Write(_options.UseCRF);
-        w.Write(_options.DropoutRate);
-        w.Write(_options.LearningRate);
-        w.Write(_options.LabelNames.Length);
-        foreach (var label in _options.LabelNames)
-            w.Write(label);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (NERModelVariant)r.ReadInt32();
-        _options.EmbeddingDimension = r.ReadInt32();
-        _options.HiddenDimension = r.ReadInt32();
-        _options.NumLSTMLayers = r.ReadInt32();
-        _options.NumLabels = r.ReadInt32();
-        _options.MaxSequenceLength = r.ReadInt32();
-        _options.UseCRF = r.ReadBoolean();
-        _options.DropoutRate = r.ReadDouble();
-        _options.LearningRate = r.ReadDouble();
-        int labelCount = r.ReadInt32();
-        _options.LabelNames = new string[labelCount];
-        for (int i = 0; i < labelCount; i++)
-            _options.LabelNames[i] = r.ReadString();
 
-        ApplyOptionsToBase();
-
-        // Native-mode layers (with their trained weights) are already reconstructed by
-        // the base DeserializeInternalUnchecked before this override runs, so do NOT
-        // clear + re-initialize them here — that would discard the deserialized weights
-        // and leave the model randomly initialized. Only an ONNX session needs rebuilding.
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-        {
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        }
-    }
 
     #endregion
 

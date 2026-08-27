@@ -29,7 +29,7 @@ namespace AiDotNet.Diffusion;
 /// - Frame interpolation: Increase frame rate smoothly
 /// </para>
 /// </remarks>
-public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, IVideoDiffusionModel<T>
+public abstract partial class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, IVideoDiffusionModel<T>
 {
     /// <summary>
     /// The motion bucket ID for controlling motion intensity.

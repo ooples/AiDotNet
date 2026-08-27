@@ -94,25 +94,6 @@ public partial class StitchDiffusionModel<T> : LatentDiffusionModelBase<T>
 
 
 
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    public override IDiffusionModel<T> Clone()
-    {
-        // Clone the ACTUAL predictor/VAE: passing neither rebuilt the default foundation-scale UNet
-        // (~643 M params) while the source may hold a small/custom predictor (~10 M), so
-        // SetParameters threw "Expected 643774499 parameters, got 10342915". See MultiDiffusionModel.
-        var clone = new StitchDiffusionModel<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            predictor: (UNetNoisePredictor<T>)_predictor.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            seed: null);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
-    }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T> { Name = "StitchDiffusion", Version = "1.0",

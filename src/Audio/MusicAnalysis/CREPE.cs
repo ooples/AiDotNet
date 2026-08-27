@@ -40,7 +40,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("CREPE: A Convolutional Representation for Pitch Estimation", "https://arxiv.org/abs/1802.06182", Year = 2018, Authors = "Jong Wook Kim, Justin Salamon, Peter Li, Juan Pablo Bello")]
-public class CREPE<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
+public partial class CREPE<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -308,28 +308,9 @@ public class CREPE<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.FrameSize); w.Write(_options.HopLength);
-        w.Write(_options.CapacityMultiplier); w.Write(_options.NumBins);
-        w.Write(_options.MinFrequency); w.Write(_options.MaxFrequency);
-        w.Write(_options.VoicingThreshold); w.Write(_options.DropoutRate);
-        w.Write(_options.Variant);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.FrameSize = r.ReadInt32(); _options.HopLength = r.ReadInt32();
-        _options.CapacityMultiplier = r.ReadInt32(); _options.NumBins = r.ReadInt32();
-        _options.MinFrequency = r.ReadDouble(); _options.MaxFrequency = r.ReadDouble();
-        _options.VoicingThreshold = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
-        _options.Variant = r.ReadString();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new CREPE<T>(Architecture, _options);
+
 
     #endregion
 

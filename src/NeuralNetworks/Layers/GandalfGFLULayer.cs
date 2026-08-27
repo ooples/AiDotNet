@@ -49,7 +49,9 @@ public partial class GandalfGFLULayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>[]? _maskLogits;                  // per-stage [numFeatures] feature-mask logits
     private FullyConnectedLayer<T>[]? _inTransform;    // per-stage numFeatures -> 2*numFeatures (GLU)
     private FullyConnectedLayer<T>[]? _gateTransform;  // per-stage numFeatures -> numFeatures (residual gate)
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _valueSelector;                 // [2F, F] constant GLU value split
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _gateSelector;                  // [2F, F] constant GLU gate split
 
     /// <summary>Initializes a GFLU stack.</summary>

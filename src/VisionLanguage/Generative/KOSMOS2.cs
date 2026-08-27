@@ -283,44 +283,9 @@ public partial class KOSMOS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.ImageSize);
-        writer.Write(_options.VisionDim);
-        writer.Write(_options.DecoderDim);
-        writer.Write(_options.NumVisionLayers);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.EnableGroundingTokens);
-        writer.Write(_options.NumLocationBins);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.ImageSize = reader.ReadInt32();
-        _options.VisionDim = reader.ReadInt32();
-        _options.DecoderDim = reader.ReadInt32();
-        _options.NumVisionLayers = reader.ReadInt32();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.EnableGroundingTokens = reader.ReadBoolean();
-        _options.NumLocationBins = reader.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new KOSMOS2<T>(Architecture, mp, _options);
-        return new KOSMOS2<T>(Architecture, _options);
-    }
+
 
     private void ThrowIfDisposed()
     {

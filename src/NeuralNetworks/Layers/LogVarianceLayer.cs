@@ -118,6 +118,7 @@ public partial class LogVarianceLayer<T> : LayerBase<T>, IShapeContract
     /// - To ensure the backward pass works correctly
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -136,6 +137,7 @@ public partial class LogVarianceLayer<T> : LayerBase<T>, IShapeContract
     /// - To make the training process more efficient
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -156,6 +158,7 @@ public partial class LogVarianceLayer<T> : LayerBase<T>, IShapeContract
     /// Think of it as saving an intermediate result that will be reused later.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _meanValues;
 
     /// <summary>

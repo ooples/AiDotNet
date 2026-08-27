@@ -33,7 +33,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Gaussian Processes for Machine Learning", "https://doi.org/10.7551/mitpress/3206.001.0001", Year = 2006, Authors = "Carl Edward Rasmussen, Christopher K. I. Williams")]
-public class StandardGaussianProcess<T> : GaussianProcessBase<T>
+public partial class StandardGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>
     /// The kernel function that determines how similarity between data points is calculated.

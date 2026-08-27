@@ -60,7 +60,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2024,
     Authors = "Xiao et al."
 )]
-public class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
+public partial class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly Florence2Options _options;
 
@@ -218,44 +218,9 @@ public class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.ImageSize);
-        writer.Write(_options.EmbeddingDim);
-        writer.Write(_options.NumLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.DecoderEmbeddingDim);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.NumDecoderHeads);
-        writer.Write((int)_options.ModelSize);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.ImageSize = reader.ReadInt32();
-        _options.EmbeddingDim = reader.ReadInt32();
-        _options.NumLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.DecoderEmbeddingDim = reader.ReadInt32();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.NumDecoderHeads = reader.ReadInt32();
-        _options.ModelSize = (Florence2ModelSize)reader.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new Florence2<T>(Architecture, mp, _options);
-        return new Florence2<T>(Architecture, _options);
-    }
+
 
     private void ThrowIfDisposed()
     {

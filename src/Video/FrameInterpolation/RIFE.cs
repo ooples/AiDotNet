@@ -949,40 +949,10 @@ public partial class RIFE<T> : FrameInterpolationBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height);
-        writer.Write(_width);
-        writer.Write(_channels);
-        writer.Write(_numFeatures);
-        writer.Write(_numFlowBlocks);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _height = reader.ReadInt32();
-        _width = reader.ReadInt32();
-        _channels = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _numFlowBlocks = reader.ReadInt32();
 
-        // Deserialization rebuilt the canonical Layers list with the loaded
-        // weights; re-point the sub-list references at those layers (otherwise
-        // Forward keeps running the constructor's random-init layers).
-        int expectedCount = 3 + 3 + 2 + _numFlowBlocks + 2; // encoder+flowDec+ctx+blocks+fusion+output
-        if (Layers.Count >= expectedCount)
-        {
-            ExtractLayerReferences();
-        }
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new RIFE<T>(
-            Architecture, _numFeatures, _numFlowBlocks, new RIFEOptions(_options));
-    }
 
     #endregion
 

@@ -48,7 +48,7 @@ namespace AiDotNet.Finance.Base;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Length, TensorAxis.Features,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public abstract class CrossSectionalGraphModelBase<T> : FinancialModelBase<T>
+public abstract partial class CrossSectionalGraphModelBase<T> : FinancialModelBase<T>
 {
     /// <summary>
     /// Initializes the shared cross-sectional state.

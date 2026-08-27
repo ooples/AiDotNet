@@ -75,9 +75,6 @@ public class Qwen2TextConditioner<T> : TextConditioningBase<T>
             numHeads: GetNumHeads(_variant),
             numKvHeads: GetNumKvHeads(_variant));
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new Qwen2TextConditioner<T>(Tokenizer, _variant, Architecture);
-
     public override Tensor<T> GetPooledEmbedding(Tensor<T> sequenceEmbeddings)
     {
         int rank = sequenceEmbeddings.Shape.Length;

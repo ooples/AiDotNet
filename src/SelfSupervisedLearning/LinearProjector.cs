@@ -46,8 +46,11 @@ public class LinearProjector<T> : IProjectorHead<T>
 
     private Tensor<T> _weight;
     private Tensor<T>? _bias;
+    [Scratch]
     private Tensor<T>? _gradWeight;
+    [Scratch]
     private Tensor<T>? _gradBias;
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     private bool _isTraining = true;

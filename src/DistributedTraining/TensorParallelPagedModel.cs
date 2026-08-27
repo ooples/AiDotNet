@@ -90,7 +90,9 @@ internal sealed partial class TensorParallelPagedModel<T> : TokenLanguageModelLa
     private readonly double _scale;
 
     // Full (un-sharded) weights.
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _embedding; // [vocab, embedDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _lmHead;    // [vocab, embedDim]
     private readonly TensorParallelLayerWeights<T>[] _layers;
 
@@ -102,6 +104,7 @@ internal sealed partial class TensorParallelPagedModel<T> : TokenLanguageModelLa
     // primitive equivalence tests), and the FFN uses the trained activation (else ReLU). This lets the sharded
     // model reproduce a real model's output token-for-token rather than a reference block.
     private readonly bool _useRmsNorm;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T>? _finalNormGamma;
     private readonly Func<double, double> _ffnActivation;
     private readonly double _rmsNormEpsilon;
@@ -618,13 +621,4 @@ internal sealed partial class TensorParallelPagedModel<T> : TokenLanguageModelLa
             ["VocabSize"] = _vocabSize
         }
     };
-
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        => throw new NotSupportedException("TensorParallelPagedModel is a live serving model and is not serialized.");
-
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        => throw new NotSupportedException("TensorParallelPagedModel is a live serving model and is not deserialized.");
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => throw new NotSupportedException("TensorParallelPagedModel cannot be cloned.");
 }

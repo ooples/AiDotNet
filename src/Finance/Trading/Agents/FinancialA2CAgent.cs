@@ -56,7 +56,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
 
     #region Fields
 
-    private readonly FinancialA2CAgentOptions<T> _options;
+    private readonly TradingAgentOptions<T> _options;
     private readonly INeuralNetwork<T> _actor;
     private readonly INeuralNetwork<T> _critic;
     private readonly ReplayBuffer<T> ReplayBuffer;
@@ -96,7 +96,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     {
         Guard.NotNull(actorArchitecture);
         Guard.NotNull(criticArchitecture);
-        _options = options as FinancialA2CAgentOptions<T> ?? new FinancialA2CAgentOptions<T>();
+        _options = options;
         _actorArchitecture = actorArchitecture;
         _criticArchitecture = criticArchitecture;
 
@@ -285,45 +285,6 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
 
     #region Serialization
 
-    /// <summary>
-    /// Executes Serialize for the FinancialA2CAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialA2CAgent model, Serialize saves or restores model-specific settings. This lets the FinancialA2CAgent architecture be reused later.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-        var actorData = _actor.Serialize();
-        var criticData = _critic.Serialize();
-        writer.Write(actorData.Length);
-        writer.Write(actorData);
-        writer.Write(criticData.Length);
-        writer.Write(criticData);
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Executes Deserialize for the FinancialA2CAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialA2CAgent model, Deserialize saves or restores model-specific settings. This lets the FinancialA2CAgent architecture be reused later.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-        int actorLen = reader.ReadInt32();
-        _actor.Deserialize(reader.ReadBytes(actorLen));
-        int criticLen = reader.ReadInt32();
-        _critic.Deserialize(reader.ReadBytes(criticLen));
-    }
-
     #endregion
 
     #region Model Metadata
@@ -346,21 +307,6 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
                 { "ParameterCount", ParameterCount }
             }
         };
-    }
-
-    /// <summary>
-    /// Executes Clone for the FinancialA2CAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialA2CAgent model, Clone performs a supporting step in the workflow. It keeps the FinancialA2CAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new FinancialA2CAgent<T>(_actorArchitecture, _criticArchitecture, TradingOptions);
-        clone.SetParameters(GetParameters());
-        return clone;
     }
 
     /// <summary>

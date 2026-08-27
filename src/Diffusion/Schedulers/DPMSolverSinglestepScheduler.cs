@@ -38,6 +38,7 @@ namespace AiDotNet.Diffusion.Schedulers;
 [PipelineStage(PipelineStage.Training)]
 public sealed class DPMSolverSinglestepScheduler<T> : NoiseSchedulerBase<T>
 {
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _sigmas;
     private readonly Random _random;
 

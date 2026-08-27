@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = true)]
+[LayerProperty(IsTrainable = true, TestConstructorArgs = "new AiDotNet.NeuralNetworks.Layers.ReadoutLayer<double>(4, 8, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>()), (AiDotNet.Interfaces.IActivationFunction<double>?)null, new[] { 3, 4 }", TestInputShape = "3, 4")]
 // A COMPOSING decorator, not a delegating one. ForwardTraced builds
 // `outputShape = new[] { batchSize, timeSteps }.Concat(_innerLayer.GetOutputShape())`, so the leading
 // two axes are this layer's (carried straight through from the input) and every trailing axis is the
@@ -177,6 +177,7 @@ public partial class TimeDistributedLayer<T> : LayerBase<T>, IShapeContract
     /// or wrong during the learning process.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -203,6 +204,7 @@ public partial class TimeDistributedLayer<T> : LayerBase<T>, IShapeContract
     /// which is crucial for learning.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
@@ -454,16 +456,25 @@ public partial class TimeDistributedLayer<T> : LayerBase<T>, IShapeContract
         _lastInput = processInput;
 
         var innerOutputShape = _innerLayer.GetOutputShape();
-        var outputShape = new[] { batchSize, timeSteps }.Concat(innerOutputShape).ToArray();
-        var output = TensorAllocator.Rent<T>(outputShape);
 
+        // Concatenated through the engine, NOT written into a rented buffer. SetSlice on a rented
+        // tensor records no tape node, so the inner layer's weights were unreachable from the loss:
+        // every trainable parameter came back with a zero gradient and the layer trained not at all
+        // while looking healthy. Each step is reshaped to width 1 on the time axis and joined there,
+        // which is the same tensor with a gradient path attached to it.
+        var stepOutputs = new Tensor<T>[timeSteps];
+        var stepShape = new[] { batchSize, 1 }.Concat(innerOutputShape).ToArray();
         for (int t = 0; t < timeSteps; t++)
         {
             var stepInput = processInput.Slice(1, t, t + 1);
             stepInput = SqueezeAxis(stepInput, 1);
             var stepOutput = _innerLayer.Forward(stepInput);
-            output.SetSlice(1, t, stepOutput);
+            stepOutputs[t] = Engine.Reshape(stepOutput, stepShape);
         }
+
+        var output = timeSteps == 1
+            ? stepOutputs[0]
+            : Engine.TensorConcatenate(stepOutputs, axis: 1);
 
         var activated = ApplyActivation(output);
 
@@ -488,6 +499,7 @@ public partial class TimeDistributedLayer<T> : LayerBase<T>, IShapeContract
     /// through each time step and delegating to the inner layer's backward pass.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _accumulatedGradients;
 
     private static Tensor<T> SqueezeAxis(Tensor<T> tensor, int axis)

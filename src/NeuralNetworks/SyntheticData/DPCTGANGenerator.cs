@@ -1399,47 +1399,10 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.EmbeddingDimension);
-        writer.Write(_options.GeneratorDimensions.Length);
-        foreach (var dim in _options.GeneratorDimensions)
-        {
-            writer.Write(dim);
-        }
-        writer.Write(_options.DiscriminatorDimensions.Length);
-        foreach (var dim in _options.DiscriminatorDimensions)
-        {
-            writer.Write(dim);
-        }
-        writer.Write(_options.BatchSize);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.GradientPenaltyWeight);
-        writer.Write(_options.PacSize);
-        writer.Write(_options.VGMModes);
-        writer.Write(_options.DiscriminatorDropout);
-        writer.Write(_options.Epsilon);
-        writer.Write(_options.Delta);
-        writer.Write(_options.ClipNorm);
-        writer.Write(_options.NoiseMultiplier);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Options are reconstructed from serialized data
-        // Layers are handled by base class
-    }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DPCTGANGenerator<T>(
-            Architecture,
-            _options,
-            _generatorOptimizer,
-            _lossFunction);
-    }
 
     /// <inheritdoc/>
     public override Dictionary<string, T> GetFeatureImportance()

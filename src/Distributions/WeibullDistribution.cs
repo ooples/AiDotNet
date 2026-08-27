@@ -224,12 +224,6 @@ public class WeibullDistribution<T> : DistributionBase<T>
     }
 
     /// <inheritdoc/>
-    public override IParametricDistribution<T> Clone()
-    {
-        return new WeibullDistribution<T>(_shape, _scale);
-    }
-
-    /// <inheritdoc/>
     public override T Sample(Random random)
     {
         double k = NumOps.ToDouble(_shape);

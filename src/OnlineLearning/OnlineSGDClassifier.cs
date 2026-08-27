@@ -61,7 +61,7 @@ namespace AiDotNet.OnlineLearning;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Large-Scale Machine Learning with Stochastic Gradient Descent", "https://doi.org/10.1007/978-3-7908-2604-3_16", Year = 2010, Authors = "Léon Bottou")]
-public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
+public partial class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
 {
 
     /// <inheritdoc />
@@ -340,31 +340,6 @@ public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
             InitialLearningRate, LearningRateScheduleType, _l1Penalty, _l2Penalty, _fitIntercept);
         newModel.SetParameters(parameters);
         return newModel;
-    }
-
-    /// <summary>
-    /// Creates a new instance of this type.
-    /// </summary>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new OnlineSGDClassifier<T>(
-            InitialLearningRate, LearningRateScheduleType, _l1Penalty, _l2Penalty, _fitIntercept);
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (OnlineSGDClassifier<T>)CreateNewInstance();
-        clone.NumFeatures = NumFeatures;
-        clone.IsInitialized = IsInitialized;
-        if (_weights is not null)
-        {
-            clone._weights = new Vector<T>(_weights.Length);
-            for (int i = 0; i < _weights.Length; i++)
-                clone._weights[i] = _weights[i];
-        }
-        clone._bias = _bias;
-        return clone;
     }
 
     /// <summary>

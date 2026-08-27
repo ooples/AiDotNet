@@ -47,7 +47,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
     "https://arxiv.org/abs/2501.14350",
     Year = 2025,
     Authors = "Kai-Tuo Xu, Feng-Long Xie, Xu Tang, Yao Hu")]
-public class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -235,47 +235,9 @@ public class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         AdditionalInfo = BaseAudioMetadataInfo()
     };
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate);
-        w.Write(_options.EncoderDim);
-        w.Write(_options.NumEncoderLayers);
-        w.Write(_options.NumAttentionHeads);
-        w.Write(_options.NumMels);
-        w.Write(_options.VocabSize);
-        w.Write(_options.MaxTextLength);
-        w.Write(_options.DropoutRate);
-        w.Write(_options.Language);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32();
-        _options.EncoderDim = r.ReadInt32();
-        _options.NumEncoderLayers = r.ReadInt32();
-        _options.NumAttentionHeads = r.ReadInt32();
-        _options.NumMels = r.ReadInt32();
-        _options.VocabSize = r.ReadInt32();
-        _options.MaxTextLength = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble();
-        _options.Language = r.ReadString();
-        base.SampleRate = _options.SampleRate;
-        base.NumMels = _options.NumMels;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new FireRedASR<T>(Architecture, mp, new FireRedASROptions(_options));
-        return new FireRedASR<T>(Architecture, new FireRedASROptions(_options));
-    }
+
 
     /// <summary>
     /// CTC greedy decode with per-frame softmax confidence tracking.

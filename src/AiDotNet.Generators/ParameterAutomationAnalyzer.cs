@@ -492,8 +492,11 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                                 var targetClassification =
                                     ParameterMemberSemanticModel.ClassifyWithRegistrations(
                                         targets[0], registrations);
-                                if (targetClassification.Kind is ParameterMemberSemanticModel.Kind.Unclassified
-                                    or ParameterMemberSemanticModel.Kind.Conflicting
+                                bool layerAlias = IsLayerLike(memberType) && IsLayerLike(
+                                    ParameterMemberSemanticModel.GetMemberType(targets[0])!);
+                                if ((targetClassification.Kind is ParameterMemberSemanticModel.Kind.Unclassified
+                                     && !layerAlias)
+                                    || targetClassification.Kind is ParameterMemberSemanticModel.Kind.Conflicting
                                     or ParameterMemberSemanticModel.Kind.Scratch
                                     or ParameterMemberSemanticModel.Kind.Alias
                                     or ParameterMemberSemanticModel.Kind.External)
@@ -647,8 +650,14 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                                                        "ParameterAliasAttribute", "ParameterAlias")) continue;
                                 if (!IsWeightCapableType(f.Type)) continue;
                                 if (generatorWillRegister && GeneratorHandles(f, type)) continue;
+                                var classification = ParameterMemberSemanticModel.Classify(f);
+                                if (InheritsRegistry(type) && GeneratorHandles(f, type)
+                                    && classification.Kind is ParameterMemberSemanticModel.Kind.Fitted
+                                        or ParameterMemberSemanticModel.Kind.Frozen
+                                        or ParameterMemberSemanticModel.Kind.Buffer)
+                                    continue;
                                 if (generatorWillYieldTensors && GeneratorHandles(f, type)
-                                    && IsTensorType(f.Type)) continue;
+                                    && (IsTensorType(f.Type) || IsVectorType(f.Type))) continue;
 
                                 var fl = f.Locations.FirstOrDefault(l => l.IsInSource);
                                 if (fl is not null)
@@ -852,6 +861,15 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
         var name = type.OriginalDefinition.ToDisplayString();
         return name.StartsWith("AiDotNet.Tensors.LinearAlgebra.Matrix<", System.StringComparison.Ordinal)
             || name.StartsWith("AiDotNet.Tensors.LinearAlgebra.Vector<", System.StringComparison.Ordinal);
+    }
+
+    /// <summary>A direct Vector&lt;T&gt; field can be exposed as a write-through Tensor view.</summary>
+    private static bool IsVectorType(ITypeSymbol type)
+    {
+        var normalized = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        return normalized is INamedTypeSymbol named
+            && named.OriginalDefinition.ToDisplayString().StartsWith(
+                "AiDotNet.Tensors.LinearAlgebra.Vector<", System.StringComparison.Ordinal);
     }
     /// <summary>
     /// Numeric containers that can hold weights: <c>Tensor&lt;T&gt;</c>, <c>Matrix&lt;T&gt;</c> and

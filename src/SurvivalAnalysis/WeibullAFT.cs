@@ -52,7 +52,7 @@ namespace AiDotNet.SurvivalAnalysis;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Survival Analysis: Techniques for Censored and Truncated Data", "https://doi.org/10.1007/978-1-4757-3294-8")]
-public class WeibullAFT<T> : SurvivalModelBase<T>
+public partial class WeibullAFT<T> : SurvivalModelBase<T>
 {
 
     /// <inheritdoc />
@@ -409,55 +409,5 @@ public class WeibullAFT<T> : SurvivalModelBase<T>
     }
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new WeibullAFT<T>(MaxIterations, Tolerance);
-    }
 
-    /// <inheritdoc />
-
-    /// <inheritdoc />
-    public override byte[] Serialize()
-    {
-        var data = new Dictionary<string, object>
-        {
-            { "NumFeatures", NumFeatures },
-            { "IsFitted", IsFitted },
-            { "Intercept", NumOps.ToDouble(Intercept) },
-            { "Scale", NumOps.ToDouble(Scale) },
-            { "Coefficients", Coefficients?.ToArray()?.Select(NumOps.ToDouble).ToArray() ?? Array.Empty<double>() },
-            { "MaxIterations", MaxIterations },
-            { "Tolerance", Tolerance }
-        };
-
-        var metadata = GetModelMetadata();
-        metadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(data));
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(metadata));
-    }
-
-    /// <inheritdoc />
-    public override void Deserialize(byte[] modelData)
-    {
-        var json = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(json);
-
-        if (metadata?.ModelData is null)
-            throw new InvalidOperationException("Invalid model data.");
-
-        var dataJson = Encoding.UTF8.GetString(metadata.ModelData);
-        var data = JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(dataJson);
-
-        if (data is null)
-            throw new InvalidOperationException("Invalid model data.");
-
-        NumFeatures = data["NumFeatures"]?.ToObject<int>() ?? 0;
-        IsFitted = data["IsFitted"]?.ToObject<bool>() ?? false;
-        Intercept = NumOps.FromDouble(data["Intercept"]?.ToObject<double>() ?? 0);
-        Scale = NumOps.FromDouble(data["Scale"]?.ToObject<double>() ?? 1);
-
-        var coeffs = data["Coefficients"]?.ToObject<double[]>() ?? Array.Empty<double>();
-        Coefficients = new Vector<T>(coeffs.Length);
-        for (int i = 0; i < coeffs.Length; i++)
-            Coefficients[i] = NumOps.FromDouble(coeffs[i]);
-    }
 }

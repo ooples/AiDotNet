@@ -81,8 +81,11 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     private readonly GNNMetaOptions<T, TInput, TOutput> _gnnOptions;
 
     // GNN parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _messagePassingWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _aggregationWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _edgeWeights;
 
     // Task graph state

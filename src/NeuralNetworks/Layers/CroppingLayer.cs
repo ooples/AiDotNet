@@ -562,6 +562,7 @@ public partial class CroppingLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stores the last input for use in autodiff backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>

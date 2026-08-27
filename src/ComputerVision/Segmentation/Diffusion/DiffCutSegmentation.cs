@@ -56,7 +56,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Diffusion;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DiffCut: Catalyzing Zero-Shot Semantic Segmentation with Diffusion Features and Recursive Normalized Cut", "https://arxiv.org/abs/2406.02842", Year = 2024, Authors = "Couairon et al.")]
-public class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
+public partial class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly DiffCutSegmentationOptions _options;
     public override ModelOptions GetOptions() => _options;
@@ -338,84 +338,6 @@ public class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
         },
         ModelData = SerializeForMetadata()
     };
-
-    /// <summary>
-    /// Writes configuration to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height);
-        writer.Write(_width);
-        writer.Write(_channels);
-        writer.Write(_numClasses);
-        writer.Write(_decoderDim);
-        writer.Write(_dropRate);
-        writer.Write(_useNativeMode);
-        writer.Write(_onnxModelPath ?? string.Empty);
-        writer.Write(_encoderLayerEnd);
-        writer.Write(_channelDims.Length);
-        foreach (int dimension in _channelDims)
-            writer.Write(dimension);
-        writer.Write(_depths.Length);
-        foreach (int depth in _depths)
-            writer.Write(depth);
-    }
-
-    /// <summary>
-    /// Reads configuration from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadDouble();
-        _ = reader.ReadBoolean();
-        _ = reader.ReadString();
-        _ = reader.ReadInt32();
-
-        int channelDimensionCount = reader.ReadInt32();
-        for (int i = 0; i < channelDimensionCount; i++)
-            _ = reader.ReadInt32();
-
-        int depthCount = reader.ReadInt32();
-        for (int i = 0; i < depthCount; i++)
-            _ = reader.ReadInt32();
-    }
-
-    /// <summary>
-    /// Creates a new instance with the same configuration but fresh weights.
-    /// </summary>
-    /// <returns>A new model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var clonedOptions = new DiffCutSegmentationOptions(_options);
-        return _useNativeMode
-            ? new DiffCutSegmentation<T>(Architecture, optimizer: null, lossFunction: LossFunction,
-                numClasses: _numClasses, dropRate: _dropRate, options: clonedOptions)
-            : new DiffCutSegmentation<T>(Architecture,
-                _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."),
-                _numClasses, clonedOptions);
-    }
 
     // Dispose of the ONNX session and the _disposed latch are handled by SegmentationModelBase.
     // NumClasses / InputHeight / InputWidth / IsOnnxMode / Segment / GetClassMap / GetProbabilityMap

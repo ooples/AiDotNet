@@ -17,7 +17,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </remarks>
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.TemporalProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 5)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 5, TestConstructorArgs = "2, 4, 3", TestInputShape = "1, 2, 4, 4, 4")]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time, TensorAxis.Height, TensorAxis.Width,
@@ -175,17 +175,7 @@ public sealed partial class TemporalConv3DLayer<T> : LayerBase<T>, IShapeContrac
     {
     }
 
-    /// <inheritdoc />
-    public override LayerBase<T> Clone()
-    {
-        var clone = new TemporalConv3DLayer<T>(
-            _inputChannels, _outputChannels,
-            _kernelDepth, _kernelHeight, _kernelWidth,
-            _paddingDepth, _paddingHeight, _paddingWidth,
-            _zeroInitialize);
-        if (_kernels.Length > 0) clone.SetParameters(GetParameters());
-        return clone;
-    }
+
 
     /// <inheritdoc />
     internal override Dictionary<string, string> GetMetadata()

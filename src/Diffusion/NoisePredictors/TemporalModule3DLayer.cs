@@ -15,7 +15,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// remains independent of the number of frames supplied at runtime.
 /// </remarks>
 [ElementWiseShape(Note = "Residual temporal module preserves NCFHW shape at every frame count.")]
-public sealed class TemporalModule3DLayer<T> : LayerBase<T>
+public sealed partial class TemporalModule3DLayer<T> : LayerBase<T>
 {
     private readonly int _channels;
     private readonly int _timeEmbeddingDim;
@@ -158,14 +158,7 @@ public sealed class TemporalModule3DLayer<T> : LayerBase<T>
         foreach (var layer in ParameterLayers()) layer.ResetState();
     }
 
-    /// <inheritdoc />
-    public override LayerBase<T> Clone()
-    {
-        var clone = new TemporalModule3DLayer<T>(_channels, _timeEmbeddingDim, _spatialSize);
-        var parameters = GetParameters();
-        if (parameters.Length > 0) clone.SetParameters(parameters);
-        return clone;
-    }
+
 
     /// <inheritdoc />
     internal override Dictionary<string, string> GetMetadata()

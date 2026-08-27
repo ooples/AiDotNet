@@ -50,25 +50,15 @@ public class MambularRegression<T> : MambularBase<T>
     private readonly int _outputDimension;
     private readonly FullyConnectedLayer<T> _regressionHead;
 
+    [Scratch]
     private Tensor<T>? _backboneOutputCache;
+    [Scratch]
     private Tensor<T>? _predictionsCache;
 
     /// <summary>
     /// Gets the output dimension.
     /// </summary>
     public int OutputDimension => _outputDimension;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <summary>The final projection this variant adds to the shared backbone.</summary>
-    /// <remarks>
-    /// Was an override that added the head to the COUNT only. The base had no read or
-    /// restore path at all, so the head was counted and never checkpointed; declaring it
-    /// here puts it in all three surfaces at once.
-    /// </remarks>
-    protected override IEnumerable<IParameterSource<T>> GetExtraTrainableLayers()
-        => new IParameterSource<T>[] { _regressionHead };
 
     /// <summary>
     /// Initializes a new instance of the MambularRegression class.
@@ -89,7 +79,9 @@ public class MambularRegression<T> : MambularBase<T>
         _regressionHead = new FullyConnectedLayer<T>(
             MLPOutputDimension,
             outputDimension,
-            (IActivationFunction<T>?)null);
+            // Identity, stated rather than left to the default: FullyConnectedLayer resolves a null
+            // activation to ReLU, which would clamp this regression head to non-negative outputs.
+            new IdentityActivation<T>());
     }
 
     /// <summary>

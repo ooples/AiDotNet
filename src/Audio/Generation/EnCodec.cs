@@ -42,7 +42,7 @@ namespace AiDotNet.Audio.Generation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("High Fidelity Neural Audio Compression", "https://arxiv.org/abs/2210.13438", Year = 2022, Authors = "Alexandre Defossez, Jade Copet, Gabriel Synnaeve, Yossi Adi")]
-public class EnCodec<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
+public partial class EnCodec<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -275,34 +275,9 @@ public class EnCodec<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.Channels);
-        w.Write(_options.EncoderChannels.Length);
-        foreach (int ch in _options.EncoderChannels) w.Write(ch);
-        w.Write(_options.DownsampleRatios.Length);
-        foreach (int r in _options.DownsampleRatios) w.Write(r);
-        w.Write(_options.EncoderDim); w.Write(_options.NumQuantizers);
-        w.Write(_options.CodebookSize); w.Write(_options.CodebookDim);
-        w.Write(_options.TargetBandwidthKbps); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.Channels = r.ReadInt32();
-        int nch = r.ReadInt32(); _options.EncoderChannels = new int[nch];
-        for (int i = 0; i < nch; i++) _options.EncoderChannels[i] = r.ReadInt32();
-        int ndr = r.ReadInt32(); _options.DownsampleRatios = new int[ndr];
-        for (int i = 0; i < ndr; i++) _options.DownsampleRatios[i] = r.ReadInt32();
-        _options.EncoderDim = r.ReadInt32(); _options.NumQuantizers = r.ReadInt32();
-        _options.CodebookSize = r.ReadInt32(); _options.CodebookDim = r.ReadInt32();
-        _options.TargetBandwidthKbps = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new EnCodec<T>(Architecture, _options);
+
 
     #endregion
 

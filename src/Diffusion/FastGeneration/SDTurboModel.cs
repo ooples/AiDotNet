@@ -325,36 +325,6 @@ public partial class SDTurboModel<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Clone the U-Net through its OWN Clone(), which reconstructs from the
-        // source predictor's actual architecture fields (input/output channels,
-        // base channels, channel multipliers, res-block count, attention
-        // resolutions, context dim, heads, input height) and copies weights via a
-        // paired per-layer walk. The previous code rebuilt clonedUnet from
-        // HARDCODED SD-/SDXL-Turbo defaults (baseChannels 320, [1,2,4,4],
-        // numResBlocks 2, contextDim 1024) and then SetParameters'd the source's
-        // weights into it — correct only when the model used the production default
-        // U-Net. With a CUSTOM U-Net (e.g. a smaller test configuration) the
-        // architectures differed, so SetParameters mis-distributed the source's
-        // shorter parameter vector and the clone's later layers kept their random
-        // init — diverging from the original despite "identical" parameters.
-        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
-
-        return new SDTurboModel<T>(
-            unet: clonedUnet,
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            isXLVariant: _isXLVariant);
-    }
-
     #endregion
 
     #region Metadata

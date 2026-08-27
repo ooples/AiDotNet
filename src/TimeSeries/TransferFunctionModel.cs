@@ -57,21 +57,25 @@ public partial class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Autoregressive (AR) parameters that capture the dependency on past values of the output series.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _arParameters;
 
     /// <summary>
     /// Moving Average (MA) parameters that capture the dependency on past error terms.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _maParameters;
 
     /// <summary>
     /// Parameters that capture the effect of input variables at different lags.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _inputLags;
 
     /// <summary>
     /// Parameters that capture the effect of output variables at different lags.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _outputLags;
 
     /// <summary>
@@ -494,28 +498,7 @@ public partial class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     /// without repeating the training process, which can save significant time for complex models.
     /// </para>
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        // Write model parameters
-        SerializationHelper<T>.SerializeVector(writer, _arParameters);
-        SerializationHelper<T>.SerializeVector(writer, _maParameters);
-        SerializationHelper<T>.SerializeVector(writer, _inputLags);
-        SerializationHelper<T>.SerializeVector(writer, _outputLags);
 
-        // Write options
-        writer.Write(_tfOptions.AROrder);
-        writer.Write(_tfOptions.MAOrder);
-        writer.Write(_tfOptions.InputLagOrder);
-        writer.Write(_tfOptions.OutputLagOrder);
-
-        // Write training series for in-sample predictions
-        if (_y is not null)
-            SerializationHelper<T>.SerializeVector(writer, _y);
-        else
-            writer.Write(0);
-
-        SerializationHelper<T>.SerializeVector(writer, _residuals);
-    }
 
     /// <summary>
     /// Deserializes the model's core parameters from a binary reader.
@@ -542,32 +525,7 @@ public partial class TransferFunctionModel<T> : TimeSeriesModelBase<T>
     /// - Saving computation time by not having to retrain complex models
     /// </para>
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        // Read model parameters
-        _arParameters = SerializationHelper<T>.DeserializeVector(reader);
-        _maParameters = SerializationHelper<T>.DeserializeVector(reader);
-        _inputLags = SerializationHelper<T>.DeserializeVector(reader);
-        _outputLags = SerializationHelper<T>.DeserializeVector(reader);
 
-        // Read options
-        _tfOptions.AROrder = reader.ReadInt32();
-        _tfOptions.MAOrder = reader.ReadInt32();
-        _tfOptions.InputLagOrder = reader.ReadInt32();
-        _tfOptions.OutputLagOrder = reader.ReadInt32();
-
-        // Read training series (post-patch field)
-        try
-        {
-            _y = SerializationHelper<T>.DeserializeVector(reader);
-            _residuals = SerializationHelper<T>.DeserializeVector(reader);
-        }
-        catch (EndOfStreamException)
-        {
-            // Older models don't include training series
-            _residuals = Vector<T>.Empty();
-        }
-    }
 
     /// <summary>
     /// The core implementation of the training process for the Transfer Function Model.

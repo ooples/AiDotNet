@@ -52,7 +52,9 @@ public partial class RobustPCADetector<T> : AnomalyDetectorBase<T>
     private readonly double _lambda;
     private readonly int _maxIterations;
     private readonly double _tolerance;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _lowRank;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _sparse;
     [Buffer]
     private Vector<T>? _mean;

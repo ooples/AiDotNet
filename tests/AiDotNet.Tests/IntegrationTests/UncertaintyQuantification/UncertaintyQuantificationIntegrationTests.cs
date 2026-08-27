@@ -331,5 +331,24 @@ public class UncertaintyQuantificationIntegrationTests
         Assert.True(anyDifferent, "Bayesian layer should produce different outputs due to weight sampling");
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task BayesianDenseLayer_SamplingDoesNotChangeGeneratedParameterSurface()
+    {
+        var layer = new BayesianDenseLayer<double>(inputSize: 4, outputSize: 2, randomSeed: 42);
+        var input = new Tensor<double>(new[] { 1, 4 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 }));
+
+        long countBeforeSampling = layer.ParameterCount;
+        int tensorsBeforeSampling = layer.GetTrainableParameters().Count;
+
+        layer.SampleWeights();
+        _ = layer.Forward(input);
+
+        Assert.Equal(countBeforeSampling, layer.ParameterCount);
+        Assert.Equal(tensorsBeforeSampling, layer.GetTrainableParameters().Count);
+        Assert.Equal(4, tensorsBeforeSampling);
+
+        await Task.CompletedTask;
+    }
+
     #endregion
 }

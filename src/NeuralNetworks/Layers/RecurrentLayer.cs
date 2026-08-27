@@ -167,6 +167,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
     /// sequence of input vectors that were processed in the most recent forward pass. The tensor
     /// is null before the first forward pass or after a reset.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -182,6 +183,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
     /// It holds the sequence of output vectors that were produced in the most recent forward pass.
     /// The tensor is null before the first forward pass or after a reset.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -192,6 +194,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
     /// It has the same dimensions as the _inputWeights tensor and is used to update the input weights during
     /// the parameter update step. The tensor is null before the first backward pass or after a reset.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _inputWeightsGradient;
 
     /// <summary>
@@ -202,6 +205,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
     /// It has the same dimensions as the _hiddenWeights tensor and is used to update the hidden weights during
     /// the parameter update step. The tensor is null before the first backward pass or after a reset.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _hiddenWeightsGradient;
 
     /// <summary>
@@ -212,6 +216,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
     /// It has the same length as the _biases tensor and is used to update the biases during
     /// the parameter update step. The tensor is null before the first backward pass or after a reset.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
@@ -686,37 +691,57 @@ public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
     }
 
 
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _inputWeightsVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _hiddenWeightsVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _biasesVelocity;
 
     #region GPU Training Fields
+    [ExternalState]
     private Tensor<T>? _gpuLastInput;
+    [ExternalState]
     private Tensor<T>? _gpuLastOutput;
 
     // GPU weight buffers
+    [ExternalState]
     private Tensor<T>? _gpuInputWeights;
+    [ExternalState]
     private Tensor<T>? _gpuHiddenWeights;
+    [ExternalState]
     private Tensor<T>? _gpuBiases;
 
     // GPU gradient buffers
+    [ExternalState]
     private Tensor<T>? _gpuInputWeightsGradient;
+    [ExternalState]
     private Tensor<T>? _gpuHiddenWeightsGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesGradient;
 
     // GPU velocity buffers (SGD momentum)
+    [ExternalState]
     private Tensor<T>? _gpuInputWeightsVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuHiddenWeightsVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesVelocity;
 
     // GPU Adam first moment buffers
+    [ExternalState]
     private Tensor<T>? _gpuInputWeightsM;
+    [ExternalState]
     private Tensor<T>? _gpuHiddenWeightsM;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesM;
 
     // GPU Adam second moment buffers
+    [ExternalState]
     private Tensor<T>? _gpuInputWeightsV;
+    [ExternalState]
     private Tensor<T>? _gpuHiddenWeightsV;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesV;
     #endregion
 

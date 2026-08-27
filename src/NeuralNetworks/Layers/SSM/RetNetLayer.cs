@@ -138,34 +138,60 @@ public partial class RetNetLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _groupNormBias;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastQuery;
+    [Scratch]
     private Tensor<T>? _lastKey;
+    [Scratch]
     private Tensor<T>? _lastValue;
+    [Scratch]
     private Tensor<T>? _lastRetentionOutput;
+    [Scratch]
     private Tensor<T>? _lastNormedRetention;
+    [Scratch]
     private Tensor<T>? _lastGateRaw;
+    [Scratch]
     private Tensor<T>? _lastGate;
+    [Scratch]
     private Tensor<T>? _lastDecayMasks;
+    [Scratch]
     private Tensor<T>? _lastRetentionScores;
+    [Scratch]
     private Tensor<T>? _lastGroupNormMean;
+    [Scratch]
     private Tensor<T>? _lastGroupNormVar;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
+    [Scratch]
     private Tensor<T>? _queryBiasGradient;
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
+    [Scratch]
     private Tensor<T>? _keyBiasGradient;
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
+    [Scratch]
     private Tensor<T>? _valueBiasGradient;
+    [Scratch]
     private Tensor<T>? _gammasGradient;
+    [Scratch]
     private Tensor<T>? _outputGateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputGateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
+    [Scratch]
     private Tensor<T>? _groupNormScaleGradient;
+    [Scratch]
     private Tensor<T>? _groupNormBiasGradient;
 
     /// <inheritdoc />
@@ -185,6 +211,9 @@ public partial class RetNetLayer<T> : LayerBase<T>, IShapeContract
     /// Gets the dimension per head.
     /// </summary>
     public int HeadDimension => _headDimension;
+
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
 
     /// <summary>
     /// Creates a new RetNet (Retentive Network) layer.
@@ -218,6 +247,7 @@ public partial class RetNetLayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

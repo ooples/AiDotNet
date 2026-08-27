@@ -124,6 +124,10 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
     /// chasing a constantly moving target, which would make learning very difficult.
     /// </para>
     /// </remarks>
+    // The target network is the frozen Bellman-bootstrap snapshot from DQN, not an independently
+    // optimized parameter branch. Persist it as model state, but exclude it from the online network's
+    // trainable parameter surface and copy-on-write module graph.
+    [Buffer]
     private DeepQNetwork<T>? _targetNetwork;
 
     /// <summary>
@@ -744,27 +748,7 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
     /// This allows you to load the exact same DQN later, with all its settings intact.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Save exploration rate (epsilon)
-        writer.Write(Convert.ToDouble(_epsilon));
 
-        // Save action space size
-        writer.Write(_actionSpace);
-
-        // Save replay buffer size (but not the actual experiences)
-        writer.Write(_replayBuffer.Count);
-
-        // Serialize target network (if present)
-        writer.Write(_targetNetwork is not null);
-        if (_targetNetwork is not null)
-        {
-            for (int i = 0; i < _targetNetwork.Layers.Count; i++)
-            {
-                _targetNetwork.Layers[i].Serialize(writer);
-            }
-        }
-    }
 
     /// <summary>
     /// Loads Deep Q-Network specific data from a binary stream.
@@ -786,59 +770,7 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
     /// This allows you to continue using a previously trained DQN with all its settings intact.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Load exploration rate (epsilon)
-        T epsilon = NumOps.FromDouble(reader.ReadDouble());
 
-        // Load action space size
-        int actionSpace = reader.ReadInt32();
-        _actionSpace = actionSpace;
-
-        // Load replay buffer size (but can't restore actual experiences)
-        int replayBufferSize = reader.ReadInt32();
-        _ = replayBufferSize;
-
-        // Deserialize target network (if it was serialized)
-        bool hasTargetNetwork = reader.ReadBoolean();
-        if (hasTargetNetwork)
-        {
-            var targetNetwork = _targetNetwork ??
-                new DeepQNetwork<T>(Architecture, _lossFunction, Convert.ToDouble(epsilon), isTargetNetwork: true);
-            _targetNetwork = targetNetwork;
-
-            for (int i = 0; i < targetNetwork.Layers.Count; i++)
-            {
-                targetNetwork.Layers[i].Deserialize(reader);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Creates a new instance of the Deep Q-Network with the same architecture and configuration.
-    /// </summary>
-    /// <returns>A new Deep Q-Network instance with the same architecture and configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the Deep Q-Network with the same architecture and
-    /// exploration rate (epsilon) as the current instance. It's used in scenarios where a fresh
-    /// copy of the model is needed while maintaining the same configuration.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a brand new copy of the agent with the same setup.
-    /// 
-    /// Think of it like creating a clone of the agent:
-    /// - The new agent has the same neural network architecture
-    /// - The new agent has the same exploration rate (epsilon)
-    /// - But it's a completely separate instance with its own memory and learning state
-    /// 
-    /// This is useful when you need multiple instances of the same DQN model,
-    /// such as for parallel training or comparing different learning strategies.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DeepQNetwork<T>(this.Architecture, _lossFunction, Convert.ToDouble(this._epsilon));
-    }
 }
 
 

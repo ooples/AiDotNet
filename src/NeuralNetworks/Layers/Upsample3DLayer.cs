@@ -158,6 +158,7 @@ public partial class Upsample3DLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// The input tensor from the last forward pass, cached for backward computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -174,6 +175,9 @@ public partial class Upsample3DLayer<T> : LayerBase<T>, IShapeContract
     #endregion
 
     #region Constructors
+
+    /// <summary>Construction state: the 'scaleFactor' the layer was built with.</summary>
+    private readonly int _scaleFactor;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Upsample3DLayer{T}"/> class with uniform scaling.
@@ -193,6 +197,7 @@ public partial class Upsample3DLayer<T> : LayerBase<T>, IShapeContract
     public Upsample3DLayer(int scaleFactor)
         : this(scaleFactor, scaleFactor, scaleFactor)
     {
+        _scaleFactor = scaleFactor;
     }
 
     /// <summary>
@@ -455,74 +460,9 @@ public partial class Upsample3DLayer<T> : LayerBase<T>, IShapeContract
 
     #region Cloning
 
-    /// <summary>
-    /// Creates a deep copy of the layer with the same configuration.
-    /// </summary>
-    /// <returns>A new instance of the <see cref="Upsample3DLayer{T}"/> with identical configuration.</returns>
-    public override LayerBase<T> Clone()
-    {
-        return new Upsample3DLayer<T>(ScaleDepth, ScaleHeight, ScaleWidth);
-    }
-
     #endregion
 
     #region Serialization
-
-    /// <summary>
-    /// Serializes the layer to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer to serialize to.</param>
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-
-        // Write input shape for proper deserialization
-        writer.Write(InputShape.Length);
-        foreach (var dim in InputShape)
-        {
-            writer.Write(dim);
-        }
-
-        writer.Write(ScaleDepth);
-        writer.Write(ScaleHeight);
-        writer.Write(ScaleWidth);
-    }
-
-    /// <summary>
-    /// Deserializes the layer from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader to deserialize from.</param>
-    /// <exception cref="InvalidOperationException">Thrown because Upsample3DLayer uses readonly properties and cannot be deserialized in-place.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method validates that the serialized scale factors match the current instance's values.
-    /// For full deserialization support, use the static factory method <see cref="DeserializeFrom"/> instead.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-
-        // Read input shape
-        int inputShapeLength = reader.ReadInt32();
-        var inputShape = new int[inputShapeLength];
-        for (int i = 0; i < inputShapeLength; i++)
-        {
-            inputShape[i] = reader.ReadInt32();
-        }
-
-        var scaleD = reader.ReadInt32();
-        var scaleH = reader.ReadInt32();
-        var scaleW = reader.ReadInt32();
-
-        // Validate serialized values match current instance (readonly properties cannot be changed)
-        if (scaleD != ScaleDepth || scaleH != ScaleHeight || scaleW != ScaleWidth)
-        {
-            throw new InvalidOperationException(
-                $"Deserialized scale factors [{scaleD}, {scaleH}, {scaleW}] do not match current instance " +
-                $"[{ScaleDepth}, {ScaleHeight}, {ScaleWidth}]. Use DeserializeFrom factory method instead.");
-        }
-    }
 
     /// <summary>
     /// Creates a new Upsample3DLayer instance from serialized data.

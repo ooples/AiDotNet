@@ -88,6 +88,7 @@ public partial class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
     // Head parameters (adapted per-task)
     private Vector<T> _headWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _headBias;
 
     // Body parameters (frozen during inner loop, updated in outer loop)

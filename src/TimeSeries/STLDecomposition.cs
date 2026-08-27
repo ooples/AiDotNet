@@ -46,7 +46,7 @@ namespace AiDotNet.TimeSeries;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("STL: A Seasonal-Trend Decomposition Procedure Based on Loess", "https://doi.org/10.6028/jres.090.015", Year = 1990, Authors = "Robert B. Cleveland, William S. Cleveland, Jean E. McRae, Irma Terpenning")]
-public class STLDecomposition<T> : TimeSeriesModelBase<T>
+public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
 {
     /// <summary>
     /// Configuration options for the STL decomposition.
@@ -889,22 +889,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     /// or continue analysis without repeating the decomposition process.
     /// </para>
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        // Write STL options
-        writer.Write(_stlOptions.SeasonalPeriod);
-        writer.Write(_stlOptions.TrendWindowSize);
-        writer.Write(_stlOptions.SeasonalLoessWindow);
-        writer.Write(_stlOptions.TrendLoessWindow);
-        writer.Write(_stlOptions.LowPassFilterWindowSize);
-        writer.Write(_stlOptions.RobustIterations);
-        writer.Write(_stlOptions.RobustWeightThreshold);
 
-        // Write decomposition components
-        SerializationHelper<T>.SerializeVector(writer, _trend);
-        SerializationHelper<T>.SerializeVector(writer, _seasonal);
-        SerializationHelper<T>.SerializeVector(writer, _residual);
-    }
 
     /// <summary>
     /// Deserializes the model's core parameters from a binary reader.
@@ -925,34 +910,7 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     /// It's like saving your work in a document and opening it later to continue editing.
     /// </para>
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        // Read STL options
-        int seasonalPeriod = reader.ReadInt32();
-        int trendWindowSize = reader.ReadInt32();
-        int seasonalLoessWindow = reader.ReadInt32();
-        int trendLoessWindow = reader.ReadInt32();
-        int lowPassFilterWindowSize = reader.ReadInt32();
-        int robustIterations = reader.ReadInt32();
-        double robustWeightThreshold = reader.ReadDouble();
 
-        // Create new STLDecompositionOptions<T> with the read values
-        _stlOptions = new STLDecompositionOptions<T>
-        {
-            SeasonalPeriod = seasonalPeriod,
-            TrendWindowSize = trendWindowSize,
-            SeasonalLoessWindow = seasonalLoessWindow,
-            TrendLoessWindow = trendLoessWindow,
-            LowPassFilterWindowSize = lowPassFilterWindowSize,
-            RobustIterations = robustIterations,
-            RobustWeightThreshold = robustWeightThreshold
-        };
-
-        // Read decomposition components
-        _trend = SerializationHelper<T>.DeserializeVector(reader);
-        _seasonal = SerializationHelper<T>.DeserializeVector(reader);
-        _residual = SerializationHelper<T>.DeserializeVector(reader);
-    }
 
     /// <summary>
     /// Resets the model to its initial state.

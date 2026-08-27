@@ -116,7 +116,9 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
 
     // Text encoder components
     // Proper CLIP-style token embedding: embedding lookup table [vocab_size, hidden_dim]
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _tokenEmbeddingTable;          // Embedding lookup table
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _positionalEmbeddingTable;     // Learned positional embeddings
     private readonly List<ConvolutionalLayer<T>> _textTransformerQKV;      // QKV projections
     private readonly List<ConvolutionalLayer<T>> _textTransformerAttnProj; // Attention output
@@ -293,10 +295,10 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
         BindLayerViewsFromLayers();
 
         // Initialize embedding tables (not part of layer list)
-        _tokenEmbeddingTable = new Tensor<T>([_vocabSize, hiddenDim]);
-        InitializeEmbeddingTable(_tokenEmbeddingTable, _vocabSize, hiddenDim);
-        _positionalEmbeddingTable = new Tensor<T>([_textMaxLength, hiddenDim]);
-        InitializeEmbeddingTable(_positionalEmbeddingTable, _textMaxLength, hiddenDim);
+        _tokenEmbeddingTable = new Tensor<T>([_vocabSize, effectiveHiddenDim]);
+        InitializeEmbeddingTable(_tokenEmbeddingTable, _vocabSize, effectiveHiddenDim);
+        _positionalEmbeddingTable = new Tensor<T>([_textMaxLength, effectiveHiddenDim]);
+        InitializeEmbeddingTable(_positionalEmbeddingTable, _textMaxLength, effectiveHiddenDim);
 
         // Paper-faithful training configuration (Xu et al. 2021, arXiv:2109.14084, Training Details):
         // "Adam ... with betas of (0.9, 0.98), an initial learning rate of 5e-5, 1000 steps of
@@ -701,11 +703,11 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
                 features = ApplyGELU(features);
             }
 
-            // VideoCLIP consumes features from a pretrained video backbone and
-            // explicitly stops gradients at that boundary (Xu et al., 2021,
-            // Eq. 1). The temporal aggregation and projection above the frozen
-            // backbone remain trainable.
-            features = Engine.StopGradient(features);
+            // This native implementation constructs its spatial encoder locally and exposes those
+            // weights through the framework parameter surface. It is therefore end-to-end
+            // trainable, not a wrapper around an externally pretrained frozen backbone. Detaching
+            // here made the published convolution weights affect the numeric loss while their tape
+            // gradients stayed exactly zero.
 
             allFrameFeatures.Add(features);
         }
@@ -1157,87 +1159,10 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height);
-        writer.Write(_width);
-        writer.Write(_channels);
-        writer.Write(_numFrames);
-        writer.Write(_embeddingDim);
-        writer.Write(_textMaxLength);
-        writer.Write(_vocabSize);
-        writer.Write(_temperature);
 
-        // The learned embedding tables. They are trainable (see GetExtraTrainableTensors) and live
-        // outside Layers, so the layer-by-layer weight sections of the stream do not carry them and
-        // a reload rebuilt them from InitializeEmbeddingTable's RNG instead — dropping trained text
-        // -tower weights on every save/load. Same element-by-element idiom VisionTransformer uses
-        // for its CLS and positional tokens.
-        for (int i = 0; i < _tokenEmbeddingTable.Length; i++)
-            writer.Write(Convert.ToDouble(_tokenEmbeddingTable[i]));
-        for (int i = 0; i < _positionalEmbeddingTable.Length; i++)
-            writer.Write(Convert.ToDouble(_positionalEmbeddingTable[i]));
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadDouble();
-        // Restore the learned embedding tables written above. The geometry fields are discarded
-        // because they are readonly and the constructor has already rebuilt this instance at the
-        // right sizes; these tensors, by contrast, carry trained values that only the stream has.
-        for (int i = 0; i < _tokenEmbeddingTable.Length; i++)
-            _tokenEmbeddingTable[i] = NumOps.FromDouble(reader.ReadDouble());
-        for (int i = 0; i < _positionalEmbeddingTable.Length; i++)
-            _positionalEmbeddingTable[i] = NumOps.FromDouble(reader.ReadDouble());
 
-        // The base deserializer has just replaced Layers with the restored instances. Rebind the
-        // per-stage views so the explicit forward and the tape both consume those restored weights
-        // rather than the constructor-fresh layers they were bound to.
-        BindLayerViewsFromLayers();
-    }
-
-    /// <inheritdoc/>
-    /// <summary>
-    /// Surfaces the token and positional embedding tables, which are learned parameters the model
-    /// owns OUTSIDE <c>Layers</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// In CLIP (Radford et al. 2021 §2.4) the text encoder's token embedding and positional
-    /// embedding are both learned — <c>nn.Embedding(vocab_size, width)</c> and an
-    /// <c>nn.Parameter</c> respectively — so they appear in <c>state_dict()</c>, receive gradients,
-    /// and survive a module copy. Here they are plain tensors built in the constructor, so without
-    /// this hook the <c>Layers</c>-only parameter walk never saw them and they were frozen at their
-    /// random initialization for the model's entire lifetime, never trained and never persisted.
-    /// </para>
-    /// <para>
-    /// The clone consequence was the sharper one. A copy re-runs the constructor, which
-    /// re-initializes both tables to FRESH random values, and nothing afterwards overwrote them:
-    /// the clone's text tower therefore computed a different function from the original's while
-    /// every tensor in <c>Layers</c> matched bit-for-bit (measured: 22/22 chunks and 48173/48173
-    /// parameters identical, parameter L2 equal to 17 digits, yet the outputs differed by 1.6e+00
-    /// on identical input, and MoreData_ShouldNotDegrade failed on the clone).
-    /// </para>
-    /// <para>
-    /// Yielding them here opts into the three base paths that already handle model-owned tensors:
-    /// the tape optimizer's step, the serialization round-trip, and the copy-on-write clone. Same
-    /// mechanism <see cref="AiDotNet.NeuralNetworks.VisionTransformer{T}"/> uses for its CLS and
-    /// positional tokens.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        yield return _tokenEmbeddingTable;
-        yield return _positionalEmbeddingTable;
-    }
 
     /// <summary>
     /// (Re)binds the per-stage layer views to the current contents of <c>Layers</c>.
@@ -1299,37 +1224,6 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
 
         // Logit scale
         _logitScale = (ConvolutionalLayer<T>)Layers[idx++];
-    }
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new VideoCLIP<T>(
-            Architecture, _numFrames, _embeddingDim, _textMaxLength, _vocabSize, _temperature,
-            // EVERY option that affects training must be carried, not just the topology ones. This
-            // copied five fields and dropped Beta1, Beta2, MaxGradientNorm, WarmupSteps,
-            // TotalTrainingSteps and DecayPower, so a clone silently rebuilt its optimizer from the
-            // DEFAULTS — including the paper's 1000-step warm-up, which the caller may deliberately have
-            // turned off. A clone that warms up when the original does not is not the same model.
-            //
-            // Measured: MoreData_ShouldNotDegrade clones the network and trains the clone, and the
-            // clone's loss came back byte-identical (0.7257835234621279) at 2, 4 and 12 iterations with
-            // its parameter L2 unchanged to 16 digits — the LR sat at ~5e-8 on the first rung of a ramp
-            // the original had disabled, so no step could move anything. The invariant was reporting a
-            // real defect, not task-to-task variance.
-            options: new VideoCLIPVideoOptions
-            {
-                HiddenDimension = _options.HiddenDimension,
-                NumSpatialBlocks = _options.NumSpatialBlocks,
-                NumTemporalBlocks = _options.NumTemporalBlocks,
-                NumTextBlocks = _options.NumTextBlocks,
-                LearningRate = _options.LearningRate,
-                Beta1 = _options.Beta1,
-                Beta2 = _options.Beta2,
-                MaxGradientNorm = _options.MaxGradientNorm,
-                WarmupSteps = _options.WarmupSteps,
-                TotalTrainingSteps = _options.TotalTrainingSteps,
-                DecayPower = _options.DecayPower
-            });
     }
 
     #endregion

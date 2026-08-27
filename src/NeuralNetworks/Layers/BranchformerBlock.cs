@@ -57,15 +57,26 @@ public partial class BranchformerBlock<T> : LayerBase<T>, IShapeContract
     private readonly int _cgmlpHiddenDim;
     private readonly int _kernelSize;
 
+    // Both branches read the block width; inside the cgMLP the CSGU splits the expanded width in
+    // half, so everything after it reads half; the merge reads the concatenation of the two
+    // branches. A literal 1 stands in for batch and time, which no child's parameters depend on.
+    [SubLayerInput("1, 1, _modelDim")]
     private readonly MultiHeadAttentionLayer<T> _attention;
+    [SubLayerInput("1, 1, _modelDim")]
     private readonly LayerNormalizationLayer<T> _attentionNorm;
 
+    [SubLayerInput("1, 1, _modelDim")]
     private readonly LayerNormalizationLayer<T> _cgmlpNorm;
+    [SubLayerInput("1, 1, _modelDim")]
     private readonly DenseLayer<T> _cgmlpExpand;
+    [SubLayerInput("1, 1, _cgmlpHiddenDim / 2")]
     private readonly LayerNormalizationLayer<T> _csguNorm;
+    [SubLayerInput("1, _kernelSize, _cgmlpHiddenDim / 2")]
     private readonly DepthwiseConv1DLayer<T> _csguConv;
+    [SubLayerInput("1, 1, _cgmlpHiddenDim / 2")]
     private readonly DenseLayer<T> _cgmlpProject;
 
+    [SubLayerInput("1, 1, _modelDim * 2")]
     private readonly DenseLayer<T> _merge;
 
     /// <inheritdoc/>
@@ -215,34 +226,13 @@ public partial class BranchformerBlock<T> : LayerBase<T>, IShapeContract
         _csguNorm, _csguConv, _cgmlpProject, _merge
     };
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Enumerates the children explicitly, since <c>LayerBase</c> does not recurse into
-    /// registered sub-layers.
-    /// </remarks>
-    public override IReadOnlyList<Tensor<T>> GetTrainableParameters()
-    {
-        var result = new List<Tensor<T>>();
-        foreach (var c in Children) result.AddRange(c.GetTrainableParameters());
-        return result;
-    }
-
-    /// <inheritdoc/>
-    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
-    {
-        var children = Children;
-        var counts = children.Select(c => c.GetTrainableParameters().Count).ToArray();
-
-        if (parameters.Count != counts.Sum())
-            throw new ArgumentException($"Expected {counts.Sum()} trainable tensors, got {parameters.Count}.", nameof(parameters));
-
-        int at = 0;
-        for (int c = 0; c < children.Length; c++)
-        {
-            children[c].SetTrainableParameters(parameters.Skip(at).Take(counts[c]).ToList());
-            at += counts[c];
-        }
-    }
+    // The eight children's tensors used to be enumerated here as this block's own, "since LayerBase
+    // does not recurse into registered sub-layers". That holds for the base GetTrainableParameters,
+    // which returns only this layer's own registrations, and not for the walk ParameterCount,
+    // GetParameters and SetParameters are built from: it appends every registered sub-layer that no
+    // declaration already covers, and its duplicate check compares LAYER references, so a child's
+    // tensors arriving through the parent's own list are invisible to it. Nineteen tensors — the
+    // whole block — were counted twice.
 
     /// <inheritdoc/>
     internal override Dictionary<string, string> GetMetadata()

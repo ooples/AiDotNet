@@ -218,51 +218,6 @@ public class PassiveAggressiveClassifier<T> : LinearClassifierBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new PassiveAggressiveClassifier<T>(new PassiveAggressiveOptions<T>
-        {
-            C = Options.C,
-            PAType = Options.PAType,
-            MaxIterations = Options.MaxIterations,
-            FitIntercept = Options.FitIntercept,
-            Shuffle = Options.Shuffle,
-            Seed = Options.Seed
-        });
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (PassiveAggressiveClassifier<T>)CreateNewInstance();
-
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-        clone.Intercept = Intercept;
-
-        if (ClassLabels is not null)
-        {
-            clone.ClassLabels = new Vector<T>(ClassLabels.Length);
-            for (int i = 0; i < ClassLabels.Length; i++)
-            {
-                clone.ClassLabels[i] = ClassLabels[i];
-            }
-        }
-
-        if (Weights is not null)
-        {
-            clone.Weights = new Vector<T>(Weights.Length);
-            for (int i = 0; i < Weights.Length; i++)
-            {
-                clone.Weights[i] = Weights[i];
-            }
-        }
-
-        return clone;
-    }
-
-    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = base.GetModelMetadata();

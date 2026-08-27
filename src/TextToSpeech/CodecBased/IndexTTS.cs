@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("IndexTTS: Zero-Shot Text-to-Speech", "https://github.com/indexteam/IndexTTS")]
-public class IndexTTS<T> : TtsModelBase<T>, ICodecTts<T>
+public partial class IndexTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly IndexTTSOptions _options;
 
@@ -227,85 +227,9 @@ public class IndexTTS<T> : TtsModelBase<T>, ICodecTts<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.NumCodebooks);
-        writer.Write(_options.LLMDim);
-        writer.Write(_options.CodebookSize);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.NumEncoderLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.NumLLMLayers);
-        writer.Write(_options.TextEncoderDim);
-        writer.Write(_options.MelChannels);
-        writer.Write(_options.HopSize);
-        writer.Write(_options.CodecFrameRate);
-        writer.Write(_options.MaxTextLength);
-        // Appended fields keep the original prefix readable and preserve every
-        // user option that affects IndexTTS construction, inference, or training.
-        writer.Write(_options.VocabSize);
-        writer.Write(_options.MaxCodecFrames);
-        writer.Write(_options.SpeakerEmbeddingDim);
-        writer.Write(_options.FftSize);
-        writer.Write(_options.HiddenDim);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.MaxMelLength);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.WeightDecay);
-        writer.Write(_options.LanguageModelName ?? string.Empty);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.NumCodebooks = reader.ReadInt32();
-        _options.LLMDim = reader.ReadInt32();
-        _options.CodebookSize = reader.ReadInt32();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.NumEncoderLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.NumLLMLayers = reader.ReadInt32();
-        _options.TextEncoderDim = reader.ReadInt32();
-        _options.MelChannels = reader.ReadInt32();
-        _options.HopSize = reader.ReadInt32();
-        _options.CodecFrameRate = reader.ReadInt32();
-        _options.MaxTextLength = reader.ReadInt32();
-        // These fields were appended after the legacy payload. Older saved
-        // models end here and retain the constructor defaults for them.
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-        {
-            _options.VocabSize = reader.ReadInt32();
-            _options.MaxCodecFrames = reader.ReadInt32();
-            _options.SpeakerEmbeddingDim = reader.ReadInt32();
-            _options.FftSize = reader.ReadInt32();
-            _options.HiddenDim = reader.ReadInt32();
-            _options.NumDecoderLayers = reader.ReadInt32();
-            _options.MaxMelLength = reader.ReadInt32();
-            _options.LearningRate = reader.ReadDouble();
-            _options.WeightDecay = reader.ReadDouble();
-            _options.LanguageModelName = reader.ReadString();
-        }
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new IndexTTS<T>(Architecture, mp, _options);
-        return new IndexTTS<T>(Architecture, _options);
-    }
+
 
     private void ThrowIfDisposed()
     {

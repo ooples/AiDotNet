@@ -4,7 +4,7 @@ using AiDotNet.Validation;
 
 namespace AiDotNet.Genetics;
 
-public class StandardGeneticAlgorithm<T, TInput, TOutput> :
+public partial class StandardGeneticAlgorithm<T, TInput, TOutput> :
     GeneticBase<T, TInput, TOutput>
 {
     private readonly Func<IFullModel<T, TInput, TOutput>> _modelFactory;

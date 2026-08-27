@@ -53,16 +53,19 @@ public sealed class UniPCScheduler<T> : NoiseSchedulerBase<T>
     /// <summary>
     /// Lambda values (log-SNR) for each inference timestep.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Vector<T> _lambdas = new Vector<T>(0);
 
     /// <summary>
     /// Alpha_t values for inference timesteps.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Vector<T> _alphaTs = new Vector<T>(0);
 
     /// <summary>
     /// Sigma_t values for inference timesteps.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Vector<T> _sigmaTs = new Vector<T>(0);
 
     /// <summary>

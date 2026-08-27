@@ -51,7 +51,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Sequence Transduction with Recurrent Neural Networks", "https://arxiv.org/abs/1211.3711", Year = 2012, Authors = "Alex Graves")]
-public class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -229,32 +229,9 @@ public class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.Variant);
-        w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers);
-        w.Write(_options.NumEncoderHeads); w.Write(_options.PredictionDim);
-        w.Write(_options.NumPredictionLayers); w.Write(_options.EmbeddingDim);
-        w.Write(_options.JointDim); w.Write(_options.NumMels);
-        w.Write(_options.VocabSize); w.Write(_options.DropoutRate);
-        w.Write(_options.Language);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.Variant = r.ReadString();
-        _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32();
-        _options.NumEncoderHeads = r.ReadInt32(); _options.PredictionDim = r.ReadInt32();
-        _options.NumPredictionLayers = r.ReadInt32(); _options.EmbeddingDim = r.ReadInt32();
-        _options.JointDim = r.ReadInt32(); _options.NumMels = r.ReadInt32();
-        _options.VocabSize = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
-        _options.Language = r.ReadString();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new RNNTransducer<T>(Architecture, _options);
+
 
     #endregion
 

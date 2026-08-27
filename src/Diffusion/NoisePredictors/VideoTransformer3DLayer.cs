@@ -14,7 +14,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// outer residual. The implementation accepts arbitrary frame counts.
 /// </remarks>
 [ElementWiseShape(Note = "Released Transformer3D residual block preserves NCFHW shape.")]
-public sealed class VideoTransformer3DLayer<T> : LayerBase<T>
+public sealed partial class VideoTransformer3DLayer<T> : LayerBase<T>
 {
     private readonly int _channels;
     private readonly int _contextDimension;
@@ -230,15 +230,7 @@ public sealed class VideoTransformer3DLayer<T> : LayerBase<T>
         foreach (var layer in ParameterLayers()) layer.ResetState();
     }
 
-    /// <inheritdoc />
-    public override LayerBase<T> Clone()
-    {
-        var clone = new VideoTransformer3DLayer<T>(
-            _channels, _contextDimension, _headCount, _spatialSize, _onlyCrossAttention);
-        var parameters = GetParameters();
-        if (parameters.Length > 0) clone.SetParameters(parameters);
-        return clone;
-    }
+
 
     /// <inheritdoc />
     internal override Dictionary<string, string> GetMetadata()

@@ -30,7 +30,7 @@ namespace AiDotNet.Video;
 /// 2. Build and train a new model from scratch
 /// </para>
 /// </remarks>
-public abstract class VideoNeuralNetworkBase<T> : NeuralNetworkBase<T>
+public abstract partial class VideoNeuralNetworkBase<T> : NeuralNetworkBase<T>
 {
     /// <summary>
     /// Gets or sets the expected frame height for this model.

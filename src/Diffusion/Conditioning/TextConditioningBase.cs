@@ -39,7 +39,7 @@ namespace AiDotNet.Diffusion.Conditioning;
 [TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
     Direction = TensorLayoutDirection.Output)]
-public abstract class TextConditioningBase<T> : NeuralNetworkBase<T>, IConditioningModule<T>, IShapeContract
+public abstract partial class TextConditioningBase<T> : NeuralNetworkBase<T>, IConditioningModule<T>, IShapeContract
 {
     /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
@@ -284,26 +284,10 @@ public abstract class TextConditioningBase<T> : NeuralNetworkBase<T>, ICondition
     };
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(VocabSize);
-        writer.Write(EmbeddingDimension);
-        writer.Write(MaxSequenceLength);
-        writer.Write(Tokenizer.GetType().AssemblyQualifiedName ?? Tokenizer.GetType().FullName ?? "");
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        VerifyEqual(reader.ReadInt32(), VocabSize, nameof(VocabSize));
-        VerifyEqual(reader.ReadInt32(), EmbeddingDimension, nameof(EmbeddingDimension));
-        VerifyEqual(reader.ReadInt32(), MaxSequenceLength, nameof(MaxSequenceLength));
-        string persistedTokenizerType = reader.ReadString();
-        string currentTokenizerType = Tokenizer.GetType().AssemblyQualifiedName ?? Tokenizer.GetType().FullName ?? "";
-        if (!string.Equals(persistedTokenizerType, currentTokenizerType, StringComparison.Ordinal))
-            throw new InvalidOperationException(
-                $"Persisted tokenizer type '{persistedTokenizerType}' does not match current '{currentTokenizerType}'.");
-    }
+
 
     private static void VerifyEqual<TValue>(TValue persisted, TValue current, string name)
         where TValue : IEquatable<TValue>

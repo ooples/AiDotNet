@@ -84,6 +84,7 @@ public partial class MaskingLayer<T> : LayerBase<T>, IShapeContract
     /// even when not immediately needed for calculations.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -106,11 +107,13 @@ public partial class MaskingLayer<T> : LayerBase<T>, IShapeContract
     /// the backward pass, which saves computation time.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastMask;
 
     /// <summary>
     /// The GPU mask tensor from the last GPU forward pass (for backward pass caching).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastMaskGpu;
 
     /// <summary>

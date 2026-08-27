@@ -965,25 +965,7 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// three networks (generator, discriminator, and Q network) to a file.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Serialize InfoGAN-specific hyperparameters
-        writer.Write(_latentCodeSize);
-        writer.Write(NumOps.ToDouble(_mutualInfoCoefficient));
 
-        // Serialize all three networks
-        var generatorBytes = Generator.Serialize();
-        writer.Write(generatorBytes.Length);
-        writer.Write(generatorBytes);
-
-        var discriminatorBytes = Discriminator.Serialize();
-        writer.Write(discriminatorBytes.Length);
-        writer.Write(discriminatorBytes);
-
-        var qNetworkBytes = QNetwork.Serialize();
-        writer.Write(qNetworkBytes.Length);
-        writer.Write(qNetworkBytes);
-    }
 
     /// <summary>
     /// Deserializes InfoGAN-specific data from a binary reader.
@@ -998,76 +980,7 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// three networks (generator, discriminator, and Q network) from a file.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        const int MaxNetworkDataLength = 100 * 1024 * 1024; // 100 MB max per network
 
-        // Deserialize InfoGAN-specific hyperparameters
-        _latentCodeSize = reader.ReadInt32();
-        _mutualInfoCoefficient = NumOps.FromDouble(reader.ReadDouble());
-
-        // Deserialize all three networks with bounds checking
-        int generatorDataLength = reader.ReadInt32();
-        if (generatorDataLength < 0 || generatorDataLength > MaxNetworkDataLength)
-        {
-            throw new InvalidDataException(
-                $"Invalid generator data length: {generatorDataLength}. " +
-                $"Must be between 0 and {MaxNetworkDataLength}.");
-        }
-        byte[] generatorData = reader.ReadBytes(generatorDataLength);
-        Generator.Deserialize(generatorData);
-
-        int discriminatorDataLength = reader.ReadInt32();
-        if (discriminatorDataLength < 0 || discriminatorDataLength > MaxNetworkDataLength)
-        {
-            throw new InvalidDataException(
-                $"Invalid discriminator data length: {discriminatorDataLength}. " +
-                $"Must be between 0 and {MaxNetworkDataLength}.");
-        }
-        byte[] discriminatorData = reader.ReadBytes(discriminatorDataLength);
-        Discriminator.Deserialize(discriminatorData);
-
-        int qNetworkDataLength = reader.ReadInt32();
-        if (qNetworkDataLength < 0 || qNetworkDataLength > MaxNetworkDataLength)
-        {
-            throw new InvalidDataException(
-                $"Invalid Q network data length: {qNetworkDataLength}. " +
-                $"Must be between 0 and {MaxNetworkDataLength}.");
-        }
-        byte[] qNetworkData = reader.ReadBytes(qNetworkDataLength);
-        QNetwork.Deserialize(qNetworkData);
-
-        // Reset optimizer state after loading network weights
-        ResetOptimizerState();
-    }
-
-    /// <summary>
-    /// Creates a new instance of the InfoGAN with the same configuration.
-    /// </summary>
-    /// <returns>A new InfoGAN instance with the same architecture and hyperparameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a fresh InfoGAN instance with the same network architectures
-    /// and hyperparameters. The new instance has freshly initialized optimizers.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a copy of the InfoGAN structure
-    /// but with new, untrained networks and fresh optimizers.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new InfoGAN<T>(
-            Generator.Architecture,
-            Discriminator.Architecture,
-            QNetwork.Architecture,
-            _latentCodeSize,
-            Architecture.InputType,
-            generatorOptimizer: null,
-            discriminatorOptimizer: null,
-            qNetworkOptimizer: null,
-            _lossFunction,
-            NumOps.ToDouble(_mutualInfoCoefficient));
-    }
 
     // UpdateParameters split the vector between Generator, Discriminator and QNetwork;
     // GetExtraTrainableLayers yields those three in the same order, so the base reproduces the

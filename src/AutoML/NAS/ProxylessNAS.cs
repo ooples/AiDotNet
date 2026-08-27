@@ -42,7 +42,7 @@ namespace AiDotNet.AutoML.NAS
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("ProxylessNAS: Direct Neural Architecture Search on Target Task and Hardware", "https://arxiv.org/abs/1812.00332")]
-    public class ProxylessNAS<T> : NasAutoMLModelBase<T>
+    public partial class ProxylessNAS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;
         private readonly SearchSpaceBase<T> _nasSearchSpace;
@@ -283,16 +283,6 @@ namespace AiDotNet.AutoML.NAS
             CancellationToken cancellationToken)
         {
             return DeriveArchitecture();
-        }
-
-        protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
-        {
-            return new ProxylessNAS<T>(
-                _nasSearchSpace,
-                _numNodes,
-                targetPlatform: _targetPlatform,
-                latencyWeight: _ops.ToDouble(_latencyWeight),
-                useBinarization: _useBinarization);
         }
     }
 }

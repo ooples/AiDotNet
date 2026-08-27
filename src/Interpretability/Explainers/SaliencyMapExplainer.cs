@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -44,6 +45,7 @@ public class SaliencyMapExplainer<T> : ILocalExplainer<T, SaliencyMapExplanation
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly Func<Vector<T>, Vector<T>> _predictFunction;
+    [Scratch]
     private readonly Func<Vector<T>, int, Vector<T>>? _gradientFunction;
     private readonly int _numFeatures;
     private readonly SaliencyMethod _method;

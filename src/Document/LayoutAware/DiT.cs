@@ -488,38 +488,10 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_hiddenDim);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_patchSize);
-        writer.Write(ImageSize);
-        writer.Write(_numClasses);
-        writer.Write(_modelSize);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int hiddenDim = reader.ReadInt32();
-        int numLayers = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-        int patchSize = reader.ReadInt32();
-        int imageSize = reader.ReadInt32();
-        int numClasses = reader.ReadInt32();
-        string modelSize = reader.ReadString();
-        bool useNativeMode = reader.ReadBoolean();
 
-        ImageSize = imageSize;
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DiT<T>(Architecture, _numClasses, ImageSize, _patchSize, _hiddenDim, _numLayers, _numHeads, _modelSize);
-    }
 
     #endregion
 

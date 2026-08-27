@@ -41,7 +41,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
     "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
-public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
+public partial class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 {
 
     /// <inheritdoc />
@@ -207,105 +207,6 @@ public class LinearQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int FeatureCount => _options.FeatureSize;
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Write options
-        writer.Write(_options.ActionSize);
-        writer.Write(_options.FeatureSize);
-        writer.Write(_options.EpsilonStart);
-        writer.Write(_options.EpsilonEnd);
-        writer.Write(_options.EpsilonDecay);
-
-        // Write base class properties that must be serialized
-        writer.Write(NumOps.ToDouble(_options.LearningRate ?? NumOps.Zero));
-        writer.Write(NumOps.ToDouble(_options.DiscountFactor ?? NumOps.Zero));
-        writer.Write(_options.Seed ?? -1); // Use -1 to indicate no seed
-        // Serialize loss function type name for reconstruction
-        string lossFunctionTypeName = _options.LossFunction?.GetType().AssemblyQualifiedName ?? string.Empty;
-        writer.Write(lossFunctionTypeName);
-
-        // Write current epsilon
-        writer.Write(_epsilon);
-
-        // Write weights matrix
-        writer.Write(_weights.Rows);
-        writer.Write(_weights.Columns);
-        for (int a = 0; a < _weights.Rows; a++)
-        {
-            for (int f = 0; f < _weights.Columns; f++)
-            {
-                writer.Write(NumOps.ToDouble(_weights[a, f]));
-            }
-        }
-
-        return ms.ToArray();
-    }
-
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        // Read options
-        int actionSize = reader.ReadInt32();
-        int featureSize = reader.ReadInt32();
-        double epsilonStart = reader.ReadDouble();
-        double epsilonEnd = reader.ReadDouble();
-        double epsilonDecay = reader.ReadDouble();
-
-        // Read base class properties from serialized data
-        double learningRate = reader.ReadDouble();
-        double discountFactor = reader.ReadDouble();
-        int seedValue = reader.ReadInt32();
-        int? seed = seedValue == -1 ? null : seedValue;
-        string lossFunctionTypeName = reader.ReadString();
-
-        // Reconstruct loss function from type name
-        ILossFunction<T>? lossFunction = null;
-        if (!string.IsNullOrEmpty(lossFunctionTypeName))
-        {
-            Type? lossFunctionType = Type.GetType(lossFunctionTypeName);
-            if (lossFunctionType is not null)
-            {
-                lossFunction = (ILossFunction<T>?)Activator.CreateInstance(lossFunctionType);
-            }
-        }
-        // Fall back to existing loss function if reconstruction failed
-        lossFunction ??= _options.LossFunction;
-
-        _options = new LinearQLearningOptions<T>
-        {
-            ActionSize = actionSize,
-            FeatureSize = featureSize,
-            EpsilonStart = epsilonStart,
-            EpsilonEnd = epsilonEnd,
-            EpsilonDecay = epsilonDecay,
-            LearningRate = NumOps.FromDouble(learningRate),
-            DiscountFactor = NumOps.FromDouble(discountFactor),
-            Seed = seed,
-            LossFunction = lossFunction
-        };
-
-        // Read current epsilon
-        _epsilon = reader.ReadDouble();
-
-        // Read weights matrix
-        int rows = reader.ReadInt32();
-        int cols = reader.ReadInt32();
-        _weights = new Matrix<T>(rows, cols);
-        for (int a = 0; a < rows; a++)
-        {
-            for (int f = 0; f < cols; f++)
-            {
-                _weights[a, f] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-    }
-
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone() => new LinearQLearningAgent<T>(_options);
     public override void SaveModel(string filepath) { var data = Serialize(); System.IO.File.WriteAllBytes(filepath, data); }
     public override void LoadModel(string filepath) { var data = System.IO.File.ReadAllBytes(filepath); Deserialize(data); }
 }

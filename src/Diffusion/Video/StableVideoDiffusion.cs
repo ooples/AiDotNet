@@ -760,35 +760,5 @@ public partial class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <summary>
-    /// Creates a clone of this StableVideoDiffusion model.
-    /// </summary>
-    /// <returns>A new instance with the same configuration.</returns>
-    public override IDiffusionModel<T> Clone()
-    {
-        var clone = new StableVideoDiffusion<T>(
-            options: null,
-            scheduler: null,
-            videoUNet: (VideoUNetPredictor<T>)_videoUNet.Clone(),
-            temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
-            conditioner: _conditioner,
-            defaultNumFrames: DefaultNumFrames,
-            defaultFPS: DefaultFPS);
-
-        // Copy motion bucket state
-        clone.SetMotionBucketId(MotionBucketId);
-
-        return clone;
-    }
-
-    /// <summary>
-    /// Creates a deep copy of this model.
-    /// </summary>
-    /// <returns>A new instance with copied parameters.</returns>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return (IFullModel<T, Tensor<T>, Tensor<T>>)Clone();
-    }
-
     #endregion
 }

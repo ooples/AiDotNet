@@ -31,7 +31,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
 public partial class ANPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly ANPOptions<T, TInput, TOutput> _anpOptions;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _latentEncoderParams;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _attentionParams;
 
     /// <inheritdoc/>

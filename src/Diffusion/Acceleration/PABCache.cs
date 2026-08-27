@@ -30,8 +30,11 @@ public class PABCache<T>
     private readonly int _spatialBroadcastInterval;
     private readonly int _temporalBroadcastInterval;
     private readonly int _crossBroadcastInterval;
+    [Scratch]
     private readonly Dictionary<string, Tensor<T>> _spatialCache;
+    [Scratch]
     private readonly Dictionary<string, Tensor<T>> _temporalCache;
+    [Scratch]
     private readonly Dictionary<string, Tensor<T>> _crossCache;
     private int _currentStep;
 

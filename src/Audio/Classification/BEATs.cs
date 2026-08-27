@@ -149,7 +149,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("BEATs: Audio Pre-Training with Acoustic Tokenizers", "https://arxiv.org/abs/2212.09058", Year = 2023, Authors = "Sanyuan Chen, Yu Wu, Chengyi Wang, Shujie Liu, Daniel Tompkins, Zhuo Chen, Furu Wei")]
-public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
+public partial class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
 
@@ -1227,39 +1227,7 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// <see cref="DeserializeNetworkSpecificData"/> to continue where you left off.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write mode and model path
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
 
-        // Write architecture hyperparameters
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.NumMels);
-        writer.Write(_options.FftSize);
-        writer.Write(_options.HopLength);
-        writer.Write(_options.EmbeddingDim);
-        writer.Write(_options.NumEncoderLayers);
-        writer.Write(_options.NumAttentionHeads);
-        writer.Write(_options.FeedForwardDim);
-        writer.Write(_options.PatchSize);
-        writer.Write(_options.PatchStride);
-        writer.Write(_options.Threshold);
-        writer.Write(_options.WindowSize);
-        writer.Write(_options.WindowOverlap);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.MaskProbability);
-        writer.Write(_options.CodebookSize);
-        writer.Write(_options.FMin);
-        writer.Write(_options.FMax);
-
-        // Write class labels
-        writer.Write(ClassLabels.Count);
-        foreach (var label in ClassLabels)
-        {
-            writer.Write(label);
-        }
-    }
 
     /// <summary>
     /// Deserializes BEATs-specific model data from a binary stream.
@@ -1280,80 +1248,7 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// at the saved path.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Restore mode and model path
-        _useNativeMode = reader.ReadBoolean();
-        string modelPath = reader.ReadString();
-        if (!string.IsNullOrEmpty(modelPath))
-        {
-            _options.ModelPath = modelPath;
-        }
 
-        // Restore architecture hyperparameters
-        _options.SampleRate = reader.ReadInt32();
-        _options.NumMels = reader.ReadInt32();
-        _options.FftSize = reader.ReadInt32();
-        _options.HopLength = reader.ReadInt32();
-        _options.EmbeddingDim = reader.ReadInt32();
-        _options.NumEncoderLayers = reader.ReadInt32();
-        _options.NumAttentionHeads = reader.ReadInt32();
-        _options.FeedForwardDim = reader.ReadInt32();
-        _options.PatchSize = reader.ReadInt32();
-        _options.PatchStride = reader.ReadInt32();
-        _options.Threshold = reader.ReadDouble();
-        _options.WindowSize = reader.ReadDouble();
-        _options.WindowOverlap = reader.ReadDouble();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.MaskProbability = reader.ReadDouble();
-        _options.CodebookSize = reader.ReadInt32();
-        _options.FMin = reader.ReadInt32();
-        _options.FMax = reader.ReadInt32();
-
-        // Read class labels
-        int numLabels = reader.ReadInt32();
-        var labels = new string[numLabels];
-        for (int i = 0; i < numLabels; i++)
-        {
-            labels[i] = reader.ReadString();
-        }
-        ClassLabels = labels;
-
-        // Reinitialize mel spectrogram with deserialized options
-        _melSpectrogram = new MelSpectrogram<T>(
-            sampleRate: _options.SampleRate,
-            nMels: _options.NumMels,
-            nFft: _options.FftSize,
-            hopLength: _options.HopLength,
-            fMin: _options.FMin,
-            fMax: _options.FMax,
-            logMel: true);
-
-        // Restore ONNX model if in ONNX inference mode
-        if (!_useNativeMode && _options.ModelPath is { } onnxModelPath && !string.IsNullOrEmpty(onnxModelPath))
-        {
-            OnnxEncoder = new OnnxModel<T>(onnxModelPath, _options.OnnxOptions);
-        }
-    }
-
-    /// <summary>
-    /// Creates a new BEATs instance for the deserialization framework.
-    /// </summary>
-    /// <returns>A new BEATs instance configured with the same architecture and options.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is used internally by the serialization system. When loading
-    /// a saved model, the framework first creates a blank instance using this method, then
-    /// fills in the saved weights and configuration. You don't need to call this directly.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new BEATsOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new BEATs<T>(Architecture, mp, options);
-        return new BEATs<T>(Architecture, options);
-    }
 
     #endregion
 

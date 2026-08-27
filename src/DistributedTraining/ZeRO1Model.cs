@@ -63,8 +63,9 @@ namespace AiDotNet.DistributedTraining;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("ZeRO: Memory Optimizations Toward Training Trillion Parameter Models", "https://arxiv.org/abs/1910.02054")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
+public partial class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _computedGradients;
 
     /// <summary>
@@ -188,44 +189,6 @@ public class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
     }
 
     /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-        writer.Write(WorldSize);
-        writer.Write(Rank);
-        writer.Write(Config.AutoSyncGradients);
-        writer.Write(Config.MinimumParameterGroupSize);
-        writer.Write(Config.EnableGradientCompression);
-        var modelData = WrappedModel.Serialize();
-        writer.Write(modelData.Length);
-        writer.Write(modelData);
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-        int savedWorldSize = reader.ReadInt32();
-        int savedRank = reader.ReadInt32();
-        reader.ReadBoolean();
-        reader.ReadInt32();
-        reader.ReadBoolean();
-
-        if (savedWorldSize != WorldSize)
-            throw new InvalidOperationException($"World size mismatch: {savedWorldSize} vs {WorldSize}");
-        if (savedRank != Rank)
-            throw new InvalidOperationException($"Rank mismatch: {savedRank} vs {Rank}");
-
-        int modelDataLength = reader.ReadInt32();
-        byte[] modelData = reader.ReadBytes(modelDataLength);
-        WrappedModel.Deserialize(modelData);
-        InitializeSharding();
-    }
-
-    /// <inheritdoc/>
     public override void SaveModel(string filePath)
     {
         Config.CommunicationBackend.Barrier();
@@ -251,11 +214,5 @@ public class ZeRO1Model<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutpu
         {
             Config.CommunicationBackend.Barrier();
         }
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> Clone()
-    {
-        return new ZeRO1Model<T, TInput, TOutput>(WrappedModel.Clone(), Config);
     }
 }

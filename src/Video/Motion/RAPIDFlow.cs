@@ -433,10 +433,7 @@ public partial class RAPIDFlow<T> : OpticalFlowBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numRefinementIterations);
-    }
+
 
     /// <inheritdoc/>
     /// <remarks>
@@ -455,50 +452,5 @@ public partial class RAPIDFlow<T> : OpticalFlowBase<T>
     /// Clone_ShouldProduceIdenticalOutput invariants catch (||Δ|| ~
     /// ||trained||, not the ~1e-10 of a clean clone).
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _numRefinementIterations = reader.ReadInt32();
 
-        // Re-bind private layer references to the post-deserialize Layers
-        // collection. Expected layout matches InitializeLayers: 3 encoder
-        // levels, _numRefinementIterations refinement blocks, 2 decoder
-        // levels, 1 flow head. Defensive count check so a future
-        // serialization-format extension that adds auxiliary layers
-        // fails loudly rather than silently mis-routing layer slots.
-        int expectedCount = 3 + _numRefinementIterations + 3;
-        if (Layers.Count != expectedCount)
-        {
-            throw new InvalidDataException(
-                $"Expected {expectedCount} RAPIDFlow layers after deserialization, found {Layers.Count}.");
-        }
-
-        _encoderLevel1 = Layers[0] as ConvolutionalLayer<T>
-            ?? throw new InvalidDataException("Layer 0 is not a ConvolutionalLayer.");
-        _encoderLevel2 = Layers[1] as ConvolutionalLayer<T>
-            ?? throw new InvalidDataException("Layer 1 is not a ConvolutionalLayer.");
-        _encoderLevel3 = Layers[2] as ConvolutionalLayer<T>
-            ?? throw new InvalidDataException("Layer 2 is not a ConvolutionalLayer.");
-
-        _refinementBlocks.Clear();
-        for (int i = 0; i < _numRefinementIterations; i++)
-        {
-            _refinementBlocks.Add(
-                Layers[3 + i] as ConvolutionalLayer<T>
-                ?? throw new InvalidDataException($"Layer {3 + i} is not a refinement ConvolutionalLayer."));
-        }
-
-        int decoderStart = 3 + _numRefinementIterations;
-        _decoderLevel2 = Layers[decoderStart] as DeconvolutionalLayer<T>
-            ?? throw new InvalidDataException($"Layer {decoderStart} is not a DeconvolutionalLayer.");
-        _decoderLevel1 = Layers[decoderStart + 1] as DeconvolutionalLayer<T>
-            ?? throw new InvalidDataException($"Layer {decoderStart + 1} is not a DeconvolutionalLayer.");
-        _flowHead = Layers[decoderStart + 2] as DeconvolutionalLayer<T>
-            ?? throw new InvalidDataException($"Layer {decoderStart + 2} is not a DeconvolutionalLayer.");
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new RAPIDFlow<T>(Architecture, _numRefinementIterations, _options);
-    }
 }

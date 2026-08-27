@@ -497,45 +497,10 @@ public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocument
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_visionDim);
-        writer.Write(_textDim);
-        writer.Write(_fusionDim);
-        writer.Write(_visionLayers);
-        writer.Write(_fusionLayers);
-        writer.Write(_numHeads);
-        writer.Write(_vocabSize);
-        writer.Write(ImageSize);
-        writer.Write(MaxSequenceLength);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int visionDim = reader.ReadInt32();
-        int textDim = reader.ReadInt32();
-        int fusionDim = reader.ReadInt32();
-        int visionLayers = reader.ReadInt32();
-        int fusionLayers = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-        int vocabSize = reader.ReadInt32();
-        int imageSize = reader.ReadInt32();
-        int maxSeqLen = reader.ReadInt32();
-        bool useNativeMode = reader.ReadBoolean();
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSeqLen;
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new InfographicVQA<T>(Architecture, ImageSize, MaxSequenceLength, _visionDim, _textDim,
-            _fusionDim, _visionLayers, _fusionLayers, _numHeads, _vocabSize,
-            options: new InfographicVQAOptions(_options));
-    }
 
     #endregion
 

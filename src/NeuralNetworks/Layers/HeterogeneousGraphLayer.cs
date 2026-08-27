@@ -23,7 +23,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// This metadata tells the layer what types exist and how they connect.
 /// </para>
 /// </remarks>
-public partial class HeterogeneousGraphMetadata
+public partial class HeterogeneousGraphMetadata : AiDotNet.Serialization.ILayerStatePersistable
 {
     /// <summary>
     /// Names of node types (e.g., ["user", "item", "category"]).
@@ -44,6 +44,55 @@ public partial class HeterogeneousGraphMetadata
     /// Edge type connections: maps edge type to (source node type, target node type).
     /// </summary>
     public Dictionary<string, (string SourceType, string TargetType)> EdgeTypeSchema { get; set; } = new();
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Written by hand rather than routed through JSON because EdgeTypeSchema's value is a
+    /// ValueTuple, whose members are FIELDS: System.Text.Json emits {} for it and the edge schema
+    /// would come back empty with nothing reporting a problem. Here SourceType and TargetType are
+    /// still named, so they survive.
+    /// </remarks>
+    public string SaveState()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append(string.Join(",", NodeTypes)).Append('|');
+        sb.Append(string.Join(",", EdgeTypes)).Append('|');
+        sb.Append(string.Join(",", System.Linq.Enumerable.Select(
+            NodeTypeFeatures, kv => kv.Key + "=" + kv.Value.ToString(
+                System.Globalization.CultureInfo.InvariantCulture)))).Append('|');
+        sb.Append(string.Join(",", System.Linq.Enumerable.Select(
+            EdgeTypeSchema, kv => kv.Key + "=" + kv.Value.SourceType + ">" + kv.Value.TargetType)));
+        return sb.ToString();
+    }
+
+    /// <inheritdoc />
+    public void LoadState(string text)
+    {
+        var parts = (text ?? string.Empty).Split('|');
+        string Part(int n) => n < parts.Length ? parts[n] : string.Empty;
+
+        NodeTypes = Part(0).Length == 0 ? [] : Part(0).Split(',');
+        EdgeTypes = Part(1).Length == 0 ? [] : Part(1).Split(',');
+
+        NodeTypeFeatures = new Dictionary<string, int>();
+        foreach (var entry in Part(2).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            int eq = entry.LastIndexOf('=');
+            if (eq <= 0) continue;
+            NodeTypeFeatures[entry.Substring(0, eq)] = int.Parse(
+                entry.Substring(eq + 1), System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        EdgeTypeSchema = new Dictionary<string, (string SourceType, string TargetType)>();
+        foreach (var entry in Part(3).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            int eq = entry.LastIndexOf('=');
+            if (eq <= 0) continue;
+            var pair = entry.Substring(eq + 1).Split('>');
+            if (pair.Length != 2) continue;
+            EdgeTypeSchema[entry.Substring(0, eq)] = (pair[0], pair[1]);
+        }
+    }
 }
 
 /// <summary>
@@ -181,12 +230,14 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     /// <summary>
     /// Cached values for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -195,6 +246,7 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     private Dictionary<string, Tensor<T>>? _edgeTypeWeightsGradients;
     private Dictionary<string, Tensor<T>>? _selfLoopWeightsGradients;
     private Dictionary<string, Tensor<T>>? _biasesGradients;
+    [Scratch]
     private Tensor<T>? _basisMatricesGradient;
     private Dictionary<string, Tensor<T>>? _basisCoefficientsGradients;
 

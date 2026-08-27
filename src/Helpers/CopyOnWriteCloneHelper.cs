@@ -27,8 +27,8 @@ namespace AiDotNet.Helpers;
 internal static class CopyOnWriteCloneHelper
 {
     /// <summary>
-    /// Re-binds every trainable parameter of <paramref name="dest"/> to a copy-on-write share of the
-    /// corresponding parameter of <paramref name="source"/>. Walks both object graphs in parallel by
+    /// Re-binds every trainable parameter and registered persistent buffer of <paramref name="dest"/>
+    /// to the corresponding state of <paramref name="source"/>. Walks both object graphs in parallel by
     /// reflection (identical runtime type ⇒ identical field order ⇒ matching layer order). Returns
     /// <c>false</c> — leaving <paramref name="dest"/> untouched — if the trainable-layer structure does
     /// not line up 1:1 (e.g. a freshly-constructed clone whose lazy layers aren't resolved yet), so the
@@ -37,13 +37,33 @@ internal static class CopyOnWriteCloneHelper
     internal static bool TryShareTrainableParameters<T>(
         IFullModel<T, Tensor<T>, Tensor<T>>? source,
         IFullModel<T, Tensor<T>, Tensor<T>>? dest)
+        => TryShareTrainableParameters(source, dest, out _);
+
+    /// <summary>Attempts the complete state share and reports the first preflight mismatch.</summary>
+    internal static bool TryShareTrainableParameters<T>(
+        IFullModel<T, Tensor<T>, Tensor<T>>? source,
+        IFullModel<T, Tensor<T>, Tensor<T>>? dest,
+        out string mismatch)
     {
-        if (source is null || dest is null || ReferenceEquals(source, dest)) return false;
-        if (source.GetType() != dest.GetType()) return false;
+        mismatch = string.Empty;
+        if (source is null || dest is null || ReferenceEquals(source, dest))
+        {
+            mismatch = "source and destination must be distinct non-null models";
+            return false;
+        }
+        if (source.GetType() != dest.GetType())
+        {
+            mismatch = $"model types differ ({source.GetType().Name} vs {dest.GetType().Name})";
+            return false;
+        }
 
         var srcLayers = CollectTrainableLayers<T>(source);
         var dstLayers = CollectTrainableLayers<T>(dest);
-        if (srcLayers.Count == 0 || srcLayers.Count != dstLayers.Count) return false;
+        if (srcLayers.Count == 0 || srcLayers.Count != dstLayers.Count)
+        {
+            mismatch = $"trainable layer counts differ ({srcLayers.Count} vs {dstLayers.Count})";
+            return false;
+        }
 
         // Verify the full structure — per-layer parameter COUNT and per-tensor SHAPE — matches BEFORE
         // mutating anything, so we never leave a half-shared clone and never rebind a shape-incompatible
@@ -55,8 +75,42 @@ internal static class CopyOnWriteCloneHelper
         // throwaway forward merely to allocate destination storage that will immediately be replaced.
         for (int i = 0; i < srcLayers.Count; i++)
         {
+            if (srcLayers[i].GetType() != dstLayers[i].GetType())
+            {
+                mismatch = $"layer {i} types differ ({srcLayers[i].GetType().Name} vs "
+                           + $"{dstLayers[i].GetType().Name})";
+                return false;
+            }
+
             var sps = GetAuthoritativeSourceValues(srcLayers[i]);
             var dps = GetWithoutMaterialization(dstLayers[i]);
+            bool hasMaterializedSourceValue = false;
+            bool hasSourcePlaceholder = false;
+            for (int p = 0; p < sps.Count; p++)
+            {
+                if (sps[p].Length == 0)
+                {
+                    hasSourcePlaceholder = true;
+                }
+                else
+                {
+                    hasMaterializedSourceValue = true;
+                }
+            }
+
+            // A mixed live/placeholder surface cannot be shared atomically: skipping the layer
+            // would drop its live values, while cloning the zero-sized entries would pretend they
+            // contain learned state. Route that partial lifecycle through the eager fallback.
+            // A WHOLLY deferred layer is different: it contains no values to transfer, and both
+            // graphs retain the same declaration-driven lazy state. Rejecting it disabled COW for
+            // ordinary predictors with optional branches (DiT's unused conditioning projections).
+            if (hasSourcePlaceholder && hasMaterializedSourceValue)
+            {
+                mismatch = $"layer {i} ({srcLayers[i].GetType().Name}) has a deferred "
+                           + $"partial trainable surface: source={DescribeShapes(sps)}";
+                return false;
+            }
+
             bool currentShapesMatch = sps.Count == dps.Count;
             if (currentShapesMatch)
             {
@@ -71,21 +125,84 @@ internal static class CopyOnWriteCloneHelper
             if (currentShapesMatch) continue;
             if (dstLayers[i] is not AiDotNet.NeuralNetworks.Layers.LayerBase<T> destinationBase
                 || !destinationBase.CanAdoptTrainableParametersWithoutMaterialization(sps))
+            {
+                mismatch = $"layer {i} ({srcLayers[i].GetType().Name}) has incompatible trainable shapes: "
+                           + $"source={DescribeShapes(sps)}, clone={DescribeShapes(dps)}";
                 return false;
+            }
+        }
+
+        // The parameter-state contract is wider than the optimizer view: registered buffers carry
+        // running statistics, learned non-gradient state, and shape-bearing constants. Validate the
+        // complete buffer graph before sharing any trainable tensor; otherwise the helper can return
+        // true while a freshly reconstructed predictor still owns empty or differently-sized state.
+        for (int i = 0; i < srcLayers.Count; i++)
+        {
+            if (srcLayers[i] is not AiDotNet.NeuralNetworks.Layers.LayerBase<T> sourceBase
+                || dstLayers[i] is not AiDotNet.NeuralNetworks.Layers.LayerBase<T> destinationBase)
+                continue;
+            if (!destinationBase.CanAdoptRegisteredBuffersFrom(sourceBase, out string bufferMismatch))
+            {
+                mismatch = $"layer {i} ({srcLayers[i].GetType().Name}) {bufferMismatch}";
+                return false;
+            }
         }
 
         for (int i = 0; i < srcLayers.Count; i++)
         {
             var sp = GetAuthoritativeSourceValues(srcLayers[i]);
-            if (sp.Count == 0) continue;
-            var shared = new Tensor<T>[sp.Count];
-            for (int p = 0; p < sp.Count; p++)
-                shared[p] = (Tensor<T>)sp[p].CloneShared();
-            dstLayers[i].SetTrainableParameters(shared);
+            bool hasSourceValues = sp.Count > 0;
+            for (int p = 0; p < sp.Count && hasSourceValues; p++)
+                hasSourceValues = sp[p].Length > 0;
+
+            if (hasSourceValues)
+            {
+                var shared = new Tensor<T>[sp.Count];
+                for (int p = 0; p < sp.Count; p++)
+                    shared[p] = (Tensor<T>)sp[p].CloneShared();
+                dstLayers[i].SetTrainableParameters(shared);
+            }
+            else if (sp.Count > 0
+                     && srcLayers[i] is AiDotNet.NeuralNetworks.Layers.LayerBase<T> deferredSource
+                     && dstLayers[i] is AiDotNet.NeuralNetworks.Layers.LayerBase<T> deferredDestination)
+            {
+                // Zero-sized placeholders still carry FUTURE parameter state: the seed, RNG
+                // progress, and initialization counter that determine the values allocated on the
+                // first read/forward. Copying no tensors and reporting success made two untouched
+                // lazy predictors initialize independently after Clone. Preserve that state with
+                // the same shared-base mechanism used by LayerCloning, without materializing either
+                // side or sacrificing the foundation-scale O(1) path.
+                AiDotNet.NeuralNetworks.Layers.LayerCloning.CopyDeferredRandomState(
+                    deferredSource, deferredDestination);
+            }
+
+            // A composite can own no tensor itself while owning trainable descendants. Shape-only
+            // graph bring-up still leaves that parent at a pending first-forward boundary; if it is
+            // skipped merely because sp.Count == 0, its real first forward may rebuild the children
+            // after their COW tensors were installed. Commit every graph node, including parameter-
+            // free parents, so the adopted descendant graph is the graph execution keeps.
+            // Commit nodes that received real values, and parameter-free composites whose child
+            // graph must survive first-forward reconciliation. A node whose source owns only
+            // a mixed live/placeholder source cannot reach this phase: preflight routes that graph
+            // through the state-transfer fallback so a clone never reports success after dropping
+            // real values. A wholly deferred node deliberately remains lazy on both sides.
+            if ((hasSourceValues || sp.Count == 0)
+                && dstLayers[i] is AiDotNet.NeuralNetworks.Layers.LayerBase<T> destinationBase)
+                destinationBase.CommitTrainableParameterAdoption();
+        }
+
+        for (int i = 0; i < srcLayers.Count; i++)
+        {
+            if (srcLayers[i] is AiDotNet.NeuralNetworks.Layers.LayerBase<T> sourceBase
+                && dstLayers[i] is AiDotNet.NeuralNetworks.Layers.LayerBase<T> destinationBase)
+                destinationBase.AdoptRegisteredBuffersFrom(sourceBase);
         }
 
         return true;
     }
+
+    private static string DescribeShapes<T>(IReadOnlyList<Tensor<T>> tensors)
+        => "[" + string.Join(", ", tensors.Select(t => "[" + string.Join(",", t.Shape.ToArray()) + "]")) + "]";
 
     private static IReadOnlyList<Tensor<T>> GetWithoutMaterialization<T>(ITrainableLayer<T> layer) =>
         layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layerBase
@@ -127,19 +244,16 @@ internal static class CopyOnWriteCloneHelper
         // the stable, PyTorch-style ownership boundary for cloning.
         if (root is NeuralNetworkBase<T> neuralNetwork)
         {
-            // `Layers` IS the registered graph, and it is what NeuralNetworkBase itself passes to this
-            // same walk. This used to call a GetCopyOnWriteLayerRoots() that exists nowhere in the
-            // repository -- a call that survived review because NeuralNetworkBase is an error type
-            // while the #1789 split is mid-flight (its declaration depends on types slice 01 has not
-            // landed yet), and Roslyn suppresses member lookup on an error type to avoid cascading
-            // diagnostics. So the compiler could not report it and a search could not find it; it
-            // would have failed the moment the branch built cleanly.
-            //
-            // structureVersion -1 keeps the caching disabled: a clone walks a graph the version
-            // counter has never seen, so a cached answer would describe the wrong model.
+            // Use the base's explicit module ROOTS, not only its canonical sequential Layers list.
+            // Generated/model-declared auxiliary layers participate in training through
+            // GetExtraTrainableLayers; omitting them here made the COW coverage check compare an
+            // incomplete walk with the complete parameter manifest, reject the candidate, and send
+            // dozens of models through the lossy eager serializer. TapeTrainingStep recursively
+            // walks registered children from both root kinds in the same deterministic order.
+            // structureVersion -1 keeps caching disabled for this one-off clone snapshot.
             return new List<ITrainableLayer<T>>(
                 TapeTrainingStep<T>.CollectTrainableLayers(
-                    neuralNetwork.Layers,
+                    neuralNetwork.GetCopyOnWriteLayerRoots(),
                     structureVersion: -1));
         }
 

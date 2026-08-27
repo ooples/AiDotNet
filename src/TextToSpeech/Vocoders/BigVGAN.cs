@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2023,
     Authors = "Lee et al."
 )]
-public class BigVGAN<T> : VocoderBase<T>
+public partial class BigVGAN<T> : VocoderBase<T>
 {
     private readonly BigVGANOptions _options;
 
@@ -215,43 +215,9 @@ public class BigVGAN<T> : VocoderBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.MelChannels);
-        writer.Write(_options.HopSize);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.HiddenChannels);
-        writer.Write(_options.NumUpsampleLayers);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.MelChannels = reader.ReadInt32();
-        _options.HopSize = reader.ReadInt32();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.HiddenChannels = reader.ReadInt32();
-        _options.NumUpsampleLayers = reader.ReadInt32();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new BigVGAN<T>(Architecture, mp, _options);
-        return new BigVGAN<T>(Architecture, _options);
-    }
+
 
     private void ThrowIfDisposed()
     {

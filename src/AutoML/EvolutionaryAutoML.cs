@@ -154,11 +154,6 @@ public sealed class EvolutionaryAutoML<T, TInput, TOutput> : BuiltInSupervisedAu
         return Task.FromResult(sampled);
     }
 
-    protected override AutoMLModelBase<T, TInput, TOutput> CreateInstanceForCopy()
-    {
-        return new EvolutionaryAutoML<T, TInput, TOutput>(Random);
-    }
-
     private double ToReward(double score) => _maximize ? score : -score;
 
     private Dictionary<string, object> ProposeByEvolution(

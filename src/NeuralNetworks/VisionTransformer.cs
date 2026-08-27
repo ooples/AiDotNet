@@ -113,6 +113,7 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
     /// froze the cls token even though the public parameter surface still
     /// counted it as trainable.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _clsToken;
 
     /// <summary>
@@ -120,6 +121,7 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
     /// Stored as Tensor&lt;T&gt; for the same gradient-flow reason as
     /// <see cref="_clsToken"/>.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _positionalEmbeddings;
 
     /// <summary>
@@ -579,204 +581,6 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
             }
         };
         return metadata;
-    }
-
-    /// <summary>
-    /// Serializes Vision Transformer-specific data.
-    /// </summary>
-    /// <param name="writer">The binary writer to write data to.</param>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_imageHeight);
-        writer.Write(_imageWidth);
-        writer.Write(_channels);
-        writer.Write(_patchSize);
-        writer.Write(_numClasses);
-        writer.Write(_hiddenDim);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_mlpDim);
-
-        for (int i = 0; i < _clsToken.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_clsToken[i]));
-        }
-
-        for (int i = 0; i < _positionalEmbeddings.Shape[0]; i++)
-        {
-            for (int j = 0; j < _positionalEmbeddings.Shape[1]; j++)
-            {
-                writer.Write(Convert.ToDouble(_positionalEmbeddings[i, j]));
-            }
-        }
-    }
-
-    /// <summary>
-    /// Deserializes Vision Transformer-specific data.
-    /// </summary>
-    /// <param name="reader">The binary reader to read data from.</param>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int imageHeight = reader.ReadInt32();
-        int imageWidth = reader.ReadInt32();
-        int channels = reader.ReadInt32();
-        int patchSize = reader.ReadInt32();
-        int numClasses = reader.ReadInt32();
-        int hiddenDim = reader.ReadInt32();
-        int numLayers = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-        int mlpDim = reader.ReadInt32();
-
-        if (imageHeight != _imageHeight || imageWidth != _imageWidth ||
-            channels != _channels || patchSize != _patchSize ||
-            numClasses != _numClasses || hiddenDim != _hiddenDim ||
-            numLayers != _numLayers || numHeads != _numHeads ||
-            mlpDim != _mlpDim)
-        {
-            throw new InvalidOperationException(
-                $"Serialized model configuration does not match current instance. " +
-                $"Expected: {_imageHeight}x{_imageWidth}x{_channels}, patch={_patchSize}, " +
-                $"classes={_numClasses}, hidden={_hiddenDim}, layers={_numLayers}, " +
-                $"heads={_numHeads}, mlp={_mlpDim}. " +
-                $"Got: {imageHeight}x{imageWidth}x{channels}, patch={patchSize}, " +
-                $"classes={numClasses}, hidden={hiddenDim}, layers={numLayers}, " +
-                $"heads={numHeads}, mlp={mlpDim}.");
-        }
-
-        for (int i = 0; i < _clsToken.Length; i++)
-        {
-            _clsToken[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        for (int i = 0; i < _positionalEmbeddings.Shape[0]; i++)
-        {
-            for (int j = 0; j < _positionalEmbeddings.Shape[1]; j++)
-            {
-                _positionalEmbeddings[i, j] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-    }
-
-    /// <summary>
-    /// Creates a new instance of the Vision Transformer.
-    /// </summary>
-    /// <returns>A new Vision Transformer instance with the same configuration.</returns>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new VisionTransformer<T>(
-            Architecture,
-            _imageHeight,
-            _imageWidth,
-            _channels,
-            _patchSize,
-            _numClasses,
-            _hiddenDim,
-            _numLayers,
-            _numHeads,
-            _mlpDim,
-            LossFunction);
-    }
-
-    /// <summary>
-    /// Clone via fresh-construct + UpdateParameters rather than the default
-    /// serialize/deserialize roundtrip. The serialize path drives the
-    /// patch-embedding / transformer / classification-head layers through
-    /// DeserializationHelper.CreateLayerFromType, which leaves their
-    /// persistent-tensor registration in a slightly different memory layout
-    /// than LayerHelper.CreateVisionTransformerLayers — the resulting clone
-    /// is parameter-equivalent but its forward output drifts from the source
-    /// by ~1e-2 (the issue #1221 class flagged in
-    /// Clone_AfterTraining_ShouldPreserveLearnedWeights). Going through the
-    /// fresh-construct + UpdateParameters path keeps both networks identical
-    /// down to bit-exactness.
-    /// </summary>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
-    {
-        var newViT = new VisionTransformer<T>(
-            Architecture,
-            _imageHeight,
-            _imageWidth,
-            _channels,
-            _patchSize,
-            _numClasses,
-            _hiddenDim,
-            _numLayers,
-            _numHeads,
-            _mlpDim,
-            LossFunction);
-
-        // Lazy ViT layers (PatchEmbedding, TransformerEncoder) defer weight
-        // allocation until the first forward pass. Before that, their
-        // ParameterCount is 0 and the network's total ParameterCount excludes
-        // them — UpdateParameters would then receive a vector sized only for
-        // cls token + positional embeddings + classification head and refuse
-        // to distribute the remaining encoder/MLP weights. Run a single
-        // probe Predict to resolve every lazy layer before copying params.
-        //
-        // Probe failures (OOM, missing engine backend, real shape regressions)
-        // would silently leave newViT with unresolved layers and
-        // ParameterCount mismatched against the source. The post-probe
-        // length-equality check below catches that mismatch and throws so
-        // the caller doesn't end up with a model that randomly drops the
-        // source's trained weights — earlier swallow-everything behaviour
-        // hid OOM and shape-validation regressions.
-        var probe = new Tensor<T>(new[] { 1, _channels, _imageHeight, _imageWidth });
-        Exception? probeFailure = null;
-        try
-        {
-            newViT.Predict(probe);
-        }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
-        {
-            // Tolerate the narrow class of "input shape disagrees with the
-            // freshly-constructed lazy layer chain" errors that genuinely
-            // mean the probe couldn't run — the length-check below will
-            // surface it as a clean mismatch rather than a model with the
-            // source's data dropped. Capture the exception to chain it
-            // into the diagnostic if the length check trips.
-            probeFailure = ex;
-        }
-
-        var allParams = GetParameters();
-        if (allParams.Length == 0)
-        {
-            return newViT;
-        }
-        if (allParams.Length != newViT.ParameterCount)
-        {
-            throw new InvalidOperationException(
-                $"VisionTransformer.Clone could not resolve the new instance's lazy layers " +
-                $"(source has {allParams.Length} parameters, clone has {newViT.ParameterCount}). " +
-                $"This typically means the probe Predict failed before all lazy weights were " +
-                $"allocated — the clone would otherwise silently lose the source's trained " +
-                $"weights, so the bug is surfaced here instead.",
-                probeFailure);
-        }
-        newViT.UpdateParameters(allParams);
-        return newViT;
-    }
-
-    /// <summary>
-    /// Surfaces <see cref="_clsToken"/> and <see cref="_positionalEmbeddings"/>
-    /// to the tape training path. These tensors are referenced directly in
-    /// <see cref="Predict"/> via tape-tracked <c>Engine.Reshape</c>, so the
-    /// gradient tape DOES record gradients for them — but the optimizer's
-    /// parameter-collection path scans <c>Layers</c> only, which would leave
-    /// them frozen at their initial values forever. Yielding them here lets
-    /// the optimizer's <c>Step</c> see them in <c>trainableParams</c> and
-    /// apply gradient updates.
-    /// </summary>
-    /// <remarks>
-    /// This complements the existing layout-faithful
-    /// <see cref="GetParameters"/> / <see cref="UpdateParameters"/> overrides:
-    /// those handle bulk save/load via the public parameter Vector, while
-    /// this hook handles the tape-training optimizer step. Both are
-    /// load-bearing for full-fidelity ViT training.
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        yield return _clsToken;
-        yield return _positionalEmbeddings;
     }
 }
 

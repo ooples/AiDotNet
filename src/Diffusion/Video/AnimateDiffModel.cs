@@ -833,36 +833,6 @@ public partial class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <summary>
-    /// Clones this AnimateDiff model.
-    /// </summary>
-    public override IDiffusionModel<T> Clone()
-    {
-        var clone = new AnimateDiffModel<T>(
-            options: null,
-            scheduler: null,
-            unet: (UNetNoisePredictor<T>)_unet.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            motionConfig: _motionConfig.Clone(),
-            defaultNumFrames: DefaultNumFrames,
-            defaultFPS: DefaultFPS);
-
-        clone.ContextLength = ContextLength;
-        clone.ContextOverlap = ContextOverlap;
-        clone.SetMotionBucketId(MotionBucketId);
-
-        return clone;
-    }
-
-    /// <summary>
-    /// Creates a deep copy.
-    /// </summary>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return (IFullModel<T, Tensor<T>, Tensor<T>>)Clone();
-    }
-
     #endregion
 }
 

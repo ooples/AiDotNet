@@ -48,7 +48,7 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("StyleTTS 2: Towards Human-Level Text-to-Speech through Style Diffusion and Adversarial Training with Large Speech Language Models", "https://arxiv.org/abs/2306.07691", Year = 2023, Authors = "Yinghao Aaron Li, Cong Han, Vinay S. Raber, Nima Mesgarani")]
-public class StyleTTS2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
+public partial class StyleTTS2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -253,30 +253,9 @@ public class StyleTTS2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.Variant);
-        w.Write(_options.TextEncoderDim); w.Write(_options.NumTextEncoderLayers);
-        w.Write(_options.StyleDim); w.Write(_options.ProsodyDim);
-        w.Write(_options.NumMels); w.Write(_options.NumAttentionHeads);
-        w.Write(_options.SpeakerEmbeddingDim); w.Write(_options.IsMultiSpeaker);
-        w.Write(_options.NumDiffusionSteps); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.Variant = r.ReadString();
-        _options.TextEncoderDim = r.ReadInt32(); _options.NumTextEncoderLayers = r.ReadInt32();
-        _options.StyleDim = r.ReadInt32(); _options.ProsodyDim = r.ReadInt32();
-        _options.NumMels = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32();
-        _options.SpeakerEmbeddingDim = r.ReadInt32(); _options.IsMultiSpeaker = r.ReadBoolean();
-        _options.NumDiffusionSteps = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new StyleTTS2<T>(Architecture, _options);
+
 
     #endregion
 

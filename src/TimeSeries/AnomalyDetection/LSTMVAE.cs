@@ -361,47 +361,9 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
         return scores;
     }
 
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        writer.Write(_options.WindowSize);
-        writer.Write(_options.LatentDim);
-        writer.Write(_options.HiddenSize);
-        writer.Write(_numOps.ToDouble(_reconstructionThreshold));
 
-        _encoder.Serialize(writer);
-        _decoder.Serialize(writer);
 
-        writer.Write(_trainingSeries.Length);
-        for (int i = 0; i < _trainingSeries.Length; i++)
-            writer.Write(_numOps.ToDouble(_trainingSeries[i]));
-    }
 
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        _options.WindowSize = reader.ReadInt32();
-        _options.LatentDim = reader.ReadInt32();
-        _options.HiddenSize = reader.ReadInt32();
-        _reconstructionThreshold = _numOps.FromDouble(reader.ReadDouble());
-
-        // Rebuild encoder/decoder with correct dimensions
-        _encoder = new LSTMEncoderTensor<T>(_options.WindowSize, _options.LatentDim, _options.HiddenSize);
-        _decoder = new LSTMDecoderTensor<T>(_options.LatentDim, _options.WindowSize, _options.HiddenSize);
-
-        _encoder.Deserialize(reader);
-        _decoder.Deserialize(reader);
-
-        try
-        {
-            int tsLen = reader.ReadInt32();
-            _trainingSeries = new Vector<T>(tsLen);
-            for (int i = 0; i < tsLen; i++)
-                _trainingSeries[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
-        catch (EndOfStreamException)
-        {
-            _trainingSeries = Vector<T>.Empty();
-        }
-    }
 
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -506,23 +468,35 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private readonly int _hiddenSize;
 
     // LSTM weights (Tensor-based)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _weights;      // [hiddenSize, inputSize]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _bias;         // [hiddenSize]
 
     // Mean projection weights
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _meanWeights;  // [latentDim, hiddenSize]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _meanBias;     // [latentDim]
 
     // Log variance projection weights
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _logVarWeights; // [latentDim, hiddenSize]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _logVarBias;    // [latentDim]
 
     // Gradient accumulators
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _weightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _biasGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _meanWeightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _meanBiasGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _logVarWeightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _logVarBiasGrad;
 
     public override bool SupportsTraining => true;
@@ -713,34 +687,6 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         updated.Data.Span.CopyTo(tensor.Data.Span);
     }
 
-    public override void Serialize(BinaryWriter writer)
-    {
-        WriteTensor(writer, _weights);
-        WriteTensor(writer, _bias);
-        WriteTensor(writer, _meanWeights);
-        WriteTensor(writer, _meanBias);
-        WriteTensor(writer, _logVarWeights);
-        WriteTensor(writer, _logVarBias);
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        _weights = ReadTensor(reader);
-        _bias = ReadTensor(reader);
-        _meanWeights = ReadTensor(reader);
-        _meanBias = ReadTensor(reader);
-        _logVarWeights = ReadTensor(reader);
-        _logVarBias = ReadTensor(reader);
-
-        // Reinitialize gradient accumulators
-        _weightsGrad = new Tensor<T>(_weights._shape);
-        _biasGrad = new Tensor<T>(_bias._shape);
-        _meanWeightsGrad = new Tensor<T>(_meanWeights._shape);
-        _meanBiasGrad = new Tensor<T>(_meanBias._shape);
-        _logVarWeightsGrad = new Tensor<T>(_logVarWeights._shape);
-        _logVarBiasGrad = new Tensor<T>(_logVarBias._shape);
-    }
-
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
@@ -811,20 +757,29 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private readonly int _hiddenSize;
 
     // LSTM weights (Tensor-based)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _weights;      // [hiddenSize, latentDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _bias;         // [hiddenSize]
 
     // Output projection weights
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputWeights; // [outputSize, hiddenSize]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputBias;    // [outputSize]
 
     // Gradient accumulators
     private Tensor<T> _weightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _biasGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputWeightsGrad;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputBiasGrad;
 
+    [Scratch]
     private Tensor<T>? _lastLatent;
+    [Scratch]
     private Tensor<T>? _lastHidden;
 
     public override bool SupportsTraining => true;
@@ -986,28 +941,6 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         var scaledGrad = Engine.TensorMultiplyScalar<T>(grad, scaledLR);
         var updated = Engine.TensorSubtract(tensor, scaledGrad);
         updated.Data.Span.CopyTo(tensor.Data.Span);
-    }
-
-    public override void Serialize(BinaryWriter writer)
-    {
-        WriteTensor(writer, _weights);
-        WriteTensor(writer, _bias);
-        WriteTensor(writer, _outputWeights);
-        WriteTensor(writer, _outputBias);
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        _weights = ReadTensor(reader);
-        _bias = ReadTensor(reader);
-        _outputWeights = ReadTensor(reader);
-        _outputBias = ReadTensor(reader);
-
-        // Reinitialize gradient accumulators
-        _weightsGrad = new Tensor<T>(_weights._shape);
-        _biasGrad = new Tensor<T>(_bias._shape);
-        _outputWeightsGrad = new Tensor<T>(_outputWeights._shape);
-        _outputBiasGrad = new Tensor<T>(_outputBias._shape);
     }
 
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)

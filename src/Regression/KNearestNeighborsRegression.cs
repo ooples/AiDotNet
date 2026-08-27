@@ -58,7 +58,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Nearest Neighbor Pattern Classification", "https://doi.org/10.1109/TIT.1967.1053964")]
-public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
+public partial class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the K-Nearest Neighbors algorithm.
@@ -71,11 +71,13 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// Matrix containing the feature vectors of the training samples.
     /// </summary>
+    [Buffer]
     private Matrix<T> _xTrain;
 
     /// <summary>
     /// Vector containing the target values of the training samples.
     /// </summary>
+    [Buffer]
     private Vector<T> _yTrain;
 
     /// <summary>
@@ -368,133 +370,6 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     /// <returns>The model type enumeration value.</returns>
 
     /// <summary>
-    /// Serializes the K-Nearest Neighbors Regression model to a byte array for storage or transmission.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method converts the KNN model into a byte array that can be stored in a file, database,
-    /// or transmitted over a network. The serialized data includes the base class data, the number of
-    /// neighbors (K), and the training data that is used for making predictions.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves your trained model as a sequence of bytes.
-    /// 
-    /// Serialization allows you to:
-    /// - Save your model to a file
-    /// - Store your model in a database
-    /// - Send your model over a network
-    /// - Keep your model for later use without having to retrain it
-    /// 
-    /// The serialized data includes:
-    /// - The value of K (number of neighbors)
-    /// - All the training examples (both features and target values)
-    /// 
-    /// Since KNN stores all training data, the serialized model can be quite large
-    /// compared to other machine learning models.
-    /// 
-    /// Example:
-    /// ```csharp
-    /// // Serialize the model
-    /// byte[] modelData = knn.Serialize();
-    /// 
-    /// // Save to a file
-    /// File.WriteAllBytes("knn.model", modelData);
-    /// ```
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize KNN specific data
-        writer.Write(_options.K);
-
-        // Serialize training data
-        writer.Write(_xTrain.Rows);
-        writer.Write(_xTrain.Columns);
-        for (int i = 0; i < _xTrain.Rows; i++)
-            for (int j = 0; j < _xTrain.Columns; j++)
-                writer.Write(Convert.ToDouble(_xTrain[i, j]));
-
-        writer.Write(_yTrain.Length);
-        for (int i = 0; i < _yTrain.Length; i++)
-            writer.Write(Convert.ToDouble(_yTrain[i]));
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Loads a previously serialized K-Nearest Neighbors Regression model from a byte array.
-    /// </summary>
-    /// <param name="modelData">The byte array containing the serialized model.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reconstructs a KNN model from a byte array that was previously created using the
-    /// Serialize method. It restores the base class data, the number of neighbors (K), and the training
-    /// data that is used for making predictions.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved model from a sequence of bytes.
-    /// 
-    /// Deserialization allows you to:
-    /// - Load a model that was saved earlier
-    /// - Use a model without having to retrain it
-    /// - Share models between different applications
-    /// 
-    /// When you deserialize a model:
-    /// - The value of K is restored
-    /// - All training examples are loaded back into memory
-    /// - The model is ready to make predictions immediately
-    /// 
-    /// Example:
-    /// ```csharp
-    /// // Load from a file
-    /// byte[] modelData = File.ReadAllBytes("knn.model");
-    /// 
-    /// // Deserialize the model
-    /// var knn = new KNearestNeighborsRegression&lt;double&gt;();
-    /// knn.Deserialize(modelData);
-    /// 
-    /// // Now you can use the model for predictions
-    /// var predictions = knn.Predict(newFeatures);
-    /// ```
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize KNN specific data
-        _options.K = reader.ReadInt32();
-
-        // Deserialize training data
-        int rows = reader.ReadInt32();
-        int cols = reader.ReadInt32();
-        _xTrain = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                _xTrain[i, j] = NumOps.FromDouble(reader.ReadDouble());
-
-        int yLength = reader.ReadInt32();
-        _yTrain = new Vector<T>(yLength);
-        for (int i = 0; i < yLength; i++)
-            _yTrain[i] = NumOps.FromDouble(reader.ReadDouble());
-
-        // Note: KNN is a distance-based method - no data transformation is applied
-    }
-
-    /// <summary>
     /// Creates a new instance of the KNearestNeighborsRegression with the same configuration as the current instance.
     /// </summary>
     /// <returns>A new KNearestNeighborsRegression instance with the same options and regularization as the current instance.</returns>
@@ -519,80 +394,6 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new KNearestNeighborsRegression<T>(_options, Regularization);
-    }
-
-    /// <summary>
-    /// Creates a shallow copy of this KNN model including its training data.
-    /// </summary>
-    /// <returns>A new KNearestNeighborsRegression instance with the same configuration and training data.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method overrides the base class Clone to ensure that KNN-specific training data
-    /// (_xTrain and _yTrain) is properly copied. Without this override, cloned models would
-    /// lose their training data and fail when Predict is called.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a copy of your trained model.
-    ///
-    /// Unlike CreateInstance which creates an empty model, Clone copies:
-    /// - All the base class settings (support vectors, alphas, bias, options)
-    /// - The training data that KNN needs to make predictions
-    /// - The soft KNN settings if enabled
-    ///
-    /// This is important because KNN stores all training examples and uses them
-    /// at prediction time. A clone without training data would be unusable.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        // First call base class Clone to copy common properties
-        var clone = (KNearestNeighborsRegression<T>)base.Clone();
-
-        // Copy KNN-specific training data (shallow copy - shares data with original)
-        clone._xTrain = _xTrain;
-        clone._yTrain = _yTrain;
-
-        // Copy soft KNN settings
-        clone.UseSoftKNN = UseSoftKNN;
-        clone.SoftKNNTemperature = SoftKNNTemperature;
-
-        return clone;
-    }
-
-    /// <summary>
-    /// Creates a deep copy of this KNN model including its training data.
-    /// </summary>
-    /// <returns>A new KNearestNeighborsRegression instance with independent copies of all data.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method overrides the base class DeepCopy to ensure that KNN-specific training data
-    /// is properly deep copied. The resulting model is completely independent of the original -
-    /// modifications to one will not affect the other.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a completely independent copy of your model.
-    ///
-    /// While Clone shares some data with the original (for efficiency), DeepCopy creates
-    /// entirely new copies of everything including:
-    /// - All training feature vectors
-    /// - All training labels
-    /// - All model parameters
-    ///
-    /// Use DeepCopy when you need to modify the copy without affecting the original.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
-    {
-        // First call base class DeepCopy to deep copy common properties
-        var clone = (KNearestNeighborsRegression<T>)base.DeepCopy();
-
-        // Deep copy KNN-specific training data
-        clone._xTrain = _xTrain.Clone();
-        clone._yTrain = _yTrain.Clone();
-
-        // Copy soft KNN settings (value types are already copied by value)
-        clone.UseSoftKNN = UseSoftKNN;
-        clone.SoftKNNTemperature = SoftKNNTemperature;
-
-        return clone;
     }
 
     // ===== Soft KNN Support for JIT Compilation =====

@@ -112,13 +112,4 @@ public class RELNER<T> : TransformerNERBase<T>
             "REL", "van Hulst et al., SIGIR 2020", optimizer)
     {
     }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new TransformerNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new RELNER<T>(Architecture, p, optionsCopy);
-        return new RELNER<T>(Architecture, optionsCopy);
-    }
 }

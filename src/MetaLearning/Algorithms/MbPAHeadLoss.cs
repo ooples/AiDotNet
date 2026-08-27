@@ -41,10 +41,11 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// coarser gradient for a ragged one, rather than an index out of range in the middle of training.
 /// </para>
 /// </remarks>
-internal sealed class MbPAHeadLoss<T> : ILossFunction<T>
+internal sealed partial class MbPAHeadLoss<T> : ILossFunction<T>
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _headParameters;
     private readonly int _featureDim;
     private readonly int _outputDim;

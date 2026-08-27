@@ -89,6 +89,7 @@ public partial class HyperShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     private readonly HyperShotOptions<T, TInput, TOutput> _hyperShotOptions;
 
     /// <summary>Parameters for the kernel hypernetwork.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _hypernetParams = new Vector<T>(0);
 
     /// <inheritdoc/>

@@ -87,6 +87,7 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     private Vector<T> _decoderWeights;
 
     // Relation network parameters (optional)
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _relationWeights;
 
     /// <summary>

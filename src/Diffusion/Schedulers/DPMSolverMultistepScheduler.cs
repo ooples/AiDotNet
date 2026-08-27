@@ -46,16 +46,19 @@ public sealed class DPMSolverMultistepScheduler<T> : NoiseSchedulerBase<T>
     /// <summary>
     /// Lambda values (log-SNR) for each inference timestep.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _lambdas;
 
     /// <summary>
     /// Alpha_t values for inference timesteps.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _alphaTs;
 
     /// <summary>
     /// Sigma_t values for inference timesteps.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _sigmaTs;
 
     /// <summary>

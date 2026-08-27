@@ -121,6 +121,7 @@ public partial class LFTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     /// transformation is applied to the encoder's features BEFORE this head consumes them, so the
     /// head's closed-form gradient carries theta_f's influence into the update.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _metricHead;
 
     /// <inheritdoc/>

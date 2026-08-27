@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("xLSTM: Extended Long Short-Term Memory", "https://arxiv.org/abs/2405.04517", Year = 2024, Authors = "Maximilian Beck, Korbinian Poppel, Markus Spanring, Andreas Auer, Oleksandra Prudnikova, Michael Kopp, Gunter Klambauer, Johannes Brandstetter, Sepp Hochreiter")]
-public class XLSTMLanguageModel<T> : TokenLanguageModelLayoutBase<T>
+public partial class XLSTMLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly XLSTMOptions _options;
     private readonly int _vocabSize;
@@ -169,30 +169,9 @@ public class XLSTMLanguageModel<T> : TokenLanguageModelLayoutBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_vocabSize);
-        writer.Write(_modelDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_maxSeqLength);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new XLSTMLanguageModel<T>(
-            Architecture, _vocabSize, _modelDimension, _numLayers, _numHeads,
-            _maxSeqLength, LossFunction, _options);
-    }
+
 
     #endregion
 }

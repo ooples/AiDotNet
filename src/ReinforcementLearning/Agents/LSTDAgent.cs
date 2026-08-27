@@ -43,7 +43,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
     "https://doi.org/10.1023/A:1007382027895",
     Year = 1996,
     Authors = "Bradtke, S. J. & Barto, A. G.")]
-public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
+public partial class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
 {
 
     /// <inheritdoc />
@@ -339,73 +339,6 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int FeatureCount => _options.FeatureSize;
-
-    public override byte[] Serialize()
-    {
-        var state = new
-        {
-            Weights = GetParameters(),  // Serialize as flat vector for consistency
-            Options = _options
-        };
-        string json = JsonConvert.SerializeObject(state);
-        return System.Text.Encoding.UTF8.GetBytes(json);
-    }
-
-    public override void Deserialize(byte[] data)
-    {
-        if (data is null || data.Length == 0)
-        {
-            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
-        }
-
-        string json = System.Text.Encoding.UTF8.GetString(data);
-        var state = JsonConvert.DeserializeObject<dynamic>(json);
-        if (state is null)
-        {
-            throw new InvalidOperationException("Deserialization returned null");
-        }
-
-        // Parse and validate weights as flat vector
-        var weightsObj = state.Weights;
-        if (weightsObj is null)
-        {
-            throw new InvalidOperationException("Failed to deserialize agent state: Weights property is missing or null.");
-        }
-
-        if (weightsObj is not Newtonsoft.Json.Linq.JArray jArray)
-        {
-            throw new InvalidOperationException($"Failed to deserialize agent state: Weights must be a JSON array, got {weightsObj.GetType().Name}.");
-        }
-
-        int expectedCount = _options.ActionSize * _options.FeatureSize;
-        if (jArray.Count != expectedCount)
-        {
-            throw new InvalidOperationException($"Weight count mismatch: expected {expectedCount} (ActionSize={_options.ActionSize} × FeatureSize={_options.FeatureSize}), got {jArray.Count}.");
-        }
-
-        var weights = new Vector<T>(jArray.Count);
-        for (int i = 0; i < jArray.Count; i++)
-        {
-            weights[i] = NumOps.FromDouble((double)jArray[i]);
-        }
-        SetParameters(weights);
-    }
-
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new LSTDAgent<T>(_options);
-
-        // Deep copy weights matrix
-        for (int a = 0; a < _options.ActionSize; a++)
-        {
-            for (int f = 0; f < _options.FeatureSize; f++)
-            {
-                clone._weights[a, f] = _weights[a, f];
-            }
-        }
-
-        return clone;
-    }
 
     public override void SaveModel(string filepath)
     {

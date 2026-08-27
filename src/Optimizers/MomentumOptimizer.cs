@@ -27,7 +27,7 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
+public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <inheritdoc/>
     /// <remarks>
@@ -544,96 +544,6 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
-    }
-
-    /// <summary>
-    /// Serializes the optimizer's state into a byte array.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method converts the current state of the optimizer, including its base class state and options, 
-    /// into a byte array. This is useful for saving the optimizer's state or transferring it between systems.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// Think of this as taking a snapshot of your entire ball-rolling experiment. It captures all the details of your 
-    /// current setup, including the ball's position, speed, and all your rules. This snapshot can be used to recreate 
-    /// the exact same experiment later or share it with others.
-    /// </para>
-    /// </remarks>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
-
-            // Serialize velocity vector (snapshot to avoid re-reading mutable field)
-            var velocitySnapshot = _velocity;
-            writer.Write(velocitySnapshot is not null);
-            if (velocitySnapshot is not null)
-            {
-                writer.Write(velocitySnapshot.Length);
-                for (int i = 0; i < velocitySnapshot.Length; i++)
-                {
-                    writer.Write(NumOps.ToDouble(velocitySnapshot[i]));
-                }
-            }
-
-            return ms.ToArray();
-        }
-    }
-
-    /// <summary>
-    /// Deserializes a byte array to restore the optimizer's state.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method takes a byte array (previously created by Serialize) and uses it to restore the optimizer's state, 
-    /// including its base class state and options.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like using a detailed blueprint to recreate your ball-rolling experiment exactly as it was at a certain point. 
-    /// It allows you to set up the experiment to match a previous state, with all the same rules and conditions.
-    /// </para>
-    /// </remarks>
-    /// <param name="data">The byte array containing the serialized optimizer state.</param>
-    /// <exception cref="InvalidOperationException">Thrown when the optimizer options cannot be deserialized.</exception>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<MomentumOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-            // Deserialize velocity vector
-            bool hasVelocity = reader.ReadBoolean();
-            if (hasVelocity)
-            {
-                int velocityLength = reader.ReadInt32();
-                T[] velocityData = new T[velocityLength];
-                for (int i = 0; i < velocityLength; i++)
-                {
-                    velocityData[i] = NumOps.FromDouble(reader.ReadDouble());
-                }
-                _velocity = new Vector<T>(velocityData);
-            }
-            else
-            {
-                _velocity = null;
-            }
-        }
     }
 
     /// <summary>

@@ -60,7 +60,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SegNeXt: Rethinking Convolutional Attention Design for Semantic Segmentation", "https://arxiv.org/abs/2209.08575", Year = 2022, Authors = "Guo et al.")]
-public class SegNeXt<T> : Common.SemanticSegmentationBase<T>
+public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly SegNeXtOptions _options;
 
@@ -517,31 +517,7 @@ public class SegNeXt<T> : Common.SemanticSegmentationBase<T>
     /// The data is written in a specific order matching <see cref="DeserializeNetworkSpecificData"/>.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height);
-        writer.Write(_width);
-        writer.Write(_channels);
-        writer.Write(_numClasses);
-        writer.Write((int)_modelSize);
-        writer.Write(_decoderDim);
-        writer.Write(_dropRate);
-        writer.Write(_useNativeMode);
-        writer.Write(_onnxModelPath ?? string.Empty);
-        writer.Write(_encoderLayerEnd);
 
-        writer.Write(_channelDims.Length);
-        foreach (int dim in _channelDims)
-        {
-            writer.Write(dim);
-        }
-
-        writer.Write(_depths.Length);
-        foreach (int depth in _depths)
-        {
-            writer.Write(depth);
-        }
-    }
 
     /// <summary>
     /// Reads SegNeXt-specific configuration values from a binary stream during model loading.
@@ -554,54 +530,7 @@ public class SegNeXt<T> : Common.SemanticSegmentationBase<T>
     /// they were written.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // height
-        _ = reader.ReadInt32(); // width
-        _ = reader.ReadInt32(); // channels
-        _ = reader.ReadInt32(); // numClasses
-        _ = reader.ReadInt32(); // modelSize
-        _ = reader.ReadInt32(); // decoderDim
-        _ = reader.ReadDouble(); // dropRate
-        _ = reader.ReadBoolean(); // useNativeMode
-        _ = reader.ReadString(); // onnxModelPath
-        _ = reader.ReadInt32(); // encoderLayerEnd
 
-        int channelCount = reader.ReadInt32();
-        for (int i = 0; i < channelCount; i++)
-        {
-            _ = reader.ReadInt32();
-        }
-
-        int depthCount = reader.ReadInt32();
-        for (int i = 0; i < depthCount; i++)
-        {
-            _ = reader.ReadInt32();
-        }
-    }
-
-    /// <summary>
-    /// Creates a new SegNeXt instance with the same configuration but freshly initialized weights.
-    /// </summary>
-    /// <returns>A new <see cref="SegNeXt{T}"/> with the same settings but reinitialized weights.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a "copy" of the model configuration with fresh random weights.
-    /// Used internally for cross-validation or ensemble training where multiple independent copies
-    /// of the same architecture are needed.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new SegNeXt<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options);
-        }
-        else
-        {
-            return new SegNeXt<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
-        }
-    }
 
     #endregion
 }

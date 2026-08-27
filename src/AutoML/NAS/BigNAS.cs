@@ -376,19 +376,6 @@ namespace AiDotNet.AutoML.NAS
                 cancellationToken: cancellationToken);
             return ConfigToArchitecture(config);
         }
-
-        protected override AutoMLModelBase<T, Tensor<T>, Tensor<T>> CreateInstanceForCopy()
-        {
-            return new BigNAS<T>(
-                _nasSearchSpace,
-                elasticDepths: new List<int>(_elasticDepths),
-                elasticWidthMultipliers: new List<double>(_elasticWidthMultipliers),
-                elasticKernelSizes: new List<int>(_elasticKernelSizes),
-                elasticExpansionRatios: new List<int>(_elasticExpansionRatios),
-                elasticResolutions: new List<int>(_elasticResolutions),
-                useSandwichSampling: _useSandwichSampling,
-                distillationWeight: _ops.ToDouble(_distillationWeight));
-        }
     }
 
 }

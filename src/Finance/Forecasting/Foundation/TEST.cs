@@ -62,7 +62,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("TEST: Text Prototype Aligned Embedding for Time Series", "https://arxiv.org/abs/2308.08241")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class TEST<T> : TimeSeriesFoundationModelBase<T>
+public partial class TEST<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
 
@@ -272,60 +272,10 @@ public class TEST<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var opts = new TESTOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            HiddenDimension = _hiddenDimension,
-            TextEmbeddingDimension = _textEmbeddingDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            DropoutRate = _dropout,
-            ModelSize = _modelSize,
-            NumPrototypes = _numPrototypes,
-            AlignmentWeight = _alignmentWeight
-        };
 
-        if (!_useNativeMode && OnnxModelPath is not null)
-            return new TEST<T>(Architecture, OnnxModelPath, opts);
-
-        return new TEST<T>(Architecture, opts);
-    }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_patchLength);
-        writer.Write(_hiddenDimension);
-        writer.Write(_textEmbeddingDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_dropout);
-        writer.Write((int)_modelSize);
-        writer.Write(_numPrototypes);
-        writer.Write(_alignmentWeight);
-    }
 
-    /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _patchLength = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _textEmbeddingDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _modelSize = (FoundationModelSize)reader.ReadInt32();
-        _numPrototypes = reader.ReadInt32();
-        _alignmentWeight = reader.ReadDouble();
-    }
 
     #endregion
 

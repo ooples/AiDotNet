@@ -107,6 +107,7 @@ public partial class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     /// <summary>
     /// Attention weights for prototype enhancement (if enabled).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _attentionWeights;
 
     /// <summary>

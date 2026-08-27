@@ -40,7 +40,7 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
     Year = 2023,
     Authors = "Kong et al."
 )]
-public class VITS2<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class VITS2<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly VITS2Options _options;
 
@@ -290,80 +290,9 @@ public class VITS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.MelChannels);
-        writer.Write(_options.HopSize);
-        writer.Write(_options.HiddenDim);
-        writer.Write(_options.NumFlowSteps);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.FilterChannels);
-        writer.Write(_options.InterChannels);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.NumEncoderLayers);
-        writer.Write(_options.NumHeads);
-        // The training recipe is part of the model's configuration: every one of these feeds
-        // CreatePaperOptimizer, so a caller's override is silently lost across a round trip
-        // unless it travels with the rest of the options.
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.Beta1);
-        writer.Write(_options.Beta2);
-        writer.Write(_options.Epsilon);
-        writer.Write(_options.WeightDecay);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.MelChannels = reader.ReadInt32();
-        _options.HopSize = reader.ReadInt32();
-        _options.HiddenDim = reader.ReadInt32();
-        _options.NumFlowSteps = reader.ReadInt32();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.FilterChannels = reader.ReadInt32();
-        _options.InterChannels = reader.ReadInt32();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.NumEncoderLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        // APPENDED FIELDS, READ ONLY IF THE PAYLOAD CARRIES THEM. The model-specific section is the
-        // last thing written and the reader wraps the payload's own MemoryStream, so remaining
-        // bytes are exactly this section's. A payload written before the training recipe was
-        // persisted simply ends here and keeps the option defaults.
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-        {
-            _options.LearningRate = reader.ReadDouble();
-            _options.Beta1 = reader.ReadDouble();
-            _options.Beta2 = reader.ReadDouble();
-            _options.Epsilon = reader.ReadDouble();
-            _options.WeightDecay = reader.ReadDouble();
 
-            // Rebuild ONLY the default optimizer. A caller-supplied one is its own type, its own
-            // configuration and its own state; replacing it with AdamW here would silently change
-            // how the restored model trains, so it is left exactly as the caller built it.
-            if (_useNativeMode && _usesDefaultOptimizer)
-                _optimizer = CreatePaperOptimizer();
-        }
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new VITS2<T>(Architecture, mp, _options);
-        return new VITS2<T>(Architecture, _options);
-    }
 
     private void ThrowIfDisposed()
     {

@@ -322,29 +322,6 @@ public partial class LatteModel<T> : VideoDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-                return new LatteModel<T>(
-            dit: (DiTNoisePredictor<T>)_dit.Clone(),
-            vae: new StandardVAE<T>(
-                inputChannels: 3,
-                latentChannels: LATENT_CHANNELS,
-                baseChannels: 128,
-                channelMultipliers: new[] { 1, 2, 4, 4 },
-                numResBlocksPerLevel: 2,
-                latentScaleFactor: 0.18215),
-            conditioner: _conditioner,
-            defaultNumFrames: DefaultNumFrames,
-            defaultFPS: DefaultFPS);
-    }
-
     #endregion
 
     #region Metadata

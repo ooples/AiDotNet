@@ -17,7 +17,7 @@ namespace AiDotNet.Interpolation;
 /// general shape and trends of your original data.
 /// </para>
 /// </remarks>
-public class PchipInterpolation<T> : IInterpolation<T>
+public partial class PchipInterpolation<T> : IInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the data points.
@@ -32,6 +32,7 @@ public class PchipInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The calculated slopes at each data point.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _slopes;
 
     /// <summary>

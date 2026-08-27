@@ -20,10 +20,53 @@ namespace AiDotNet.Clustering.Base;
 /// Provides a base implementation for clustering algorithms that group similar data points together.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
-public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>, IModelShape,
+public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>, IModelShape,
     IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>,
     IParameterManifestProvider
 {
+    // --- declared state (ModelStateRegistry) ---
+    // Identical in every model base because these bases are siblings over the same interfaces rather
+    // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.
+
+    /// <summary>State that is not a parameter vector, declared once and persisted by this base.</summary>
+    private readonly AiDotNet.Models.ModelStateRegistry<T> _declaredState = new();
+    private bool _declaredStateRegistered;
+
+    /// <summary>
+    /// Declare state here that the parameter vector does not carry -- a retained training set,
+    /// fitted knots, kernel centres, an ensemble's children. Both halves of the payload are driven
+    /// by the declaration, so they cannot drift.
+    /// </summary>
+    /// <param name="state">The registry to declare into.</param>
+    protected virtual void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+    }
+    /// <summary>Generated state declarations for fields declared across this model's hierarchy.</summary>
+    /// <param name="state">The registry to declare into.</param>
+    /// <remarks>
+    /// Emitted by ModelStateGenerator into the partial model, so a model author declares nothing. The
+    /// hand-written <c>RegisterState</c> beside it exists only for state the classifier genuinely
+    /// cannot place; anything it CAN place belongs here, where it cannot be forgotten.
+    /// </remarks>
+    protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        RegisterGeneratedStateCore(state);
+    }
+
+    /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>
+    protected AiDotNet.Models.ModelStateRegistry<T> DeclaredState
+    {
+        get
+        {
+            if (!_declaredStateRegistered)
+            {
+                _declaredStateRegistered = true;
+                RegisterGeneratedState(_declaredState);
+                RegisterState(_declaredState);
+            }
+            return _declaredState;
+        }
+    }
     /// <summary>
     /// Gets the numeric operations for the specified type T.
     /// </summary>
@@ -296,12 +339,15 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
         var modelMetadata = GetModelMetadata();
         modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
 
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
+        return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata)));
     }
 
     /// <inheritdoc/>
     public virtual void Deserialize(byte[] modelData)
     {
+        // Strips and applies any declared-state trailer, so the body below reads the payload
+        // exactly as it did before this existed.
+        modelData = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, modelData);
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         var jsonString = Encoding.UTF8.GetString(modelData);
         var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
@@ -742,7 +788,18 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// <summary>
     /// Creates a new instance of this clustering algorithm.
     /// </summary>
-    protected abstract IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance();
+    /// <remarks>
+    /// <para>
+    /// No longer abstract. Every concrete model used to be forced to write this, and 1147 of them
+    /// did -- each one a hand-copied list of constructor arguments that a new option could fall out
+    /// of without anything failing. The clone plan records that constructor at compile time instead,
+    /// so the base can rebuild the type and a model only overrides this when the generator says it
+    /// cannot: a constructor parameter with nothing holding its value, which the build reports by
+    /// name rather than leaving to be discovered by a clone that comes back subtly different.
+    /// </para>
+    /// </remarks>
+    protected virtual IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
+        => (IFullModel<T, Matrix<T>, Vector<T>>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
 
     /// <inheritdoc/>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()

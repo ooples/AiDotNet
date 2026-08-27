@@ -159,6 +159,7 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
     /// Each coefficient quantifies the effect of one external variable. The model
     /// learns these coefficients from your data to improve predictions.
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _regression;
 
     /// <summary>
@@ -1216,42 +1217,7 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
     /// 
     /// This allows the model to be fully reconstructed later.
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        // Serialize model parameters
-        writer.Write(Convert.ToDouble(_level));
 
-        if (_bayesianOptions.IncludeTrend)
-        {
-            writer.Write(Convert.ToDouble(_trend));
-        }
-
-        writer.Write(_seasonalComponents.Count);
-        foreach (var component in _seasonalComponents)
-        {
-            writer.Write(component.Length);
-            foreach (var val in component) writer.Write(Convert.ToDouble(val));
-        }
-
-        writer.Write(_stateCovariance.Rows);
-        writer.Write(_stateCovariance.Columns);
-        for (int i = 0; i < _stateCovariance.Rows; i++)
-            for (int j = 0; j < _stateCovariance.Columns; j++)
-                writer.Write(Convert.ToDouble(_stateCovariance[i, j]));
-
-        writer.Write(Convert.ToDouble(_observationVariance));
-
-        // Serialize options
-        writer.Write(_bayesianOptions.IncludeTrend);
-        writer.Write(_bayesianOptions.IncludeRegression);
-
-        // Serialize training series for in-sample predictions
-        writer.Write(_trainingSeries.Length);
-        for (int i = 0; i < _trainingSeries.Length; i++)
-            writer.Write(Convert.ToDouble(_trainingSeries[i]));
-
-        SerializationHelper<T>.SerializeVector(writer, _regression);
-    }
 
     /// <summary>
     /// Deserializes the model's state from a binary stream.
@@ -1275,59 +1241,7 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
     /// 
     /// After deserialization, the model is ready to make predictions as if it had just been trained.
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        // Deserialize model parameters — level is always present
-        _level = NumOps.FromDouble(reader.ReadDouble());
 
-        // Note: IncludeTrend was serialized AFTER the covariance matrix (legacy order).
-        // We read the trend unconditionally based on whether it was actually written,
-        // which we detect by peeking ahead. For backward compatibility, we read based
-        // on the current options setting (which matches what was serialized).
-        if (_bayesianOptions.IncludeTrend)
-        {
-            _trend = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        int seasonalComponentsCount = reader.ReadInt32();
-        _seasonalComponents = new List<Vector<T>>();
-        for (int i = 0; i < seasonalComponentsCount; i++)
-        {
-            int componentLength = reader.ReadInt32();
-            Vector<T> component = new Vector<T>(componentLength);
-            for (int j = 0; j < componentLength; j++) component[j] = NumOps.FromDouble(reader.ReadDouble());
-            _seasonalComponents.Add(component);
-        }
-
-        int covarianceRows = reader.ReadInt32();
-        int covarianceColumns = reader.ReadInt32();
-        _stateCovariance = new Matrix<T>(covarianceRows, covarianceColumns);
-        for (int i = 0; i < covarianceRows; i++)
-            for (int j = 0; j < covarianceColumns; j++)
-                _stateCovariance[i, j] = NumOps.FromDouble(reader.ReadDouble());
-
-        _observationVariance = NumOps.FromDouble(reader.ReadDouble());
-
-        // Deserialize options
-        _bayesianOptions.IncludeTrend = reader.ReadBoolean();
-        _bayesianOptions.IncludeRegression = reader.ReadBoolean();
-
-        // Deserialize training series (post-patch field)
-        try
-        {
-            int tsLen = reader.ReadInt32();
-            _trainingSeries = new Vector<T>(tsLen);
-            for (int i = 0; i < tsLen; i++)
-                _trainingSeries[i] = NumOps.FromDouble(reader.ReadDouble());
-
-            _regression = SerializationHelper<T>.DeserializeVector(reader);
-        }
-        catch (EndOfStreamException)
-        {
-            _trainingSeries = Vector<T>.Empty();
-            _regression = Vector<T>.Empty();
-        }
-    }
 
     /// <summary>
     /// Creates a new instance of the BSTS model with the same options.
@@ -1551,90 +1465,6 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
         {
             _regression = new Vector<T>(_regression.Length);
         }
-    }
-
-    /// <summary>
-    /// Creates a deep copy of the current model.
-    /// </summary>
-    /// <returns>A new instance of the BSTS model with the same state and parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a complete copy of the model, including its configuration and trained components.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates an exact duplicate of your trained model.
-    /// 
-    /// Unlike CreateInstance(), which creates a blank model with the same settings,
-    /// Clone() creates a complete copy including:
-    /// - The model configuration (level, trend, seasonal settings, etc.)
-    /// - All trained components and their current values
-    /// - The current uncertainty estimates
-    /// 
-    /// This is useful for:
-    /// - Creating a backup before experimenting with a model
-    /// - Using the same trained model in multiple scenarios
-    /// - Creating ensemble models that use variations of the same base model
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new BayesianStructuralTimeSeriesModel<T>((BayesianStructuralTimeSeriesOptions<T>)Options);
-
-        // Copy level and trend
-        clone._level = _level;
-        if (_bayesianOptions.IncludeTrend)
-        {
-            clone._trend = _trend;
-        }
-
-        // Copy seasonal components
-        clone._seasonalComponents.Clear();
-        foreach (var component in _seasonalComponents)
-        {
-            Vector<T> componentCopy = new Vector<T>(component.Length);
-            for (int i = 0; i < component.Length; i++)
-            {
-                componentCopy[i] = component[i];
-            }
-            clone._seasonalComponents.Add(componentCopy);
-        }
-
-        // Copy state covariance
-        clone._stateCovariance = new Matrix<T>(_stateCovariance.Rows, _stateCovariance.Columns);
-        for (int i = 0; i < _stateCovariance.Rows; i++)
-        {
-            for (int j = 0; j < _stateCovariance.Columns; j++)
-            {
-                clone._stateCovariance[i, j] = _stateCovariance[i, j];
-            }
-        }
-
-        // Copy observation variance
-        clone._observationVariance = _observationVariance;
-
-        // Copy regression component if included
-        if (_bayesianOptions.IncludeRegression && _regression != null)
-        {
-            clone._regression = new Vector<T>(_regression.Length);
-            for (int i = 0; i < _regression.Length; i++)
-            {
-                clone._regression[i] = _regression[i];
-            }
-        }
-
-        // Copy training series for in-sample predictions
-        if (_trainingSeries.Length > 0)
-        {
-            clone._trainingSeries = new Vector<T>(_trainingSeries.Length);
-            for (int i = 0; i < _trainingSeries.Length; i++)
-                clone._trainingSeries[i] = _trainingSeries[i];
-        }
-
-        // Copy trained state
-        clone.IsTrained = IsTrained;
-        if (ModelParameters.Length > 0)
-            clone.ModelParameters = ModelParameters.Clone();
-
-        return clone;
     }
 
     /// <summary>

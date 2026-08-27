@@ -54,7 +54,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Classification and Regression Trees", "https://doi.org/10.1201/9781315139470")]
-public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
+public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
 {
     /// <summary>
     /// The configuration options for the decision tree algorithm.
@@ -327,105 +327,6 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
         }
 
         return _featureImportances[featureIndex];
-    }
-
-    /// <summary>
-    /// Serializes the decision tree model to a byte array for storage or transmission.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method converts the decision tree model into a byte array that can be stored in a file, database,
-    /// or transmitted over a network. The serialized data includes the model's configuration options and the
-    /// complete tree structure.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves your trained model as a sequence of bytes.
-    /// 
-    /// Serialization allows you to:
-    /// - Save your model to a file
-    /// - Store your model in a database
-    /// - Send your model over a network
-    /// - Keep your model for later use without having to retrain it
-    /// 
-    /// The serialized data includes:
-    /// - All the model's settings (like maximum depth)
-    /// - The entire tree structure with all its decision rules
-    /// 
-    /// Example:
-    /// ```csharp
-    /// // Serialize the model
-    /// byte[] modelData = decisionTree.Serialize();
-    /// 
-    /// // Save to a file
-    /// File.WriteAllBytes("decisionTree.model", modelData);
-    /// ```
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-        // Serialize options
-        writer.Write(_options.MaxDepth);
-        writer.Write(_options.MinSamplesSplit);
-        writer.Write(_options.MaxFeatures);
-        writer.Write(_options.Seed ?? -1);
-
-        // Serialize the tree structure
-        SerializeNode(Root, writer);
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Loads a previously serialized decision tree model from a byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized model.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reconstructs a decision tree model from a byte array that was previously created using the
-    /// Serialize method. It restores the model's configuration options and tree structure, allowing the model
-    /// to be used for predictions without retraining.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved model from a sequence of bytes.
-    /// 
-    /// Deserialization allows you to:
-    /// - Load a model that was saved earlier
-    /// - Use a model without having to retrain it
-    /// - Share models between different applications
-    /// 
-    /// When you deserialize a model:
-    /// - All settings are restored
-    /// - The entire tree structure is reconstructed
-    /// - The model is ready to make predictions immediately
-    /// 
-    /// Example:
-    /// ```csharp
-    /// // Load from a file
-    /// byte[] modelData = File.ReadAllBytes("decisionTree.model");
-    /// 
-    /// // Deserialize the model
-    /// var decisionTree = new DecisionTreeRegression&lt;double&gt;();
-    /// decisionTree.Deserialize(modelData);
-    /// 
-    /// // Now you can use the model for predictions
-    /// var predictions = decisionTree.Predict(newFeatures);
-    /// ```
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-        // Deserialize options
-        _options.MaxDepth = reader.ReadInt32();
-        _options.MinSamplesSplit = reader.ReadInt32();
-        _options.MaxFeatures = reader.ReadDouble();
-        int seed = reader.ReadInt32();
-        _options.Seed = seed == -1 ? null : seed;
-
-        // Deserialize the tree structure
-        Root = DeserializeNode(reader);
     }
 
     /// <summary>
@@ -1209,37 +1110,5 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
 
         // Copy to the public property from base class so ensemble methods can access it
         FeatureImportances = _featureImportances;
-    }
-
-    /// <summary>
-    /// Creates a new instance of the decision tree regression model with the same options.
-    /// </summary>
-    /// <returns>A new instance of the model with the same configuration but no trained parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the decision tree regression model with the same configuration
-    /// options and regularization method as the current instance, but without copying the trained parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model configuration without 
-    /// any learned parameters.
-    /// 
-    /// Think of it like getting a blank notepad with the same paper quality and size, 
-    /// but without any writing on it yet. The new model has the same:
-    /// - Maximum depth setting
-    /// - Minimum samples split setting
-    /// - Split criterion (how nodes decide which feature to split on)
-    /// - Random seed (if specified)
-    /// - Regularization method
-    /// 
-    /// But it doesn't have any of the actual tree structure that was learned from data.
-    /// 
-    /// This is mainly used internally when doing things like cross-validation or 
-    /// creating ensembles of similar models with different training data.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        // Create a new instance with the same options and regularization
-        return new DecisionTreeRegression<T>(_options, _regularization);
     }
 }

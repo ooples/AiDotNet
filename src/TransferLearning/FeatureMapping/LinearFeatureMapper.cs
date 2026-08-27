@@ -27,7 +27,9 @@ public class LinearFeatureMapper<T> : IFeatureMapper<T>
 {
     private readonly INumericOperations<T> _numOps;
     protected static IEngine Engine => AiDotNetEngine.Current;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _projectionMatrix;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _reverseProjectionMatrix;
     private T _confidence;
 

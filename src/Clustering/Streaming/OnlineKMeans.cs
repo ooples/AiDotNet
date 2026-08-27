@@ -60,7 +60,7 @@ namespace AiDotNet.Clustering.Streaming;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Mini-Batch K-Means Clustering", "https://www.eecs.tufts.edu/~dsculley/papers/fastkmeans.pdf")]
-public class OnlineKMeans<T> : ClusteringBase<T>
+public partial class OnlineKMeans<T> : ClusteringBase<T>
 {
     private readonly OnlineKMeansOptions<T> _options;
 
@@ -89,63 +89,6 @@ public class OnlineKMeans<T> : ClusteringBase<T>
     /// Gets the current learning rate.
     /// </summary>
     public double CurrentLearningRate { get; private set; }
-
-    /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new OnlineKMeans<T>(new OnlineKMeansOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            LearningRate = _options.LearningRate,
-            DecayLearningRate = _options.DecayLearningRate,
-            MinLearningRate = _options.MinLearningRate,
-            MaxIterations = _options.MaxIterations,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = (OnlineKMeans<T>)CreateNewInstance();
-        if (_centers is not null)
-        {
-            int k = _centers.Rows;
-            int d = _centers.Columns;
-            clone._centers = new Matrix<T>(k, d);
-            for (int i = 0; i < k; i++)
-                for (int j = 0; j < d; j++)
-                    clone._centers[i, j] = _centers[i, j];
-        }
-        clone._clusterCounts = _clusterCounts?.ToArray() ?? Array.Empty<int>();
-        clone._totalPointsSeen = _totalPointsSeen;
-        clone.CurrentLearningRate = CurrentLearningRate;
-        clone.NumClusters = NumClusters;
-        clone.NumFeatures = NumFeatures;
-        clone.IsTrained = IsTrained;
-
-        if (Labels is not null)
-        {
-            clone.Labels = new Vector<T>(Labels.Length);
-            for (int i = 0; i < Labels.Length; i++)
-                clone.Labels[i] = Labels[i];
-        }
-
-        if (ClusterCenters is not null)
-        {
-            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
-            for (int i = 0; i < ClusterCenters.Rows; i++)
-                for (int j = 0; j < ClusterCenters.Columns; j++)
-                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
-        }
-
-        return clone;
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

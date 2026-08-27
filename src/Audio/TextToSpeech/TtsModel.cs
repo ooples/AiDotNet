@@ -63,7 +63,7 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FastSpeech 2: Fast and High-Quality End-to-End Text to Speech", "https://arxiv.org/abs/2006.04558", Year = 2021, Authors = "Yi Ren, Chenxu Hu, Xu Tan, Tao Qin, Sheng Zhao, Zhou Zhao, Tie-Yan Liu")]
-public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
+public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     private readonly TtsOptions _options;
 
@@ -755,86 +755,12 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(SampleRate);
-        writer.Write(NumMels);
-        writer.Write(_speakingRate);
-        writer.Write(_energy);
-        writer.Write(_useGriffinLimFallback);
-        writer.Write(_useNativeMode);
-        writer.Write(_hiddenDim);
-        writer.Write(_numHeads);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numDecoderLayers);
-        writer.Write(_maxPhonemeLength);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        SampleRate = reader.ReadInt32();
-        NumMels = reader.ReadInt32();
-        // Other fields are readonly and set during construction
-        // Read them but don't assign
-        _ = reader.ReadDouble(); // speakingRate
-        _ = reader.ReadDouble(); // energy
-        _ = reader.ReadBoolean(); // useGriffinLimFallback
-        _ = reader.ReadBoolean(); // useNativeMode
-        _ = reader.ReadInt32(); // hiddenDim
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadInt32(); // numEncoderLayers
-        _ = reader.ReadInt32(); // numDecoderLayers
-        _ = reader.ReadInt32(); // maxPhonemeLength
-    }
 
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _acousticModelPath is not null)
-        {
-            return new TtsModel<T>(
-                Architecture,
-                _acousticModelPath,
-                _vocoderModelPath,
-                SampleRate,
-                NumMels,
-                _speakingRate,
-                _pitchShift,
-                _energy,
-                _speakerId,
-                _language,
-                _useGriffinLimFallback,
-                _griffinLimIterations,
-                _fftSize,
-                _hopLength);
-        }
-        else
-        {
-            return new TtsModel<T>(
-                Architecture,
-                SampleRate,
-                NumMels,
-                _speakingRate,
-                _pitchShift,
-                _energy,
-                _speakerId,
-                _language,
-                _hiddenDim,
-                _numHeads,
-                _numEncoderLayers,
-                _numDecoderLayers,
-                _maxPhonemeLength,
-                _fftSize,
-                _hopLength,
-                _griffinLimIterations,
-                lossFunction: _lossFunction);
-        }
-    }
 
     #endregion
 

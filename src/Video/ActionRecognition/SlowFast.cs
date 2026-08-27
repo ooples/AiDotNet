@@ -697,42 +697,7 @@ public partial class SlowFast<T> : NeuralNetworkBase<T>
     /// are NOT serialized - after deserialization, default LayerHelper layers are used
     /// unless custom layers are re-provided.
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        if (!_useNativeMode) throw new InvalidOperationException("Serialization is not supported in ONNX mode.");
 
-        // Configuration parameters
-        writer.Write(_numClasses);
-        writer.Write(_slowFrames);
-        writer.Write(_fastFrames);
-        writer.Write(_slowChannels);
-        writer.Write(_fastChannels);
-        writer.Write(_alpha);
-        writer.Write(_imageSize);
-
-        // Per-pathway range markers needed by deserialize to reconstruct
-        // the _fastLayers / _fusionLayers mirror views into the unified
-        // Layers list. Without these, the deserialize side cannot tell where
-        // the slow pathway ends and the fast pathway begins from the flat
-        // [slow... | fast... | fusion...] layout.
-        writer.Write(_slowLayerCount);
-        writer.Write(_fastLayerCount);
-        writer.Write(_fusionLayerCount);
-
-        // Training component type names for restoration
-        writer.Write(_lossFunction.GetType().AssemblyQualifiedName ?? throw new InvalidOperationException(
-            $"Cannot resolve AssemblyQualifiedName for loss function type '{_lossFunction.GetType().FullName}'."));
-        writer.Write(_probabilityActivation.GetType().AssemblyQualifiedName ?? throw new InvalidOperationException(
-            $"Cannot resolve AssemblyQualifiedName for activation function type '{_probabilityActivation.GetType().FullName}'."));
-
-        // Optimizer type (can be null for ONNX mode or after certain operations)
-        writer.Write(_optimizer is not null);
-        if (_optimizer is { } optimizer)
-        {
-            writer.Write(optimizer.GetType().AssemblyQualifiedName ?? throw new InvalidOperationException(
-                $"Cannot resolve AssemblyQualifiedName for optimizer type '{optimizer.GetType().FullName}'."));
-        }
-    }
 
     /// <summary>
     /// Deserializes SlowFast-specific configuration data and reinitializes layers.
@@ -741,114 +706,7 @@ public partial class SlowFast<T> : NeuralNetworkBase<T>
     /// Restores configuration parameters and recreates training components from serialized type names.
     /// Custom layer definitions are NOT restored - default LayerHelper layers are used after deserialization.
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        if (!_useNativeMode) throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
 
-        // Restore configuration values
-        _numClasses = reader.ReadInt32();
-        _slowFrames = reader.ReadInt32();
-        _fastFrames = reader.ReadInt32();
-        _slowChannels = reader.ReadInt32();
-        _fastChannels = reader.ReadInt32();
-        _alpha = reader.ReadInt32();
-        _imageSize = reader.ReadInt32();
-
-        // Per-pathway range markers — must match what the serialize side wrote
-        // so the _fastLayers / _fusionLayers mirror views can be rebuilt as
-        // slices of the unified Layers list below.
-        _slowLayerCount = reader.ReadInt32();
-        _fastLayerCount = reader.ReadInt32();
-        _fusionLayerCount = reader.ReadInt32();
-
-        // Restore training component types
-        string lossFunctionTypeName = reader.ReadString();
-        string probabilityActivationTypeName = reader.ReadString();
-
-        // Recreate loss function from type name
-        var lossFunctionType = Type.GetType(lossFunctionTypeName);
-        if (lossFunctionType != null)
-        {
-            _lossFunction = (ILossFunction<T>?)Activator.CreateInstance(lossFunctionType) ?? new CrossEntropyWithLogitsLoss<T>();
-        }
-        else
-        {
-            System.Diagnostics.Debug.WriteLine(
-                $"Warning: Serialized loss function type '{lossFunctionTypeName}' could not be resolved. Falling back to CrossEntropyWithLogitsLoss.");
-            _lossFunction = new CrossEntropyWithLogitsLoss<T>();
-        }
-
-        // Recreate probability activation from type name
-        var activationType = Type.GetType(probabilityActivationTypeName);
-        if (activationType != null)
-        {
-            _probabilityActivation = (IActivationFunction<T>?)Activator.CreateInstance(activationType) ?? new SoftmaxActivation<T>();
-        }
-        else
-        {
-            System.Diagnostics.Debug.WriteLine(
-                $"Warning: Serialized activation type '{probabilityActivationTypeName}' could not be resolved. Falling back to SoftmaxActivation.");
-            _probabilityActivation = new SoftmaxActivation<T>();
-        }
-
-        // Restore optimizer if it was serialized
-        bool hasOptimizer = reader.ReadBoolean();
-        if (hasOptimizer)
-        {
-            string optimizerTypeName = reader.ReadString();
-            var optimizerType = Type.GetType(optimizerTypeName);
-
-            if (optimizerType != null)
-            {
-                var constructor = optimizerType.GetConstructor([typeof(IFullModel<T, Tensor<T>, Tensor<T>>)]);
-                if (constructor != null)
-                {
-                    _optimizer = (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)constructor.Invoke([this]);
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine(
-                        $"Warning: Serialized optimizer type '{optimizerTypeName}' does not have expected constructor. Falling back to Adam.");
-                    _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-                }
-            }
-            else
-            {
-                System.Diagnostics.Debug.WriteLine(
-                    $"Warning: Serialized optimizer type '{optimizerTypeName}' could not be resolved. Falling back to Adam.");
-                _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-            }
-        }
-        else
-        {
-            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        }
-        SetBaseTrainOptimizer(_optimizer);
-
-        // Clear custom layer references (not serialized)
-        _customFastLayers = null;
-        _customFusionLayers = null;
-
-        // Rebuild the per-pathway mirror lists as slices of the freshly-
-        // deserialized Layers. Do NOT call InitializeLayers — base
-        // DeserializeInternalUnchecked already populated Layers with the
-        // saved [slow... | fast... | fusion...] flat layout (with TRAINED
-        // weights). Re-running InitializeLayers would Clear + rebuild with
-        // random-init weights, dropping all the trained state on the floor
-        // (issue #1221 class — exactly what Clone_AfterTraining_*
-        // is designed to catch).
-        _fastLayers.Clear();
-        _fusionLayers.Clear();
-        int slowEnd = _slowLayerCount;
-        int fastEnd = slowEnd + _fastLayerCount;
-        for (int i = slowEnd; i < fastEnd && i < Layers.Count; i++)
-            _fastLayers.Add(Layers[i]);
-        for (int i = fastEnd; i < Layers.Count; i++)
-            _fusionLayers.Add(Layers[i]);
-    }
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new SlowFast<T>(Architecture, _numClasses, _optimizer, _lossFunction, _probabilityActivation, _customFastLayers, _customFusionLayers, _slowFrames, _slowChannels, _fastChannels, _alpha);
 
     #endregion
 

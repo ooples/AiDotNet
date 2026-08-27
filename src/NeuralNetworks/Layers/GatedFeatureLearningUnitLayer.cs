@@ -72,8 +72,11 @@ public partial class GatedFeatureLearningUnitLayer<T> : LayerBase<T>, IShapeCont
     private readonly FullyConnectedLayer<T> _gateTransform;
 
     // Cached values
+    [Scratch]
     private Tensor<T>? _inputCache;
+    [Scratch]
     private Tensor<T>? _transformedCache;
+    [Scratch]
     private Tensor<T>? _gateCache;
 
     /// <inheritdoc/>

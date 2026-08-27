@@ -523,12 +523,6 @@ public partial class XLearner<T> : CausalModelBase<T>
     }
 
     /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new XLearner<T>(MaxIterations, LearningRate, Lambda);
-    }
-
-    /// <inheritdoc />
     protected override Dictionary<string, object> GetAdditionalModelData()
     {
         var data = base.GetAdditionalModelData();

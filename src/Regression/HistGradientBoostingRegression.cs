@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -8,7 +8,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
-using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Models.Parameters;
 
 namespace AiDotNet.Regression;
@@ -396,138 +396,6 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     }
 
     /// <summary>
-    /// Serializes the model to a byte array.
-    /// </summary>
-    public override byte[] Serialize()
-    {
-        ModelPersistenceGuard.EnforceBeforeSerialize();
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Write options
-        writer.Write(_options.NumberOfIterations);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.MaxBins);
-        writer.Write(_options.MaxDepth);
-        writer.Write(_options.MaxLeafNodes ?? -1);
-        writer.Write(_options.MinSamplesLeaf);
-        writer.Write(_options.L2Regularization);
-        writer.Write(_options.SubsampleRatio);
-
-        // Write model state
-        writer.Write(NumOps.ToDouble(_initialPrediction));
-        writer.Write(_numFeatures);
-
-        // Write bin thresholds
-        if (_binThresholds is not null)
-        {
-            writer.Write(_binThresholds.Length);
-            foreach (var featureThresholds in _binThresholds)
-            {
-                writer.Write(featureThresholds.Length);
-                foreach (var threshold in featureThresholds)
-                {
-                    writer.Write(NumOps.ToDouble(threshold));
-                }
-            }
-        }
-        else
-        {
-            writer.Write(0);
-        }
-
-        // Write trees
-        if (_trees is not null)
-        {
-            writer.Write(_trees.Count);
-            foreach (var tree in _trees)
-            {
-                SerializeTree(writer, tree);
-            }
-        }
-        else
-        {
-            writer.Write(0);
-        }
-
-        // Write feature importances
-        if (_featureImportances is not null)
-        {
-            writer.Write(_featureImportances.Length);
-            foreach (var importance in _featureImportances)
-            {
-                writer.Write(NumOps.ToDouble(importance));
-            }
-        }
-        else
-        {
-            writer.Write(0);
-        }
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the model from a byte array.
-    /// </summary>
-    public override void Deserialize(byte[] data)
-    {
-        ModelPersistenceGuard.EnforceBeforeDeserialize();
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        // Read options
-        _options.NumberOfIterations = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.MaxBins = reader.ReadInt32();
-        _options.MaxDepth = reader.ReadInt32();
-        int maxLeaf = reader.ReadInt32();
-        _options.MaxLeafNodes = maxLeaf >= 0 ? maxLeaf : null;
-        _options.MinSamplesLeaf = reader.ReadInt32();
-        _options.L2Regularization = reader.ReadDouble();
-        _options.SubsampleRatio = reader.ReadDouble();
-
-        // Read model state
-        _initialPrediction = NumOps.FromDouble(reader.ReadDouble());
-        _numFeatures = reader.ReadInt32();
-
-        // Read bin thresholds
-        int numFeatureThresholds = reader.ReadInt32();
-        if (numFeatureThresholds > 0)
-        {
-            _binThresholds = new T[numFeatureThresholds][];
-            for (int i = 0; i < numFeatureThresholds; i++)
-            {
-                int numThresholds = reader.ReadInt32();
-                _binThresholds[i] = new T[numThresholds];
-                for (int j = 0; j < numThresholds; j++)
-                {
-                    _binThresholds[i][j] = NumOps.FromDouble(reader.ReadDouble());
-                }
-            }
-        }
-
-        // Read trees
-        int numTrees = reader.ReadInt32();
-        _trees = new List<HistTreeNode>(numTrees);
-        for (int i = 0; i < numTrees; i++)
-        {
-            _trees.Add(DeserializeTree(reader));
-        }
-
-        // Read feature importances
-        int numImportances = reader.ReadInt32();
-        if (numImportances > 0)
-        {
-            _featureImportances = new T[numImportances];
-            for (int i = 0; i < numImportances; i++)
-            {
-                _featureImportances[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-    }
-
-    /// <summary>
     /// Gets the default loss function used for gradient computation.
     /// </summary>
     /// <remarks>
@@ -693,34 +561,6 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     {
         var activeFeatures = GetActiveFeatureIndices();
         return activeFeatures.Contains(featureIndex);
-    }
-
-    /// <summary>
-    /// Creates a deep copy of the model.
-    /// </summary>
-    /// <returns>A new instance with all data copied.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a complete independent copy of the model.
-    /// Changes to the copy won't affect the original.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
-    {
-        // In-memory clone, not a user save/load — wrap in InternalOperation
-        // so the persistence guard does not treat this as a billable op.
-        //
-        // Options are cloned (not shared by reference) so the returned copy
-        // owns an independent options object. A shared _options reference
-        // would let mutations on the clone leak back into the original and
-        // break deep-copy isolation downstream (e.g., hyperparameter tuners
-        // that adjust a single model's options).
-        using (ModelPersistenceGuard.InternalOperation())
-        {
-            var copy = new HistGradientBoostingRegression<T>(_options.Clone());
-            copy.Deserialize(Serialize());
-            return copy;
-        }
     }
 
     /// <summary>

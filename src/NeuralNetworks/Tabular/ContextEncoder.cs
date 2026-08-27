@@ -44,8 +44,11 @@ public class ContextEncoder<T>
     private readonly FullyConnectedLayer<T> _labelEmbedding;
 
     // Cached values
+    [Scratch]
     private Tensor<T>? _queryCache;
+    [Scratch]
     private Tensor<T>? _keyCache;
+    [Scratch]
     private Tensor<T>? _valueCache;
 
     /// <summary>

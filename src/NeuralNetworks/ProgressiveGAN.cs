@@ -47,7 +47,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Progressive Growing of GANs for Improved Quality, Stability, and Variation", "https://arxiv.org/abs/1710.10196", Year = 2018, Authors = "Tero Karras, Timo Aila, Samuli Laine, Jaakko Lehtinen")]
-public class ProgressiveGAN<T> : GenerativeAdversarialNetwork<T>
+public partial class ProgressiveGAN<T> : GenerativeAdversarialNetwork<T>
 {
     private const double DefaultLearningRate = 0.001;
     private const double DefaultLearningRateDecay = 0.9999;
@@ -171,21 +171,6 @@ public class ProgressiveGAN<T> : GenerativeAdversarialNetwork<T>
                imageChannels > 0 ? imageChannels : (discriminatorArchitecture.InputDepth > 0 ? discriminatorArchitecture.InputDepth : 3),
                maxResolutionLevel, baseFeatureMaps, lossFunction, options)
     {
-    }
-
-    /// <summary>
-    /// Constructs a fresh ProgressiveGAN with the same hyperparameters so Clone /
-    /// DeepCopy rebuilds both architectures from scratch. Mirrors <see cref="DCGAN{T}"/>.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new ProgressiveGAN<T>(
-            _latentSize,
-            _imageChannels,
-            _maxResolutionLevel,
-            _baseFeatureMaps,
-            lossFunction: LossFunction,
-            options: _options);
     }
 
     /// <summary>

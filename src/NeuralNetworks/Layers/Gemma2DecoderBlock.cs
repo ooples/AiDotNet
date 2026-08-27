@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -6,7 +6,7 @@ using AiDotNet.Interfaces;
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
-/// Gemma-2 decoder block with <em>sandwiched</em> RMSNorms — a norm both before and after each sublayer:
+/// Gemma-2 decoder block with <em>sandwiched</em> RMSNorms â€” a norm both before and after each sublayer:
 /// <c>x = x + postAttnNorm(Attn(inputNorm(x)))</c> then <c>x = x + postFfnNorm(GeGLU(preFfnNorm(x)))</c>.
 /// The FFN is a gated GeGLU (tanh-GELU gate); RMSNorms use the Gemma <c>(1 + weight)</c> convention (applied
 /// at load time).
@@ -14,7 +14,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+[LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 16, new AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<double>(2, 4)")]
 // Shape-preserving at any rank, and structurally so rather than incidentally: ForwardTraced is two
 // residual adds, `Engine.TensorAdd(input, attnNormed)` and `Engine.TensorAdd(afterAttn, ffnNormed)`,
 // and a residual can only add a tensor of its own shape. The FFN widens to ffnDim internally but the
@@ -24,13 +24,24 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [AutoParameters]
 public partial class Gemma2DecoderBlock<T> : LayerBase<T>
 {
+    // Every child reads the block input; only the down-projection reads the expanded width.
+    // Chained sizing walked registration order instead and built the second projection from
+    // the first's output, so a restore met a differently shaped layer than the checkpoint.
+    [SubLayerInput("_hiddenSize")]
     private readonly RMSNormalizationLayer<T> _normInput;
+    [SubLayerInput("1, _hiddenSize")]
     private readonly LayerBase<T> _attention;
+    [SubLayerInput("_hiddenSize")]
     private readonly RMSNormalizationLayer<T> _normPostAttn;
+    [SubLayerInput("_hiddenSize")]
     private readonly RMSNormalizationLayer<T> _normPreFfn;
+    [SubLayerInput("_hiddenSize")]
     private readonly DenseLayer<T> _ffnGate;
+    [SubLayerInput("_hiddenSize")]
     private readonly DenseLayer<T> _ffnUp;
+    [SubLayerInput("_ffnDim")]
     private readonly DenseLayer<T> _ffnDown;
+    [SubLayerInput("_hiddenSize")]
     private readonly RMSNormalizationLayer<T> _normPostFfn;
     private readonly int _hiddenSize;
 
@@ -63,6 +74,12 @@ public partial class Gemma2DecoderBlock<T> : LayerBase<T>
     /// <summary>The model (input/output) feature dimension.</summary>
     public int HiddenSize => _hiddenSize;
 
+    /// <summary>Construction state: the 'ffnDim' the layer was built with.</summary>
+    private readonly int _ffnDim;
+
+    /// <summary>Construction state: the 'rmsNormEpsilon' the layer was built with.</summary>
+    private readonly double _rmsNormEpsilon;
+
     /// <summary>Creates a Gemma-2 decoder block.</summary>
     /// <param name="hiddenSize">Input/output feature dimension.</param>
     /// <param name="ffnDim">FFN inner dimension.</param>
@@ -71,6 +88,8 @@ public partial class Gemma2DecoderBlock<T> : LayerBase<T>
     public Gemma2DecoderBlock(int hiddenSize, int ffnDim, LayerBase<T> attention, double rmsNormEpsilon = 1e-6)
         : base(new[] { -1, hiddenSize }, new[] { -1, hiddenSize })
     {
+        _rmsNormEpsilon = rmsNormEpsilon;
+        _ffnDim = ffnDim;
         Guard.NotNull(attention);
         _hiddenSize = hiddenSize;
         _attention = attention;

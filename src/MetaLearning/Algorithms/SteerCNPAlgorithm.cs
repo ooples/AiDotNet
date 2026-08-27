@@ -25,7 +25,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Peter Holderrieth, Michael J. Hutchinson, Yee Whye Teh")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class SteerCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
+public partial class SteerCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly SteerCNPOptions<T, TInput, TOutput> _algoOptions;
 

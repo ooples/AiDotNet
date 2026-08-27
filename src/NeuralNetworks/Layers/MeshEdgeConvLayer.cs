@@ -148,16 +148,19 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached weight gradients from backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _weightsGradient;
 
     /// <summary>
     /// Cached bias gradients from backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
     /// Cached input from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -168,11 +171,13 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached output before activation from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPreActivation;
 
     /// <summary>
     /// Cached output after activation from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     #endregion
@@ -697,31 +702,6 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>, IShapeContract
     /// <returns>The bias tensor.</returns>
     public override Tensor<T> GetBiases() => _biases;
 
-    /// <summary>
-    /// Creates a deep copy of the layer.
-    /// </summary>
-    /// <returns>A new instance with identical configuration and parameters.</returns>
-    public override LayerBase<T> Clone()
-    {
-        MeshEdgeConvLayer<T> copy;
-
-        if (UsingVectorActivation)
-        {
-            copy = new MeshEdgeConvLayer<T>(InputChannels, OutputChannels, NumNeighbors, VectorActivation);
-        }
-        else
-        {
-            copy = new MeshEdgeConvLayer<T>(InputChannels, OutputChannels, NumNeighbors, ScalarActivation);
-        }
-
-        copy.SetParameters(GetParameters());
-        if (_lastEdgeAdjacency != null)
-        {
-            copy.SetEdgeAdjacency(_lastEdgeAdjacency);
-        }
-        return copy;
-    }
-
     #endregion
 
     #region State Management
@@ -741,59 +721,6 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>, IShapeContract
     #endregion
 
     #region Serialization
-
-    /// <summary>
-    /// Serializes the layer to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer to serialize to.</param>
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-        writer.Write(InputChannels);
-        writer.Write(OutputChannels);
-        writer.Write(NumNeighbors);
-
-        var weightArray = _weights.ToArray();
-        for (int i = 0; i < weightArray.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(weightArray[i]));
-        }
-
-        var biasArray = _biases.ToArray();
-        for (int i = 0; i < biasArray.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(biasArray[i]));
-        }
-    }
-
-    /// <summary>
-    /// Deserializes the layer from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader to deserialize from.</param>
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-        InputChannels = reader.ReadInt32();
-        OutputChannels = reader.ReadInt32();
-        NumNeighbors = reader.ReadInt32();
-
-        int weightSize = OutputChannels * InputChannels * (1 + NumNeighbors);
-        _weights = new Tensor<T>([OutputChannels, InputChannels * (1 + NumNeighbors)]);
-        var weightArray = new T[weightSize];
-        for (int i = 0; i < weightSize; i++)
-        {
-            weightArray[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        _weights = new Tensor<T>(weightArray, _weights._shape);
-
-        _biases = new Tensor<T>([OutputChannels]);
-        var biasArray = new T[OutputChannels];
-        for (int i = 0; i < OutputChannels; i++)
-        {
-            biasArray[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        _biases = new Tensor<T>(biasArray, _biases._shape);
-    }
 
     #endregion
 

@@ -31,12 +31,10 @@ namespace AiDotNet.TextToSpeech.Classic;
     "https://arxiv.org/abs/1712.05884",
     Year = 2018,
     Authors = "Shen et al.")]
-public class Tacotron2<T> : AiDotNet.Audio.TextToSpeech.Tacotron2Model<T>, IAcousticModel<T>
+public partial class Tacotron2<T> : AiDotNet.Audio.TextToSpeech.Tacotron2Model<T>, IAcousticModel<T>
 {
     private readonly Tacotron2Options _options;
     private readonly ITokenizer _tokenizer;
-    private readonly bool _nativeMode;
-    private readonly string? _modelPath;
 
     /// <inheritdoc />
     public override ModelOptions GetOptions() => _options;
@@ -79,7 +77,6 @@ public class Tacotron2<T> : AiDotNet.Audio.TextToSpeech.Tacotron2Model<T>, IAcou
     {
         _ = nativeMarker;
         _options = options;
-        _nativeMode = true;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: options.VocabSize);
     }
 
@@ -111,8 +108,7 @@ public class Tacotron2<T> : AiDotNet.Audio.TextToSpeech.Tacotron2Model<T>, IAcou
     {
         _ = onnxMarker;
         _options = options;
-        _modelPath = modelPath;
-        _nativeMode = false;
+        _options.ModelPath = modelPath;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: options.VocabSize);
     }
 
@@ -133,15 +129,6 @@ public class Tacotron2<T> : AiDotNet.Audio.TextToSpeech.Tacotron2Model<T>, IAcou
 
     /// <inheritdoc />
     public Tensor<T> Synthesize(string text) => TextToMel(text);
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var copiedOptions = new Tacotron2Options(_options);
-        return _nativeMode
-            ? new Tacotron2<T>(Architecture, copiedOptions)
-            : new Tacotron2<T>(Architecture, _modelPath!, copiedOptions);
-    }
 
     private Tensor<T> CreateTokenTensor(string text)
     {

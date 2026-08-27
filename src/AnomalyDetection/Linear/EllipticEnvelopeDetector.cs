@@ -53,6 +53,7 @@ public partial class EllipticEnvelopeDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _supportFraction;
     private Vector<T>? _location;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _precisionMatrix;
 
     /// <summary>

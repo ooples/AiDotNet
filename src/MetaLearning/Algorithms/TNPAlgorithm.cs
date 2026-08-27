@@ -26,7 +26,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Nguyen, T. & Grover, A.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class TNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
+public partial class TNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly TNPOptions<T, TInput, TOutput> _algoOptions;
 

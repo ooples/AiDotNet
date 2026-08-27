@@ -117,17 +117,20 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stored input from forward pass for backpropagation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stored pre-activation output for gradient computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Gradient for weights, stored during backward pass.
     /// Stored as dense matrix for gradient accumulation, then sparsified.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _weightsGradient;
 
     /// <summary>
@@ -135,6 +138,7 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
     /// <see cref="_biases"/>'s shape so gradient layout stays consistent
     /// across the manual backprop path and tape-mode.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
@@ -220,8 +224,23 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
         var random = RandomHelper.CreateSeededRandom(42);
 
         // Calculate number of non-zero weights
-        int totalWeights = OutputFeatures * InputFeatures;
-        int nonZeroCount = Math.Max(1, (int)(totalWeights * (1.0 - _sparsity)));
+        // WIDENED TO long. OutputFeatures * InputFeatures is int * int, so it silently wraps for a
+        // large layer: 32768 x 16384 lands on -536870912 (-2^29), which then travelled onward as a
+        // NEGATIVE shape dimension and failed far from here as "Shape dimension 0 must be
+        // non-negative". A sparse layer is exactly the kind that is wide enough to overflow, and the
+        // count below is a proportion of the dense size, so it must be computed at full width and
+        // only narrowed once it is known to fit.
+        long totalWeights = (long)OutputFeatures * InputFeatures;
+        long requested = (long)(totalWeights * (1.0 - _sparsity));
+        if (requested > int.MaxValue)
+        {
+            throw new InvalidOperationException(
+                $"{GetType().Name} would need {requested:N0} non-zero weights for a "
+                    + $"{OutputFeatures}x{InputFeatures} layer at sparsity {_sparsity}, which exceeds "
+                    + "what a single sparse tensor can index. Raise the sparsity or split the layer.");
+        }
+
+        int nonZeroCount = (int)Math.Max(1L, requested);
 
         // Generate random non-zero positions
         var indices = new HashSet<(int row, int col)>();
@@ -447,87 +466,6 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
         var metadata = base.GetMetadata();
         metadata["Sparsity"] = _sparsity.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return metadata;
-    }
-
-    public override void Serialize(BinaryWriter writer)
-    {
-        // Persist sparsity pattern (CSR row/col indices) so Deserialize
-        // can restore values into the SAME positions. Without this, a
-        // fresh layer's randomly-generated sparsity pattern places the
-        // saved values at different positions than the original, and
-        // Forward outputs diverge.
-        writer.Write(_weights.NonZeroCount);
-        var rows = _weights.RowIndices;
-        var cols = _weights.ColumnIndices;
-        for (int i = 0; i < _weights.NonZeroCount; i++)
-        {
-            writer.Write(rows[i]);
-            writer.Write(cols[i]);
-        }
-        base.Serialize(writer);
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        int nnz = reader.ReadInt32();
-        if (nnz == _weights.NonZeroCount)
-        {
-            // Same sparsity pattern shape — overwrite the existing index
-            // arrays in place. SetParameters (called via base.Deserialize)
-            // then reconstructs _weights cloning these positions.
-            var rows = _weights.RowIndices;
-            var cols = _weights.ColumnIndices;
-            for (int i = 0; i < nnz; i++)
-            {
-                rows[i] = reader.ReadInt32();
-                cols[i] = reader.ReadInt32();
-            }
-        }
-        else
-        {
-            // Saved layer used a different sparsity ratio than the freshly-
-            // constructed layer. Silently skipping the indices and falling
-            // through to SetParameters would load values into the WRONG
-            // CSR positions, silently corrupting the model. Instead,
-            // reconstruct _weights with the saved sparsity pattern and
-            // zero-init values; SetParameters will then write the saved
-            // values into the matching positions.
-            var savedRows = new int[nnz];
-            var savedCols = new int[nnz];
-            for (int i = 0; i < nnz; i++)
-            {
-                savedRows[i] = reader.ReadInt32();
-                savedCols[i] = reader.ReadInt32();
-            }
-            // Validate indices fall inside the layer's known dimensions —
-            // a stream from an incompatible model shouldn't silently land
-            // out-of-range values that would crash later at Forward time.
-            for (int i = 0; i < nnz; i++)
-            {
-                if (savedRows[i] < 0 || savedRows[i] >= OutputFeatures)
-                    throw new InvalidDataException(
-                        $"SparseLinearLayer.Deserialize: row index {savedRows[i]} at slot {i} is outside [0, {OutputFeatures}). " +
-                        "Stream is from an incompatible model.");
-                if (savedCols[i] < 0 || savedCols[i] >= InputFeatures)
-                    throw new InvalidDataException(
-                        $"SparseLinearLayer.Deserialize: column index {savedCols[i]} at slot {i} is outside [0, {InputFeatures}). " +
-                        "Stream is from an incompatible model.");
-            }
-            // Replace _weights with a fresh SparseTensor matching the saved
-            // sparsity pattern. Re-register so GetTrainableParameters
-            // (used by tape mode and parameter walks) returns the new
-            // instance. We deliberately don't UnregisterTrainableParameter
-            // on the old reference here because Engine.UnregisterPersistentTensor
-            // calls Contiguous() which throws on sparse tensors —
-            // sparse-aware unregistration is tracked in the Tensors repo.
-            // Deserialize is pre-training, so no ParameterBuffer view
-            // aliases the old _weights at this point.
-            _weights = new SparseTensor<T>(
-                OutputFeatures, InputFeatures,
-                savedRows, savedCols, new T[nnz]);
-            RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
-        }
-        base.Deserialize(reader);
     }
 
     /// <inheritdoc/>

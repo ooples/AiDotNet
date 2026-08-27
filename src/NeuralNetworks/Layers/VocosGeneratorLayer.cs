@@ -109,7 +109,9 @@ public partial class VocosGeneratorLayer<T> : LayerBase<T>, IShapeContract
     private readonly LayerNormalizationLayer<T> _outputNormalization;
     private readonly FullyConnectedLayer<T> _fourierProjection;
     private readonly Tensor<T> _window;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<int> _inverseFftInteriorReverseIndices;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<int> _inverseFftBitReverseIndices;
     private readonly Tensor<T>[] _inverseFftCosines;
     private readonly Tensor<T>[] _inverseFftSines;

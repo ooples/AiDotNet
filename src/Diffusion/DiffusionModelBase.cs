@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using AiDotNet.Autodiff;
 using AiDotNet.Deployment.Optimization.Quantization;
 using AiDotNet.Deployment.Optimization.Quantization.Training;
@@ -39,10 +39,53 @@ namespace AiDotNet.Diffusion;
 /// Specific diffusion models (like DDPM, Latent Diffusion) extend this base to implement
 /// their unique noise prediction architectures.</para>
 /// </remarks>
-public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableModel<T>, IModelShape, IDisposable,
+public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableModel<T>, IModelShape, IDisposable,
     AiDotNet.Interfaces.ISelfSupervisedModel, AiDotNet.Models.Parameters.IParameterManifestProvider,
     AiDotNet.Models.Parameters.IParameterSurfaceLifecycle
 {
+    // --- declared state (ModelStateRegistry) ---
+    // Identical in every model base because these bases are siblings over the same interfaces rather
+    // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.
+
+    /// <summary>State that is not a parameter vector, declared once and persisted by this base.</summary>
+    private readonly AiDotNet.Models.ModelStateRegistry<T> _declaredState = new();
+    private bool _declaredStateRegistered;
+
+    /// <summary>
+    /// Declare state here that the parameter vector does not carry -- a retained training set,
+    /// fitted knots, kernel centres, an ensemble's children. Both halves of the payload are driven
+    /// by the declaration, so they cannot drift.
+    /// </summary>
+    /// <param name="state">The registry to declare into.</param>
+    protected virtual void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+    }
+    /// <summary>Generated state declarations for fields declared across this model's hierarchy.</summary>
+    /// <param name="state">The registry to declare into.</param>
+    /// <remarks>
+    /// Emitted by ModelStateGenerator into the partial model, so a model author declares nothing. The
+    /// hand-written <c>RegisterState</c> beside it exists only for state the classifier genuinely
+    /// cannot place; anything it CAN place belongs here, where it cannot be forgotten.
+    /// </remarks>
+    protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        RegisterGeneratedStateCore(state);
+    }
+
+    /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>
+    protected AiDotNet.Models.ModelStateRegistry<T> DeclaredState
+    {
+        get
+        {
+            if (!_declaredStateRegistered)
+            {
+                _declaredStateRegistered = true;
+                RegisterGeneratedState(_declaredState);
+                RegisterState(_declaredState);
+            }
+            return _declaredState;
+        }
+    }
     /// <summary>
     /// Concrete diffusion models can override this method to yield the components
     /// they own that hold disposable resources — typically the noise predictor
@@ -1185,6 +1228,13 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         _qatHook = null;
     }
 
+    /// <summary>Marks a payload whose weights are streamed per tensor rather than flattened.</summary>
+    /// <remarks>
+    /// Negative on purpose: a payload written before streaming existed opens with a vector LENGTH,
+    /// so the reader can tell the two apart without a version field.
+    /// </remarks>
+    private const int ChunkedParameterMarker = -424242;
+
     /// <summary>
     /// Whether quantization-aware training is engaged for <see cref="Train"/> (G5, #1624). Opt-in and OFF
     /// by default at every model size; turn it on/off explicitly via
@@ -1646,12 +1696,15 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         ModelPersistenceGuard.EnforceBeforeSerialize();
         using var stream = new MemoryStream();
         SaveState(stream);
-        return stream.ToArray();
+        return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, stream.ToArray());
     }
 
     /// <inheritdoc />
     public virtual void Deserialize(byte[] data)
     {
+        // Strips and applies any declared-state trailer, so the body below reads the payload
+        // exactly as it did before this existed.
+        data = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, data);
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         using var stream = new MemoryStream(data);
         LoadState(stream);
@@ -1721,8 +1774,25 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         writer.Write((int)_scheduler.Config.PredictionType);
         writer.Write(_scheduler.Config.ClipSample);
 
-        // Save model parameters using SerializationHelper
-        SerializationHelper<T>.SerializeVector(writer, GetParameters());
+        // STREAM THE WEIGHTS, DO NOT FLATTEN THEM. GetParameters() materialises every weight into
+        // one Vector<T>, and a foundation-scale model crosses the CLR's ~2 GB single-array ceiling on
+        // the way in -- six diffusion clone contracts failed here with "Array dimensions exceeded
+        // supported range". DeepCopy was already fixed to stream chunks; this path never was.
+        //
+        // A sentinel keeps old files readable: it is negative, and a legacy payload starts with a
+        // vector LENGTH, which never is.
+        writer.Write(ChunkedParameterMarker);
+        var parameterChunks = new List<Tensor<T>>(GetParameterChunks());
+        writer.Write(parameterChunks.Count);
+        foreach (var chunk in parameterChunks)
+        {
+            writer.Write(chunk.Length);
+            var span = chunk.AsSpan();
+            for (int i = 0; i < span.Length; i++)
+            {
+                writer.Write(NumOps.ToDouble(span[i]));
+            }
+        }
 
         stream.Flush();
     }
@@ -1803,8 +1873,32 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                 $"current={_scheduler.Config.ClipSample}. Create a model with matching scheduler config.");
         }
 
-        // Load model parameters using SerializationHelper
-        SetParameters(SerializationHelper<T>.DeserializeVector(reader));
+        // Matches the writer above, and still reads a file written before it: a legacy payload opens
+        // with the vector length, so anything that is not the sentinel is handed to the flat reader
+        // with that length already consumed.
+        int parameterMarker = reader.ReadInt32();
+        if (parameterMarker == ChunkedParameterMarker)
+        {
+            int chunkCount = reader.ReadInt32();
+            var restored = new List<Tensor<T>>(chunkCount);
+            for (int c = 0; c < chunkCount; c++)
+            {
+                int length = reader.ReadInt32();
+                var values = new T[length];
+                for (int i = 0; i < length; i++)
+                {
+                    values[i] = NumOps.FromDouble(reader.ReadDouble());
+                }
+
+                restored.Add(new Tensor<T>(new[] { length }, new Vector<T>(values)));
+            }
+
+            SetParameterChunks(restored);
+        }
+        else
+        {
+            SetParameters(SerializationHelper<T>.DeserializeVector(reader, parameterMarker));
+        }
     }
 
     #endregion
@@ -1868,7 +1962,142 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     #region ICloneable<IFullModel<T, Tensor<T>, Tensor<T>>> Implementation
 
     /// <inheritdoc />
-    public abstract IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy();
+    /// <remarks>
+    /// <para>
+    /// No longer abstract. Declaring it abstract here is what produced 267 hand-written DeepCopy and
+    /// Clone pairs across this family -- one per model, each re-listing the constructor arguments
+    /// its type happens to take. The clone plan records that constructor at compile time, so the
+    /// rebuild is the same code for every model and a new argument cannot be forgotten in 266 places.
+    /// </para>
+    /// <para>
+    /// Configuration is rebuilt, learned state is carried through the model's own Serialize and
+    /// Deserialize -- the public, overridable pair, so a model that persists something extra keeps
+    /// it. The guard is told this is an internal operation because a clone is not a save.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            var copy = (DiffusionModelBase<T>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
+
+            // Copy the weights CHUNK BY CHUNK rather than through Serialize/Deserialize. The
+            // roundtrip funnels every parameter into one MemoryStream, and a ControlNet-scale model
+            // crosses the CLR's ~2 GB single-array ceiling on the way in -- the clone died with
+            // "Array dimensions exceeded supported range" inside BinaryWriter.Write, having
+            // allocated gigabytes first. GetParameterChunks exists precisely so a whole-model
+            // transfer never materialises a flat aggregate.
+            //
+            // Nothing is lost by not serializing. SaveState writes exactly three things: a version
+            // marker, the scheduler config, and the parameters. The scheduler config is already
+            // reproduced by CopyConfiguration above, and LoadState only VALIDATES that it matches
+            // rather than restoring it -- so the parameters were the sole payload this roundtrip
+            // was carrying.
+            // Prefer the shared O(1)-until-write transfer for every diffusion model. Keeping this
+            // decision in the base removes the last reason for concrete diffusion types to carry
+            // bespoke clone overrides, and avoids both materializing a second foundation-scale
+            // parameter set and depending on post-forward reflection order. The helper validates
+            // the complete source/destination layer graph before rebinding anything; an unsupported
+            // graph remains untouched and takes the exact streaming fallback below.
+            if (!copy.TryShareParametersFrom(this))
+            {
+                EnsureCloneParameterLayoutMatches(this, copy);
+#if NETFRAMEWORK
+                // IParameterizable's chunked API is unavailable on .NET Framework, so latent
+                // diffusion models deliberately expose no chunks there. Falling through to the
+                // streaming restore would therefore hand a non-empty clone a zero-length vector.
+                // The net471 target is retained for compatibility and cannot host foundation-scale
+                // models; use the contract-preserving flat path on that target only.
+                copy.SetParameters(GetParameters());
+#else
+                copy.SetParameterChunks(GetParameterChunks());
+#endif
+            }
+            return copy;
+        }
+    }
+
+    private static void EnsureCloneParameterLayoutMatches(
+        DiffusionModelBase<T> source,
+        DiffusionModelBase<T> destination)
+    {
+        var sourceLayout = source.ParameterLayout;
+        var destinationLayout = destination.ParameterLayout;
+        // Clone restoration may materialize a shape-resolved lazy child. Allocation timing is
+        // not part of the durable model schema, so validate the declared layout here while the
+        // exact fingerprint remains available to checkpoint/readiness boundaries.
+        if (string.Equals(sourceLayout.DeclaredLayoutFingerprint,
+                destinationLayout.DeclaredLayoutFingerprint,
+                StringComparison.Ordinal))
+            return;
+
+        var destinationById = destinationLayout.Slots.ToDictionary(
+            slot => slot.StableId,
+            StringComparer.Ordinal);
+        var differences = new List<string>();
+        for (int i = 0; i < sourceLayout.Slots.Count && differences.Count < 8; i++)
+        {
+            var sourceSlot = sourceLayout.Slots[i];
+            if (!destinationById.TryGetValue(sourceSlot.StableId, out var destinationSlot))
+            {
+                differences.Add($"missing '{sourceSlot.StableId}' ({sourceSlot.ParameterCount?.ToString() ?? "?"})");
+                continue;
+            }
+
+            if (sourceSlot.ParameterCount != destinationSlot.ParameterCount
+                || sourceSlot.Role != destinationSlot.Role
+                || sourceSlot.UpdatePolicy != destinationSlot.UpdatePolicy
+                || sourceSlot.Persistence != destinationSlot.Persistence
+                || sourceSlot.Ownership != destinationSlot.Ownership
+                || sourceSlot.Availability != destinationSlot.Availability
+                || !string.Equals(sourceSlot.ElementType, destinationSlot.ElementType,
+                    StringComparison.Ordinal)
+                || !ShapesEqual(sourceSlot.Shape, destinationSlot.Shape))
+            {
+                differences.Add(
+                    $"'{sourceSlot.StableId}' source={DescribeSlot(sourceSlot)}, "
+                    + $"clone={DescribeSlot(destinationSlot)}");
+            }
+        }
+
+        if (differences.Count < 8)
+        {
+            var sourceIds = new HashSet<string>(
+                sourceLayout.Slots.Select(slot => slot.StableId),
+                StringComparer.Ordinal);
+            for (int i = 0; i < destinationLayout.Slots.Count && differences.Count < 8; i++)
+            {
+                var slot = destinationLayout.Slots[i];
+                if (!sourceIds.Contains(slot.StableId))
+                    differences.Add($"extra '{slot.StableId}' ({slot.ParameterCount?.ToString() ?? "?"})");
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Clone configuration changed the parameter manifest for {source.GetType().Name}: "
+            + $"source declared/materialized={sourceLayout.ParameterCount?.ToString() ?? "?"}/"
+            + $"{sourceLayout.MaterializedParameterCount}, clone={destinationLayout.ParameterCount?.ToString() ?? "?"}/"
+            + $"{destinationLayout.MaterializedParameterCount}. "
+            + (differences.Count == 0
+                ? "Stable slot metadata or ordering differs."
+                : string.Join("; ", differences)));
+    }
+
+    private static string DescribeSlot(AiDotNet.Models.Parameters.ParameterSlotDescriptor slot)
+        => $"{slot.Readiness}, declared={slot.ParameterCount?.ToString() ?? "?"}, "
+           + $"materialized={slot.MaterializedParameterCount}, shape={DescribeShape(slot.Shape)}";
+
+    private static string DescribeShape(IReadOnlyList<int>? shape)
+        => shape is null ? "?" : $"[{string.Join(",", shape)}]";
+
+    private static bool ShapesEqual(IReadOnlyList<int>? left, IReadOnlyList<int>? right)
+    {
+        if (left is null || right is null) return left is null && right is null;
+        if (left.Count != right.Count) return false;
+        for (int i = 0; i < left.Count; i++)
+            if (left[i] != right[i]) return false;
+        return true;
+    }
 
     /// <inheritdoc />
     IFullModel<T, Tensor<T>, Tensor<T>> ICloneable<IFullModel<T, Tensor<T>, Tensor<T>>>.Clone()
@@ -1880,7 +2109,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// Creates a deep copy of the model.
     /// </summary>
     /// <returns>A new instance with the same parameters.</returns>
-    public abstract IDiffusionModel<T> Clone();
+    public virtual IDiffusionModel<T> Clone() => (IDiffusionModel<T>)DeepCopy();
 
     #endregion
 

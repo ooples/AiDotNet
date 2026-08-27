@@ -59,7 +59,7 @@ namespace AiDotNet.Finance.Risk;
     "https://doi.org/10.1111/mafi.70000",
     Year = 2026,
     Authors = "Barrera, Crépey, Gobet, Nguyen, and Saadeddine")]
-public class NeuralVaR<T> : RiskModelBase<T>
+public partial class NeuralVaR<T> : RiskModelBase<T>
 {
     #region Shared Fields
 
@@ -329,32 +329,6 @@ public class NeuralVaR<T> : RiskModelBase<T>
                 { "ParameterCount", GetParameterCount() }
             }
         };
-    }
-
-    /// <summary>
-    /// Executes CreateNewInstance for the NeuralVaR.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the NeuralVaR model, CreateNewInstance builds and wires up model components. This sets up the NeuralVaR architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new NeuralVaROptions<T>
-        {
-            NumFeatures = _options.NumFeatures,
-            ConfidenceLevel = _options.ConfidenceLevel,
-            TimeHorizon = _options.TimeHorizon,
-            HiddenLayers = _options.HiddenLayers,
-            HiddenDimension = _options.HiddenDimension,
-            LossFunction = _options.LossFunction
-        };
-
-        // Optimizers own model references and accumulated moment state. A clone must
-        // construct an optimizer bound to itself instead of sharing the source model's
-        // optimizer instance.
-        return new NeuralVaR<T>(Architecture, options, lossFunction: _lossFunction);
     }
 
     #endregion

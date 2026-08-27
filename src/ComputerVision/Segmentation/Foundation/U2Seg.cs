@@ -58,7 +58,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Unsupervised Universal Image Segmentation", "https://arxiv.org/abs/2312.17243", Year = 2024, Authors = "Dantong Niu, Xudong Wang, Xinyang Han, Long Lian, Roei Herzig, Trevor Darrell")]
-public class U2Seg<T> : Common.PanopticSegmentationBase<T>
+public partial class U2Seg<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly U2SegOptions _options;
 
@@ -315,63 +315,6 @@ public class U2Seg<T> : Common.PanopticSegmentationBase<T>
             },
             ModelData = SerializeForMetadata()
         };
-    }
-
-    /// <summary>
-    /// Writes U2Seg configuration to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height); writer.Write(_width); writer.Write(_channels);
-        writer.Write(_numClasses); writer.Write(_decoderDim); writer.Write(_dropRate);
-        writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty);
-        writer.Write(_encoderLayerEnd);
-        writer.Write(_channelDims.Length);
-        foreach (int dim in _channelDims) writer.Write(dim);
-        writer.Write(_depths.Length);
-        foreach (int depth in _depths) writer.Write(depth);
-    }
-
-    /// <summary>
-    /// Reads U2Seg configuration from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble();
-        _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32();
-        int dimCount = reader.ReadInt32();
-        for (int i = 0; i < dimCount; i++) _ = reader.ReadInt32();
-        int depthCount = reader.ReadInt32();
-        for (int i = 0; i < depthCount; i++) _ = reader.ReadInt32();
-    }
-
-    /// <summary>
-    /// Creates a new U2Seg instance with the same configuration but fresh weights.
-    /// </summary>
-    /// <returns>A new <see cref="U2Seg{T}"/> model.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return _useNativeMode
-            ? new U2Seg<T>(Architecture, Optimizer, LossFunction, _numClasses, _dropRate, _options)
-            : new U2Seg<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _options);
     }
 
     // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and sets _disposed,

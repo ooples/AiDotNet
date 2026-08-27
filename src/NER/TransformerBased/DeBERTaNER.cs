@@ -92,13 +92,4 @@ public class DeBERTaNER<T> : TransformerNERBase<T>
             "DeBERTa-NER", "He et al., ICLR 2021", optimizer)
     {
     }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new TransformerNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new DeBERTaNER<T>(Architecture, p, optionsCopy);
-        return new DeBERTaNER<T>(Architecture, optionsCopy);
-    }
 }
