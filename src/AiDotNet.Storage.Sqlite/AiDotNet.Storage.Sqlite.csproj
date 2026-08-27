@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <!--
@@ -7,7 +7,7 @@
       of it. Provides a precise SQL syntax validator for the program synthesizer.
       Matches the core package's TFM set.
     -->
-    <TargetFrameworks>net10.0;net471</TargetFrameworks>
+    <TargetFrameworks>net10.0;net8.0;net471</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
