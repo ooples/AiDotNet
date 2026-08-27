@@ -144,7 +144,12 @@ jobs:
           # lockstep with the core package, but only AiDotNet was ever packed here, so a consumer
           # told to add AiDotNet.Storage.Sqlite could not get it from NuGet at all. Packed with the
           # SAME version so an opt-in backend can never drift from the core it extends.
-          for proj in src/AiDotNet.Privacy.HE/AiDotNet.Privacy.HE.csproj                       src/AiDotNet.Storage.Sqlite/AiDotNet.Storage.Sqlite.csproj                       src/AiDotNet.Storage.Elasticsearch/AiDotNet.Storage.Elasticsearch.csproj                       src/AiDotNet.Storage.Neo4j/AiDotNet.Storage.Neo4j.csproj; do
+          #
+          # Postgres and Redis were not even in AiDotNet.sln until now, so they never compiled in CI
+          # and could not be packed at all. Dashboard declares its own <Version>1.0.0</Version>;
+          # /p:PackageVersion overrides that at pack time, so it publishes on the release version
+          # like everything else here.
+          for proj in src/AiDotNet.Privacy.HE/AiDotNet.Privacy.HE.csproj                       src/AiDotNet.Storage.Sqlite/AiDotNet.Storage.Sqlite.csproj                       src/AiDotNet.Storage.Elasticsearch/AiDotNet.Storage.Elasticsearch.csproj                       src/AiDotNet.Storage.Neo4j/AiDotNet.Storage.Neo4j.csproj                       src/AiDotNet.Storage.Postgres/AiDotNet.Storage.Postgres.csproj                       src/AiDotNet.Storage.Redis/AiDotNet.Storage.Redis.csproj                       src/AiDotNet.Dashboard/AiDotNet.Dashboard.csproj; do
             echo "Packing $proj"
             dotnet pack "$proj" -c Release -o out --no-build /p:PackageVersion=$version
           done
