@@ -53,6 +53,7 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
     private readonly int _controlPointCount;
     private readonly double _marginX;
     private readonly double _marginY;
+    private readonly double _localizationMargin;
     private readonly int _localizationFeatureSize;
 
     // The released localization head damps features before predicting control-point offsets,
@@ -87,6 +88,19 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
     public int OutputWidth => _outputWidth;
     public double MarginX => _marginX;
     public double MarginY => _marginY;
+
+    /// <summary>
+    /// Inset used for the localization network's identity bias, separately from the output grid's
+    /// <see cref="MarginX"/> / <see cref="MarginY"/>.
+    /// </summary>
+    /// <remarks>
+    /// The released SVTR rectifier does NOT reuse one margin for both point sets. Its localization
+    /// network seeds the SOURCE control points it regresses at a 0.01 inset, while the TARGET grid
+    /// the sampler warps onto is built at the configured 0.05 margins. Collapsing the two makes the
+    /// initial transform the identity by construction and removes the small source/target offset the
+    /// published initialization starts from.
+    /// </remarks>
+    public double LocalizationMargin => _localizationMargin;
     public override bool SupportsTraining => true;
     public SVTRThinPlateSplineLayer(
         int inputChannels = 3,
@@ -96,7 +110,8 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
         int outputWidth = 100,
         int controlPointCount = 20,
         double marginX = 0.05,
-        double marginY = 0.05)
+        double marginY = 0.05,
+        double localizationMargin = 0.01)
         : base([inputChannels, -1, -1], [inputChannels, outputHeight, outputWidth])
     {
         if (inputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inputChannels));
@@ -106,6 +121,8 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
             throw new ArgumentException("TPS requires an even control-point count of at least four.", nameof(controlPointCount));
         if (marginX <= 0 || marginX >= 0.5 || marginY <= 0 || marginY >= 0.5)
             throw new ArgumentOutOfRangeException(nameof(marginX));
+        if (localizationMargin <= 0 || localizationMargin >= 0.5)
+            throw new ArgumentOutOfRangeException(nameof(localizationMargin));
 
         _inputChannels = inputChannels;
         _localizationHeight = localizationHeight;
@@ -115,6 +132,7 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
         _controlPointCount = controlPointCount;
         _marginX = marginX;
         _marginY = marginY;
+        _localizationMargin = localizationMargin;
 
         AddConvBlock(32, pool: true);
         AddConvBlock(64, pool: true);
@@ -136,7 +154,7 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
         _controlBias = new Tensor<T>([controlPointCount * 2]);
         // Zero weights are intentional: the bias alone reproduces the target control points, so
         // the initial spatial transform is the identity before localization training begins.
-        InitializeIdentityControlBias(_controlBias, controlPointCount, marginX, marginY);
+        InitializeIdentityControlBias(_controlBias, controlPointCount, localizationMargin, localizationMargin);
         RegisterTrainableParameter(_controlWeights, PersistentTensorRole.Weights);
         AppendTrainableParameter(_controlBias, PersistentTensorRole.Biases);
 
@@ -251,6 +269,7 @@ public sealed partial class SVTRThinPlateSplineLayer<T> : LayerBase<T>, IShapeCo
         metadata["ControlPointCount"] = _controlPointCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["MarginX"] = _marginX.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["MarginY"] = _marginY.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["LocalizationMargin"] = _localizationMargin.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return metadata;
     }
 

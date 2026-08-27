@@ -200,7 +200,8 @@ public static class DeserializationHelper
                 TryGetInt(additionalParams, "OutputWidth") ?? 100,
                 TryGetInt(additionalParams, "ControlPointCount") ?? 20,
                 TryGetDouble(additionalParams, "MarginX") ?? 0.05,
-                TryGetDouble(additionalParams, "MarginY") ?? 0.05)
+                TryGetDouble(additionalParams, "MarginY") ?? 0.05,
+                TryGetDouble(additionalParams, "LocalizationMargin") ?? 0.01)
                 ?? throw new MissingLayerCtorException("Cannot construct SVTRThinPlateSplineLayer.");
         }
         else if (genericDef == typeof(NeuralNetworks.Layers.SVTRMixingBlockLayer<>))
