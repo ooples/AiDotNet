@@ -298,7 +298,7 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
                     string localId = chunk.StableId == "$"
                         ? entry.StableId
                         : entry.StableId + "/" + chunk.StableId;
-                    yield return new ParameterChunk<T>(localId, role, chunk.Tensor);
+                    yield return new ParameterChunk<T>(localId, role, chunk.Tensor, chunk.SourceTensor);
                 }
                 if (actual != expected)
                     throw new ParameterContractViolationException(

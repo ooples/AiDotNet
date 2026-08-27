@@ -6289,7 +6289,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                         : ParameterSlotRole.Trainable,
                     component.LowPrecisionTensor is not null
                         ? ValueSlot(component).Snapshot()
-                        : AsStoredScalarChunk(component.Tensor!));
+                        : AsStoredScalarChunk(component.Tensor!),
+                    // A sparse component is presented as a dense run of its non-zero values, so the
+                    // payload above is a DIFFERENT object from the registered tensor. Carry the
+                    // registered one so reference-keyed callers (gradient lookup) still resolve it.
+                    component.Tensor);
                 continue;
             }
 

@@ -1146,7 +1146,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             yield return new AiDotNet.Models.Parameters.ParameterChunk<T>(
                 "components/" + chunk.StableId,
                 chunk.Role,
-                chunk.Tensor);
+                chunk.Tensor,
+                // Re-prefixing the id must not drop the source-storage reference, or a sparse
+                // registered component becomes unresolvable to reference-keyed callers.
+                chunk.SourceTensor);
         }
     }
 
@@ -15710,18 +15713,44 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var allGrads = ComputeAndPublishParameterGradients(tape, lossTensor, sources: null);
         var grads = allGrads;
 
-        // Flatten exactly the parameter tensors selected by the shared training hook. This keeps
-        // IGradientComputable's gradient vector aligned with ApplyGradients, including model-owned
-        // tensors and off-chain trainable layers while excluding paper-frozen parameters.
-        var chunks = CollectModelTrainableTensors().ToList();
+        // Flatten in the CANONICAL PARAMETER ORDER, the one GetParameters / SetParameters use.
+        //
+        // THERE ARE TWO DIFFERENT WALKS OVER "the model's trainable tensors" and they do not agree.
+        // GetParameters flattens each layer through LayerBase.FillParameters, which follows the
+        // layer's DECLARED COMPONENT MANIFEST and therefore interleaves a layer's own weights with
+        // its sub-layers in declaration order. CollectModelTrainableTensors instead walks
+        // TapeTrainingStep.CollectParameters, which emits ALL of a layer's own tensors first and
+        // only then recurses into children. For a layer whose manifest declares a child BEFORE its
+        // own weights the two orders differ, so flattening gradients the second way produced a
+        // vector whose index i did not describe theta[i].
+        //
+        // Every consumer pairs the two: IGradientComputable's contract is that this vector lines up
+        // with the parameter vector, and the finite-difference conformance probe perturbs
+        // GetParameters()[i] while reading gradient[i]. The mismatch is invisible for the majority
+        // of models, whose manifests happen to list own weights first and therefore agree with the
+        // recursive walk, which is why it survived: it surfaced only on nested components, as
+        // gradients attributed to the wrong slot (ViTCoMer read -7.77e-4 at a slot whose true
+        // gradient is +7.78e-2) or as an exact zero from the fallback below (OccupancyNetwork).
+        //
+        // GetParameterStateChunks is that canonical walk, and it already carries the owning tensor
+        // for each chunk, so gradients can be looked up by reference against the same enumeration
+        // the flat parameter APIs are defined by. Its own scope contract says chunks must match
+        // exactly what ParameterCount / GetParameters / SetParameters operate on.
+        var chunks = GetParameterStateChunks().ToList();
+
+        // Ordering comes from the canonical walk; ELIGIBILITY still comes from the training hook.
+        // GetParameterStateChunks enumerates the whole parameter surface, including buffers and any
+        // weights a partial-freeze recipe deliberately excludes, so membership is checked against
+        // the selected set before a gradient is emitted. Without this a frozen backbone would
+        // receive a real gradient here and ApplyGradients would then move it, undoing the freeze
+        // that SelectTrainableParametersForTraining exists to enforce.
+        var selected = new HashSet<Tensor<T>>(
+            CollectModelTrainableTensors(),
+            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
 
         long totalLength = 0;
-        foreach (var paramTensor in chunks)
-        {
-            totalLength += grads.TryGetValue(paramTensor, out var sizingGrad)
-                ? sizingGrad.Length
-                : paramTensor.Length;
-        }
+        foreach (var chunk in chunks)
+            totalLength += chunk.Tensor.Length;
 
         var flatGradients = new Vector<T>((int)Math.Min(totalLength, int.MaxValue));
         // Write through the span, not the indexer. Vector<T>'s indexer is virtual and runs
@@ -15730,17 +15759,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // single allocation won. The span is resolved once and written contiguously.
         var destination = flatGradients.AsWritableSpan();
         int writeOffset = 0;
-        foreach (var paramTensor in chunks)
+        foreach (var chunk in chunks)
         {
-            if (grads.TryGetValue(paramTensor, out var grad))
+            // Size from the PAYLOAD but resolve the gradient by the SOURCE: they are the same
+            // object for an ordinary dense weight, and differ for a sparse component whose payload
+            // is the dense run of its non-zero values.
+            var paramTensor = chunk.Tensor;
+            var gradientKey = chunk.SourceTensor;
+            if (selected.Contains(gradientKey)
+                && grads.TryGetValue(gradientKey, out var grad)
+                && grad.Length == paramTensor.Length)
             {
                 for (int i = 0; i < grad.Length; i++)
                     destination[writeOffset++] = grad[i];
             }
             else
             {
-                // Written explicitly rather than relying on the ctor's zero-init: default(T)
-                // is not guaranteed to be NumOps.Zero for a custom numeric type.
+                // No recorded gradient for this slot: a buffer, a frozen sub-layer, or a chunk the
+                // backward never reached. Written explicitly rather than relying on the ctor's
+                // zero-init: default(T) is not guaranteed to be NumOps.Zero for a custom numeric
+                // type.
                 for (int i = 0; i < paramTensor.Length; i++)
                     destination[writeOffset++] = NumOps.Zero;
             }
@@ -15789,28 +15827,41 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (gradients == null)
             throw new ArgumentNullException(nameof(gradients));
 
-        var parameters = CollectModelTrainableTensors();
-        long expectedLength = 0;
-        foreach (var parameter in parameters)
-            expectedLength += parameter.Length;
+        // Consume the SAME canonical order ComputeGradients now emits, which is the order
+        // GetParameters / SetParameters define. Walking CollectModelTrainableTensors here instead
+        // would re-introduce the mismatch described on ComputeGradients from the other side: the
+        // two walks disagree for any layer whose declared component manifest interleaves a child
+        // with the layer's own weights, so a caller's gradient[i] would be subtracted from a
+        // different parameter than the one it belongs to.
+        //
+        // Apply through the flat parameter vector. That keeps the alignment true BY CONSTRUCTION
+        // rather than by two walks happening to agree, and it is the only route that lands for
+        // every component kind: a ParameterChunk's tensor is the live storage for an ordinary
+        // dense weight, but a SNAPSHOT for sparse and low-precision components, whose restore path
+        // goes through the component's value slot. Writing chunk tensors in place would therefore
+        // silently fail to update a SparseLinearLayer's weights.
+        //
+        // Parameters the training hook excludes are safe: ComputeGradients emits an explicit zero
+        // for them, so a frozen backbone is subtracted by zero rather than skipped by position.
+        var parameters = GetParameters();
 
-        if (expectedLength != gradients.Length)
+        if (parameters.Length != gradients.Length)
         {
             throw new ArgumentException(
-                $"Gradient vector length {gradients.Length} does not match the selected trainable parameter length {expectedLength}.",
+                $"Gradient vector length {gradients.Length} does not match the parameter vector length {parameters.Length}.",
                 nameof(gradients));
         }
 
-        int offset = 0;
-        foreach (var parameter in parameters)
+        var updated = new Vector<T>(parameters.Length);
+        var destination = updated.AsWritableSpan();
+        for (int i = 0; i < parameters.Length; i++)
         {
-            for (int i = 0; i < parameter.Length; i++)
-            {
-                parameter[i] = NumOps.Subtract(
-                    parameter[i],
-                    NumOps.Multiply(learningRate, gradients[offset++]));
-            }
+            destination[i] = NumOps.Subtract(
+                parameters[i],
+                NumOps.Multiply(learningRate, gradients[i]));
         }
+
+        SetParameters(updated);
 
         InvalidateWeightCachesAfterSuccessfulWeightUpdate();
     }
