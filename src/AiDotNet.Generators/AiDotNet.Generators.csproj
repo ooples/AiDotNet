@@ -4,9 +4,10 @@
     <!-- Not shipped. release-please packs and pushes src/AiDotNet.csproj ALONE, so this
          produced a package nothing publishes or consumes. A BUILD-TIME source generator, consumed by AiDotNet and the test project through
        ProjectReference OutputItemType="Analyzer". Its output is compiled INTO those
-       assemblies, so a consumer of AiDotNet never needs the generator itself. Verified by
-       inspecting the package: AiDotNet.0.204.0.nupkg contains only lib/{net10.0,net8.0,net471}
-       and carries no analyzers/ entry at all. -->
+       assemblies. Consumers DO receive it, but through AiDotNet's own package: AiDotNet.csproj
+       includes this project's built dll at analyzers/dotnet/cs/, which is how a PackageReference
+       consumer gets the generated factories, and release-please fails the release if that entry
+       is missing. A second standalone package would be an unreferenced duplicate. -->
     <IsPackable>false</IsPackable>
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>latest</LangVersion>
