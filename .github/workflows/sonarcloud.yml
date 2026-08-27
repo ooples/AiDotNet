@@ -277,6 +277,9 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: write
     if: "${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
 
     steps:
@@ -349,17 +352,26 @@ jobs:
       - name: Build source generator first
         run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release --no-restore
 
-      - name: Build (Release)
-        # Windows-only workarounds (UseSharedCompilation=false, nodeReuse=false) are
-        # dropped — they existed to work around MSBuild file-locking on Windows and
-        # aren't needed on Linux. net471 cross-compiles on Linux via the modern SDK's
-        # auto-included reference assembly pack.
-        # Bound project-level compilation concurrency independently from the runner's
-        # four CPUs. With the generated source set, the default four-way build launches
-        # net8/net10/net471 csc processes together, reaches the 16-GB runner limit, and
-        # the kernel kills a compiler with exit 137. Two projects at a time retain
-        # parallel compilation without exceeding the measured memory envelope.
-        run: dotnet build -c Release --no-restore -m:2
+      - name: Build (Release, net10.0)
+        # SCOPED TO WHAT THE SHARDS ACTUALLY RUN. This job gates ~116 of them, and every
+        # one executes net10.0, so compiling net471 and net8.0 here put two frameworks
+        # nobody was waiting for onto the path everybody waits on. They now build in
+        # build-compat, concurrently. Measured: removing net8.0 alone saved 13 SECONDS off
+        # 13 minutes, which is what proved the job was bound by serialization rather than
+        # by total work -- freeing a slot at -m:2 just let another project take it.
+        #
+        # -m:4 rather than -m:2 for the same reason the cap existed: the 16-GB ceiling was
+        # reached by net8/net10/net471 csc processes running TOGETHER. One framework per
+        # job removes the condition that forced the throttle, so the runner's four cores
+        # can be used.
+        #
+        # Solution-wide `-f net10.0` is not possible: AiDotNet.Generators targets
+        # netstandard2.0 and would fail. Naming the test projects builds src and the
+        # satellites transitively at the right framework.
+        run: |
+          dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release --no-restore -f net10.0 -m:4
+          dotnet build tests/AiDotNet.ParameterSweepWorker/AiDotNet.ParameterSweepWorker.csproj -c Release --no-restore -m:4
+          dotnet build tests/AiDotNet.Serving.Tests/AiDotNet.Serving.Tests.csproj -c Release --no-restore -m:4
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
@@ -379,14 +391,6 @@ jobs:
             !**/bin/Release/net471/
           retention-days: 1
 
-      - name: Build NuGet package
-        run: dotnet pack --no-build -c Release --output ./artifacts
-
-      - name: Upload NuGet package
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
-        with:
-          name: nuget-packages
-          path: ./artifacts/*.nupkg
       # SHARD COVERAGE IS VERIFIED, NOT MAINTAINED BY HAND. The generated-layer
       # shards select classes by first-letter prefix, so a class emitted later
       # under an unlisted letter matches no shard, never runs, and nothing reports
@@ -400,6 +404,93 @@ jobs:
 
   # Sharded test execution for fast, parallel feedback and coverage generation (net10.0).
   # Coverage artifacts are consumed by the SonarCloud analysis job below.
+
+      # A build failure makes every downstream shard meaningless. GitHub skips jobs whose
+      # `needs` failed, but build-compat runs CONCURRENTLY with the shards by design, so
+      # its failure would otherwise leave ~116 of them running against a tree that does not
+      # compile. Cancelling the run stops the queued ones and the in-flight ones together.
+      - name: Cancel the run if this build failed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run cancel ${{ github.run_id }} --repo ${{ github.repository }}
+
+  # Everything the shards do NOT need, built concurrently with them instead of ahead of
+  # them: the net471 compatibility compile, net8.0, and the pack that requires all three.
+  # Compiling net471 is a real check -- it catches breakage a net10.0 build cannot see --
+  # it simply is not a check anything downstream waits on. It still blocks the merge, via
+  # ci-gate.
+  build-compat:
+    name: Build (compat frameworks + pack)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: write
+    needs: validation-source
+    if: "${{ (github.event_name != 'push' || needs.validation-source.outputs.reuse != 'true') && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /opt/ghc /usr/local/.ghcup || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          sudo rm -rf /usr/share/swift /usr/local/share/boost || true
+          sudo rm -rf /usr/share/miniconda || true
+          sudo apt-get clean
+          df -h /
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build source generator first
+        run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release --no-restore
+
+      # The full solution across all three frameworks. -m:2 is kept HERE and only here:
+      # this is the job that actually runs net8/net10/net471 csc processes together, which
+      # is the combination that reached the 16-GB ceiling and got a compiler killed with
+      # exit 137.
+      - name: Build (Release, all frameworks)
+        run: dotnet build -c Release --no-restore -m:2
+
+      - name: Build NuGet package
+        run: dotnet pack --no-build -c Release --output ./artifacts
+
+      - name: Upload NuGet package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: nuget-packages
+          path: ./artifacts/*.nupkg
+          retention-days: 1
+
+      # A build failure makes every downstream shard meaningless. GitHub skips jobs whose
+      # `needs` failed, but build-compat runs CONCURRENTLY with the shards by design, so
+      # its failure would otherwise leave ~116 of them running against a tree that does not
+      # compile. Cancelling the run stops the queued ones and the in-flight ones together.
+      - name: Cancel the run if this build failed
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run cancel ${{ github.run_id }} --repo ${{ github.repository }}
+
+
   test-net10-sharded:
     name: Tests (${{ matrix.shard.framework }}) - ${{ matrix.shard.name }}
     runs-on: ubuntu-latest
@@ -2841,6 +2932,7 @@ jobs:
     needs:
       - validation-source
       - build
+      - build-compat
       - test-net10-sharded
       - test-regression-analysis
       - ci-test-analysis
@@ -2851,6 +2943,7 @@ jobs:
       - name: Evaluate required jobs
         env:
           BUILD_RESULT: ${{ needs.build.result }}
+          BUILD_COMPAT_RESULT: ${{ needs.build-compat.result }}
           TESTS_RESULT: ${{ needs.test-net10-sharded.result }}
           REGRESSION_ANALYSIS_RESULT: ${{ needs.test-regression-analysis.result }}
           VERDICT_ENFORCED: ${{ needs.test-regression-analysis.outputs.verdict_enforced }}
@@ -2875,6 +2968,7 @@ jobs:
             echo "|---|---|"
             echo "| validation-source | $SOURCE_RESULT |"
             echo "| build | $BUILD_RESULT |"
+            echo "| build-compat | $BUILD_COMPAT_RESULT |"
             echo "| test-net10-sharded | $TESTS_RESULT |"
             echo "| test-regression-analysis | $REGRESSION_ANALYSIS_RESULT |"
             echo "| regression verdict enforced | ${VERDICT_ENFORCED:-false} |"
@@ -2884,7 +2978,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           failed=0
-          required=("validation-source:$SOURCE_RESULT" "build:$BUILD_RESULT" "sonarcloud:$SONAR_RESULT")
+          required=("validation-source:$SOURCE_RESULT" "build:$BUILD_RESULT" "build-compat:$BUILD_COMPAT_RESULT" "sonarcloud:$SONAR_RESULT")
           if [ "$REUSED_VALIDATION" = "true" ]; then
             required+=("promote-ci-test-analysis:$PROMOTION_RESULT")
           else
