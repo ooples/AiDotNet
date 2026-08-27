@@ -210,8 +210,8 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
     {
     }
 
-    public DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, double epsilon = 1.0, DeepQNetworkOptions? options = null) :
-        this(architecture, lossFunction, epsilon, isTargetNetwork: false, options: options)
+    public DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, double epsilon = 1.0, DeepQNetworkOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) :
+        this(architecture, lossFunction, epsilon, isTargetNetwork: false, options: options, optimizer: optimizer)
     {
     }
 
@@ -222,13 +222,31 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
     /// <param name="lossFunction">The loss function to use for training.</param>
     /// <param name="epsilon">The initial exploration rate.</param>
     /// <param name="isTargetNetwork">If true, this is a target network and won't create its own target network.</param>
-    private DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction, double epsilon, bool isTargetNetwork, DeepQNetworkOptions? options = null) :
+    private DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction, double epsilon, bool isTargetNetwork, DeepQNetworkOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _options = options ?? new DeepQNetworkOptions();
         Options = _options;
         _epsilon = NumOps.FromDouble(epsilon);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+
+        // THE PUBLISHED OPTIMIZER, NOT WHATEVER THE BASE DEFAULTS TO. _trainOptimizer was declared
+        // and never assigned, so Train handed TrainWithTape a null and the network learned through
+        // the base's generic optimizer -- none of Mnih et al. 2015's Extended Data Table 1 settings
+        // were in effect. That table specifies RMSProp at 0.00025 with gradient momentum 0.95,
+        // squared gradient momentum 0.95 and a minimum squared gradient of 0.01, the last being far
+        // larger than a generic epsilon precisely so the effective step stays bounded when recent
+        // gradients are small. Every value is an option, and a caller can still replace the whole
+        // optimizer.
+        _trainOptimizer = optimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new RootMeanSquarePropagationOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                InitialMomentum = _options.GradientMomentum,
+                Decay = _options.SquaredGradientMomentum,
+                Epsilon = _options.MinSquaredGradient,
+            });
 
         // Only create the target network if this is not already a target network (prevents infinite recursion)
         if (!isTargetNetwork)
