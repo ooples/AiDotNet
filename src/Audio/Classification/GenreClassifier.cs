@@ -51,7 +51,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Musical Genre Classification of Audio Signals", "https://doi.org/10.1109/TSA.2002.800560", Year = 2002, Authors = "George Tzanetakis, Perry Cook")]
-public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
+public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
 {
     #region Fields
 
@@ -608,57 +608,6 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
         metadata.AdditionalInfo["Genres"] = string.Join(", ", ClassLabels);
         metadata.AdditionalInfo["Mode"] = _useNativeMode ? "Native Training" : "ONNX Inference";
         return metadata;
-    }
-
-    /// <summary>
-    /// Serializes network-specific data.
-    /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(SampleRate);
-        writer.Write(ClassLabels.Count);
-        foreach (var label in ClassLabels)
-        {
-            writer.Write(label);
-        }
-        writer.Write(_options.NumMfccs);
-        writer.Write(_options.FftSize);
-        writer.Write(_options.HopLength);
-    }
-
-    /// <summary>
-    /// Deserializes network-specific data.
-    /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        base.SampleRate = reader.ReadInt32();
-        int numLabels = reader.ReadInt32();
-        var labels = new string[numLabels];
-        for (int i = 0; i < numLabels; i++)
-        {
-            labels[i] = reader.ReadString();
-        }
-        ClassLabels = labels;
-        _options.NumMfccs = reader.ReadInt32();
-        _options.FftSize = reader.ReadInt32();
-        _options.HopLength = reader.ReadInt32();
-    }
-
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException(
-                "CreateNewInstance is not supported for ONNX models. " +
-                "Create a new GenreClassifier with the model path instead.");
-        }
-
-        return new GenreClassifier<T>(
-            Architecture,
-            _options);
     }
 
     #endregion

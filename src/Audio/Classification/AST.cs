@@ -101,7 +101,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("AST: Audio Spectrogram Transformer", "https://arxiv.org/abs/2104.01778", Year = 2021, Authors = "Yuan Gong, Yu-An Chung, James Glass")]
-public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
+public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
 
@@ -569,92 +569,10 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.NumMels);
-        writer.Write(_options.FftSize);
-        writer.Write(_options.HopLength);
-        writer.Write(_options.EmbeddingDim);
-        writer.Write(_options.NumEncoderLayers);
-        writer.Write(_options.NumAttentionHeads);
-        writer.Write(_options.FeedForwardDim);
-        writer.Write(_options.PatchSize);
-        writer.Write(_options.PatchStride);
-        writer.Write(_options.Threshold);
-        writer.Write(_options.WindowSize);
-        writer.Write(_options.WindowOverlap);
-        writer.Write(_options.DropoutRate);
-        writer.Write((int)_options.FMin);
-        writer.Write((int)_options.FMax);
 
-        writer.Write(ClassLabels.Count);
-        foreach (var label in ClassLabels)
-        {
-            writer.Write(label);
-        }
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string modelPath = reader.ReadString();
-        if (!string.IsNullOrEmpty(modelPath))
-        {
-            _options.ModelPath = modelPath;
-        }
 
-        _options.SampleRate = reader.ReadInt32();
-        _options.NumMels = reader.ReadInt32();
-        _options.FftSize = reader.ReadInt32();
-        _options.HopLength = reader.ReadInt32();
-        _options.EmbeddingDim = reader.ReadInt32();
-        _options.NumEncoderLayers = reader.ReadInt32();
-        _options.NumAttentionHeads = reader.ReadInt32();
-        _options.FeedForwardDim = reader.ReadInt32();
-        _options.PatchSize = reader.ReadInt32();
-        _options.PatchStride = reader.ReadInt32();
-        _options.Threshold = reader.ReadDouble();
-        _options.WindowSize = reader.ReadDouble();
-        _options.WindowOverlap = reader.ReadDouble();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.FMin = reader.ReadInt32();
-        _options.FMax = reader.ReadInt32();
-
-        int numLabels = reader.ReadInt32();
-        var labels = new string[numLabels];
-        for (int i = 0; i < numLabels; i++)
-        {
-            labels[i] = reader.ReadString();
-        }
-        ClassLabels = labels;
-
-        _melSpectrogram = new MelSpectrogram<T>(
-            sampleRate: _options.SampleRate,
-            nMels: _options.NumMels,
-            nFft: _options.FftSize,
-            hopLength: _options.HopLength,
-            fMin: _options.FMin,
-            fMax: _options.FMax,
-            logMel: true);
-
-        if (!_useNativeMode && _options.ModelPath is { } onnxModelPath && !string.IsNullOrEmpty(onnxModelPath))
-        {
-            OnnxEncoder = new OnnxModel<T>(onnxModelPath, _options.OnnxOptions);
-        }
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new ASTOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new AST<T>(Architecture, mp, options);
-        return new AST<T>(Architecture, options);
-    }
 
     #endregion
 

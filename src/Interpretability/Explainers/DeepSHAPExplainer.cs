@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
@@ -48,6 +49,7 @@ public class DeepSHAPExplainer<T> : ILocalExplainer<T, DeepSHAPExplanation<T>>, 
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly Func<Vector<T>, Vector<T>> _predictFunction;
+    [Scratch]
     private readonly Func<Vector<T>, int, Vector<T>>? _gradientFunction;
     private readonly Func<Vector<T>, Vector<T>, Vector<T>>? _deepLiftMultipliers;
     private readonly Matrix<T> _backgroundData;

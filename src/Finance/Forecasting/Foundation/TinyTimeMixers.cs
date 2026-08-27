@@ -82,7 +82,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Tiny Time Mixers (TTMs): Fast Pre-trained Models for Enhanced Zero/Few-Shot Forecasting of Multivariate Time Series", "https://arxiv.org/abs/2401.03955", Year = 2024, Authors = "Vijay Ekambaram, Arindam Jati, Nam H. Nguyen, Phanwadee Sinthong, Jayant Kalagnanam")]
-public class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
+public partial class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Execution Mode
 
@@ -358,57 +358,10 @@ public class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new TinyTimeMixersOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            PatchLength = _patchLength,
-            HiddenDimension = _hiddenDimension,
-            NumMixerLayers = _numMixerLayers,
-            ExpansionFactor = _expansionFactor,
-            DropoutRate = _dropout,
-            ModelSize = _modelSize,
-            UseAdaptivePatching = _useAdaptivePatching,
-            NumFeatures = _numFeatures
-        };
 
-        return new TinyTimeMixers<T>(Architecture, options);
-    }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_patchLength);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numMixerLayers);
-        writer.Write(_expansionFactor);
-        writer.Write(_dropout);
-        writer.Write((int)_modelSize);
-        writer.Write(_useAdaptivePatching.HasValue);
-        if (_useAdaptivePatching.HasValue)
-            writer.Write(_useAdaptivePatching.Value);
-        writer.Write(_numFeatures);
-    }
 
-    /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _patchLength = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numMixerLayers = reader.ReadInt32();
-        _expansionFactor = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _modelSize = (FoundationModelSize)reader.ReadInt32();
-        bool hasAdaptive = reader.ReadBoolean();
-        _useAdaptivePatching = hasAdaptive ? reader.ReadBoolean() : null;
-        _numFeatures = reader.ReadInt32();
-    }
 
     #endregion
 

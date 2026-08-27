@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("SPLADE: Sparse Lexical and Expansion Model for First Stage Ranking", "https://arxiv.org/abs/2107.05720", Year = 2021, Authors = "Thibault Formal, Benjamin Piwowarski, Stephane Clinchant")]
-    public class SPLADE<T> : TransformerEmbeddingNetwork<T>
+    public partial class SPLADE<T> : TransformerEmbeddingNetwork<T>
     {
         private readonly SPLADEOptions _options;
 
@@ -198,23 +198,6 @@ namespace AiDotNet.NeuralNetworks
             return sparseVector;
         }
 
-        /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new SPLADE<T>(
-                Architecture,
-                null,
-                null,
-                _vocabSize,
-                EmbeddingDimension,
-                MaxTokens,
-                _numLayers,
-                _numHeads,
-                _feedForwardDim,
-                LossFunction,
-                Convert.ToDouble(MaxGradNorm));
-        }
-
         /// <summary>
         /// Retrieves detailed metadata about the SPLADE configuration.
         /// </summary>
@@ -228,24 +211,10 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <inheritdoc/>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            base.SerializeNetworkSpecificData(writer);
-            writer.Write(_vocabSize);
-            writer.Write(_numLayers);
-            writer.Write(_numHeads);
-            writer.Write(_feedForwardDim);
-        }
+
 
         /// <inheritdoc/>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            base.DeserializeNetworkSpecificData(reader);
-            _vocabSize = reader.ReadInt32();
-            _numLayers = reader.ReadInt32();
-            _numHeads = reader.ReadInt32();
-            _feedForwardDim = reader.ReadInt32();
-        }
+
 
         /// <inheritdoc/>
         public override Task<Vector<T>> EmbedAsync(string text)

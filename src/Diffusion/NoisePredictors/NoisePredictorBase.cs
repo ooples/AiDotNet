@@ -1,4 +1,5 @@
-﻿using System.Linq;
+using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
@@ -29,11 +30,54 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// extend this base class.
 /// </para>
 /// </remarks>
-public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
+public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     AiDotNet.Models.Parameters.IParameterLayoutSource,
     AiDotNet.Models.Parameters.IParameterManifestProvider,
     AiDotNet.Models.Parameters.IParameterSurfaceLifecycle, IDisposable
 {
+    // --- declared state (ModelStateRegistry) ---
+    // Identical in every model base because these bases are siblings over the same interfaces rather
+    // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.
+
+    /// <summary>State that is not a parameter vector, declared once and persisted by this base.</summary>
+    private readonly AiDotNet.Models.ModelStateRegistry<T> _declaredState = new();
+    private bool _declaredStateRegistered;
+
+    /// <summary>
+    /// Declare state here that the parameter vector does not carry -- a retained training set,
+    /// fitted knots, kernel centres, an ensemble's children. Both halves of the payload are driven
+    /// by the declaration, so they cannot drift.
+    /// </summary>
+    /// <param name="state">The registry to declare into.</param>
+    protected virtual void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+    }
+    /// <summary>Generated state declarations for fields declared across this model's hierarchy.</summary>
+    /// <param name="state">The registry to declare into.</param>
+    /// <remarks>
+    /// Emitted by ModelStateGenerator into the partial model, so a model author declares nothing. The
+    /// hand-written <c>RegisterState</c> beside it exists only for state the classifier genuinely
+    /// cannot place; anything it CAN place belongs here, where it cannot be forgotten.
+    /// </remarks>
+    protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        RegisterGeneratedStateCore(state);
+    }
+
+    /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>
+    protected AiDotNet.Models.ModelStateRegistry<T> DeclaredState
+    {
+        get
+        {
+            if (!_declaredStateRegistered)
+            {
+                _declaredStateRegistered = true;
+                RegisterGeneratedState(_declaredState);
+                RegisterState(_declaredState);
+            }
+            return _declaredState;
+        }
+    }
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
     /// </summary>
@@ -530,7 +574,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
             if (TryGetDeclaredParameterCount(out long declaredCount, out _))
                 return declaredCount;
 
-            EnsureParametersReadyGuarded();
+            PrepareParameterSurface(AiDotNet.Models.Parameters.ParameterSurfaceIntent.Read);
             long total = 0;
             foreach (var slot in EnumerateParameterValueSlots())
             {
@@ -579,8 +623,8 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
 
     /// <summary>
     /// Builds any layer objects whose dimensions are fixed by construction, without allocating
-    /// their weight tensors. Deferred-construction predictors override this independently from
-    /// <see cref="EnsureParametersReady"/>, whose explicit read/write path may materialize values.
+    /// their weight tensors. Deferred-construction predictors override this shape-only hook;
+    /// concrete reads and writes are materialized uniformly by the layer lifecycle below.
     /// </summary>
     protected virtual void EnsureParameterStructureReady()
     {
@@ -659,8 +703,12 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
                     streamingEngaged = true;
                 }
 
-                ((AiDotNet.Models.Parameters.IParameterSurfaceLifecycle)lb)
-                    .PrepareParameterSurface(AiDotNet.Models.Parameters.ParameterSurfaceIntent.Read);
+                // LayerBase<T> declares IParameterSurfaceLifecycle in its base list, so the type
+                // test this replaces was always true (CodeQL: useless type test). The cast is still
+                // needed because LayerBase implements the member EXPLICITLY, which keeps it off the
+                // public surface.
+                ((AiDotNet.Models.Parameters.IParameterSurfaceLifecycle)lb).PrepareParameterSurface(
+                    AiDotNet.Models.Parameters.ParameterSurfaceIntent.Read);
             }
 
             // STATE slots, not trainable-only: this enumeration backs the flat vector and the chunk
@@ -682,98 +730,40 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     }
 
     /// <summary>
-    /// Brings lazily-built layers into existence before their parameters are read or written.
-    /// Does nothing by default, which is correct for the predictors that build eagerly.
+    /// The chunk surface's slots: the same walk as <see cref="EnumerateParameterValueSlots"/> but
+    /// covering every component <c>GetOwnParameterStateChunks</c> emits, so the chunk pair is
+    /// symmetric where the flat pair is the narrower trainable-only optimizer view.
     /// </summary>
-    /// <remarks>
-    /// A predictor with lazy weights overrides this, and must use the SAME resolution on every
-    /// path. UNetNoisePredictor is the cautionary case: it resolved shape-only when read and for
-    /// real when written, so the count described one model and the restore built another, and
-    /// restoring grew it from 3,146,496 to 5,006,595.
-    /// </remarks>
-    protected virtual void EnsureParametersReady()
+    private IEnumerable<LayerBase<T>.ParameterStateWriteTarget> EnumerateParameterStateValueSlots()
     {
-    }
-
-    /// <summary>
-    /// The instance whose <see cref="EnsureParametersReady"/> is currently running on this thread,
-    /// or null. Per-thread so concurrent predictors never suppress each other's resolution, and
-    /// saved/restored around each call so a nested resolution on a DIFFERENT predictor still runs.
-    /// </summary>
-    [ThreadStatic]
-    private static object? _resolvingParametersFor;
-
-    /// <summary>
-    /// The predictor whose streaming-engagement decision is currently being made on this thread,
-    /// or null. Same shape and reason as <see cref="_resolvingParametersFor"/>, for the second
-    /// cycle through this heuristic:
-    /// <para>
-    /// ParameterCount -&gt; EnumerateParameterValueSlots -&gt; MaybeEngageWeightStreaming -&gt;
-    /// ParameterCount.
-    /// </para>
-    /// <para>
-    /// EnumerateParameterValueSlots guards its own call with a LOCAL flag, which a nested
-    /// enumeration re-creates as false, so the local guard cannot see the outer call. The
-    /// _streamingEngaged flag cannot break it either: the re-entry happens while the engagement
-    /// decision is still being made, which is precisely when nothing has engaged yet. Like the
-    /// resolution guard, this overflowed the stack instead of failing a test, so it aborted the
-    /// whole run with no failing test named.
-    /// </para>
-    /// </summary>
-    [ThreadStatic]
-    private static object? _decidingStreamingEngagementFor;
-
-    /// <summary>
-    /// Calls <see cref="EnsureParametersReady"/>, but returns immediately if this same predictor is
-    /// already resolving on this thread.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Lazy predictors resolve their shapes by running a real forward pass, and the forward path
-    /// consults the weight-streaming heuristic, which reads <see cref="ParameterCount"/> -- which
-    /// resolves. That closes a cycle with no base case:
-    /// </para>
-    /// <para>
-    /// ParameterCount -&gt; EnsureParametersReady -&gt; TriggerLazyShapeResolution -&gt; PredictNoise
-    /// -&gt; BeginWeightStreamingForward -&gt; MaybeEngageWeightStreaming -&gt; ParameterCount.
-    /// </para>
-    /// <para>
-    /// It overflowed the stack rather than failing a test, so it killed the whole test host: the
-    /// parameter sweeps reported "Test Run Aborted" with empty logs and no artifacts instead of
-    /// naming a failing model. The <c>_streamingEngaged</c> flag cannot break the cycle because the
-    /// re-entry happens at the ParameterCount READ, before anything has engaged.
-    /// </para>
-    /// <para>
-    /// Returning early is correct, not just a stack guard: the outer call is already resolving, so
-    /// the inner read sees whatever is materialized so far. The streaming heuristic that triggers
-    /// the re-entry only needs a count to compare against a threshold, and a predictor mid-resolve
-    /// is by definition not yet finished building.
-    /// </para>
-    /// </remarks>
-    private protected void EnsureParametersReadyGuarded()
-    {
-        if (ReferenceEquals(_resolvingParametersFor, this)) return;
-
-        object? previous = _resolvingParametersFor;
-        _resolvingParametersFor = this;
-        try
+        foreach (var layer in ReflectInstanceLayers(this))
         {
-            EnsureParametersReady();
-        }
-        finally
-        {
-            _resolvingParametersFor = previous;
+            if (layer is not LayerBase<T> lb) continue;
+            foreach (var target in lb.GetOwnParameterStateWriteTargets())
+            {
+                if (target.ScalarCount == 0) continue;
+                yield return target;
+            }
         }
     }
 
     /// <inheritdoc />
     void AiDotNet.Models.Parameters.IParameterSurfaceLifecycle.PrepareParameterSurface(
         AiDotNet.Models.Parameters.ParameterSurfaceIntent intent)
+        => PrepareParameterSurface(intent);
+
+    /// <summary>
+    /// Advances the reflected layer graph through the one shared parameter lifecycle. Shape-only
+    /// queries never allocate; every concrete operation asks each generated layer manifest to
+    /// materialize exactly its construction-declared slots. Predictor authors therefore do not
+    /// need value-readiness overrides or dummy forwards.
+    /// </summary>
+    private void PrepareParameterSurface(
+        AiDotNet.Models.Parameters.ParameterSurfaceIntent intent)
     {
         EnsureParameterStructureReady();
         if (intent == AiDotNet.Models.Parameters.ParameterSurfaceIntent.Describe) return;
 
-        EnsureParametersReadyGuarded();
         foreach (var layer in ReflectInstanceLayers(this))
         {
             if (layer is AiDotNet.Models.Parameters.IParameterSurfaceLifecycle lifecycle)
@@ -862,20 +852,37 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     }
 
     /// <summary>
-    /// Collects this predictor's reflectable trainable weight tensors (skipping null / empty),
-    /// summing their lengths, and reports whether that sum equals <see cref="ParameterCount"/> — i.e.
-    /// whether reflection sees the FULL parameter set. Only then is the flat-free per-tensor chunk
-    /// path (used by both <see cref="GetParameterChunks"/> and <see cref="SetParameterChunks"/>) safe;
-    /// otherwise those fall back to the legacy flat path so a predictor with non-LayerBase weight
-    /// storage (or unresolved lazy weights) round-trips correctly rather than dropping weights. Both
-    /// callers use this same walk on the same instance, so Get and Set agree on order by construction.
+    /// Collects the slots backing this predictor's CHUNK surface (skipping null / empty), summing
+    /// their lengths, and reports whether that sum equals <see cref="ParameterCount"/> — i.e. whether
+    /// reflection sees the FULL parameter set. Only then is the flat-free per-tensor chunk path (used
+    /// by both <see cref="GetParameterChunks"/> and <see cref="SetParameterChunks"/>) safe; otherwise
+    /// those fall back to the legacy flat path so a predictor with non-LayerBase weight storage (or
+    /// unresolved lazy weights) round-trips correctly rather than dropping weights. Both callers use
+    /// this same walk on the same instance, so Get and Set agree on order by construction.
     /// </summary>
+    /// <remarks>
+    /// The walk must be the STATE surface, not the trainable-only one. ParameterCount and the
+    /// declared manifest both count buffers, so collecting trainable slots made the gate compare
+    /// 88,860 against 95,116: it could never pass, every predictor silently collapsed to a single
+    /// flat blob (the failure mode the ParameterCount remarks warn about), and the resulting stream
+    /// was then too wide for the trainable-only SetParameters that consumed it.
+    /// </remarks>
     private bool TryCollectReflectedParameterSlots(
-        out List<LayerBase<T>.TrainableParameterValueSlot> slots)
+        out List<LayerBase<T>.ParameterStateWriteTarget> slots)
     {
-        slots = new List<LayerBase<T>.TrainableParameterValueSlot>();
+        slots = new List<LayerBase<T>.ParameterStateWriteTarget>();
+
+        // Ready the parameter structure BEFORE walking it. The completeness gate below compares the
+        // reflected total against ParameterCount, whose getter readies the structure as a side effect
+        // -- so without this call the walk runs against a still-lazy graph while the comparand is
+        // materialized, the totals cannot agree, and the caller silently drops to the flat path. On a
+        // freshly cloned predictor that path then threw "Expected 88860 parameters, got 95116": the
+        // copy's own weights had never been brought up. Readying first leaves the fallback for what it
+        // was meant for -- genuinely non-LayerBase weight storage.
+        PrepareParameterSurface(AiDotNet.Models.Parameters.ParameterSurfaceIntent.Read);
+
         long total = 0;
-        foreach (var slot in EnumerateParameterValueSlots())
+        foreach (var slot in EnumerateParameterStateValueSlots())
         {
             slots.Add(slot);
             total += slot.ScalarCount;
@@ -914,19 +921,23 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
             // only tensor REFERENCES (no flat aggregate / no per-tensor data copy), so this stays
             // flat-free — matching the buffer-then-single-SetParameters atomicity of the legacy branch
             // and VAEModelBase/DiffusionModelBase without reintroducing the flat-vector OOM.
-            var pairs = new List<(Tensor<T> Src, LayerBase<T>.TrainableParameterValueSlot Dst)>(slots.Count);
-            foreach (var dst in slots)
+            var pairs = new List<(Tensor<T> Src, LayerBase<T>.ParameterStateWriteTarget Dst)>(slots.Count);
+            for (int chunkIndex = 0; chunkIndex < slots.Count; chunkIndex++)
             {
+                var dst = slots[chunkIndex];
                 if (!e.MoveNext())
                     throw new ArgumentException(
-                        "SetParameterChunks received fewer chunks than the predictor has parameter tensors.",
+                        $"SetParameterChunks received fewer chunks than the predictor has parameter tensors " +
+                        $"(missing chunk {chunkIndex} of {slots.Count}).",
                         nameof(chunks));
                 var src = e.Current;
                 if (src is null)
-                    throw new ArgumentException("Chunk sequence contains a null tensor.", nameof(chunks));
+                    throw new ArgumentException(
+                        $"Chunk sequence contains a null tensor at index {chunkIndex}.", nameof(chunks));
                 if (src.Length != dst.ScalarCount)
                     throw new ArgumentException(
-                        $"SetParameterChunks chunk length {src.Length} does not match parameter length {dst.ScalarCount}.",
+                        $"SetParameterChunks chunk {chunkIndex} length {src.Length} does not match " +
+                        $"parameter length {dst.ScalarCount}.",
                         nameof(chunks));
                 pairs.Add((src, dst));
             }
@@ -1098,25 +1109,6 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     {
         if (System.Threading.Volatile.Read(ref _streamingEngaged) != 0) return;
 
-        // Re-entry guard. Reading ParameterCount below walks EnumerateParameterValueSlots, which
-        // calls back into this method; returning early is correct rather than merely safe, because
-        // the outer call is already deciding and the inner one has nothing to add.
-        if (ReferenceEquals(_decidingStreamingEngagementFor, this)) return;
-
-        object? previousDeciding = _decidingStreamingEngagementFor;
-        _decidingStreamingEngagementFor = this;
-        try
-        {
-            MaybeEngageWeightStreamingCore();
-        }
-        finally
-        {
-            _decidingStreamingEngagementFor = previousDeciding;
-        }
-    }
-
-    private void MaybeEngageWeightStreamingCore()
-    {
         long threshold = StreamingThresholdOverride ?? DefaultStreamingThresholdParams;
         if (ParameterCount <= threshold) return;
 
@@ -1661,6 +1653,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     /// Cache for timestep embeddings to avoid recomputing sinusoidal embeddings
     /// for the same timestep during the denoising loop.
     /// </summary>
+    [Scratch]
     private readonly Dictionary<int, Tensor<T>> _timestepEmbeddingCache = new();
 
     /// <inheritdoc />
@@ -1747,7 +1740,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     /// this explicit value read materializes lazy tensors and emits those concrete values.</remarks>
     public virtual Vector<T> GetParameters()
     {
-        EnsureParametersReadyGuarded();
+        PrepareParameterSurface(AiDotNet.Models.Parameters.ParameterSurfaceIntent.Read);
 
         long total = 0;
         var slots = EnumerateParameterValueSlots().ToList();
@@ -1775,7 +1768,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     public virtual void SetParameters(Vector<T> parameters)
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-        EnsureParametersReadyGuarded();
+        PrepareParameterSurface(AiDotNet.Models.Parameters.ParameterSurfaceIntent.Restore);
 
         long expected = 0;
         var slots = EnumerateParameterValueSlots().ToList();
@@ -1815,6 +1808,13 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
         }
     }
 
+    /// <summary>Marks a payload whose weights are streamed per tensor rather than flattened.</summary>
+    /// <remarks>
+    /// Negative on purpose: a payload written before streaming existed opens with a vector LENGTH,
+    /// so the reader can tell the two apart without a version field.
+    /// </remarks>
+    private const int ChunkedParameterMarker = -424242;
+
     /// <summary>
     /// COW clone lever (#1624): shares each trainable weight tensor's STORAGE with <paramref name="source"/>
     /// via the global <see cref="AiDotNet.Helpers.CopyOnWriteCloneHelper"/> (O(1)-until-write), instead of
@@ -1825,6 +1825,10 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     /// </summary>
     protected bool TryShareParametersFrom(NoisePredictorBase<T> source)
         => AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(source, this);
+
+    private bool TryShareParametersFrom(NoisePredictorBase<T> source, out string mismatch)
+        => AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(
+            source, this, out mismatch);
 
     /// <inheritdoc />
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
@@ -1845,12 +1849,15 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
         ModelPersistenceGuard.EnforceBeforeSerialize();
         using var stream = new MemoryStream();
         SaveState(stream);
-        return stream.ToArray();
+        return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, stream.ToArray());
     }
 
     /// <inheritdoc />
     public virtual void Deserialize(byte[] data)
     {
+        // Strips and applies any declared-state trailer, so the body below reads the payload
+        // exactly as it did before this existed.
+        data = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, data);
         ThrowIfDisposed();
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         using var stream = new MemoryStream(data);
@@ -1964,8 +1971,49 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
                 $"vs current ({InputChannels}, {OutputChannels}, {BaseChannels}, {TimeEmbeddingDim}).");
         }
 
-        // Load model parameters
-        SetParameters(SerializationHelper<T>.DeserializeVector(reader));
+        // Matches the writer above, and still reads a file written before it: a legacy payload opens
+        // with the vector length, so anything that is not the sentinel is handed to the flat reader
+        // with that length already consumed.
+        int parameterMarker = reader.ReadInt32();
+        if (parameterMarker == ChunkedParameterMarker)
+        {
+            int chunkCount = reader.ReadInt32();
+            var restored = new List<Tensor<T>>(chunkCount);
+            for (int c = 0; c < chunkCount; c++)
+            {
+                int length = reader.ReadInt32();
+                var values = new T[length];
+                for (int i = 0; i < length; i++)
+                {
+                    values[i] = NumOps.FromDouble(reader.ReadDouble());
+                }
+
+                restored.Add(new Tensor<T>(new[] { length }, new Vector<T>(values)));
+            }
+
+            SetParameterChunks(restored);
+        }
+        else
+        {
+            if (parameterMarker < 0)
+            {
+                throw new InvalidOperationException(
+                    $"Unsupported parameter payload marker: {parameterMarker}.");
+            }
+
+            // The legacy payload's vector length was already consumed above while distinguishing it
+            // from the chunked sentinel. DeserializeVector(reader, expectedLength) expects to read
+            // that prefix itself, so calling it here interpreted the first parameter bytes as a
+            // second length and failed for nested predictor state. Read the known-length body
+            // directly; ReadValue remains the exact inverse of SerializeVector's WriteValue for T.
+            var parameters = new Vector<T>(parameterMarker);
+            for (int i = 0; i < parameterMarker; i++)
+            {
+                parameters[i] = SerializationHelper<T>.ReadValue(reader);
+            }
+
+            SetParameters(parameters);
+        }
     }
 
     #endregion
@@ -2029,7 +2077,63 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     #region ICloneable<IFullModel<T, Tensor<T>, Tensor<T>>> Implementation
 
     /// <inheritdoc />
-    public abstract IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy();
+    /// <remarks>
+    /// <para>
+    /// No longer abstract. Declaring it abstract here is what produced 267 hand-written DeepCopy and
+    /// Clone pairs across this family -- one per model, each re-listing the constructor arguments
+    /// its type happens to take. The clone plan records that constructor at compile time, so the
+    /// rebuild is the same code for every model and a new argument cannot be forgotten in 266 places.
+    /// </para>
+    /// <para>
+    /// Configuration is rebuilt, learned state is carried through the model's own Serialize and
+    /// Deserialize -- the public, overridable pair, so a model that persists something extra keeps
+    /// it. The guard is told this is an internal operation because a clone is not a save.
+    /// </para>
+    /// </remarks>
+    public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            var copy = (NoisePredictorBase<T>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
+
+            // Copy the weights CHUNK BY CHUNK rather than through Serialize/Deserialize. The
+            // roundtrip funnels every parameter into one MemoryStream, and a foundation-scale
+            // predictor crosses the CLR's ~2 GB single-array ceiling on the way in. That cost is
+            // why eleven predictors grew their own hand-written Clone() overrides, and those
+            // overrides are where cloning defects accumulated -- one of them decided whether to
+            // copy weights at all from a flag that records "a forward has run", so a freshly
+            // constructed model was cloned with its weights discarded. Making the base both
+            // correct and cheap is what lets those overrides be deleted rather than each fixed.
+            // Make copy-on-write the common predictor clone path instead of requiring each large
+            // predictor to repeat it in an override. The helper performs a complete structural and
+            // per-tensor shape preflight before it mutates the destination, so the streaming copy
+            // remains the correctness fallback for custom or otherwise non-isomorphic graphs.
+            bool shared = copy.TryShareParametersFrom(this, out string shareMismatch);
+            if (!shared)
+                copy.SetParameterChunks(GetParameterChunks());
+
+            var sourceLayout = ParameterLayout;
+            var copyLayout = copy.ParameterLayout;
+            // Restoring a clone may allocate storage for a shape-resolved lazy slot. That changes
+            // readiness but not the durable parameter schema. Reject identity, role, shape, type,
+            // ownership, availability, order, or declared-count changes; allow only that lifecycle
+            // transition, using the common manifest contract rather than a predictor override.
+            if (!string.Equals(sourceLayout.DeclaredLayoutFingerprint,
+                    copyLayout.DeclaredLayoutFingerprint,
+                    StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Clone state transfer changed the parameter manifest for {GetType().Name}: "
+                    + $"source declared/materialized={sourceLayout.ParameterCount?.ToString() ?? "?"}/"
+                    + $"{sourceLayout.MaterializedParameterCount}, clone="
+                    + $"{copyLayout.ParameterCount?.ToString() ?? "?"}/{copyLayout.MaterializedParameterCount}. "
+                    + (shared ? "The copy-on-write transfer reported success."
+                        : $"Copy-on-write preflight rejected the clone because {shareMismatch}; "
+                          + "the streaming fallback did not restore an identical manifest."));
+            }
+            return copy;
+        }
+    }
 
     /// <inheritdoc />
     IFullModel<T, Tensor<T>, Tensor<T>> ICloneable<IFullModel<T, Tensor<T>, Tensor<T>>>.Clone()
@@ -2041,7 +2145,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape,
     /// Creates a deep copy of the noise predictor.
     /// </summary>
     /// <returns>A new instance with the same parameters.</returns>
-    public abstract INoisePredictor<T> Clone();
+    public virtual INoisePredictor<T> Clone() => (INoisePredictor<T>)DeepCopy();
 
     #endregion
 

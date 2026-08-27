@@ -25,7 +25,7 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// just the answer key alone.
 /// </para>
 /// </remarks>
-public abstract class SemiSupervisedClassifierBase<T> : ClassifierBase<T>, ISemiSupervisedClassifier<T>
+public abstract partial class SemiSupervisedClassifierBase<T> : ClassifierBase<T>, ISemiSupervisedClassifier<T>
 {
     /// <summary>
     /// Gets or sets the number of labeled samples used in training.

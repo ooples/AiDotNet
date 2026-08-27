@@ -45,7 +45,7 @@ namespace AiDotNet.Audio.Emotion;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("WavLM: Large-Scale Self-Supervised Pre-Training for Full Stack Speech Processing", "https://arxiv.org/abs/2110.13900", Year = 2022, Authors = "Sanyuan Chen, Chengyi Wang, Zhengyang Chen, Yu Wu, Shujie Liu, Zhuo Chen, Jinyu Li, Naoyuki Kanda, Takuya Yoshioka, Xiong Xiao, Jian Wu, Long Zhou, Shuo Ren, Yanmin Qian, Yao Qian, Jian Wu, Michael Zeng, Xiangzhan Yu, Furu Wei")]
-internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
+internal partial class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
 {
     #region Fields
 
@@ -352,34 +352,9 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.Variant); w.Write(_options.NumMels);
-        w.Write(_options.HiddenDim); w.Write(_options.NumLayers); w.Write(_options.NumAttentionHeads);
-        w.Write(_options.FeedForwardDim); w.Write(_options.FeatureEncoderDim);
-        w.Write(_options.NumClasses); w.Write(_options.DropoutRate);
-        w.Write(_options.EmotionLabels.Length); foreach (var l in _options.EmotionLabels) w.Write(l);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.Variant = r.ReadString(); _options.NumMels = r.ReadInt32();
-        _options.HiddenDim = r.ReadInt32(); _options.NumLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32();
-        _options.FeedForwardDim = r.ReadInt32(); _options.FeatureEncoderDim = r.ReadInt32();
-        _options.NumClasses = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
-        int n = r.ReadInt32(); _options.EmotionLabels = new string[n]; for (int i = 0; i < n; i++) _options.EmotionLabels[i] = r.ReadString();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var copiedOptions = new WavLMSEROptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new WavLMSER<T>(Architecture, mp, copiedOptions);
-        return new WavLMSER<T>(Architecture, copiedOptions);
-    }
+
 
     #endregion
 

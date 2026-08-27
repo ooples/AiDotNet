@@ -61,6 +61,7 @@ public partial class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// The power spectral density (periodogram) values for each frequency.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _periodogram;
 
     /// <summary>
@@ -249,28 +250,7 @@ public partial class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
     /// - The calculated periodogram (power spectral density)
     /// </para>
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        // Serialize SpectralAnalysisOptions
-        writer.Write(_spectralOptions.NFFT);
-        writer.Write(_spectralOptions.UseWindowFunction);
-        writer.Write((int)_spectralOptions.WindowFunction.GetWindowFunctionType());
-        writer.Write(_spectralOptions.OverlapPercentage);
 
-        // Serialize frequencies
-        writer.Write(_frequencies.Length);
-        for (int i = 0; i < _frequencies.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_frequencies[i]));
-        }
-
-        // Serialize periodogram
-        writer.Write(_periodogram.Length);
-        for (int i = 0; i < _periodogram.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_periodogram[i]));
-        }
-    }
 
     /// <summary>
     /// Deserializes the model's core parameters from a binary reader.
@@ -286,38 +266,7 @@ public partial class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
     /// This allows you to train a model once and then use it many times without retraining.
     /// </para>
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        // Deserialize SpectralAnalysisOptions
-        int nfft = reader.ReadInt32();
-        bool useWindowFunction = reader.ReadBoolean();
-        WindowFunctionType windowFunctionType = (WindowFunctionType)reader.ReadInt32();
-        int overlapPercentage = reader.ReadInt32();
 
-        _spectralOptions = new SpectralAnalysisOptions<T>
-        {
-            NFFT = nfft,
-            UseWindowFunction = useWindowFunction,
-            WindowFunction = WindowFunctionFactory.CreateWindowFunction<T>(windowFunctionType),
-            OverlapPercentage = overlapPercentage
-        };
-
-        // Deserialize frequencies
-        int frequenciesLength = reader.ReadInt32();
-        _frequencies = new Vector<T>(frequenciesLength);
-        for (int i = 0; i < frequenciesLength; i++)
-        {
-            _frequencies[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Deserialize periodogram
-        int periodogramLength = reader.ReadInt32();
-        _periodogram = new Vector<T>(periodogramLength);
-        for (int i = 0; i < periodogramLength; i++)
-        {
-            _periodogram[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-    }
 
     /// <summary>
     /// Evaluates the performance of the trained model on test data.

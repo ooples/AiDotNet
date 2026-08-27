@@ -119,13 +119,4 @@ public class TriaffineNER<T> : SpanBasedNERBase<T>
             numLabels: NEROptions.NumLabels,
             dropoutRate: NEROptions.DropoutRate);
     }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new SpanBasedNEROptions(NEROptions);
-        if (!UseNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new TriaffineNER<T>(Architecture, p, optionsCopy);
-        return new TriaffineNER<T>(Architecture, optionsCopy);
-    }
 }

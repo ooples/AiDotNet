@@ -56,7 +56,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class RpropOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
+public partial class RpropOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
     /// The options specific to the Rprop optimizer.
@@ -508,27 +508,6 @@ public class RpropOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// of Rprop's learned state -- resuming without them would throw away everything the optimizer had worked out
     /// about the loss surface.</para>
     /// </remarks>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
-
-            writer.Write(_t);
-
-            SerializeVector(writer, _prevGradient);
-            SerializeVector(writer, _stepSize);
-
-            return ms.ToArray();
-        }
-    }
-
     private void SerializeVector(BinaryWriter writer, Vector<T>? vector)
     {
         writer.Write(vector is not null);
@@ -562,26 +541,6 @@ public class RpropOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// Restores the optimizer's state from a byte array previously created by <see cref="Serialize"/>.
     /// </summary>
     /// <param name="data">The byte array containing the serialized optimizer state.</param>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<RpropOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-            _t = reader.ReadInt32();
-
-            _prevGradient = DeserializeVector(reader);
-            _stepSize = DeserializeVector(reader);
-        }
-    }
-
     /// <summary>
     /// Generates a unique key for caching gradients based on the current state of the optimizer and input data.
     /// </summary>

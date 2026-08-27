@@ -25,7 +25,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Timon Willi, Jonathan Masci, Juergen Schmidhuber, Christian Osendorfer")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class RCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
+public partial class RCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly RCNPOptions<T, TInput, TOutput> _algoOptions;
 

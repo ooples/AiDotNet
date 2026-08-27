@@ -33,7 +33,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
+public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
     /// Describes this Lion instance for the fused kernel (Tensors
@@ -665,78 +665,6 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
-    }
-
-    /// <summary>
-    /// Serializes the optimizer's state into a byte array.
-    /// </summary>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method saves the optimizer's current state into a compact form.
-    /// You can use this to pause training, save your progress, and resume later from exactly where you left off.
-    /// Lion's single momentum state makes serialization more efficient than Adam.</para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            // Serialize base class data
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            // Serialize LionOptimizerOptions
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
-
-            // Serialize Lion-specific data
-            writer.Write(_t);
-            writer.Write(_m.Length);
-            foreach (var value in _m)
-            {
-                writer.Write(Convert.ToDouble(value));
-            }
-
-            return ms.ToArray();
-        }
-    }
-
-    /// <summary>
-    /// Deserializes the optimizer's state from a byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized optimizer state.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method rebuilds the optimizer's state from a saved snapshot.
-    /// Use this to resume training from a checkpoint, restoring all momentum and configuration exactly
-    /// as it was when you saved it.</para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            // Deserialize base class data
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            // Deserialize LionOptimizerOptions
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<LionOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-            InitializeAdaptiveParameters();
-
-            // Deserialize Lion-specific data
-            _t = reader.ReadInt32();
-            int mLength = reader.ReadInt32();
-            _m = new Vector<T>(mLength);
-            for (int i = 0; i < mLength; i++)
-            {
-                _m[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
     }
 
     /// <summary>

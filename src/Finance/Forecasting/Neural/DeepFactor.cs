@@ -567,46 +567,6 @@ public partial class DeepFactor<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a fresh copy of the model architecture.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new DeepFactorOptions<T>
-        {
-            LookbackWindow = _lookbackWindow,
-            ForecastHorizon = _forecastHorizon,
-            NumFactors = _numFactors,
-            FactorHiddenDimension = _factorHiddenDim,
-            LocalHiddenDimension = _localHiddenDim,
-            NumFactorLayers = _numFactorLayers,
-            NumLocalLayers = _numLocalLayers,
-            DropoutRate = _dropout
-        };
-
-        if (_useNativeMode)
-        {
-            return new DeepFactor<T>(Architecture, options);
-        }
-        else
-        {
-            // Use null-coalescing throw to satisfy null analysis across all framework targets
-            string onnxPath = OnnxModelPath ?? throw new InvalidOperationException(
-                "Cannot create new instance from ONNX mode when OnnxModelPath is not available.");
-            if (onnxPath.Length == 0)
-            {
-                throw new InvalidOperationException(
-                    "Cannot create new instance from ONNX mode when OnnxModelPath is empty.");
-            }
-            return new DeepFactor<T>(Architecture, onnxPath, options);
-        }
-    }
-
-    /// <summary>
     /// Writes DeepFactor-specific configuration during serialization.
     /// </summary>
     /// <remarks>
@@ -614,18 +574,7 @@ public partial class DeepFactor<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> Saves all the configuration needed to reconstruct this model.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_lookbackWindow);
-        writer.Write(_forecastHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_numFactors);
-        writer.Write(_factorHiddenDim);
-        writer.Write(_localHiddenDim);
-        writer.Write(_numFactorLayers);
-        writer.Write(_numLocalLayers);
-        writer.Write(_dropout);
-    }
+
 
     /// <summary>
     /// Reads DeepFactor-specific configuration during deserialization.
@@ -635,22 +584,7 @@ public partial class DeepFactor<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> Loads the configuration that was saved during serialization.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _lookbackWindow = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _numFactors = reader.ReadInt32();
-        _factorHiddenDim = reader.ReadInt32();
-        _localHiddenDim = reader.ReadInt32();
-        _numFactorLayers = reader.ReadInt32();
-        _numLocalLayers = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
 
-        // Re-bind cached layer references so a deserialized/cloned model runs on
-        // the restored layers, not the construction-time random ones.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

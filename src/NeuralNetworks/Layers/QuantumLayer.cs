@@ -78,6 +78,7 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
     private readonly int _inputSize;
     private readonly int _numQubits;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<Complex<T>> _quantumCircuit;
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
 
@@ -102,13 +103,16 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _rotationAngles;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _angleGradients;
 
     /// <summary>
     /// Cached result amplitudes from Forward for use in Backward.
     /// Shape: [batch, dimension] for real and imaginary parts.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastResultReal;
+    [Scratch]
     private Tensor<T>? _lastResultImag;
     private readonly INumericOperations<Complex<T>> _complexOps;
 

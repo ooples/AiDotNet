@@ -768,73 +768,10 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_hiddenDim);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numDecoderLayers);
-        writer.Write(_numHeads);
-        writer.Write(_vocabSize);
-        writer.Write(ImageSize);
-        writer.Write(MaxSequenceLength);
-        writer.Write(_numClasses);
-        writer.Write(_useNativeMode);
-        writer.Write(_hasBuiltInClassHead);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int hiddenDim = reader.ReadInt32();
-        int numEncoderLayers = reader.ReadInt32();
-        int numDecoderLayers = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-        int vocabSize = reader.ReadInt32();
-        int imageSize = reader.ReadInt32();
-        int maxSeqLen = reader.ReadInt32();
-        int numClasses = reader.ReadInt32();
-        bool useNativeMode = reader.ReadBoolean();
-        _hasBuiltInClassHead = reader.ReadBoolean();
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSeqLen;
-
-        // Re-derive the classification-head reference from the layers the base just reconstructed. The
-        // base ClearLayers()+rebuilds Layers from the serialized metadata/params before calling this, but
-        // our _classHead FIELD still points at the orphaned pre-deserialize InitializeLayers instance
-        // (fresh random weights). Without re-pointing it, Forward would (a) fail to skip the real
-        // (restored) head in the sequential walk and (b) apply the stale random head after pooling — so a
-        // deserialized clone diverged by ~O(1) from the original (Clone_* failures). The head is the last
-        // layer (added last in InitializeLayers, order preserved through serialization).
-        //
-        // Only rebind when the ORIGINAL model actually created the built-in head. A custom
-        // Architecture.Layers stack owns no head — and if it happens to end in a DenseLayer, grabbing it
-        // as _classHead would wrongly skip that user layer in the sequential walk and reapply it after
-        // pooling. In that case leave _classHead null so Forward runs the custom stack straight through.
-        if (_hasBuiltInClassHead && Layers.Count > 0)
-            _classHead = Layers[Layers.Count - 1] as DenseLayer<T>;
-        else
-            _classHead = null;
-
-        if (_hasBuiltInClassHead)
-        {
-            int encoderCount = 5 + 5 * _numEncoderLayers;
-            int decoderCount = 4 + _numDecoderLayers;
-            if (Layers.Count >= encoderCount + decoderCount + 1)
-            {
-                PartitionDefaultGraph(
-                    Layers.Take(encoderCount).ToArray(),
-                    Layers.Skip(encoderCount).Take(decoderCount).ToArray());
-            }
-        }
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new UDOP<T>(Architecture, _tokenizer, _numClasses, ImageSize, MaxSequenceLength,
-            _hiddenDim, _numEncoderLayers, _numDecoderLayers, _numHeads, _vocabSize);
-    }
 
     #endregion
 
@@ -1009,7 +946,8 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         }
     }
 
-    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+
 
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights

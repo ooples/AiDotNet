@@ -47,7 +47,7 @@ namespace AiDotNet.Diffusion.Audio;
 /// </remarks>
 [ComponentType(ComponentType.Encoder)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class GriffinLim<T>
+public partial class GriffinLim<T>
 {
     /// <summary>
     /// Provides numeric operations for the specific type T.
@@ -67,6 +67,7 @@ public class GriffinLim<T>
     /// <summary>
     /// Window tensor for GPU operations.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T>? _windowTensor;
 
     /// <summary>

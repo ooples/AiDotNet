@@ -1,4 +1,5 @@
 using AiDotNet.Engines;
+using AiDotNet.Attributes;
 using System.Collections.Generic;
 using AiDotNet.Models.Parameters;
 using AiDotNet.LinearAlgebra;
@@ -40,7 +41,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class TabTransformerBase<T> : IParameterSource<T>
+public abstract partial class TabTransformerBase<T> : IParameterSource<T>
 {
     /// <summary>
     /// Numeric operations helper for type T.
@@ -72,7 +73,9 @@ public abstract class TabTransformerBase<T> : IParameterSource<T>
     private readonly List<Tensor<T>?> _categoricalEmbeddingsGrad;
 
     // Column embeddings (learned position for each categorical feature)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _columnEmbeddings;  // [numCat, embDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _columnEmbeddingsGrad;
 
     // Transformer encoder layers
@@ -85,10 +88,15 @@ public abstract class TabTransformerBase<T> : IParameterSource<T>
     private readonly List<FullyConnectedLayer<T>> _mlpLayers;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _numericalFeaturesCache;
+    [Scratch]
     private Matrix<int>? _categoricalIndicesCache;
+    [Scratch]
     private Tensor<T>? _embeddedCategoricalsCache;
+    [Scratch]
     private Tensor<T>? _transformedCategoricalsCache;
+    [Scratch]
     private Tensor<T>? _concatenatedCache;
 
     /// <summary>
@@ -111,7 +119,7 @@ public abstract class TabTransformerBase<T> : IParameterSource<T>
 
     /// <summary>Extra trainable layers a subclass contributes after the shared backbone.</summary>
     protected virtual IEnumerable<IParameterSource<T>> GetExtraTrainableLayers()
-        => System.Linq.Enumerable.Empty<IParameterSource<T>>();
+        => GeneratedParameterDiscovery.EnumerateDerivedSources<T>(this, typeof(TabTransformerBase<T>));
 
     /// <summary>The single ordered traversal of this model's parameter-bearing components.</summary>
     private ParameterComponentRegistry<T> ParameterRegistry

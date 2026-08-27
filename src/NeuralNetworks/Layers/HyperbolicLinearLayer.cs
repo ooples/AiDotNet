@@ -67,6 +67,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _weights;
 
     /// <summary>Cached W^T — invalidated when weights change.</summary>
+    [Scratch]
     private Tensor<T>? _weightsTCache;
 
     /// <summary>
@@ -86,6 +87,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stored input from forward pass for backpropagation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -96,16 +98,19 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stored pre-activation output for gradient computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Gradient for weights, stored during backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _weightsGradient;
 
     /// <summary>
     /// Gradient for biases, stored during backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
 

@@ -64,7 +64,7 @@ namespace AiDotNet.Classification.Ordinal;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Regression Models for Ordinal Data", "https://doi.org/10.1111/j.2517-6161.1980.tb01109.x", Year = 1980, Authors = "Peter McCullagh")]
-public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
+public partial class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
 
@@ -89,6 +89,7 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
     /// ordinal outcome. A positive coefficient means higher values of that feature push
     /// predictions toward higher classes (e.g., more stars).</para>
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _coefficients;
 
     /// <summary>
@@ -661,19 +662,6 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
     }
 
     /// <summary>
-    /// Creates a new instance of this model type.
-    /// </summary>
-    /// <returns>New instance with same hyperparameters.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Creates a fresh, untrained copy of the model with
-    /// the same configuration settings (learning rate, iterations, etc.).</para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new OrdinalLogisticRegression<T>(_learningRate, _maxIterations, _tolerance, _regularizationStrength);
-    }
-
-    /// <summary>
     /// Computes gradients for the model parameters.
     /// </summary>
     /// <param name="input">Input feature matrix.</param>
@@ -824,94 +812,6 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
             if (NumOps.LessThanOrEquals(_thresholds[k], _thresholds[k - 1]))
             {
                 _thresholds[k] = NumOps.FromDouble(NumOps.ToDouble(_thresholds[k - 1]) + 0.001);
-            }
-        }
-    }
-
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        var modelData = new Dictionary<string, object>
-        {
-            { "NumClasses", NumClasses },
-            { "NumFeatures", NumFeatures },
-            { "TaskType", (int)TaskType },
-            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() }
-        };
-
-        if (_coefficients is not null)
-        {
-            var coefArray = new double[_coefficients.Length];
-            for (int i = 0; i < _coefficients.Length; i++)
-                coefArray[i] = NumOps.ToDouble(_coefficients[i]);
-            modelData["Coefficients"] = coefArray;
-        }
-
-        if (_thresholds is not null)
-        {
-            var threshArray = new double[_thresholds.Length];
-            for (int i = 0; i < _thresholds.Length; i++)
-                threshArray[i] = NumOps.ToDouble(_thresholds[i]);
-            modelData["Thresholds"] = threshArray;
-        }
-
-        var modelMetadata = GetModelMetadata();
-        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        var jsonString = Encoding.UTF8.GetString(modelData);
-        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-
-        if (modelMetadata == null || modelMetadata.ModelData == null)
-            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
-
-        var modelDataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
-        var modelDataObj = JsonConvert.DeserializeObject<JObject>(modelDataString);
-
-        if (modelDataObj == null)
-            throw new InvalidOperationException("Deserialization failed: The model data is invalid or corrupted.");
-
-        NumClasses = modelDataObj["NumClasses"]?.ToObject<int>() ?? 0;
-        NumFeatures = modelDataObj["NumFeatures"]?.ToObject<int>() ?? 0;
-        TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
-
-        var classLabelsToken = modelDataObj["ClassLabels"];
-        if (classLabelsToken is not null)
-        {
-            var classLabelsAsDoubles = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (classLabelsAsDoubles.Length > 0)
-            {
-                ClassLabels = new Vector<T>(classLabelsAsDoubles.Length);
-                for (int i = 0; i < classLabelsAsDoubles.Length; i++)
-                    ClassLabels[i] = NumOps.FromDouble(classLabelsAsDoubles[i]);
-            }
-        }
-
-        var coefToken = modelDataObj["Coefficients"];
-        if (coefToken is not null)
-        {
-            var coefArray = coefToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (coefArray.Length > 0)
-            {
-                _coefficients = new Vector<T>(coefArray.Length);
-                for (int i = 0; i < coefArray.Length; i++)
-                    _coefficients[i] = NumOps.FromDouble(coefArray[i]);
-            }
-        }
-
-        var threshToken = modelDataObj["Thresholds"];
-        if (threshToken is not null)
-        {
-            var threshArray = threshToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (threshArray.Length > 0)
-            {
-                _thresholds = new Vector<T>(threshArray.Length);
-                for (int i = 0; i < threshArray.Length; i++)
-                    _thresholds[i] = NumOps.FromDouble(threshArray[i]);
             }
         }
     }

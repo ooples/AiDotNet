@@ -26,7 +26,7 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
+public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
     /// Describes this optimizer for the compiled fused-training kernel.
@@ -903,104 +903,6 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
             "GPU-accelerated L-BFGS is not yet implemented. L-BFGS requires maintaining gradient history " +
             "and performing two-loop recursion which is complex to implement efficiently on GPU. " +
             "Use CPU-based UpdateParameters or consider using Adam/AdamW for GPU-resident training.");
-    }
-
-    /// <summary>
-    /// Serializes the optimizer's state into a byte array.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method converts the current state of the optimizer, including its options and internal memory,
-    /// into a byte array. This allows the optimizer's state to be saved or transmitted.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like taking a snapshot of the optimizer's current state so it can be saved or sent somewhere else.
-    /// It includes all the important information about what the optimizer has learned so far.
-    /// </para>
-    /// </remarks>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
-
-            writer.Write(_iteration);
-            writer.Write(NumOps.ToDouble(_lbfgsInverseHessianScale));
-            writer.Write(_s.Count);
-            foreach (var vector in _s)
-            {
-                byte[] vectorData = vector.Serialize();
-                writer.Write(vectorData.Length);
-                writer.Write(vectorData);
-            }
-            writer.Write(_y.Count);
-            foreach (var vector in _y)
-            {
-                byte[] vectorData = vector.Serialize();
-                writer.Write(vectorData.Length);
-                writer.Write(vectorData);
-            }
-
-            return ms.ToArray();
-        }
-    }
-
-    /// <summary>
-    /// Deserializes a byte array to restore the optimizer's state.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method takes a byte array (previously created by the Serialize method) and uses it to restore
-    /// the optimizer's state, including its options and internal memory.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like loading a saved snapshot of the optimizer's state. It rebuilds the optimizer's memory
-    /// and settings from the saved data, allowing it to continue from where it left off.
-    /// </para>
-    /// </remarks>
-    /// <param name="data">The byte array containing the serialized optimizer state.</param>
-    /// <exception cref="InvalidOperationException">Thrown when deserialization of optimizer options fails.</exception>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<LBFGSOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-            _iteration = reader.ReadInt32();
-            _lbfgsInverseHessianScale = NumOps.FromDouble(reader.ReadDouble());
-
-            int sCount = reader.ReadInt32();
-            _s = new List<Vector<T>>(sCount);
-            for (int i = 0; i < sCount; i++)
-            {
-                int vectorLength = reader.ReadInt32();
-                byte[] vectorData = reader.ReadBytes(vectorLength);
-                _s.Add(Vector<T>.Deserialize(vectorData));
-            }
-
-            int yCount = reader.ReadInt32();
-            _y = new List<Vector<T>>(yCount);
-            for (int i = 0; i < yCount; i++)
-            {
-                int vectorLength = reader.ReadInt32();
-                byte[] vectorData = reader.ReadBytes(vectorLength);
-                _y.Add(Vector<T>.Deserialize(vectorData));
-            }
-        }
     }
 
     /// <inheritdoc />

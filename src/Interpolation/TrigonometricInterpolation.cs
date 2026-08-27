@@ -18,7 +18,7 @@ namespace AiDotNet.Interpolation;
 /// a smooth curve that passes through all your data points and can predict values between them.
 /// </para>
 /// </remarks>
-public class TrigonometricInterpolation<T> : IInterpolation<T>
+public partial class TrigonometricInterpolation<T> : IInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the data points.
@@ -33,11 +33,13 @@ public class TrigonometricInterpolation<T> : IInterpolation<T>
     /// <summary>
     /// The coefficients for the cosine terms in the Fourier series.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _a;
 
     /// <summary>
     /// The coefficients for the sine terms in the Fourier series.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _b;
 
     /// <summary>

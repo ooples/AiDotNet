@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Real-Time Computing Without Stable States", "https://doi.org/10.1162/089976602760407955")]
-public class LiquidStateMachine<T> : SequenceModelLayoutBase<T>
+public partial class LiquidStateMachine<T> : SequenceModelLayoutBase<T>
 {
     private readonly LiquidStateMachineOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -540,18 +540,7 @@ public class LiquidStateMachine<T> : SequenceModelLayoutBase<T>
     /// when loaded later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write LSM-specific properties
-        writer.Write(_reservoirSize);
-        writer.Write(NumOps.ToDouble(_connectionProbability));
-        writer.Write(NumOps.ToDouble(_spectralRadius));
-        writer.Write(NumOps.ToDouble(_inputScaling));
-        writer.Write(NumOps.ToDouble(_leakingRate));
 
-        // Write whether we're in training mode
-        writer.Write(IsTrainingMode);
-    }
 
     /// <summary>
     /// Deserializes Liquid State Machine-specific data from a binary reader.
@@ -575,17 +564,7 @@ public class LiquidStateMachine<T> : SequenceModelLayoutBase<T>
     /// when it was saved, preserving all its behavior and learned patterns.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _reservoirSize = reader.ReadInt32();
-        _connectionProbability = NumOps.FromDouble(reader.ReadDouble());
-        _spectralRadius = NumOps.FromDouble(reader.ReadDouble());
-        _inputScaling = NumOps.FromDouble(reader.ReadDouble());
-        _leakingRate = NumOps.FromDouble(reader.ReadDouble());
 
-        // Read training mode
-        IsTrainingMode = reader.ReadBoolean();
-    }
 
     /// <summary>
     /// Sets the training mode for the Liquid State Machine.
@@ -734,40 +713,5 @@ public class LiquidStateMachine<T> : SequenceModelLayoutBase<T>
             // the model stuck in training mode.
             SetTrainingMode(false);
         }
-    }
-
-    /// <summary>
-    /// Creates a new instance of the Liquid State Machine with the same architecture and configuration.
-    /// </summary>
-    /// <returns>A new Liquid State Machine instance with the same architecture and configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the Liquid State Machine with the same architecture and LSM-specific
-    /// parameters as the current instance. It's used in scenarios where a fresh copy of the model is needed
-    /// while maintaining the same configuration.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a brand new copy of the LSM with the same setup.
-    /// 
-    /// Think of it like creating a clone of the network:
-    /// - The new network has the same architecture (structure)
-    /// - It has the same reservoir size, connection probability, and other settings
-    /// - But it's a completely separate instance with its own internal state
-    /// - The reservoir will be randomly initialized again, creating a different random network
-    /// 
-    /// This is useful when you want to:
-    /// - Train multiple networks with the same configuration
-    /// - Compare how different random initializations affect learning
-    /// - Create an ensemble of models with the same parameters
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new LiquidStateMachine<T>(
-            this.Architecture,
-            _reservoirSize,
-            NumOps.ToDouble(_connectionProbability),
-            NumOps.ToDouble(_spectralRadius),
-            NumOps.ToDouble(_inputScaling),
-            NumOps.ToDouble(_leakingRate));
     }
 }

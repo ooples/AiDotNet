@@ -54,7 +54,7 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
 
     #region Fields
 
-    private readonly FinancialDQNAgentOptions<T> _options;
+    private readonly TradingAgentOptions<T> _options;
     private readonly INeuralNetwork<T> _qNetwork;
     [Buffer]
     private readonly INeuralNetwork<T> _targetNetwork;
@@ -101,13 +101,13 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     public FinancialDQNAgent(NeuralNetworkArchitecture<T> architecture, TradingAgentOptions<T> options)
         : base(options)
     {
-        _options = options as FinancialDQNAgentOptions<T> ?? new FinancialDQNAgentOptions<T>();
+        _options = options;
         _architecture = architecture;
 
         EnsureDefaultLayers(architecture, options.StateSize, options.ActionSize);
 
         _qNetwork = new NeuralNetwork<T>(architecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
-        _targetNetwork = new NeuralNetwork<T>(architecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        _targetNetwork = new NeuralNetwork<T>(architecture.CloneForModelConstruction(), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
         UpdateTargetNetwork();
     }
@@ -332,26 +332,6 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
 
     #region Serialization
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialDQNAgent model, Serialize saves or restores model-specific settings. This lets the FinancialDQNAgent architecture be reused later.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize() => _qNetwork.Serialize();
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialDQNAgent model, Deserialize saves or restores model-specific settings. This lets the FinancialDQNAgent architecture be reused later.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        _qNetwork.Deserialize(data);
-        UpdateTargetNetwork();
-    }
-
     #endregion
 
     #region Model Metadata
@@ -372,19 +352,6 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
                 { "ParameterCount", ParameterCount }
             }
         };
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialDQNAgent model, Clone performs a supporting step in the workflow. It keeps the FinancialDQNAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new FinancialDQNAgent<T>(_architecture, TradingOptions);
-        clone.SetParameters(GetParameters());
-        return clone;
     }
 
     /// <inheritdoc/>

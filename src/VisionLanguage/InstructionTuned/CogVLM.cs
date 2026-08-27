@@ -64,7 +64,7 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2023,
     Authors = "Wang et al."
 )]
-public class CogVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
+public partial class CogVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly CogVLMOptions _options;
 
@@ -292,45 +292,9 @@ public class CogVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.ImageSize);
-        writer.Write(_options.VisionDim);
-        writer.Write(_options.DecoderDim);
-        writer.Write(_options.NumVisionLayers);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.VisualExpertDim);
-        writer.Write(_options.NumVisualExpertHeads);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.ImageSize = reader.ReadInt32();
-        _options.VisionDim = reader.ReadInt32();
-        _options.DecoderDim = reader.ReadInt32();
-        _options.NumVisionLayers = reader.ReadInt32();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.VisualExpertDim = reader.ReadInt32();
-        _options.NumVisualExpertHeads = reader.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var cloneOptions = new CogVLMOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new CogVLM<T>(Architecture, mp, cloneOptions);
-        return new CogVLM<T>(Architecture, cloneOptions);
-    }
+
 
     private void ThrowIfDisposed()
     {

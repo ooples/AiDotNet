@@ -43,7 +43,7 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Spiking-FullSubNet: Spiking Neural Networks for Speech Enhancement", "https://arxiv.org/abs/2406.04662", Year = 2024, Authors = "Jiaying Lin, Rong Xie, Qi Liu")]
-public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+public partial class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -63,7 +63,7 @@ public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     private readonly ShortTimeFourierTransform<T> _stft;
     [Scratch]
     private Tensor<T>? _lastPhase;
-    [Buffer]
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Tensor<T>? _noiseProfile;
     private bool _useNativeMode;
     private bool _disposed;
@@ -282,34 +282,9 @@ public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.FftSize); w.Write(_options.HopLength);
-        w.Write(_options.NumFreqBins); w.Write(_options.NumFullBandLayers); w.Write(_options.FullBandHiddenSize);
-        w.Write(_options.NumSubBandLayers); w.Write(_options.SubBandHiddenSize);
-        w.Write(_options.SpikingThreshold); w.Write(_options.TimeConstant);
-        w.Write(_options.EnhancementStrength); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.FftSize = r.ReadInt32(); _options.HopLength = r.ReadInt32();
-        _options.NumFreqBins = r.ReadInt32(); _options.NumFullBandLayers = r.ReadInt32(); _options.FullBandHiddenSize = r.ReadInt32();
-        _options.NumSubBandLayers = r.ReadInt32(); _options.SubBandHiddenSize = r.ReadInt32();
-        _options.SpikingThreshold = r.ReadDouble(); _options.TimeConstant = r.ReadDouble();
-        _options.EnhancementStrength = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new SpikingFullSubNet<T>(Architecture, mp, _options);
-        return new SpikingFullSubNet<T>(Architecture, _options);
-    }
+
 
     #endregion
 

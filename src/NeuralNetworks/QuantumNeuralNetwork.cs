@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Preprocessing;
@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Parameterized Quantum Circuits as Machine Learning Models", "https://arxiv.org/abs/1906.07682")]
-public class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
+public partial class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly QuantumNeuralNetworkOptions _options;
 
@@ -320,41 +320,9 @@ public class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
         };
     }
 
-    /// <summary>
-    /// Serializes quantum neural network-specific data to a binary writer.
-    /// </summary>
-    /// <param name="writer">The BinaryWriter to write the data to.</param>
-    /// <remarks>
-    /// <para>
-    /// This method writes the specific parameters and state of the quantum neural network to a binary stream.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This saves the current state of the quantum neural network to a file.
-    /// It records all the important information about the network so you can reload it later exactly as it is now.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numQubits);
-    }
 
-    /// <summary>
-    /// Deserializes quantum neural network-specific data from a binary reader.
-    /// </summary>
-    /// <param name="reader">The BinaryReader to read the data from.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reads the specific parameters and state of the quantum neural network from a binary stream.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This loads a saved quantum neural network state from a file. It rebuilds the
-    /// network exactly as it was when you saved it, including all its learned information and quantum-specific settings.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _numQubits = reader.ReadInt32();
-    }
+
+
 
     /// <summary>
     /// Prepares a quantum state from a classical input tensor.
@@ -617,46 +585,5 @@ public class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
         }
 
         return complexTensor;
-    }
-
-    /// <summary>
-    /// Creates a new instance of the quantum neural network with the same configuration.
-    /// </summary>
-    /// <returns>
-    /// A new instance of <see cref="QuantumNeuralNetwork{T}"/> with the same configuration as the current instance.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new quantum neural network that has the same configuration as the current instance.
-    /// It's used for model persistence, cloning, and transferring the model's configuration to new instances.
-    /// The new instance will have the same architecture, number of qubits, normalizer, and loss function
-    /// as the original, but will not share parameter values unless they are explicitly copied after creation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method makes a fresh copy of the current model with the same settings.
-    /// 
-    /// It's like creating a blueprint copy of your quantum neural network that can be used to:
-    /// - Save your model's settings
-    /// - Create a new identical model
-    /// - Transfer your model's configuration to another system
-    /// 
-    /// This is useful when you want to:
-    /// - Create multiple similar quantum neural networks
-    /// - Save a model's configuration for later use
-    /// - Reset a model while keeping its quantum-specific settings
-    /// 
-    /// Note that while the settings are copied, the learned parameters are not automatically
-    /// transferred, so the new instance will need training or parameter copying to match
-    /// the performance of the original.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Create a new instance with the cloned architecture and same configuration
-        return new QuantumNeuralNetwork<T>(
-            Architecture,
-            _numQubits,
-            _preprocessingPipeline,
-            LossFunction
-        );
     }
 }

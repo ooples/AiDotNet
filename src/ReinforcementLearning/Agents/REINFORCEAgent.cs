@@ -414,44 +414,6 @@ public partial class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>, 
     }
 
     /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        writer.Write(_reinforceOptions.StateSize);
-        writer.Write(_reinforceOptions.ActionSize);
-
-        var policyBytes = _policyNetwork.Serialize();
-        writer.Write(policyBytes.Length);
-        writer.Write(policyBytes);
-
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        reader.ReadInt32(); // stateSize
-        reader.ReadInt32(); // actionSize
-
-        var policyLength = reader.ReadInt32();
-        var policyBytes = reader.ReadBytes(policyLength);
-        _policyNetwork.Deserialize(policyBytes);
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new REINFORCEAgent<T>(_reinforceOptions);
-        clone.SetParameters(GetParameters());
-        return clone;
-    }
-
-    /// <inheritdoc/>
     public Vector<T> ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {

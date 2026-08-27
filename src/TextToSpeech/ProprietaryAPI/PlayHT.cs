@@ -35,7 +35,7 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 [ModelComplexity(ModelComplexity.Medium)]
 [ResearchPaper("PlayHT", "https://play.ht")]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class PlayHT<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class PlayHT<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly PlayHTOptions _options;
 
@@ -191,52 +191,9 @@ public class PlayHT<T> : TtsModelBase<T>, IEndToEndTts<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.HiddenDim);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.NumEncoderLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.MaxTextLength);
-        writer.Write(_options.HopSize);
-        writer.Write(_options.MelChannels);
-        writer.Write(_options.NumFlowSteps);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.HiddenDim = reader.ReadInt32();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.NumEncoderLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.MaxTextLength = reader.ReadInt32();
-        _options.HopSize = reader.ReadInt32();
-        _options.MelChannels = reader.ReadInt32();
-        _options.NumFlowSteps = reader.ReadInt32();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (IsOnnxMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new PlayHT<T>(Architecture, mp, _options);
-        return new PlayHT<T>(Architecture, _options, _optimizer);
-    }
+
 
     private void ThrowIfDisposed()
     {

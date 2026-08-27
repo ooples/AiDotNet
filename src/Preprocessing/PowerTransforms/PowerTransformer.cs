@@ -47,8 +47,11 @@ public class PowerTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly bool _standardize;
 
     // Fitted parameters
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _lambdas;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _mean;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _stdDev;
 
     /// <summary>

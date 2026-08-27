@@ -65,9 +65,11 @@ public partial class DiscoRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     private const double SpsaLearningRateMultiplier = 0.1;
 
     /// <summary>Skill basis vectors: numSkills * skillRank * compressedDim.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _skillBasis;
 
     /// <summary>Gating network parameters: compressedDim * numSkills.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _gatingParams;
 
     /// <inheritdoc/>

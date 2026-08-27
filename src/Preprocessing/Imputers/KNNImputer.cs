@@ -33,6 +33,7 @@ public class KNNImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly double _missingValue;
 
     // Fitted parameters
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _fitData;
 
     /// <summary>

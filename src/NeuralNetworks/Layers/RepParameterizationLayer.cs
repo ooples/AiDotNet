@@ -61,6 +61,7 @@ public partial class RepParameterizationLayer<T> : LayerBase<T>, IShapeContract
     /// It represents the center of the distribution from which samples are drawn. The tensor is null
     /// before the first forward pass or after a reset.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastMean;
 
     /// <summary>
@@ -71,6 +72,7 @@ public partial class RepParameterizationLayer<T> : LayerBase<T>, IShapeContract
     /// Log variance is used instead of variance for numerical stability. It represents the spread of the
     /// distribution from which samples are drawn. The tensor is null before the first forward pass or after a reset.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastLogVar;
 
     /// <summary>
@@ -82,6 +84,7 @@ public partial class RepParameterizationLayer<T> : LayerBase<T>, IShapeContract
     /// distribution. Saving these values is necessary for the backward pass. The tensor is null
     /// before the first forward pass or after a reset.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastEpsilon;
 
     /// <summary>
@@ -120,9 +123,13 @@ public partial class RepParameterizationLayer<T> : LayerBase<T>, IShapeContract
     private int[]? _originalInputShape;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuMean;
+    [ExternalState]
     private Tensor<T>? _gpuLogVar;
+    [ExternalState]
     private Tensor<T>? _gpuEpsilon;
+    [ExternalState]
     private Tensor<T>? _gpuStdDev;
     private int _gpuBatchSize;
     private int _gpuLatentSize;

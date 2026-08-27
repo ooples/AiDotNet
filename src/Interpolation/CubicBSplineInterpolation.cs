@@ -15,7 +15,7 @@ namespace AiDotNet.Interpolation;
 /// flexible ruler that naturally creates gentle curves.
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
-public class CubicBSplineInterpolation<T> : IInterpolation<T>
+public partial class CubicBSplineInterpolation<T> : IInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the data points.
@@ -34,11 +34,13 @@ public class CubicBSplineInterpolation<T> : IInterpolation<T>
     /// <b>For Beginners:</b> Knots are special points that help define how the curve behaves.
     /// They're like invisible control points that determine where the curve bends.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _knots;
 
     /// <summary>
     /// The calculated coefficients that define the B-spline curve.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _coefficients;
 
     /// <summary>

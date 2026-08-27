@@ -148,6 +148,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     /// It needs to remember this input during training so it can calculate how to improve.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -163,6 +164,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     /// affect the overall network performance.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -178,6 +180,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     /// negative values mean it should increase.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _depthwiseKernelsGradient;
 
     /// <summary>
@@ -193,6 +196,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     /// for the parameters that mix information between channels.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _pointwiseKernelsGradient;
 
     /// <summary>
@@ -208,6 +212,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     /// because they directly shift the output values.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
@@ -298,6 +303,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     /// similar to how a ball rolling downhill gathers momentum.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _depthwiseKernelsVelocity;
 
     /// <summary>
@@ -313,6 +319,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     /// mix information between channels.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _pointwiseKernelsVelocity;
 
     /// <summary>
@@ -328,35 +335,53 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     /// the history of previous updates.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _biasesVelocity;
 
     #region GPU Training Fields
+    [ExternalState]
     private Tensor<T>? _gpuLastInput;
+    [ExternalState]
     private Tensor<T>? _gpuLastOutput;
 
     // GPU weight buffers
+    [ExternalState]
     private Tensor<T>? _gpuDepthwiseKernels;
+    [ExternalState]
     private Tensor<T>? _gpuPointwiseKernels;
+    [ExternalState]
     private Tensor<T>? _gpuBiases;
 
     // GPU gradient buffers
+    [ExternalState]
     private Tensor<T>? _gpuDepthwiseKernelsGradient;
+    [ExternalState]
     private Tensor<T>? _gpuPointwiseKernelsGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesGradient;
 
     // GPU velocity buffers (SGD momentum)
+    [ExternalState]
     private Tensor<T>? _gpuDepthwiseKernelsVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuPointwiseKernelsVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesVelocityGpu;
 
     // GPU Adam first moment buffers
+    [ExternalState]
     private Tensor<T>? _gpuDepthwiseKernelsM;
+    [ExternalState]
     private Tensor<T>? _gpuPointwiseKernelsM;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesM;
 
     // GPU Adam second moment buffers
+    [ExternalState]
     private Tensor<T>? _gpuDepthwiseKernelsV;
+    [ExternalState]
     private Tensor<T>? _gpuPointwiseKernelsV;
+    [ExternalState]
     private Tensor<T>? _gpuBiasesV;
     #endregion
 

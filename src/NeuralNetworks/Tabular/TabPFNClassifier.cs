@@ -57,22 +57,17 @@ public class TabPFNClassifier<T> : TabPFNBase<T>
     private readonly int _numClasses;
     private readonly FullyConnectedLayer<T> _classificationHead;
 
+    [Scratch]
     private Tensor<T>? _backboneOutputCache;
+    [Scratch]
     private Tensor<T>? _logitsCache;
+    [Scratch]
     private Tensor<T>? _probabilitiesCache;
 
     /// <summary>
     /// Gets the number of output classes.
     /// </summary>
     public int NumClasses => _numClasses;
-
-    /// <summary>
-    /// Gets the total number of trainable parameters.
-    /// </summary>
-    /// <inheritdoc />
-    /// <remarks>The head, folded after the shared backbone by the base's single traversal.</remarks>
-    protected override IEnumerable<ILayer<T>> GetExtraTrainableLayers()
-        => new ILayer<T>[] { _classificationHead };
 
     /// <summary>
     /// Initializes a new instance of the TabPFNClassifier class.

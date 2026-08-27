@@ -92,7 +92,7 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
     "https://arxiv.org/abs/1609.02907",
     Year = 2017,
     Authors = "Thomas N. Kipf, Max Welling")]
-public class GraphClassificationModel<T> : GraphModelLayoutBase<T>
+public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
 {
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -763,66 +763,6 @@ public class GraphClassificationModel<T> : GraphModelLayoutBase<T>
                 ["PoolingType"] = _poolingType.ToString()
             }
         };
-    }
-
-    /// <summary>
-    /// Serializes network-specific data to a binary writer.
-    /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(InputFeatures);
-        writer.Write(NumClasses);
-        writer.Write(HiddenDim);
-        writer.Write(EmbeddingDim);
-        writer.Write(NumGnnLayers);
-        writer.Write(DropoutRate);
-        writer.Write((int)_poolingType);
-
-        SerializationHelper<T>.SerializeInterface(writer, _lossFunction);
-        SerializationHelper<T>.SerializeInterface(writer, _optimizer);
-    }
-
-    /// <summary>
-    /// Deserializes network-specific data from a binary reader.
-    /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); // InputFeatures
-        _ = reader.ReadInt32(); // NumClasses
-        _ = reader.ReadInt32(); // HiddenDim
-        _ = reader.ReadInt32(); // EmbeddingDim
-        _ = reader.ReadInt32(); // NumGnnLayers
-        _ = reader.ReadDouble(); // DropoutRate
-        _ = reader.ReadInt32(); // PoolingType
-
-        _ = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader);
-        _ = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader);
-    }
-
-    /// <summary>
-    /// Creates a new instance of this network type for cloning or deserialization.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var clone = new GraphClassificationModel<T>(
-            architecture: Architecture,
-            hiddenDim: HiddenDim,
-            embeddingDim: EmbeddingDim,
-            numGnnLayers: NumGnnLayers,
-            dropoutRate: DropoutRate,
-            poolingType: _poolingType);
-        // Graph STATE is model state in this stateful-adjacency design, so a clone of a configured
-        // model must stay usable: carry the implicit-identity opt-in and any explicit adjacency.
-        if (_implicitIdentityWhenUnset)
-        {
-            clone.EnableImplicitIdentityAdjacency();
-        }
-        else if (_cachedAdjacencyMatrix is not null)
-        {
-            clone.SetAdjacencyMatrix(_cachedAdjacencyMatrix);
-        }
-
-        return clone;
     }
 
     #endregion

@@ -66,6 +66,7 @@ public partial class MultiplyLayer<T> : LayerBase<T>, IShapeContract
     /// This field stores the output tensor from the most recent forward pass, which is needed
     /// during the backward pass for gradient calculation.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>

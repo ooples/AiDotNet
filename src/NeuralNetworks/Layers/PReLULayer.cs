@@ -67,6 +67,9 @@ public partial class PReLULayer<T> : LayerBase<T>
     /// </summary>
     public Tensor<T> GetAlphaTensor() => _alpha;
 
+    /// <summary>Construction state: the 'initialAlpha' the layer was built with.</summary>
+    private readonly double _initialAlpha;
+
     /// <summary>Gets the number of independently learned negative slopes.</summary>
     public int NumParameters => _numParameters;
 
@@ -93,6 +96,7 @@ public partial class PReLULayer<T> : LayerBase<T>
     public PReLULayer(int numParameters = 1, int channelAxis = 1, double initialAlpha = 0.25)
         : base(new[] { -1 }, new[] { -1 })
     {
+        _initialAlpha = initialAlpha;
         if (numParameters < 1)
             throw new ArgumentException("numParameters must be at least 1.", nameof(numParameters));
         if (numParameters > 1 && channelAxis < 0)
@@ -188,17 +192,5 @@ public partial class PReLULayer<T> : LayerBase<T>
     public override void ResetState()
     {
         _lastInput = null;
-    }
-
-    /// <inheritdoc/>
-    public override LayerBase<T> Clone()
-    {
-        var copy = new PReLULayer<T>(_numParameters, _channelAxis,
-            Convert.ToDouble(_alpha.Data.Span[0]));
-        // Copy current α values so Clone preserves trained state, not just init state.
-        var dst = copy._alpha.Data.Span;
-        var src = _alpha.Data.Span;
-        for (int i = 0; i < _alpha.Length; i++) dst[i] = src[i];
-        return copy;
     }
 }

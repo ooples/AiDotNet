@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Griffin: Mixing Gated Linear Recurrences with Local Attention for Efficient Language Models", "https://arxiv.org/abs/2402.19427", Year = 2024, Authors = "Soham De, Samuel L. Smith, Anushan Fernando, Aleksandar Botev, George Cristian-Muraru, Albert Gu, Ruba Haroun, Leonard Berrada, Yutian Chen, Srivatsan Srinivasan, Guillaume Desjardins, Arnaud Doucet, David Budden, Yee Whye Teh, Razvan Pascanu, Nando De Freitas, Caglar Gulcehre")]
-public class GriffinLanguageModel<T> : TokenLanguageModelLayoutBase<T>
+public partial class GriffinLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly GriffinOptions _options;
     private readonly int _vocabSize;
@@ -169,46 +169,9 @@ public class GriffinLanguageModel<T> : TokenLanguageModelLayoutBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_vocabSize);
-        writer.Write(_modelDimension);
-        writer.Write(_numLayers);
-        writer.Write(_maxSeqLength);
-        // RecurrenceDimension is configurable and sizes the whole RG-LRU stack, but it was not
-        // in the payload -- so a checkpoint saved with a non-default width reloaded at the
-        // default and mismatched its own weights.
-        writer.Write(_recurrenceDimension);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
 
-        // VALIDATED, NOT APPLIED. The layer stack was already built from the options this
-        // instance was constructed with, so a differing saved width cannot be adopted here --
-        // the weights about to be loaded would not fit. Reporting the mismatch names the cause;
-        // staying silent would load a checkpoint into a wrong-width model, which fails later as
-        // an opaque parameter-count error or, worse, does not fail at all.
-        int savedRecurrenceDimension = reader.ReadInt32();
-        if (savedRecurrenceDimension != _recurrenceDimension)
-        {
-            throw new InvalidOperationException(
-                $"Checkpoint was saved with RecurrenceDimension {savedRecurrenceDimension} but this "
-                + $"instance was built with {_recurrenceDimension}. Set RecurrenceDimension on the "
-                + "options before loading this checkpoint.");
-        }
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new GriffinLanguageModel<T>(
-            Architecture, _vocabSize, _modelDimension, _numLayers, _maxSeqLength,
-            LossFunction, new GriffinOptions(_options), optimizer: null);
-    }
 
     #endregion
 }

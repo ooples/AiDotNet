@@ -266,28 +266,6 @@ public partial class ImagicModel<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        var clonedOptions = GetOptions() is DiffusionModelOptions<T> options
-            ? new DiffusionModelOptions<T>(options)
-            : null;
-
-        return new ImagicModel<T>(
-            architecture: Architecture,
-            options: clonedOptions,
-            scheduler: new DDIMScheduler<T>(Scheduler.Config),
-            unet: (UNetNoisePredictor<T>)_unet.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

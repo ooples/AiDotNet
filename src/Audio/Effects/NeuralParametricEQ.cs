@@ -41,7 +41,7 @@ namespace AiDotNet.Audio.Effects;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Style Transfer of Audio Effects with Differentiable Signal Processing", "https://arxiv.org/abs/2207.08759", Year = 2022, Authors = "Christian J. Steinmetz, Nicholas J. Bryan, Joshua D. Reiss")]
-public class NeuralParametricEQ<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+public partial class NeuralParametricEQ<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -203,31 +203,9 @@ public class NeuralParametricEQ<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.Variant);
-        w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers);
-        w.Write(_options.NumBands); w.Write(_options.FFTSize);
-        w.Write(_options.GainRange); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.Variant = r.ReadString();
-        _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32();
-        _options.NumBands = r.ReadInt32(); _options.FFTSize = r.ReadInt32();
-        _options.GainRange = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new NeuralParametricEQ<T>(Architecture, mp, _options);
-        return new NeuralParametricEQ<T>(Architecture, _options);
-    }
+
 
     #endregion
 

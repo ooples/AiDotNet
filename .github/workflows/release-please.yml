@@ -151,7 +151,14 @@ jobs:
               echo "$files" | grep -qE "^lib/${tfm}/.+\.dll$" || { echo "Error: Missing ${tfm} lib in $pkg"; exit 1; }
               echo "Found ${tfm} in $(basename "$pkg")"
             done
+            echo "$files" | grep -q '^analyzers/dotnet/cs/AiDotNet.Generators.dll$' || {
+              echo "Error: Missing packaged source generator in $pkg"; exit 1;
+            }
           done
+
+      - name: Verify PackageReference consumer gets generated factories automatically
+        shell: pwsh
+        run: ./scripts/Verify-NuGetGenerator.ps1 -PackagePath "out/AiDotNet.${{ needs.release-please.outputs.version }}.nupkg"
 
       - name: Push to NuGet
         run: |

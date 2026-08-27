@@ -30,7 +30,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// (frozen) reduces trainable parameters from 1,000,000 to just 16,000!
 /// </para>
 /// </remarks>
-public class StandardLoRAAdapter<T> : LoRAAdapterBase<T>
+public partial class StandardLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Initializes a new Standard LoRA adapter wrapping an existing layer.

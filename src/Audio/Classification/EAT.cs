@@ -57,7 +57,7 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("EAT: Self-Supervised Pre-Training with Efficient Audio Transformer", "https://arxiv.org/abs/2401.03497", Year = 2024, Authors = "Wenxi Chen, Yuzhe Liang, Ziyang Ma, Zhisheng Zheng, Xie Chen")]
-public class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
+public partial class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
 
@@ -244,34 +244,9 @@ public class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate); writer.Write(_options.NumMels); writer.Write(_options.FftSize); writer.Write(_options.HopLength);
-        writer.Write(_options.EmbeddingDim); writer.Write(_options.NumEncoderLayers); writer.Write(_options.NumAttentionHeads); writer.Write(_options.FeedForwardDim);
-        writer.Write(_options.PatchSize); writer.Write(_options.PatchStride); writer.Write(_options.Threshold); writer.Write(_options.WindowSize); writer.Write(_options.WindowOverlap); writer.Write(_options.DropoutRate);
-        writer.Write((int)_options.FMin); writer.Write((int)_options.FMax);
-        writer.Write(ClassLabels.Count); foreach (var label in ClassLabels) writer.Write(label);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32(); _options.NumMels = reader.ReadInt32(); _options.FftSize = reader.ReadInt32(); _options.HopLength = reader.ReadInt32();
-        _options.EmbeddingDim = reader.ReadInt32(); _options.NumEncoderLayers = reader.ReadInt32(); _options.NumAttentionHeads = reader.ReadInt32(); _options.FeedForwardDim = reader.ReadInt32();
-        _options.PatchSize = reader.ReadInt32(); _options.PatchStride = reader.ReadInt32(); _options.Threshold = reader.ReadDouble(); _options.WindowSize = reader.ReadDouble(); _options.WindowOverlap = reader.ReadDouble(); _options.DropoutRate = reader.ReadDouble();
-        _options.FMin = reader.ReadInt32(); _options.FMax = reader.ReadInt32();
-        int n = reader.ReadInt32(); var labels = new string[n]; for (int i = 0; i < n; i++) labels[i] = reader.ReadString(); ClassLabels = labels;
-        _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels, _options.FftSize, _options.HopLength, _options.FMin, _options.FMax, logMel: true);
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new EAT<T>(Architecture, mp, _options);
-        return new EAT<T>(Architecture, _options);
-    }
+
 
     #endregion
 

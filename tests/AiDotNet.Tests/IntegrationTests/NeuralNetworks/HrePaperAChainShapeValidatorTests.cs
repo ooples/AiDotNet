@@ -27,7 +27,7 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks;
 /// declares the same shape contract as HarmonicEngine's <c>HreReadoutLayer</c>,
 /// which is what surfaces the validator regression.</para>
 /// </summary>
-public class HrePaperAChainShapeValidatorTests
+public partial class HrePaperAChainShapeValidatorTests
 {
     /// <summary>
     /// Validator runs at chain-construction time and rejects the chain if any
@@ -236,7 +236,7 @@ public class HrePaperAChainShapeValidatorTests
         Direction = TensorLayoutDirection.Input)]
     [TensorLayout(TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
         Direction = TensorLayoutDirection.Output)]
-    private sealed class FixedShapeRank2Layer : LayerBase<float>, IShapeContract
+    private sealed partial class FixedShapeRank2Layer : LayerBase<float>, IShapeContract
     {
         public FixedShapeRank2Layer(int[] inputShape, int[] outputShape)
             : base(inputShape, outputShape)
@@ -304,6 +304,5 @@ public class HrePaperAChainShapeValidatorTests
         public override void SetParameters(Vector<float> parameters) { }
         public override Vector<float> GetParameterGradients() => new Vector<float>(0);
         public override void ResetState() { }
-        public override LayerBase<float> Clone() => new FixedShapeRank2Layer(GetInputShape(), GetOutputShape());
     }
 }

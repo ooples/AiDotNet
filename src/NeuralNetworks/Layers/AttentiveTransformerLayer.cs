@@ -80,13 +80,26 @@ public partial class AttentiveTransformerLayer<T> : LayerBase<T>, IShapeContract
     private readonly Sparsemax<T> _sparsemax;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _inputCache;
+    [Scratch]
     private Tensor<T>? _priorScalesCache;
+    [Scratch]
     private Tensor<T>? _attentionMaskCache;
+    [Scratch]
     private Tensor<T>? _sparsemaxInputCache;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
+
+    /// <summary>Construction state: the 'epsilon' the layer was built with.</summary>
+    private readonly double _epsilon;
+
+    /// <summary>Construction state: the 'momentum' the layer was built with.</summary>
+    private readonly double _momentum;
+
+    /// <summary>Construction state: the 'virtualBatchSize' the layer was built with.</summary>
+    private readonly int _virtualBatchSize;
 
     /// <summary>
     /// Initializes a new instance of the AttentiveTransformer class.
@@ -121,6 +134,9 @@ public partial class AttentiveTransformerLayer<T> : LayerBase<T>, IShapeContract
         double epsilon = 1e-5)
         : base([inputDim], [outputDim])
     {
+        _virtualBatchSize = virtualBatchSize;
+        _momentum = momentum;
+        _epsilon = epsilon;
         _inputDim = inputDim;
         _outputDim = outputDim;
         _relaxationFactor = relaxationFactor;

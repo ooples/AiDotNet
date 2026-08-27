@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -76,7 +76,7 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Conv-TasNet: Surpassing Ideal Time-Frequency Magnitude Masking for Speech Separation", "https://arxiv.org/abs/1809.07454", Year = 2019, Authors = "Yi Luo, Nima Mesgarani")]
-public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     private readonly ConvTasNetOptions _options;
 
@@ -89,7 +89,9 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     private readonly int _encoderDim;
     private readonly int _kernelSize;
     private readonly int _stride;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _encoderWeight;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _encoderBias;
 
     // Separator (TCN) parameters
@@ -104,10 +106,13 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     private readonly List<TcnBlock> _tcnBlocks;
 
     // Decoder parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _decoderWeight;
 
     // Mask estimation
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _maskWeight;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _maskBias;
 
     // Normalization layers
@@ -976,132 +981,6 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
     #region Serialization
 
-    /// <summary>
-    /// Serializes the model state to a byte array.
-    /// </summary>
-    public override byte[] Serialize()
-    {
-        using var stream = new MemoryStream();
-        using var writer = new BinaryWriter(stream);
-
-        // Write model configuration
-        writer.Write(SampleRate);
-        writer.Write(_encoderDim);
-        writer.Write(_kernelSize);
-        writer.Write(_bottleneckDim);
-        writer.Write(_hiddenDim);
-        writer.Write(_numBlocks);
-        writer.Write(_numRepeats);
-        writer.Write(_tcnKernelSize);
-        writer.Write(_numSources);
-
-        // Write encoder weights
-        writer.Write(_encoderWeight.Length);
-        foreach (var w in _encoderWeight)
-        {
-            writer.Write(_numOps.ToDouble(w));
-        }
-
-        // Write decoder weights
-        writer.Write(_decoderWeight.Length);
-        foreach (var w in _decoderWeight)
-        {
-            writer.Write(_numOps.ToDouble(w));
-        }
-
-        // Write mask weights
-        writer.Write(_maskWeight.Length);
-        foreach (var w in _maskWeight)
-        {
-            writer.Write(_numOps.ToDouble(w));
-        }
-
-        // Write normalization parameters
-        writer.Write(_normGamma.Length);
-        foreach (var g in _normGamma)
-        {
-            writer.Write(_numOps.ToDouble(g));
-        }
-        foreach (var b in _normBeta)
-        {
-            writer.Write(_numOps.ToDouble(b));
-        }
-
-        // The base Layers collection is intentionally empty for this manual graph.
-        // Persist the complete flat registry as well, including encoder/mask biases
-        // and every TCN block, which the legacy fields above omitted.
-        var parameters = GetParameters();
-        writer.Write(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-            writer.Write(_numOps.ToDouble(parameters[i]));
-
-        return stream.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes the model state from a byte array.
-    /// </summary>
-    public override void Deserialize(byte[] data)
-    {
-        using var stream = new MemoryStream(data);
-        using var reader = new BinaryReader(stream);
-
-        // Read and verify configuration
-        int sampleRate = reader.ReadInt32();
-        int encoderDim = reader.ReadInt32();
-        int kernelSize = reader.ReadInt32();
-        int bottleneckDim = reader.ReadInt32();
-        int hiddenDim = reader.ReadInt32();
-        int numBlocks = reader.ReadInt32();
-        int numRepeats = reader.ReadInt32();
-        int tcnKernelSize = reader.ReadInt32();
-        int numSources = reader.ReadInt32();
-
-        // Validate configuration matches
-        if (encoderDim != _encoderDim || kernelSize != _kernelSize || numSources != _numSources)
-        {
-            throw new InvalidOperationException("Serialized model configuration does not match current model.");
-        }
-
-        // Read encoder weights
-        int encoderLen = reader.ReadInt32();
-        for (int i = 0; i < encoderLen && i < _encoderWeight.Length; i++)
-        {
-            _encoderWeight[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read decoder weights
-        int decoderLen = reader.ReadInt32();
-        for (int i = 0; i < decoderLen && i < _decoderWeight.Length; i++)
-        {
-            _decoderWeight[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read mask weights
-        int maskLen = reader.ReadInt32();
-        for (int i = 0; i < maskLen && i < _maskWeight.Length; i++)
-        {
-            _maskWeight[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read normalization parameters
-        int normLen = reader.ReadInt32();
-        for (int i = 0; i < normLen && i < _normGamma.Length; i++)
-        {
-            _normGamma[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
-        for (int i = 0; i < normLen && i < _normBeta.Length; i++)
-        {
-            _normBeta[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
-
-        int parameterCount = reader.ReadInt32();
-        var parameters = new Vector<T>(parameterCount);
-        for (int i = 0; i < parameterCount; i++)
-            parameters[i] = _numOps.FromDouble(reader.ReadDouble());
-        SetParameters(parameters);
-    }
-
     #endregion
 
     #region Helper Methods
@@ -1133,48 +1012,6 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
     #region Abstract Method Implementations
 
-    /// <summary>
-    /// Declares every weight Conv-TasNet owns: the encoder, the separation mask, the decoder, the
-    /// layer-norm affine pair, and each temporal-convolution block's seven tensors.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Conv-TasNet implements its signal path with model-owned tensors rather than
-    /// <see cref="NeuralNetworkBase{T}.Layers"/>, so the base walk finds nothing unless they are
-    /// declared. Declared in the order the deleted GetParameters concatenated them -- encoder
-    /// weight and bias, decoder weight, mask weight and bias, norm gamma and beta, then each TCN
-    /// block -- so existing checkpoints still restore.
-    /// </para>
-    /// <para>
-    /// This replaces ParameterCount, GetParameters, GetParameterChunks and SetParameters here, four
-    /// more on TcnBlock, and the four Copy/Read helpers that moved values one element at a time.
-    /// </para>
-    /// <para>
-    /// The weights are <c>Tensor&lt;T&gt;</c> now rather than raw <c>T[]</c>, which is what the rest
-    /// of the library uses and what the trainable-parameter walk can see. A bare array cannot be
-    /// declared: a <c>Vector&lt;T&gt;</c> built over one COPIES it, so a restore driven through such
-    /// a view would have written into a temporary and been discarded.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        yield return _encoderWeight;
-        yield return _encoderBias;
-        yield return _decoderWeight;
-        yield return _maskWeight;
-        yield return _maskBias;
-        yield return _normGamma;
-        yield return _normBeta;
-
-        foreach (var block in _tcnBlocks)
-        {
-            foreach (var tensor in block.EnumerateTensors())
-            {
-                yield return tensor;
-            }
-        }
-    }
-
     // UpdateParameters is NOT overridden. It used to throw NotSupportedException; the base
     // implementation is virtual now and distributes a flat vector over the same enumeration
     // GetParameters folds, which this model already exposes correctly. The throw existed
@@ -1198,64 +1035,10 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(IsOnnxMode);
-        writer.Write(SampleRate);
-        writer.Write(_encoderDim);
-        writer.Write(_kernelSize);
-        writer.Write(_stride);
-        writer.Write(_numSources);
-        writer.Write(_bottleneckDim);
-        writer.Write(_hiddenDim);
-        writer.Write(_numBlocks);
-        writer.Write(_numRepeats);
-        writer.Write(_tcnKernelSize);
-        writer.Write(EnhancementStrength);
-        var parameters = GetParameters();
-        writer.Write(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-            writer.Write(_numOps.ToDouble(parameters[i]));
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read configuration values for validation
-        _ = reader.ReadBoolean(); // IsOnnxMode
-        _ = reader.ReadInt32();   // SampleRate
-        _ = reader.ReadInt32();   // _encoderDim
-        _ = reader.ReadInt32();   // _kernelSize
-        _ = reader.ReadInt32();   // _stride
-        _ = reader.ReadInt32();   // _numSources
-        _ = reader.ReadInt32();   // _bottleneckDim
-        _ = reader.ReadInt32();   // _hiddenDim
-        _ = reader.ReadInt32();   // _numBlocks
-        _ = reader.ReadInt32();   // _numRepeats
-        _ = reader.ReadInt32();   // _tcnKernelSize
-        EnhancementStrength = reader.ReadDouble();
-        int parameterCount = reader.ReadInt32();
-        var parameters = new Vector<T>(parameterCount);
-        for (int i = 0; i < parameterCount; i++)
-            parameters[i] = _numOps.FromDouble(reader.ReadDouble());
-        SetParameters(parameters);
-    }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new ConvTasNet<T>(
-            Architecture,
-            sampleRate: SampleRate,
-            encoderDim: _encoderDim,
-            kernelSize: _kernelSize,
-            bottleneckDim: _bottleneckDim,
-            hiddenDim: _hiddenDim,
-            numBlocks: _numBlocks,
-            numRepeats: _numRepeats,
-            tcnKernelSize: _tcnKernelSize,
-            numSources: _numSources);
-    }
 
     #endregion
 

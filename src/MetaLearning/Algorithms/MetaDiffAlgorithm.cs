@@ -80,9 +80,11 @@ public partial class MetaDiffAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     private readonly double[] _alphasCumprod;
 
     /// <summary>Denoiser network parameters (task-conditional noise predictor).</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _denoiserParams;
 
     /// <summary>Task encoder parameters: maps support features to conditioning vector.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _taskEncoderParams;
 
     private readonly int _paramDim;

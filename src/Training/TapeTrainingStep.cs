@@ -1,5 +1,6 @@
 ﻿using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Attributes;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -42,6 +43,7 @@ public static class TapeTrainingStep<T>
     // recursive walk happens on miss). One-time cost: ~O(layers); collision
     // probability over a 64-bit FNV is negligible for any realistic graph.
     [ThreadStatic]
+    [Scratch]
     private static List<Tensor<T>>? _cachedParameters;
     [ThreadStatic]
     private static int _cachedVersion;

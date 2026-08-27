@@ -27,9 +27,52 @@ namespace AiDotNet.Regression;
 /// straight line.
 /// </para>
 /// </remarks>
-public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, IConfigurableModel<T>, IModelShape,
+public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<T>, IConfigurableModel<T>, IModelShape,
     IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
+    // --- declared state (ModelStateRegistry) ---
+    // Identical in every model base because these bases are siblings over the same interfaces rather
+    // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.
+
+    /// <summary>State that is not a parameter vector, declared once and persisted by this base.</summary>
+    private readonly AiDotNet.Models.ModelStateRegistry<T> _declaredState = new();
+    private bool _declaredStateRegistered;
+
+    /// <summary>
+    /// Declare state here that the parameter vector does not carry -- a retained training set,
+    /// fitted knots, kernel centres, an ensemble's children. Both halves of the payload are driven
+    /// by the declaration, so they cannot drift.
+    /// </summary>
+    /// <param name="state">The registry to declare into.</param>
+    protected virtual void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+    }
+    /// <summary>Generated state declarations for fields declared across this model's hierarchy.</summary>
+    /// <param name="state">The registry to declare into.</param>
+    /// <remarks>
+    /// Emitted by ModelStateGenerator into the partial model, so a model author declares nothing. The
+    /// hand-written <c>RegisterState</c> beside it exists only for state the classifier genuinely
+    /// cannot place; anything it CAN place belongs here, where it cannot be forgotten.
+    /// </remarks>
+    protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        RegisterGeneratedStateCore(state);
+    }
+
+    /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>
+    protected AiDotNet.Models.ModelStateRegistry<T> DeclaredState
+    {
+        get
+        {
+            if (!_declaredStateRegistered)
+            {
+                _declaredStateRegistered = true;
+                RegisterGeneratedState(_declaredState);
+                RegisterState(_declaredState);
+            }
+            return _declaredState;
+        }
+    }
     /// <summary>
     /// Gets the numeric operations provider for the specified type T.
     /// </summary>
@@ -619,7 +662,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
         var regularizationOptionsJson = JsonConvert.SerializeObject(Regularization.GetOptions());
         writer.Write(regularizationOptionsJson);
 
-        return ms.ToArray();
+        return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, ms.ToArray());
     }
 
     /// <summary>
@@ -661,6 +704,9 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
     /// </remarks>
     public virtual void Deserialize(byte[] modelData)
     {
+        // Strips and applies any declared-state trailer, so the body below reads the payload
+        // exactly as it did before this existed.
+        modelData = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, modelData);
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         using var ms = new MemoryStream(modelData);
         using var reader = new BinaryReader(ms);
@@ -674,7 +720,13 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
             SerializationBinder = new SafeSerializationBinder()
         };
         var optionsJson = reader.ReadString();
-        // The typeof(NonLinearRegressionOptions) is the base type, but TypeNameHandling.All will honor $type metadata
+
+        // REVERTED, and the reason is worth keeping. Materialising into the type the model already
+        // holds looked like the fix for LocallyWeighted's InvalidCastException; it was not -- carrying
+        // the span and bandwidth as model state was -- and three ensemble models that passed before it
+        // failed their clone round trip with it in. A speculative change that does not fix the thing it
+        // was written for and correlates with new failures is not a change to keep.
+        // The typeof here is the base type, and TypeNameHandling.All honours $type metadata.
         var optionsObj = JsonConvert.DeserializeObject(optionsJson, typeof(NonLinearRegressionOptions), serializerSettings);
         Options = (NonLinearRegressionOptions)(optionsObj ?? new NonLinearRegressionOptions());
 
@@ -986,28 +1038,17 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
     /// </remarks>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
-        // Create a new instance through cloning
-        var clone = (NonLinearRegressionBase<T>)this.Clone();
-
-        // Perform deep copy of all mutable fields
-        clone.SupportVectors = SupportVectors.Clone();
-        clone.Alphas = Alphas.Clone();
-        clone.B = B; // Value types are copied by value
-        // Use TypeNameHandling.All to preserve derived Options type during deep copy
-        var serializerSettings = new JsonSerializerSettings
+        // Create through the subclass factory so constructor-bound collaborators (such as an
+        // optimizer whose model owner is supplied by a factory) bind to the clone, not the source.
+        // The serialized payload remains the single source of truth for fitted and declared state.
+        using (ModelPersistenceGuard.InternalOperation())
         {
-            TypeNameHandling = TypeNameHandling.All,
-            SerializationBinder = new SafeSerializationBinder()
-        };
-        var optionsObj = JsonConvert.DeserializeObject(
-            JsonConvert.SerializeObject(Options, serializerSettings), typeof(NonLinearRegressionOptions), serializerSettings);
-        clone.Options = (NonLinearRegressionOptions)(optionsObj ?? new NonLinearRegressionOptions());
-
-        // Create a new regularization instance with the same options
-        var regularizationOptions = Regularization.GetOptions();
-        clone.Regularization = RegularizationFactory.CreateRegularization<T, Matrix<T>, Vector<T>>(regularizationOptions);
-
-        return clone;
+            byte[] state = Serialize();
+            var clone = (NonLinearRegressionBase<T>)CreateInstance();
+            clone.Deserialize(state);
+            AiDotNet.Models.CloneEngine.RestoreMutableConstructorConfiguration(this, clone);
+            return clone;
+        }
     }
 
     /// <summary>
@@ -1032,17 +1073,11 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
     /// </remarks>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
-        // Create a new instance using the factory method
-        var clone = (NonLinearRegressionBase<T>)CreateInstance();
-
-        // Copy the model parameters
-        clone.SupportVectors = SupportVectors;  // Shallow copy
-        clone.Alphas = Alphas;                 // Shallow copy
-        clone.B = B;                          // Value types are copied by value
-        clone.Options = Options;              // Shallow copy
-        clone.Regularization = Regularization; // Shallow copy
-
-        return clone;
+        // One clone contract for the whole hierarchy. The old shallow copy knew only the support-
+        // vector fields declared here, so IsotonicRegression and KernelRidgeRegression lost every
+        // fitted field their generated state declaration correctly persisted. DeepCopy already
+        // routes through the complete payload and does not call Clone, so this is recursion-free.
+        return DeepCopy();
     }
 
     public virtual long ParameterCount

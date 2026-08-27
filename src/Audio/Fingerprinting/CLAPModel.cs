@@ -68,17 +68,6 @@ namespace AiDotNet.Audio.Fingerprinting;
 public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
 
-    // TextEncoderLayers is yielded by AudioNeuralNetworkBase.GetExtraTrainableLayers for every audio
-    // model that owns a text tower, so this override restated the base. Removed under AIDN082.
-
-    /// <inheritdoc />
-    /// <remarks>The learned logit scale (CLIP's temperature), a single value the contrastive
-    /// loss trains alongside the towers. The hand-written count added it as a bare "+ 1" and
-    /// the vector appended _logTemperature[0]; it is a one-element tensor, so the base fold
-    /// contributes the same single scalar in the same position.</remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-        => new[] { _logTemperature };
-
     /// <inheritdoc />
     /// <remarks>
     /// Measured: <c>PredictCore</c> delegates to <c>EncodeAudio</c>, which folds the AUDIO stack
@@ -102,6 +91,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     // Trainable temperature parameter (stored in log space). Gradients flow
     // through the tape via Engine ops; the optimizer updates this alongside
     // the rest of the network.
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _logTemperature = null!;
 
     // Cached Hann window for the STFT preprocessing step. Built once on the
@@ -736,28 +726,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     // UpdateParameters restated a fold the base now derives from generated component registration.
     // Removed under AIDN082.
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.NumMelBands);
-        writer.Write(_options.StftWindowSize);
-        writer.Write(_options.HopLength);
-        writer.Write(_options.AudioPatchSize);
-        writer.Write(_options.AudioHiddenDim);
-        writer.Write(_options.AudioEncoderLayers);
-        writer.Write(_options.AudioEncoderHeads);
-        writer.Write(_options.SwinWindowSize);
-        writer.Write(_options.VocabSize);
-        writer.Write(_options.MaxTextLength);
-        writer.Write(_options.TextHiddenDim);
-        writer.Write(_options.TextEncoderLayers);
-        writer.Write(_options.TextEncoderHeads);
-        writer.Write(_options.ProjectionDim);
-        writer.Write(_options.InitialTemperature);
-        writer.Write(_options.DropoutRate);
-        writer.Write(Convert.ToDouble(_logTemperature[0]));
-    }
+
 
     /// <inheritdoc/>
     /// <remarks>
@@ -767,30 +736,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     /// produce wrong-shape weight loads. Throwing with the offending field
     /// surfaces the issue immediately.
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        bool useNativeMode = reader.ReadBoolean();
-        VerifyEqual(reader.ReadInt32(),    _options.SampleRate,         nameof(_options.SampleRate));
-        VerifyEqual(reader.ReadInt32(),    _options.NumMelBands,        nameof(_options.NumMelBands));
-        VerifyEqual(reader.ReadInt32(),    _options.StftWindowSize,     nameof(_options.StftWindowSize));
-        VerifyEqual(reader.ReadInt32(),    _options.HopLength,          nameof(_options.HopLength));
-        VerifyEqual(reader.ReadInt32(),    _options.AudioPatchSize,     nameof(_options.AudioPatchSize));
-        VerifyEqual(reader.ReadInt32(),    _options.AudioHiddenDim,     nameof(_options.AudioHiddenDim));
-        VerifyEqual(reader.ReadInt32(),    _options.AudioEncoderLayers, nameof(_options.AudioEncoderLayers));
-        VerifyEqual(reader.ReadInt32(),    _options.AudioEncoderHeads,  nameof(_options.AudioEncoderHeads));
-        VerifyEqual(reader.ReadInt32(),    _options.SwinWindowSize,     nameof(_options.SwinWindowSize));
-        VerifyEqual(reader.ReadInt32(),    _options.VocabSize,          nameof(_options.VocabSize));
-        VerifyEqual(reader.ReadInt32(),    _options.MaxTextLength,      nameof(_options.MaxTextLength));
-        VerifyEqual(reader.ReadInt32(),    _options.TextHiddenDim,      nameof(_options.TextHiddenDim));
-        VerifyEqual(reader.ReadInt32(),    _options.TextEncoderLayers,  nameof(_options.TextEncoderLayers));
-        VerifyEqual(reader.ReadInt32(),    _options.TextEncoderHeads,   nameof(_options.TextEncoderHeads));
-        VerifyEqual(reader.ReadInt32(),    _options.ProjectionDim,      nameof(_options.ProjectionDim));
-        VerifyEqual(reader.ReadDouble(),   _options.InitialTemperature, nameof(_options.InitialTemperature));
-        VerifyEqual(reader.ReadDouble(),   _options.DropoutRate,        nameof(_options.DropoutRate));
 
-        double logTau = reader.ReadDouble();
-        _logTemperature[0] = NumOps.FromDouble(logTau);
-    }
 
     private static void VerifyEqual<TValue>(TValue persisted, TValue current, string name)
         where TValue : IEquatable<TValue>
@@ -800,12 +746,6 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
                 $"Persisted CLAPModelOptions.{name} = {persisted} does not match constructor option {current}. " +
                 "Reconstruct CLAPModel with matching CLAPModelOptions before loading this checkpoint.");
     }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        _useNativeMode
-            ? new CLAPModel<T>(Architecture, new CLAPModelOptions(_options))
-            : new CLAPModel<T>(Architecture, _audioEncoderPath!, _textEncoderPath, new CLAPModelOptions(_options));
 
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()

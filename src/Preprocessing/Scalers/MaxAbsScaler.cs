@@ -32,6 +32,7 @@ namespace AiDotNet.Preprocessing.Scalers;
 public class MaxAbsScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     [JsonProperty]
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _maxAbs;
 
     /// <summary>

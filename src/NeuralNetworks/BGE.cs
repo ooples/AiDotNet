@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper(// Title corrected to the published form; the arXiv id was already right.
     "C-Pack: Packed Resources For General Chinese Embeddings", "https://arxiv.org/abs/2309.07597", Year = 2023, Authors = "Shitao Xiao, Zheng Liu, Peitian Zhang, Niklas Muennighoff")]
-    public class BGE<T> : TransformerEmbeddingNetwork<T>
+    public partial class BGE<T> : TransformerEmbeddingNetwork<T>
     {
         private readonly BGEOptions _options;
 
@@ -178,24 +178,6 @@ namespace AiDotNet.NeuralNetworks
 
         #region Methods
 
-        /// <inheritdoc/>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new BGE<T>(
-                Architecture,
-                null,
-                null,
-                _vocabSize,
-                EmbeddingDimension,
-                MaxTokens,
-                _numLayers,
-                _numHeads,
-                _feedForwardDim,
-                PoolingStrategy.ClsToken,
-                LossFunction,
-                Convert.ToDouble(MaxGradNorm));
-        }
-
         /// <summary>
         /// Retrieves metadata about the BGE model.
         /// </summary>
@@ -209,24 +191,10 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <inheritdoc/>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            base.SerializeNetworkSpecificData(writer);
-            writer.Write(_vocabSize);
-            writer.Write(_numLayers);
-            writer.Write(_numHeads);
-            writer.Write(_feedForwardDim);
-        }
+
 
         /// <inheritdoc/>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            base.DeserializeNetworkSpecificData(reader);
-            _vocabSize = reader.ReadInt32();
-            _numLayers = reader.ReadInt32();
-            _numHeads = reader.ReadInt32();
-            _feedForwardDim = reader.ReadInt32();
-        }
+
 
         /// <inheritdoc/>
         public override Vector<T> Embed(string text)

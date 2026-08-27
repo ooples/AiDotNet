@@ -53,7 +53,8 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-    [ResearchPaper("Time Series Analysis: Forecasting and Control", "https://doi.org/10.1002/9781118619193")]
+[ResearchPaper("Time Series Analysis: Forecasting and Control", "https://doi.org/10.1002/9781118619193")]
+[CustomSerializationFormat]
 public partial class TimeSeriesRegression<T> : RegressionBase<T>
 {
     /// <summary>
@@ -803,12 +804,12 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
     /// transmitted over a network, or otherwise persisted.
     /// </para>
     /// <para><b>For Beginners:</b> This method saves your trained model to a format that can be stored or shared.
-    /// 
+    ///
     /// Serialization:
     /// - Converts your trained model into simple bytes that can be saved
     /// - Preserves all the patterns and relationships the model has learned
     /// - Includes all settings and configuration options
-    /// 
+    ///
     /// It's like taking a snapshot of the model that can be saved to a file or database.
     /// Later, you can use Deserialize to recreate the exact same model without retraining.
     /// </para>
@@ -861,12 +862,12 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
     /// model to be restored without retraining.
     /// </para>
     /// <para><b>For Beginners:</b> This method loads a previously saved model.
-    /// 
+    ///
     /// Deserialization:
     /// - Takes the bytes created by Serialize and converts them back into a working model
     /// - Restores all the learned patterns and relationships
     /// - Recreates the exact same model configuration
-    /// 
+    ///
     /// It's like restoring a snapshot of the model, allowing you to use a trained model
     /// without having to retrain it each time. This saves time and ensures consistent predictions.
     /// </para>
@@ -936,33 +937,4 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
         }
     }
 
-    /// <summary>
-    /// Creates a new instance of the time series regression model with the same configuration.
-    /// </summary>
-    /// <returns>
-    /// A new instance of <see cref="TimeSeriesRegression{T}"/> with the same configuration as the current instance.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new time series regression model that has the same configuration as the current instance.
-    /// It's used for model persistence, cloning, and transferring the model's configuration to new instances.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method makes a fresh copy of the current model with the same settings.
-    /// 
-    /// It's like creating a blueprint copy of your model that can be used to:
-    /// - Save your model's settings
-    /// - Create a new identical model
-    /// - Transfer your model's configuration to another system
-    /// 
-    /// This is useful when you want to:
-    /// - Create multiple similar models
-    /// - Save a model's configuration for later use
-    /// - Reset a model while keeping its settings
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        // Create and return a new instance with the same configuration
-        return new TimeSeriesRegression<T>(_options, _regularization);
-    }
 }

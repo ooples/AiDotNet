@@ -142,6 +142,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
     private int _nextBranch;           // 0 = branch1, 1 = branch2
     private int _nextBackwardBranch;   // 0 = branch1, 1 = branch2
 
+    [Scratch]
     private Vector<T>? _gradients;
 
     // Guard properties for predictor parameters

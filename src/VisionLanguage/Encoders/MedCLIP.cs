@@ -389,10 +389,6 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         }
     }
 
-    /// <inheritdoc />
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers() =>
-        EnumerateMedClipExtraLayers();
-
     private IEnumerable<LayerBase<T>?> EnumerateMedClipExtraLayers()
     {
         foreach (var layer in EnumerateTextEncoderTrainableLayers()) yield return layer;
@@ -446,76 +442,9 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ImageEncoderModelPath ?? string.Empty);
-        writer.Write(_options.TextEncoderModelPath ?? string.Empty);
-        writer.Write(_options.ImageSize);
-        writer.Write(_options.VisionEmbeddingDim);
-        writer.Write(_options.TextEmbeddingDim);
-        writer.Write(_options.ProjectionDim);
-        writer.Write(_options.Temperature);
-        writer.Write(_options.SemanticMatchingWeight);
-        writer.Write(MedClipExtrasFormatVersion);
-        writer.Write(TextEncoderLayers.Count);
-        foreach (var layer in TextEncoderLayers)
-            SerializationHelper<T>.SerializeVector(writer, layer.GetParameters());
-        SerializationHelper<T>.SerializeVector(writer, _logitScale.GetParameters());
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string ip = reader.ReadString();
-        if (!string.IsNullOrEmpty(ip))
-            _options.ImageEncoderModelPath = ip;
-        string tp = reader.ReadString();
-        if (!string.IsNullOrEmpty(tp))
-            _options.TextEncoderModelPath = tp;
-        _options.ImageSize = reader.ReadInt32();
-        _options.VisionEmbeddingDim = reader.ReadInt32();
-        _options.TextEmbeddingDim = reader.ReadInt32();
-        _options.ProjectionDim = reader.ReadInt32();
-        _options.Temperature = reader.ReadDouble();
-        _options.SemanticMatchingWeight = reader.ReadDouble();
-        int formatVersion = reader.ReadInt32();
-        if (formatVersion != MedClipExtrasFormatVersion)
-            throw new InvalidDataException(
-                $"Unsupported MedCLIP payload version {formatVersion}; " +
-                $"expected {MedClipExtrasFormatVersion}.");
-        int layerCount = reader.ReadInt32();
-        if (layerCount != TextEncoderLayers.Count)
-            throw new InvalidDataException(
-                $"Serialized MedCLIP text layer count {layerCount} does not match topology {TextEncoderLayers.Count}.");
-        foreach (var layer in TextEncoderLayers)
-        {
-            var values = SerializationHelper<T>.DeserializeVector(reader);
-            if (values.Length != layer.ParameterCount)
-                throw new InvalidDataException(
-                    $"Serialized MedCLIP layer has {values.Length} parameters; expected {layer.ParameterCount}.");
-            layer.SetParameters(values);
-        }
-        var logScale = SerializationHelper<T>.DeserializeVector(reader);
-        if (logScale.Length != _logitScale.ParameterCount)
-            throw new InvalidDataException("Serialized MedCLIP logit-scale parameter count is invalid.");
-        _logitScale.SetParameters(logScale);
-        if (!_useNativeMode && _options.ImageEncoderModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxImageEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-        if (_options.TextEncoderModelPath is { } t2 && !string.IsNullOrEmpty(t2))
-            OnnxTextEncoder = new OnnxModel<T>(t2, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (
-            !_useNativeMode
-            && _options.ImageEncoderModelPath is { } mp
-            && !string.IsNullOrEmpty(mp)
-        )
-            return new MedCLIP<T>(Architecture, mp, new MedCLIPOptions(_options));
-        return new MedCLIP<T>(Architecture, new MedCLIPOptions(_options));
-    }
+
 
     private Tensor<T> TokenizeText(string text)
     {

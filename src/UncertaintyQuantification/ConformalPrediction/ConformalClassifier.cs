@@ -32,6 +32,7 @@ public class ConformalClassifier<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly INeuralNetwork<T> _model;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _calibrationScores;
     private readonly int _numClasses;
     private bool _isCalibrated;

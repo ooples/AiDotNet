@@ -57,7 +57,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Segment Anything in Medical Images", "https://doi.org/10.1038/s41467-024-44824-z", Year = 2024, Authors = "Jun Ma, Yuting He, Feifei Li, Lin Han, Chenyu You, Bo Wang")]
-public class MedSAM<T> : Common.MedicalSegmentationBase<T>
+public partial class MedSAM<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly MedSAMOptions _options;
     public override ModelOptions GetOptions() => _options;
@@ -375,43 +375,6 @@ public class MedSAM<T> : Common.MedicalSegmentationBase<T>
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "MedSAM" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = SerializeForMetadata()
     };
-
-    /// <summary>
-    /// Writes configuration to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    { writer.Write(_height); writer.Write(_width); writer.Write(_channels); writer.Write(_numClasses); writer.Write((int)_modelSize); writer.Write(_decoderDim); writer.Write(_dropRate); writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty); writer.Write(_encoderLayerEnd); writer.Write(_channelDims.Length); foreach (int d in _channelDims) writer.Write(d); writer.Write(_depths.Length); foreach (int d in _depths) writer.Write(d); }
-
-    /// <summary>
-    /// Reads configuration from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    { _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble(); _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32(); int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32(); int dd = reader.ReadInt32(); for (int i = 0; i < dd; i++) _ = reader.ReadInt32(); }
-
-    /// <summary>
-    /// Creates a new instance with the same configuration but fresh weights.
-    /// </summary>
-    /// <returns>A new model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new MedSAM<T>(Architecture, _optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
-        : new MedSAM<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
 
     // Dispose is inherited from SegmentationModelBase, which already disposes the ONNX session.
     // MedSAM owns no further unmanaged resources.

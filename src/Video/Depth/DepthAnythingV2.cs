@@ -69,7 +69,7 @@ namespace AiDotNet.Video.Depth;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public class DepthAnythingV2<T> : NeuralNetworkBase<T>
+public partial class DepthAnythingV2<T> : NeuralNetworkBase<T>
 {
     private readonly DepthAnythingV2Options _options;
 
@@ -649,40 +649,10 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height);
-        writer.Write(_width);
-        writer.Write(_channels);
-        writer.Write((int)_modelSize);
-        writer.Write(_useNativeMode);
-        writer.Write(_onnxModelPath ?? string.Empty);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _height = reader.ReadInt32();
-        _width = reader.ReadInt32();
-        _channels = reader.ReadInt32();
-        _modelSize = (ModelSize)reader.ReadInt32();
-        _useNativeMode = reader.ReadBoolean();
-        _onnxModelPath = reader.ReadString();
-        if (string.IsNullOrEmpty(_onnxModelPath)) _onnxModelPath = null;
-    }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new DepthAnythingV2<T>(Architecture, CreateOptimizerForClone(), LossFunction, _modelSize, new DepthAnythingV2Options(_options));
-        }
-        else
-        {
-            return new DepthAnythingV2<T>(Architecture, _onnxModelPath!, _modelSize, new DepthAnythingV2Options(_options));
-        }
-    }
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateOptimizerForClone()
     {

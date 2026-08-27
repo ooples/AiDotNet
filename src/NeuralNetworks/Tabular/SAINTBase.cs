@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using System.Collections.Generic;
 using AiDotNet.Models.Parameters;
 using AiDotNet.LinearAlgebra;
@@ -32,7 +33,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class SAINTBase<T> : IParameterSource<T>
+public abstract partial class SAINTBase<T> : IParameterSource<T>
 {
     protected readonly SAINTOptions<T> Options;
     protected readonly int NumNumericalFeatures;
@@ -45,6 +46,7 @@ public abstract class SAINTBase<T> : IParameterSource<T>
     // Feature embeddings
     private readonly FullyConnectedLayer<T> _numericalEmbedding;
     private readonly Tensor<T>[]? _categoricalEmbeddings;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T>? _columnEmbeddings;
 
     // Transformer layers (alternating column and row attention)
@@ -58,9 +60,13 @@ public abstract class SAINTBase<T> : IParameterSource<T>
     protected int MLPOutputDimension { get; }
 
     // Caches for backward pass
+    [Scratch]
     private Tensor<T>? _embeddedFeaturesCache;
+    [Scratch]
     private List<Tensor<T>>? _columnAttentionOutputsCache;
+    [Scratch]
     private List<Tensor<T>>? _rowAttentionOutputsCache;
+    [Scratch]
     private Tensor<T>? _mlpOutputCache;
 
     /// <summary>Built once on first parameter access, then reused.</summary>
@@ -70,7 +76,7 @@ public abstract class SAINTBase<T> : IParameterSource<T>
     /// Extra trainable layers a subclass contributes, folded after the shared backbone.
     /// </summary>
     protected virtual IEnumerable<IParameterSource<T>> GetExtraTrainableLayers()
-        => System.Linq.Enumerable.Empty<IParameterSource<T>>();
+        => GeneratedParameterDiscovery.EnumerateDerivedSources<T>(this, typeof(SAINTBase<T>));
 
     /// <summary>The single ordered traversal of this model's parameter-bearing components.</summary>
     private ParameterComponentRegistry<T> ParameterRegistry

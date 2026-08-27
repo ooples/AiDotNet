@@ -48,7 +48,9 @@ public partial class ESDDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _alpha;
     private readonly int? _maxOutliers;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _means;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _stds;
     private int _nFeatures;
     private int _nSamples;

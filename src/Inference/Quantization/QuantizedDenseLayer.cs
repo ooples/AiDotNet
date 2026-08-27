@@ -75,12 +75,16 @@ internal sealed partial class QuantizedDenseLayer : LayerBase<float>, IShapeCont
     private readonly WeightOnlyProjection _proj;
     private readonly float[] _biases;
 
+    /// <summary>Construction state: kept so the generated clone factory can rebuild this layer.</summary>
+    private readonly DenseLayer<float> _source;
+
     public QuantizedDenseLayer(DenseLayer<float> source, InferenceQuantizationMode mode = InferenceQuantizationMode.WeightOnlyInt8)
         : base(
             inputShape: source.GetInputShape(),
             outputShape: source.GetOutputShape(),
             scalarActivation: source.ScalarActivation ?? new AiDotNet.ActivationFunctions.IdentityActivation<float>())
     {
+        _source = source;
         _inputSize = source.GetInputShape()[0];
         _outputSize = source.GetOutputLayerShape().RequireConcrete("Sizing a quantized dense layer's weight block")[0];
 
@@ -104,6 +108,7 @@ internal sealed partial class QuantizedDenseLayer : LayerBase<float>, IShapeCont
             outputShape: source.GetOutputShape(),
             vectorActivation: vectorActivation)
     {
+        _source = source;
         _inputSize = source.GetInputShape()[0];
         _outputSize = source.GetOutputLayerShape().RequireConcrete("Sizing a quantized dense layer's weight block")[0];
 

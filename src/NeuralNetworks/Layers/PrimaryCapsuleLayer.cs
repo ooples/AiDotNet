@@ -87,6 +87,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
     /// This field stores the gradient of the convolution weights, which is used to update the weights
     /// during the parameter update step.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _convWeightsGradient;
 
     /// <summary>
@@ -96,6 +97,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
     /// This field stores the gradient of the convolution bias, which is used to update the bias
     /// during the parameter update step.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _convBiasGradient;
 
     /// <summary>
@@ -105,6 +107,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
     /// This field stores the input tensor from the most recent forward pass, which is needed
     /// during the backward pass for gradient calculation.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -124,7 +127,9 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
     /// This field stores the output tensor from the most recent forward pass, which is needed
     /// during the backward pass for gradient calculation.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastPreSquash;
 
     /// <summary>

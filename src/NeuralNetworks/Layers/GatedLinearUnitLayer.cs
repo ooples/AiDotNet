@@ -185,6 +185,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
     /// This value is automatically cleared between training batches to save memory.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -206,6 +207,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
     /// gradients during the backward pass.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastLinearOutput;
 
     /// <summary>
@@ -227,11 +229,15 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
     /// of each linear output value passed through to the final output.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastGateOutput;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput;
+    [ExternalState]
     private Tensor<T>? _gpuLinearOutput;
+    [ExternalState]
     private Tensor<T>? _gpuGateOutput;
 
     /// <summary>
@@ -253,6 +259,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
     /// that, when gated appropriately, lead to better final outputs.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _linearWeightsGradient;
 
     /// <summary>
@@ -274,6 +281,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
     /// information through and when to block it for better results.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _gateWeightsGradient;
 
     /// <summary>
@@ -295,6 +303,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
     /// before gating is applied.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _linearBiasGradient;
 
     /// <summary>
@@ -316,6 +325,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
     /// for controlling information flow.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _gateBiasGradient;
 
     /// <summary>
@@ -397,7 +407,10 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
         _gateBias = new Tensor<T>([outputDimension]);
     }
 
-    private int _outputDimension;
+    // protected, not private: the four GLU variants forward their constructor argument to this
+    // base parameter, and the generated state partial for a DERIVED layer reads it as
+    // `this._outputDimension`. Private would leave those layers with no factory at all.
+    protected int _outputDimension;
 
     /// <summary>
     /// Resolves input dimension on first forward and allocates linear/gate weight matrices.

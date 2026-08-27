@@ -302,36 +302,7 @@ public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMul
     /// without repeating the training process.
     /// </para>
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        // Serialize VARModelOptions
-        writer.Write(_varOptions.Lag);
-        writer.Write(_varOptions.OutputDimension);
 
-        // Serialize _coefficients
-        writer.Write(_coefficients.Rows);
-        writer.Write(_coefficients.Columns);
-        for (int i = 0; i < _coefficients.Rows; i++)
-            for (int j = 0; j < _coefficients.Columns; j++)
-                writer.Write(Convert.ToDouble(_coefficients[i, j]));
-
-        // Serialize _intercepts
-        writer.Write(_intercepts.Length);
-        for (int i = 0; i < _intercepts.Length; i++)
-            writer.Write(Convert.ToDouble(_intercepts[i]));
-
-        // Serialize _residuals
-        writer.Write(_residuals.Rows);
-        writer.Write(_residuals.Columns);
-        for (int i = 0; i < _residuals.Rows; i++)
-            for (int j = 0; j < _residuals.Columns; j++)
-                writer.Write(Convert.ToDouble(_residuals[i, j]));
-
-        // Serialize training series for in-sample predictions
-        writer.Write(_trainingSeries.Length);
-        for (int i = 0; i < _trainingSeries.Length; i++)
-            writer.Write(Convert.ToDouble(_trainingSeries[i]));
-    }
 
     /// <summary>
     /// Deserializes the model's core parameters from a binary reader.
@@ -360,47 +331,7 @@ public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMul
     /// - Saving computation time by not having to retrain complex models
     /// </para>
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        // Deserialize VARModelOptions
-        _varOptions.Lag = reader.ReadInt32();
-        _varOptions.OutputDimension = reader.ReadInt32();
 
-        // Deserialize _coefficients
-        int coeffRows = reader.ReadInt32();
-        int coeffCols = reader.ReadInt32();
-        _coefficients = new Matrix<T>(coeffRows, coeffCols);
-        for (int i = 0; i < coeffRows; i++)
-            for (int j = 0; j < coeffCols; j++)
-                _coefficients[i, j] = NumOps.FromDouble(reader.ReadDouble());
-
-        // Deserialize _intercepts
-        int interceptsLength = reader.ReadInt32();
-        _intercepts = new Vector<T>(interceptsLength);
-        for (int i = 0; i < interceptsLength; i++)
-            _intercepts[i] = NumOps.FromDouble(reader.ReadDouble());
-
-        // Deserialize _residuals
-        int residualsRows = reader.ReadInt32();
-        int residualsCols = reader.ReadInt32();
-        _residuals = new Matrix<T>(residualsRows, residualsCols);
-        for (int i = 0; i < residualsRows; i++)
-            for (int j = 0; j < residualsCols; j++)
-                _residuals[i, j] = NumOps.FromDouble(reader.ReadDouble());
-
-        // Deserialize training series (post-patch field)
-        try
-        {
-            int tsLen = reader.ReadInt32();
-            _trainingSeries = new Vector<T>(tsLen);
-            for (int i = 0; i < tsLen; i++)
-                _trainingSeries[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        catch (EndOfStreamException)
-        {
-            _trainingSeries = Vector<T>.Empty();
-        }
-    }
 
     /// <summary>
     /// Prepares a matrix of lagged data for VAR model estimation.

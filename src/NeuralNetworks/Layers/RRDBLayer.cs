@@ -119,16 +119,19 @@ public partial class RRDBLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached input for backpropagation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Cached output from RDB3 for backpropagation.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _rdb3Output;
 
     /// <summary>
     /// GPU cached input tensor for backward pass.
     /// </summary>
+    [ExternalState]
     private Tensor<T>? _gpuLastInput;
 
     #endregion
@@ -406,6 +409,7 @@ public partial class RRDBLayer<T> : LayerBase<T>, IShapeContract
             rdb.ClearGradients();
     }
 
+    [Scratch]
     private Vector<T>? _pendingParameters;
 
     /// <inheritdoc />

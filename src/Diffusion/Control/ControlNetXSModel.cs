@@ -196,27 +196,6 @@ public partial class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Delegate to sub-Clones — same lazy-init fix pattern as
-        // SDXLTurbo / RealESRGAN / EDiffI / DiffEdit / DDPM / SUPIR.
-        // Preserve outer configuration (architecture / options / scheduler) so
-        // a model created with custom diffusion settings doesn't clone back
-        // to constructor defaults (CodeRabbit PR #1562).
-        var cu = (UNetNoisePredictor<T>)_unet.Clone();
-        var cc = (UNetNoisePredictor<T>)_controlEncoder.Clone();
-        var cv = (StandardVAE<T>)_vae.Clone();
-        return new ControlNetXSModel<T>(
-            architecture: Architecture,
-            options: (DiffusionModelOptions<T>)GetOptions(),
-            scheduler: Scheduler,
-            unet: cu, controlEncoder: cc, vae: cv, conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

@@ -159,12 +159,23 @@ csharp_space_between_square_brackets = false
 # License header
 file_header_template = Licensed to the .NET Foundation under one or more agreements.\nThe .NET Foundation licenses this file to you under the MIT license.
 
+# ADN0057 is informational for NuGet consumers, whose custom initialization-only constructor
+# arguments may be intentional. In this repository it is an acceptance gate: every shipped layer
+# must either preserve the value or classify its entropy semantics explicitly.
+dotnet_diagnostic.ADN0057.severity = error
+
+# Concrete models and layers in the shipped source must use generated/base lifecycle plumbing.
+# The analyzer remains informational for external consumers, whose own base contracts may require
+# an override; this repository raises it to an acceptance error.
+dotnet_diagnostic.ADN0063.severity = error
+
 # Dedicated test doubles deliberately override parameter surfaces to simulate malformed,
 # throwing, or streaming implementations. Production descriptors remain compiler errors; this
 # explicit path-scoped policy keeps those fixtures buildable without an assembly-name heuristic.
 [tests/AiDotNet.Tests/**/*.cs]
 dotnet_diagnostic.AIDN081.severity = warning
 dotnet_diagnostic.AIDN082.severity = warning
+dotnet_diagnostic.ADN0063.severity = warning
 
 [src/libraries/System.Net.Http/src/System/Net/Http/{SocketsHttpHandler/Http3RequestStream.cs,BrowserHttpHandler/BrowserHttpHandler.cs}]
 # disable CA2025, the analyzer throws a NullReferenceException when processing this file: https://github.com/dotnet/roslyn-analyzers/issues/7652

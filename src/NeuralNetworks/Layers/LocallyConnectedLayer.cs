@@ -161,6 +161,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stores the input tensor from the last forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -171,25 +172,31 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Stores the pre-activation output from the last forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPreActivation;
 
     /// <summary>
     /// Stores the output tensor from the last forward pass for use in the backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Stores the gradients for the weights calculated during the backward pass.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _weightGradients;
 
     /// <summary>
     /// Stores the gradients for the biases calculated during the backward pass.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _biasGradients;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput;
+    [ExternalState]
     private Tensor<T>? _gpuOutput;
     private int[]? _gpuInputShape4D;
     private bool _gpuAddedBatchDimension;
@@ -197,21 +204,31 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
     #region GPU Weight Storage Fields
 
     // GPU weight tensors for GPU-resident training
+    [ExternalState]
     private Tensor<T>? _gpuWeights;
+    [ExternalState]
     private Tensor<T>? _gpuBiases;
 
     // GPU gradient tensors from BackwardGpu
+    [ExternalState]
     private Tensor<T>? _gpuWeightGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBiasGradient;
 
     // Optimizer state tensors for SGD/NAG/LARS (velocity)
+    [ExternalState]
     private Tensor<T>? _gpuWeightVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBiasVelocity;
 
     // Optimizer state tensors for Adam/AdamW/LAMB (M and V)
+    [ExternalState]
     private Tensor<T>? _gpuWeightM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightV;
+    [ExternalState]
     private Tensor<T>? _gpuBiasM;
+    [ExternalState]
     private Tensor<T>? _gpuBiasV;
 
     #endregion
@@ -915,31 +932,6 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
     {
         _weightGradients = null;
         _biasGradients = null;
-    }
-
-    public override void Serialize(BinaryWriter writer)
-    {
-        // Persist resolved input shape so Deserialize can re-resolve before
-        // SetParameters lands. The 6-D weight tensor's shape can't be uniquely
-        // inferred from parameter count alone (outputH×outputW×outputC×k²×inputC
-        // + outputC has multiple solutions), so we serialize the input shape
-        // explicitly. base.Serialize then writes the parameter vector.
-        writer.Write(_inputHeight);
-        writer.Write(_inputWidth);
-        writer.Write(_inputChannels);
-        base.Serialize(writer);
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        int inH = reader.ReadInt32();
-        int inW = reader.ReadInt32();
-        int inC = reader.ReadInt32();
-        if (!IsShapeResolved && inH > 0 && inW > 0 && inC > 0)
-        {
-            ResolveFromShape(new[] { inH, inW, inC });
-        }
-        base.Deserialize(reader);
     }
 
     /// <summary>

@@ -25,7 +25,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Jonathan Gordon, Wessel P. Bruinsma, Andrew Y.K. Foong, et al.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class ConvCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
+public partial class ConvCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly ConvCNPOptions<T, TInput, TOutput> _algoOptions;
 

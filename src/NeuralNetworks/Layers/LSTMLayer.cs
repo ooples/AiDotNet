@@ -431,6 +431,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// how you processed it if asked.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -452,21 +453,25 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// and passed to the next step.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastHiddenState;
 
     /// <summary>
     /// The cell state from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastCellState;
 
     /// <summary>
     /// Cached hidden states for all time steps (Batch, Time, Hidden).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedHiddenStates;
 
     /// <summary>
     /// Cached cell states for all time steps (Batch, Time, Hidden).
     /// </summary>
+    [Scratch]
     private Tensor<T>? _cachedCellStates;
 
     /// <summary>
@@ -585,74 +590,135 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     #region GPU Training Fields
 
     // GPU-resident weight tensors
+    [ExternalState]
     private Tensor<T>? _gpuWeightsFi;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsIi;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsCi;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsOi;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsFh;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsIh;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsCh;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsOh;
+    [ExternalState]
     private Tensor<T>? _gpuBiasF;
+    [ExternalState]
     private Tensor<T>? _gpuBiasI;
+    [ExternalState]
     private Tensor<T>? _gpuBiasC;
+    [ExternalState]
     private Tensor<T>? _gpuBiasO;
 
     // GPU-resident gradient tensors
+    [ExternalState]
     private Tensor<T>? _gpuWeightsFiGradient;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsIiGradient;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsCiGradient;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsOiGradient;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsFhGradient;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsIhGradient;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsChGradient;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsOhGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBiasFGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBiasIGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBiasCGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBiasOGradient;
 
     // GPU-resident optimizer state tensors (velocity for SGD momentum, M/V for Adam)
+    [ExternalState]
     private Tensor<T>? _gpuWeightsFiVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsIiVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsCiVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsOiVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsFhVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsIhVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsChVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsOhVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBiasFVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBiasIVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBiasCVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBiasOVelocity;
 
     // Adam M/V buffers
+    [ExternalState]
     private Tensor<T>? _gpuWeightsFiM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsFiV;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsIiM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsIiV;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsCiM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsCiV;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsOiM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsOiV;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsFhM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsFhV;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsIhM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsIhV;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsChM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsChV;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsOhM;
+    [ExternalState]
     private Tensor<T>? _gpuWeightsOhV;
+    [ExternalState]
     private Tensor<T>? _gpuBiasFM;
+    [ExternalState]
     private Tensor<T>? _gpuBiasFV;
+    [ExternalState]
     private Tensor<T>? _gpuBiasIM;
+    [ExternalState]
     private Tensor<T>? _gpuBiasIV;
+    [ExternalState]
     private Tensor<T>? _gpuBiasCM;
+    [ExternalState]
     private Tensor<T>? _gpuBiasCV;
+    [ExternalState]
     private Tensor<T>? _gpuBiasOM;
+    [ExternalState]
     private Tensor<T>? _gpuBiasOV;
 
     // Cached forward pass state for backpropagation (per timestep arrays)
+    [ExternalState]
     private Tensor<T>? _gpuLastInput;
     private Tensor<T>[]? _gpuCachedForgetGates;
     private Tensor<T>[]? _gpuCachedInputGates;
@@ -660,7 +726,9 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>[]? _gpuCachedOutputGates;
     private Tensor<T>[]? _gpuCachedCellStates;
     private Tensor<T>[]? _gpuCachedHiddenStates;
+    [ExternalState]
     private Tensor<T>? _gpuInitialHiddenState;
+    [ExternalState]
     private Tensor<T>? _gpuInitialCellState;
 
     // Cached stacked weights for fused kernel (PyTorch format: i, f, g, o)
@@ -675,8 +743,11 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     // [4*hidden, *] arrays is invariant across forward calls while the weights are
     // unchanged, so cache it and reuse on repeated inference. Invalidated alongside
     // the GPU stacked weights whenever the underlying weights mutate.
+    [AiDotNet.Attributes.Scratch]
     private Tensor<float>? _cpuStackedWeightsIh;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<float>? _cpuStackedWeightsHh;
+    [AiDotNet.Attributes.Scratch]
     private Tensor<float>? _cpuStackedBiasIh;
     private bool _cpuStackedWeightsValid;
 
@@ -885,42 +956,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
 
         _isInitialized = false;
     }
-
-    /// <inheritdoc />
-    public override LayerBase<T> Clone()
-    {
-        // LayerBase.Clone uses MemberwiseClone. That is unsafe for a lazy LSTM because the clone and
-        // source then share LayerBase's mutable parameter registry and generated manifest objects.
-        // BidirectionalLayer clones its inner LSTM before either direction is materialized; when the
-        // directions later initialize, one registration pass overwrites the other's manifest and a
-        // subsequent model clone copies fresh-random gate weights. Reconstructing the layer gives each
-        // direction independent lazy state, exactly like two separately-created recurrent modules.
-        var copy = _useVectorActivation
-            ? new LSTMLayer<T>(_hiddenSize, _tanhVectorActivation!, _sigmoidVectorActivation)
-            : new LSTMLayer<T>(_hiddenSize, _tanhActivation, _sigmoidActivation);
-
-        copy.RandomSeed = RandomSeed;
-        copy.DeterministicForward = DeterministicForward;
-        copy.UseStreamingAllocator = UseStreamingAllocator;
-
-        if (_isInitialized)
-        {
-            copy._inputSize = _inputSize;
-            copy.InputShape = (int[])InputShape.Clone();
-            copy.OutputShape = (int[])OutputShape.Clone();
-
-            var sourceParameters = GetTrainableParameters();
-            var copiedParameters = new Tensor<T>[sourceParameters.Count];
-            for (int i = 0; i < sourceParameters.Count; i++)
-                copiedParameters[i] = sourceParameters[i].Clone();
-
-            copy.SetTrainableParameters(copiedParameters);
-            copy._isInitialized = true;
-        }
-
-        copy.SetTrainingMode(IsTrainingMode);
-        return copy;
-    }
+
 
     /// <summary>
     /// Resolves <see cref="_inputSize"/> from <c>input.Shape[^1]</c> and propagates the
@@ -2331,94 +2367,6 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         }
 
         // Invalidate stacked weight buffers since weights have been modified
-        InvalidateGpuStackedWeights();
-        InvalidateCpuStackedWeights();
-    }
-
-    /// <summary>
-    /// Serializes the LSTM layer's parameters to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer to write to.</param>
-    /// <remarks>
-    /// <para>
-    /// This method saves all weights and biases of the LSTM layer to a binary stream. This allows the layer's
-    /// state to be saved to a file and loaded later, which is useful for saving trained models or for
-    /// transferring parameters between different instances.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves the layer's learned values to a file.
-    /// 
-    /// Serialization is like taking a snapshot of the layer's current state:
-    /// - All weights and biases are written to a file
-    /// - The exact format ensures they can be loaded back correctly
-    /// - This lets you save a trained model for later use
-    /// 
-    /// For example, after training your model for hours or days, you can save it
-    /// and then load it later without having to retrain.
-    /// </para>
-    /// </remarks>
-    public override void Serialize(BinaryWriter writer)
-    {
-        SerializationHelper<T>.SerializeTensor(writer, _weightsFi);
-        SerializationHelper<T>.SerializeTensor(writer, _weightsIi);
-        SerializationHelper<T>.SerializeTensor(writer, _weightsCi);
-        SerializationHelper<T>.SerializeTensor(writer, _weightsOi);
-        SerializationHelper<T>.SerializeTensor(writer, _weightsFh);
-        SerializationHelper<T>.SerializeTensor(writer, _weightsIh);
-        SerializationHelper<T>.SerializeTensor(writer, _weightsCh);
-        SerializationHelper<T>.SerializeTensor(writer, _weightsOh);
-        SerializationHelper<T>.SerializeTensor(writer, _biasF);
-        SerializationHelper<T>.SerializeTensor(writer, _biasI);
-        SerializationHelper<T>.SerializeTensor(writer, _biasC);
-        SerializationHelper<T>.SerializeTensor(writer, _biasO);
-    }
-
-    /// <summary>
-    /// Deserializes the LSTM layer's parameters from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader to read from.</param>
-    /// <remarks>
-    /// <para>
-    /// This method loads all weights and biases of the LSTM layer from a binary stream. This allows the layer
-    /// to restore its state from a previously saved file, which is useful for loading trained models or for
-    /// transferring parameters between different instances.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads previously saved values into the layer.
-    /// 
-    /// Deserialization is like restoring a saved snapshot:
-    /// - All weights and biases are read from a file
-    /// - The layer's internal state is set to match what was saved
-    /// - This lets you use a previously trained model without retraining
-    /// 
-    /// For example, you could train a model on a powerful computer, save it,
-    /// and then load it on a less powerful device for actual use.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(BinaryReader reader)
-    {
-        _weightsFi = SerializationHelper<T>.DeserializeTensor(reader);
-        _weightsIi = SerializationHelper<T>.DeserializeTensor(reader);
-        _weightsCi = SerializationHelper<T>.DeserializeTensor(reader);
-        _weightsOi = SerializationHelper<T>.DeserializeTensor(reader);
-        _weightsFh = SerializationHelper<T>.DeserializeTensor(reader);
-        _weightsIh = SerializationHelper<T>.DeserializeTensor(reader);
-        _weightsCh = SerializationHelper<T>.DeserializeTensor(reader);
-        _weightsOh = SerializationHelper<T>.DeserializeTensor(reader);
-        _biasF = SerializationHelper<T>.DeserializeTensor(reader);
-        _biasI = SerializationHelper<T>.DeserializeTensor(reader);
-        _biasC = SerializationHelper<T>.DeserializeTensor(reader);
-        _biasO = SerializationHelper<T>.DeserializeTensor(reader);
-
-        // Recover the lazy-init state from the loaded tensor shapes. Without this,
-        // a lazy-constructed layer that just deserialized real weights would have
-        // its weights overwritten on the first Forward by EnsureInitialized's
-        // re-allocation path.
-        if (_weightsFi.Shape.Length >= 2 && _weightsFi.Shape[1] > 0)
-        {
-            _inputSize = _weightsFi.Shape[1];
-            _isInitialized = true;
-        }
-
-        // Invalidate stacked weight buffers since weights have been replaced from deserialization
         InvalidateGpuStackedWeights();
         InvalidateCpuStackedWeights();
     }

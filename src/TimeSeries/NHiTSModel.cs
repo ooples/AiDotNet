@@ -794,44 +794,9 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
         return result;
     }
 
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        writer.Write(_options.NumStacks);
-        writer.Write(_options.LookbackWindow);
-        writer.Write(_options.ForecastHorizon);
 
-        writer.Write(_stacks.Count);
-        foreach (var stack in _stacks)
-        {
-            stack.Serialize(writer);
-        }
 
-        // Normalization statistics learned in TrainCore. Without these a reloaded
-        // model denormalizes with the defaults (_normMean=0, _normStd=1), so its
-        // forecasts differ from the original trained model. Written as doubles.
-        writer.Write(NumOps.ToDouble(_normMean));
-        writer.Write(NumOps.ToDouble(_normStd));
-    }
 
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        _options.NumStacks = reader.ReadInt32();
-        _options.LookbackWindow = reader.ReadInt32();
-        _options.ForecastHorizon = reader.ReadInt32();
-
-        InitializeStacks();
-
-        int stackCount = reader.ReadInt32();
-        for (int s = 0; s < stackCount && s < _stacks.Count; s++)
-        {
-            _stacks[s].Deserialize(reader);
-        }
-
-        // Restore the normalization statistics written by SerializeCore so the
-        // reloaded model reproduces the original's forecasts.
-        _normMean = NumOps.FromDouble(reader.ReadDouble());
-        _normStd = NumOps.FromDouble(reader.ReadDouble());
-    }
 
     public override ModelMetadata<T> GetModelMetadata()
     {
@@ -856,24 +821,6 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
     {
         return new NHiTSModel<T>(new NHiTSOptions<T>(_options));
     }
-
-    // ParameterCount restated a fold the base now derives from generated component registration.
-    // Removed under AIDN082.
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new NHiTSModel<T>(_options);
-        clone._stacks.Clear();
-        clone._stacks.AddRange(_stacks);
-        if (_trainingSeries.Length > 0)
-            clone._trainingSeries = new Vector<T>(_trainingSeries);
-        if (ModelParameters is not null && ModelParameters.Length > 0)
-            clone.ModelParameters = new Vector<T>(ModelParameters);
-        clone._normMean = _normMean;
-        clone._normStd = _normStd;
-        return clone;
-    }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 }
 
 /// <summary>
@@ -957,9 +904,13 @@ internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>,
         return metadata;
     }
 
+    /// <summary>Construction state: kept so the generated clone factory can rebuild this layer.</summary>
+    private readonly int _numBlocks;
+
     public NHiTSStackTensor(int inputLength, int outputLength, int hiddenSize, int numLayers, int numBlocks, int poolingSize, int seed = 42)
         : base(new[] { inputLength }, new[] { outputLength })
     {
+        _numBlocks = numBlocks;
         _inputLength = inputLength;
         _outputLength = outputLength;
         _hiddenSize = hiddenSize;
@@ -1012,6 +963,7 @@ internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>,
         return tensor;
     }
 
+    [Scratch]
     private Tensor<T>? _lastForwardInput;
 
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
@@ -1083,80 +1035,5 @@ internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>,
 
         // [outputLength, B] -> [B, outputLength]
         return Engine.TensorPermute(x, new[] { 1, 0 });
-    }
-
-    public override void Serialize(BinaryWriter writer)
-    {
-        writer.Write(_inputLength);
-        writer.Write(_outputLength);
-        writer.Write(_hiddenSize);
-        writer.Write(_numLayers);
-        writer.Write(PoolingSize);
-
-        writer.Write(_weights.Count);
-        foreach (var weight in _weights)
-        {
-            writer.Write(weight.Shape.Length);
-            foreach (var dim in weight._shape)
-                writer.Write(dim);
-            for (int i = 0; i < weight.Length; i++)
-                writer.Write(Convert.ToDouble(weight[i]));
-        }
-
-        writer.Write(_biases.Count);
-        foreach (var bias in _biases)
-        {
-            writer.Write(bias.Shape.Length);
-            foreach (var dim in bias._shape)
-                writer.Write(dim);
-            for (int i = 0; i < bias.Length; i++)
-                writer.Write(Convert.ToDouble(bias[i]));
-        }
-    }
-
-    public override void Deserialize(BinaryReader reader)
-    {
-        // Skip reading dimensions as they should match constructor
-        reader.ReadInt32(); // inputLength
-        reader.ReadInt32(); // outputLength
-        reader.ReadInt32(); // hiddenSize
-        reader.ReadInt32(); // numLayers
-        reader.ReadInt32(); // poolingSize
-
-        int weightCount = reader.ReadInt32();
-        // Consume ALL serialized tensors to keep stream aligned, even if counts differ
-        for (int w = 0; w < weightCount; w++)
-        {
-            int rank = reader.ReadInt32();
-            var shape = new int[rank];
-            for (int d = 0; d < rank; d++)
-                shape[d] = reader.ReadInt32();
-
-            int total = shape.Aggregate(1, (a, b) => a * b);
-            for (int i = 0; i < total; i++)
-            {
-                double v = reader.ReadDouble();
-                if (w < _weights.Count && i < _weights[w].Length)
-                    _weights[w][i] = NumOps.FromDouble(v);
-            }
-        }
-
-        int biasCount = reader.ReadInt32();
-        // Consume ALL serialized tensors to keep stream aligned, even if counts differ
-        for (int b = 0; b < biasCount; b++)
-        {
-            int rank = reader.ReadInt32();
-            var shape = new int[rank];
-            for (int d = 0; d < rank; d++)
-                shape[d] = reader.ReadInt32();
-
-            int total = shape.Aggregate(1, (a, b) => a * b);
-            for (int i = 0; i < total; i++)
-            {
-                double v = reader.ReadDouble();
-                if (b < _biases.Count && i < _biases[b].Length)
-                    _biases[b][i] = NumOps.FromDouble(v);
-            }
-        }
     }
 }

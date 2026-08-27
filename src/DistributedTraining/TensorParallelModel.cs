@@ -98,7 +98,7 @@ namespace AiDotNet.DistributedTraining;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ResearchPaper("Megatron-LM: Training Multi-Billion Parameter Language Models", "https://arxiv.org/abs/1909.08053")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
+public partial class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
     private int _tensorParallelSize;
     private List<int> _tensorParallelGroup = new();
@@ -506,44 +506,6 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
     }
 
     /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-        writer.Write(WorldSize);
-        writer.Write(Rank);
-        writer.Write(Config.AutoSyncGradients);
-        writer.Write(Config.MinimumParameterGroupSize);
-        writer.Write(Config.EnableGradientCompression);
-        var modelData = WrappedModel.Serialize();
-        writer.Write(modelData.Length);
-        writer.Write(modelData);
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-        int savedWorldSize = reader.ReadInt32();
-        int savedRank = reader.ReadInt32();
-        reader.ReadBoolean();
-        reader.ReadInt32();
-        reader.ReadBoolean();
-
-        if (savedWorldSize != WorldSize)
-            throw new InvalidOperationException($"World size mismatch: {savedWorldSize} vs {WorldSize}");
-        if (savedRank != Rank)
-            throw new InvalidOperationException($"Rank mismatch: {savedRank} vs {Rank}");
-
-        int modelDataLength = reader.ReadInt32();
-        byte[] modelData = reader.ReadBytes(modelDataLength);
-        WrappedModel.Deserialize(modelData);
-        InitializeSharding();
-    }
-
-    /// <inheritdoc/>
     public override void SaveModel(string filePath)
     {
         Config.CommunicationBackend.Barrier();
@@ -569,11 +531,5 @@ public class TensorParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TInpu
         {
             Config.CommunicationBackend.Barrier();
         }
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> Clone()
-    {
-        return new TensorParallelModel<T, TInput, TOutput>(WrappedModel.Clone(), Config);
     }
 }

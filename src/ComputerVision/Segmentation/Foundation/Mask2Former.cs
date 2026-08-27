@@ -62,7 +62,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Masked-attention Mask Transformer for Universal Image Segmentation", "https://arxiv.org/abs/2112.01527", Year = 2022, Authors = "Bowen Cheng, Ishan Misra, Alexander G. Schwing, Alexander Kirillov, Rohit Girdhar")]
-public class Mask2Former<T> : Common.PanopticSegmentationBase<T>
+public partial class Mask2Former<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly Mask2FormerOptions _options;
 
@@ -434,63 +434,6 @@ public class Mask2Former<T> : Common.PanopticSegmentationBase<T>
             },
             ModelData = SerializeForMetadata()
         };
-    }
-
-    /// <summary>
-    /// Serializes Mask2Former configuration for persistence.
-    /// </summary>
-    /// <param name="writer">Binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves configuration so the model can be restored later.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height); writer.Write(_width); writer.Write(_channels);
-        writer.Write(_numClasses); writer.Write(_numQueries); writer.Write((int)_modelSize);
-        writer.Write(_decoderDim); writer.Write(_dropRate);
-        writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty);
-        writer.Write(_encoderLayerEnd);
-        writer.Write(_channelDims.Length);
-        foreach (int c in _channelDims) writer.Write(c);
-        writer.Write(_depths.Length);
-        foreach (int d in _depths) writer.Write(d);
-    }
-
-    /// <summary>
-    /// Deserializes Mask2Former configuration.
-    /// </summary>
-    /// <param name="reader">Binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Reads saved configuration matching the write order.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadDouble();
-        _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32();
-        int cc = reader.ReadInt32(); for (int i = 0; i < cc; i++) _ = reader.ReadInt32();
-        int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32();
-    }
-
-    /// <summary>
-    /// Creates a new Mask2Former with same config but fresh weights.
-    /// </summary>
-    /// <returns>New model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Used for cross-validation or ensemble training.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return _useNativeMode
-            ? new Mask2Former<T>(Architecture, _optimizer, LossFunction, _numClasses, _numQueries, _modelSize, _dropRate, _options)
-            : new Mask2Former<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _numQueries, _modelSize, _options);
     }
 
     // Dispose of the ONNX session and the _disposed latch are handled by SegmentationModelBase.

@@ -541,30 +541,6 @@ public partial class TCN<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a fresh copy with randomly initialized weights.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new TCNOptions<T>
-        {
-            LookbackWindow = _lookbackWindow,
-            ForecastHorizon = _forecastHorizon,
-            NumChannels = _numChannels,
-            KernelSize = _kernelSize,
-            NumLayers = _numLayers,
-            DropoutRate = _dropout,
-            UseResidualConnections = _useResidualConnections
-        };
-
-        return new TCN<T>(Architecture, options);
-    }
-
-    /// <summary>
     /// Writes TCN-specific configuration during serialization.
     /// </summary>
     /// <remarks>
@@ -572,17 +548,7 @@ public partial class TCN<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the TCN model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the TCN architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_lookbackWindow);
-        writer.Write(_forecastHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_numChannels);
-        writer.Write(_kernelSize);
-        writer.Write(_numLayers);
-        writer.Write(_dropout);
-        writer.Write(_useResidualConnections);
-    }
+
 
     /// <summary>
     /// Reads TCN-specific configuration during deserialization.
@@ -592,22 +558,7 @@ public partial class TCN<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the TCN model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the TCN architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _lookbackWindow = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _numChannels = reader.ReadInt32();
-        _kernelSize = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _useResidualConnections = reader.ReadBoolean();
 
-        // Re-bind cached layer references (_inputProjection, _tcnBlocks,
-        // _outputProjection) to the deserialized weight-loaded layers so a clone
-        // runs on the loaded weights, not random init.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

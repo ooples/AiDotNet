@@ -74,7 +74,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         Direction = TensorLayoutDirection.Input, BatchOptional = true)]
     [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
         Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-    public class LagrangianNeuralNetwork<T> : NeuralNetworkBase<T>
+    public partial class LagrangianNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         private readonly LagrangianNeuralNetworkOptions _options;
 
@@ -325,32 +325,13 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// Serializes Lagrangian-specific data.
         /// </summary>
         /// <param name="writer">Binary writer.</param>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            writer.Write(_configurationDim);
-        }
+
 
         /// <summary>
         /// Deserializes Lagrangian-specific data.
         /// </summary>
         /// <param name="reader">Binary reader.</param>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            int storedConfigDim = reader.ReadInt32();
-            if (storedConfigDim != _configurationDim)
-            {
-                throw new InvalidOperationException("Serialized Lagrangian configuration does not match the current instance.");
-            }
-        }
 
-        /// <summary>
-        /// Creates a new instance with the same configuration.
-        /// </summary>
-        /// <returns>New Lagrangian network instance.</returns>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new LagrangianNeuralNetwork<T>(Architecture, _configurationDim, _optimizer);
-        }
 
         /// <summary>
         /// Indicates whether this model supports training.

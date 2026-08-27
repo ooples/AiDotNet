@@ -482,14 +482,6 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new TD3Agent<T>(_options);
-        clone.SetParameters(GetParameters());
-        return clone;
-    }
-
-    /// <inheritdoc/>
     public Vector<T> ComputeGradients(
         Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
@@ -502,80 +494,6 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // TD3 uses direct network updates during training, not manual gradient application
-    }
-
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        writer.Write(_options.StateSize);
-        writer.Write(_options.ActionSize);
-        writer.Write(_stepCount);
-        writer.Write(_updateCount);
-
-        var actorBytes = _actorNetwork.Serialize();
-        writer.Write(actorBytes.Length);
-        writer.Write(actorBytes);
-
-        var targetActorBytes = _targetActorNetwork.Serialize();
-        writer.Write(targetActorBytes.Length);
-        writer.Write(targetActorBytes);
-
-        var critic1Bytes = _critic1Network.Serialize();
-        writer.Write(critic1Bytes.Length);
-        writer.Write(critic1Bytes);
-
-        var critic2Bytes = _critic2Network.Serialize();
-        writer.Write(critic2Bytes.Length);
-        writer.Write(critic2Bytes);
-
-        var targetCritic1Bytes = _targetCritic1Network.Serialize();
-        writer.Write(targetCritic1Bytes.Length);
-        writer.Write(targetCritic1Bytes);
-
-        var targetCritic2Bytes = _targetCritic2Network.Serialize();
-        writer.Write(targetCritic2Bytes.Length);
-        writer.Write(targetCritic2Bytes);
-
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        reader.ReadInt32(); // stateSize
-        reader.ReadInt32(); // actionSize
-        _stepCount = reader.ReadInt32();
-        _updateCount = reader.ReadInt32();
-
-        var actorLength = reader.ReadInt32();
-        var actorBytes = reader.ReadBytes(actorLength);
-        _actorNetwork.Deserialize(actorBytes);
-
-        var targetActorLength = reader.ReadInt32();
-        var targetActorBytes = reader.ReadBytes(targetActorLength);
-        _targetActorNetwork.Deserialize(targetActorBytes);
-
-        var critic1Length = reader.ReadInt32();
-        var critic1Bytes = reader.ReadBytes(critic1Length);
-        _critic1Network.Deserialize(critic1Bytes);
-
-        var critic2Length = reader.ReadInt32();
-        var critic2Bytes = reader.ReadBytes(critic2Length);
-        _critic2Network.Deserialize(critic2Bytes);
-
-        var targetCritic1Length = reader.ReadInt32();
-        var targetCritic1Bytes = reader.ReadBytes(targetCritic1Length);
-        _targetCritic1Network.Deserialize(targetCritic1Bytes);
-
-        var targetCritic2Length = reader.ReadInt32();
-        var targetCritic2Bytes = reader.ReadBytes(targetCritic2Length);
-        _targetCritic2Network.Deserialize(targetCritic2Bytes);
     }
 
     /// <inheritdoc/>

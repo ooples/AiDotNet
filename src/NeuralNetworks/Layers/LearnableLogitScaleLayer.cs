@@ -24,9 +24,13 @@ public partial class LearnableLogitScaleLayer<T> : LayerBase<T>
     private Tensor<T> _logScale;
 
     public override bool SupportsTraining => true;
+    /// <summary>Construction state: kept so the generated clone factory can rebuild this layer.</summary>
+    private readonly double _temperature;
+
     public LearnableLogitScaleLayer(double temperature = 0.07)
         : base([-1], [-1])
     {
+        _temperature = temperature;
         if (temperature <= 0) throw new ArgumentOutOfRangeException(nameof(temperature));
         _logScale = new Tensor<T>([1]);
         _logScale[0] = NumOps.FromDouble(Math.Log(1.0 / temperature));

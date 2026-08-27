@@ -18,7 +18,7 @@ namespace AiDotNet.Interpolation;
 /// readings taken at irregular locations.
 /// </para>
 /// </remarks>
-public class ThinPlateSplineInterpolation<T> : I2DInterpolation<T>
+public partial class ThinPlateSplineInterpolation<T> : I2DInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the data points.
@@ -33,6 +33,7 @@ public class ThinPlateSplineInterpolation<T> : I2DInterpolation<T>
     /// <summary>
     /// The z-values (heights) at each data point.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _z;
 
     /// <summary>

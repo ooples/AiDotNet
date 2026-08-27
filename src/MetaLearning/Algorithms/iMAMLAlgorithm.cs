@@ -68,7 +68,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Aravind Rajeswaran, Chelsea Finn, Sham M. Kakade, Sergey Levine")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly iMAMLOptions<T, TInput, TOutput> _imamlOptions;
 

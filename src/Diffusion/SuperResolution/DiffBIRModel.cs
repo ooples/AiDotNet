@@ -443,27 +443,6 @@ public partial class DiffBIRModel<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Lazy-preserving Clone: delegate weights to the submodules' own Clone(), and carry through the
-        // caller-provided runtime configuration (architecture / options / scheduler) so the clone is a
-        // faithful copy rather than a defaults-rebuild.
-        return new DiffBIRModel<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            unet: (UNetNoisePredictor<T>)_unet.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

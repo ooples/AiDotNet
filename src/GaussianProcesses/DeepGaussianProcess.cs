@@ -55,12 +55,24 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Deep Gaussian Processes", "https://doi.org/10.48550/arXiv.1211.0358", Year = 2013, Authors = "Andreas Damianou, Neil D. Lawrence")]
-public class DeepGaussianProcess<T> : GaussianProcessBase<T>
+public partial class DeepGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>
     /// The GP layers in the deep architecture.
     /// </summary>
     private readonly List<DGPLayer<T>> _layers;
+
+    /// <summary>The per-layer kernels this process was built from.</summary>
+    /// <remarks>
+    /// Both are kept because the constructor spends them building <see cref="_layers"/> and nothing
+    /// gives them back: recovering them would mean projecting a list of layers into two arrays, which
+    /// is not something the clone plan can express. The convenience constructor fills them in with the
+    /// arrays it is equivalent to, so an instance built either way rebuilds through the same one.
+    /// </remarks>
+    private readonly IKernelFunction<T>[] _layerKernels;
+
+    /// <summary>The per-layer output widths, one fewer than the kernels; the last layer emits 1D.</summary>
+    private readonly int[] _layerWidths;
 
     /// <summary>
     /// The training input data.
@@ -154,6 +166,9 @@ public class DeepGaussianProcess<T> : GaussianProcessBase<T>
         if (layerWidths.Length != layerKernels.Length - 1)
             throw new ArgumentException("Layer widths must have one fewer element than layer kernels (last layer outputs 1D).", nameof(layerWidths));
 
+        _layerKernels = layerKernels;
+        _layerWidths = layerWidths;
+
         _numOps = MathHelper.GetNumericOperations<T>();
         _decompositionType = decompositionType;
         _numInducingPoints = numInducingPoints;
@@ -215,6 +230,13 @@ public class DeepGaussianProcess<T> : GaussianProcessBase<T>
 
         _X = Matrix<T>.Empty();
         _y = Vector<T>.Empty();
+
+        // Record the arrays this shorthand is equivalent to, so a clone rebuilds through the full
+        // constructor rather than depending on which overload happened to be called.
+        _layerKernels = new IKernelFunction<T>[numLayers];
+        for (int i = 0; i < numLayers; i++) _layerKernels[i] = kernel;
+        _layerWidths = new int[numLayers - 1];
+        for (int i = 0; i < numLayers - 1; i++) _layerWidths[i] = hiddenWidth;
 
         // Create layers with same kernel
         _layers = new List<DGPLayer<T>>();
@@ -569,6 +591,7 @@ internal class DGPLayer<T>
     private Matrix<T> _inducingInputs;
     private Matrix<T> _variationalMean;
     private Matrix<T> _variationalCovCholesky;
+    [AiDotNet.Attributes.Scratch]
     private Matrix<T> _Kuu;
 
     public int OutputDim => _outputDim;

@@ -44,12 +44,14 @@ namespace AiDotNet.MetaLearning.Models;
     Authors = "Rusu, A. A., Rao, D., Sygnowski, J., Vinyals, O., Pascanu, R., Osindero, S., & Hadsell, R.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class LEOModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+public partial class LEOModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly IFullModel<T, TInput, TOutput> _featureEncoder;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _classifierParams;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _latentCode;
     private readonly LEOOptions<T, TInput, TOutput> _options;
 

@@ -283,10 +283,8 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>
         ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
     };
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new CCDM<T>(Architecture, new CCDMOptions<T> { ContextLength = _contextLength, ForecastHorizon = _forecastHorizon, HiddenDimension = _hiddenDimension, NumLayers = _numLayers, NumHeads = _numHeads, DiffusionSteps = _diffusionSteps, DropoutRate = _dropout, BetaStart = _betaStart, BetaEnd = _betaEnd, SigmaMin = _sigmaMin, SigmaMax = _sigmaMax });
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_contextLength); writer.Write(_forecastHorizon); writer.Write(_hiddenDimension); writer.Write(_numLayers); writer.Write(_numHeads); writer.Write(_diffusionSteps); writer.Write(_dropout); writer.Write(_betaStart); writer.Write(_betaEnd); writer.Write(_sigmaMin); writer.Write(_sigmaMax); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _contextLength = reader.ReadInt32(); _forecastHorizon = reader.ReadInt32(); _hiddenDimension = reader.ReadInt32(); _numLayers = reader.ReadInt32(); _numHeads = reader.ReadInt32(); _diffusionSteps = reader.ReadInt32(); _dropout = reader.ReadDouble(); _betaStart = reader.ReadDouble(); _betaEnd = reader.ReadDouble(); _sigmaMin = reader.ReadDouble(); _sigmaMax = reader.ReadDouble(); ComputeNoiseSchedule(); }
+
 
     #endregion
 

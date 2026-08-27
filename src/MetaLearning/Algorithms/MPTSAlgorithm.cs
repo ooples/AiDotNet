@@ -64,6 +64,7 @@ public partial class MPTSAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private readonly int _groupSize;
 
     /// <summary>Learned priority scores for each group (higher = adapted earlier).</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _priorityScores;
 
     /// <inheritdoc/>

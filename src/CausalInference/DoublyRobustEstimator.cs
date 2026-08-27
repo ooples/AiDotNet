@@ -68,11 +68,12 @@ namespace AiDotNet.CausalInference;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Doubly Robust Estimation in Missing Data and Causal Inference Models", "https://doi.org/10.1111/j.0006-341X.2005.031007.x")]
-public class DoublyRobustEstimator<T> : CausalModelBase<T>
+public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
 {
     /// <summary>
     /// Stores the logistic regression coefficients for propensity score estimation.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _propensityCoefficients;
 
     /// <summary>
@@ -824,32 +825,6 @@ public class DoublyRobustEstimator<T> : CausalModelBase<T>
         var newModel = new DoublyRobustEstimator<T>(_trimMin, _trimMax, _useCrossFitting, _numFolds);
         newModel.SetParameters(parameters);
         return newModel;
-    }
-
-    /// <summary>
-    /// Creates a fitted copy, including the learned propensity and outcome coefficients.
-    /// CausalModelBase's metadata round-trip does not carry these estimator state vectors.
-    /// </summary>
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
-    {
-        var copy = new DoublyRobustEstimator<T>(_trimMin, _trimMax, _useCrossFitting, _numFolds);
-        // Keep estimator state as independent vectors without forcing a generic
-        // parameter flatten/round-trip. (Unlike a neural model these vectors are
-        // small, but direct cloning is both clearer and preserves fitted state.)
-        copy._propensityCoefficients = _propensityCoefficients?.Clone();
-        copy._outcomeCoefficients1 = _outcomeCoefficients1?.Clone();
-        copy._outcomeCoefficients0 = _outcomeCoefficients0?.Clone();
-        copy.NumFeatures = NumFeatures;
-        copy.IsFitted = IsFitted;
-        return copy;
-    }
-
-    /// <summary>
-    /// Creates a new instance of this type.
-    /// </summary>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new DoublyRobustEstimator<T>(_trimMin, _trimMax, _useCrossFitting, _numFolds);
     }
 
     #endregion

@@ -62,6 +62,7 @@ public partial class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     private readonly int _paramDim;
 
     /// <summary>Reward shaper parameters: 3-input → hidden → 1-output MLP.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _shaperParams;
 
     private readonly int _hiddenDim;

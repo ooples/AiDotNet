@@ -216,32 +216,8 @@ public partial class VideoFlow<T> : OpticalFlowBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numFeatures);
-        writer.Write(_numLayers);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _numFeatures = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
 
-        // Re-link the typed role fields to the layers the BASE already deserialized (trained,
-        // shape-resolved) rather than calling InitializeNativeLayers, which allocates FRESH random-init
-        // convolutions and replaces the deserialized layers — so a cloned/loaded model predicted from
-        // random init (#1221 class). EstimateFlow reads these fields directly, not Layers. Order matches
-        // InitializeLayers: [featureExtract, ...processingBlocks, outputConv].
-        // Re-link the typed role fields via the shared OpticalFlowBase helper (validates the untrusted
-        // count, then casts-or-throws each role layer). Order matches InitializeLayers:
-        // [featureExtract, ...processingBlocks, outputConv].
-        RelinkOpticalFlowLayers(_numLayers, "VideoFlow", out _featureExtract, _processingBlocks, out _outputConv);
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new VideoFlow<T>(Architecture, _numFeatures, _numLayers, _options);
-    }
 }

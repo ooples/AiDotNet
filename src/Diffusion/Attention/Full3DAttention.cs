@@ -42,6 +42,7 @@ public partial class Full3DAttention<T> : LayerBase<T>, IShapeContract
     private readonly int _numFrames;
     private readonly int _spatialSize;
     private readonly FlashAttentionLayer<T> _fullAttention;
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <inheritdoc />

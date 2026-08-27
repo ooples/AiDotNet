@@ -830,70 +830,7 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
         };
     }
 
-    /// <summary>
-    /// Serializes network-specific data for the Variational Autoencoder.
-    /// </summary>
-    /// <param name="writer">The BinaryWriter to write the data to.</param>
-    /// <remarks>
-    /// This method writes the specific configuration and state of the VAE to a binary stream.
-    /// It includes network-specific parameters that are essential for later reconstruction of the network.
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(LatentSize);
-        SerializationHelper<T>.SerializeInterface(writer, _optimizer);
-    }
 
-    /// <summary>
-    /// Deserializes network-specific data for the Variational Autoencoder.
-    /// </summary>
-    /// <param name="reader">The BinaryReader to read the data from.</param>
-    /// <remarks>
-    /// This method reads the specific configuration and state of the VAE from a binary stream.
-    /// It reconstructs the network-specific parameters to match the state of the network when it was serialized.
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        LatentSize = reader.ReadInt32();
-        _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader) ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-    }
 
-    /// <summary>
-    /// Creates a new instance of the Variational Autoencoder with the same architecture and configuration.
-    /// </summary>
-    /// <returns>A new instance of the Variational Autoencoder with the same configuration as the current instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new Variational Autoencoder with the same architecture, latent size,
-    /// optimizer, loss function, and gradient clipping settings as the current instance. The new
-    /// instance has freshly initialized parameters, making it useful for creating separate instances
-    /// with identical configurations or for resetting the network while preserving its structure.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates a brand new VAE with the same setup as the current one.
-    /// 
-    /// Think of it like creating a copy of your VAE's blueprint:
-    /// - It has the same overall structure
-    /// - It uses the same latent size (compression level)
-    /// - It has the same optimizer (learning method)
-    /// - It uses the same loss function (way of measuring performance)
-    /// - But it starts with fresh parameters (internal values)
-    /// 
-    /// This is useful when you want to:
-    /// - Start over with a fresh network but keep the same design
-    /// - Create multiple networks with identical settings for comparison
-    /// - Reset a network to its initial state
-    /// 
-    /// The new VAE will need to be trained from scratch, as it doesn't inherit any
-    /// of the learned knowledge from the original network.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new VariationalAutoencoder<T>(
-            Architecture,
-            LatentSize,
-            _optimizer,
-            LossFunction,
-            Convert.ToDouble(MaxGradNorm));
-    }
+
 }

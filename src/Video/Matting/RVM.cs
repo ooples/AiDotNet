@@ -65,7 +65,7 @@ namespace AiDotNet.Video.Matting;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public class RVM<T> : NeuralNetworkBase<T>
+public partial class RVM<T> : NeuralNetworkBase<T>
 {
     private readonly RVMOptions _options;
 
@@ -375,18 +375,9 @@ public class RVM<T> : NeuralNetworkBase<T>
         ModelData = _useNativeMode ? this.Serialize() : []
     };
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numFeatures); writer.Write(_imageHeight); writer.Write(_imageWidth);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        for (int i = 0; i < 3; i++) _ = reader.ReadInt32();
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new RVM<T>(Architecture, _optimizer, _lossFunction, _numFeatures);
+
 
     #endregion
 }

@@ -73,6 +73,11 @@ public partial class VGGishAudioEmbedding<T> : LayerBase<T>, IShapeContract
     /// <summary>Frames per patch in the published front-end (0.96 s at a 10 ms hop).</summary>
     public const int PaperPatchFrames = 96;
 
+    private readonly int _conv1Filters;
+    private readonly int _conv2Filters;
+    private readonly int _conv3Filters;
+    private readonly int _conv4Filters;
+
     private readonly ConvolutionalLayer<T> _conv1;
     private readonly MaxPoolingLayer<T> _pool1;
     private readonly ConvolutionalLayer<T> _conv2;
@@ -85,11 +90,22 @@ public partial class VGGishAudioEmbedding<T> : LayerBase<T>, IShapeContract
     private readonly MaxPoolingLayer<T> _pool4;
     private readonly FlattenLayer<T> _flatten;
     private readonly DenseLayer<T> _fc1;
+    // Declared because their width IS known at construction: both read the fully connected width
+    // that _fc1 produces. The convolutions before them cannot be declared -- this layer's own
+    // input is [-1, -1] -- and they no longer need to be, since the chain now covers whatever a
+    // declaration leaves out. Without this the two were shape-deferred, contributing nothing to
+    // the count while GetParameters materialized them: 4160 + 2080 = the 6240 the sweep reported.
+    [SubLayerInput("FullyConnectedWidth")]
     private readonly DenseLayer<T> _fc2;
+    [SubLayerInput("FullyConnectedWidth")]
     private readonly DenseLayer<T> _embedding;
 
     /// <summary>Size of the embedding this layer produces.</summary>
     public int EmbeddingSize { get; }
+
+    /// <summary>Width of the two hidden dense layers.</summary>
+    /// <remarks>Retained so the layers after the flatten can DECLARE the width they read.</remarks>
+    public int FullyConnectedWidth { get; }
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
@@ -130,6 +146,11 @@ public partial class VGGishAudioEmbedding<T> : LayerBase<T>, IShapeContract
         Positive(embeddingSize, nameof(embeddingSize));
 
         EmbeddingSize = embeddingSize;
+        FullyConnectedWidth = fullyConnectedWidth;
+        _conv1Filters = conv1Filters;
+        _conv2Filters = conv2Filters;
+        _conv3Filters = conv3Filters;
+        _conv4Filters = conv4Filters;
 
         // 3x3 kernels with padding 1 reproduce TensorFlow's SAME padding at stride 1, so each group
         // preserves its spatial extent and only the pools reduce it. ReLU on every convolution.

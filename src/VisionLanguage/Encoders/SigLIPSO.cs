@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Zhai et al."
 )]
-public class SigLIPSO<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
+public partial class SigLIPSO<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly SigLIPSOOptions _options;
 
@@ -184,38 +184,9 @@ public class SigLIPSO<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.ImageSize);
-        writer.Write(_options.EmbeddingDim);
-        writer.Write(_options.NumLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.NumOutputTokens);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.ImageSize = reader.ReadInt32();
-        _options.EmbeddingDim = reader.ReadInt32();
-        _options.NumLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.NumOutputTokens = reader.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new SigLIPSO<T>(Architecture, mp, _options);
-        return new SigLIPSO<T>(Architecture, _options);
-    }
+
 
     private void ThrowIfDisposed()
     {

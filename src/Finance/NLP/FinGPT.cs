@@ -220,24 +220,6 @@ public partial class FinGPT<T> : FinancialNLPModelBase<T>
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <summary>
-    /// Executes CreateNewInstance for the FinGPT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinGPT model, CreateNewInstance builds and wires up model components. This sets up the FinGPT architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new ModelOptions.FinGPTOptions<T>
-        {
-            MaxSequenceLength = MaxSequenceLength,
-            VocabularySize = VocabularySize,
-            HiddenDimension = HiddenDimension
-        };
-        return new FinGPT<T>(Architecture, options, _optimizer, LossFunction);
-    }
 
     /// <summary>
     /// Executes SerializeModelSpecificData for the FinGPT.
@@ -247,10 +229,7 @@ public partial class FinGPT<T> : FinancialNLPModelBase<T>
     /// <b>For Beginners:</b> In the FinGPT model, SerializeModelSpecificData saves or restores model-specific settings. This lets the FinGPT architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeModelSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_dropout);
-    }
+
 
     /// <summary>
     /// Executes DeserializeModelSpecificData for the FinGPT.
@@ -260,10 +239,7 @@ public partial class FinGPT<T> : FinancialNLPModelBase<T>
     /// <b>For Beginners:</b> In the FinGPT model, DeserializeModelSpecificData saves or restores model-specific settings. This lets the FinGPT architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeModelSpecificData(BinaryReader reader)
-    {
-        _dropout = reader.ReadDouble();
-    }
+
 
     /// <summary>
     /// Executes ForecastNative for the FinGPT.

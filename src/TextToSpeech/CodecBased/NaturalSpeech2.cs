@@ -50,7 +50,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2023,
     Authors = "Shen et al."
 )]
-public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
+public partial class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly NaturalSpeech2Options _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -270,55 +270,10 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.MelChannels);
-        writer.Write(_options.HiddenDim);
-        writer.Write(_options.NumDiffusionSteps);
-        writer.Write(_options.DiffusionDim);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.NumEncoderLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.HopSize);
-        writer.Write(_options.MaxTextLength);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.MelChannels = reader.ReadInt32();
-        _options.HiddenDim = reader.ReadInt32();
-        _options.NumDiffusionSteps = reader.ReadInt32();
-        _options.DiffusionDim = reader.ReadInt32();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.NumEncoderLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.HopSize = reader.ReadInt32();
-        _options.MaxTextLength = reader.ReadInt32();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new NaturalSpeech2Options(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new NaturalSpeech2<T>(Architecture, mp, options);
-        return new NaturalSpeech2<T>(Architecture, options);
-    }
 
     private void ThrowIfDisposed()
     {

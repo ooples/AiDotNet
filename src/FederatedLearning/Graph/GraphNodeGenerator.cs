@@ -29,7 +29,7 @@ namespace AiDotNet.FederatedLearning.Graph;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ComponentType(ComponentType.FederatedAggregator)]
 [PipelineStage(PipelineStage.Training)]
-public class GraphNodeGenerator<T> : FederatedLearningComponentBase<T>
+public partial class GraphNodeGenerator<T> : FederatedLearningComponentBase<T>
 {
     private readonly int _inputDim;
     private readonly int _hiddenDim;
@@ -37,9 +37,13 @@ public class GraphNodeGenerator<T> : FederatedLearningComponentBase<T>
     private readonly double _learningRate;
 
     // Simple two-layer MLP: input -> hidden -> output
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _weightsHidden;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _biasHidden;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _weightsOutput;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _biasOutput;
     private bool _trained;
 

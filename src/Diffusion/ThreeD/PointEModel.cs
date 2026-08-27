@@ -646,24 +646,6 @@ public partial class PointEModel<T> : ThreeDDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Create a clone of the predictor to preserve trained weights
-                return new PointEModel<T>(
-            pointCloudPredictor: (DiTNoisePredictor<T>)_pointCloudPredictor.Clone(),
-            imageGenerator: _imageGenerator,
-            conditioner: _conditioner,
-            defaultPointCount: DefaultPointCount,
-            useTwoStage: _useTwoStage);
-    }
-
     #endregion
 
     #region Metadata

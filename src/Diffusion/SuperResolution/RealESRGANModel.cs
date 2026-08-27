@@ -407,32 +407,6 @@ public partial class RealESRGANModel<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Delegate to the predictor/VAE's own Clone implementations, which resolve
-        // their internal lazy shapes on BOTH source and clone before copying weights.
-        // Constructing a fresh predictor/VAE here and calling SetParameters with
-        // GetParameters from this re-hits the lazy-init bug: GetParameters() on a
-        // still-unresolved source under-counts the lazy DenseLayer params while the new
-        // constructor's ParameterCount is live (arch-derived), so the clone re-resolves
-        // on its first Predict and diverges from the original. Mirrors
-        // ImprovedConsistencyModel / SDXLTurbo / DDPM (PR #1555 / #1562).
-        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
-        var clonedVae = (StandardVAE<T>)_vae.Clone();
-
-        return new RealESRGANModel<T>(
-            unet: clonedUnet,
-            vae: clonedVae,
-            conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

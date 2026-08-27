@@ -25,7 +25,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Makoto Kawano, Wataru Kumagai, Akiyoshi Sannai, et al.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class EquivCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
+public partial class EquivCNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
 {
     private readonly EquivCNPOptions<T, TInput, TOutput> _algoOptions;
 

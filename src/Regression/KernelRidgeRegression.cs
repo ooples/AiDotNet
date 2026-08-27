@@ -61,7 +61,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Kernel Methods for Pattern Analysis", "https://doi.org/10.1017/CBO9780511809682")]
-public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
+public partial class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
     /// Initializes a new instance with default settings.
@@ -74,12 +74,15 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// The Gram matrix (kernel matrix) that represents pairwise similarities between all training points.
     /// </summary>
+    [Buffer]
     private Matrix<T> _gramMatrix;
 
     /// <summary>
     /// The dual coefficients used for making predictions.
     /// </summary>
+    [Buffer]
     private Vector<T> _dualCoefficients;
+    [Buffer]
     private T _yMean;
     private Vector<T>? _linearCoefficients;
     private T _linearIntercept;
@@ -377,195 +380,6 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
 
         return metadata;
     }
-
-    /// <summary>
-    /// Serializes the Kernel Ridge Regression model to a byte array for storage or transmission.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method converts the Kernel Ridge Regression model into a byte array that can be stored in a file, database,
-    /// or transmitted over a network. The serialized data includes the base class data, model-specific options like
-    /// the regularization parameter (lambda), the Gram matrix, and the dual coefficients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method saves your trained model as a sequence of bytes.
-    /// 
-    /// Serialization allows you to:
-    /// - Save your model to a file
-    /// - Store your model in a database
-    /// - Send your model over a network
-    /// - Keep your model for later use without having to retrain it
-    /// 
-    /// The serialized data includes:
-    /// - The model's settings (like the lambda regularization parameter)
-    /// - The Gram matrix (similarities between training examples)
-    /// - The dual coefficients learned during training
-    /// 
-    /// Example:
-    /// ```csharp
-    /// // Serialize the model
-    /// byte[] modelData = krr.Serialize();
-    /// 
-    /// // Save to a file
-    /// File.WriteAllBytes("kernelRidgeRegression.model", modelData);
-    /// ```
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize KernelRidgeRegression specific data
-        writer.Write(Options.LambdaKRR);
-        writer.Write((int)Options.DecompositionType);
-
-        // Serialize _gramMatrix
-        writer.Write(_gramMatrix.Rows);
-        writer.Write(_gramMatrix.Columns);
-        for (int i = 0; i < _gramMatrix.Rows; i++)
-        {
-            for (int j = 0; j < _gramMatrix.Columns; j++)
-            {
-                writer.Write(Convert.ToDouble(_gramMatrix[i, j]));
-            }
-        }
-
-        // Serialize _dualCoefficients
-        writer.Write(_dualCoefficients.Length);
-        for (int i = 0; i < _dualCoefficients.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_dualCoefficients[i]));
-        }
-
-        // Serialize _yMean
-        writer.Write(Convert.ToDouble(_yMean));
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Loads a previously serialized Kernel Ridge Regression model from a byte array.
-    /// </summary>
-    /// <param name="modelData">The byte array containing the serialized model.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reconstructs a Kernel Ridge Regression model from a byte array that was previously created using the
-    /// Serialize method. It restores the base class data, model-specific options, the Gram matrix, and the dual
-    /// coefficients, allowing the model to be used for predictions without retraining.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads a previously saved model from a sequence of bytes.
-    /// 
-    /// Deserialization allows you to:
-    /// - Load a model that was saved earlier
-    /// - Use a model without having to retrain it
-    /// - Share models between different applications
-    /// 
-    /// When you deserialize a model:
-    /// - All settings are restored
-    /// - The Gram matrix is reconstructed
-    /// - The dual coefficients are recovered
-    /// - The model is ready to make predictions immediately
-    /// 
-    /// Example:
-    /// ```csharp
-    /// // Load from a file
-    /// byte[] modelData = File.ReadAllBytes("kernelRidgeRegression.model");
-    /// 
-    /// // Deserialize the model
-    /// var options = new KernelRidgeRegressionOptions();
-    /// var krr = new KernelRidgeRegression&lt;double&gt;(options);
-    /// krr.Deserialize(modelData);
-    /// 
-    /// // Now you can use the model for predictions
-    /// var predictions = krr.Predict(newFeatures);
-    /// ```
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize KernelRidgeRegression specific data
-        Options.LambdaKRR = reader.ReadDouble();
-        Options.DecompositionType = (MatrixDecompositionType)reader.ReadInt32();
-
-        // Deserialize _gramMatrix
-        int rows = reader.ReadInt32();
-        int cols = reader.ReadInt32();
-        _gramMatrix = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                _gramMatrix[i, j] = NumOps.FromDouble(reader.ReadDouble());
-            }
-        }
-
-        // Deserialize _dualCoefficients
-        int length = reader.ReadInt32();
-        _dualCoefficients = new Vector<T>(length);
-        for (int i = 0; i < length; i++)
-        {
-            _dualCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Deserialize _yMean
-        if (ms.Position < ms.Length)
-            _yMean = NumOps.FromDouble(reader.ReadDouble());
-    }
-
-    /// <summary>
-    /// Creates a new instance of the KernelRidgeRegression with the same configuration as the current instance.
-    /// </summary>
-    /// <returns>A new KernelRidgeRegression instance with the same options and regularization as the current instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the KernelRidgeRegression model with the same configuration options
-    /// and regularization settings as the current instance. This is useful for model cloning, ensemble methods, or
-    /// cross-validation scenarios where multiple instances of the same model with identical configurations are needed.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a fresh copy of the model's blueprint.
-    /// 
-    /// When you need multiple versions of the same type of model with identical settings:
-    /// - This method creates a new, empty model with the same configuration
-    /// - It's like making a copy of a recipe before you start cooking
-    /// - The new model has the same settings but no trained data
-    /// - This is useful for techniques that need multiple models, like cross-validation
-    /// 
-    /// For example, when testing your model on different subsets of data,
-    /// you'd want each test to use a model with identical settings.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new KernelRidgeRegression<T>((KernelRidgeRegressionOptions)Options, Regularization);
-        if (SupportVectors.Rows > 0)
-            clone.SupportVectors = SupportVectors.Clone();
-        if (Alphas.Length > 0)
-            clone.Alphas = new Vector<T>(Alphas);
-        clone.B = B;
-        clone._gramMatrix = _gramMatrix.Rows > 0 ? _gramMatrix.Clone() : Matrix<T>.Empty();
-        clone._dualCoefficients = _dualCoefficients.Length > 0 ? new Vector<T>(_dualCoefficients) : Vector<T>.Empty();
-        clone._yMean = _yMean;
-        clone._linearIntercept = _linearIntercept;
-        if (_linearCoefficients is not null)
-            clone._linearCoefficients = new Vector<T>(_linearCoefficients);
-        return clone;
-    }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {

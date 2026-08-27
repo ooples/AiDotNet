@@ -1,5 +1,6 @@
 
 using AiDotNet.Interfaces;
+using AiDotNet.Attributes;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.NestedLearning;
@@ -16,6 +17,7 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
     private readonly int _dimension;
     private readonly double _inverseTemperature;
     private readonly List<(Vector<T> Input, Vector<T> Target)> _memories;
+    [Scratch]
     private Matrix<T>? _cachedAssociationMatrix;
 
     /// <summary>Cosine similarity threshold for treating two keys as duplicates in Update.</summary>
@@ -23,6 +25,7 @@ public class AssociativeMemory<T> : NestedLearningBase<T>, IAssociativeMemory<T>
 
     /// <summary>Small epsilon to prevent division by zero in cosine similarity.</summary>
     private const double CosineEpsilon = 1e-10;
+    [Scratch]
     private Tensor<T>? _cachedValuesTensor;
 
     public AssociativeMemory(int dimension, int capacity = 1000, double inverseTemperature = 8.0)

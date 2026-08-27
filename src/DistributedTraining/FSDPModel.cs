@@ -66,8 +66,9 @@ namespace AiDotNet.DistributedTraining;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ResearchPaper("PyTorch FSDP: Experiences on Scaling Fully Sharded Data Parallel", "https://arxiv.org/abs/2304.11277")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
+public partial class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput>
 {
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _computedGradients;
 
     /// <summary>
@@ -226,64 +227,6 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
     }
 
     /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize sharding configuration info
-        writer.Write(WorldSize);
-        writer.Write(Rank);
-        writer.Write(Config.AutoSyncGradients);
-        writer.Write(Config.MinimumParameterGroupSize);
-        writer.Write(Config.EnableGradientCompression);
-
-        // Serialize wrapped model
-        var modelData = WrappedModel.Serialize();
-        writer.Write(modelData.Length);
-        writer.Write(modelData);
-
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-
-        // Read sharding configuration (for validation)
-        int savedWorldSize = reader.ReadInt32();
-        int savedRank = reader.ReadInt32();
-        reader.ReadBoolean(); // AutoSyncGradients
-        reader.ReadInt32(); // MinimumParameterGroupSize
-        reader.ReadBoolean(); // EnableGradientCompression
-
-        if (savedWorldSize != WorldSize)
-        {
-            throw new InvalidOperationException(
-                $"World size mismatch. Model was trained with {savedWorldSize} processes, " +
-                $"but current configuration has {WorldSize} processes.");
-        }
-
-        // Validate rank matches - different rank could indicate configuration mismatch
-        if (savedRank != Rank)
-        {
-            throw new InvalidOperationException(
-                $"Rank mismatch. Model was saved on rank {savedRank}, " +
-                $"but is being loaded on rank {Rank}. This could indicate a configuration error.");
-        }
-
-        // Read wrapped model
-        int modelDataLength = reader.ReadInt32();
-        byte[] modelData = reader.ReadBytes(modelDataLength);
-        WrappedModel.Deserialize(modelData);
-
-        // Re-initialize sharding
-        InitializeSharding();
-    }
-
-    /// <inheritdoc/>
     public override void SaveModel(string filePath)
     {
         // Barrier first so all ranks arrive together — prevents deadlock
@@ -335,23 +278,9 @@ public class FSDPModel<T, TInput, TOutput> : ShardedModelBase<T, TInput, TOutput
     }
 
     /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> Clone()
-    {
-        var clonedWrappedModel = WrappedModel.Clone();
-        return new FSDPModel<T, TInput, TOutput>(clonedWrappedModel, Config);
-    }
-
-    /// <inheritdoc/>
     public override Dictionary<string, T> GetFeatureImportance()
     {
         return WrappedModel.GetFeatureImportance();
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-    {
-        var deepCopiedWrappedModel = WrappedModel.DeepCopy();
-        return new FSDPModel<T, TInput, TOutput>(deepCopiedWrappedModel, Config);
     }
 
     /// <inheritdoc/>

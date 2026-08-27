@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using System;
 using System.Collections.Generic;
 using AiDotNet.Models.Parameters;
@@ -32,7 +33,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class MambularBase<T> : IParameterSource<T>
+public abstract partial class MambularBase<T> : IParameterSource<T>
 {
     /// <summary>
     /// Provides access to the hardware-accelerated tensor engine.
@@ -47,6 +48,7 @@ public abstract class MambularBase<T> : IParameterSource<T>
     private readonly Random _random = RandomHelper.CreateSecureRandom();
 
     // Feature embeddings
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _numericalEmbeddings;
     private readonly Tensor<T>[]? _categoricalEmbeddings;
 
@@ -58,7 +60,9 @@ public abstract class MambularBase<T> : IParameterSource<T>
     protected int MLPOutputDimension { get; }
 
     // Caches
+    [Scratch]
     private Tensor<T>? _embeddedFeaturesCache;
+    [Scratch]
     private Tensor<T>? _mambaOutputCache;
 
     /// <summary>Built once on first parameter access, then reused.</summary>
@@ -76,7 +80,7 @@ public abstract class MambularBase<T> : IParameterSource<T>
     /// the registry decides where it goes, so count, vector and restore cannot disagree about it.
     /// </remarks>
     protected virtual IEnumerable<IParameterSource<T>> GetExtraTrainableLayers()
-        => System.Linq.Enumerable.Empty<IParameterSource<T>>();
+        => GeneratedParameterDiscovery.EnumerateDerivedSources<T>(this, typeof(MambularBase<T>));
 
     /// <summary>
     /// The single ordered traversal of this model's parameter-bearing components.
@@ -395,7 +399,11 @@ public abstract class MambularBase<T> : IParameterSource<T>
         // Convolution
         private readonly Tensor<T> _convWeight;
 
-        // Delta (discretization)
+        // Delta (discretization). Built once in the constructor and only ever read afterwards, and
+        // it is yielded from Tensors() below, so it travels in the parameter vector exactly like the
+        // seven weights above it. It was briefly labelled Scratch, which would have declared the
+        // opposite -- a value the restore path is free to discard -- while the vector was still
+        // carrying it. A field cannot be both.
         private readonly Tensor<T> _deltaProj;
 
         /// <summary>

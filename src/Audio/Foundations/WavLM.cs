@@ -43,7 +43,7 @@ namespace AiDotNet.Audio.Foundations;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("WavLM: Large-Scale Self-Supervised Pre-Training for Full Stack Speech Processing", "https://arxiv.org/abs/2110.13900", Year = 2022, Authors = "Sanyuan Chen, Chengyi Wang, Zhengyang Chen, Yu Wu, Shujie Liu, Zhuo Chen, Jinyu Li, Naoyuki Kanda, Takuya Yoshioka, Xiong Xiao, Jian Wu, Long Zhou, Shuo Ren, Yanmin Qian, Yao Qian, Jian Wu, Michael Zeng, Xiangzhan Yu, Furu Wei")]
-public class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
+public partial class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -233,34 +233,9 @@ public class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.Variant);
-        w.Write(_options.HiddenDim); w.Write(_options.NumLayers);
-        w.Write(_options.NumAttentionHeads); w.Write(_options.FeedForwardDim);
-        w.Write(_options.FeatureEncoderDim); w.Write(_options.UseGatedRelativePositionBias);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.Variant = r.ReadString();
-        _options.HiddenDim = r.ReadInt32(); _options.NumLayers = r.ReadInt32();
-        _options.NumAttentionHeads = r.ReadInt32(); _options.FeedForwardDim = r.ReadInt32();
-        _options.FeatureEncoderDim = r.ReadInt32(); _options.UseGatedRelativePositionBias = r.ReadBoolean();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-        base.SampleRate = _options.SampleRate;
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new WavLM<T>(Architecture, mp, _options);
-        return new WavLM<T>(Architecture, _options);
-    }
+
 
     #endregion
 

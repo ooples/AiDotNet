@@ -54,7 +54,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.NStepSARSA;
     "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
-public class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -250,50 +250,6 @@ public class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGradientCo
     }
 
     public override int FeatureCount => _options.StateSize;
-
-    public override byte[] Serialize()
-    {
-        var state = new
-        {
-            QTable = _qTable,
-            Epsilon = _epsilon,
-            Options = _options
-        };
-        string json = JsonConvert.SerializeObject(state);
-        return System.Text.Encoding.UTF8.GetBytes(json);
-    }
-
-    public override void Deserialize(byte[] data)
-    {
-        if (data is null || data.Length == 0)
-        {
-            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
-        }
-
-        string json = System.Text.Encoding.UTF8.GetString(data);
-        var state = JsonConvert.DeserializeObject<dynamic>(json);
-        if (state is null)
-        {
-            throw new InvalidOperationException("Deserialization returned null");
-        }
-
-        _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
-        _epsilon = state.Epsilon;
-    }
-
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new NStepSARSAAgent<T>(_options);
-
-        // Deep copy Q-table to avoid shared state
-        foreach (var kvp in _qTable)
-        {
-            clone._qTable[kvp.Key] = new Dictionary<int, T>(kvp.Value);
-        }
-
-        clone._epsilon = _epsilon;
-        return clone;
-    }
 
     public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {

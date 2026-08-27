@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using System.Collections.Generic;
 using AiDotNet.Models.Parameters;
 using AiDotNet.LinearAlgebra;
@@ -32,7 +33,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class AutoIntBase<T> : IParameterSource<T>
+public abstract partial class AutoIntBase<T> : IParameterSource<T>
 {
     protected readonly AutoIntOptions<T> Options;
     protected readonly int NumNumericalFeatures;
@@ -43,6 +44,7 @@ public abstract class AutoIntBase<T> : IParameterSource<T>
     private readonly Random _random = RandomHelper.CreateSecureRandom();
 
     // Feature embeddings
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _numericalEmbeddings;
     private readonly Tensor<T>[]? _categoricalEmbeddings;
 
@@ -54,10 +56,15 @@ public abstract class AutoIntBase<T> : IParameterSource<T>
     protected int MLPOutputDimension { get; }
 
     // Caches
+    [Scratch]
     private Tensor<T>? _numericalFeaturesCache;
+    [Scratch]
     private Matrix<int>? _categoricalIndicesCache;
+    [Scratch]
     private Tensor<T>? _embeddedFeaturesCache;
+    [Scratch]
     private List<Tensor<T>>? _interactingOutputsCache;
+    [Scratch]
     private Tensor<T>? _mlpOutputCache;
 
     // Embedding gradients
@@ -79,7 +86,7 @@ public abstract class AutoIntBase<T> : IParameterSource<T>
     /// the registry decides where it goes, so count, vector and restore cannot disagree about it.
     /// </remarks>
     protected virtual IEnumerable<IParameterSource<T>> GetExtraTrainableLayers()
-        => System.Linq.Enumerable.Empty<IParameterSource<T>>();
+        => GeneratedParameterDiscovery.EnumerateDerivedSources<T>(this, typeof(AutoIntBase<T>));
 
     /// <summary>
     /// The single ordered traversal of this model's parameter-bearing components.

@@ -42,6 +42,7 @@ public class LearningWithoutForgetting<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly Dictionary<int, Tensor<T>> _oldPredictions;
+    [AiDotNet.Attributes.FittedParameter]
     private Tensor<T>? _currentTaskInputs;
     private double _lambda;
     private double _temperature;

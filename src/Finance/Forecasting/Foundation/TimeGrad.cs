@@ -350,54 +350,10 @@ public partial class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TimeGrad<T>(Architecture, new TimeGradOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            HiddenDimension = _hiddenDimension,
-            NumRnnLayers = _numRnnLayers,
-            NumDiffusionSteps = _numDiffusionSteps,
-            DenoisingNetworkDim = _denoisingNetworkDim,
-            NumSamples = _numSamples,
-            DropoutRate = _dropout,
-            BetaStart = _betaStart,
-            BetaEnd = _betaEnd
-        });
-    }
+
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numRnnLayers);
-        writer.Write(_numDiffusionSteps);
-        writer.Write(_denoisingNetworkDim);
-        writer.Write(_numSamples);
-        writer.Write(_dropout);
-        writer.Write(_betaStart);
-        writer.Write(_betaEnd);
-    }
 
-    /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numRnnLayers = reader.ReadInt32();
-        _numDiffusionSteps = reader.ReadInt32();
-        _denoisingNetworkDim = reader.ReadInt32();
-        _numSamples = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _betaStart = reader.ReadDouble();
-        _betaEnd = reader.ReadDouble();
-
-        ComputeNoiseSchedule();
-    }
 
     #endregion
 

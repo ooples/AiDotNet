@@ -77,6 +77,7 @@ public partial class MetaDDPMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     private readonly double[] _posteriorVariance;
 
     /// <summary>Denoiser (noise predictor) parameters.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _denoiserParams;
 
     /// <summary>EMA copy of denoiser parameters for stable generation.</summary>

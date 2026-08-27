@@ -1,4 +1,5 @@
 ﻿using AiDotNet.Autodiff;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
@@ -36,7 +37,7 @@ namespace AiDotNet.ReinforcementLearning.Agents;
 /// <c>TensorCodecOptions.Current.EnableCompilation = false</c>.
 /// </para>
 /// </remarks>
-public abstract class DeepReinforcementLearningAgentBase<T> : ReinforcementLearningAgentBase<T>
+public abstract partial class DeepReinforcementLearningAgentBase<T> : ReinforcementLearningAgentBase<T>
 {
     /// <summary>
     /// Gets the global execution engine for hardware-accelerated vector operations.
@@ -67,6 +68,11 @@ public abstract class DeepReinforcementLearningAgentBase<T> : ReinforcementLearn
     /// - SAC: 4+ networks (policy, two Q-networks, two target Q-networks)
     /// </para>
     /// </remarks>
+    // Non-owning lifecycle bookkeeping. Concrete agent fields/generated registrations own the
+    // networks and declare whether each is trainable or a target buffer. Registering this mixed-role
+    // aggregate as trainable aliases target networks under the wrong role and correctly trips the
+    // strict parameter registry (DQN/QMIX were the first deterministic reproducers).
+    [ExternalState]
     protected List<INeuralNetwork<T>> Networks;
 
     /// <summary>

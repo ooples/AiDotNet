@@ -145,21 +145,6 @@ public partial class Mochi1PreviewModel<T> : VideoDiffusionModelBase<T>
 
 
 
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    public override IDiffusionModel<T> Clone()
-    {
-                return new Mochi1PreviewModel<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            predictor: (DiTNoisePredictor<T>)_predictor.Clone(),
-            temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
-            conditioner: _conditioner,
-            defaultNumFrames: DefaultNumFrames,
-            defaultFPS: DefaultFPS);
-    }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

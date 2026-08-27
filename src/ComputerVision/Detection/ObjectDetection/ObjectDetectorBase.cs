@@ -26,7 +26,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection;
 /// </para>
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("ObjectDetector")]
-public abstract class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
     // Engine and NumOps inherited from ModelBase
 

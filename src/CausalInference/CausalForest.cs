@@ -60,7 +60,7 @@ namespace AiDotNet.CausalInference;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Estimation and Inference of Heterogeneous Treatment Effects using Random Forests", "https://doi.org/10.1080/01621459.2017.1319839", Year = 2018, Authors = "Stefan Wager, Susan Athey")]
-public class CausalForest<T> : CausalModelBase<T>
+public partial class CausalForest<T> : CausalModelBase<T>
 {
 
     /// <inheritdoc />
@@ -118,21 +118,25 @@ public class CausalForest<T> : CausalModelBase<T>
     /// <summary>
     /// Propensity score coefficients for overlap adjustment.
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _propensityCoefficients;
 
     /// <summary>
     /// Cached treatment vector from fitting.
     /// </summary>
+    [Scratch]
     private Vector<int>? _cachedTreatment;
 
     /// <summary>
     /// Cached outcome vector from fitting.
     /// </summary>
+    [Scratch]
     private Vector<T>? _cachedOutcome;
 
     /// <summary>
     /// Cached feature matrix from fitting.
     /// </summary>
+    [Scratch]
     private Matrix<T>? _cachedFeatures;
 
     /// <summary>
@@ -900,39 +904,6 @@ public class CausalForest<T> : CausalModelBase<T>
         var newModel = new CausalForest<T>(_numTrees, _maxDepth, _minSamplesLeaf, _maxFeatures, _honest, _honestFraction);
         newModel.SetParameters(parameters);
         return newModel;
-    }
-
-    /// <summary>
-    /// Creates a new instance of the same type.
-    /// </summary>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new CausalForest<T>(_numTrees, _maxDepth, _minSamplesLeaf, _maxFeatures, _honest, _honestFraction);
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// A fitted causal forest's predictive state is its tree ensemble, not
-    /// merely the propensity-coefficient vector returned by
-    /// <see cref="GetParameters"/>. Copy that state explicitly so a clone
-    /// cannot be marked fitted while containing no trees.
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
-    {
-        var copy = new CausalForest<T>(
-            _numTrees, _maxDepth, _minSamplesLeaf, _maxFeatures, _honest, _honestFraction)
-        {
-            NumFeatures = NumFeatures,
-            IsFitted = IsFitted,
-            FeatureNames = FeatureNames is null ? null : (string[])FeatureNames.Clone(),
-            _propensityCoefficients = CopyVector(_propensityCoefficients),
-            _cachedTreatment = CopyVector(_cachedTreatment),
-            _cachedOutcome = CopyVector(_cachedOutcome),
-            _cachedFeatures = CopyMatrix(_cachedFeatures),
-            _trees = _trees?.Select(CloneTree).ToList()
-        };
-
-        return copy;
     }
 
     private static CausalTree CloneTree(CausalTree source) =>

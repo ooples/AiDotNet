@@ -24,6 +24,7 @@ namespace AiDotNet.TransferLearning.DomainAdaptation;
 public class CORALDomainAdapter<T> : IDomainAdapter<T>
 {
     private readonly INumericOperations<T> _numOps;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _transformationMatrix;
 
     /// <summary>

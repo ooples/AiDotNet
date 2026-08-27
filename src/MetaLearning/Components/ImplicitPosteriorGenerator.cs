@@ -38,7 +38,7 @@ namespace AiDotNet.MetaLearning.Components;
 /// it again with different random numbers and you get a different plausible set. The collection of
 /// everything it can output IS the uncertainty, and it can be any shape at all.</para>
 /// </remarks>
-public class ImplicitPosteriorGenerator<T>
+public partial class ImplicitPosteriorGenerator<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -62,6 +62,7 @@ public class ImplicitPosteriorGenerator<T>
     // Flat lambda layout, in this order: W1, b1, W2, b2, W3, b3.
     private readonly int _w1, _b1, _w2, _b2, _w3, _b3;
 
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _lambda;
 
     /// <summary>Gets the dimension of the generated parameter vector.</summary>

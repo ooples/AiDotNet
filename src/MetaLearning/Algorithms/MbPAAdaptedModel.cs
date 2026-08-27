@@ -53,8 +53,21 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [PipelineStage(PipelineStage.Evaluation)]
 public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>
 {
+    /// <summary>
+    /// The embedding network this model was built with, read back from the base that holds it.
+    /// </summary>
+    /// <remarks>
+    /// The constructor calls the argument <c>embeddingNetwork</c> and hands it to the base, which
+    /// keeps it as <c>BaseModel</c>. That rename is invisible to the clone plan -- no name or type
+    /// rule can tell that two differently named members are the same value -- so the model could not
+    /// be rebuilt from its own state. Reading it back beats storing a second reference, which could
+    /// drift from the one the base actually uses.
+    /// </remarks>
+    private IFullModel<T, TInput, TOutput> _embeddingNetwork => BaseModel;
+
     private readonly MbPAEpisodicMemory<T> _memory;
     private readonly MbPAOptions<T, TInput, TOutput> _options;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _trainedOutputParams;
 
     /// <summary>
@@ -241,14 +254,4 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
     /// <inheritdoc/>
     public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
         => new MbPAAdaptedModel<T, TInput, TOutput>(BaseModel, _memory, parameters, _options);
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// The episodic memory is SHARED with the algorithm rather than copied. That is deliberate: the
-    /// memory is the algorithm's accumulated experience, and a deep copy that forked it would let
-    /// the copy's writes silently diverge from the original's.
-    /// </remarks>
-    public override IFullModel<T, TInput, TOutput> DeepCopy()
-        => new MbPAAdaptedModel<T, TInput, TOutput>(
-            BaseModel.DeepCopy(), _memory, _trainedOutputParams.Clone(), _options);
 }

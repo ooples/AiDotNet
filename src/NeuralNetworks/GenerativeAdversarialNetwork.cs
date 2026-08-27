@@ -280,11 +280,13 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
     /// <summary>
     /// Stores the last real batch for feature matching computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastRealBatch;
 
     /// <summary>
     /// Stores the last fake batch for feature matching computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastFakeBatch;
 
     /// <summary>
@@ -1858,37 +1860,7 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
     /// </summary>
     private const int GanSerializationVersion = 1;
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Format-version header. ALWAYS the first int written by this
-        // method so the deserializer can sniff what fields to expect.
-        writer.Write(GanSerializationVersion);
 
-        // Persist gradient-penalty configuration so a reloaded checkpoint
-        // continues training with the same WGAN-GP coefficient/enabled state.
-        // Without this, resuming a WGAN-GP run silently falls back to the
-        // default (disabled / λ = 10) and the loss curve changes shape.
-        writer.Write(_useGradientPenalty);
-        writer.Write(_gradientPenaltyLambda);
-
-        // Save recent loss history (last 20 entries at most)
-        int lossCount = Math.Min(_generatorLosses.Count, 20);
-        writer.Write(lossCount);
-
-        for (int i = _generatorLosses.Count - lossCount; i < _generatorLosses.Count; i++)
-        {
-            writer.Write(Convert.ToDouble(_generatorLosses[i]));
-        }
-
-        // Save Generator and Discriminator networks
-        var generatorBytes = Generator.Serialize();
-        writer.Write(generatorBytes.Length);
-        writer.Write(generatorBytes);
-
-        var discriminatorBytes = Discriminator.Serialize();
-        writer.Write(discriminatorBytes.Length);
-        writer.Write(discriminatorBytes);
-    }
 
     /// <summary>
     /// Deserializes GAN-specific data from a binary reader.
@@ -1912,57 +1884,7 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
     /// or use a model that someone else has trained.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read the format-version header first so we know what fields to
-        // expect. Legacy checkpoints predate the header and start straight
-        // at the lossCount int — a v0 (no header) checkpoint reads the
-        // same first int as `version` but the value will be > 1, so we
-        // fall through to the legacy branch instead of mis-aligning.
-        long headerStart = reader.BaseStream.Position;
-        int version = reader.ReadInt32();
-        if (version == GanSerializationVersion)
-        {
-            // Restore gradient-penalty configuration (must match the order
-            // in SerializeNetworkSpecificData above).
-            _useGradientPenalty = reader.ReadBoolean();
-            _gradientPenaltyLambda = reader.ReadDouble();
-        }
-        else if (version > GanSerializationVersion)
-        {
-            throw new InvalidDataException(
-                $"GAN checkpoint format version {version} is newer than this binary " +
-                $"supports (max version {GanSerializationVersion}). Update the AiDotNet " +
-                "library before loading this checkpoint.");
-        }
-        else
-        {
-            // Pre-versioning (v0) checkpoint — no gradient-penalty fields.
-            // Rewind to the start of the network-specific block so the
-            // legacy code path picks up the lossCount int we just consumed.
-            reader.BaseStream.Position = headerStart;
-            _useGradientPenalty = false;
-            _gradientPenaltyLambda = 10.0;
-        }
 
-        // Load recent loss history
-        int lossCount = reader.ReadInt32();
-        _generatorLosses = new List<T>(lossCount);
-
-        for (int i = 0; i < lossCount; i++)
-        {
-            _generatorLosses.Add(NumOps.FromDouble(reader.ReadDouble()));
-        }
-
-        // Load Generator and Discriminator networks
-        int generatorDataLength = reader.ReadInt32();
-        byte[] generatorData = reader.ReadBytes(generatorDataLength);
-        Generator.Deserialize(generatorData);
-
-        int discriminatorDataLength = reader.ReadInt32();
-        byte[] discriminatorData = reader.ReadBytes(discriminatorDataLength);
-        Discriminator.Deserialize(discriminatorData);
-    }
 
     /// <inheritdoc />
     /// <remarks>
@@ -2622,38 +2544,5 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         var sum = Engine.ReduceSum(tensor, [0], keepDims: false);
         T batchSizeT = NumOps.FromDouble(batchSize);
         return Engine.TensorDivideScalar(sum, batchSizeT);
-    }
-
-    /// <summary>
-    /// Creates a new instance of the GenerativeAdversarialNetwork with the same configuration as the current instance.
-    /// </summary>
-    /// <returns>A new GenerativeAdversarialNetwork instance with the same architecture as the current instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the GenerativeAdversarialNetwork with the same generator and
-    /// discriminator architectures as the current instance. This is useful for model cloning, ensemble methods, or
-    /// cross-validation scenarios where multiple instances of the same model with identical configurations are needed.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a fresh copy of the GAN's blueprint.
-    ///
-    /// When you need multiple versions of the same GAN with identical settings:
-    /// - This method creates a new, empty GAN with the same configuration
-    /// - It copies the architecture of both the generator and discriminator networks
-    /// - The new GAN has the same structure but no trained data
-    /// - This is useful for techniques that need multiple models, like ensemble methods
-    ///
-    /// For example, when experimenting with different training approaches,
-    /// you'd want to start with identical model configurations.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new GenerativeAdversarialNetwork<T>(
-            Generator.Architecture,
-            Discriminator.Architecture,
-            Architecture.InputType,
-            generatorOptimizer: null,
-            discriminatorOptimizer: null,
-            _lossFunction);
     }
 }

@@ -47,6 +47,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public partial class PrependCLSTokenLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _embedDim;
+    private readonly double _initScale;
 
     /// <inheritdoc />
     /// <remarks>
@@ -85,8 +86,11 @@ public partial class PrependCLSTokenLayer<T> : LayerBase<T>, IShapeContract
     }
 
     // Trainable CLS token — shape [1, embedDim]. Held by reference so the
-    // gradient tape can track parameter identity.
-    private  Tensor<T> _cls;
+    // gradient tape can track parameter identity, which is why it is readonly:
+    // the generated restore copies values into a readonly tensor in place and
+    // rebinds a mutable one, and rebinding is what would break that identity.
+    [AiDotNet.Attributes.TrainableParameter]
+    private readonly Tensor<T> _cls;
 
     /// <summary>Creates a CLS-token prepender for embedDim-wide inputs.</summary>
     /// <param name="embedDim">Embedding dimension (must match the input's last axis).</param>
@@ -100,6 +104,7 @@ public partial class PrependCLSTokenLayer<T> : LayerBase<T>, IShapeContract
     {
         if (embedDim <= 0) throw new ArgumentOutOfRangeException(nameof(embedDim));
         _embedDim = embedDim;
+        _initScale = initScale;
         _cls = new Tensor<T>(new[] { 1, embedDim });
 
         var rng = seed.HasValue
@@ -111,21 +116,6 @@ public partial class PrependCLSTokenLayer<T> : LayerBase<T>, IShapeContract
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override IReadOnlyList<Tensor<T>> GetTrainableParameters() => new[] { _cls };
-
-    /// <inheritdoc/>
-    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
-    {
-        if (parameters.Count != 1)
-            throw new ArgumentException("Expected exactly 1 parameter tensor (CLS).", nameof(parameters));
-        var src = parameters[0];
-        if (src.Length != _cls.Length)
-            throw new ArgumentException(
-                $"CLS shape mismatch: source length={src.Length}, expected {_cls.Length}.");
-        for (int i = 0; i < src.Length; i++) _cls[i] = src[i];
-    }
 
     /// <inheritdoc/>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)

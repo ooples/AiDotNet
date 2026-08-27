@@ -39,6 +39,7 @@ public class SplitConformalPredictor<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly IModel<Tensor<T>, Tensor<T>, ModelMetadata<T>> _model;
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _calibrationScores;
     private bool _isCalibrated;
 

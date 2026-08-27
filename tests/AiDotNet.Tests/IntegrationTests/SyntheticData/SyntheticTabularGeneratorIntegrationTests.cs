@@ -369,6 +369,15 @@ public class SyntheticTabularGeneratorIntegrationTests
         // The generator batch-norm layers live outside the base Layers collection; verify they
         // (and the VGM transformer driving output activations) survive serialization.
         AssertAuxLayerListPreserved<BatchNormalizationLayer<double>>(generator, restored, "_genBNLayers");
+        var originalTransformer = GetPrivateField<TabularDataTransformer<double>>(generator, "_transformer");
+        var restoredTransformer = GetPrivateField<TabularDataTransformer<double>>(restored, "_transformer");
+        Assert.NotNull(restoredTransformer);
+        Assert.Equal(originalTransformer.Serialize(), restoredTransformer.Serialize());
+        var originalParameters = generator.GetParameters();
+        var restoredParameters = restored.GetParameters();
+        Assert.Equal(originalParameters.Length, restoredParameters.Length);
+        for (int i = 0; i < originalParameters.Length; i++)
+            Assert.Equal(originalParameters[i], restoredParameters[i], 10);
 
         generator.SetTrainingMode(false);
         restored.SetTrainingMode(false);
@@ -592,6 +601,15 @@ public class SyntheticTabularGeneratorIntegrationTests
         // The data-generator batch-norm layers (running mean/variance included) live outside the
         // base Layers collection; verify they survive serialization, including their extras.
         AssertAuxLayerListPreserved<BatchNormalizationLayer<double>>(generator, restored, "_dataGenBNLayers");
+        var originalTransformer = GetPrivateField<TabularDataTransformer<double>>(generator, "_transformer");
+        var restoredTransformer = GetPrivateField<TabularDataTransformer<double>>(restored, "_transformer");
+        Assert.NotNull(restoredTransformer);
+        Assert.Equal(originalTransformer.Serialize(), restoredTransformer.Serialize());
+        var originalParameters = generator.GetParameters();
+        var restoredParameters = restored.GetParameters();
+        Assert.Equal(originalParameters.Length, restoredParameters.Length);
+        for (int i = 0; i < originalParameters.Length; i++)
+            Assert.Equal(originalParameters[i], restoredParameters[i], 10);
 
         // And the eval-mode forward (used by Generate) must match exactly after restore — this also
         // exercises the restored VGM transformer via ApplyOutputActivations.
@@ -830,6 +848,31 @@ public class SyntheticTabularGeneratorIntegrationTests
 
         var generated = generator.Generate(GenSamples);
         ValidateGeneratedData(generated, GenSamples, TotalCols, "AutoDiffTab");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task AutoDiffTabGenerator_ClonePreservesRuntimeSizedTopology()
+    {
+        await Task.Yield();
+        var architecture = CreateArchitecture(10, 10);
+        using var generator = new AutoDiffTabGenerator<double>(
+            architecture,
+            new AutoDiffTabOptions<double>
+            {
+                Seed = Seed,
+                MLPDimensions = [16],
+                TimestepEmbeddingDimension = 8
+            });
+        var input = new Tensor<double>([4]);
+        for (int i = 0; i < input.Length; i++) input[i] = 0.1 * (i + 1);
+
+        var expected = generator.Predict(input);
+        using var clone = generator.Clone();
+        var actual = clone.Predict(input);
+
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], actual[i], 12);
     }
 
     [Fact(Timeout = 120000)]

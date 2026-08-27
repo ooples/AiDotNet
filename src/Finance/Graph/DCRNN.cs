@@ -734,20 +734,6 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance with the same configuration.
-    /// </summary>
-    /// <returns>A new DCRNN instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the DCRNN model, CreateNewInstance builds and wires up model components. This sets up the DCRNN architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DCRNN<T>(Architecture, _options, _adjacencyMatrix);
-    }
-
-    /// <summary>
     /// Serializes DCRNN-specific data.
     /// </summary>
     /// <param name="writer">The binary writer.</param>
@@ -756,38 +742,7 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the DCRNN model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the DCRNN architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_numNodes);
-        writer.Write(_numFeatures);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numDecoderLayers);
-        writer.Write(_diffusionSteps);
-        writer.Write(_trainingStep);
 
-        // Serialize diffusion matrices
-        if (_forwardDiffusion is not null && _backwardDiffusion is not null)
-        {
-            writer.Write(true);
-            int n = _forwardDiffusion.GetLength(0);
-            writer.Write(n);
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    writer.Write(_forwardDiffusion[i, j]);
-                    writer.Write(_backwardDiffusion[i, j]);
-                }
-            }
-        }
-        else
-        {
-            writer.Write(false);
-        }
-    }
 
     /// <summary>
     /// Deserializes DCRNN-specific data.
@@ -798,40 +753,7 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the DCRNN model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the DCRNN architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _numNodes = reader.ReadInt32();
-        int numNodes = _numNodes;
-        _numFeatures = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numEncoderLayers = reader.ReadInt32();
-        _numDecoderLayers = reader.ReadInt32();
-        _diffusionSteps = reader.ReadInt32();
-        _trainingStep = reader.ReadInt32();
 
-        // NeuralNetworkBase restores Layers before this hook runs. Refresh the typed
-        // references so diffusion supports are rebound to those restored instances,
-        // not to the temporary layers created by this object's constructor.
-        ExtractLayerReferences();
-        bool hasDiffusion = reader.ReadBoolean();
-        if (hasDiffusion)
-        {
-            int n = reader.ReadInt32();
-            _forwardDiffusion = new double[n, n];
-            _backwardDiffusion = new double[n, n];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    _forwardDiffusion[i, j] = reader.ReadDouble();
-                    _backwardDiffusion[i, j] = reader.ReadDouble();
-                }
-            }
-            ComputeDiffusionPowers();
-        }
-    }
 
     #endregion
 

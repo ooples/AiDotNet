@@ -46,7 +46,7 @@ namespace AiDotNet.NER.TransformerBased;
 /// slightly differently, leading to different strengths.
 /// </para>
 /// </remarks>
-public abstract class TransformerNERBase<T> : SequenceLabeling.SequenceLabelingNERBase<T>, INERModel<T>
+public abstract partial class TransformerNERBase<T> : SequenceLabeling.SequenceLabelingNERBase<T>, INERModel<T>
 {
     #region Fields
 
@@ -414,71 +414,10 @@ public abstract class TransformerNERBase<T> : SequenceLabeling.SequenceLabelingN
     }
 
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.HiddenDimension);
-        w.Write(_options.NumAttentionHeads);
-        w.Write(_options.NumTransformerLayers);
-        w.Write(_options.IntermediateDimension);
-        w.Write(_options.NumLabels);
-        w.Write(_options.MaxSequenceLength);
-        w.Write(_options.UseCRF);
-        w.Write(_options.DropoutRate);
-        w.Write(_options.LearningRate);
-        w.Write(_options.LabelNames.Length);
-        foreach (var label in _options.LabelNames)
-            w.Write(label);
-        w.Write(_options.WarmupSteps);
-        w.Write(_options.WarmupInitialLearningRate);
-        w.Write(_options.TotalTrainingSteps);
-        w.Write(_options.EndLearningRate);
-    }
+
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (NERModelVariant)r.ReadInt32();
-        _options.HiddenDimension = r.ReadInt32();
-        _options.NumAttentionHeads = r.ReadInt32();
-        _options.NumTransformerLayers = r.ReadInt32();
-        _options.IntermediateDimension = r.ReadInt32();
-        _options.NumLabels = r.ReadInt32();
-        _options.MaxSequenceLength = r.ReadInt32();
-        _options.UseCRF = r.ReadBoolean();
-        _options.DropoutRate = r.ReadDouble();
-        _options.LearningRate = r.ReadDouble();
-        int labelCount = r.ReadInt32();
-        _options.LabelNames = new string[labelCount];
-        for (int i = 0; i < labelCount; i++)
-            _options.LabelNames[i] = r.ReadString();
 
-        // These scheduler fields were appended to preserve compatibility with models serialized
-        // before transformer-NER schedulers were configurable.
-        if (r.BaseStream.Position < r.BaseStream.Length)
-        {
-            _options.WarmupSteps = r.ReadInt32();
-            _options.WarmupInitialLearningRate = r.ReadDouble();
-            _options.TotalTrainingSteps = r.ReadInt32();
-            _options.EndLearningRate = r.ReadDouble();
-        }
-
-        ApplyOptionsToBase();
-
-        // Native-mode layers (with their trained weights) are already reconstructed by
-        // the base DeserializeInternalUnchecked before this override runs, so do NOT
-        // clear + re-initialize them here — that would discard the deserialized weights
-        // and leave the model randomly initialized. Only an ONNX session needs rebuilding.
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-        {
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        }
-    }
 
     #endregion
 

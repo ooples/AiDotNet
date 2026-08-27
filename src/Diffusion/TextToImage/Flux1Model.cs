@@ -312,27 +312,6 @@ public partial class Flux1Model<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
-    }
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Delegate to the predictor's and VAE's own Clone(), which reconstruct from their
-        // actual config fields (NOT hardcoded foundation-scale constants) and preserve
-        // materialized weights — so a caller-injected variant of any scale round-trips
-        // correctly. Rebuilding at fixed FLUX_HIDDEN_SIZE here would size a clone that cannot
-        // accept an injected tiny (or otherwise non-default) predictor's parameter vector.
-        return new Flux1Model<T>(
-            mmdit: (MMDiTNoisePredictor<T>)_mmdit.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner,
-            variant: _variant);
-    }
-
     #endregion
 
     #region Metadata

@@ -68,9 +68,6 @@ public class SigLIP2TextConditioner<T> : TextConditioningBase<T>
             numLayers: GetNumLayers(_variant),
             numHeads: GetNumHeads(_variant));
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new SigLIP2TextConditioner<T>(Tokenizer, _variant, Architecture);
-
     private static NeuralNetworkArchitecture<T> BuildDefaultArchitecture(SigLIP2Variant variant) =>
         new NeuralNetworkArchitecture<T>(
             inputType: InputType.TwoDimensional,

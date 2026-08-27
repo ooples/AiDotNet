@@ -223,6 +223,7 @@ public partial class StandardVAE<T> : VAEModelBase<T>
     /// Tracks whether the VAE layer graph has been built. Default paper-scale
     /// constructors defer this work until first use to keep construction cheap.
     /// </summary>
+    [Scratch]
     private bool _layersInitialized;
 
     /// <inheritdoc />
@@ -591,17 +592,6 @@ public partial class StandardVAE<T> : VAEModelBase<T>
         if (layer != null) count += (int)layer.ParameterCount;
     }
 
-    /// <inheritdoc />
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
-    {
-        EnsureLayersInitialized();
-        foreach (var layer in EnumerateAllLayers())
-        {
-            foreach (var parameter in EnumerateMaterializedParameters(layer))
-                yield return parameter;
-        }
-    }
-
     private IEnumerable<ILayer<T>?> EnumerateAllLayers()
     {
         yield return _inputConv;
@@ -655,48 +645,6 @@ public partial class StandardVAE<T> : VAEModelBase<T>
     #endregion
 
     #region ICloneable Implementation
-
-    /// <inheritdoc />
-    public override IVAEModel<T> Clone()
-    {
-        var clone = new StandardVAE<T>(
-            architecture: _architecture,
-            inputChannels: _inputChannels,
-            latentChannels: _latentChannels,
-            baseChannels: _baseChannels,
-            channelMultipliers: _channelMultipliers,
-            numResBlocksPerLevel: _numResBlocksPerLevel,
-            latentScaleFactor: _latentScaleFactor,
-            lossFunction: LossFunction);
-
-        // Keep source and destination at the same structural lifecycle before comparing or copying
-        // tensors. ParameterCount/GetParameters can resolve the lazy graph without a real forward;
-        // measuring before that resolution and copying afterward compares different layer sequences.
-        bool structureResolved = _shapesResolvedViaForward;
-        if (structureResolved)
-            clone.ResolveShapesViaForward();
-        else if (_layersInitialized)
-            clone.EnsureLayersInitialized();
-
-        // A flat parameter read materializes the complete generated surface without running
-        // Encode/Decode, so the forward-only flag is not enough to decide whether trained state
-        // exists. Only compare against ParameterCount after structure is already stable, ensuring
-        // the metadata read cannot mutate the sequence being measured.
-        bool hasCompleteMaterializedSurface = structureResolved
-            && GetMaterializedParameterCount() == ParameterCount;
-        if (_preserveMaterializedParameters || hasCompleteMaterializedSurface)
-        {
-            TriggerLazyShapeResolution();
-            clone.TriggerLazyShapeResolution();
-            if (!clone.TryShareParametersFrom(this))
-                CopyMaterializedParametersTo(clone);
-        }
-        else
-        {
-            CopyMaterializedParametersTo(clone);
-        }
-        return clone;
-    }
 
     private long GetMaterializedParameterCount()
     {
@@ -768,8 +716,10 @@ public partial class StandardVAE<T> : VAEModelBase<T>
     /// invariant), so any size works as long as the conv stack doesn't
     /// underflow.
     /// </remarks>
+    [Scratch]
     private bool _lazyShapesResolved;
 
+    [Scratch]
     private bool _shapesResolvedViaForward;
 
     /// <summary>
@@ -812,12 +762,6 @@ public partial class StandardVAE<T> : VAEModelBase<T>
         var dummyImage = new Tensor<T>(new[] { 1, _inputChannels, dummySpatial, dummySpatial });
         var dummyLatent = Encode(dummyImage, sampleMode: false);
         _ = Decode(dummyLatent);
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return Clone();
     }
 
     #endregion

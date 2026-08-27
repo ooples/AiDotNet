@@ -45,6 +45,7 @@ public class SMOTENCGenerator<T> : SyntheticTabularGeneratorBase<T>
     private readonly SMOTENCOptions<T> _options;
 
     // Stored minority class samples from the original data
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _minoritySamples;
 
     // Column metadata (numerical vs categorical)

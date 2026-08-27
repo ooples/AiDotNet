@@ -46,6 +46,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
+[CustomSerializationFormat]
 public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <inheritdoc/>

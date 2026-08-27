@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -78,7 +78,7 @@ namespace AiDotNet.Video.ActionRecognition;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Classes,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public class TimeSformer<T> : NeuralNetworkBase<T>
+public partial class TimeSformer<T> : NeuralNetworkBase<T>
 {
     private readonly TimeSformerOptions _options;
 
@@ -644,53 +644,10 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Serialization is not supported in ONNX mode.");
 
-        writer.Write(_embedDim);
-        writer.Write(_numHeads);
-        writer.Write(_numLayers);
-        writer.Write(_numFrames);
-        writer.Write(_patchSize);
-        writer.Write(_imageSize);
-        writer.Write(_numClasses);
-        writer.Write((int)_attentionType);
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
 
-        _ = reader.ReadInt32(); // embedDim
-        _ = reader.ReadInt32(); // numHeads
-        _ = reader.ReadInt32(); // numLayers
-        _ = reader.ReadInt32(); // numFrames
-        _ = reader.ReadInt32(); // patchSize
-        _ = reader.ReadInt32(); // imageSize
-        _ = reader.ReadInt32(); // numClasses
-        _ = reader.ReadInt32(); // attentionType
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TimeSformer<T>(
-            Architecture,
-            numClasses: _numClasses,
-            optimizer: null,
-            lossFunction: _lossFunction,
-            embedDim: _embedDim,
-            numHeads: _numHeads,
-            numLayers: _numLayers,
-            numFrames: _numFrames,
-            patchSize: _patchSize,
-            attentionType: _attentionType,
-            options: _options);
-    }
 
     #endregion
 }

@@ -44,7 +44,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Onsets and Frames: Dual-Objective Piano Transcription", "https://arxiv.org/abs/1710.11153", Year = 2018, Authors = "Curtis Hawthorne, Erich Elsen, Jialin Song, Adam Roberts, Ian Simon, Colin Raffel, Jesse Engel, Sageev Oore, Douglas Eck")]
-public class OnsetsAndFrames<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
+public partial class OnsetsAndFrames<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -279,32 +279,9 @@ public class OnsetsAndFrames<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.NumMels); w.Write(_options.FftSize);
-        w.Write(_options.HopLength); w.Write(_options.FMin); w.Write(_options.FMax);
-        w.Write(_options.NumMidiNotes); w.Write(_options.MidiOffset);
-        w.Write(_options.AcousticModelDim); w.Write(_options.LstmHiddenSize); w.Write(_options.NumLstmLayers);
-        w.Write(_options.OnsetThreshold); w.Write(_options.FrameThreshold);
-        w.Write(_options.MinNoteDurationSec); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.FftSize = r.ReadInt32();
-        _options.HopLength = r.ReadInt32(); _options.FMin = r.ReadDouble(); _options.FMax = r.ReadDouble();
-        _options.NumMidiNotes = r.ReadInt32(); _options.MidiOffset = r.ReadInt32();
-        _options.AcousticModelDim = r.ReadInt32(); _options.LstmHiddenSize = r.ReadInt32(); _options.NumLstmLayers = r.ReadInt32();
-        _options.OnsetThreshold = r.ReadDouble(); _options.FrameThreshold = r.ReadDouble();
-        _options.MinNoteDurationSec = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-        _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels,
-            _options.FftSize, _options.HopLength, _options.FMin, _options.FMax, logMel: true);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new OnsetsAndFrames<T>(Architecture, _options);
+
 
     #endregion
 

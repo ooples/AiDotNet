@@ -105,7 +105,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Luisa M. Zintgraf, Kyriacos Shiarli, Vitaly Kurin, et al.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly CAVIAOptions<T, TInput, TOutput> _caviaOptions;
 

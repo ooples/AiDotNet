@@ -74,6 +74,7 @@ public partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>, IShapeContract
     /// Pre-computed bias tensor [numHeads, maxSequenceLength, maxSequenceLength].
     /// Lazily computed on first use and cached.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _biasCache;
     private int _biasCacheQueryLen;
     private int _biasCacheKeyLen;

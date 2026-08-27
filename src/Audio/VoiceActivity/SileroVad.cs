@@ -9,7 +9,8 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Tensors.Helpers;
-using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.LinearAlgebra;
+
 using System.Collections.Generic;
 
 namespace AiDotNet.Audio.VoiceActivity;
@@ -442,12 +443,17 @@ public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
             var frame = new T[_frameSize];
             Array.Copy(samples, i, frame, 0, _frameSize);
 
-            // Create tensor from frame data
-            var frameTensor = new Tensor<T>([_frameSize]);
-            var frameVector = frameTensor.ToVector();
+            // Write directly into the tensor's backing storage, and dispose it per frame.
+            // ToVector() returns a COPY, so assigning into that copy left frameTensor ALL ZEROS
+            // and every frame reached the model as silence -- the same defect PreprocessAudio
+            // below already documents, surviving here. Speech detection was therefore independent
+            // of the audio. Disposal is safe because PreprocessAudio allocates its own result, so
+            // nothing downstream holds a reference to this tensor once the call returns.
+            using var frameTensor = new Tensor<T>([_frameSize]);
+            var frameSpan = frameTensor.Data.Span;
             for (int j = 0; j < _frameSize; j++)
             {
-                frameVector[j] = frame[j];
+                frameSpan[j] = frame[j];
             }
 
             var prob = GetSpeechProbability(frameTensor);
@@ -505,12 +511,14 @@ public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
             var frame = new T[_frameSize];
             Array.Copy(samples, i * _frameSize, frame, 0, _frameSize);
 
-            // Create tensor from frame data
-            var frameTensor = new Tensor<T>([_frameSize]);
-            var frameVector = frameTensor.ToVector();
+            // Same direct write and per-frame disposal as DetectSpeechSegments above: assigning
+            // into the ToVector() copy left this tensor all zeros, so every probability was
+            // computed from silence rather than from the frame.
+            using var frameTensor = new Tensor<T>([_frameSize]);
+            var frameSpan = frameTensor.Data.Span;
             for (int j = 0; j < _frameSize; j++)
             {
-                frameVector[j] = frame[j];
+                frameSpan[j] = frame[j];
             }
 
             probabilities[i] = GetSpeechProbability(frameTensor);
@@ -773,57 +781,10 @@ public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(SampleRate);
-        writer.Write(_frameSize);
-        writer.Write(_threshold);
-        writer.Write(_minSpeechDurationMs);
-        writer.Write(_minSilenceDurationMs);
-        writer.Write(_convFilters);
-        writer.Write(_lstmHiddenDim);
-        writer.Write(_numLstmLayers);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read saved values (but don't reassign readonly fields)
-        _ = reader.ReadBoolean(); // _useNativeMode
-        SampleRate = reader.ReadInt32();
-        _ = reader.ReadInt32(); // _frameSize
-        _ = reader.ReadDouble(); // _threshold
-        _ = reader.ReadInt32(); // _minSpeechDurationMs
-        _ = reader.ReadInt32(); // _minSilenceDurationMs
-        _ = reader.ReadInt32(); // _convFilters
-        _ = reader.ReadInt32(); // _lstmHiddenDim
-        _ = reader.ReadInt32(); // _numLstmLayers
 
-        // Deserialization has already rebuilt the canonical Layers list with the
-        // loaded weights. Re-point the cached conv/LSTM/output references at those
-        // layers; otherwise Forward would keep running the constructor's
-        // randomly-initialized layers and ignore the loaded weights.
-        if (_useNativeMode && Layers.Count >= 3 + _numLstmLayers + 1)
-        {
-            ExtractLayerReferences();
-        }
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new SileroVad<T>(
-            Architecture,
-            SampleRate,
-            _frameSize,
-            _threshold,
-            _minSpeechDurationMs,
-            _minSilenceDurationMs,
-            _convFilters,
-            _lstmHiddenDim,
-            _numLstmLayers);
-    }
 
     #endregion
 

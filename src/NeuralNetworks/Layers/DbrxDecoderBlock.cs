@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
@@ -12,7 +12,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+[LayerProperty(IsTrainable = false, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, new AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<double>(2, 4), new AiDotNet.NeuralNetworks.Layers.MoEFeedForwardLayer<double>(8, 16, 2, 1)")]
 // SHAPE-PRESERVING, and structurally so: ForwardTraced is two residual adds,
 // "Engine.TensorAdd(input, attnOut)" then "Engine.TensorAdd(afterAttn, moeOut)". Neither add can even
 // be formed unless the sublayer handed back exactly the shape it was given, so this block cannot
@@ -54,6 +54,9 @@ public partial class DbrxDecoderBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>The model (input/output) feature dimension.</summary>
     public int HiddenSize => _hiddenSize;
 
+    /// <summary>Construction state: the 'layerNormEpsilon' the layer was built with.</summary>
+    private readonly double _layerNormEpsilon;
+
     /// <summary>Creates a DBRX LayerNorm MoE decoder block.</summary>
     /// <param name="hiddenSize">Input/output feature dimension.</param>
     /// <param name="attention">Pre-constructed self-attention sublayer.</param>
@@ -62,6 +65,7 @@ public partial class DbrxDecoderBlock<T> : LayerBase<T>, IShapeContract
     public DbrxDecoderBlock(int hiddenSize, LayerBase<T> attention, MoEFeedForwardLayer<T> moe, double layerNormEpsilon = 1e-5)
         : base(new[] { -1, hiddenSize }, new[] { -1, hiddenSize })
     {
+        _layerNormEpsilon = layerNormEpsilon;
         Guard.NotNull(attention);
         Guard.NotNull(moe);
         _hiddenSize = hiddenSize;

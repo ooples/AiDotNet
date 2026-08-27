@@ -31,12 +31,13 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
         "https://arxiv.org/abs/1509.02971",
         Year = 2016,
         Authors = "Lillicrap, T. P., Hunt, J. J., Pritzel, A., Heess, N., Erez, T., Tassa, Y., Silver, D., & Wierstra, D.")]
-    public class OrnsteinUhlenbeckNoise<T> : ExplorationStrategyBase<T>
+    public partial class OrnsteinUhlenbeckNoise<T> : ExplorationStrategyBase<T>
     {
         private readonly double _theta;      // Mean reversion rate
         private readonly double _sigma;      // Volatility/noise scale
         private readonly double _mu;         // Long-term mean
         private readonly double _dt;         // Time step
+        [AiDotNet.Attributes.TrainableParameter]
         private Vector<T> _state;            // Current noise state
 
         /// <summary>

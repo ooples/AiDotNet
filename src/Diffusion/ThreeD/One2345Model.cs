@@ -222,36 +222,6 @@ public partial class One2345Model<T> : ThreeDDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        EnsureInitialized();
-        // Clone the existing UNet + VAE via their own Clone() methods —
-        // see DreamGaussianModel.Clone for the full rationale. The
-        // previous "rebuild with paper-scale defaults + push original's
-        // params" pattern made Clone_ShouldProduceIdenticalOutput
-        // exceed the 120 s xUnit timeout on the test scaffold because
-        // the clone always ran a full-paper-scale UNet Predict
-        // regardless of how small the original was.
-        var clonedUnet = (UNetNoisePredictor<T>)_unet.Clone();
-        var clonedVae = (StandardVAE<T>)_vae.Clone();
-        // Forward the outer-model config (DiffusionModelOptions, Scheduler,
-        // Architecture) too — otherwise a customized One2345Model resets to
-        // constructor defaults on clone.
-        return new One2345Model<T>(
-            architecture: Architecture,
-            options: (DiffusionModelOptions<T>)GetOptions(),
-            scheduler: Scheduler,
-            unet: clonedUnet,
-            vae: clonedVae,
-            conditioner: _conditioner,
-            defaultPointCount: DefaultPointCount,
-            seed: _seed);
-    }
-
     #endregion
 
     #region Metadata

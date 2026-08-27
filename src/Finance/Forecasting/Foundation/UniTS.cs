@@ -516,30 +516,6 @@ public partial class UniTS<T> : ForecastingModelBase<T>
         };
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the UniTS model, CreateNewInstance builds and wires up model components. This sets up the UniTS architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new UniTSOptions<T>
-        {
-            ContextLength = _contextLength,
-            ForecastHorizon = _forecastHorizon,
-            HiddenDimension = _hiddenDimension,
-            NumLayers = _numLayers,
-            NumHeads = _numHeads,
-            ConvKernelSizes = _convKernelSizes,
-            DropoutRate = _dropout,
-            TaskType = _taskType,
-            NumClasses = _numClasses
-        };
-
-        return new UniTS<T>(Architecture, options, _numFeatures);
-    }
-
     /// <summary>
     /// Writes UniTS-specific configuration during serialization.
     /// </summary>
@@ -548,23 +524,7 @@ public partial class UniTS<T> : ForecastingModelBase<T>
     /// including task type and multi-scale convolution settings.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_convKernelSizes.Length);
-        foreach (var kernelSize in _convKernelSizes)
-        {
-            writer.Write(kernelSize);
-        }
-        writer.Write(_dropout);
-        writer.Write(_taskType);
-        writer.Write(_numClasses);
-        writer.Write(_numFeatures);
-    }
+
 
     /// <summary>
     /// Reads UniTS-specific configuration during deserialization.
@@ -574,24 +534,7 @@ public partial class UniTS<T> : ForecastingModelBase<T>
     /// restoring the model to its original state.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        int kernelCount = reader.ReadInt32();
-        _convKernelSizes = new int[kernelCount];
-        for (int i = 0; i < kernelCount; i++)
-        {
-            _convKernelSizes[i] = reader.ReadInt32();
-        }
-        _dropout = reader.ReadDouble();
-        _taskType = reader.ReadString();
-        _numClasses = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-    }
+
 
     #endregion
 

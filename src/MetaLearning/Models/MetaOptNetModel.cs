@@ -43,11 +43,12 @@ namespace AiDotNet.MetaLearning.Models;
     Authors = "Lee, K., Maji, S., Ravichandran, A., & Soatto, S.")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class MetaOptNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+public partial class MetaOptNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly IFullModel<T, TInput, TOutput> _featureEncoder;
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Matrix<T> _classifierWeights;
     private readonly T _temperature;
     private readonly MetaOptNetOptions<T, TInput, TOutput> _options;

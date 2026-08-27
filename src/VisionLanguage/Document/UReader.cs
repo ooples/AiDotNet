@@ -59,7 +59,7 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2024,
     Authors = "Ye et al."
 )]
-public class UReader<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
+public partial class UReader<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly UReaderOptions _options;
 
@@ -277,46 +277,9 @@ public class UReader<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingMode
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.ImageSize);
-        writer.Write(_options.VisionDim);
-        writer.Write(_options.DecoderDim);
-        writer.Write(_options.NumVisionLayers);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.IsOcrFree);
-        writer.Write(_options.MaxOutputTokens);
-        writer.Write(_options.EnableShapeAdaptiveCropping);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.ImageSize = reader.ReadInt32();
-        _options.VisionDim = reader.ReadInt32();
-        _options.DecoderDim = reader.ReadInt32();
-        _options.NumVisionLayers = reader.ReadInt32();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.IsOcrFree = reader.ReadBoolean();
-        _options.MaxOutputTokens = reader.ReadInt32();
-        _options.EnableShapeAdaptiveCropping = reader.ReadBoolean();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new UReader<T>(Architecture, mp, _options);
-        return new UReader<T>(Architecture, _options);
-    }
+
 
     private void ThrowIfDisposed()
     {

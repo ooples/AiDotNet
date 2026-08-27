@@ -187,11 +187,13 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// The input tensor from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// The final hidden state from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastHiddenState;
 
     /// <summary>
@@ -253,6 +255,7 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
     private readonly int _hiddenSize;
 
     // Cached ones tensor for (1-z) computation — avoids per-timestep allocation
+    [Scratch]
     private Tensor<T>? _cachedOnesForGate;
 
     /// <summary>
@@ -373,66 +376,113 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
     #region GPU Training Fields
 
     // GPU-resident weight tensors
+    [ExternalState]
     private Tensor<T>? _gpuWz;
+    [ExternalState]
     private Tensor<T>? _gpuWr;
+    [ExternalState]
     private Tensor<T>? _gpuWh;
+    [ExternalState]
     private Tensor<T>? _gpuUz;
+    [ExternalState]
     private Tensor<T>? _gpuUr;
+    [ExternalState]
     private Tensor<T>? _gpuUh;
+    [ExternalState]
     private Tensor<T>? _gpuBz;
+    [ExternalState]
     private Tensor<T>? _gpuBr;
+    [ExternalState]
     private Tensor<T>? _gpuBh;
 
     // GPU-resident gradient tensors
+    [ExternalState]
     private Tensor<T>? _gpuWzGradient;
+    [ExternalState]
     private Tensor<T>? _gpuWrGradient;
+    [ExternalState]
     private Tensor<T>? _gpuWhGradient;
+    [ExternalState]
     private Tensor<T>? _gpuUzGradient;
+    [ExternalState]
     private Tensor<T>? _gpuUrGradient;
+    [ExternalState]
     private Tensor<T>? _gpuUhGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBzGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBrGradient;
+    [ExternalState]
     private Tensor<T>? _gpuBhGradient;
 
     // GPU-resident optimizer state tensors (SGD/NAG/LARS velocity)
+    [ExternalState]
     private Tensor<T>? _gpuWzVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuWrVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuWhVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuUzVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuUrVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuUhVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBzVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBrVelocity;
+    [ExternalState]
     private Tensor<T>? _gpuBhVelocity;
 
     // Adam/AdamW M (first moment) tensors
+    [ExternalState]
     private Tensor<T>? _gpuWzM;
+    [ExternalState]
     private Tensor<T>? _gpuWrM;
+    [ExternalState]
     private Tensor<T>? _gpuWhM;
+    [ExternalState]
     private Tensor<T>? _gpuUzM;
+    [ExternalState]
     private Tensor<T>? _gpuUrM;
+    [ExternalState]
     private Tensor<T>? _gpuUhM;
+    [ExternalState]
     private Tensor<T>? _gpuBzM;
+    [ExternalState]
     private Tensor<T>? _gpuBrM;
+    [ExternalState]
     private Tensor<T>? _gpuBhM;
 
     // Adam/AdamW V (second moment) tensors
+    [ExternalState]
     private Tensor<T>? _gpuWzV;
+    [ExternalState]
     private Tensor<T>? _gpuWrV;
+    [ExternalState]
     private Tensor<T>? _gpuWhV;
+    [ExternalState]
     private Tensor<T>? _gpuUzV;
+    [ExternalState]
     private Tensor<T>? _gpuUrV;
+    [ExternalState]
     private Tensor<T>? _gpuUhV;
+    [ExternalState]
     private Tensor<T>? _gpuBzV;
+    [ExternalState]
     private Tensor<T>? _gpuBrV;
+    [ExternalState]
     private Tensor<T>? _gpuBhV;
 
     // Cached forward pass state for backpropagation (BPTT)
+    [ExternalState]
     private Tensor<T>? _gpuLastInput;
     private Tensor<T>[]? _gpuCachedZGates;
     private Tensor<T>[]? _gpuCachedRGates;
     private Tensor<T>[]? _gpuCachedHCandidates;
     private Tensor<T>[]? _gpuCachedHiddenStates;
+    [ExternalState]
     private Tensor<T>? _gpuInitialHiddenState;
 
     // Cached stacked weights for fused kernel (PyTorch format: r, z, n)
@@ -1820,48 +1870,6 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
         var ones = new Tensor<T>(tensor._shape);
         ones.Fill(NumOps.One);
         return ones;
-    }
-
-    /// <summary>
-    /// Creates a deep copy of this GRU layer with independent weights and reset state.
-    /// </summary>
-    /// <returns>A new GRULayer with the same weights but independent of the original.</returns>
-    public override LayerBase<T> Clone()
-    {
-        var clone = (GRULayer<T>)base.Clone();
-
-        // Deep copy all weight tensors
-        clone._Wz = _Wz.Clone();
-        clone._Wr = _Wr.Clone();
-        clone._Wh = _Wh.Clone();
-        clone._Uz = _Uz.Clone();
-        clone._Ur = _Ur.Clone();
-        clone._Uh = _Uh.Clone();
-        clone._bz = _bz.Clone();
-        clone._br = _br.Clone();
-        clone._bh = _bh.Clone();
-
-        // Reset internal state (don't share state between original and clone)
-        clone._lastInput = null;
-        clone._lastHiddenState = null;
-        clone._lastZ = null;
-        clone._lastR = null;
-        clone._lastH = null;
-        clone._allHiddenStates = null;
-        clone._originalInputShape = null;
-
-        // Reset gradients
-        clone._dWz = null;
-        clone._dWr = null;
-        clone._dWh = null;
-        clone._dUz = null;
-        clone._dUr = null;
-        clone._dUh = null;
-        clone._dbz = null;
-        clone._dbr = null;
-        clone._dbh = null;
-
-        return clone;
     }
 
     /// <summary>

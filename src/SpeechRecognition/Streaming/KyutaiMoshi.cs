@@ -265,54 +265,6 @@ public partial class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
         AdditionalInfo = BaseAudioMetadataInfo()
     };
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.MaxAudioLengthSeconds);
-        writer.Write(_options.EncoderDim);
-        writer.Write(_options.NumEncoderLayers);
-        writer.Write(_options.NumAttentionHeads);
-        writer.Write(_options.NumMels);
-        writer.Write(_options.VocabSize);
-        writer.Write(_options.MaxTextLength);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.Language);
-    }
-
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string modelPath = reader.ReadString();
-        if (!string.IsNullOrEmpty(modelPath))
-            _options.ModelPath = modelPath;
-
-        _options.SampleRate = reader.ReadInt32();
-        _options.MaxAudioLengthSeconds = reader.ReadInt32();
-        _options.EncoderDim = reader.ReadInt32();
-        _options.NumEncoderLayers = reader.ReadInt32();
-        _options.NumAttentionHeads = reader.ReadInt32();
-        _options.NumMels = reader.ReadInt32();
-        _options.VocabSize = reader.ReadInt32();
-        _options.MaxTextLength = reader.ReadInt32();
-        _options.DropoutRate = reader.ReadDouble();
-        _options.Language = reader.ReadString();
-        base.SampleRate = _options.SampleRate;
-        base.NumMels = _options.NumMels;
-
-        if (!_useNativeMode && _options.ModelPath is { } path && !string.IsNullOrEmpty(path))
-            OnnxEncoder = new OnnxModel<T>(path, _options.OnnxOptions);
-    }
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } modelPath && !string.IsNullOrEmpty(modelPath))
-            return new KyutaiMoshi<T>(Architecture, modelPath, _options);
-
-        return new KyutaiMoshi<T>(Architecture, _options);
-    }
-
     private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits)
     {
         var tokens = new List<int>();

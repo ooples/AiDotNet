@@ -122,6 +122,7 @@ public partial class SplitLayer<T> : LayerBase<T>, IShapeContract
     /// or when you explicitly reset the layer.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>

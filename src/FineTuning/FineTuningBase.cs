@@ -23,8 +23,51 @@ namespace AiDotNet.FineTuning;
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 /// <typeparam name="TInput">The input data type for the model.</typeparam>
 /// <typeparam name="TOutput">The output data type for the model.</typeparam>
-public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput, TOutput>, IModelShape
+public abstract partial class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput, TOutput>, IModelShape
 {
+    // --- declared state (ModelStateRegistry) ---
+    // Identical in every model base because these bases are siblings over the same interfaces rather
+    // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.
+
+    /// <summary>State that is not a parameter vector, declared once and persisted by this base.</summary>
+    private readonly AiDotNet.Models.ModelStateRegistry<T> _declaredState = new();
+    private bool _declaredStateRegistered;
+
+    /// <summary>
+    /// Declare state here that the parameter vector does not carry -- a retained training set,
+    /// fitted knots, kernel centres, an ensemble's children. Both halves of the payload are driven
+    /// by the declaration, so they cannot drift.
+    /// </summary>
+    /// <param name="state">The registry to declare into.</param>
+    protected virtual void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+    }
+    /// <summary>Generated state declarations for fields declared across this model's hierarchy.</summary>
+    /// <param name="state">The registry to declare into.</param>
+    /// <remarks>
+    /// Emitted by ModelStateGenerator into the partial model, so a model author declares nothing. The
+    /// hand-written <c>RegisterState</c> beside it exists only for state the classifier genuinely
+    /// cannot place; anything it CAN place belongs here, where it cannot be forgotten.
+    /// </remarks>
+    protected virtual void RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        RegisterGeneratedStateCore(state);
+    }
+
+    /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>
+    protected AiDotNet.Models.ModelStateRegistry<T> DeclaredState
+    {
+        get
+        {
+            if (!_declaredStateRegistered)
+            {
+                _declaredStateRegistered = true;
+                RegisterGeneratedState(_declaredState);
+                RegisterState(_declaredState);
+            }
+            return _declaredState;
+        }
+    }
     /// <summary>
     /// The numeric operations helper for type T.
     /// </summary>
@@ -103,12 +146,15 @@ public abstract class FineTuningBase<T, TInput, TOutput> : IFineTuning<T, TInput
     {
         ModelPersistenceGuard.EnforceBeforeSerialize();
         var json = JsonConvert.SerializeObject(Options, Formatting.None);
-        return Encoding.UTF8.GetBytes(json);
+        return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, Encoding.UTF8.GetBytes(json));
     }
 
     /// <inheritdoc/>
     public virtual void Deserialize(byte[] data)
     {
+        // Strips and applies any declared-state trailer, so the body below reads the payload
+        // exactly as it did before this existed.
+        data = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, data);
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null)
         {

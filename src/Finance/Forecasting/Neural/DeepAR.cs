@@ -517,48 +517,6 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates a new instance of this model with the same configuration.
-    /// </summary>
-    /// <returns>A new DeepAR model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This creates a fresh copy of the model with the same settings
-    /// but new (randomly initialized) weights. Useful for ensemble training or cross-validation.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new DeepAROptions<T>
-        {
-            LookbackWindow = SequenceLength,
-            ForecastHorizon = PredictionHorizon,
-            HiddenSize = _hiddenSize,
-            NumLayers = _numLstmLayers,
-            EmbeddingDimension = _embeddingDim,
-            DropoutRate = _dropout,
-            LikelihoodType = _distributionType,
-            NumSamples = _numSamples
-        };
-
-        if (UseNativeMode)
-        {
-            return new DeepAR<T>(Architecture, options, _optimizer, LossFunction);
-        }
-        else
-        {
-            // Use null-coalescing throw to satisfy null analysis across all framework targets
-            string onnxPath = OnnxModelPath ?? throw new InvalidOperationException(
-                "Cannot create new instance from ONNX mode when OnnxModelPath is not available.");
-            if (onnxPath.Length == 0)
-            {
-                throw new InvalidOperationException(
-                    "Cannot create new instance from ONNX mode when OnnxModelPath is empty.");
-            }
-            return new DeepAR<T>(Architecture, onnxPath, options, _optimizer, LossFunction);
-        }
-    }
-
-    /// <summary>
     /// Writes DeepAR-specific configuration during serialization.
     /// </summary>
     /// <param name="writer">Binary writer for output.</param>
@@ -568,16 +526,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
     /// to a file so the model can be loaded later with the same configuration.
     /// </para>
     /// </remarks>
-    protected override void SerializeModelSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_hiddenSize);
-        writer.Write(_numLstmLayers);
-        writer.Write(_embeddingDim);
-        writer.Write(_dropout);
-        writer.Write(_distributionType);
-        writer.Write(_numSamples);
-        writer.Write(_useScaling);
-    }
+
 
     /// <summary>
     /// Reads DeepAR-specific configuration during deserialization.
@@ -589,25 +538,7 @@ public partial class DeepAR<T> : ForecastingModelBase<T>
     /// The values advance the reader but aren't used since constructor sets them.
     /// </para>
     /// </remarks>
-    protected override void DeserializeModelSpecificData(BinaryReader reader)
-    {
-        _hiddenSize = reader.ReadInt32();
-        _numLstmLayers = reader.ReadInt32();
-        _embeddingDim = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _distributionType = reader.ReadString();
-        _numSamples = reader.ReadInt32();
-        _useScaling = reader.ReadBoolean();
 
-        // Re-bind the cached layer references (_inputProjection, _lstmLayers,
-        // _muProjection, _sigmaProjection, _layerNorm) to the layers the base
-        // deserializer just rebuilt with the loaded weights. Without this the
-        // references still point at the construction-time fresh-init layers, so
-        // Forward (and therefore Predict / a clone) ran on RANDOM weights rather
-        // than the deserialized ones — Clone_ShouldProduceIdenticalOutput saw the
-        // original vs a randomly-initialized clone.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

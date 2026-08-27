@@ -45,7 +45,7 @@ namespace AiDotNet.Audio.Multimodal;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Audio Flamingo: A Novel Audio Language Model with Few-Shot Learning and Dialogue Abilities", "https://doi.org/10.48550/arXiv.2402.01831", Year = 2024, Authors = "Zhifeng Kong, Arushi Goel, Rohan Badlani, Wei Ping, Rafael Valle, Bryan Catanzaro")]
-public class AudioFlamingo2<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
+public partial class AudioFlamingo2<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -222,28 +222,9 @@ public class AudioFlamingo2<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.AudioEncoderDim);
-        w.Write(_options.LLMHiddenDim); w.Write(_options.NumPerceiverLayers);
-        w.Write(_options.NumPerceiverTokens); w.Write(_options.MaxAudioDurationSeconds);
-        w.Write(_options.MaxResponseTokens); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.AudioEncoderDim = r.ReadInt32();
-        _options.LLMHiddenDim = r.ReadInt32(); _options.NumPerceiverLayers = r.ReadInt32();
-        _options.NumPerceiverTokens = r.ReadInt32(); _options.MaxAudioDurationSeconds = r.ReadDouble();
-        _options.MaxResponseTokens = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new AudioFlamingo2<T>(Architecture, new AudioFlamingo2Options(_options));
+
 
     #endregion
 

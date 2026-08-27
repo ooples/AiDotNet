@@ -58,6 +58,7 @@ public partial class KNNEvaluator<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     private readonly bool _useCosine;
     private readonly double _temperature;
 
+    [AiDotNet.Attributes.FittedParameter]
     private Tensor<T>? _trainFeatures;
     private int[]? _trainLabels;
     private int _numClasses;
@@ -388,10 +389,6 @@ public partial class KNNEvaluator<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         ((IParameterizable<T, Tensor<T>, Tensor<T>>)copy).SetParameters(parameters);
         return copy;
     }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-        => (KNNEvaluator<T>)MemberwiseClone();
 
     #endregion
 }

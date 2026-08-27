@@ -110,6 +110,7 @@ public partial class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     private readonly TADAMOptions<T, TInput, TOutput> _tadamOptions;
 
     // Learnable metric scaling parameters (alpha)
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _metricScale;
 
     // Learnable temperature parameter

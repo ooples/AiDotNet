@@ -13,7 +13,7 @@ namespace AiDotNet.Tests.IntegrationTests.Optimizers;
 /// don't redundantly call model.Train() every epoch, and that the content-based
 /// cache key in GenerateCacheKey prevents redundant evaluations.
 /// </summary>
-public class OptimizerTrainSkipTests
+public partial class OptimizerTrainSkipTests
 {
     [Fact(Timeout = 30000)]
     public async Task ClosedFormModel_WithOptimizer_CompletesQuickly()
@@ -143,7 +143,7 @@ public class OptimizerTrainSkipTests
     /// <summary>
     /// Test model that counts how many times Train() is called.
     /// </summary>
-    private class TrainCountingModel : MultipleRegression<double>
+    private partial class TrainCountingModel : MultipleRegression<double>
     {
         public int TrainCallCount { get; private set; }
 

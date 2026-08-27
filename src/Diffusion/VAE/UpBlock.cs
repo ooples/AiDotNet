@@ -152,6 +152,7 @@ public partial class UpBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached inputs and intermediate values for backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
     private Tensor<T>? _postUpsampleOutput;
     private readonly Tensor<T>?[] _resBlockOutputs;
@@ -295,7 +296,10 @@ public partial class UpBlock<T> : LayerBase<T>, IShapeContract
     /// <returns>Output tensor with shape [batch, outChannels, 2*H, 2*W] if hasUpsample, else [batch, outChannels, H, W].</returns>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = input;
+        // Cache only when a manual backward will read it. Retaining the post-upsample activation
+        // and every res-block output unconditionally pinned the whole stage alive for the pass;
+        // at 512x512 fp64 each of those is 268MB.
+        SaveForBackward(ref _lastInput, input);
         var x = input;
 
         // Apply upsampling if enabled
@@ -304,13 +308,13 @@ public partial class UpBlock<T> : LayerBase<T>, IShapeContract
             x = _upsample.Forward(x);
         }
 
-        _postUpsampleOutput = x;
+        SaveForBackward(ref _postUpsampleOutput, x);
 
         // Process through residual blocks
         for (int i = 0; i < _numLayers; i++)
         {
             x = _resBlocks[i].Forward(x);
-            _resBlockOutputs[i] = x;
+            SaveForBackward(ref _resBlockOutputs[i], x);
         }
 
         return x;
@@ -372,63 +376,6 @@ public partial class UpBlock<T> : LayerBase<T>, IShapeContract
         }
     }
 
-
-    /// <summary>
-    /// Saves the block's state to a binary writer.
-    /// </summary>
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-
-        writer.Write(_inChannels);
-        writer.Write(_outChannels);
-        writer.Write(_numLayers);
-        writer.Write(_numGroups);
-        writer.Write(_inputSpatialSize);
-        writer.Write(_hasUpsample);
-
-        if (_hasUpsample && _upsample != null)
-        {
-            _upsample.Serialize(writer);
-        }
-
-        foreach (var block in _resBlocks)
-        {
-            block.Serialize(writer);
-        }
-    }
-
-    /// <summary>
-    /// Loads the block's state from a binary reader.
-    /// </summary>
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-
-        var inChannels = reader.ReadInt32();
-        var outChannels = reader.ReadInt32();
-        var numLayers = reader.ReadInt32();
-        var numGroups = reader.ReadInt32();
-        var inputSpatialSize = reader.ReadInt32();
-        var hasUpsample = reader.ReadBoolean();
-
-        if (inChannels != _inChannels || outChannels != _outChannels ||
-            numLayers != _numLayers || hasUpsample != _hasUpsample)
-        {
-            throw new InvalidOperationException(
-                $"Architecture mismatch in UpBlock deserialization.");
-        }
-
-        if (_hasUpsample && _upsample != null)
-        {
-            _upsample.Deserialize(reader);
-        }
-
-        foreach (var block in _resBlocks)
-        {
-            block.Deserialize(reader);
-        }
-    }
 
     /// <summary>
     /// Gets the residual blocks for external access.

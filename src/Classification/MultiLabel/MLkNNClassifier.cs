@@ -68,14 +68,16 @@ namespace AiDotNet.Classification.MultiLabel;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 [ResearchPaper("ML-KNN: A Lazy Learning Approach to Multi-Label Learning", "https://doi.org/10.1016/j.patcog.2006.12.019", Year = 2007, Authors = "Min-Ling Zhang, Zhi-Hua Zhou")]
-public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
+public partial class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
 {
     private readonly MLkNNOptions<T> _options;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
     private readonly Random _random;
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _trainFeatures = new Matrix<T>(0, 0);
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _trainLabels = new Matrix<T>(0, 0);
     private double[]? _priorProbs; // P(H_l = 1)
     private double[,] _condProbsPos = new double[0, 0]; // P(E_l = j | H_l = 1) for j = 0..k
@@ -351,164 +353,5 @@ public class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
                 _condProbsNeg[l, j] = NumOps.ToDouble(parameters[idx++]);
     }
 
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        int k = _options.KNeighbors;
-
-        // Serialize training features as double[][]
-        double[][]? trainFeaturesArr = null;
-        if (_trainFeatures is not null)
-        {
-            trainFeaturesArr = new double[_trainFeatures.Rows][];
-            for (int i = 0; i < _trainFeatures.Rows; i++)
-            {
-                trainFeaturesArr[i] = new double[_trainFeatures.Columns];
-                for (int j = 0; j < _trainFeatures.Columns; j++)
-                {
-                    trainFeaturesArr[i][j] = NumOps.ToDouble(_trainFeatures[i, j]);
-                }
-            }
-        }
-
-        // Serialize training labels as double[][]
-        double[][]? trainLabelsArr = null;
-        if (_trainLabels is not null)
-        {
-            trainLabelsArr = new double[_trainLabels.Rows][];
-            for (int i = 0; i < _trainLabels.Rows; i++)
-            {
-                trainLabelsArr[i] = new double[_trainLabels.Columns];
-                for (int j = 0; j < _trainLabels.Columns; j++)
-                {
-                    trainLabelsArr[i][j] = NumOps.ToDouble(_trainLabels[i, j]);
-                }
-            }
-        }
-
-        // Serialize 2D conditional probability arrays as double[][]
-        double[][]? condProbsPosArr = null;
-        double[][]? condProbsNegArr = null;
-        if (_condProbsPos is not null && _condProbsNeg is not null)
-        {
-            condProbsPosArr = new double[NumLabels][];
-            condProbsNegArr = new double[NumLabels][];
-            for (int l = 0; l < NumLabels; l++)
-            {
-                condProbsPosArr[l] = new double[k + 1];
-                condProbsNegArr[l] = new double[k + 1];
-                for (int j = 0; j <= k; j++)
-                {
-                    condProbsPosArr[l][j] = _condProbsPos[l, j];
-                    condProbsNegArr[l][j] = _condProbsNeg[l, j];
-                }
-            }
-        }
-
-        var modelDict = new Dictionary<string, object?>
-        {
-            { "NumLabels", NumLabels },
-            { "NumFeatures", NumFeatures },
-            { "NumClasses", NumClasses },
-            { "TaskType", (int)TaskType },
-            { "LabelNames", LabelNames },
-            { "KNeighbors", k },
-            { "Smoothing", _options.Smoothing },
-            { "PriorProbs", _priorProbs },
-            { "CondProbsPos", condProbsPosArr },
-            { "CondProbsNeg", condProbsNegArr },
-            { "TrainFeatures", trainFeaturesArr },
-            { "TrainLabels", trainLabelsArr }
-        };
-
-        var metadata = GetModelMetadata();
-        metadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelDict));
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(metadata));
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        var jsonString = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
-            ?? throw new InvalidOperationException("Failed to deserialize MLkNNClassifier: invalid metadata.");
-        if (metadata.ModelData is null)
-            throw new InvalidOperationException("Failed to deserialize MLkNNClassifier: missing model data.");
-
-        var dataString = Encoding.UTF8.GetString(metadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
-            ?? throw new InvalidOperationException("Failed to deserialize MLkNNClassifier: invalid model payload.");
-
-        NumLabels = jObj["NumLabels"]?.ToObject<int>() ?? 0;
-        NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
-        NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 2;
-        TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
-        LabelNames = jObj["LabelNames"]?.ToObject<string[]>();
-        _options.Smoothing = jObj["Smoothing"]?.ToObject<double>() ?? _options.Smoothing;
-
-        _priorProbs = jObj["PriorProbs"]?.ToObject<double[]>();
-
-        int k = jObj["KNeighbors"]?.ToObject<int>() ?? _options.KNeighbors;
-
-        var condProbsPosArr = jObj["CondProbsPos"]?.ToObject<double[][]>();
-        var condProbsNegArr = jObj["CondProbsNeg"]?.ToObject<double[][]>();
-        if (condProbsPosArr is not null && condProbsNegArr is not null)
-        {
-            if (condProbsPosArr.Length < NumLabels)
-                throw new InvalidOperationException(
-                    $"Failed to deserialize MLkNNClassifier: CondProbsPos has {condProbsPosArr.Length} rows but expected at least {NumLabels}.");
-            if (condProbsNegArr.Length < NumLabels)
-                throw new InvalidOperationException(
-                    $"Failed to deserialize MLkNNClassifier: CondProbsNeg has {condProbsNegArr.Length} rows but expected at least {NumLabels}.");
-
-            _condProbsPos = new double[NumLabels, k + 1];
-            _condProbsNeg = new double[NumLabels, k + 1];
-            for (int l = 0; l < NumLabels && l < condProbsPosArr.Length; l++)
-            {
-                for (int j = 0; j <= k && j < condProbsPosArr[l].Length; j++)
-                {
-                    _condProbsPos[l, j] = condProbsPosArr[l][j];
-                    _condProbsNeg[l, j] = condProbsNegArr[l][j];
-                }
-            }
-        }
-
-        var trainFeaturesArr = jObj["TrainFeatures"]?.ToObject<double[][]>();
-        if (trainFeaturesArr is not null && trainFeaturesArr.Length > 0)
-        {
-            int rows = trainFeaturesArr.Length;
-            int cols = trainFeaturesArr[0].Length;
-            _trainFeatures = new Matrix<T>(rows, cols);
-            for (int i = 0; i < rows; i++)
-            {
-                for (int j = 0; j < cols; j++)
-                {
-                    _trainFeatures[i, j] = NumOps.FromDouble(trainFeaturesArr[i][j]);
-                }
-            }
-        }
-
-        var trainLabelsArr = jObj["TrainLabels"]?.ToObject<double[][]>();
-        if (trainLabelsArr is not null && trainLabelsArr.Length > 0)
-        {
-            int rows = trainLabelsArr.Length;
-            int cols = trainLabelsArr[0].Length;
-            _trainLabels = new Matrix<T>(rows, cols);
-            for (int i = 0; i < rows; i++)
-            {
-                for (int j = 0; j < cols; j++)
-                {
-                    _trainLabels[i, j] = NumOps.FromDouble(trainLabelsArr[i][j]);
-                }
-            }
-        }
-    }
-
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Matrix<T>> CreateNewInstance()
-    {
-        return new MLkNNClassifier<T>(_options);
-    }
 }

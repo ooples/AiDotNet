@@ -71,6 +71,7 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
     // before the first Forward. Both _bn and _conv are still unresolved
     // at that point so we can't slice between them; stash the whole
     // vector and replay inside OnFirstForward.
+    [Scratch]
     private Vector<T>? _pendingParameters;
     // Lazy ctor leaves _conv = null until OnFirstForward resolves
     // OutputChannels (= inputChannels × compressionFactor) and allocates
@@ -81,13 +82,16 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
     private readonly AveragePoolingLayer<T> _pool;
     private readonly IActivationFunction<T> _relu;
 
+    [Scratch]
     private Tensor<T>? _lastInput;
     private Tensor<T>? _bnOut;
     private Tensor<T>? _reluOut;
     private Tensor<T>? _convOut;
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuBnOut;
+    [ExternalState]
     private Tensor<T>? _gpuConvOut;
     private bool _gpuAdded3DBatch;
 

@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2408.06291",
     Year = 2024,
     Authors = "Thielmann, A., Kruse, R., Samiee, S., & Kleyko, D.")]
-public class MambularNetwork<T> : TabularNeuralNetworkBase<T>
+public partial class MambularNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly MambularOptions<T> _options;
 
@@ -216,51 +216,8 @@ public class MambularNetwork<T> : TabularNeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.EmbeddingDimension);
-        writer.Write(_options.StateDimension);
-        writer.Write(_options.NumLayers);
-        writer.Write(_options.ExpansionFactor);
-        writer.Write(_options.ConvKernelSize);
-        writer.Write(_options.DropoutRate);
-        writer.Write(_options.InitScale);
-        writer.Write(_options.DeltaMin);
-        writer.Write(_options.DeltaMax);
-        writer.Write(_options.UseBidirectional);
 
-        writer.Write(_options.MLPHiddenDimensions.Length);
-        foreach (var dim in _options.MLPHiddenDimensions)
-        {
-            writer.Write(dim);
-        }
-
-        if (_options.CategoricalCardinalities != null)
-        {
-            writer.Write(_options.CategoricalCardinalities.Length);
-            foreach (var card in _options.CategoricalCardinalities)
-            {
-                writer.Write(card);
-            }
-        }
-        else
-        {
-            writer.Write(0);
-        }
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-    }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new MambularNetwork<T>(
-            Architecture,
-            _options,
-            _optimizer,
-            _lossFunction);
-    }
 }

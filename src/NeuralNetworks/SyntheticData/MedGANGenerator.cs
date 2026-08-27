@@ -578,80 +578,10 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_dataWidth);
-        writer.Write(IsFitted);
 
-        writer.Write(_outputGroups?.Count ?? -1);
-        if (_outputGroups is not null)
-        {
-            foreach (var (start, width, softmax) in _outputGroups)
-            {
-                writer.Write(start);
-                writer.Write(width);
-                writer.Write(softmax);
-            }
-        }
-
-        writer.Write(_colMin?.Length ?? -1);
-        if (_colMin is not null && _colMax is not null)
-        {
-            for (int i = 0; i < _colMin.Length; i++)
-            {
-                writer.Write(_colMin[i]);
-                writer.Write(_colMax[i]);
-            }
-        }
-    }
 
     /// <inheritdoc />
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _dataWidth = reader.ReadInt32();
-        IsFitted = reader.ReadBoolean();
 
-        int groupCount = reader.ReadInt32();
-        if (groupCount >= 0)
-        {
-            _outputGroups = new List<(int, int, bool)>(groupCount);
-            for (int i = 0; i < groupCount; i++)
-            {
-                _outputGroups.Add((reader.ReadInt32(), reader.ReadInt32(), reader.ReadBoolean()));
-            }
-        }
-        else
-        {
-            _outputGroups = null;
-        }
-
-        int rangeCount = reader.ReadInt32();
-        if (rangeCount >= 0)
-        {
-            _colMin = new double[rangeCount];
-            _colMax = new double[rangeCount];
-            for (int i = 0; i < rangeCount; i++)
-            {
-                _colMin[i] = reader.ReadDouble();
-                _colMax[i] = reader.ReadDouble();
-            }
-        }
-        else
-        {
-            _colMin = null;
-            _colMax = null;
-        }
-
-        // The base deserializer rebuilt Layers with fresh instances; re-bind the typed views so the
-        // forward paths use the deserialized (trained) weights rather than discarded init.
-        if (!_usingCustomLayers) ExtractMedGANLayerReferences();
-    }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new MedGANGenerator<T>(Architecture, _options);
-    }
 
     /// <inheritdoc />
     public override Dictionary<string, T> GetFeatureImportance()

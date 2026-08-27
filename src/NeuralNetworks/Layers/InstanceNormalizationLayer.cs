@@ -83,13 +83,18 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>, IShapeContrac
         Shape = "_numChannels", Condition = nameof(Affine))]
     private Tensor<T> _beta;
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastMean;
+    [Scratch]
     private Tensor<T>? _lastVariance;
+    [Scratch]
     private Tensor<T>? _gammaGradient;
+    [Scratch]
     private Tensor<T>? _betaGradient;
     private int[] _originalInputShape = [];
 
     // GPU cached tensors for backward pass
+    [ExternalState]
     private Tensor<T>? _gpuInput;
     private IGpuBuffer? _gpuMean;
     private IGpuBuffer? _gpuInvVar;

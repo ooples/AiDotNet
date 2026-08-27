@@ -44,7 +44,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 [ResearchPaper("Bayesian Gaussian Process Latent Variable Model", "https://doi.org/10.48550/arXiv.1309.6835", Year = 2010, Authors = "Michalis K. Titsias, Neil D. Lawrence")]
-public class BayesianGPLVM<T>
+public partial class BayesianGPLVM<T>
 {
     /// <summary>
     /// The kernel function for the mapping from latent to observed space.
@@ -76,6 +76,7 @@ public class BayesianGPLVM<T>
     /// and each column is a latent dimension.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _latentMean;
 
     /// <summary>
@@ -87,16 +88,19 @@ public class BayesianGPLVM<T>
     /// is in latent space. Larger values mean more uncertainty.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _latentVariance;
 
     /// <summary>
     /// The inducing points in latent space (M x Q).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _inducingPoints;
 
     /// <summary>
     /// The observed data (N x D).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Matrix<T>? _observedData;
 
     /// <summary>

@@ -58,7 +58,7 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2204.04216",
     Year = 2022,
     Authors = "Chengxu Liu, Huan Yang, Jianlong Fu, Xueming Qian")]
-public class TTVSR<T> : VideoSuperResolutionBase<T>
+public partial class TTVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 
@@ -189,41 +189,9 @@ public class TTVSR<T> : VideoSuperResolutionBase<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.NumFeatures);
-        w.Write(_options.NumTransformerBlocks);
-        w.Write(_options.NumResBlocks);
-        w.Write(_options.ScaleFactor);
-        w.Write(_options.TrajectoryLength);
-        w.Write(_options.NumHeads);
-        w.Write(_options.NumScales);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (VideoModelVariant)r.ReadInt32();
-        _options.NumFeatures = r.ReadInt32();
-        _options.NumTransformerBlocks = r.ReadInt32();
-        _options.NumResBlocks = r.ReadInt32();
-        _options.ScaleFactor = r.ReadInt32();
-        _options.TrajectoryLength = r.ReadInt32();
-        _options.NumHeads = r.ReadInt32();
-        _options.NumScales = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new TTVSR<T>(Architecture, _options);
+
 
     #endregion
 

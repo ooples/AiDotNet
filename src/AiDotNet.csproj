@@ -241,6 +241,17 @@
 	  <None Remove="AiDotNet.Generators\**\*" />
 	</ItemGroup>
 
+	<!-- Ship the same generator/analyzer assembly to NuGet consumers. A ProjectReference makes it
+	     run only for source checkouts; placing it under NuGet's conventional analyzer path makes
+	     generated layer factories automatic for PackageReference consumers too. This Include must
+	     follow the broad generator-project exclusion above so it is not removed from the package. -->
+	<ItemGroup>
+	  <None Include="AiDotNet.Generators\bin\$(Configuration)\netstandard2.0\AiDotNet.Generators.dll"
+	        Pack="true"
+	        PackagePath="analyzers/dotnet/cs"
+	        Visible="false" />
+	</ItemGroup>
+
 	<!-- Emit generated source files to disk for inspection/debugging (Debug only) -->
 	<PropertyGroup Condition="'$(Configuration)'=='Debug'">
 	  <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
@@ -252,9 +263,14 @@
 	  <Compile Remove="Generated\**\*.cs" />
 	</ItemGroup>
 
-	<!-- AiDotNet.Tensors NuGet package (spun out to separate repo) -->
-	<ItemGroup>
+	<!-- AiDotNet.Tensors NuGet package (spun out to separate repo).
+	     Build with -p:UseLocalTensors=true to compile against a sibling checkout instead, for
+	     cross-repo debugging without cutting a package first. Default is unchanged. -->
+	<ItemGroup Condition="'$(UseLocalTensors)' != 'true'">
 	  <PackageReference Include="AiDotNet.Tensors" />
+	</ItemGroup>
+	<ItemGroup Condition="'$(UseLocalTensors)' == 'true'">
+	  <ProjectReference Include="$(MSBuildThisFileDirectory)..\..\AiDotNet.Tensors\src\AiDotNet.Tensors\AiDotNet.Tensors.csproj" />
 	</ItemGroup>
 
 	<!--

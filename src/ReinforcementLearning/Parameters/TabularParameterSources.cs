@@ -29,7 +29,7 @@ namespace AiDotNet.ReinforcementLearning.Parameters;
 /// numbers, so saving and loading it works the same way it does for a neural network.</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type of the table's values.</typeparam>
-public sealed class QTableParameterSource<T> : IParameterSource<T>
+public sealed class QTableParameterSource<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameterTopologySource
 {
     private readonly Dictionary<string, Dictionary<int, T>> _table;
     private readonly int _actionSize;
@@ -79,6 +79,39 @@ public sealed class QTableParameterSource<T> : IParameterSource<T>
             }
         }
     }
+
+    /// <inheritdoc />
+    public void WriteParameterTopology(BinaryWriter writer)
+    {
+        if (writer is null) throw new ArgumentNullException(nameof(writer));
+        writer.Write(_table.Count);
+        foreach (var state in _table)
+        {
+            writer.Write(state.Key);
+            writer.Write(state.Value.Count);
+            foreach (var action in state.Value.Keys) writer.Write(action);
+        }
+    }
+
+    /// <inheritdoc />
+    public void ReadParameterTopology(BinaryReader reader)
+    {
+        if (reader is null) throw new ArgumentNullException(nameof(reader));
+        int stateCount = reader.ReadInt32();
+        if (stateCount < 0) throw new InvalidDataException($"Q-table topology has negative state count {stateCount}.");
+        _table.Clear();
+        for (int stateIndex = 0; stateIndex < stateCount; stateIndex++)
+        {
+            string state = reader.ReadString();
+            int actionCount = reader.ReadInt32();
+            if (actionCount < 0)
+                throw new InvalidDataException($"Q-table topology has negative action count {actionCount}.");
+            var actions = new Dictionary<int, T>();
+            for (int actionIndex = 0; actionIndex < actionCount; actionIndex++)
+                actions.Add(reader.ReadInt32(), _ops.Zero);
+            _table.Add(state, actions);
+        }
+    }
 }
 
 /// <summary>
@@ -88,7 +121,7 @@ public sealed class QTableParameterSource<T> : IParameterSource<T>
 /// <remarks>Held by reference and enumerated in dictionary order, for the same reasons as
 /// <see cref="QTableParameterSource{T}"/>.</remarks>
 /// <typeparam name="T">The numeric type of the table's values.</typeparam>
-public sealed class ValueTableParameterSource<T> : IParameterSource<T>
+public sealed class ValueTableParameterSource<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameterTopologySource
 {
     private readonly Dictionary<string, T> _table;
 
@@ -120,6 +153,24 @@ public sealed class ValueTableParameterSource<T> : IParameterSource<T>
             if (idx >= parameters.Length) break;
             _table[key] = parameters[idx++];
         }
+    }
+
+    /// <inheritdoc />
+    public void WriteParameterTopology(BinaryWriter writer)
+    {
+        if (writer is null) throw new ArgumentNullException(nameof(writer));
+        writer.Write(_table.Count);
+        foreach (var key in _table.Keys) writer.Write(key);
+    }
+
+    /// <inheritdoc />
+    public void ReadParameterTopology(BinaryReader reader)
+    {
+        if (reader is null) throw new ArgumentNullException(nameof(reader));
+        int count = reader.ReadInt32();
+        if (count < 0) throw new InvalidDataException($"Value-table topology has negative count {count}.");
+        _table.Clear();
+        for (int i = 0; i < count; i++) _table.Add(reader.ReadString(), default!);
     }
 }
 
@@ -229,7 +280,7 @@ public sealed class VectorParameterSource<T> : IParameterSource<T>
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type of the table's values.</typeparam>
-public sealed class QTableEntriesParameterSource<T> : IParameterSource<T>
+public sealed class QTableEntriesParameterSource<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameterTopologySource
 {
     private readonly Dictionary<string, Dictionary<int, T>> _table;
     private readonly bool _padEmptyToOne;
@@ -315,6 +366,39 @@ public sealed class QTableEntriesParameterSource<T> : IParameterSource<T>
                 if (idx >= parameters.Length) return;
                 row[action] = parameters[idx++];
             }
+        }
+    }
+
+    /// <inheritdoc />
+    public void WriteParameterTopology(BinaryWriter writer)
+    {
+        if (writer is null) throw new ArgumentNullException(nameof(writer));
+        writer.Write(_table.Count);
+        foreach (var state in _table)
+        {
+            writer.Write(state.Key);
+            writer.Write(state.Value.Count);
+            foreach (var action in state.Value.Keys) writer.Write(action);
+        }
+    }
+
+    /// <inheritdoc />
+    public void ReadParameterTopology(BinaryReader reader)
+    {
+        if (reader is null) throw new ArgumentNullException(nameof(reader));
+        int stateCount = reader.ReadInt32();
+        if (stateCount < 0) throw new InvalidDataException($"Q-table topology has negative state count {stateCount}.");
+        _table.Clear();
+        for (int stateIndex = 0; stateIndex < stateCount; stateIndex++)
+        {
+            string state = reader.ReadString();
+            int actionCount = reader.ReadInt32();
+            if (actionCount < 0)
+                throw new InvalidDataException($"Q-table topology has negative action count {actionCount}.");
+            var actions = new Dictionary<int, T>();
+            for (int actionIndex = 0; actionIndex < actionCount; actionIndex++)
+                actions.Add(reader.ReadInt32(), _ops.Zero);
+            _table.Add(state, actions);
         }
     }
 }

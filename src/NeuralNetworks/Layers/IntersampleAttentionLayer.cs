@@ -71,7 +71,9 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _layerNormBeta;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _inputCache;
+    [Scratch]
     private Tensor<T>? _normalizedCache;
 
     /// <inheritdoc/>

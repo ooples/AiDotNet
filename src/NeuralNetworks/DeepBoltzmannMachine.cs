@@ -1,4 +1,4 @@
-﻿using AiDotNet.Helpers;
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Deep Boltzmann Machines", "https://proceedings.mlr.press/v5/salakhutdinov09a.html", Year = 2009, Authors = "Ruslan Salakhutdinov, Geoffrey Hinton")]
-public class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
+public partial class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
 {
     private readonly DeepBoltzmannMachineOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -911,47 +911,6 @@ public class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
     }
 
     /// <summary>
-    /// Declares the contrastive-divergence weight and bias tensors, which live outside
-    /// <see cref="NeuralNetworkBase{T}.Layers"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// A DBM carries its parameters in one of two places. Trained supervised, it builds
-    /// <c>Layers</c> and the base walk finds everything. Trained by contrastive divergence it has no
-    /// layers at all and holds <c>_layerWeights</c> and <c>_layerBiases</c> directly, which is what
-    /// this declares -- interleaved weight-then-bias per level, the order the old GetParameters
-    /// concatenated and therefore the order existing checkpoints are written in.
-    /// </para>
-    /// <para>
-    /// The guard is what stops the two modes double-counting: with layers present those same
-    /// weights are already reachable through them.
-    /// </para>
-    /// <para>
-    /// This replaces three overrides that disagreed with each other about which store was
-    /// authoritative. ParameterCount and GetParameters branched on <c>Layers.Count</c>;
-    /// UpdateParameters did NOT -- it always wrote the CD store, so in supervised mode it wrote
-    /// weights nothing would read. And there was no SetParameters override at all, so the path
-    /// serialization actually calls walked only <c>Layers</c>: in CD mode that is empty, and a
-    /// restore silently discarded the entire model while the count and the vector both reported
-    /// the full size. Declaring the tensors once makes count, vector and restore read the same
-    /// store in the same order, in both modes.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        if (Layers.Count > 0)
-        {
-            yield break;
-        }
-
-        for (int i = 0; i < _layerWeights.Count; i++)
-        {
-            yield return _layerWeights[i];
-            yield return _layerBiases[i];
-        }
-    }
-
-    /// <summary>
     /// Gets metadata about the Deep Boltzmann Machine model.
     /// </summary>
     /// <returns>A ModelMetaData object containing information about the model.</returns>
@@ -995,57 +954,7 @@ public class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
     /// This allows us to later "unpack" the network exactly as it was, preserving all its learned knowledge.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write the number of layers
-        writer.Write(_layerSizes.Count);
 
-        // Write layer sizes
-        foreach (var size in _layerSizes)
-        {
-            writer.Write(size);
-        }
-
-        // Write epochs
-        writer.Write(_epochs);
-
-        // Write learning rate
-        writer.Write(Convert.ToDouble(_learningRate));
-
-        // Write learning rate decay
-        writer.Write(Convert.ToDouble(_learningRateDecay));
-
-        // Write batch size
-        writer.Write(_batchSize);
-
-        // Write CD steps
-        writer.Write(_cdSteps);
-
-        // Write activation function type
-        writer.Write(_activationFunction != null ? 0 : (_vectorActivationFunction != null ? 1 : -1));
-
-        // Serialize activation function if present
-        if (_activationFunction != null)
-        {
-            SerializationHelper<T>.SerializeInterface(writer, _activationFunction);
-        }
-        else if (_vectorActivationFunction != null)
-        {
-            SerializationHelper<T>.SerializeInterface(writer, _vectorActivationFunction);
-        }
-
-        // Write layer weights
-        foreach (var weights in _layerWeights)
-        {
-            SerializationHelper<T>.SerializeTensor(writer, weights);
-        }
-
-        // Write layer biases
-        foreach (var biases in _layerBiases)
-        {
-            SerializationHelper<T>.SerializeTensor(writer, biases);
-        }
-    }
 
     /// <summary>
     /// Deserializes Deep Boltzmann Machine-specific data from a binary reader.
@@ -1069,110 +978,5 @@ public class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
     /// This allows us to continue using the network exactly where we left off, with all its learned knowledge intact.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read the number of layers
-        int layerCount = reader.ReadInt32();
 
-        // Read layer sizes
-        _layerSizes = new List<int>();
-        for (int i = 0; i < layerCount; i++)
-        {
-            _layerSizes.Add(reader.ReadInt32());
-        }
-
-        // Read epochs
-        _epochs = reader.ReadInt32();
-
-        // Read learning rate
-        _learningRate = NumOps.FromDouble(reader.ReadDouble());
-
-        // Read learning rate decay
-        _learningRateDecay = NumOps.FromDouble(reader.ReadDouble());
-
-        // Read batch size
-        _batchSize = reader.ReadInt32();
-
-        // Read CD steps
-        _cdSteps = reader.ReadInt32();
-
-        // Read activation function type
-        int activationType = reader.ReadInt32();
-
-        // Deserialize activation function
-        if (activationType == 0)
-        {
-            _activationFunction = DeserializationHelper.DeserializeInterface<IActivationFunction<T>>(reader);
-        }
-        else if (activationType == 1)
-        {
-            _vectorActivationFunction = DeserializationHelper.DeserializeInterface<IVectorActivationFunction<T>>(reader);
-        }
-
-        // Read layer weights
-        _layerWeights = new List<Tensor<T>>();
-        for (int i = 0; i < layerCount - 1; i++)
-        {
-            _layerWeights.Add(SerializationHelper<T>.DeserializeTensor(reader));
-        }
-
-        // Read layer biases
-        _layerBiases = new List<Tensor<T>>();
-        for (int i = 0; i < layerCount; i++)
-        {
-            _layerBiases.Add(SerializationHelper<T>.DeserializeTensor(reader));
-        }
-    }
-
-    /// <summary>
-    /// Creates a new instance of the deep boltzmann machine model.
-    /// </summary>
-    /// <returns>A new instance of the deep boltzmann machine model with the same configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the deep boltzmann machine model with the same configuration 
-    /// as the current instance. It is used internally during serialization/deserialization processes to 
-    /// create a fresh instance that can be populated with the serialized data. The new instance will have 
-    /// the same architecture, training parameters, and activation function type as the original.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a copy of the network structure without copying the learned data.
-    /// 
-    /// Think of it like making a blueprint copy of the DBM:
-    /// - It copies the same multi-layer structure (architecture)
-    /// - It uses the same learning settings (learning rate, epochs, etc.)
-    /// - It keeps the same activation function (how neurons respond to input)
-    /// - But it doesn't copy any of the weights and biases (the learned knowledge)
-    /// 
-    /// This is primarily used when saving or loading models, creating an empty framework
-    /// that the saved parameters can be loaded into later.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Choose the appropriate constructor based on which activation function is used
-        if (_activationFunction != null)
-        {
-            return new DeepBoltzmannMachine<T>(
-                Architecture,
-                _epochs,
-                Convert.ToDouble(_learningRateDecay),
-                lossFunction: _lossFunction,
-                activationFunction: _activationFunction,
-                batchSize: _batchSize,
-                cdSteps: _cdSteps
-            );
-        }
-        else
-        {
-            return new DeepBoltzmannMachine<T>(
-                Architecture,
-                _epochs,
-                Convert.ToDouble(_learningRateDecay),
-                lossFunction: _lossFunction,
-                activationFunction: (IActivationFunction<T>?)null,
-                batchSize: _batchSize,
-                cdSteps: _cdSteps
-            );
-        }
-    }
 }

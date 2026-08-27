@@ -52,17 +52,15 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     Authors = "Yury Gorishniy, Akim Kotelnikov, Artem Babenko")]
 public class TabMRegression<T> : TabMBase<T>
 {
-
-    /// <inheritdoc />
-    /// <remarks>The task head. Everything else is the shared backbone, which the base folds ahead of it in every parameter surface.</remarks>
-    protected override IEnumerable<ILayer<T>> GetExtraTrainableLayers()
-        => new ILayer<T>[] { _regressionHead };
     private readonly int _outputDimension;
     private readonly BatchEnsembleLayer<T> _regressionHead;
 
     // Cache for backward pass
+    [Scratch]
     private Tensor<T>? _backboneOutputCache;
+    [Scratch]
     private Tensor<T>? _predictionsCache;
+    [Scratch]
     private Tensor<T>? _memberPredictionsCache;
 
     /// <summary>

@@ -604,49 +604,10 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> In the FEDformer model, CreateNewInstance builds and wires up model components. This sets up the FEDformer architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new FEDformer<T>(
-                Architecture, _sequenceLength, _predictionHorizon, _numFeatures,
-                _numEncoderLayers, _numDecoderLayers, _numHeads, _modelDimension, _feedForwardDimension,
-                _numModes, _movingAverageKernel, _useInstanceNormalization, _dropout,
-                _optimizer, _lossFunction);
-        }
-        else
-        {
-            return new FEDformer<T>(
-                Architecture, OnnxModelPath ?? string.Empty,
-                _sequenceLength, _predictionHorizon, _numFeatures,
-                _optimizer, _lossFunction);
-        }
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
     /// <b>For Beginners:</b> In the FEDformer model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the FEDformer architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_predictionHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numDecoderLayers);
-        writer.Write(_numHeads);
-        writer.Write(_modelDimension);
-        writer.Write(_feedForwardDimension);
-        writer.Write(_numModes);
-        writer.Write(_movingAverageKernel);
-        writer.Write(_useInstanceNormalization);
-        writer.Write(_dropout);
-    }
+
 
     /// <inheritdoc/>
     /// <remarks>
@@ -654,21 +615,7 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the FEDformer model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the FEDformer architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _predictionHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _numEncoderLayers = reader.ReadInt32();
-        _numDecoderLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _modelDimension = reader.ReadInt32();
-        _feedForwardDimension = reader.ReadInt32();
-        _numModes = reader.ReadInt32();
-        _movingAverageKernel = reader.ReadInt32();
-        _useInstanceNormalization = reader.ReadBoolean();
-        _dropout = reader.ReadDouble();
-    }
+
 
     #endregion
 

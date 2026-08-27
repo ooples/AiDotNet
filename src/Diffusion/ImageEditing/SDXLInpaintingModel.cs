@@ -110,39 +110,6 @@ public partial class SDXLInpaintingModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        // Clone the predictor and VAE structurally so the clone respects the
-        // SOURCE instance's UNet/VAE config (baseChannels, multipliers,
-        // numResBlocks, etc.) rather than rebuilding them with the
-        // SDXLInpainting constructor's paper-scale defaults. The previous
-        // implementation passed no predictor/vae to the ctor → ctor built
-        // 320-baseChannels defaults → SetParameters(GetParameters()) then
-        // tried to bridge potentially mismatched parameter counts when
-        // callers had constructed the model with a smaller custom UNet
-        // (e.g. test scaffolds that scale down to baseChannels=64 for
-        // tractable CI runtime — same pattern as FlashDiffusion /
-        // SyncDiffusion / SpotDiffusion). Both paths now use the source's
-        // already-built components' Clone(), which preserves shape and
-        // copies parameters atomically.
-        var predictorClone = (UNetNoisePredictor<T>)_predictor.Clone();
-        var vaeClone = (StandardVAE<T>)_vae.Clone();
-        var options = GetOptions() is DiffusionModelOptions<T> diffusionOptions
-            ? new DiffusionModelOptions<T>(diffusionOptions)
-            : null;
-        return new SDXLInpaintingModel<T>(
-            architecture: Architecture,
-            options: options,
-            predictor: predictorClone,
-            vae: vaeClone,
-            conditioner: _conditioner,
-            seed: null);
-    }
-
-    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>

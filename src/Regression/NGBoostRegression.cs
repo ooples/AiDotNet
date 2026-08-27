@@ -62,7 +62,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("NGBoost: Natural Gradient Boosting for Probabilistic Prediction", "https://arxiv.org/abs/1910.03225", Year = 2019, Authors = "Tony Duan, Anand Avati, Daisy Yi Ding, Khanh K. Thai, Sanjay Basu, Andrew Y. Ng, Alejandro Schuler")]
-public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
+public partial class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     private const double MinVariance = 1e-6;
     private const double MaxStdDevMultiplier = 4.0;
@@ -78,6 +78,7 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Initial parameter values (e.g., mean of y for location, initial scale).
     /// </summary>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _initialParameters;
 
     /// <summary>
@@ -734,125 +735,4 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         };
     }
 
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Options
-        writer.Write(_options.NumberOfIterations);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.SubsampleRatio);
-        writer.Write((int)_options.DistributionType);
-        // Persist the rule by name. An ordinal only worked while the choice was a closed enum;
-        // now that any IScoringRule<T> is allowed, the name is what identifies it.
-        writer.Write(_scoringRule.Name);
-        writer.Write(_options.UseNaturalGradient);
-
-        // Y standardization
-        writer.Write(NumOps.ToDouble(_yMean));
-        writer.Write(NumOps.ToDouble(_yStd));
-
-        // Initial parameters
-        writer.Write(_numParams);
-        for (int p = 0; p < _numParams; p++)
-        {
-            writer.Write(NumOps.ToDouble(_initialParameters[p]));
-        }
-
-        // Trees
-        writer.Write(_trees.Count);
-        foreach (var iterTrees in _trees)
-        {
-            for (int p = 0; p < _numParams; p++)
-            {
-                byte[] treeData = iterTrees[p].Serialize();
-                writer.Write(treeData.Length);
-                writer.Write(treeData);
-            }
-        }
-
-        return ms.ToArray();
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        int baseLen = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseLen);
-        base.Deserialize(baseData);
-
-        // Options
-        _options.NumberOfIterations = reader.ReadInt32();
-        _options.LearningRate = reader.ReadDouble();
-        _options.SubsampleRatio = reader.ReadDouble();
-        _options.DistributionType = (NGBoostDistributionType)reader.ReadInt32();
-        // Rebuild the rule from its name. A rule the library ships round-trips exactly; a custom one
-        // cannot be reconstructed from a name alone, so it falls back to the default and the caller
-        // must re-supply it via Options.ScoringRule — reported rather than silently substituted.
-        string scoringRuleName = reader.ReadString();
-        _options.ScoringRule = scoringRuleName switch
-        {
-            "LogScore" => new LogScore<T>(),
-            "CRPS" => new CRPSScore<T>(),
-            _ => null
-        };
-        if (_options.ScoringRule is null && scoringRuleName != "LogScore")
-        {
-            System.Diagnostics.Trace.TraceWarning(
-                $"Serialized model used the custom scoring rule '{scoringRuleName}', which cannot be " +
-                "reconstructed from its name. Falling back to LogScore; re-supply the rule via " +
-                "Options.ScoringRule if the original is needed.");
-        }
-        _options.UseNaturalGradient = reader.ReadBoolean();
-
-        // Y standardization
-        _yMean = NumOps.FromDouble(reader.ReadDouble());
-        _yStd = NumOps.FromDouble(reader.ReadDouble());
-
-        // Initial parameters
-        _numParams = reader.ReadInt32();
-        _initialParameters = new Vector<T>(_numParams);
-        for (int p = 0; p < _numParams; p++)
-        {
-            _initialParameters[p] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Trees
-        int numIter = reader.ReadInt32();
-        _trees = new List<DecisionTreeRegression<T>[]>(numIter);
-        for (int iter = 0; iter < numIter; iter++)
-        {
-            var iterTrees = new DecisionTreeRegression<T>[_numParams];
-            for (int p = 0; p < _numParams; p++)
-            {
-                int treeLen = reader.ReadInt32();
-                byte[] treeData = reader.ReadBytes(treeLen);
-                iterTrees[p] = new DecisionTreeRegression<T>(new DecisionTreeOptions());
-                iterTrees[p].Deserialize(treeData);
-            }
-            _trees.Add(iterTrees);
-        }
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new NGBoostRegression<T>(_options, Regularization);
-    }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new NGBoostRegression<T>(_options, Regularization);
-        clone.Deserialize(Serialize());
-        return clone;
-    }
 }

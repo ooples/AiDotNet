@@ -189,7 +189,7 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("3D Gaussian Splatting for Real-Time Radiance Field Rendering", "https://doi.org/10.1145/3592433", Year = 2023, Authors = "Bernhard Kerbl, Georgios Kopanas, Thomas Leimkühler, George Drettakis")]
-public class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>, IRadianceField<T>,
+public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>, IRadianceField<T>,
     IHyperparameterAware<T, Tensor<T>, Tensor<T>>,
     NeuralRadianceFields.Interfaces.IImageTrainable<T>
 {
@@ -201,7 +201,7 @@ public class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBas
     /// <summary>
     /// Represents a single 3D Gaussian in the scene.
     /// </summary>
-    private sealed class Gaussian
+    private sealed partial class Gaussian
     {
         public Gaussian(int colorDim, INumericOperations<T> numOps)
         {
@@ -243,6 +243,7 @@ public class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBas
         /// and the property below keeps every existing read and write in the renderer working
         /// unchanged.
         /// </remarks>
+        [AiDotNet.Attributes.TrainableParameter]
         private readonly Vector<T> _opacity = new(1);
 
         /// <summary>Opacity in logit space, stored in <see cref="OpacityStorage"/>.</summary>
@@ -476,7 +477,9 @@ public class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBas
     private int _trainingStep;
     private SpatialHashGrid? _spatialIndex;
     private bool _spatialIndexDirty = true;
+    [Scratch]
     private Tensor<T>? _lastQueryPositions;
+    [Scratch]
     private Tensor<T>? _lastQueryDirections;
 
     public override bool SupportsTraining => true;
@@ -2499,38 +2502,6 @@ public class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBas
         return activations;
     }
 
-    /// <summary>
-    /// Declares every Gaussian's trainable attributes. This is an explicit representation -- the
-    /// scene is a list of Gaussians, not a stack of layers -- so <c>Layers</c> is empty by design
-    /// and the base walk would otherwise find nothing.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Per Gaussian, in the order the deleted GetParameters flattened them: position (3), rotation
-    /// (4), scale (3), opacity (1), colour (3, or 3 x the SH basis count). Same layout, same order,
-    /// so a checkpoint written before this change still restores.
-    /// </para>
-    /// <para>
-    /// This replaces ParameterCount, GetParameters, GetParameterChunks, SetParameters and
-    /// UpdateParameters -- five members each re-deriving <c>perGaussian = 3 + 4 + 3 + 1 +
-    /// colorDim</c> and walking the list in lockstep. A tensor built over a <c>Vector&lt;T&gt;</c>
-    /// shares its storage, so these views are the fields themselves and the base's restore writes
-    /// straight into the scene; the old GetParameterChunks yielded a COPY, which any restore driven
-    /// through it would have written to and thrown away.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        foreach (var gaussian in _gaussians)
-        {
-            yield return new Tensor<T>([gaussian.Position.Length], gaussian.Position);
-            yield return new Tensor<T>([gaussian.Rotation.Length], gaussian.Rotation);
-            yield return new Tensor<T>([gaussian.Scale.Length], gaussian.Scale);
-            yield return new Tensor<T>([gaussian.OpacityStorage.Length], gaussian.OpacityStorage);
-            yield return new Tensor<T>([gaussian.Color.Length], gaussian.Color);
-        }
-    }
-
     /// <inheritdoc />
     /// <remarks>
     /// A Gaussian's covariance is DERIVED from its rotation and scale, and the spatial index is
@@ -2584,176 +2555,6 @@ public class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBas
             // same rationale. Fixes #1826.
             ModelData = SerializeForMetadata()
         };
-    }
-
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useSphericalHarmonics);
-        writer.Write(_shDegree);
-        writer.Write(_trainingStep);
-        writer.Write(EnableDensification);
-        writer.Write(DensificationInterval);
-        writer.Write(PruneOpacityThreshold);
-        writer.Write(SplitGradientThreshold);
-        writer.Write(SplitPositionJitter);
-        writer.Write(SplitScaleFactor);
-        writer.Write(SplitOpacityFactor);
-        writer.Write(SplitOpacityMax);
-        writer.Write(MaxGaussians);
-        writer.Write(PositionLearningRate);
-        writer.Write(ColorLearningRate);
-        writer.Write(OpacityLearningRate);
-        writer.Write(ScaleLearningRate);
-        writer.Write(RotationLearningRate);
-        writer.Write(TileSize);
-        writer.Write(EnableSpatialIndex);
-        writer.Write(SpatialIndexRadius);
-        writer.Write(InitialNeighborSearchScale);
-        writer.Write(InitialScaleMultiplier);
-        writer.Write(DefaultPointSpacing);
-        writer.Write(MinScale);
-
-        int colorDim = _useSphericalHarmonics ? 3 * GetShBasisCount() : 3;
-        writer.Write(colorDim);
-        writer.Write(_gaussians.Count);
-
-        foreach (var gaussian in _gaussians)
-        {
-            for (int i = 0; i < 3; i++)
-            {
-                writer.Write(NumOps.ToDouble(gaussian.Position[i]));
-            }
-            for (int i = 0; i < 4; i++)
-            {
-                writer.Write(NumOps.ToDouble(gaussian.Rotation[i]));
-            }
-            for (int i = 0; i < 3; i++)
-            {
-                writer.Write(NumOps.ToDouble(gaussian.Scale[i]));
-            }
-            writer.Write(NumOps.ToDouble(gaussian.Opacity));
-            for (int i = 0; i < colorDim; i++)
-            {
-                writer.Write(NumOps.ToDouble(gaussian.Color[i]));
-            }
-        }
-    }
-
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        bool useSh = reader.ReadBoolean();
-        int shDegree = reader.ReadInt32();
-        _trainingStep = reader.ReadInt32();
-        EnableDensification = reader.ReadBoolean();
-        DensificationInterval = reader.ReadInt32();
-        PruneOpacityThreshold = reader.ReadDouble();
-        SplitGradientThreshold = reader.ReadDouble();
-        SplitPositionJitter = reader.ReadDouble();
-        SplitScaleFactor = reader.ReadDouble();
-        SplitOpacityFactor = reader.ReadDouble();
-        SplitOpacityMax = reader.ReadDouble();
-        MaxGaussians = reader.ReadInt32();
-        PositionLearningRate = reader.ReadDouble();
-        ColorLearningRate = reader.ReadDouble();
-        OpacityLearningRate = reader.ReadDouble();
-        ScaleLearningRate = reader.ReadDouble();
-        RotationLearningRate = reader.ReadDouble();
-        TileSize = reader.ReadInt32();
-        EnableSpatialIndex = reader.ReadBoolean();
-        SpatialIndexRadius = reader.ReadInt32();
-        InitialNeighborSearchScale = reader.ReadDouble();
-        InitialScaleMultiplier = reader.ReadDouble();
-        DefaultPointSpacing = reader.ReadDouble();
-        MinScale = reader.ReadDouble();
-
-        if (useSh != _useSphericalHarmonics || shDegree != _shDegree)
-        {
-            throw new InvalidOperationException("Serialized GaussianSplatting configuration does not match this instance.");
-        }
-
-        int colorDim = reader.ReadInt32();
-        int gaussianCount = reader.ReadInt32();
-        _gaussians.Clear();
-
-        for (int i = 0; i < gaussianCount; i++)
-        {
-            var gaussian = new Gaussian(colorDim, NumOps);
-
-            for (int d = 0; d < 3; d++)
-            {
-                gaussian.Position[d] = NumOps.FromDouble(reader.ReadDouble());
-            }
-            for (int d = 0; d < 4; d++)
-            {
-                gaussian.Rotation[d] = NumOps.FromDouble(reader.ReadDouble());
-            }
-            for (int d = 0; d < 3; d++)
-            {
-                gaussian.Scale[d] = NumOps.FromDouble(reader.ReadDouble());
-            }
-            gaussian.Opacity = NumOps.FromDouble(reader.ReadDouble());
-            for (int d = 0; d < colorDim; d++)
-            {
-                gaussian.Color[d] = NumOps.FromDouble(reader.ReadDouble());
-            }
-
-            ComputeCovariance(gaussian);
-            _gaussians.Add(gaussian);
-        }
-
-        MarkSpatialIndexDirty();
-    }
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Pass a placeholder point cloud sized to the ORIGINAL model's
-        // Gaussian count so the clone starts with the right capacity.
-        // Without this, the constructor would auto-seed 8 default Gaussians
-        // and any subsequent UpdateParameters(originalState) would throw
-        // because the parameter vector length wouldn't match perGaussian *
-        // _gaussians.Count. Cloning a 32-Gaussian model would error; cloning
-        // a model trained past 8 Gaussians via densification would error;
-        // deserialization would error. The placeholder coordinates are all
-        // zeros — the caller's UpdateParameters overwrites every field, so
-        // only the count needs to be preserved here.
-        Matrix<T>? clonePointCloud = null;
-        if (_gaussians.Count > 0)
-        {
-            clonePointCloud = new Matrix<T>(_gaussians.Count, 3);
-            // Default-constructed Matrix<T> is all zeros; UpdateParameters
-            // restores positions during the snapshot replay.
-        }
-
-        return new GaussianSplatting<T>(
-            new GaussianSplattingOptions
-            {
-                UseSphericalHarmonics = _useSphericalHarmonics,
-                ShDegree = _shDegree,
-                EnableDensification = EnableDensification,
-                DensificationInterval = DensificationInterval,
-                PruneOpacityThreshold = PruneOpacityThreshold,
-                SplitGradientThreshold = SplitGradientThreshold,
-                SplitPositionJitter = SplitPositionJitter,
-                SplitScaleFactor = SplitScaleFactor,
-                SplitOpacityFactor = SplitOpacityFactor,
-                SplitOpacityMax = SplitOpacityMax,
-                MaxGaussians = MaxGaussians,
-                PositionLearningRate = PositionLearningRate,
-                ColorLearningRate = ColorLearningRate,
-                OpacityLearningRate = OpacityLearningRate,
-                ScaleLearningRate = ScaleLearningRate,
-                RotationLearningRate = RotationLearningRate,
-                TileSize = TileSize,
-                EnableSpatialIndex = EnableSpatialIndex,
-                SpatialIndexRadius = SpatialIndexRadius,
-                InitialNeighborSearchScale = InitialNeighborSearchScale,
-                InitialScaleMultiplier = InitialScaleMultiplier,
-                DefaultPointSpacing = DefaultPointSpacing,
-                MinScale = MinScale
-            },
-            initialPointCloud: clonePointCloud,
-            initialColors: null,
-            lossFunction: LossFunction);
     }
 
     private void ParseCameraInput(

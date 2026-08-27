@@ -849,55 +849,13 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// Serializes DeepONet-specific data.
         /// </summary>
         /// <param name="writer">Binary writer.</param>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            writer.Write(_p);
-            writer.Write(_numSensors);
 
-            var branchBytes = _branchNet.Serialize();
-            writer.Write(branchBytes.Length);
-            writer.Write(branchBytes);
-
-            var trunkBytes = _trunkNet.Serialize();
-            writer.Write(trunkBytes.Length);
-            writer.Write(trunkBytes);
-        }
 
         /// <summary>
         /// Deserializes DeepONet-specific data.
         /// </summary>
         /// <param name="reader">Binary reader.</param>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            int storedP = reader.ReadInt32();
-            int storedSensors = reader.ReadInt32();
 
-            if (storedP != _p || storedSensors != _numSensors)
-            {
-                throw new InvalidOperationException("Serialized DeepONet configuration does not match the current instance.");
-            }
-
-            int branchLength = reader.ReadInt32();
-            _branchNet.Deserialize(reader.ReadBytes(branchLength));
-
-            int trunkLength = reader.ReadInt32();
-            _trunkNet.Deserialize(reader.ReadBytes(trunkLength));
-        }
-
-        /// <summary>
-        /// Creates a new instance with the same configuration.
-        /// </summary>
-        /// <returns>New DeepONet instance.</returns>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new DeepOperatorNetwork<T>(
-                Architecture,
-                _branchNet.Architecture,
-                _trunkNet.Architecture,
-                _p,
-                _numSensors,
-                _optimizer);
-        }
 
         private static void ClearNetworkGradients(NeuralNetworkBase<T> network)
         {

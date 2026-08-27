@@ -61,7 +61,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Very Deep Convolutional Networks for Large-Scale Image Recognition", "https://arxiv.org/abs/1409.1556", Year = 2015, Authors = "Karen Simonyan, Andrew Zisserman")]
-public class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
+public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly VGGOptions _options;
 
@@ -465,84 +465,10 @@ public class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// <summary>
     /// Serializes VGG network-specific data to a binary writer.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write VGG configuration
-        writer.Write((int)_configuration.Variant);
-        writer.Write(_configuration.NumClasses);
-        writer.Write(_configuration.InputHeight);
-        writer.Write(_configuration.InputWidth);
-        writer.Write(_configuration.InputChannels);
-        writer.Write(_configuration.DropoutRate);
-        writer.Write(_configuration.IncludeClassifier);
-        writer.Write(_configuration.UseAutodiff);
-    }
+
 
     /// <summary>
     /// Deserializes VGG network-specific data from a binary reader.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read VGG configuration and validate compatibility
-        var variant = (VGGVariant)reader.ReadInt32();
-        var numClasses = reader.ReadInt32();
-        var inputHeight = reader.ReadInt32();
-        var inputWidth = reader.ReadInt32();
-        var inputChannels = reader.ReadInt32();
-        var dropoutRate = reader.ReadDouble();
-        var includeClassifier = reader.ReadBoolean();
-        _ = reader.ReadBoolean(); // useAutodiff - read but not validated (runtime setting)
 
-        // Validate loaded configuration matches current
-        if (variant != _configuration.Variant)
-        {
-            throw new InvalidOperationException(
-                $"Serialized VGG variant ({variant}) does not match current configuration ({_configuration.Variant}).");
-        }
-
-        if (numClasses != _configuration.NumClasses)
-        {
-            throw new InvalidOperationException(
-                $"Serialized number of classes ({numClasses}) does not match current configuration ({_configuration.NumClasses}).");
-        }
-
-        if (inputHeight != _configuration.InputHeight || inputWidth != _configuration.InputWidth)
-        {
-            throw new InvalidOperationException(
-                $"Serialized input dimensions ({inputHeight}x{inputWidth}) do not match current configuration ({_configuration.InputHeight}x{_configuration.InputWidth}).");
-        }
-
-        if (inputChannels != _configuration.InputChannels)
-        {
-            throw new InvalidOperationException(
-                $"Serialized input channels ({inputChannels}) does not match current configuration ({_configuration.InputChannels}).");
-        }
-
-        if (Math.Abs(dropoutRate - _configuration.DropoutRate) > 1e-6)
-        {
-            throw new InvalidOperationException(
-                $"Serialized dropout rate ({dropoutRate}) does not match current configuration ({_configuration.DropoutRate}).");
-        }
-
-        if (includeClassifier != _configuration.IncludeClassifier)
-        {
-            throw new InvalidOperationException(
-                $"Serialized includeClassifier ({includeClassifier}) does not match current configuration ({_configuration.IncludeClassifier}).");
-        }
-    }
-
-    /// <summary>
-    /// Creates a new instance of the VGG network model.
-    /// </summary>
-    /// <returns>A new instance of the VGG network with the same configuration.</returns>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new VGGNetwork<T>(
-            Architecture,
-            _configuration,
-            _optimizer,
-            _lossFunction,
-            Convert.ToDouble(MaxGradNorm)
-        );
-    }
 }

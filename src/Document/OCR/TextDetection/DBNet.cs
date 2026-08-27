@@ -609,43 +609,10 @@ public partial class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_backboneChannels);
-        writer.Write(_innerChannels);
-        writer.Write(ImageSize);
-        writer.Write(_expandRatio);
-        writer.Write(_thresholdK);
-        writer.Write(_minTextArea);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int backboneChannels = reader.ReadInt32();
-        int innerChannels = reader.ReadInt32();
-        int imageSize = reader.ReadInt32();
-        double expandRatio = reader.ReadDouble();
-        double thresholdK = reader.ReadDouble();
-        int minTextArea = reader.ReadInt32();
-        bool useNativeMode = reader.ReadBoolean();
 
-        ImageSize = imageSize;
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DBNet<T>(
-            Architecture,
-            ImageSize,
-            _backboneChannels,
-            _innerChannels,
-            _expandRatio,
-            _thresholdK,
-            _minTextArea);
-    }
 
     #endregion
 

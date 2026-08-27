@@ -153,7 +153,19 @@ public class VisionLanguageDocumentTests
                 string.Join("; ", layerDiagnostics));
         }
 
-        model.Train(image, tokens, target);
+        // Exercise the configuration that exposed the shard-only failure. Multi-input training
+        // must stay on the eager tape while the compiled cache persists only one input tensor;
+        // otherwise it captures a stale auxiliary input and can report a successful no-op step.
+        bool compilationWasEnabled = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation;
+        try
+        {
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = true;
+            model.Train(image, tokens, target);
+        }
+        finally
+        {
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = compilationWasEnabled;
+        }
 
         var after = model.Layers[^1].GetParameters().ToArray();
         Assert.Equal(before.Length, after.Length);

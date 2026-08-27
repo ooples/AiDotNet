@@ -186,6 +186,7 @@ public partial class GlobalPoolingLayer<T> : LayerBase<T>, IShapeContract
     /// This is automatically cleared between training batches to save memory.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -207,6 +208,7 @@ public partial class GlobalPoolingLayer<T> : LayerBase<T>, IShapeContract
     /// This is also cleared after each training batch to save memory.
     /// </para>
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -215,6 +217,7 @@ public partial class GlobalPoolingLayer<T> : LayerBase<T>, IShapeContract
     private int[]? _maxIndices;
 
     // GPU-resident cached tensors for GPU training pipeline
+    [Scratch]
     private Tensor<T>? _lastOutputGpu;
     private int[]? _lastInputGpuShape;
 

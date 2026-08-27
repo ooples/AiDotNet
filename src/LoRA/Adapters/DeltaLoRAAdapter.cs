@@ -55,6 +55,7 @@ public partial class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     /// Instead of "what are the weights", it tracks "how much have they changed".
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _deltaWeights;
 
     /// <summary>
@@ -101,16 +102,19 @@ public partial class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     /// When gradients change direction, velocity slows down, preventing oscillation.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _velocity;
 
     /// <summary>
     /// Gradients for the delta weights computed during backpropagation.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _deltaGradients;
 
     /// <summary>
     /// Stored input from the forward pass, needed for gradient computation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>

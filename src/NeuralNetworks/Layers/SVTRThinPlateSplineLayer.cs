@@ -22,6 +22,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High,
     TestInputShape = "1, 3, 32, 100", TestConstructorArgs = "3, 32, 64, 32, 100, 20")]
+[GenerateDoubleTestScaffold]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,

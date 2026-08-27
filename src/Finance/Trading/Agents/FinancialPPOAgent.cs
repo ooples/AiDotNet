@@ -61,7 +61,8 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
     private const double ObservationNormalizerEpsilon = 1e-8;
     private const double ObservationClipRange = 10.0;
 
-    private readonly FinancialPPOAgentOptions<T> _options;
+    private readonly TradingAgentOptions<T> _options;
+    private readonly FinancialPPOAgentOptions<T> _ppoOptions;
     private readonly INeuralNetwork<T> _actor;
     private readonly INeuralNetwork<T> _critic;
     private readonly Trajectory<T> _trajectory;
@@ -115,7 +116,8 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
         TradingAgentOptions<T> options)
         : base(options)
     {
-        _options = options as FinancialPPOAgentOptions<T> ?? new FinancialPPOAgentOptions<T>();
+        _options = options;
+        _ppoOptions = options as FinancialPPOAgentOptions<T> ?? new FinancialPPOAgentOptions<T>();
         _actorArchitecture = actorArchitecture;
         _criticArchitecture = criticArchitecture;
 
@@ -452,7 +454,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
     private int GetEffectiveEpochCount(int trajectoryLength)
     {
-        int configuredEpochs = Math.Max(1, _options.NumEpochs);
+        int configuredEpochs = Math.Max(1, _ppoOptions.NumEpochs);
         return trajectoryLength < 8 ? 1 : configuredEpochs;
     }
 
@@ -463,7 +465,7 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
             return 1;
         }
 
-        return Math.Max(1, Math.Min(_options.NumMiniBatches, trajectoryLength));
+        return Math.Max(1, Math.Min(_ppoOptions.NumMiniBatches, trajectoryLength));
     }
 
     private int GetMinimumRolloutSize()
@@ -774,55 +776,6 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
 
     #region Serialization
 
-    /// <summary>
-    /// Executes Serialize for the FinancialPPOAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialPPOAgent model, Serialize saves or restores model-specific settings. This lets the FinancialPPOAgent architecture be reused later.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-        var actorData = _actor.Serialize();
-        var criticData = _critic.Serialize();
-        writer.Write(actorData.Length);
-        writer.Write(actorData);
-        writer.Write(criticData.Length);
-        writer.Write(criticData);
-        writer.Write(ObservationNormalizerMarker);
-        WriteObservationNormalizer(writer);
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Executes Deserialize for the FinancialPPOAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialPPOAgent model, Deserialize saves or restores model-specific settings. This lets the FinancialPPOAgent architecture be reused later.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-        int actorLen = reader.ReadInt32();
-        _actor.Deserialize(reader.ReadBytes(actorLen));
-        int criticLen = reader.ReadInt32();
-        _critic.Deserialize(reader.ReadBytes(criticLen));
-        if (ms.Position < ms.Length)
-        {
-            string marker = reader.ReadString();
-            if (marker == ObservationNormalizerMarker)
-            {
-                ReadObservationNormalizer(reader);
-            }
-        }
-    }
-
     private void WriteObservationNormalizer(BinaryWriter writer)
     {
         writer.Write(_observationCount);
@@ -880,22 +833,6 @@ public partial class FinancialPPOAgent<T> : TradingAgentBase<T>, IGradientComput
                 { "ParameterCount", ParameterCount }
             }
         };
-    }
-
-    /// <summary>
-    /// Executes Clone for the FinancialPPOAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialPPOAgent model, Clone performs a supporting step in the workflow. It keeps the FinancialPPOAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new FinancialPPOAgent<T>(_actorArchitecture, _criticArchitecture, TradingOptions);
-        clone.SetParameters(GetParameters());
-        clone.CopyObservationNormalizerFrom(this);
-        return clone;
     }
 
     /// <summary>

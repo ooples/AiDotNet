@@ -1005,22 +1005,6 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new NeuralNoiseReducer<T>(
-            Architecture,
-            SampleRate,
-            _fftSize,
-            _hopSize,
-            NumChannels,
-            _numStages,
-            _baseFilters,
-            _bottleneckDim,
-            EnhancementStrength,
-            _lossFunction);
-    }
-
-    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>
@@ -1056,41 +1040,10 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(SampleRate);
-        writer.Write(_fftSize);
-        writer.Write(_hopSize);
-        writer.Write(NumChannels);
-        writer.Write(_numStages);
-        writer.Write(_baseFilters);
-        writer.Write(_bottleneckDim);
-        writer.Write(EnhancementStrength);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        SampleRate = reader.ReadInt32();
-        _fftSize = reader.ReadInt32();
-        _hopSize = reader.ReadInt32();
-        NumChannels = reader.ReadInt32();
-        _numStages = reader.ReadInt32();
-        _baseFilters = reader.ReadInt32();
-        _bottleneckDim = reader.ReadInt32();
-        EnhancementStrength = reader.ReadDouble();
 
-        // Rebuild streaming buffers after FFT/hop size may have changed
-        InitializeStreamingBuffers();
-
-        // Reinitialize layers if needed for native mode
-        if (_useNativeMode && (_encoderLayers is null || _encoderLayers.Count == 0))
-        {
-            InitializeLayers();
-        }
-    }
 
     #endregion
 }

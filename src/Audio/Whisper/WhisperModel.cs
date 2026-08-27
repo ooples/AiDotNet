@@ -70,7 +70,7 @@ namespace AiDotNet.Audio.Whisper;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Robust Speech Recognition via Large-Scale Weak Supervision", "https://arxiv.org/abs/2212.04356", Year = 2022, Authors = "Alec Radford, Jong Wook Kim, Tao Xu, Greg Brockman, Christine McLeavey, Ilya Sutskever")]
-public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly WhisperOptions _options;
 
@@ -975,77 +975,12 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(SampleRate);
-        writer.Write(_numMels);
-        writer.Write(_maxAudioLengthSeconds);
-        writer.Write((int)_modelSize);
-        writer.Write(_language ?? string.Empty);
-        writer.Write(_translate);
-        writer.Write(_maxTokens);
-        writer.Write(_beamSize);
-        writer.Write(_temperature);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Note: Most fields are readonly, so deserialization would require a different approach
-        // For now, we read and validate the values
-        var useNative = reader.ReadBoolean();
-        var sampleRate = reader.ReadInt32();
-        var numMels = reader.ReadInt32();
-        var maxAudioLen = reader.ReadInt32();
-        var modelSize = (WhisperModelSize)reader.ReadInt32();
-        var lang = reader.ReadString();
-        var translate = reader.ReadBoolean();
-        var maxTokens = reader.ReadInt32();
-        var beamSize = reader.ReadInt32();
-        var temperature = reader.ReadDouble();
 
-        // Validation would happen here
-    }
-
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (_useNativeMode)
-        {
-            return new WhisperModel<T>(
-                Architecture,
-                modelSize: _modelSize,
-                language: _language,
-                translate: _translate,
-                sampleRate: SampleRate,
-                numMels: _numMels,
-                maxAudioLengthSeconds: _maxAudioLengthSeconds,
-                maxTokens: _maxTokens,
-                beamSize: _beamSize,
-                temperature: _temperature);
-        }
-        else
-        {
-            return new WhisperModel<T>(
-                Architecture,
-                encoderPath: _encoderPath!,
-                decoderPath: _decoderPath!,
-                modelSize: _modelSize,
-                language: _language,
-                translate: _translate,
-                sampleRate: SampleRate,
-                numMels: _numMels,
-                maxAudioLengthSeconds: _maxAudioLengthSeconds,
-                maxTokens: _maxTokens,
-                beamSize: _beamSize,
-                temperature: _temperature);
-        }
-    }
 
     #endregion
 

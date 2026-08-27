@@ -41,7 +41,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Music Structure Analysis: A Survey", "https://doi.org/10.1007/978-3-319-25226-1_12")]
-public class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
+public partial class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -262,32 +262,9 @@ public class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.NumMels); w.Write(_options.FftSize);
-        w.Write(_options.HopLength); w.Write(_options.HiddenDim); w.Write(_options.NumLayers);
-        w.Write(_options.NumAttentionHeads); w.Write(_options.NumSections);
-        w.Write(_options.SectionLabels.Length);
-        foreach (var label in _options.SectionLabels) w.Write(label);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.FftSize = r.ReadInt32();
-        _options.HopLength = r.ReadInt32(); _options.HiddenDim = r.ReadInt32(); _options.NumLayers = r.ReadInt32();
-        _options.NumAttentionHeads = r.ReadInt32(); _options.NumSections = r.ReadInt32();
-        int labelCount = r.ReadInt32();
-        var labels = new string[labelCount];
-        for (int i = 0; i < labelCount; i++) labels[i] = r.ReadString();
-        _options.SectionLabels = labels;
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => new MusicStructureAnalyzer<T>(Architecture, _options);
+
 
     #endregion
 

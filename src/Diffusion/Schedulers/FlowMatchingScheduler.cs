@@ -46,7 +46,7 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// </remarks>
 [ComponentType(ComponentType.Scheduler)]
 [PipelineStage(PipelineStage.Training)]
-public sealed class FlowMatchingScheduler<T> : NoiseSchedulerBase<T>
+public sealed partial class FlowMatchingScheduler<T> : NoiseSchedulerBase<T>
 {
     /// <summary>
     /// Sigma values for each timestep (optional noise scaling for stochastic sampling).
@@ -59,6 +59,7 @@ public sealed class FlowMatchingScheduler<T> : NoiseSchedulerBase<T>
     /// <remarks>
     /// Maps integer timesteps to continuous t in [0, 1] where t=0 is clean and t=1 is noise.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _timeValues;
 
     /// <summary>

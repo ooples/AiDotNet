@@ -243,7 +243,10 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
 
     private void InitializeEmbeddings()
     {
-        var random = RandomHelper.CreateSeededRandom(42);
+        // The graph stack is part of the native architecture, even before the caller supplies an
+        // adjacency matrix. Construct it here so the generated layer inventory, clone graph and
+        // optimizer all see one stable topology without a model-specific enumeration override.
+        EnsureGraphPathBuilt();
     }
 
     private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
@@ -484,32 +487,10 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_nodeDim);
-        writer.Write(_edgeDim);
-        writer.Write(_gcnLayers);
-        writer.Write(_numClasses);
-        writer.Write(_maxNodes);
-        writer.Write(_useNativeMode);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _nodeDim = reader.ReadInt32();
-        _edgeDim = reader.ReadInt32();
-        _gcnLayers = reader.ReadInt32();
-        _numClasses = reader.ReadInt32();
-        _maxNodes = reader.ReadInt32();
-        _ = reader.ReadBoolean(); // useNativeMode - already set by constructor
-    }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new DocGCN<T>(Architecture, _nodeDim, _edgeDim, _gcnLayers, _numClasses, _maxNodes);
-    }
 
     #endregion
 
@@ -571,7 +552,8 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
         }
     }
 
-    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+
 
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
@@ -609,14 +591,6 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
     private EmbeddingLayer<T>? _nodeOrderEmbedding;
 
     private readonly List<GraphConvolutionalLayer<T>> _graphConvolutions = [];
-
-    /// <inheritdoc/>
-    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
-    {
-        EnsureGraphPathBuilt();
-        yield return _nodeOrderEmbedding;
-        foreach (var conv in _graphConvolutions) yield return conv;
-    }
 
     /// <summary>Builds the graph path once. Cheap no-op afterwards.</summary>
     private void EnsureGraphPathBuilt()

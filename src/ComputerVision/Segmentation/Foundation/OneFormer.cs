@@ -65,7 +65,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("OneFormer: One Transformer to Rule Universal Image Segmentation", "https://arxiv.org/abs/2211.06220", Year = 2023, Authors = "Jitesh Jain, Jiachen Li, MangTik Chiu, Ali Hassani, Nikita Orlov, Humphrey Shi")]
-public class OneFormer<T> : Common.PanopticSegmentationBase<T>
+public partial class OneFormer<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly OneFormerOptions _options;
 
@@ -475,63 +475,6 @@ public class OneFormer<T> : Common.PanopticSegmentationBase<T>
             },
             ModelData = SerializeForMetadata()
         };
-    }
-
-    /// <summary>
-    /// Serializes OneFormer configuration.
-    /// </summary>
-    /// <param name="writer">Binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves configuration for later restoration.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height); writer.Write(_width); writer.Write(_channels);
-        writer.Write(_numClasses); writer.Write(_numQueries); writer.Write((int)_modelSize);
-        writer.Write(_decoderDim); writer.Write(_dropRate);
-        writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty);
-        writer.Write(_encoderLayerEnd);
-        writer.Write(_channelDims.Length); foreach (int c in _channelDims) writer.Write(c);
-        writer.Write(_depths.Length); foreach (int d in _depths) writer.Write(d);
-    }
-
-    /// <summary>
-    /// Deserializes OneFormer configuration.
-    /// </summary>
-    /// <param name="reader">Binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Reads saved configuration in write order.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadDouble();
-        _ = reader.ReadBoolean(); _ = reader.ReadString(); _ = reader.ReadInt32();
-        int cc = reader.ReadInt32(); for (int i = 0; i < cc; i++) _ = reader.ReadInt32();
-        int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32();
-    }
-
-    /// <summary>
-    /// Creates a new OneFormer with same config but fresh weights.
-    /// </summary>
-    /// <returns>New model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Used for cross-validation or ensemble training.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return _useNativeMode
-            ? new OneFormer<T>(Architecture, optimizer: null, lossFunction: LossFunction,
-                numClasses: _numClasses, numQueries: _numQueries, modelSize: _modelSize,
-                dropRate: _dropRate, options: new OneFormerOptions(_options))
-            : new OneFormer<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _numQueries, _modelSize, new OneFormerOptions(_options));
     }
 
     // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and sets _disposed,

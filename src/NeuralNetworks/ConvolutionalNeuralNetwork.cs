@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Gradient-Based Learning Applied to Document Recognition", "https://doi.org/10.1109/5.726791")]
-public class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutBase<T>
+public partial class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly ConvolutionalNeuralNetworkOptions _options;
 
@@ -568,9 +568,7 @@ public class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// the important information about the network so you can reload it later exactly as it is now.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-    }
+
 
     /// <summary>
     /// Deserializes convolutional neural network-specific data from a binary reader.
@@ -585,36 +583,5 @@ public class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// network exactly as it was when you saved it, including all its learned information.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-    }
 
-    /// <summary>
-    /// Creates a new instance of the convolutional neural network model.
-    /// </summary>
-    /// <returns>A new instance of the convolutional neural network model with the same configuration.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new instance of the convolutional neural network model with the same 
-    /// configuration as the current instance. It is used internally during serialization/deserialization 
-    /// processes to create a fresh instance that can be populated with the serialized data.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method creates a copy of the network structure without copying 
-    /// the learned data. Think of it like making a blank copy of the original network's blueprint - 
-    /// it has the same structure, same learning strategy, and same error measurement, but none of 
-    /// the knowledge that the original network has gained through training. This is primarily 
-    /// used when saving or loading models, creating an empty framework that can later be filled 
-    /// with the saved knowledge from the original network.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new ConvolutionalNeuralNetwork<T>(
-            Architecture,
-            _optimizer,
-            _lossFunction,
-            Convert.ToDouble(MaxGradNorm)
-        );
-    }
 }

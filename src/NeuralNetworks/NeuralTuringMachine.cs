@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Tensors.Helpers;
@@ -47,7 +47,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Neural Turing Machines", "https://arxiv.org/abs/1410.5401", Year = 2014, Authors = "Alex Graves, Greg Wayne, Ivo Danihelka")]
-public class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxiliaryLossLayer<T>
+public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly NeuralTuringMachineOptions _options;
 
@@ -2214,186 +2214,13 @@ public class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxiliaryLoss
     /// Serializes NTM-specific data to a binary writer.
     /// </summary>
     /// <param name="writer">The binary writer to write to.</param>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Write memory configuration
-        writer.Write(_memorySize);
-        writer.Write(_memoryVectorSize);
-        writer.Write(_controllerSize);
-        writer.Write(_memories.Count);
 
-        // Write memory contents
-        foreach (var memory in _memories)
-        {
-            for (int i = 0; i < _memorySize; i++)
-            {
-                for (int j = 0; j < _memoryVectorSize; j++)
-                {
-                    writer.Write(Convert.ToDouble(memory[i, j]));
-                }
-            }
-        }
-
-        // Write read weights
-        writer.Write(_readWeights.Count);
-        foreach (var weights in _readWeights)
-        {
-            for (int i = 0; i < _memorySize; i++)
-            {
-                writer.Write(Convert.ToDouble(weights[i]));
-            }
-        }
-
-        // Write write weights
-        writer.Write(_writeWeights.Count);
-        foreach (var weights in _writeWeights)
-        {
-            for (int i = 0; i < _memorySize; i++)
-            {
-                writer.Write(Convert.ToDouble(weights[i]));
-            }
-        }
-
-        // Write the initial memory template — the canonical snapshot
-        // ResetRuntimeState copies onto every batch element at the start of
-        // each Predict. Without this, Clone reconstructs the model with a
-        // FRESH random template (constructor calls InitializeMemory), and
-        // the cloned model's first Predict resets _memories to the wrong
-        // initial state — the Predict-after-Clone output diverges from the
-        // original. presentFlag handles backward-compat with payloads
-        // written by earlier versions of this class.
-        bool templatePresent = _initialMemoryTemplate is not null;
-        writer.Write(templatePresent);
-        if (templatePresent)
-        {
-            for (int i = 0; i < _memorySize; i++)
-                for (int j = 0; j < _memoryVectorSize; j++)
-                    writer.Write(Convert.ToDouble(_initialMemoryTemplate![i, j]));
-        }
-    }
 
     /// <summary>
     /// Deserializes NTM-specific data from a binary reader.
     /// </summary>
     /// <param name="reader">The binary reader to read from.</param>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read memory configuration
-        _memorySize = reader.ReadInt32();
-        _memoryVectorSize = reader.ReadInt32();
-        _controllerSize = reader.ReadInt32();
-        int memoryCount = reader.ReadInt32();
 
-        // Read memory contents
-        _memories.Clear();
-        for (int b = 0; b < memoryCount; b++)
-        {
-            var memory = new Matrix<T>(_memorySize, _memoryVectorSize);
-            for (int i = 0; i < _memorySize; i++)
-            {
-                for (int j = 0; j < _memoryVectorSize; j++)
-                {
-                    memory[i, j] = NumOps.FromDouble(reader.ReadDouble());
-                }
-            }
-            _memories.Add(memory);
-        }
-
-        // Read read weights
-        _readWeights.Clear();
-        int readWeightsCount = reader.ReadInt32();
-        for (int b = 0; b < readWeightsCount; b++)
-        {
-            var weights = new Vector<T>(_memorySize);
-            for (int i = 0; i < _memorySize; i++)
-            {
-                weights[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-            _readWeights.Add(weights);
-        }
-
-        // Read write weights
-        _writeWeights.Clear();
-        int writeWeightsCount = reader.ReadInt32();
-        for (int b = 0; b < writeWeightsCount; b++)
-        {
-            var weights = new Vector<T>(_memorySize);
-            for (int i = 0; i < _memorySize; i++)
-            {
-                weights[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-            _writeWeights.Add(weights);
-        }
-
-        // Read the initial memory template (added for #1332 cluster 1 —
-        // see SerializeNetworkSpecificData for context). The stream-bounds
-        // check protects against legacy payloads that didn't write it.
-        //
-        // Legacy serialized models (pre-#1332): the template is NOT in
-        // the payload, so _initialMemoryTemplate / _initialMemoryTensor
-        // keep whatever values the constructor's InitializeMemory()
-        // populated — fresh random draws, not the values the trained
-        // model was using. Determinism within a Predict call is still
-        // preserved (ResetRuntimeState snapshots back to the runtime
-        // template), and trained Layer parameters are restored
-        // correctly, so the model is fully usable. The only difference
-        // is that the *initial* memory state for the very first time
-        // step differs from the original training run; over a few
-        // training/inference steps memory rewrites converge regardless.
-        // Re-saving an old payload with this code writes the template
-        // and the difference goes away on the next load.
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-        {
-            bool templatePresent = reader.ReadBoolean();
-            if (templatePresent)
-            {
-                _initialMemoryTemplate = new Matrix<T>(_memorySize, _memoryVectorSize);
-                _initialMemoryTensor = new Tensor<T>([_memorySize, _memoryVectorSize]);
-                for (int i = 0; i < _memorySize; i++)
-                    for (int j = 0; j < _memoryVectorSize; j++)
-                    {
-                        T v = NumOps.FromDouble(reader.ReadDouble());
-                        _initialMemoryTemplate[i, j] = v;
-                        _initialMemoryTensor[i, j] = v;
-                    }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Creates a new instance of the neural turing machine model.
-    /// </summary>
-    /// <returns>A new instance of the neural turing machine model with the same configuration.</returns>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Determine which constructor to use based on whether we're using scalar or vector activations
-        if (ContentAddressingVectorActivation != null || GateVectorActivation != null || OutputVectorActivation != null)
-        {
-            // Use the vector activation constructor
-            return new NeuralTuringMachine<T>(
-                Architecture,
-                _memorySize,
-                _memoryVectorSize,
-                _controllerSize,
-                LossFunction,
-                ContentAddressingVectorActivation,
-                GateVectorActivation,
-                OutputVectorActivation);
-        }
-        else
-        {
-            // Use the scalar activation constructor
-            return new NeuralTuringMachine<T>(
-                Architecture,
-                _memorySize,
-                _memoryVectorSize,
-                _controllerSize,
-                LossFunction,
-                ContentAddressingActivation,
-                GateActivation,
-                OutputActivation);
-        }
-    }
 
     /// <summary>
     /// Resets the internal state of the neural network.

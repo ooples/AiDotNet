@@ -94,6 +94,7 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     private double _dropout;
 
     // VQ codebook: [numCodebooks x codebookSize x codebookDimension]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _codebooks;
 
     // RevIN (reversible instance normalization, Kim et al. 2022) statistics.
@@ -451,73 +452,10 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new TOTEM<T>(Architecture, new TOTEMOptions<T>(_options));
-    }
+
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_contextLength);
-        writer.Write(_forecastHorizon);
-        writer.Write(_hiddenDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_codebookSize);
-        writer.Write(_codebookDimension);
-        writer.Write(_numCodebooks);
-        writer.Write(_dropout);
 
-        // Serialize codebook embeddings
-        if (_codebooks is not null)
-        {
-            writer.Write(true);
-            for (int c = 0; c < _numCodebooks; c++)
-                for (int k = 0; k < _codebookSize; k++)
-                    for (int d = 0; d < _codebookDimension; d++)
-                        writer.Write(NumOps.ToDouble(GetCodebookValue(c, k, d)));
-        }
-        else
-        {
-            writer.Write(false);
-        }
-    }
-
-    /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _contextLength = reader.ReadInt32();
-        _forecastHorizon = reader.ReadInt32();
-        _hiddenDimension = reader.ReadInt32();
-        _numLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _codebookSize = reader.ReadInt32();
-        _codebookDimension = reader.ReadInt32();
-        _numCodebooks = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-
-        // Deserialize codebook embeddings
-        bool hasCodebooks = reader.ReadBoolean();
-        if (hasCodebooks)
-        {
-            _codebooks = new Tensor<T>(new[] { _numCodebooks, _codebookSize, _codebookDimension });
-            for (int c = 0; c < _numCodebooks; c++)
-                for (int k = 0; k < _codebookSize; k++)
-                    for (int d = 0; d < _codebookDimension; d++)
-                        SetCodebookValue(c, k, d, NumOps.FromDouble(reader.ReadDouble()));
-        }
-        else
-        {
-            InitializeCodebooks();
-        }
-
-        // The base deserializer has already recreated every layer in Layers with the
-        // copied weights. Re-point the cached encoder/decoder/projection references at
-        // those layers; otherwise they keep pointing at the stale random-initialized
-        // layers from CreateNewInstance and a clone diverges from the original.
-        ExtractLayerReferences();
-    }
 
     #endregion
 

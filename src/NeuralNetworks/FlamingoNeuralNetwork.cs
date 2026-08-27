@@ -15,7 +15,8 @@ using AiDotNet.Tokenization;
 using AiDotNet.Tokenization.Interfaces;
 using Microsoft.ML.OnnxRuntime;
 using AiDotNet.Validation;
-using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
+using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
+
 using System.Collections.Generic;
 
 namespace AiDotNet.NeuralNetworks;
@@ -1101,51 +1102,6 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
 
     #region NeuralNetworkBase Overrides
 
-    /// <summary>
-    /// Declares the Perceiver Resampler's latent queries and the two positional embedding tables,
-    /// which live outside <see cref="NeuralNetworkBase{T}.Layers"/>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// These three tables were in NEITHER surface. ParameterCount enumerated the tower lists and
-    /// the three projections; GetParameters concatenated the same things; neither mentioned the
-    /// tables, and nothing serialized them. So they never trained through a flat-vector optimizer
-    /// and were lost on every save -- including <c>_perceiverQueries</c>, the learned latent array
-    /// the Perceiver Resampler attends the vision features into (Alayrac et al. 2022 §3.2). Those
-    /// latents are trainable in the paper; a Flamingo that cannot learn them is not Flamingo.
-    /// </para>
-    /// <para>
-    /// Declaring them ADDS to the parameter count -- deliberately. The old number was not a
-    /// smaller-but-correct total, it was a total that omitted real weights.
-    /// </para>
-    /// <para>
-    /// They are <c>Tensor&lt;T&gt;</c> now because a <c>Matrix&lt;T&gt;</c> is invisible to the
-    /// trainable-parameter walk, which is why the surfaces had to be hand-written to begin with.
-    /// The tower lists need no declaration and must not get one: <c>_visionEncoderLayers</c>,
-    /// <c>_perceiverLayers</c>, <c>_gatedCrossAttentionLayers</c>, <c>_languageModelLayers</c> and
-    /// the three projections are all filled FROM <c>Layers</c> (<c>Layers[idx++]</c> in
-    /// InitializeLayers), so they are typed views of layers the base walk already reaches and
-    /// declaring them would double-count.
-    /// </para>
-    /// </remarks>
-    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
-    {
-        if (_visionPositionalEmbeddings is not null)
-        {
-            yield return _visionPositionalEmbeddings;
-        }
-
-        if (_perceiverQueries is not null)
-        {
-            yield return _perceiverQueries;
-        }
-
-        if (_textPositionalEmbeddings is not null)
-        {
-            yield return _textPositionalEmbeddings;
-        }
-    }
-
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
@@ -1214,46 +1170,6 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         }
     }
 
-    /// <summary>
-    /// Resolve Flamingo's lazy attention projections before cloning so a fresh instance
-    /// receives the same materialized layer shapes and weights. Without this, a clone made
-    /// before the first forward can retain independently initialized lazy projections.
-    /// </summary>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        if (_useNativeMode && _imageSize > 0)
-        {
-            try
-            {
-                ResolveShapes(new Tensor<T>(new[] { _channels, _imageSize, _imageSize }));
-            }
-            catch (ArgumentException ex)
-            {
-                // Preserve the base fallback for callers supplying a custom architecture. The
-                // exception is expected on that path, but swallowing it silently meant a genuinely
-                // malformed architecture looked identical to a deliberately custom one -- the shape
-                // resolution just never happened and nothing said why.
-                System.Diagnostics.Debug.WriteLine(
-                    $"{nameof(FlamingoNeuralNetwork<T>)}: native-mode shape resolution declined a "
-                    + $"{_imageSize}x{_imageSize} probe, falling back to the base architecture. {ex.Message}");
-            }
-        }
-
-        // The base path owns COW/weight streaming for every model size. Rebind the
-        // private execution branches to its canonical cloned layer collection so no
-        // model-wide or per-layer parameter vector is materialized here.
-        var result = base.DeepCopy();
-        if (result is FlamingoNeuralNetwork<T> copy && _useNativeMode)
-        {
-            copy.RebindNativeLayerReferences();
-            copy._visionPositionalEmbeddings = _visionPositionalEmbeddings?.Clone();
-            copy._perceiverQueries = _perceiverQueries?.Clone();
-            copy._textPositionalEmbeddings = _textPositionalEmbeddings?.Clone();
-            copy.SetTrainingMode(IsTrainingMode);
-        }
-        return result;
-    }
-
     // The layer streams this model holds outside Layers are discovered by ModelParameterGenerator and surfaced automatically; the hand-written hook that used to sit here was an override wearing a different name.
 
     // UpdateParameters restated a fold the base now derives from generated component registration.
@@ -1283,136 +1199,6 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
             },
             ModelData = SerializeForMetadata()
         };
-    }
-
-    /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_embeddingDimension);
-        writer.Write(_maxSequenceLength);
-        writer.Write(_imageSize);
-        writer.Write(_numPerceiverTokens);
-        writer.Write(_maxImagesInContext);
-        writer.Write(_visionHiddenDim);
-        writer.Write(_lmHiddenDim);
-        writer.Write(_numVisionLayers);
-        writer.Write(_numLmLayers);
-        writer.Write(_numHeads);
-        writer.Write(_patchSize);
-        writer.Write(_vocabularySize);
-        writer.Write((int)_languageModelBackbone);
-        writer.Write(_numPerceiverLayers);
-        writer.Write(_useNativeMode);
-    }
-
-    /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = (LanguageModelBackbone)reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadBoolean();
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Create a fresh optimizer instance to avoid state sharing between models
-        var freshOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
-        if (_useNativeMode)
-        {
-            // Architecture.Layers may contain this instance's live layer objects.
-            // Rebuild the blueprint without that list so the COW clone owns fresh
-            // layer instances before rebinding their shared tensors.
-            var freshArchitecture = new NeuralNetworkArchitecture<T>(
-                Architecture.InputType,
-                Architecture.TaskType,
-                Architecture.Complexity,
-                Architecture.InputSize,
-                Architecture.InputHeight,
-                Architecture.InputWidth,
-                Architecture.InputDepth,
-                Architecture.OutputSize,
-                shouldReturnFullSequence: Architecture.ShouldReturnFullSequence,
-                imageEmbeddingDim: Architecture.ImageEmbeddingDim,
-                textEmbeddingDim: Architecture.TextEmbeddingDim,
-                inputFrames: Architecture.InputFrames)
-            {
-                RandomSeed = Architecture.RandomSeed,
-
-                // Carried explicitly, because it is settable rather than a constructor parameter and so
-                // is not covered by the rebuild above. Left off, the clone silently reverted to the
-                // architecture default (false) and trained its gradients through a different code path
-                // than the original -- a divergence with no error attached to it.
-                UseAutodiff = Architecture.UseAutodiff
-            };
-
-            // Layers is deliberately NOT carried over, and that is not the same omission: the source's
-            // Layers holds this instance's LIVE layer objects. Copying the list would have the clone
-            // share them, which is what the COW clone path then rebinds tensor-by-tensor. The clone
-            // rebuilds its own layer instances from the blueprint above and the caller re-binds the
-            // shared weights, so the layer graph is reproduced without aliasing the originals.
-
-            return new FlamingoNeuralNetwork<T>(
-                freshArchitecture,
-                _embeddingDimension,
-                _maxSequenceLength,
-                _imageSize,
-                _channels,
-                _numPerceiverTokens,
-                _maxImagesInContext,
-                _visionHiddenDim,
-                _lmHiddenDim,
-                _numVisionLayers,
-                _numLmLayers,
-                _numHeads,
-                _vocabularySize,
-                _languageModelBackbone,
-                _numPerceiverLayers,
-                _tokenizer,
-                freshOptimizer,
-                _lossFunction,
-                // Same class of drop as UseAutodiff: skipping this optional parameter handed the clone a
-                // default FlamingoOptions() rather than the one the original was configured with.
-                _options,
-                learningRate: _learningRate);
-        }
-        else
-        {
-            // ONNX mode - use the stored paths
-            string visionPath = _visionEncoderPath ?? string.Empty;
-            string languagePath = _languageModelPath ?? string.Empty;
-
-            if (visionPath.Length == 0 || languagePath.Length == 0)
-            {
-                throw new InvalidOperationException("Cannot clone ONNX mode instance without valid model paths.");
-            }
-
-            return new FlamingoNeuralNetwork<T>(
-                Architecture,
-                visionPath,
-                languagePath,
-                _tokenizer,
-                _embeddingDimension,
-                _maxSequenceLength,
-                _imageSize,
-                _numPerceiverTokens,
-                _maxImagesInContext,
-                freshOptimizer,
-                _lossFunction);
-        }
     }
 
     #endregion

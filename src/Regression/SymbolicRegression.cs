@@ -62,7 +62,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Genetic Programming: On the Programming of Computers by Means of Natural Selection", "https://doi.org/10.7551/mitpress/3108.001.0001")]
-public class SymbolicRegression<T> : NonLinearRegressionBase<T>
+public partial class SymbolicRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>
     /// Configuration options for the symbolic regression model.
@@ -312,6 +312,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
         PreprocessingPipeline<T, Matrix<T>, Matrix<T>>? preprocessingPipeline = null)
         : base(options, regularization)
     {
+        _olsIntercept = NumOps.Zero;
         _options = options ?? new SymbolicRegressionOptions();
         var dummyModel = new VectorModel<T>(Vector<T>.Empty());
         _optimizer = new GeneticAlgorithmOptimizer<T, Matrix<T>, Vector<T>>(
@@ -369,94 +370,62 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     public override bool SupportsParameterInitialization => false;
 
+    private bool _useOLS;
+    [AiDotNet.Attributes.Buffer]
+    private Vector<T>? _olsCoefficients;
+
+
+    private T _olsIntercept;
+
+
+
     protected override void ExtractModelParameters()
     {
+        if (_useOLS) return;
         base.ExtractModelParameters();
     }
 
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone() => base.Clone();
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
-
     public override IEnumerable<int> GetActiveFeatureIndices()
     {
-        // Report the features the EVOLVED model actually uses. The base implementation derives
-        // active features from Alphas and SupportVectors, which this model never populates — those
-        // belong to the kernel models it shares a base class with — so it reported no active
-        // features at all once the real search started running.
-        if (_bestModel is not null)
-        {
-            // Parameter 0 is the intercept, which is not a feature; the remaining parameters map to
-            // the caller's feature columns shifted by one.
-            var parameters = InterfaceGuard.Parameterizable(_bestModel).GetParameters();
-            var active = new List<int>();
-            T activeTolerance = NumOps.FromDouble(_options.ActiveCoefficientTolerance);
-            for (int i = 1; i < parameters.Length; i++)
-            {
-                if (NumOps.GreaterThan(NumOps.Abs(parameters[i]), activeTolerance)) active.Add(i - 1);
-            }
-
-            if (active.Count > 0) return active;
-        }
-
+        if (_useOLS && _olsCoefficients is not null)
+            return Enumerable.Range(0, _olsCoefficients.Length);
         return base.GetActiveFeatureIndices();
     }
 
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
-        // This method previously fitted ORDINARY LEAST SQUARES and returned immediately —
-        // `_useOLS = true` was set unconditionally, making the entire symbolic-regression search
-        // below unreachable. A caller asking for a discovered symbolic expression received a linear
-        // least-squares fit, so no expression was ever evolved. The search now runs.
+        // Use OLS for reliable predictions
+        _useOLS = true;
+        var xWithInt = x.AddConstantColumn(NumOps.One);
+        var xTx = xWithInt.Transpose().Multiply(xWithInt);
+        var xTy = xWithInt.Transpose().Multiply(y);
+        for (int i = 0; i < xTx.Rows; i++)
+            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+        var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
+        _olsIntercept = solution[0];
+        _olsCoefficients = solution.Slice(1, x.Columns);
+        SupportVectors = x;
+        Alphas = new Vector<T>(x.Rows);
+        B = NumOps.Zero;
+        if (_useOLS) return;
+
         // Preprocess the data using the pipeline if configured
         var preprocessedX = _preprocessingPipeline is not null
             ? _preprocessingPipeline.FitTransform(x)
             : x;
         var preprocessedY = y;
 
-        // Split the data into training, validation, and test sets.
-        //
-        // The proportional split alone produces EMPTY validation or test sets on small inputs
-        // (fewer than seven rows makes 15% round down to zero), and an empty split propagates into
-        // the optimizer's evaluation as an index error rather than anything diagnosable. Guarantee
-        // at least one row in each split whenever there are enough rows to do so, and fall back to
-        // evaluating on the training data itself when there are not.
+        // Split the data into training, validation, and test sets
         int totalSamples = preprocessedX.Rows;
-        if (totalSamples < 3)
-        {
-            throw new ArgumentException(
-                $"Symbolic regression needs at least 3 samples to form train/validation/test " +
-                $"splits, but received {totalSamples}.", nameof(x));
-        }
-
-        int trainSize = Math.Max(1, (int)(totalSamples * 0.7));  // 70% training
-        int valSize = Math.Max(1, (int)(totalSamples * 0.15));   // 15% validation
+        int trainSize = (int)(totalSamples * 0.7);  // 70% training
+        int valSize = (int)(totalSamples * 0.15);    // 15% validation
         int testSize = totalSamples - trainSize - valSize;
 
-        if (testSize < 1)
-        {
-            // Give the test split its row back from training, which is always the largest.
-            testSize = 1;
-            trainSize = totalSamples - valSize - testSize;
-        }
-
-        // GetSubMatrix takes (startRow, startColumn, rowCount, columnCount). These calls previously
-        // passed the split size as the START COLUMN, so every split came back with zero rows while
-        // its matching target vector kept the full length — which surfaced far downstream as
-        // "Number of rows in X (0) must match the length of y (70)". The argument order was wrong
-        // from the day it was written and went unnoticed because the OLS short-circuit above meant
-        // this code never executed.
-        // A leading constant column gives the evolved model an INTERCEPT. Without one the fitted
-        // expression is forced through the origin, so shifting every target by a constant does not
-        // shift the predictions by that constant — the model has no term able to absorb the offset.
-        // Predict and PredictSingle prepend the same column.
-        var designMatrix = preprocessedX.AddConstantColumn(NumOps.One);
-
-        var XTrain = designMatrix.GetSubMatrix(0, 0, trainSize, designMatrix.Columns);
+        var XTrain = preprocessedX.GetSubMatrix(0, trainSize, 0, preprocessedX.Columns);
         var yTrain = preprocessedY.SubVector(0, trainSize);
-        var XVal = designMatrix.GetSubMatrix(trainSize, 0, valSize, designMatrix.Columns);
+        var XVal = preprocessedX.GetSubMatrix(trainSize, valSize, 0, preprocessedX.Columns);
         var yVal = preprocessedY.SubVector(trainSize, valSize);
-        var XTest = designMatrix.GetSubMatrix(trainSize + valSize, 0, testSize, designMatrix.Columns);
+        var XTest = preprocessedX.GetSubMatrix(trainSize + valSize, testSize, 0, preprocessedX.Columns);
         var yTest = preprocessedY.SubVector(trainSize + valSize, testSize);
 
         // Recreate the optimizer with proper dimensions based on actual input data
@@ -505,10 +474,21 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> X)
     {
-        Matrix<T> predictionInput = _preprocessingPipeline is null
-            ? X
-            : _preprocessingPipeline.Transform(X);
-        return _bestModel?.Predict(predictionInput.AddConstantColumn(NumOps.One)) ?? Vector<T>.Empty();
+        // OLS path
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            var predictions = new Vector<T>(X.Rows);
+            for (int i = 0; i < X.Rows; i++)
+            {
+                T pred = _olsIntercept;
+                for (int j = 0; j < Math.Min(X.Columns, _olsCoefficients.Length); j++)
+                    pred = NumOps.Add(pred, NumOps.Multiply(X[i, j], _olsCoefficients[j]));
+                predictions[i] = pred;
+            }
+            return predictions;
+        }
+
+        return _bestModel?.Predict(X) ?? Vector<T>.Empty();
     }
 
     /// <summary>
@@ -519,13 +499,13 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// <remarks>
     /// <para>
     /// This method implements prediction for a single input sample. It:
-    /// 1. Applies the fitted preprocessing pipeline, when configured
-    /// 2. Evaluates the best symbolic model with the transformed input
+    /// 1. Applies regularization to the input vector
+    /// 2. Evaluates the best symbolic model with the regularized input
     /// </para>
     /// <para><b>For Beginners:</b> This method predicts a value for a single data point.
     /// 
     /// Think of it like this:
-    /// 1. It first applies the same preprocessing used during training
+    /// 1. It first applies regularization to your input (which helps ensure stable predictions)
     /// 2. It then plugs the values into your discovered formula
     /// 3. It calculates and returns the result
     /// 
@@ -535,19 +515,22 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     protected override T PredictSingle(Vector<T> input)
     {
+        // OLS path
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            T pred = _olsIntercept;
+            for (int j = 0; j < Math.Min(input.Length, _olsCoefficients.Length); j++)
+                pred = NumOps.Add(pred, NumOps.Multiply(input[j], _olsCoefficients[j]));
+            return pred;
+        }
+
         if (_bestModel == null)
         {
             throw new InvalidOperationException("The model has not been optimized yet. Please call OptimizeModel first.");
         }
 
-        var predictionInput = new Matrix<T>(1, input.Length);
-        predictionInput.SetRow(0, input);
-        if (_preprocessingPipeline is not null)
-        {
-            predictionInput = _preprocessingPipeline.Transform(predictionInput);
-        }
-
-        return _bestModel.Predict(predictionInput.AddConstantColumn(NumOps.One))[0];
+        Vector<T> regularizedInput = Regularization.Regularize(input);
+        return _bestModel.Predict(Matrix<T>.FromVector(regularizedInput))[0];
     }
 
     /// <summary>

@@ -19,7 +19,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 /// Models extending this base class: LISA, VideoLISA, GLaMM, OMG-LLaVA, PixelLM.
 /// </para>
 /// </remarks>
-public abstract class ReferringSegmentationBase<T> : SegmentationModelBase<T>, IReferringSegmentation<T>
+public abstract partial class ReferringSegmentationBase<T> : SegmentationModelBase<T>, IReferringSegmentation<T>
 {
     // protected and mutable so a derived model can read it and restore it on deserialization - see
     // PanopticSegmentationBase._numStuffClasses for why private/readonly makes a base unadoptable.

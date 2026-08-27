@@ -674,35 +674,5 @@ public partial class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
 
     #region ICloneable Implementation
 
-    /// <summary>
-    /// Clones this model.
-    /// </summary>
-    public override IDiffusionModel<T> Clone()
-    {
-        var clone = new VideoCrafterModel<T>(
-            options: null,
-            scheduler: null,
-            videoUNet: (VideoUNetPredictor<T>)_videoUNet.Clone(),
-            temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
-            textConditioner: _textConditioner,
-            imageConditioner: _imageConditioner,
-            defaultNumFrames: DefaultNumFrames,
-            defaultFPS: DefaultFPS);
-
-        clone.ImageConditioningScale = ImageConditioningScale;
-        clone.UseDualConditioning = UseDualConditioning;
-        clone.SetMotionBucketId(MotionBucketId);
-
-        return clone;
-    }
-
-    /// <summary>
-    /// Creates a deep copy.
-    /// </summary>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return (IFullModel<T, Tensor<T>, Tensor<T>>)Clone();
-    }
-
     #endregion
 }

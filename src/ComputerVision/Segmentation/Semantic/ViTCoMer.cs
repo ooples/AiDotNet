@@ -60,7 +60,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ViT-CoMer: Vision Transformer with Convolutional Multi-scale Feature Interaction for Dense Predictions", "https://arxiv.org/abs/2403.07392", Year = 2024, Authors = "Xia et al.")]
-public class ViTCoMer<T> : Common.SemanticSegmentationBase<T>
+public partial class ViTCoMer<T> : Common.SemanticSegmentationBase<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -373,66 +373,6 @@ public class ViTCoMer<T> : Common.SemanticSegmentationBase<T>
             },
             ModelData = SerializeForMetadata()
         };
-    }
-
-    /// <summary>
-    /// Serializes configuration for persistence.
-    /// </summary>
-    /// <param name="writer">Binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves config so the model can be restored later.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height); writer.Write(_width); writer.Write(_channels);
-        writer.Write(_numClasses); writer.Write((int)_modelSize);
-        writer.Write(_embedDim); writer.Write(_decoderDim); writer.Write(_dropRate);
-        writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty);
-        writer.Write(_encoderLayerEnd);
-        writer.Write(_options.LearningRate);
-        writer.Write(_cnnChannels.Length);
-        foreach (int c in _cnnChannels) writer.Write(c);
-        writer.Write(_depths.Length);
-        foreach (int d in _depths) writer.Write(d);
-    }
-
-    /// <summary>
-    /// Deserializes configuration.
-    /// </summary>
-    /// <param name="reader">Binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Reads saved configuration matching the write order.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadInt32();
-        _ = reader.ReadInt32(); _ = reader.ReadInt32(); _ = reader.ReadDouble();
-        _ = reader.ReadBoolean(); _ = reader.ReadString();
-        _ = reader.ReadInt32();
-        _ = reader.ReadDouble();
-        int cc = reader.ReadInt32(); for (int i = 0; i < cc; i++) _ = reader.ReadInt32();
-        int dc = reader.ReadInt32(); for (int i = 0; i < dc; i++) _ = reader.ReadInt32();
-    }
-
-    /// <summary>
-    /// Creates a new ViT-CoMer with same config but fresh weights.
-    /// </summary>
-    /// <returns>New model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Used for cross-validation or ensemble training.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return _useNativeMode
-            ? new ViTCoMer<T>(Architecture, optimizer: null, LossFunction, _numClasses, _modelSize, _dropRate, new ViTCoMerOptions(_options))
-            : new ViTCoMer<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, new ViTCoMerOptions(_options));
     }
 
     #endregion

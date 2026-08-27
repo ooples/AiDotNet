@@ -54,7 +54,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.TabularQLearning;
     "https://www.cs.rhul.ac.uk/~chrisw/new_thesis.pdf",
     Year = 1989,
     Authors = "Watkins, C. J. C. H.")]
-public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
+public partial class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
     /// <inheritdoc />
@@ -234,56 +234,6 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>, IGrad
     }
 
     public override int FeatureCount => _options.StateSize;
-
-    public override byte[] Serialize()
-    {
-        var state = new
-        {
-            QTable = _qTable,
-            Epsilon = _epsilon,
-            Options = _options
-        };
-        string json = JsonConvert.SerializeObject(state);
-        return System.Text.Encoding.UTF8.GetBytes(json);
-    }
-
-    public override void Deserialize(byte[] data)
-    {
-        if (data is null || data.Length == 0)
-        {
-            throw new ArgumentException("Serialized data cannot be null or empty", nameof(data));
-        }
-
-        string json = System.Text.Encoding.UTF8.GetString(data);
-        var state = JsonConvert.DeserializeObject<dynamic>(json);
-        if (state is null)
-        {
-            throw new InvalidOperationException("Deserialization returned null");
-        }
-
-        _qTable = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<int, T>>>(state.QTable.ToString()) ?? new Dictionary<string, Dictionary<int, T>>();
-        _epsilon = state.Epsilon;
-    }
-
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new TabularQLearningAgent<T>(_options);
-
-        // Deep copy the Q-table
-        clone._qTable = new Dictionary<string, Dictionary<int, T>>();
-        foreach (var stateEntry in _qTable)
-        {
-            var actionDict = new Dictionary<int, T>();
-            foreach (var actionEntry in stateEntry.Value)
-            {
-                actionDict[actionEntry.Key] = actionEntry.Value;
-            }
-            clone._qTable[stateEntry.Key] = actionDict;
-        }
-
-        clone._epsilon = _epsilon;
-        return clone;
-    }
 
     public Vector<T> ComputeGradients(
         Vector<T> input,

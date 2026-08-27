@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Foundational;
     Year = 2019,
     Authors = "Li et al."
 )]
-public class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
+public partial class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly VisualBERTOptions _options;
 
@@ -299,44 +299,9 @@ public class VisualBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionMo
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.ImageSize);
-        writer.Write(_options.VisionDim);
-        writer.Write(_options.TextDim);
-        writer.Write(_options.FusionDim);
-        writer.Write(_options.NumFusionLayers);
-        writer.Write(_options.NumHeads);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.ImageSize = reader.ReadInt32();
-        _options.VisionDim = reader.ReadInt32();
-        _options.TextDim = reader.ReadInt32();
-        _options.FusionDim = reader.ReadInt32();
-        _options.NumFusionLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        if (_useNativeMode)
-            _projectionLayerEnd =
-                (_options.VisionDim != _options.FusionDim ? 2 : 0)
-                + (_options.TextDim != _options.FusionDim ? 2 : 0);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new VisualBERT<T>(Architecture, mp, new VisualBERTOptions(_options));
-        return new VisualBERT<T>(Architecture, new VisualBERTOptions(_options));
-    }
+
 
     private void ThrowIfDisposed()
     {

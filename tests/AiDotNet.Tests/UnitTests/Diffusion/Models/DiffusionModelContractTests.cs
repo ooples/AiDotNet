@@ -199,7 +199,11 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
     public async Task StableDiffusion15Model_Clone_PreservesLazyParameterCount()
     {
         await Task.Yield();
-        var model = new StableDiffusion15Model<float>();
+        // This invariant checks lifecycle semantics, not production-scale capacity. Cloning the
+        // default 865M-parameter U-Net just to compare two counts exceeds the test budget even in an
+        // isolated process. The tiny stack uses the same lazy UNet/VAE contracts; the following test
+        // separately materializes it and compares every cloned value plus mutation independence.
+        var model = CreateTinyStableDiffusion15Model();
         var clone = model.Clone();
 
         Assert.Equal(model.ParameterCount, clone.ParameterCount);
@@ -279,6 +283,39 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
         Assert.NotEmpty(chunks);
         Assert.All(chunks, chunk => Assert.True(chunk.Length > 0));
         Assert.Equal(predictor.ParameterCount, chunks.Sum(chunk => (long)chunk.Length));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task StandardVAE_PreForwardChunks_CoverAndRestoreCompleteParameterSurface()
+    {
+        await Task.Yield();
+        var source = new StandardVAE<float>(
+            inputChannels: 3,
+            latentChannels: 4,
+            baseChannels: 8,
+            channelMultipliers: [1, 2],
+            numResBlocksPerLevel: 1,
+            seed: 42);
+        var destination = new StandardVAE<float>(
+            inputChannels: 3,
+            latentChannels: 4,
+            baseChannels: 8,
+            channelMultipliers: [1, 2],
+            numResBlocksPerLevel: 1,
+            seed: 43);
+
+        var chunks = source.GetParameterChunks().ToList();
+
+        Assert.NotEmpty(chunks);
+        Assert.Equal(source.ParameterCount, chunks.Sum(chunk => (long)chunk.Length));
+
+        destination.SetParameterChunks(chunks);
+
+        var expected = source.GetParameters();
+        var actual = destination.GetParameters();
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], actual[i]);
     }
 
     #endregion

@@ -268,6 +268,22 @@ public sealed class AliasLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double
         Assert.Contains("_missing", diagnostic.GetMessage(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Alias_MayNameTheOwnedLayerField()
+    {
+        await Task.Yield();
+        const string source = @"
+using AiDotNet.Attributes;
+public sealed class ChildLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double> { }
+public sealed class CompositeLayer : AiDotNet.NeuralNetworks.Layers.LayerBase<double>
+{
+    private ChildLayer _owned = new();
+    [ParameterAlias(nameof(_owned))] private ChildLayer _alias = null!;
+}";
+
+        Assert.DoesNotContain(Run(source), item => item.Id == "AIDN091");
+    }
+
     [Theory]
     [InlineData("Missing", "no such field")]
     [InlineData("Rank", "not a readable Boolean")]

@@ -23,7 +23,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
+public partial class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
     /// The options for configuring the Bayesian Optimization algorithm.
@@ -33,11 +33,13 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
     /// <summary>
     /// A matrix storing the points that have been sampled during the optimization process.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Matrix<T> _sampledPoints;
 
     /// <summary>
     /// A vector storing the corresponding function values for the sampled points.
     /// </summary>
+    [AiDotNet.Attributes.Buffer]
     private Vector<T> _sampledValues;
 
     /// <summary>
@@ -312,96 +314,6 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
-    }
-
-    /// <summary>
-    /// Converts the current state of the optimizer into a byte array for storage or transmission.
-    /// </summary>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method takes all the important information about the current state
-    /// of the Bayesian Optimizer and turns it into a format that can be easily saved or sent to another computer.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using (MemoryStream ms = new MemoryStream())
-        using (BinaryWriter writer = new BinaryWriter(ms))
-        {
-            byte[] baseData = base.Serialize();
-            writer.Write(baseData.Length);
-            writer.Write(baseData);
-
-            string optionsJson = JsonConvert.SerializeObject(_options);
-            writer.Write(optionsJson);
-
-            // Serialize _sampledPoints
-            writer.Write(_sampledPoints.Rows);
-            writer.Write(_sampledPoints.Columns);
-            for (int i = 0; i < _sampledPoints.Rows; i++)
-            {
-                for (int j = 0; j < _sampledPoints.Columns; j++)
-                {
-                    writer.Write(Convert.ToDouble(_sampledPoints[i, j]));
-                }
-            }
-
-            // Serialize _sampledValues
-            writer.Write(_sampledValues.Length);
-            for (int i = 0; i < _sampledValues.Length; i++)
-            {
-                writer.Write(Convert.ToDouble(_sampledValues[i]));
-            }
-
-            return ms.ToArray();
-        }
-    }
-
-    /// <summary>
-    /// Restores the state of the optimizer from a byte array.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized state of the optimizer.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method takes a saved state of the Bayesian Optimizer (in the form of a byte array)
-    /// and uses it to restore the optimizer to that state. It's like loading a saved game, bringing back all the
-    /// important settings and progress that were saved earlier.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using (MemoryStream ms = new MemoryStream(data))
-        using (BinaryReader reader = new BinaryReader(ms))
-        {
-            int baseDataLength = reader.ReadInt32();
-            byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
-
-            string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<BayesianOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-                ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-            // Deserialize _sampledPoints
-            int rows = reader.ReadInt32();
-            int columns = reader.ReadInt32();
-            _sampledPoints = new Matrix<T>(rows, columns);
-            for (int i = 0; i < rows; i++)
-            {
-                for (int j = 0; j < columns; j++)
-                {
-                    _sampledPoints[i, j] = NumOps.FromDouble(reader.ReadDouble());
-                }
-            }
-
-            // Deserialize _sampledValues
-            int valueCount = reader.ReadInt32();
-            _sampledValues = new Vector<T>(valueCount);
-            for (int i = 0; i < valueCount; i++)
-            {
-                _sampledValues[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-
-            _gaussianProcess = new StandardGaussianProcess<T>(_options.KernelFunction);
-        }
     }
 }
 

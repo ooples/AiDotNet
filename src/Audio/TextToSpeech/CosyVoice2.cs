@@ -46,7 +46,7 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("CosyVoice 2: Scalable Streaming Speech Synthesis with Large Language Models", "https://arxiv.org/abs/2412.10117", Year = 2024, Authors = "Zhihao Du, Yuxuan Wang, Qian Chen, Xian Shi, Xiang Lv, Tianyu Zhao, Zhifu Gao, Yexin Yang, Changfeng Gao, Hui Wang, Fan Yu, Huadai Liu, Zhengyan Sheng, Yue Gu, Chong Deng, Wen Wang, Shiliang Zhang, Zhijie Yan, Jinren Zhou")]
-public class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
+public partial class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -252,30 +252,9 @@ public class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.Variant);
-        w.Write(_options.TextEncoderDim); w.Write(_options.NumTextEncoderLayers);
-        w.Write(_options.DecoderDim); w.Write(_options.NumDecoderLayers);
-        w.Write(_options.NumMels); w.Write(_options.SpeakerEmbeddingDim);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.Variant = r.ReadString();
-        _options.TextEncoderDim = r.ReadInt32(); _options.NumTextEncoderLayers = r.ReadInt32();
-        _options.DecoderDim = r.ReadInt32(); _options.NumDecoderLayers = r.ReadInt32();
-        _options.NumMels = r.ReadInt32(); _options.SpeakerEmbeddingDim = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new CosyVoice2<T>(Architecture, _options);
+
 
     #endregion
 
@@ -318,6 +297,7 @@ public class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     {
         private readonly CosyVoice2<T> _model;
         private readonly double _speakingRate;
+        [Scratch]
         private readonly List<Tensor<T>> _pendingAudio = [];
         private string _textBuffer = string.Empty;
         private bool _disposed;

@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Jamba: A Hybrid Transformer-Mamba Language Model", "https://arxiv.org/abs/2403.19887", Year = 2024, Authors = "Opher Lieber, Barak Lenz, Hofit Bata, Gal Cohen, Jhonathan Osin, Itay Dalmedigos, Erez Safahi, Shaked Meirom, Yonatan Belinkov, Shai Shalev-Shwartz, Omri Abend, Raz Alon, Tomer Asida, Amir Bergman, Roman Glozman, Michael Gokhman, Avashalom Manevich, Nir Ratner, Noam Rozen, Erez Shwartz, Mor Zusman, Yoav Shoham")]
-public class JambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
+public partial class JambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly JambaOptions _options;
     private readonly int _vocabSize;
@@ -146,32 +146,9 @@ public class JambaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_vocabSize);
-        writer.Write(_modelDimension);
-        writer.Write(_numLayers);
-        writer.Write(_stateDimension);
-        writer.Write(_attentionInterval);
-        writer.Write(_maxSeqLength);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new JambaLanguageModel<T>(
-            Architecture, _vocabSize, _modelDimension, _numLayers, _stateDimension,
-            _attentionInterval, _maxSeqLength, LossFunction, _options);
-    }
+
 
     #endregion
 }

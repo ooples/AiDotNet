@@ -57,7 +57,7 @@ namespace AiDotNet.CausalInference;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ResearchPaper("Metalearners for Estimating Heterogeneous Treatment Effects Using Machine Learning", "https://doi.org/10.1073/pnas.1804597116")]
-public class TLearner<T> : CausalModelBase<T>
+public partial class TLearner<T> : CausalModelBase<T>
 {
     /// <summary>
     /// Weights for the treatment model.
@@ -397,12 +397,6 @@ public class TLearner<T> : CausalModelBase<T>
         var copy = new TLearner<T>(MaxIterations, LearningRate, Lambda);
         copy.SetParameters(parameters);
         return copy;
-    }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new TLearner<T>(MaxIterations, LearningRate, Lambda);
     }
 
     /// <summary>

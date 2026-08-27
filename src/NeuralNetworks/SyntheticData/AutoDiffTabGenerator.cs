@@ -106,11 +106,11 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
 
     // Diffusion parameters (set after search)
     private int _numTimesteps;
-    [Buffer]
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Vector<T>? _betas;
-    [Buffer]
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Vector<T>? _alphas;
-    [Buffer]
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Vector<T>? _alphasCumprod;
 
     // Whether custom layers are being used
@@ -876,40 +876,10 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_options.MLPDimensions.Length);
-        foreach (var dim in _options.MLPDimensions) writer.Write(dim);
-        writer.Write(_options.TimestepEmbeddingDimension);
-        writer.Write(_numTimesteps);
-        writer.Write(_dataWidth);
-        writer.Write(IsFitted);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        int mlpLen = reader.ReadInt32();
-        for (int i = 0; i < mlpLen; i++) _ = reader.ReadInt32();
-        _ = reader.ReadInt32();        // TimestepEmbeddingDimension
-        _numTimesteps = reader.ReadInt32();
-        _dataWidth = reader.ReadInt32();
-        IsFitted = reader.ReadBoolean();
 
-        // The base deserializer rebuilt Layers; re-bind the typed denoiser
-        // references so Clone/DeepCopy reproduce the identical forward.
-        ExtractLayerReferences();
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new AutoDiffTabGenerator<T>(
-            Architecture,
-            _options,
-            _optimizer,
-            _lossFunction);
-    }
 
     /// <inheritdoc/>
     public override Dictionary<string, T> GetFeatureImportance()

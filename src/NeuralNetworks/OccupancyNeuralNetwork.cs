@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Occupancy Networks: Learning 3D Reconstruction in Function Space", "https://arxiv.org/abs/1812.03828", Year = 2019, Authors = "Lars Mescheder, Michael Oechsle, Michael Niemeyer, Sebastian Nowozin, Andreas Geiger")]
-public class OccupancyNeuralNetwork<T> : VectorModelLayoutBase<T>
+public partial class OccupancyNeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly OccupancyNeuralNetworkOptions _options;
 
@@ -608,24 +608,7 @@ public class OccupancyNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// as it was configured.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Save temporal configuration
-        writer.Write(_includeTemporalData);
-        writer.Write(_historyWindowSize);
 
-        // Save any internal sensor history if present
-        writer.Write(_internalSensorHistory.Count);
-
-        foreach (var reading in _internalSensorHistory)
-        {
-            writer.Write(reading.Length);
-            for (int i = 0; i < reading.Length; i++)
-            {
-                writer.Write(Convert.ToDouble(reading[i]));
-            }
-        }
-    }
 
     /// <summary>
     /// Deserializes network-specific data from a binary reader.
@@ -644,66 +627,5 @@ public class OccupancyNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// with all its settings and internal state intact.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Load temporal configuration
-        _includeTemporalData = reader.ReadBoolean();
-        _historyWindowSize = reader.ReadInt32();
 
-        // Initialize sensor history queue
-        _internalSensorHistory = new Queue<Vector<T>>(_historyWindowSize);
-
-        // Load any saved sensor history
-        int historyCount = reader.ReadInt32();
-
-        for (int h = 0; h < historyCount; h++)
-        {
-            int readingLength = reader.ReadInt32();
-            var reading = new Vector<T>(readingLength);
-
-            for (int i = 0; i < readingLength; i++)
-            {
-                reading[i] = NumOps.FromDouble(reader.ReadDouble());
-            }
-
-            _internalSensorHistory.Enqueue(reading);
-        }
-    }
-
-    /// <summary>
-    /// Creates a new instance of the OccupancyNeuralNetwork with the same architecture and temporal configuration.
-    /// </summary>
-    /// <returns>A new instance of the occupancy neural network.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new occupancy neural network with the same architecture and temporal
-    /// data processing configuration as the current instance. The new instance starts with fresh layers
-    /// and an empty sensor history buffer, making it useful for creating multiple networks with identical
-    /// configurations or for resetting a network while preserving its structure.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This creates a brand new occupancy detection network with the same settings.
-    /// 
-    /// Think of it like creating a copy of your current network's blueprint:
-    /// - It has the same structure (layers and neurons)
-    /// - It uses the same approach to time-based analysis (if enabled)
-    /// - It looks at the same number of past readings when analyzing patterns
-    /// 
-    /// However, the new network starts fresh with:
-    /// - Newly initialized weights and parameters
-    /// - An empty history buffer (no past sensor readings)
-    /// 
-    /// This is useful when you want to start over with a clean network that has
-    /// the same design but hasn't learned anything yet, or when you need multiple
-    /// identical networks for different spaces or comparison purposes.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new OccupancyNeuralNetwork<T>(
-            Architecture,
-            _includeTemporalData,
-            _historyWindowSize,
-            LossFunction);
-    }
 }

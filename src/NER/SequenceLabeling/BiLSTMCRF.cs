@@ -131,7 +131,7 @@ namespace AiDotNet.NER.SequenceLabeling;
     "https://arxiv.org/abs/1508.01991",
     Year = 2015,
     Authors = "Zhiheng Huang, Wei Xu, Kai Yu")]
-public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
+public partial class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
 {
     #region Fields
 
@@ -1002,30 +1002,7 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     /// proportions so you can recreate the dish.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.EmbeddingDimension);
-        w.Write(_options.HiddenDimension);
-        w.Write(_options.NumLSTMLayers);
-        w.Write(_options.NumLabels);
-        w.Write(_options.MaxSequenceLength);
-        w.Write(_options.UseCRF);
-        w.Write(_options.UseCharEmbeddings);
-        w.Write(_options.CharEmbeddingDimension);
-        w.Write(_options.CharHiddenDimension);
-        w.Write(_options.DropoutRate);
-        w.Write(_options.LearningRate);
 
-        // Serialize label names
-        w.Write(_options.LabelNames.Length);
-        foreach (var label in _options.LabelNames)
-        {
-            w.Write(label);
-        }
-    }
 
     /// <summary>
     /// Deserializes model-specific data from a binary stream, restoring the model to its saved state.
@@ -1050,91 +1027,7 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     /// the other loads.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (NERModelVariant)r.ReadInt32();
-        _options.EmbeddingDimension = r.ReadInt32();
-        _options.HiddenDimension = r.ReadInt32();
-        _options.NumLSTMLayers = r.ReadInt32();
-        _options.NumLabels = r.ReadInt32();
-        _options.MaxSequenceLength = r.ReadInt32();
-        _options.UseCRF = r.ReadBoolean();
-        _options.UseCharEmbeddings = r.ReadBoolean();
-        _options.CharEmbeddingDimension = r.ReadInt32();
-        _options.CharHiddenDimension = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble();
-        _options.LearningRate = r.ReadDouble();
 
-        // Deserialize label names
-        int labelCount = r.ReadInt32();
-        _options.LabelNames = new string[labelCount];
-        for (int i = 0; i < labelCount; i++)
-        {
-            _options.LabelNames[i] = r.ReadString();
-        }
-
-        // Restore base class properties from deserialized options
-        NumLabels = _options.NumLabels;
-        EmbeddingDimension = _options.EmbeddingDimension;
-        MaxSequenceLength = _options.MaxSequenceLength;
-        UseCRF = _options.UseCRF;
-        LabelNames = _options.LabelNames;
-
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-        {
-            OnnxModel?.Dispose();
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        }
-        else if (_useNativeMode)
-        {
-            // ONNX cleanup only — do NOT clear Layers and call InitializeLayers
-            // here. The base class's DeserializeInternalUnchecked has already
-            // recreated every layer from its serialized type+shape+metadata
-            // and called SetParameters with the saved trained weights; clearing
-            // and reinitialising here threw all that work away and replaced it
-            // with fresh random-init layers, which made Clone /
-            // DeepCopy / SaveModel+LoadModel return a model that predicts
-            // completely different label sequences than the source. That was
-            // the actual root cause of the BiLSTMCRFTests
-            // Clone_ShouldProduceIdenticalOutput and
-            // Clone_AfterTraining_ShouldPreserveLearnedWeights failures after
-            // cluster 4 cleanup (the dropped weights manifested as ||Δ|| ~= ||trained||
-            // on a probe-input — random-init magnitude relative to the trained model).
-            OnnxModel?.Dispose();
-            OnnxModel = null;
-        }
-    }
-
-    /// <summary>
-    /// Creates a new, uninitialized instance of this model with the same configuration.
-    /// </summary>
-    /// <returns>A new <see cref="BiLSTMCRF{T}"/> instance with identical options but fresh
-    /// (randomly initialized) weights. Used internally by the framework for model cloning,
-    /// ensemble creation, and cross-validation.</returns>
-    /// <remarks>
-    /// <para>
-    /// The new instance receives a deep copy of the options via the copy constructor to prevent
-    /// mutation leaking between instances. In ONNX mode, the new instance loads the same
-    /// ONNX model file. In native mode, the new instance gets freshly initialized layers via
-    /// <see cref="InitializeLayers"/>.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This creates a "twin" of the current model with the same architecture
-    /// and settings, but with fresh random weights (as if it was just created). This is useful for
-    /// training multiple copies of the same model (ensemble learning) or for cross-validation
-    /// experiments where you need identical model architectures with different training data.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var optionsCopy = new BiLSTMCRFOptions(_options);
-        if (!_useNativeMode && optionsCopy.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new BiLSTMCRF<T>(Architecture, p, optionsCopy);
-        return new BiLSTMCRF<T>(Architecture, optionsCopy);
-    }
 
     #endregion
 

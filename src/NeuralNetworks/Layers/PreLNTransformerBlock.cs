@@ -29,7 +29,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </remarks>
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = true, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "")]
+[LayerProperty(IsTrainable = true, HasTrainingMode = false, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 16, new AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<double>(2, 4)")]
 // Roles from this block's own forward: "Self-attention sublayer expects [B, S, H] (or [S, H])", so one
 // declaration with BatchOptional covers both ranks. Time rather than Length because the block is built
 // for causal decoder stacks (T5 / LLaMA / Gemma / Qwen2), where the sequence axis IS temporal.
@@ -51,6 +51,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [AutoParameters]
 public partial class PreLNTransformerBlock<T> : LayerBase<T>, IShapeContract
 {
+    // Every child reads the block input; only the down-projection reads the expanded width.
+    // Chained sizing walked registration order instead and built the second projection from
+    // the first's output, so a restore met a differently shaped layer than the checkpoint.
     [SubLayerInput("_hiddenSize")]
     private readonly RMSNormalizationLayer<T> _norm1;
     // Non-readonly so the inference optimizer can swap the attention sublayer in place (e.g.

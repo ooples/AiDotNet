@@ -16,7 +16,7 @@ namespace AiDotNet.TimeSeries.TFT;
 /// (token-wise), matching the Temporal Fusion Transformer tape-training campaign.
 /// The final layer normalization uses learned affine parameters (γ, β).
 /// </remarks>
-internal class GatedResidualNetwork<T>
+internal partial class GatedResidualNetwork<T>
 {
     private static IEngine Engine => AiDotNetEngine.Current;
 
@@ -25,24 +25,35 @@ internal class GatedResidualNetwork<T>
     private readonly int _outputSize;
 
     // η₂ = ELU(W₂·a + b₂)
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _w2; // [hiddenSize, inputSize]
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _b2; // [hiddenSize]
 
     // η₁ = W₁·η₂ + b₁
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _w1; // [outputSize, hiddenSize]
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _b1; // [outputSize]
 
     // GLU: σ(W₄·γ + b₄) ⊙ (W₅·γ + b₅)
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _w4; // [outputSize, outputSize]
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _b4; // [outputSize]
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _w5; // [outputSize, outputSize]
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _b5; // [outputSize]
 
     // Skip connection projection (only when inputSize != outputSize)
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T>? _skipProjection; // [outputSize, inputSize]
 
     // Learned LayerNorm affine parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _lnGamma; // [outputSize]
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _lnBeta;  // [outputSize]
 
     public GatedResidualNetwork(int inputSize, int hiddenSize, int outputSize, int? seed = null)

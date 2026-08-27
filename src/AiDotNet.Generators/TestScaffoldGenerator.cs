@@ -648,6 +648,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // Only the memorization probe is affected; its other probes already pass.
             { "MusicTaggingTransformer", new WarmupIterationOverride(memorization: 12) },
 
+            // Madmom's FP32 audio policy previously stopped MoreData after two AdamW updates,
+            // exactly inside its deterministic initial overshoot (0.679 -> 1.324). Its ordinary
+            // six-update loss-reduction invariant is already green; ten updates keep the fixture
+            // inexpensive while judging the settled trajectory instead of the warm-up transient.
+            {
+                "MadmomBeatTracker",
+                new WarmupIterationOverride(moreDataLong: 10)
+            },
+
             // SeACo / Paraformer uses the GLM sampler from arXiv 2206.08317 section 2.3. Its
             // target-substitution count changes with prediction error, so the real paper objective
             // is intentionally non-monotonic at the first two steps (measured 36.429470 -> 37.064968).
@@ -2127,7 +2136,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     // ModelTask enum values (must match AiDotNet.Enums.ModelTask)
     private const int TaskClassification = 0;
     private const int TaskRegression = 1;
-    private const int TaskClustering = 2;
+    private const int TaskGeneration = 2;
+    private const int TaskClustering = 8;
 
     private static readonly DiagnosticDescriptor UntestedModel = new(
         id: "AIDN040",
@@ -2169,6 +2179,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         category: "AiDotNet.TestCoverage",
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor UnscaffoldableLayer = new(
+        id: "AIDN046",
+        title: "Layer cannot be scaffolded and produces no generated tests",
+        messageFormat: "'{0}' has no parameterless constructor and declares no "
+                     + "[LayerProperty(TestConstructorArgs = \"...\")], so the scaffold generator "
+                     + "emits NO tests for it at all. Declare TestConstructorArgs, and "
+                     + "TestInputShape alongside it so the generated tests can drive a forward.",
+        category: "AiDotNet.TestCoverage",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "A layer the generator cannot construct was previously skipped in silence, so "
+                   + "it did not fail, appear in the coverage count, or show up anywhere as "
+                   + "missing -- the skip read exactly like coverage. Four layers reached master "
+                   + "that way, and two of them carried real defects: one never built its "
+                   + "convolutions on the single-input path, so a checkpoint held none of its "
+                   + "weights, and one severed its input gradient while its parameter gradients "
+                   + "still looked healthy.");
 
     private static readonly DiagnosticDescriptor AlgorithmCoverageSummary = new(
         id: "AIDN045",
@@ -2237,6 +2265,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(combined, static (spc, source) =>
         {
             var ((((((models, tests), activations), losses), layers), algorithms), compilation) = source;
+
+            // This generator owns AiDotNet's repository test census and emits fixtures that
+            // depend on AiDotNetTests-only base classes and xUnit. The generator assembly is also
+            // shipped to PackageReference consumers so production generators (layer state,
+            // registries, schemas, etc.) activate automatically. Do not leak these repository-only
+            // fixtures or coverage diagnostics into arbitrary consumer compilations.
+            string assemblyName = compilation.AssemblyName ?? string.Empty;
+            if (!string.Equals(assemblyName, "AiDotNet", System.StringComparison.Ordinal) &&
+                !string.Equals(assemblyName, "AiDotNetTests", System.StringComparison.Ordinal))
+            {
+                return;
+            }
+
             Execute(spc, models, tests, compilation);
             ExecuteActivationAndLossGeneration(spc, activations, losses, compilation);
             ExecuteLayerGeneration(spc, layers, compilation);
@@ -2693,7 +2734,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     continue;
                 }
 
-                bool canConstruct = (model.HasParameterlessConstructor || model.HasArchitectureOnlyConstructor) &&
+                bool canConstruct = (model.HasParameterlessConstructor
+                                    || model.HasArchitectureOnlyConstructor
+                                    || model.HasVectorOnlyConstructor) &&
                                     IsCompatibleWithFamily(model, family.Value);
 
                 // Don't emit a runtime-throwing NotImplementedException stub
@@ -2715,9 +2758,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 {
                     // Report the two causes SEPARATELY - they have different fixes, and lumping them
                     // together is what made this class of gap unreadable in the first place.
-                    bool hasCtor = model.HasParameterlessConstructor || model.HasArchitectureOnlyConstructor;
+                    bool hasCtor = model.HasParameterlessConstructor
+                                || model.HasArchitectureOnlyConstructor
+                                || model.HasVectorOnlyConstructor;
                     string reason = !hasCtor
-                        ? "it has neither a parameterless nor an architecture-only constructor, so the "
+                        ? "it has no supported parameterless, architecture-only, or vector-only constructor, so the "
                           + "generated fixture has no way to build it"
                         : $"it resolves to test family {family.Value}, whose fixture requires an "
                           + $"interface this type does not implement (see IsCompatibleWithFamily); the "
@@ -3063,6 +3108,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // either parameterless, or all parameters have default values.
         bool hasParameterlessCtor = false;
         bool hasArchitectureOnlyCtor = false;
+        bool hasVectorOnlyCtor = false;
         string? architectureParamTypeName = null;
         foreach (var ctor in modelClass.InstanceConstructors)
         {
@@ -3096,6 +3142,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             if (ctor.Parameters.Length >= 1)
             {
                 var firstParam = ctor.Parameters[0];
+                bool restOptional = true;
+                for (int pi = 1; pi < ctor.Parameters.Length; pi++)
+                {
+                    // Only explicit default values make a parameter optional.
+                    // Nullable type annotations (string?) do NOT imply optionality.
+                    if (!ctor.Parameters[pi].HasExplicitDefaultValue)
+                    {
+                        restOptional = false;
+                        break;
+                    }
+                }
+
+                if (IsExactlyVector(firstParam.Type)
+                    && !firstParam.HasExplicitDefaultValue
+                    && restOptional)
+                {
+                    hasVectorOnlyCtor = true;
+                }
+
                 // Check if the first parameter type IS exactly NeuralNetworkArchitecture<T>.
                 // Derived types (CodeSynthesisArchitecture<T>, etc.) have incompatible constructors
                 // and need manual test classes — they stay as NotImplementedException.
@@ -3103,17 +3168,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
                 if (isArchitectureParam && !firstParam.HasExplicitDefaultValue)
                 {
-                    bool restOptional = true;
-                    for (int pi = 1; pi < ctor.Parameters.Length; pi++)
-                    {
-                        // Only explicit default values make a parameter optional.
-                        // Nullable type annotations (string?) do NOT imply optionality.
-                        if (!ctor.Parameters[pi].HasExplicitDefaultValue)
-                        {
-                            restOptional = false;
-                            break;
-                        }
-                    }
                     if (restOptional)
                     {
                         hasArchitectureOnlyCtor = true;
@@ -3155,6 +3209,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             UsesVectorOutput = usesVectorOutput,
             HasParameterlessConstructor = hasParameterlessCtor,
             HasArchitectureOnlyConstructor = hasArchitectureOnlyCtor,
+            HasVectorOnlyConstructor = hasVectorOnlyCtor,
             InheritsFromExcludedBase = InheritsFromAnyExcludedBase(modelClass),
             RequestsFloatScaffold = HasFloatScaffoldAttribute(modelClass),
             ArchitectureParamTypeName = architectureParamTypeName,
@@ -3437,6 +3492,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Fallback: metadata name check if symbol resolution failed
         return originalDef.MetadataName == "NeuralNetworkArchitecture`1" &&
                originalDef.ContainingNamespace.ToDisplayString() == "AiDotNet.NeuralNetworks";
+    }
+
+    /// <summary>Checks whether a constructor parameter is exactly Vector&lt;T&gt;.</summary>
+    private static bool IsExactlyVector(ITypeSymbol type)
+    {
+        if (type is not INamedTypeSymbol { IsGenericType: true } namedType)
+            return false;
+
+        var originalDef = namedType.OriginalDefinition;
+        return originalDef.MetadataName == "Vector`1"
+            && originalDef.ContainingNamespace.ToDisplayString() == "AiDotNet.Tensors.LinearAlgebra";
     }
 
     /// <summary>
@@ -5859,7 +5925,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // through the public native constructor at CI-smoke scale.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "modelSize: AiDotNet.Audio.AudioGen.AudioGenModelSize.Medium, " +
                     "sampleRate: 8000, durationSeconds: 0.1, maxDurationSeconds: 0.1, " +
@@ -10670,6 +10736,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 3))";
             }
+            else if (model.HasVectorOnlyConstructor && model.TypeParameterCount == 1)
+            {
+                // A coefficient-backed regression model is only meaningful when its coefficient width
+                // matches the generated fixture's three input features. Supplying that public constructor
+                // argument keeps every strict invariant active without a serialization-only empty model.
+                constructorExpr = $"new {typeName}<double>(" +
+                    "new AiDotNet.Tensors.LinearAlgebra.Vector<double>(3))";
+            }
             // These models expose convenient parameterless constructors that intentionally build their
             // paper/default scale. Do not let the generic fallback shadow their explicit CI-smoke branches
             // below. Production behavior is unchanged; only generated fixtures use the bounded constructors.
@@ -11105,9 +11179,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // model.HasArchitectureOnlyConstructor (and canConstruct) only when
                 // IsExactlyArchitecture is true.
                 string archTypeName = "NeuralNetworkArchitecture<double>";
+                string taskTypeExpr = model.Tasks.Contains(TaskGeneration)
+                    ? "AiDotNet.Enums.NeuralNetworkTaskType.Generative"
+                    : "AiDotNet.Enums.NeuralNetworkTaskType.Regression";
                 string archExpr = $"new {archTypeName}(" +
                     $"inputType: {inputTypeExpr}, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    $"taskType: {taskTypeExpr}, " +
                     $"{sizeExpr})";
 
                 // Paper-scale language models (Griffin/Hawk/RecurrentGemma) default to a 256k
@@ -13561,15 +13638,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // PR #1789 / issue #1933 timeout ladder, rung 2: RecurrentGemma was already
             // emitted in FP32 (rung 1), but both the multi-update training invariant and
             // the sampled finite-difference invariant still exceeded the 120-second gate.
-            // Cap the repeated work before considering rung 3 (shrinking the fixture): five
-            // training/memorization iterations and one finite-difference coordinate still exercise
-            // the real optimizer and analytical-vs-numerical gradient paths. The full-class run
-            // later proved the cap insufficient and activated the constructor shrink above; retain
-            // these caps so the smaller fixture does not spend its budget repeating the same probe.
+            // Cap the repeated work before considering rung 3 (shrinking the fixture). Five ordinary
+            // training iterations and one finite-difference coordinate exercise the real optimizer
+            // and analytical-vs-numerical gradient paths. The deterministic memorization trajectory,
+            // however, needs twelve updates to clear the unchanged strict 1% improvement threshold;
+            // its smoke-scale fixture completes that stronger probe in only a few seconds.
             if (model.ClassName == "RecurrentGemmaLanguageModel")
             {
                 sb.AppendLine("    protected override int TrainingIterations => 5;");
-                sb.AppendLine("    protected override int MemorizationTaskIterations => 5;");
+                sb.AppendLine("    protected override int MemorizationTaskIterations => 12;");
                 sb.AppendLine("    protected override int GradientCheckSampleCount => 1;");
             }
 
@@ -14709,6 +14786,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             sb.AppendLine(factoryBody);
         }
+        if (model.HasVectorOnlyConstructor)
+        {
+            string featureWidthConstructor = constructorExpr
+                .Replace("Vector<double>(3)", "Vector<double>(featureCount)")
+                .Replace("Vector<float>(3)", "Vector<float>(featureCount)");
+            sb.AppendLine();
+            sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}(int featureCount)");
+            sb.AppendLine($"        => {featureWidthConstructor};");
+        }
         if (model.ClassName == "StableVideoSR")
         {
             // A deterministic, allocation-bounded 1024-wide conditioner keeps the generated fixture
@@ -15499,9 +15585,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     continue;
                 }
 
-                // Skip if no accessible constructor
+                // Skip if no accessible constructor -- but say so. This was a bare continue, and a
+                // silent skip is indistinguishable from coverage: the layer did not fail, was not
+                // counted as untested, and appeared nowhere as missing.
                 if (!layer.HasParameterlessConstructor && string.IsNullOrEmpty(layer.TestConstructorArgs))
+                {
+                    // Reported with whatever location exists, NOT gated on having one. This loop
+                    // runs in the TEST project, where layers arrive from the referenced assembly and
+                    // carry no source location -- so gating on a location silenced the diagnostic
+                    // everywhere it could actually fire, which is how the first version of it
+                    // reported zero. The message names the class, which is enough to find it.
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        UnscaffoldableLayer,
+                        layer.DeclarationLocation ?? Location.None,
+                        layer.ClassName));
                     continue;
+                }
 
                 var testClassName = StripBacktick(layer.ClassName) + "Tests";
                 if (!generatedNames.Add(testClassName))
@@ -15543,6 +15642,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool isTrainable = true, hasTrainingMode = false, changesShape = false, isStateful = false;
         bool supportsBackprop = true, normalizesInput = false, usesSurrogateGradient = false;
         bool producesNonFiniteOutput = false;
+        bool requiresDoublePrecisionGradients = false;
         bool trainsViaCustomLoss = false;
         int apiShape = LayerApiShapeSingleTensor;
         string testInputShape = "";
@@ -15552,6 +15652,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         foreach (var attr in symbol.GetAttributes())
         {
             if (attr.AttributeClass is null) continue;
+            if (attr.AttributeClass.Name == "GenerateDoubleTestScaffoldAttribute")
+            {
+                requiresDoublePrecisionGradients = true;
+                continue;
+            }
+
             if (!attr.AttributeClass.ToDisplayString().EndsWith("LayerPropertyAttribute", System.StringComparison.Ordinal))
                 continue;
 
@@ -15610,6 +15716,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             FullyQualifiedName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
             TypeParameterCount = symbol.TypeParameters.Length,
             HasParameterlessConstructor = hasParameterlessCtor,
+            DeclarationLocation = symbol.Locations.FirstOrDefault(location => location.IsInSource),
             IsTrainable = isTrainable,
             SupportsBackpropagation = supportsBackprop,
             HasTrainingMode = hasTrainingMode,
@@ -15622,7 +15729,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             NormalizesInput = normalizesInput,
             UsesSurrogateGradient = usesSurrogateGradient,
             ProducesNonFiniteOutput = producesNonFiniteOutput,
-            TrainsViaCustomLoss = trainsViaCustomLoss
+            TrainsViaCustomLoss = trainsViaCustomLoss,
+            RequiresDoublePrecisionGradients = requiresDoublePrecisionGradients
         };
     }
 
@@ -15690,6 +15798,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         string testClassName)
     {
         var typeName = GeneratorHelpers.StripGenericSuffix(layer.FullyQualifiedName);
+        string numericType = layer.RequiresDoublePrecisionGradients ? "double" : "float";
         string constructorArgs = string.IsNullOrEmpty(layer.TestConstructorArgs) ? "" : layer.TestConstructorArgs;
         if (layer.ClassName == "DepthwiseSeparableConvolutionalLayer")
         {
@@ -15698,13 +15807,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // the negative ReLU half-space and falsely report identical zeros.
             // Use identity only in the generated fixture so the invariant tests
             // the depthwise/pointwise convolution rather than activation clipping.
-            constructorArgs = "2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<float>)new AiDotNet.ActivationFunctions.IdentityActivation<float>()";
+            constructorArgs =
+                $"2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<{numericType}>)" +
+                $"new AiDotNet.ActivationFunctions.IdentityActivation<{numericType}>()";
         }
-        else
+        else if (numericType == "float")
         {
             constructorArgs = GeneratedTestFloatify.Floatify(constructorArgs);
         }
-        string constructorExpr = $"new {typeName}<float>({constructorArgs})";
+        string constructorExpr = $"new {typeName}<{numericType}>({constructorArgs})";
 
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -15725,10 +15836,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // compile time if it drifts, instead of the old pattern of two
         // strings-in-lockstep that could silently diverge. See issue #1166.
         sb.AppendLine("[Collection(global::AiDotNet.Tests.Fixtures.LayerSerializationCollection.Name)]");
-        sb.AppendLine($"public class {testClassName} : LayerTestBase<float>");
+        sb.AppendLine($"public class {testClassName} : LayerTestBase<{numericType}>");
         sb.AppendLine("{");
         sb.AppendLine($"    public {testClassName}() => global::AiDotNet.Tests.Helpers.GeneratedTestTrace.Record(typeof({testClassName}));");
-        sb.AppendLine($"    protected override ILayer<float> CreateLayer()");
+        sb.AppendLine($"    protected override ILayer<{numericType}> CreateLayer()");
         sb.AppendLine($"        => {constructorExpr};");
 
         // Override InputShape if specified
@@ -16003,6 +16114,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public bool UsesSurrogateGradient { get; set; }
         public bool ProducesNonFiniteOutput { get; set; }
         public bool TrainsViaCustomLoss { get; set; }
+        public bool RequiresDoublePrecisionGradients { get; set; }
+
+        /// <summary>Where the layer is declared, or null when it came from a referenced assembly.</summary>
+        /// <remarks>
+        /// Gates the AIDN046 report. A layer discovered in a referenced assembly cannot be annotated
+        /// from this compilation, so warning about it would be noise nobody here can act on.
+        /// </remarks>
+        public Location? DeclarationLocation { get; set; }
     }
 
     /// <summary>
@@ -16712,6 +16831,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         /// When true, the generator can emit a default architecture to construct the model.
         /// </summary>
         public bool HasArchitectureOnlyConstructor { get; set; }
+
+        /// <summary>
+        /// Whether the model has a public constructor whose only required parameter is Vector&lt;T&gt;.
+        /// The generated regression fixture supplies a vector matching its three input features.
+        /// </summary>
+        public bool HasVectorOnlyConstructor { get; set; }
+
         /// <summary>
         /// The fully-qualified display name of the architecture parameter type (e.g.,
         /// "AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture&lt;double&gt;").

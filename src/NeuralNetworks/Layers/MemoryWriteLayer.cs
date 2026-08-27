@@ -153,6 +153,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
     /// This field stores the input tensor from the most recent forward pass, which is needed
     /// during the backward pass for gradient calculation.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -162,6 +163,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
     /// This field stores the memory tensor from the most recent forward pass, which is needed
     /// during the backward pass for gradient calculation.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastMemory;
 
     /// <summary>
@@ -171,6 +173,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
     /// This field stores the output tensor from the most recent forward pass, which is needed
     /// during the backward pass for gradient calculation.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -180,6 +183,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
     /// This field stores the attention scores from the most recent forward pass, which is needed
     /// during the backward pass for gradient calculation.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastAttentionScores;
 
     /// <summary>
@@ -189,6 +193,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
     /// This field stores the write values tensor computed from attention weights, which can be used
     /// when updating memory or computing auxiliary objectives.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastWriteValues;
 
     /// <summary>
@@ -197,6 +202,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
     /// <remarks>
     /// This field stores the input values after value projection, which are used for output gradients.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastValues;
 
     /// <summary>
@@ -206,6 +212,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
     /// This field stores the gradient of the query weights, which is used to update the weights
     /// during the parameter update step.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _queryWeightsGradient;
 
     /// <summary>
@@ -215,6 +222,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
     /// This field stores the gradient of the key weights, which is used to update the weights
     /// during the parameter update step.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _keyWeightsGradient;
 
     /// <summary>
@@ -224,6 +232,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
     /// This field stores the gradient of the value weights, which is used to update the weights
     /// during the parameter update step.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _valueWeightsGradient;
 
     /// <summary>
@@ -233,6 +242,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
     /// This field stores the gradient of the output weights, which is used to update the weights
     /// during the parameter update step.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _outputWeightsGradient;
 
     /// <summary>
@@ -242,6 +252,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
     /// This field stores the gradient of the output bias, which is used to update the bias
     /// during the parameter update step.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _outputBiasGradient;
 
     public override bool SupportsTraining => true;

@@ -204,6 +204,7 @@ public partial class PoolingLayer<T> : LayerBase<T>, IShapeContract
     /// This field stores the input tensor from the most recent forward pass, which is needed
     /// during the backward pass for gradient calculation.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>

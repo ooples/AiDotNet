@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Conditional Generative Adversarial Nets", "https://arxiv.org/abs/1411.1784", Year = 2014, Authors = "Mehdi Mirza, Simon Osindero")]
-public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
+public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
 {
     private readonly ConditionalGANOptions _options;
 
@@ -880,60 +880,7 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         };
     }
 
-    /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        base.SerializeNetworkSpecificData(writer);
-        writer.Write(_numConditionClasses);
-    }
 
-    /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        base.DeserializeNetworkSpecificData(reader);
-        _numConditionClasses = reader.ReadInt32();
 
-        // The generator architecture is already the full [noise | condition]
-        // width. Reconstruct only the original discriminator architecture by
-        // subtracting the condition dimensions so CreateNewInstance() does not
-        // expand it a second time.
-        _originalGeneratorArchitecture = Generator.Architecture;
 
-        var discArch = Discriminator.Architecture;
-        int origInputSize = discArch.InputSize > 0
-            ? discArch.InputSize - _numConditionClasses
-            : 0;
-        int origInputDepth = (discArch.InputHeight > 0 && discArch.InputWidth > 0)
-            ? discArch.InputDepth - _numConditionClasses
-            : discArch.InputDepth;
-
-        _originalDiscriminatorArchitecture = new NeuralNetworkArchitecture<T>(
-            inputType: discArch.InputType,
-            taskType: discArch.TaskType,
-            complexity: discArch.Complexity,
-            inputSize: origInputSize,
-            inputHeight: discArch.InputHeight,
-            inputWidth: discArch.InputWidth,
-            inputDepth: origInputDepth,
-            outputSize: discArch.OutputSize,
-            layers: discArch.Layers);
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Use the stored architectures to avoid double-conditioning. The
-        // generator is stored at its full [noise | condition] width, while the
-        // discriminator is stored before conditioning because its helper expands
-        // it again in the constructor.
-        return new ConditionalGAN<T>(
-            _originalGeneratorArchitecture ?? Generator.Architecture,
-            _originalDiscriminatorArchitecture ?? Discriminator.Architecture,
-            _numConditionClasses,
-            Architecture.InputType,
-            null,
-            null,
-            null,
-            _options);
-    }
 }

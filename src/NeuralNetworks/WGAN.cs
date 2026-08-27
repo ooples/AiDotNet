@@ -646,68 +646,10 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_weightClipValue);
-        writer.Write(_criticIterations);
 
-        // Serialize loss histories
-        writer.Write(_generatorLosses.Count);
-        foreach (var loss in _generatorLosses)
-            writer.Write(NumOps.ToDouble(loss));
-
-        writer.Write(_criticLosses.Count);
-        foreach (var loss in _criticLosses)
-            writer.Write(NumOps.ToDouble(loss));
-
-        var generatorBytes = Generator.Serialize();
-        writer.Write(generatorBytes.Length);
-        writer.Write(generatorBytes);
-
-        var criticBytes = Critic.Serialize();
-        writer.Write(criticBytes.Length);
-        writer.Write(criticBytes);
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _weightClipValue = reader.ReadDouble();
-        _criticIterations = reader.ReadInt32();
 
-        // Deserialize loss histories
-        _generatorLosses.Clear();
-        int genLossCount = reader.ReadInt32();
-        for (int i = 0; i < genLossCount; i++)
-            _generatorLosses.Add(NumOps.FromDouble(reader.ReadDouble()));
-
-        _criticLosses.Clear();
-        int criticLossCount = reader.ReadInt32();
-        for (int i = 0; i < criticLossCount; i++)
-            _criticLosses.Add(NumOps.FromDouble(reader.ReadDouble()));
-
-        int generatorDataLength = reader.ReadInt32();
-        byte[] generatorData = reader.ReadBytes(generatorDataLength);
-        Generator.Deserialize(generatorData);
-
-        int criticDataLength = reader.ReadInt32();
-        byte[] criticData = reader.ReadBytes(criticDataLength);
-        Critic.Deserialize(criticData);
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new WGAN<T>(
-            Generator.Architecture,
-            Critic.Architecture,
-            Architecture.InputType,
-            null, // Use default optimizer
-            null, // Use default optimizer
-            _lossFunction,
-            _weightClipValue,
-            _criticIterations);
-    }
 
     // The layer streams this model holds outside Layers are discovered by ModelParameterGenerator and surfaced automatically; the hand-written hook that used to sit here was an override wearing a different name.
 }

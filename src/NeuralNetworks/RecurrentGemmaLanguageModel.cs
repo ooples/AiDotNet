@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("RecurrentGemma: Moving Past Transformers for Efficient Open Language Models", "https://arxiv.org/abs/2404.07839", Year = 2024, Authors = "Aleksandar Botev, Soham De, Samuel L. Smith, Anushan Fernando, George-Cristian Muraru, Ruba Haroun, Leonard Berrada, Razvan Pascanu, Pier Giuseppe Sessa, Robert Dadashi, Leonard Hussenot, Johan Ferret, Sertan Girgin, Olivier Bachem, Alek Andreev, Kathleen Kenealy, Thomas Mesnard, Cassidy Hardin, Surya Bhupatiraju, Shreya Pathak, Laurent Sifre, Morgane Riviere, Mihir Sanjay Kale, Juliette Love, Pouya Tafti, Armand Joulin, Noah Fiedel, Evan Senter, Yutian Chen, Srivatsan Srinivasan, Guillaume Desjardins, David Budden, Arnaud Doucet, Koray Kavukcuoglu, Nando De Freitas")]
-public class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
+public partial class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly RecurrentGemmaOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -225,28 +225,9 @@ public class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_vocabSize);
-        writer.Write(_modelDimension);
-        writer.Write(_numLayers);
-        writer.Write(_maxSeqLength);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new RecurrentGemmaLanguageModel<T>(
-            Architecture, _vocabSize, _modelDimension, _numLayers, _maxSeqLength,
-            LossFunction, _options);
-    }
+
 
     #endregion
 }

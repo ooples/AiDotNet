@@ -51,7 +51,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("The Lottery Ticket Hypothesis: Finding Sparse, Trainable Neural Networks", "https://arxiv.org/abs/1803.03635")]
-public class SparseNeuralNetwork<T> : VectorModelLayoutBase<T>
+public partial class SparseNeuralNetwork<T> : VectorModelLayoutBase<T>
 {
     private readonly SparseNeuralNetworkOptions _options;
 
@@ -430,43 +430,12 @@ public class SparseNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// <summary>
     /// Serializes sparse neural network-specific data to a binary writer.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(NumOps.ToDouble(_sparsity));
-        writer.Write(_optimizer.GetType().FullName ?? "AdamOptimizer");
-        writer.Write(_lossFunction.GetType().FullName ?? "MeanSquaredErrorLoss");
-    }
+
 
     /// <summary>
     /// Deserializes sparse neural network-specific data from a binary reader.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sparsity = NumOps.FromDouble(reader.ReadDouble());
 
-        // Read type names for forward compatibility and validation
-        string optimizerType = reader.ReadString();
-        string lossFunctionType = reader.ReadString();
-
-        // Note: Optimizer and loss function instances should be provided during construction.
-        // The type names are read for data integrity verification but new instances
-        // need to be created via the constructor or a dedicated factory method.
-        _ = optimizerType;
-        _ = lossFunctionType;
-    }
-
-    /// <summary>
-    /// Creates a new instance of the SparseNeuralNetwork with the same configuration.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new SparseNeuralNetwork<T>(
-            Architecture,
-            NumOps.ToDouble(_sparsity),
-            _optimizer,
-            _lossFunction,
-            Convert.ToDouble(MaxGradNorm));
-    }
 
     /// <summary>
     /// Indicates whether this network supports training.

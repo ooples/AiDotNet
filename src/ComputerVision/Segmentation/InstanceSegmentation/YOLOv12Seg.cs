@@ -57,7 +57,7 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("YOLOv12: Attention-Centric Real-Time Object Detectors", "https://arxiv.org/abs/2502.12524", Year = 2025, Authors = "Yunjie Tian, Qixiang Ye, David Doermann")]
-public class YOLOv12Seg<T> : Common.InstanceSegmentationBase<T>
+public partial class YOLOv12Seg<T> : Common.InstanceSegmentationBase<T>
 {
     private readonly YOLOv12SegOptions _options;
     public override ModelOptions GetOptions() => _options;
@@ -313,60 +313,6 @@ public class YOLOv12Seg<T> : Common.InstanceSegmentationBase<T>
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "YOLOv12Seg" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = SerializeForMetadata()
     };
-
-    /// <summary>
-    /// Writes configuration to a binary stream.
-    /// </summary>
-    /// <param name="writer">The binary writer.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Saves model configuration for later reconstruction.
-    /// </para>
-    /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    { writer.Write(_height); writer.Write(_width); writer.Write(_channels); writer.Write(_numClasses); writer.Write((int)_modelSize); writer.Write(_decoderDim); writer.Write(_dropRate); writer.Write(_useNativeMode); writer.Write(_onnxModelPath ?? string.Empty); writer.Write(_encoderLayerEnd); writer.Write(_channelDims.Length); foreach (int d in _channelDims) writer.Write(d); writer.Write(_depths.Length); foreach (int d in _depths) writer.Write(d); }
-
-    /// <summary>
-    /// Reads configuration from a binary stream.
-    /// </summary>
-    /// <param name="reader">The binary reader.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads model configuration when restoring a saved model.
-    /// </para>
-    /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _height = reader.ReadInt32();
-        _width = reader.ReadInt32();
-        _channels = reader.ReadInt32();
-        _numClasses = reader.ReadInt32();
-        _modelSize = (YOLOv12SegModelSize)reader.ReadInt32();
-        _decoderDim = reader.ReadInt32();
-        _dropRate = reader.ReadDouble();
-        _useNativeMode = reader.ReadBoolean();
-        _onnxModelPath = reader.ReadString();
-        _encoderLayerEnd = reader.ReadInt32();
-        int dc = reader.ReadInt32();
-        _channelDims = new int[dc];
-        for (int i = 0; i < dc; i++) _channelDims[i] = reader.ReadInt32();
-        int dd = reader.ReadInt32();
-        _depths = new int[dd];
-        for (int i = 0; i < dd; i++) _depths[i] = reader.ReadInt32();
-    }
-
-    /// <summary>
-    /// Creates a new instance with the same configuration but fresh weights.
-    /// </summary>
-    /// <returns>A new model instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a copy for cross-validation or ensemble training.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() => _useNativeMode
-        ? new YOLOv12Seg<T>(Architecture, Optimizer, LossFunction, _numClasses, _modelSize, _dropRate, _options)
-        : new YOLOv12Seg<T>(Architecture, _onnxModelPath ?? throw new InvalidOperationException("ONNX model path not initialized."), _numClasses, _modelSize, _options);
 
     // Dispose is inherited from SegmentationModelBase, which already disposes the ONNX session.
     // YOLOv12Seg owns no further unmanaged resources.

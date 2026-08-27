@@ -423,26 +423,31 @@ public partial class SpiralConvLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached weight gradients from backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _weightsGradient;
 
     /// <summary>
     /// Cached bias gradients from backward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
     /// Cached input from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Cached pre-activation output from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastPreActivation;
 
     /// <summary>
     /// Cached output from the last forward pass.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastOutput;
 
     /// <summary>
@@ -458,6 +463,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Cached gathered neighbor features for backward pass.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _gatheredFeatures;
 
     #endregion
@@ -1037,37 +1043,6 @@ public partial class SpiralConvLayer<T> : LayerBase<T>, IShapeContract
         return meta;
     }
 
-    /// <summary>
-    /// Creates a deep copy of this layer.
-    /// </summary>
-    /// <returns>A new SpiralConvLayer with identical configuration and parameters.</returns>
-    public override LayerBase<T> Clone()
-    {
-        SpiralConvLayer<T> copy;
-
-        if (UsingVectorActivation)
-        {
-            var vAct = VectorActivation ?? throw new InvalidOperationException(
-                "UsingVectorActivation is true but VectorActivation is null.");
-            copy = new SpiralConvLayer<T>(
-                OutputChannels, SpiralLength, vAct);
-        }
-        else
-        {
-            copy = new SpiralConvLayer<T>(
-                OutputChannels, SpiralLength, ScalarActivation);
-        }
-
-        copy.SetParameters(GetParameters());
-
-        if (_spiralIndices != null)
-        {
-            copy.SetSpiralIndices(_spiralIndices);
-        }
-
-        return copy;
-    }
-
     #endregion
 
     #region State Management
@@ -1088,102 +1063,6 @@ public partial class SpiralConvLayer<T> : LayerBase<T>, IShapeContract
     #endregion
 
     #region Serialization
-
-    /// <summary>
-    /// Serializes the layer to a binary stream.
-    /// </summary>
-    /// <param name="writer">Binary writer for serialization.</param>
-    /// <remarks>
-    /// <para>
-    /// If spiral indices are set, they are serialized along with the layer.
-    /// Otherwise, users must call <see cref="SetSpiralIndices"/> after deserialization.
-    /// </para>
-    /// </remarks>
-    public override void Serialize(BinaryWriter writer)
-    {
-        base.Serialize(writer);
-        writer.Write(InputChannels);
-        writer.Write(OutputChannels);
-        writer.Write(SpiralLength);
-
-        var weightArray = _weights.ToArray();
-        for (int i = 0; i < weightArray.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(weightArray[i]));
-        }
-
-        var biasArray = _biases.ToArray();
-        for (int i = 0; i < biasArray.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(biasArray[i]));
-        }
-
-        // Serialize spiral indices if set
-        bool hasIndices = _spiralIndices != null;
-        writer.Write(hasIndices);
-        if (hasIndices && _spiralIndices != null)
-        {
-            int numVertices = _spiralIndices.GetLength(0);
-            writer.Write(numVertices);
-            for (int v = 0; v < numVertices; v++)
-            {
-                for (int s = 0; s < SpiralLength; s++)
-                {
-                    writer.Write(_spiralIndices[v, s]);
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Deserializes the layer from a binary stream.
-    /// </summary>
-    /// <param name="reader">Binary reader for deserialization.</param>
-    /// <remarks>
-    /// <para>
-    /// If spiral indices were serialized with the layer, they are restored automatically.
-    /// Otherwise, users must call <see cref="SetSpiralIndices"/> before calling Forward.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(BinaryReader reader)
-    {
-        base.Deserialize(reader);
-        InputChannels = reader.ReadInt32();
-        OutputChannels = reader.ReadInt32();
-        SpiralLength = reader.ReadInt32();
-
-        int weightSize = InputChannels * SpiralLength;
-        _weights = new Tensor<T>([OutputChannels, weightSize]);
-        var weightArray = new T[_weights.Length];
-        for (int i = 0; i < weightArray.Length; i++)
-        {
-            weightArray[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        _weights = new Tensor<T>(weightArray, _weights._shape);
-
-        _biases = new Tensor<T>([OutputChannels]);
-        var biasArray = new T[_biases.Length];
-        for (int i = 0; i < biasArray.Length; i++)
-        {
-            biasArray[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        _biases = new Tensor<T>(biasArray, _biases._shape);
-
-        // Deserialize spiral indices if present
-        bool hasIndices = reader.ReadBoolean();
-        if (hasIndices)
-        {
-            int numVertices = reader.ReadInt32();
-            _spiralIndices = new int[numVertices, SpiralLength];
-            for (int v = 0; v < numVertices; v++)
-            {
-                for (int s = 0; s < SpiralLength; s++)
-                {
-                    _spiralIndices[v, s] = reader.ReadInt32();
-                }
-            }
-        }
-    }
 
     #endregion
 

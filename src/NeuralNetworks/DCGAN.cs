@@ -54,7 +54,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Unsupervised Representation Learning with Deep Convolutional Generative Adversarial Networks", "https://arxiv.org/abs/1511.06434", Year = 2016, Authors = "Alec Radford, Luke Metz, Soumith Chintala")]
-public class DCGAN<T> : GenerativeAdversarialNetwork<T>
+public partial class DCGAN<T> : GenerativeAdversarialNetwork<T>
 {
     private readonly DCGANOptions _options;
     private readonly int _latentSize;
@@ -196,36 +196,6 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
         // objective, inserting that extra optimizer step made the first DCGAN update
         // non-finite on the tensor tape. Callers who intentionally want the later
         // regularizer can still opt in explicitly through EnableGradientPenalty().
-    }
-
-    /// <summary>
-    /// Constructs a fresh DCGAN with the same paper-faithful hyperparameters
-    /// so Clone / DeepCopy produces a deep-independent network whose layer
-    /// list isn't shared with the original. The base
-    /// <see cref="GenerativeAdversarialNetwork{T}.CreateNewInstance"/> passes
-    /// the existing <c>Generator.Architecture</c> and
-    /// <c>Discriminator.Architecture</c> straight through to the GAN ctor,
-    /// which wraps them in fresh
-    /// <see cref="ConvolutionalNeuralNetwork{T}"/> shells whose
-    /// <c>InitializeLayers</c> calls <c>ValidateCustomLayers</c> against
-    /// layer instances that already had their shape state resolved by the
-    /// original network's forward pass — and that validation rejects the
-    /// resolved shape chain. Going through DCGAN's own ctor instead rebuilds
-    /// both architectures (and their layer lists) from scratch.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Pass the current LossFunction through so cloning a model trained
-        // with a custom objective doesn't silently downgrade to the default.
-        return new DCGAN<T>(
-            _latentSize,
-            _imageChannels,
-            _imageHeight,
-            _imageWidth,
-            _generatorFeatureMaps,
-            _discriminatorFeatureMaps,
-            lossFunction: LossFunction,
-            options: _options);
     }
 
     /// <summary>

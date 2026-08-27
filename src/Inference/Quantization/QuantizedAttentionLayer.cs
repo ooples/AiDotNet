@@ -68,6 +68,16 @@ internal sealed partial class QuantizedAttentionLayer : LayerBase<float>, IShape
     private readonly RotaryPositionalEncodingLayer<float>? _ropeLayer;
     private readonly ALiBiPositionalBiasLayer<float>? _alibiLayer;
 
+    /// <summary>Construction state: the 'source' the layer was built with.</summary>
+    // The quantized projections own the inference weights after construction. These references
+    // are provenance only; traversing them as child layers would expose the original full-precision
+    // attention weights through an inference-only layer whose parameter contract is intentionally 0.
+    [ExternalState]
+    private readonly AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<float> _source = null!;
+    // The two constructors take different source layer types, which cannot share one field.
+    [ExternalState]
+    private readonly AiDotNet.NeuralNetworks.Layers.GroupedQueryAttentionLayer<float> _sourceGrouped = null!;
+
     /// <summary>
     /// Creates a quantized attention layer from a trained <see cref="MultiHeadAttentionLayer{T}"/>.
     /// </summary>
@@ -80,6 +90,7 @@ internal sealed partial class QuantizedAttentionLayer : LayerBase<float>, IShape
             inputShape: source.GetInputShape(),
             outputShape: source.GetOutputShape())
     {
+        _source = source;
         _headCount = source.HeadCount;
         _embeddingDimension = source.GetInputShape()[^1];
         _headDimension = _embeddingDimension / _headCount;
@@ -110,12 +121,15 @@ internal sealed partial class QuantizedAttentionLayer : LayerBase<float>, IShape
     /// <param name="source">The source GQA layer to quantize.</param>
     /// <param name="mode">The quantization format to use (default: INT8).</param>
     public QuantizedAttentionLayer(
+        // Not [LayerState]: this layer is non-generic, and ADN0055 reports that the factory only
+        // builds layers with one type parameter, so marking its arguments cannot produce one.
         GroupedQueryAttentionLayer<float> source,
         InferenceQuantizationMode mode = InferenceQuantizationMode.WeightOnlyInt8)
         : base(
             inputShape: source.GetInputShape(),
             outputShape: source.GetOutputShape())
     {
+        _sourceGrouped = source;
         _headCount = source.NumHeads;
         _numKVHeads = source.NumKVHeads;
         _headDimension = source.HeadDimension;

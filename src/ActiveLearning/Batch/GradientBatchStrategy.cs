@@ -49,6 +49,7 @@ public class GradientBatchStrategy<T, TInput, TOutput> : IGradientBatchStrategy<
 
     private readonly bool _useHypotheticalGradients;
     private T _diversityTradeoff;
+    [Scratch]
     private Matrix<T>? _cachedEmbeddings;
 
     /// <inheritdoc/>

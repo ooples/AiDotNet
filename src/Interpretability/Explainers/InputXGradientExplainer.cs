@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
 using AiDotNet.LinearAlgebra;
@@ -48,6 +49,7 @@ public class InputXGradientExplainer<T> : ILocalExplainer<T, InputXGradientExpla
 
     private readonly INeuralNetwork<T>? _network;
     private readonly Func<Vector<T>, Vector<T>>? _predictFunction;
+    [Scratch]
     private readonly Func<Vector<T>, int, Vector<T>>? _gradientFunction;
     private readonly int _numFeatures;
     private readonly string[]? _featureNames;

@@ -146,18 +146,6 @@ public partial class StreamingT2VModel<T> : VideoDiffusionModelBase<T>
 
 
 
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    public override IDiffusionModel<T> Clone()
-    {
-                return new StreamingT2VModel<T>(
-            predictor: (VideoUNetPredictor<T>)_predictor.Clone(),
-            temporalVAE: (TemporalVAE<T>)_temporalVAE.Clone(),
-            conditioner: _conditioner,
-            defaultNumFrames: DefaultNumFrames,
-            defaultFPS: DefaultFPS);
-    }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

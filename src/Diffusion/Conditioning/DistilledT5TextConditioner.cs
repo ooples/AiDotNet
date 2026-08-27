@@ -68,9 +68,6 @@ public class DistilledT5TextConditioner<T> : TextConditioningBase<T>
             numLayers: GetNumLayers(_variant),
             numHeads: GetNumHeads(_variant));
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new DistilledT5TextConditioner<T>(Tokenizer, _variant, Architecture);
-
     private static NeuralNetworkArchitecture<T> BuildDefaultArchitecture(DistilledT5Variant variant) =>
         new NeuralNetworkArchitecture<T>(
             inputType: InputType.TwoDimensional,

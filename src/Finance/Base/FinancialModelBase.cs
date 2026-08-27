@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Finance.Interfaces;
@@ -722,18 +722,7 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
     /// before allowing derived classes to store their own settings.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        if (!UseNativeMode)
-            throw new InvalidOperationException("Serialization is not supported in ONNX mode.");
 
-        writer.Write(SequenceLength);
-        writer.Write(PredictionHorizon);
-        writer.Write(NumFeatures);
-
-        // Derived classes add their own data via override
-        SerializeModelSpecificData(writer);
-    }
 
     /// <inheritdoc/>
     /// <remarks>
@@ -742,19 +731,7 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
     /// then lets derived classes restore their extra settings.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        if (!UseNativeMode)
-            throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
 
-        // Read configuration
-        _baseSequenceLength = reader.ReadInt32();
-        _basePredictionHorizon = reader.ReadInt32();
-        _baseNumFeatures = reader.ReadInt32();
-
-        // Derived classes read their own data via override
-        DeserializeModelSpecificData(reader);
-    }
 
     /// <summary>
     /// Serializes model-specific data. Override in derived classes.

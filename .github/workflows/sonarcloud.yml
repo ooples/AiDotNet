@@ -40,7 +40,10 @@ concurrency:
   # Keep only the newest run for a PR, merge-group ref, or protected branch. A master push
   # normally reuses its exact-tree PR artifacts, so it no longer queues another test matrix.
   group: build-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # A synchronize event captured while a PR was still a draft can be delivered after the
+  # ready_for_review run has started. Its job-level draft gates intentionally skip validation,
+  # so it must never cancel the real ready run and replace it with an all-skipped check suite.
+  cancel-in-progress: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft != true }}
 
 env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
@@ -980,10 +983,10 @@ jobs:
           - name: ModelFamily - Generated Layers R2-SAI
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            # 23 classes, 11.0 min. Heaviest: RWKV4LanguageModel 1.6m, RoomImpulseResponse 1.5m.
+            # 24 classes, 11.0 min. Heaviest: RWKV4LanguageModel 1.6m, RoomImpulseResponse 1.5m.
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.RP|FullyQualifiedName~Generated.RR|FullyQualifiedName~Generated.RS|FullyQualifiedName~Generated.RT|FullyQualifiedName~Generated.RV|FullyQualifiedName~Generated.RW|FullyQualifiedName~Generated.RoM|FullyQualifiedName~Generated.Robu|FullyQualifiedName~Generated.Rod|FullyQualifiedName~Generated.Roo|FullyQualifiedName~Generated.Rot|FullyQualifiedName~Generated.S4|FullyQualifiedName~Generated.S5|FullyQualifiedName~Generated.SAC|FullyQualifiedName~Generated.SAI)
+              (FullyQualifiedName~Generated.RP|FullyQualifiedName~Generated.RR|FullyQualifiedName~Generated.RS|FullyQualifiedName~Generated.RT|FullyQualifiedName~Generated.RV|FullyQualifiedName~Generated.RW|FullyQualifiedName~Generated.RoM|FullyQualifiedName~Generated.Robu|FullyQualifiedName~Generated.Rod|FullyQualifiedName~Generated.Roo|FullyQualifiedName~Generated.Rot|FullyQualifiedName~Generated.Row|FullyQualifiedName~Generated.S4|FullyQualifiedName~Generated.S5|FullyQualifiedName~Generated.SAC|FullyQualifiedName~Generated.SAI)
           - name: ModelFamily - Generated Layers SAL-SAM
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
@@ -1067,7 +1070,7 @@ jobs:
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              (FullyQualifiedName~Generated.VA|FullyQualifiedName~Generated.Va|FullyQualifiedName~Generated.VF)
+              (FullyQualifiedName~Generated.VA|FullyQualifiedName~Generated.Va|FullyQualifiedName~Generated.Ve|FullyQualifiedName~Generated.VF)
           - name: ModelFamily - Generated Layers Video
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0

@@ -57,7 +57,7 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2022,
     Authors = "Kim et al."
 )]
-public class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
+public partial class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly DonutOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -296,54 +296,9 @@ public class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.ImageSize);
-        writer.Write(_options.VisionDim);
-        writer.Write(_options.DecoderDim);
-        writer.Write(_options.NumVisionLayers);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.NumHeads);
-        writer.Write(_options.IsOcrFree);
-        writer.Write(_options.MaxOutputTokens);
-        writer.Write(_options.EncoderType ?? string.Empty);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.ImageSize = reader.ReadInt32();
-        _options.VisionDim = reader.ReadInt32();
-        _options.DecoderDim = reader.ReadInt32();
-        _options.NumVisionLayers = reader.ReadInt32();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.NumHeads = reader.ReadInt32();
-        _options.IsOcrFree = reader.ReadBoolean();
-        _options.MaxOutputTokens = reader.ReadInt32();
-        _options.EncoderType = reader.ReadString();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-        {
-            // Release any existing session before replacing it so repeated
-            // deserialize / clone round-trips don't leak native ONNX resources.
-            OnnxModel?.Dispose();
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        }
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        // Copy the options so the new instance doesn't share — and mutate, via its
-        // deserialize path — the source instance's options object.
-        var optionsCopy = new DonutOptions(_options);
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new Donut<T>(Architecture, mp, optionsCopy);
-        return new Donut<T>(Architecture, optionsCopy);
-    }
+
 
     private void ThrowIfDisposed()
     {

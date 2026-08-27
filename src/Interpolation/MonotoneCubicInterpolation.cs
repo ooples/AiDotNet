@@ -15,7 +15,7 @@ namespace AiDotNet.Interpolation;
 /// It's particularly useful when you know your data should never "change direction" between points.
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class MonotoneCubicInterpolation<T> : IInterpolation<T>
+public partial class MonotoneCubicInterpolation<T> : IInterpolation<T>
 {
     /// <summary>
     /// The x-coordinates of the known data points.
@@ -35,6 +35,7 @@ public class MonotoneCubicInterpolation<T> : IInterpolation<T>
     /// at that exact point. These slopes are carefully calculated to make sure our curve remains
     /// smooth but doesn't create unwanted oscillations.
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _m;
 
     /// <summary>

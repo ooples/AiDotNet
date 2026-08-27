@@ -66,7 +66,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
     Authors = "Alex Nichol, Joshua Achiam, John Schulman")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
+public partial class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
     private readonly ReptileOptions<T, TInput, TOutput> _reptileOptions;
 

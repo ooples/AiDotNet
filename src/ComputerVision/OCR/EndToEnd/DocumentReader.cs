@@ -408,10 +408,6 @@ public partial class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         return copy;
     }
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-        => (DocumentReader<T>)MemberwiseClone();
-
     #endregion
 }
 

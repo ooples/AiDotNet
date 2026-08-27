@@ -26,7 +26,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Bark: Text-Prompted Generative Audio Model", "https://github.com/suno-ai/bark")]
-public class Bark<T> : BarkModel<T>, ICodecTts<T>
+public partial class Bark<T> : BarkModel<T>, ICodecTts<T>
 {
     private readonly ITokenizer? _configuredTokenizer;
     private ITokenizer? _loadedTokenizer;
@@ -117,13 +117,6 @@ public class Bark<T> : BarkModel<T>, ICodecTts<T>
 
     protected override Tensor<T> PreprocessText(string text)
         => ToTokenTensorForFacade(Tokenize(text));
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new Bark<T>(
-            Architecture,
-            BarkConfiguration,
-            CreateCodecForNewInstance(),
-            _configuredTokenizer ?? _loadedTokenizer);
 
     private IReadOnlyList<int> Tokenize(string text)
     {

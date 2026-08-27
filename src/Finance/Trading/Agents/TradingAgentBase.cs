@@ -44,7 +44,7 @@ namespace AiDotNet.Finance.Trading.Agents;
 /// 6. Repeat thousands of times until convergence
 /// </para>
 /// </remarks>
-public abstract class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, ITradingAgent<T>
+public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBase<T>, ITradingAgent<T>
 {
     #region Fields
 

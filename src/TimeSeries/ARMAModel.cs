@@ -74,6 +74,7 @@ public partial class ARMAModel<T> : TimeSeriesModelBase<T>
     /// 
     /// These values are determined during training to best fit your historical data.
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _arCoefficients;
 
     /// <summary>
@@ -87,6 +88,7 @@ public partial class ARMAModel<T> : TimeSeriesModelBase<T>
     /// 
     /// These values are determined during training to best fit your historical data.
     /// </remarks>
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _maCoefficients;
 
     /// <summary>
@@ -510,35 +512,7 @@ public partial class ARMAModel<T> : TimeSeriesModelBase<T>
     /// 
     /// This allows the model to be fully reconstructed later.
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        writer.Write(_arOrder);
-        writer.Write(_maOrder);
-        for (int i = 0; i < _arOrder; i++)
-        {
-            writer.Write(Convert.ToDouble(_arCoefficients[i]));
-        }
-        for (int i = 0; i < _maOrder; i++)
-        {
-            writer.Write(Convert.ToDouble(_maCoefficients[i]));
-        }
 
-        // Serialize training state for in-sample prediction support
-        writer.Write(_trainedSeries.Length);
-        for (int i = 0; i < _trainedSeries.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_trainedSeries[i]));
-        }
-
-        writer.Write(_trainedResiduals.Length);
-        for (int i = 0; i < _trainedResiduals.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(_trainedResiduals[i]));
-        }
-
-        // Serialize series mean for centered prediction
-        writer.Write(Convert.ToDouble(_seriesMean));
-    }
 
     /// <summary>
     /// Deserializes the model's state from a binary stream.
@@ -560,54 +534,7 @@ public partial class ARMAModel<T> : TimeSeriesModelBase<T>
     /// 
     /// After deserialization, the model is ready to make predictions as if it had just been trained.
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        _arOrder = reader.ReadInt32();
-        _maOrder = reader.ReadInt32();
-        _arCoefficients = new Vector<T>(_arOrder);
-        _maCoefficients = new Vector<T>(_maOrder);
-        for (int i = 0; i < _arOrder; i++)
-        {
-            _arCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-        for (int i = 0; i < _maOrder; i++)
-        {
-            _maCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
 
-        // Deserialize training state if available (backward-compatible)
-        _trainedSeries = Vector<T>.Empty();
-        _trainedResiduals = Vector<T>.Empty();
-        try
-        {
-            int seriesLength = reader.ReadInt32();
-            if (seriesLength > 0)
-            {
-                _trainedSeries = new Vector<T>(seriesLength);
-                for (int i = 0; i < seriesLength; i++)
-                {
-                    _trainedSeries[i] = NumOps.FromDouble(reader.ReadDouble());
-                }
-            }
-
-            int residualsLength = reader.ReadInt32();
-            if (residualsLength > 0)
-            {
-                _trainedResiduals = new Vector<T>(residualsLength);
-                for (int i = 0; i < residualsLength; i++)
-                {
-                    _trainedResiduals[i] = NumOps.FromDouble(reader.ReadDouble());
-                }
-            }
-
-            // Deserialize series mean
-            _seriesMean = NumOps.FromDouble(reader.ReadDouble());
-        }
-        catch (EndOfStreamException)
-        {
-            // Older serialized models don't include training state — leave empty
-        }
-    }
 
     /// <summary>
     /// Creates a new instance of the ARMA model with the same options.
@@ -807,77 +734,6 @@ public partial class ARMAModel<T> : TimeSeriesModelBase<T>
         }
 
         return sb.ToString();
-    }
-
-    /// <summary>
-    /// Creates a deep copy of the current model.
-    /// </summary>
-    /// <returns>A new instance of the ARMA model with the same state and parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a complete copy of the model, including its configuration and trained coefficients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates an exact duplicate of your trained model.
-    /// 
-    /// Unlike CreateInstance(), which creates a blank model with the same settings,
-    /// Clone() creates a complete copy including:
-    /// - The model configuration (AR order, MA order, etc.)
-    /// - All trained coefficients and internal state
-    /// 
-    /// This is useful for:
-    /// - Creating a backup before experimenting with a model
-    /// - Using the same trained model in multiple scenarios
-    /// - Creating ensemble models that use variations of the same base model
-    /// 
-    /// Think of it like photocopying a completed notebook - you get all the written content
-    /// as well as the structure of the notebook itself.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new ARMAModel<T>((ARMAOptions<T>)Options);
-
-        // Copy trained coefficients
-        if (_arCoefficients.Length > 0)
-        {
-            clone._arCoefficients = new Vector<T>(_arCoefficients.Length);
-            for (int i = 0; i < _arCoefficients.Length; i++)
-            {
-                clone._arCoefficients[i] = _arCoefficients[i];
-            }
-        }
-
-        if (_maCoefficients.Length > 0)
-        {
-            clone._maCoefficients = new Vector<T>(_maCoefficients.Length);
-            for (int i = 0; i < _maCoefficients.Length; i++)
-            {
-                clone._maCoefficients[i] = _maCoefficients[i];
-            }
-        }
-
-        // Deep copy training state
-        if (_trainedSeries.Length > 0)
-        {
-            clone._trainedSeries = new Vector<T>(_trainedSeries.Length);
-            for (int i = 0; i < _trainedSeries.Length; i++)
-            {
-                clone._trainedSeries[i] = _trainedSeries[i];
-            }
-        }
-
-        if (_trainedResiduals.Length > 0)
-        {
-            clone._trainedResiduals = new Vector<T>(_trainedResiduals.Length);
-            for (int i = 0; i < _trainedResiduals.Length; i++)
-            {
-                clone._trainedResiduals[i] = _trainedResiduals[i];
-            }
-        }
-
-        clone._seriesMean = _seriesMean;
-
-        return clone;
     }
 
     /// <summary>

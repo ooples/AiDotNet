@@ -56,6 +56,7 @@ public class LpNormScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     // Fitted parameters: the Lp-norm of each column
     [JsonProperty]
+    [AiDotNet.Attributes.FittedParameter]
     private Vector<T>? _columnNorms;
     [JsonProperty]
     private int _nColumns;

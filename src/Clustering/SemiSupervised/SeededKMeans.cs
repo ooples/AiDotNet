@@ -60,7 +60,7 @@ namespace AiDotNet.Clustering.SemiSupervised;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Seeded Region Growing", "https://doi.org/10.1109/34.295913", Year = 2000, Authors = "Sugato Basu, Arindam Banerjee, Raymond Mooney")]
-public class SeededKMeans<T> : ClusteringBase<T>
+public partial class SeededKMeans<T> : ClusteringBase<T>
 {
     private readonly SeededKMeansOptions<T> _options;
 
@@ -78,19 +78,6 @@ public class SeededKMeans<T> : ClusteringBase<T>
     }
 
     /// <inheritdoc />
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new SeededKMeans<T>(new SeededKMeansOptions<T>
-        {
-            NumClusters = _options.NumClusters,
-            Seeds = _options.Seeds,
-            ConstrainSeeds = _options.ConstrainSeeds,
-            MaxIterations = _options.MaxIterations,
-            DistanceMetric = _options.DistanceMetric
-        });
-    }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

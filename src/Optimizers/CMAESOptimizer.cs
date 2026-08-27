@@ -25,7 +25,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IDerivativeFreeFunctionOptimizer<T>
+public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IDerivativeFreeFunctionOptimizer<T>
 {
     /// <summary>
     /// The options specific to the CMA-ES optimization algorithm.
@@ -474,70 +474,6 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
     public override OptimizationAlgorithmOptions<T, TInput, TOutput> GetOptions()
     {
         return _options;
-    }
-
-    /// <summary>
-    /// Serializes the current state of the CMA-ES optimizer into a byte array.
-    /// </summary>
-    /// <returns>A byte array representing the serialized state of the optimizer.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method saves the current state of the optimizer into a format
-    /// that can be stored or transmitted. This is useful for saving progress or sharing the optimizer's state.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using MemoryStream ms = new MemoryStream();
-        using BinaryWriter writer = new BinaryWriter(ms);
-
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        string optionsJson = JsonConvert.SerializeObject(_options);
-        writer.Write(optionsJson);
-
-        // Serialize CMA-ES specific data
-        SerializationHelper<T>.SerializeMatrix(writer, _population);
-        SerializationHelper<T>.SerializeVector(writer, _mean);
-        SerializationHelper<T>.SerializeMatrix(writer, _C);
-        SerializationHelper<T>.SerializeVector(writer, _pc);
-        SerializationHelper<T>.SerializeVector(writer, _ps);
-        SerializationHelper<T>.WriteValue(writer, _sigma);
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes a byte array to restore the state of the CMA-ES optimizer.
-    /// </summary>
-    /// <param name="data">The byte array containing the serialized state of the optimizer.</param>
-    /// <exception cref="InvalidOperationException">Thrown when deserialization of optimizer options fails.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method loads a previously saved state of the optimizer.
-    /// It's like restoring a saved game, allowing you to continue from where you left off or use a shared optimizer state.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using MemoryStream ms = new MemoryStream(data);
-        using BinaryReader reader = new BinaryReader(ms);
-
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        string optionsJson = reader.ReadString();
-        _options = JsonConvert.DeserializeObject<CMAESOptimizerOptions<T, TInput, TOutput>>(optionsJson)
-            ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
-
-        // Deserialize CMA-ES specific data
-        _population = SerializationHelper<T>.DeserializeMatrix(reader);
-        _mean = SerializationHelper<T>.DeserializeVector(reader);
-        _C = SerializationHelper<T>.DeserializeMatrix(reader);
-        _pc = SerializationHelper<T>.DeserializeVector(reader);
-        _ps = SerializationHelper<T>.DeserializeVector(reader);
-        _sigma = SerializationHelper<T>.ReadValue(reader);
     }
 
     /// <summary>

@@ -80,7 +80,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
         Direction = TensorLayoutDirection.Input, BatchOptional = true)]
     [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
         Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-    public class DeepRitzMethod<T> : NeuralNetworkBase<T>
+    public partial class DeepRitzMethod<T> : NeuralNetworkBase<T>
     {
         private readonly DeepRitzMethodOptions _options;
 
@@ -493,42 +493,13 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// Serializes Deep Ritz-specific data.
         /// </summary>
         /// <param name="writer">Binary writer.</param>
-        protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-        {
-            writer.Write(_numQuadraturePoints);
-            writer.Write(Architecture.InputSize);
-        }
+
 
         /// <summary>
         /// Deserializes Deep Ritz-specific data.
         /// </summary>
         /// <param name="reader">Binary reader.</param>
-        protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-        {
-            int storedNumPoints = reader.ReadInt32();
-            int storedDimension = reader.ReadInt32();
 
-            if (storedNumPoints != _numQuadraturePoints || storedDimension != Architecture.InputSize)
-            {
-                throw new InvalidOperationException("Serialized Deep Ritz configuration does not match the current instance.");
-            }
-
-            GenerateQuadraturePoints(storedNumPoints, storedDimension);
-        }
-
-        /// <summary>
-        /// Creates a new instance with the same configuration.
-        /// </summary>
-        /// <returns>New Deep Ritz instance.</returns>
-        protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        {
-            return new DeepRitzMethod<T>(
-                Architecture,
-                _energyFunctional,
-                _boundaryCheck,
-                _boundaryValue,
-                _numQuadraturePoints);
-        }
 
         /// <summary>
         /// Indicates whether this model supports training.

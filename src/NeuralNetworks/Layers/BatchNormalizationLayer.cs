@@ -120,6 +120,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// <remarks>
     /// Stored for use in the backward pass.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
@@ -138,6 +139,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// <remarks>
     /// Stored for use in the backward pass.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastMean;
 
     /// <summary>
@@ -146,6 +148,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// <remarks>
     /// Stored for use in the backward pass.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _lastVariance;
 
     /// <summary>
@@ -154,6 +157,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// <remarks>
     /// Computed during the backward pass and used to update gamma.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _gammaGradient;
 
     /// <summary>
@@ -162,9 +166,11 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// <remarks>
     /// Computed during the backward pass and used to update beta.
     /// </remarks>
+    [Scratch]
     private Tensor<T>? _betaGradient;
 
     // GPU-resident cached tensors for GPU training pipeline
+    [Scratch]
     private Tensor<T>? _lastInputGpu;
 
     /// <summary>
@@ -439,6 +445,9 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         _runningVariance = new Tensor<T>([0]);
     }
 
+    /// <summary>Construction state: the 'numFeatures' the layer was built with.</summary>
+    private readonly int _numFeatures;
+
     /// <summary>
     /// AiDotNet#1370 eager-init constructor. Pass <paramref name="numFeatures"/> at
     /// construction (the channel count for image-like inputs OR the feature count
@@ -468,6 +477,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         double momentum = 0.9)
         : base(new[] { numFeatures }, new[] { numFeatures })
     {
+        _numFeatures = numFeatures;
         if (numFeatures <= 0)
             throw new ArgumentOutOfRangeException(nameof(numFeatures),
                 $"numFeatures must be positive, got {numFeatures}.");
@@ -942,9 +952,8 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             var epsilonVec = Tensor<T>.CreateDefault(_runningVariance._shape, _epsilon);
             var variancePlusEps = Engine.TensorAdd(_runningVariance, epsilonVec);
             var stdDev = Engine.TensorSqrt(variancePlusEps);
-            var inferenceScale = Engine.TensorDivide(_gamma, stdDev);
-            var term2 = Engine.TensorDivide(Engine.TensorMultiply(_gamma, _runningMean), stdDev);
-            var inferenceShift = Engine.TensorSubtract(_beta, term2);
+            var (inferenceScale, inferenceShift) =
+                CreateInferenceAffine(_gamma, _beta, _runningMean, stdDev);
 
             // Handle any tensor rank (2D, 3D, 4D, 5D, etc.)
             // Dimension 0 is batch, dimension 1 is features/channels
@@ -965,6 +974,33 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
 
             return result;
         }
+    }
+
+    /// <summary>
+    /// Builds inference affine coefficients without requesting writable access to persistent operands.
+    /// </summary>
+    private (Tensor<T> Scale, Tensor<T> Shift) CreateInferenceAffine(
+        Tensor<T> gamma,
+        Tensor<T> beta,
+        Tensor<T> runningMean,
+        Tensor<T> standardDeviation)
+    {
+        if (!gamma._shape.SequenceEqual(beta._shape)
+            || !gamma._shape.SequenceEqual(runningMean._shape)
+            || !gamma._shape.SequenceEqual(standardDeviation._shape))
+        {
+            throw new ArgumentException(
+                "Batch-normalization affine operands must have identical shapes.");
+        }
+
+        // Keep the affine transform on the active tape. Constructing fresh tensors and filling them
+        // through scalar indexing reproduces the forward values but severs gamma/beta from the graph,
+        // making eval-mode fine tuning and every composite that contains BatchNorm report zero
+        // parameter gradients.
+        var scale = Engine.TensorDivide(gamma, standardDeviation);
+        var shift = Engine.TensorSubtract(beta, Engine.TensorMultiply(scale, runningMean));
+
+        return (scale, shift);
     }
 
     /// <summary>
@@ -1092,6 +1128,25 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     void ILayerSerializationExtras<T>.SetExtraParameters(Vector<T> extraParameters)
     {
         int featureSize = InputShape[0];
+
+        // A layer whose feature count has not resolved yet cannot check anything: InputShape[0] is
+        // the -1 free-axis sentinel, and the arithmetic below turned that into the message
+        // "extra parameters must have length -2 (mean + variance for -1 features), but got 0" --
+        // a demand for a negative number of values, which no caller can satisfy. An empty vector
+        // from an equally unresolved source is not a mismatch, it is two sides agreeing that there
+        // are no running statistics yet, so accept it and leave the buffers alone. This is what
+        // CRNN's clone hit: neither side had run a forward, so neither had statistics.
+        if (featureSize <= 0)
+        {
+            if (extraParameters.Length == 0) return;
+
+            throw new ArgumentException(
+                $"BatchNormalization cannot accept {extraParameters.Length} extra parameters until " +
+                "its feature count is known; the layer's input shape is still unresolved. Run a " +
+                "forward pass, or restore into a layer resolved from the same input shape.",
+                nameof(extraParameters));
+        }
+
         if (extraParameters.Length != featureSize * 2)
             throw new ArgumentException(
                 $"BatchNormalization extra parameters must have length {featureSize * 2} " +
@@ -1125,7 +1180,9 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         base.SetTrainingMode(isTraining);
     }
 
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _gammaVelocity;
+    [AiDotNet.Attributes.Buffer]
     private Tensor<T>? _betaVelocity;
 
     /// <summary>

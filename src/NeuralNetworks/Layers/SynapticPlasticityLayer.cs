@@ -235,6 +235,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
     /// were active in the recent past.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _presynapticTraces;
 
     /// <summary>
@@ -256,6 +257,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
     /// input and output activity, which is crucial for spike-timing-dependent plasticity.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _postsynapticTraces;
 
     /// <summary>
@@ -277,6 +279,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
     /// version of how biological neurons generate electrical impulses when sufficiently activated.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _presynapticSpikes;
 
     /// <summary>
@@ -298,6 +301,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
     /// timing-dependent learning rules.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _postsynapticSpikes;
 
     /// <summary>
@@ -328,11 +332,14 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
 
     public override bool SupportsTraining => true;
 
+    [Scratch]
     private Tensor<T>? _lastInputGpu;
+    [Scratch]
     private Tensor<T>? _lastOutputGpu;
     private Tensor<T>? _presynapticTracesGpu;
     private Tensor<T>? _postsynapticTracesGpu;
     private Tensor<T>? _presynapticSpikesGpu;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _postsynapticSpikesGpu;
 
     /// <inheritdoc/>
@@ -496,6 +503,9 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
         base.Dispose(disposing);
     }
 
+    /// <summary>Construction state: the 'size' the layer was built with.</summary>
+    private readonly int _size;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SynapticPlasticityLayer{T}"/> class.
     /// </summary>
@@ -527,6 +537,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
     public SynapticPlasticityLayer(int size, double stdpLtpRate = 0.005,
         double stdpLtdRate = 0.0025, double homeostasisRate = 0.0001, double minWeight = 0, double maxWeight = 1, double traceDecay = 0.95) : base([size], [size])
     {
+        _size = size;
         // Initialize cached state tensors
         _lastInput = new Tensor<T>([size]);
         _lastInput.Fill(NumOps.Zero);

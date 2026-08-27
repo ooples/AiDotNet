@@ -98,9 +98,11 @@ public partial class SetFeatAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     private readonly SetFeatOptions<T, TInput, TOutput> _setFeatOptions;
 
     /// <summary>Parameters for the set encoder.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _setEncoderParams = new Vector<T>(0);
 
     /// <summary>Parameters for the cross-attention module.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _crossAttentionParams = new Vector<T>(0);
 
     /// <inheritdoc/>

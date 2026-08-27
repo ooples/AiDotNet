@@ -248,69 +248,6 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
 
     #region Serialization
 
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        var classifierTypes = new List<string>();
-        var classifierData = new List<string>();
-        if (_labelClassifiers is not null)
-        {
-            foreach (var clf in _labelClassifiers)
-            {
-                var (typeName, data) = ClassifierRegistry<T>.SerializeClassifier(clf);
-                classifierTypes.Add(typeName);
-                classifierData.Add(data);
-            }
-        }
-
-        var modelDict = new Dictionary<string, object?>
-        {
-            { "NumLabels", NumLabels },
-            { "NumFeatures", NumFeatures },
-            { "NumClasses", NumClasses },
-            { "TaskType", (int)TaskType },
-            { "LabelNames", LabelNames },
-            { "ClassifierTypes", classifierTypes },
-            { "ClassifierData", classifierData }
-        };
-
-        var metadata = GetModelMetadata();
-        metadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelDict));
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(metadata));
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        var jsonString = Encoding.UTF8.GetString(modelData);
-        var metadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString)
-            ?? throw new InvalidOperationException("Failed to deserialize BinaryRelevance: invalid metadata.");
-        if (metadata.ModelData is null)
-            throw new InvalidOperationException("Failed to deserialize BinaryRelevance: missing model data.");
-
-        var dataString = Encoding.UTF8.GetString(metadata.ModelData);
-        var jObj = JsonConvert.DeserializeObject<JObject>(dataString)
-            ?? throw new InvalidOperationException("Failed to deserialize BinaryRelevance: invalid model payload.");
-
-        NumLabels = jObj["NumLabels"]?.ToObject<int>() ?? 0;
-        NumFeatures = jObj["NumFeatures"]?.ToObject<int>() ?? 0;
-        NumClasses = jObj["NumClasses"]?.ToObject<int>() ?? 2;
-        TaskType = (ClassificationTaskType)(jObj["TaskType"]?.ToObject<int>() ?? 0);
-        LabelNames = jObj["LabelNames"]?.ToObject<string[]>();
-
-        var types = jObj["ClassifierTypes"]?.ToObject<string[]>();
-        var data = jObj["ClassifierData"]?.ToObject<string[]>();
-        if (types is null || data is null || types.Length != data.Length)
-            throw new InvalidOperationException(
-                "Failed to deserialize BinaryRelevance: classifier types/data arrays are missing or mismatched.");
-
-        _labelClassifiers = new IClassifier<T>[types.Length];
-        for (int i = 0; i < types.Length; i++)
-        {
-            _labelClassifiers[i] = ClassifierRegistry<T>.DeserializeClassifier(types[i], data[i]);
-        }
-    }
-
     #endregion
 
     #region Abstract Method Implementations
@@ -407,50 +344,6 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
 
             ((IGradientComputable<T, Matrix<T>, Vector<T>>)classifier).ApplyGradients(classifierGradients, learningRate);
         }
-    }
-
-    /// <summary>
-    /// Creates a new instance of this classifier with default configuration.
-    /// </summary>
-    /// <returns>A new BinaryRelevance instance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is used internally for operations like cloning or serialization.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Matrix<T>, Matrix<T>> CreateNewInstance()
-    {
-        return new BinaryRelevance<T>(_classifierFactory, Options, Regularization);
-    }
-
-    /// <summary>
-    /// Creates a deep copy of this classifier.
-    /// </summary>
-    /// <returns>A new instance with the same parameters and state.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Cloning creates an independent copy of the classifier,
-    /// including all its internal label classifiers.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Matrix<T>, Matrix<T>> Clone()
-    {
-        var clone = new BinaryRelevance<T>(_classifierFactory, Options, Regularization);
-        clone.NumLabels = NumLabels;
-        clone.NumFeatures = NumFeatures;
-        clone.NumClasses = NumClasses;
-        clone.TaskType = TaskType;
-
-        if (_labelClassifiers is not null)
-        {
-            clone._labelClassifiers = new IClassifier<T>[_labelClassifiers.Length];
-            for (int i = 0; i < _labelClassifiers.Length; i++)
-            {
-                clone._labelClassifiers[i] = (IClassifier<T>)_labelClassifiers[i].Clone();
-            }
-        }
-
-        return clone;
     }
 
     #endregion

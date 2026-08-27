@@ -105,9 +105,11 @@ public partial class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private readonly DPGNOptions<T, TInput, TOutput> _dpgnOptions;
 
     /// <summary>Parameters for the point graph propagation layers.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _pointGraphParams = new Vector<T>(0);
 
     /// <summary>Parameters for the distribution graph propagation layers.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _distGraphParams = new Vector<T>(0);
 
     /// <inheritdoc/>

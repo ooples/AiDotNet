@@ -111,6 +111,7 @@ public partial class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     private readonly DKTOptions<T, TInput, TOutput> _dktOptions;
 
     /// <summary>Learned kernel hyperparameters (length-scale, noise variance).</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _kernelParams = new Vector<T>(0);
 
     /// <inheritdoc/>

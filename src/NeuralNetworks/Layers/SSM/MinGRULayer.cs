@@ -121,24 +121,40 @@ public partial class MinGRULayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastOutput;
+    [Scratch]
     private Tensor<T>? _lastProjectedInput;
+    [Scratch]
     private Tensor<T>? _lastGatePreAct;
+    [Scratch]
     private Tensor<T>? _lastGate;
+    [Scratch]
     private Tensor<T>? _lastCandidate;
+    [Scratch]
     private Tensor<T>? _lastHiddenStates;
+    [Scratch]
     private Tensor<T>? _lastRecurrenceOutput;
     private int[]? _originalInputShape;
 
     // Gradients
+    [Scratch]
     private Tensor<T>? _inputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _inputProjectionBiasGradient;
+    [Scratch]
     private Tensor<T>? _gateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _gateBiasGradient;
+    [Scratch]
     private Tensor<T>? _candidateWeightsGradient;
+    [Scratch]
     private Tensor<T>? _candidateBiasGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionWeightsGradient;
+    [Scratch]
     private Tensor<T>? _outputProjectionBiasGradient;
 
     /// <inheritdoc />
@@ -158,6 +174,9 @@ public partial class MinGRULayer<T> : LayerBase<T>, IShapeContract
     /// Gets the expansion factor applied to the model dimension for the internal recurrence.
     /// </summary>
     public int ExpansionFactor => _expansionFactor;
+
+    /// <summary>Construction state: the 'sequenceLength' the layer was built with.</summary>
+    private readonly int _sequenceLength;
 
     /// <summary>
     /// Creates a new minGRU layer.
@@ -190,6 +209,7 @@ public partial class MinGRULayer<T> : LayerBase<T>, IShapeContract
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        _sequenceLength = sequenceLength;
         InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
 
         if (sequenceLength <= 0)

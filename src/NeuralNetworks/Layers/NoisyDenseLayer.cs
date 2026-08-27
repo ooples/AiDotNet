@@ -146,9 +146,13 @@ public partial class NoisyDenseLayer<T> : LayerBase<T>, IShapeContract
     // a view into the provided ParameterBuffer" — the path
     // RainbowDQNAgent.Train(state, target) takes when called for offline
     // pretraining or BC warm-start.
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _muWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _sigmaWeights;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _muBiases;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _sigmaBiases;
 
     /// <summary>
@@ -234,8 +238,6 @@ public partial class NoisyDenseLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc/>
-    public override IReadOnlyList<Tensor<T>> GetTrainableParameters() =>
-        new[] { _muWeights, _sigmaWeights, _muBiases, _sigmaBiases };
 
     /// <inheritdoc/>
     /// <remarks>
@@ -251,19 +253,6 @@ public partial class NoisyDenseLayer<T> : LayerBase<T>, IShapeContract
     /// length but rebinding _muWeights from the former to the latter would
     /// rotate every weight-index pair.
     /// </remarks>
-    public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
-    {
-        if (parameters.Count != 4)
-            throw new ArgumentException("Expected exactly 4 parameter tensors (μ_w, σ_w, μ_b, σ_b).", nameof(parameters));
-        ValidateShapeMatch(parameters[0], _muWeights, nameof(_muWeights));
-        ValidateShapeMatch(parameters[1], _sigmaWeights, nameof(_sigmaWeights));
-        ValidateShapeMatch(parameters[2], _muBiases, nameof(_muBiases));
-        ValidateShapeMatch(parameters[3], _sigmaBiases, nameof(_sigmaBiases));
-        _muWeights = parameters[0];
-        _sigmaWeights = parameters[1];
-        _muBiases = parameters[2];
-        _sigmaBiases = parameters[3];
-    }
 
     private static void ValidateShapeMatch(Tensor<T> incoming, Tensor<T> existing, string paramName)
     {

@@ -61,7 +61,7 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Regularization and Variable Selection via the Elastic Net", "https://doi.org/10.1111/j.1467-9868.2005.00503.x", Year = 2005, Authors = "Hui Zou, Trevor Hastie")]
-public class ElasticNetRegression<T> : RegressionBase<T>
+public partial class ElasticNetRegression<T> : RegressionBase<T>
 {
     /// <summary>
     /// Gets the configuration options specific to Elastic Net Regression.
@@ -321,61 +321,4 @@ public class ElasticNetRegression<T> : RegressionBase<T>
         return metadata;
     }
 
-
-    /// <summary>
-    /// Creates a new instance of Elastic Net Regression with the same configuration.
-    /// </summary>
-    /// <returns>A new instance with the same options.</returns>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new ElasticNetRegression<T>(Options, Regularization);
-    }
-
-    /// <summary>
-    /// Serializes the Elastic Net Regression model to a byte array.
-    /// </summary>
-    /// <returns>A byte array containing the serialized model.</returns>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        // Serialize base class data
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        // Serialize Elastic Net-specific data
-        writer.Write(Options.Alpha);
-        writer.Write(Options.L1Ratio);
-        writer.Write(Options.MaxIterations);
-        writer.Write(Options.Tolerance);
-        writer.Write(Options.WarmStart);
-        writer.Write(_iterationsUsed);
-
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Deserializes an Elastic Net Regression model from a byte array.
-    /// </summary>
-    /// <param name="modelData">The byte array containing the serialized model.</param>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        // Deserialize base class data
-        int baseDataLength = reader.ReadInt32();
-        byte[] baseData = reader.ReadBytes(baseDataLength);
-        base.Deserialize(baseData);
-
-        // Deserialize Elastic Net-specific data
-        Options.Alpha = reader.ReadDouble();
-        Options.L1Ratio = reader.ReadDouble();
-        Options.MaxIterations = reader.ReadInt32();
-        Options.Tolerance = reader.ReadDouble();
-        Options.WarmStart = reader.ReadBoolean();
-        _iterationsUsed = reader.ReadInt32();
-    }
 }

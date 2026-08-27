@@ -57,7 +57,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2407.08680",
     Year = 2024,
     Authors = "Zujin Guo, Wei Li, Chen Change Loy")]
-public class GIMMVFI<T> : FrameInterpolationBase<T>
+public partial class GIMMVFI<T> : FrameInterpolationBase<T>
 {
     #region Fields
 
@@ -186,49 +186,9 @@ public class GIMMVFI<T> : FrameInterpolationBase<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode);
-        w.Write(_options.ModelPath ?? string.Empty);
-        w.Write((int)_options.Variant);
-        w.Write(_options.NumFeatures);
-        w.Write(_options.NumEncoderBlocks);
-        w.Write(_options.ImplicitDim);
-        w.Write(_options.NumImplicitLayers);
-        w.Write(_options.NumFrequencies);
-        w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString();
-        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.Variant = (VideoModelVariant)r.ReadInt32();
-        _options.NumFeatures = r.ReadInt32();
-        _options.NumEncoderBlocks = r.ReadInt32();
-        _options.ImplicitDim = r.ReadInt32();
-        _options.NumImplicitLayers = r.ReadInt32();
-        _options.NumFrequencies = r.ReadInt32();
-        _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-        {
-            // Release any existing session before replacing it so repeated
-            // deserialize / clone round-trips don't leak native ONNX resources.
-            OnnxModel?.Dispose();
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        }
-        // Native-mode layers (with their trained weights) are already reconstructed by
-        // the base deserializer before this override runs; re-initializing here would
-        // discard them and leave the model randomly initialized.
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            return new GIMMVFI<T>(Architecture, p, _options);
-        return new GIMMVFI<T>(Architecture, _options);
-    }
+
 
     #endregion
 

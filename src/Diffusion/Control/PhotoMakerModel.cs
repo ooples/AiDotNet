@@ -219,21 +219,6 @@ public partial class PhotoMakerModel<T> : LatentDiffusionModelBase<T>
 
     #region ICloneable
 
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
-    /// <inheritdoc />
-    public override IDiffusionModel<T> Clone()
-    {
-        return new PhotoMakerModel<T>(
-            architecture: Architecture,
-            options: Options as DiffusionModelOptions<T>,
-            scheduler: Scheduler,
-            unet: (UNetNoisePredictor<T>)_unet.Clone(),
-            vae: (StandardVAE<T>)_vae.Clone(),
-            conditioner: _conditioner);
-    }
-
     #endregion
 
     #region Metadata

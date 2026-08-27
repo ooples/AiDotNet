@@ -43,6 +43,7 @@ namespace AiDotNet.Diffusion.Schedulers;
 [PipelineStage(PipelineStage.Training)]
 public sealed class ConsistencyModelScheduler<T> : NoiseSchedulerBase<T>
 {
+    [AiDotNet.Attributes.Scratch]
     private Vector<T>? _sigmas;
     private readonly Random _random;
     private readonly double _sigmaMin;

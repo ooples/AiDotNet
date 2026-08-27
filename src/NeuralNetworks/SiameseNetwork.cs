@@ -118,6 +118,7 @@ public partial class SiameseNetwork<T> : DeclaredModelLayoutBase<T>, IAuxiliaryL
     /// Cache for embedding pairs and their similarity labels during training.
     /// Used to compute contrastive auxiliary loss.
     /// </summary>
+    [Scratch]
     private List<(Vector<T> embedding1, Vector<T> embedding2, T label)> _cachedEmbeddingPairs;
 
     /// <summary>
@@ -627,22 +628,7 @@ public partial class SiameseNetwork<T> : DeclaredModelLayoutBase<T>, IAuxiliaryL
     /// allowing you to load it later without having to retrain it.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        // Serialize the subnetwork
-        var subNetworkData = _subnetwork.Serialize();
-        writer.Write(subNetworkData.Length);
-        writer.Write(subNetworkData);
 
-        // Serialize the output layer parameters
-        Vector<T> outputLayerParams = _outputLayer.GetParameters();
-        writer.Write(outputLayerParams.Length);
-
-        for (int i = 0; i < outputLayerParams.Length; i++)
-        {
-            writer.Write(Convert.ToDouble(outputLayerParams[i]));
-        }
-    }
 
     /// <summary>
     /// Deserializes Siamese network-specific data from a binary reader.
@@ -658,42 +644,7 @@ public partial class SiameseNetwork<T> : DeclaredModelLayoutBase<T>, IAuxiliaryL
     /// restoring all its learned parameters so you can use it without retraining.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Deserialize the subnetwork
-        _subnetwork = Architecture.InputType == Enums.InputType.OneDimensional
-            ? (NeuralNetworkBase<T>)new FeedForwardNeuralNetwork<T>(CreateEmbeddingArchitecture(Architecture, _options.EmbeddingSize))
-            : new ConvolutionalNeuralNetwork<T>(CreateEmbeddingArchitecture(Architecture, _options.EmbeddingSize));
-        var subNetworkCount = reader.ReadInt32();
-        _subnetwork.Deserialize(reader.ReadBytes(subNetworkCount));
 
-        // Deserialize the output layer parameters
-        int paramCount = reader.ReadInt32();
-        Vector<T> outputLayerParams = new Vector<T>(paramCount);
-
-        for (int i = 0; i < paramCount; i++)
-        {
-            outputLayerParams[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Initialize the output layer with the correct dimensions
-        _outputLayer = new DenseLayer<T>(1, new SigmoidActivation<T>() as IActivationFunction<T>);
-        _outputLayer.SetParameters(outputLayerParams);
-
-        // Re-wire the base Layers list to the freshly deserialized _subnetwork /
-        // _outputLayer, exactly as the constructor does. The base deserialize
-        // populated Layers from the generic layer stream BEFORE this method ran,
-        // so without this call Layers would reference stale layer objects while
-        // _subnetwork/_outputLayer point to these new ones. Training would then
-        // forward through _subnetwork/_outputLayer (ForwardForTraining) but the
-        // optimizer would read and update the disconnected Layers parameters —
-        // the clone (DeepCopy/Clone routes through this path) trained on a
-        // mismatched parameter set and its loss diverged with more iterations
-        // (MoreData_ShouldNotDegrade: loss rose instead of falling). Re-running
-        // InitializeLayers binds Layers to the live objects so forward and
-        // update share one parameter surface.
-        InitializeLayers();
-    }
 
     /// <summary>
     /// Gets metadata about the Siamese Network.
@@ -726,36 +677,5 @@ public partial class SiameseNetwork<T> : DeclaredModelLayoutBase<T>, IAuxiliaryL
         };
 
         return metadata;
-    }
-
-    /// <summary>
-    /// Creates a new instance of the Siamese network with the same architecture.
-    /// </summary>
-    /// <returns>A new instance of the Siamese network.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a new Siamese network with the same architecture as the current instance.
-    /// The new instance has freshly initialized parameters and is ready for training.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This creates a brand new Siamese network with the same structure.
-    /// 
-    /// Think of it like creating a copy of your current network's blueprint:
-    /// - It has the same subnetwork structure for processing inputs
-    /// - It processes the same types of inputs (like images of the same size)
-    /// - But it starts with fresh, untrained parameters
-    /// 
-    /// This is useful when you want to:
-    /// - Start over with a fresh network but keep the same design
-    /// - Create multiple networks with identical structures for comparison
-    /// - Train networks with different data but the same architecture
-    /// 
-    /// The new network will need to be trained from scratch, as it doesn't
-    /// inherit any of the "knowledge" from the original network.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new SiameseNetwork<T>(Architecture, lossFunction: LossFunction);
     }
 }

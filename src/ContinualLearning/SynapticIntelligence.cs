@@ -55,6 +55,7 @@ public class SynapticIntelligence<T> : IContinualLearningStrategy<T>
     private double _lambda;
     private readonly double _damping;            // Small constant to prevent division by zero
     private bool _isTrackingTask;
+    [Scratch]
     private Vector<T>? _lastGradients;
 
     /// <summary>

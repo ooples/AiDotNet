@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Models;
@@ -29,7 +29,7 @@ namespace AiDotNet.Finance.Base;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public abstract class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfolioOptimizer<T>
+public abstract partial class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfolioOptimizer<T>
 {
     /// <summary>
     /// The number of assets in the portfolio universe.
@@ -290,10 +290,7 @@ public abstract class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfo
     /// so the model configuration can be restored later.
     /// </para>
     /// </remarks>
-    protected override void SerializeModelSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_numAssets);
-    }
+
 
     /// <summary>
     /// Deserializes portfolio-specific model data.
@@ -304,17 +301,7 @@ public abstract class PortfolioOptimizerBase<T> : FinancialModelBase<T>, IPortfo
     /// <b>For Beginners:</b> Loads portfolio settings from a file.
     /// </para>
     /// </remarks>
-    protected override void DeserializeModelSpecificData(BinaryReader reader)
-    {
-        _numAssets = reader.ReadInt32();
 
-        // Validate deserialized value matches constructor invariant
-        if (_numAssets <= 0)
-        {
-            throw new InvalidOperationException(
-                $"Deserialized numAssets ({_numAssets}) is invalid. Must be greater than 0.");
-        }
-    }
 
     /// <summary>
     /// Core training logic for the portfolio optimizer.

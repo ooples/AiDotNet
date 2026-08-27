@@ -69,6 +69,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
+// See the note on ObliviousDecisionTreeLayer. The declared arguments are a deliberately small
+// configuration -- one RRDB block at 8 features, x2 scale -- because the defaults describe the
+// paper model (23 blocks, 64 features) and constructing that per test is minutes of work.
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3,
+    TestInputShape = "3, 8, 8", TestConstructorArgs = "3, 3, 8, 4, 1, 2")]
 public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
 {
     /// <inheritdoc />
@@ -155,6 +160,10 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// LeakyReLU activation with negative slope 0.2.
     /// </summary>
+    /// <summary>Negative slope of the generator's LeakyReLU, per Real-ESRGAN (Wang et al. 2021).</summary>
+    /// <remarks>Shared by the activation instance and the traced forward so the two cannot drift.</remarks>
+    private const double LeakyReLUSlope = 0.2;
+
     private readonly LeakyReLUActivation<T> _leakyReLU;
 
     /// <summary>
@@ -176,15 +185,19 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
     /// Upscaling factor (2 or 4).
     /// </summary>
     private readonly int _scale;
+    private readonly int _growthChannels;
+    private readonly double _residualScale;
 
     /// <summary>
     /// Cached input for backpropagation.
     /// </summary>
+    [Scratch]
     private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Cached conv1 output for trunk residual.
     /// </summary>
+    [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _conv1Output;
 
     /// <summary>
@@ -280,7 +293,9 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
         _scale = scale;
         _inputChannels = inputChannels;
         _outputChannels = outputChannels;
-        _leakyReLU = new LeakyReLUActivation<T>(0.2);
+        _growthChannels = growthChannels;
+        _residualScale = residualScale;
+        _leakyReLU = new LeakyReLUActivation<T>(LeakyReLUSlope);
 
         // Initial convolution: inputChannels → numFeatures
         _convFirst = new ConvolutionalLayer<T>(
@@ -487,12 +502,17 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
     {
-        var output = TensorAllocator.Rent<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            output.Data.Span[i] = _leakyReLU.Activate(input.Data.Span[i]);
-        }
-        return output;
+        // max(x, slope*x) IS LeakyReLU for any slope in (0, 1): above zero the identity wins, below
+        // it the shallower line does. Both operations are tape-tracked, so the input stays connected
+        // to the reverse-mode graph.
+        //
+        // The previous form filled a rented buffer in a manual element loop, which records no tape
+        // node at all. This runs three times in ForwardTraced -- twice in the upsampling stack and
+        // once after the HR convolution -- so the generator's entire input gradient was severed
+        // while its PARAMETER gradients still looked healthy, which is exactly the asymmetry the
+        // conformance test calls out: a missing input VJP must not pass parameter-only checks.
+        var scaled = Engine.TensorMultiplyScalar(input, NumOps.FromDouble(LeakyReLUSlope));
+        return Engine.TensorMax(input, scaled);
     }
 
     /// <summary>
@@ -548,6 +568,7 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
     /// in OnFirstForward once every sub-layer reports a real
     /// GetParameters().Length.
     /// </summary>
+    [Scratch]
     private Vector<T>? _pendingParameters;
 
     private void ApplyParameters(Vector<T> parameters)

@@ -64,7 +64,7 @@ namespace AiDotNet.Video.Restoration;
     "https://arxiv.org/abs/2201.12288",
     Year = 2022,
     Authors = "Jingyun Liang, Jiezhang Cao, Yuchen Fan, Kai Zhang, Rakesh Ranjan, Yawei Li, Radu Timofte, Luc Van Gool")]
-public class VRT<T> : VideoSuperResolutionBase<T>
+public partial class VRT<T> : VideoSuperResolutionBase<T>
 {
     private readonly VRTOptions _options;
 
@@ -500,46 +500,10 @@ public class VRT<T> : VideoSuperResolutionBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Serialization is not supported in ONNX mode.");
 
-        writer.Write(_embedDim);
-        writer.Write(_numFrames);
-        writer.Write(_numBlocks);
-        writer.Write(_scaleFactor);
-        writer.Write(_inputHeight);
-        writer.Write(_inputWidth);
-    }
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Deserialization is not supported in ONNX mode.");
 
-        _ = reader.ReadInt32(); // embedDim
-        _ = reader.ReadInt32(); // numFrames
-        _ = reader.ReadInt32(); // numBlocks
-        _ = reader.ReadInt32(); // scaleFactor
-        _ = reader.ReadInt32(); // inputHeight
-        _ = reader.ReadInt32(); // inputWidth
-    }
-
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new VRT<T>(
-            Architecture,
-            null,
-            _lossFunction,
-            _embedDim,
-            _numFrames,
-            _numBlocks,
-            _scaleFactor,
-            new VRTOptions(_options));
-    }
 
     #endregion
 

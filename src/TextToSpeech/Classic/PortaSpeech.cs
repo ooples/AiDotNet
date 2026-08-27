@@ -49,7 +49,7 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2021,
     Authors = "Ren et al."
 )]
-public class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
+public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly PortaSpeechOptions _options;
 
@@ -256,53 +256,9 @@ public class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(_options.ModelPath ?? string.Empty);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.MelChannels);
-        writer.Write(_options.HiddenDim);
-        writer.Write(_options.NumEncoderLayers);
-        writer.Write(_options.NumDecoderLayers);
-        writer.Write(_options.NumFlowLayers);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        string mp = reader.ReadString();
-        if (!string.IsNullOrEmpty(mp))
-            _options.ModelPath = mp;
-        _options.SampleRate = reader.ReadInt32();
-        _options.MelChannels = reader.ReadInt32();
-        _options.HiddenDim = reader.ReadInt32();
-        _options.NumEncoderLayers = reader.ReadInt32();
-        _options.NumDecoderLayers = reader.ReadInt32();
-        _options.NumFlowLayers = reader.ReadInt32();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new PortaSpeech<T>(Architecture, mp, new PortaSpeechOptions(_options));
 
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? cloneOptimizer = _optimizer switch
-        {
-            AdamWOptimizer<T, Tensor<T>, Tensor<T>> when _optimizer.GetOptions() is AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options
-                => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options)),
-            AdamOptimizer<T, Tensor<T>, Tensor<T>> when _optimizer.GetOptions() is AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> options
-                => new AdamOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>(options)),
-            _ => null
-        };
-        return new PortaSpeech<T>(Architecture, new PortaSpeechOptions(_options), cloneOptimizer);
-    }
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
     {

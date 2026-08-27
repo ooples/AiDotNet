@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Transformers are SSMs: Generalized Models and Efficient Algorithms Through Structured State Space Duality", "https://arxiv.org/abs/2405.21060", Year = 2024, Authors = "Tri Dao, Albert Gu")]
-public class Mamba2LanguageModel<T> : TokenLanguageModelLayoutBase<T>
+public partial class Mamba2LanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly Mamba2Options _options;
     private readonly int _vocabSize;
@@ -151,32 +151,9 @@ public class Mamba2LanguageModel<T> : TokenLanguageModelLayoutBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_vocabSize);
-        writer.Write(_modelDimension);
-        writer.Write(_numLayers);
-        writer.Write(_stateDimension);
-        writer.Write(_numHeads);
-        writer.Write(_maxSeqLength);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new Mamba2LanguageModel<T>(
-            Architecture, _vocabSize, _modelDimension, _numLayers, _stateDimension,
-            _numHeads, _maxSeqLength, LossFunction, _options);
-    }
+
 
     #endregion
 }

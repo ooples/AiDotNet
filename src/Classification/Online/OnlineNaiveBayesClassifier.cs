@@ -74,7 +74,7 @@ namespace AiDotNet.Classification.Online;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("A Comparison of Event Models for Naive Bayes Text Classification", "https://www.cs.cmu.edu/~knigam/papers/multinomial-aaaiws98.pdf")]
-public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>,
+public partial class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>,
     IParameterizable<T, Matrix<T>, Vector<T>>
 {
 
@@ -446,113 +446,5 @@ public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifie
         clone.ClassLabels = ClassLabels is not null ? new Vector<T>(ClassLabels.ToArray()) : null;
         clone.SetParameters(parameters);
         return clone;
-    }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new OnlineNaiveBayesClassifier<T>(_options);
-    }
-
-    /// <summary>
-    /// Serializes the trained model state including per-class statistics.
-    /// </summary>
-    public override byte[] Serialize()
-    {
-        var modelData = new Dictionary<string, object>
-        {
-            { "NumClasses", NumClasses },
-            { "NumFeatures", NumFeatures },
-            { "TaskType", (int)TaskType },
-            { "ClassLabels", ClassLabels?.ToArray() ?? Array.Empty<T>() },
-            { "SamplesSeen", SamplesSeen },
-            { "KnownClassCount", _knownClasses.Count }
-        };
-
-        // Save known classes
-        var knownClassValues = new double[_knownClasses.Count];
-        for (int i = 0; i < _knownClasses.Count; i++)
-            knownClassValues[i] = NumOps.ToDouble(_knownClasses[i]);
-        modelData["KnownClasses"] = knownClassValues;
-
-        // Save per-class statistics
-        modelData["ClassStatsCount"] = _classStats.Count;
-        int idx = 0;
-        foreach (var kvp in _classStats)
-        {
-            var statsDict = new Dictionary<string, object>
-            {
-                { "ClassIdx", kvp.Key },
-                { "Count", kvp.Value.Count },
-                { "Means", kvp.Value.Means ?? Array.Empty<double>() },
-                { "M2", kvp.Value.M2 ?? Array.Empty<double>() }
-            };
-            modelData[$"ClassStats_{idx}"] = statsDict;
-            idx++;
-        }
-
-        var modelMetadata = GetModelMetadata();
-        modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
-        return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelMetadata));
-    }
-
-    /// <summary>
-    /// Deserializes the trained model state including per-class statistics.
-    /// </summary>
-    public override void Deserialize(byte[] modelData)
-    {
-        var jsonString = Encoding.UTF8.GetString(modelData);
-        var modelMetadata = JsonConvert.DeserializeObject<ModelMetadata<T>>(jsonString);
-        if (modelMetadata?.ModelData is null)
-            throw new InvalidOperationException("Deserialization failed: invalid model data.");
-
-        var dataString = Encoding.UTF8.GetString(modelMetadata.ModelData);
-        var dataObj = JsonConvert.DeserializeObject<JObject>(dataString);
-        if (dataObj is null)
-            throw new InvalidOperationException("Deserialization failed: invalid model data.");
-
-        NumClasses = dataObj["NumClasses"]?.ToObject<int>() ?? 0;
-        NumFeatures = dataObj["NumFeatures"]?.ToObject<int>() ?? 0;
-        TaskType = (ClassificationTaskType)(dataObj["TaskType"]?.ToObject<int>() ?? 0);
-        SamplesSeen = dataObj["SamplesSeen"]?.ToObject<long>() ?? 0;
-
-        var classLabelsToken = dataObj["ClassLabels"];
-        if (classLabelsToken is not null)
-        {
-            var arr = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (arr.Length > 0)
-            {
-                ClassLabels = new Vector<T>(arr.Length);
-                for (int i = 0; i < arr.Length; i++)
-                    ClassLabels[i] = NumOps.FromDouble(arr[i]);
-            }
-        }
-
-        // Restore known classes
-        _knownClasses.Clear();
-        var knownClassesArr = dataObj["KnownClasses"]?.ToObject<double[]>();
-        if (knownClassesArr is not null)
-        {
-            foreach (var val in knownClassesArr)
-                _knownClasses.Add(NumOps.FromDouble(val));
-        }
-
-        // Restore per-class statistics
-        _classStats.Clear();
-        int statsCount = dataObj["ClassStatsCount"]?.ToObject<int>() ?? 0;
-        for (int i = 0; i < statsCount; i++)
-        {
-            if (dataObj[$"ClassStats_{i}"] is JObject statsObj)
-            {
-                int classIdx = statsObj["ClassIdx"]?.ToObject<int>() ?? 0;
-                var stats = new ClassStatistics
-                {
-                    Count = statsObj["Count"]?.ToObject<long>() ?? 0,
-                    Means = statsObj["Means"]?.ToObject<double[]>(),
-                    M2 = statsObj["M2"]?.ToObject<double[]>()
-                };
-                _classStats[classIdx] = stats;
-            }
-        }
     }
 }

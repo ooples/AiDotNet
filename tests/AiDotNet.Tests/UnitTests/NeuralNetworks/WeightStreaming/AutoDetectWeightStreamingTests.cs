@@ -81,8 +81,6 @@ public class AutoDetectWeightStreamingTests
             => new() { Name = "FixedParamCountNetwork" };
         protected override void SerializeNetworkSpecificData(BinaryWriter writer) { }
         protected override void DeserializeNetworkSpecificData(BinaryReader reader) { }
-        protected override IFullModel<float, Tensor<float>, Tensor<float>> CreateNewInstance()
-            => new FixedParamCountNetwork(_fixedCount);
     }
 
     [Fact]

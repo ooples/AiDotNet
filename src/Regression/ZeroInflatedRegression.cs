@@ -64,11 +64,12 @@ namespace AiDotNet.Regression;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Zero-Inflated Poisson Regression, with an Application to Defects in Manufacturing", "https://doi.org/10.1080/00401706.1992.10485228", Year = 1992, Authors = "Diane Lambert")]
-public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
+public partial class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
 {
     /// <summary>
     /// Coefficients for the count model (λ).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _countCoefficients;
 
     /// <summary>
@@ -79,6 +80,7 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Coefficients for the zero-inflation model (π).
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _zeroCoefficients;
 
     /// <summary>
@@ -774,29 +776,6 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
         };
     }
 
-    /// <inheritdoc/>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-
-        byte[] baseData = base.Serialize();
-        writer.Write(baseData.Length);
-        writer.Write(baseData);
-
-        writer.Write((int)_options.DistributionFamily);
-        writer.Write(_options.ModelZeroInflation);
-        writer.Write(_numFeatures);
-        writer.Write(NumOps.ToDouble(_countIntercept));
-        writer.Write(NumOps.ToDouble(_zeroIntercept));
-        writer.Write(NumOps.ToDouble(_dispersion));
-
-        WriteVec(writer, _countCoefficients);
-        WriteVec(writer, _zeroCoefficients);
-
-        return ms.ToArray();
-    }
-
     private void WriteVec(BinaryWriter w, Vector<T>? v)
     {
         w.Write(v != null);
@@ -805,26 +784,6 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
             w.Write(v.Length);
             for (int i = 0; i < v.Length; i++) w.Write(NumOps.ToDouble(v[i]));
         }
-    }
-
-    /// <inheritdoc/>
-    public override void Deserialize(byte[] modelData)
-    {
-        using var ms = new MemoryStream(modelData);
-        using var reader = new BinaryReader(ms);
-
-        int baseLen = reader.ReadInt32();
-        base.Deserialize(reader.ReadBytes(baseLen));
-
-        _options.DistributionFamily = (ZeroInflatedDistributionFamily)reader.ReadInt32();
-        _options.ModelZeroInflation = reader.ReadBoolean();
-        _numFeatures = reader.ReadInt32();
-        _countIntercept = NumOps.FromDouble(reader.ReadDouble());
-        _zeroIntercept = NumOps.FromDouble(reader.ReadDouble());
-        _dispersion = NumOps.FromDouble(reader.ReadDouble());
-
-        _countCoefficients = ReadVec(reader);
-        _zeroCoefficients = ReadVec(reader);
     }
 
     private Vector<T>? ReadVec(BinaryReader r)
@@ -836,16 +795,4 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
         return v;
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
-    {
-        return new ZeroInflatedRegression<T>(_options, Regularization);
-    }
-
-    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        var clone = new ZeroInflatedRegression<T>(_options, Regularization);
-        clone.Deserialize(Serialize());
-        return clone;
-    }
 }

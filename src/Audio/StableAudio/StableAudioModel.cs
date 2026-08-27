@@ -67,7 +67,7 @@ namespace AiDotNet.Audio.StableAudio;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Stable Audio: Fast Timing-Conditioned Latent Audio Diffusion", "https://arxiv.org/abs/2402.04825", Year = 2024, Authors = "Zach Evans, CJ Carr, Josiah Taylor, Scott H. Hawley, Jordi Pons")]
-public class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
+public partial class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -1048,41 +1048,12 @@ public class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write((int)_options.ModelSize);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.NumInferenceSteps);
-        writer.Write(_options.GuidanceScale);
-        writer.Write(_options.Stereo);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadBoolean();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadDouble();
-        _ = reader.ReadBoolean();
-    }
 
-    /// <summary>
-    /// Creates a new instance for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new StableAudioModel<T>(
-            Architecture,
-            _options,
-            _tokenizer,
-            null,
-            _lossFunction);
-    }
 
     #endregion
 

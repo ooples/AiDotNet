@@ -64,7 +64,7 @@ namespace AiDotNet.Audio.MusicGen;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(string), typeof(Tensor<>))]
 [ResearchPaper("Simple and Controllable Music Generation", "https://doi.org/10.48550/arXiv.2306.05284", Year = 2023, Authors = "Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi, Alexandre Défossez")]
-public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
+public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -1042,55 +1042,12 @@ public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write((int)_options.ModelSize);
-        writer.Write(_options.SampleRate);
-        writer.Write(_options.DurationSeconds);
-        writer.Write(_options.MaxDurationSeconds);
-        writer.Write(_options.Temperature);
-        writer.Write(_options.TopK);
-        writer.Write(_options.TopP);
-        writer.Write(_options.GuidanceScale);
-        writer.Write(_options.Stereo);
-        writer.Write(_options.NumCodebooks);
-        writer.Write(_options.CodebookSize);
-        writer.Write(_options.MaxTextLength);
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadBoolean();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadDouble();
-        _ = reader.ReadDouble();
-        _ = reader.ReadDouble();
-        _ = reader.ReadInt32();
-        _ = reader.ReadDouble();
-        _ = reader.ReadDouble();
-        _ = reader.ReadBoolean();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-    }
 
-    /// <summary>
-    /// Creates a new instance for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new MusicGenModel<T>(
-            Architecture,
-            _options,
-            _tokenizer,
-            null,
-            _lossFunction);
-    }
 
     #endregion
 

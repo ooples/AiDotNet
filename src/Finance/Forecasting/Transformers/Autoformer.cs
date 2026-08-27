@@ -487,39 +487,10 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, CreateNewInstance builds and wires up model components. This sets up the Autoformer architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var options = new AutoformerOptions<T>(_options);
-
-        return _useNativeMode
-            ? new Autoformer<T>(Architecture, options, optimizer: null, lossFunction: _lossFunction)
-            : new Autoformer<T>(Architecture, OnnxModelPath!, options, optimizer: null, lossFunction: _lossFunction);
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
     /// <b>For Beginners:</b> In the Autoformer model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the Autoformer architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_sequenceLength);
-        writer.Write(_predictionHorizon);
-        writer.Write(_numFeatures);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numDecoderLayers);
-        writer.Write(_numHeads);
-        writer.Write(_modelDimension);
-        writer.Write(_feedForwardDimension);
-        writer.Write(_movingAverageKernel);
-        writer.Write(_topKFactor);
-        writer.Write(_dropout);
-        writer.Write(_useInstanceNormalization);
-    }
+
 
     /// <inheritdoc/>
     /// <remarks>
@@ -527,27 +498,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
     /// <b>For Beginners:</b> In the Autoformer model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the Autoformer architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _sequenceLength = reader.ReadInt32();
-        _predictionHorizon = reader.ReadInt32();
-        _numFeatures = reader.ReadInt32();
-        _numEncoderLayers = reader.ReadInt32();
-        _numDecoderLayers = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _modelDimension = reader.ReadInt32();
-        _feedForwardDimension = reader.ReadInt32();
-        _movingAverageKernel = reader.ReadInt32();
-        _topKFactor = reader.ReadInt32();
-        _dropout = reader.ReadDouble();
-        _useInstanceNormalization = reader.ReadBoolean();
 
-        // Re-bind the cached layer references to the layers the base deserializer
-        // just rebuilt with the loaded weights — otherwise Forward (and therefore
-        // a clone) runs on the construction-time random-init layers instead of the
-        // deserialized weights (Clone_ShouldProduceIdenticalOutput divergence).
-        ExtractLayerReferences();
-    }
 
     #endregion
 

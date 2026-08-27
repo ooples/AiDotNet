@@ -41,7 +41,7 @@ namespace AiDotNet.Audio.Generation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("AudioLM: A Language Modeling Approach to Audio Generation", "https://arxiv.org/abs/2209.03143", Year = 2023, Authors = "Zalán Borsos, Raphaël Marinier, Damien Vincent, Eugene Kharitonov, Olivier Pietquin, Matt Sharifi, Dominik Roblek, Olivier Teboul, David Grangier, Marco Tagliasacchi, Neil Zeghidour")]
-public class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
+public partial class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -262,41 +262,9 @@ public class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.MaxDurationSeconds);
-        w.Write(_options.SemanticVocabSize); w.Write(_options.SemanticDim);
-        w.Write(_options.NumSemanticLayers); w.Write(_options.NumSemanticHeads);
-        w.Write(_options.SemanticFrameRate); w.Write(_options.CoarseCodebookSize);
-        w.Write(_options.NumCoarseQuantizers); w.Write(_options.CoarseDim);
-        w.Write(_options.NumCoarseLayers); w.Write(_options.FineCodebookSize);
-        w.Write(_options.NumFineQuantizers); w.Write(_options.FineDim);
-        w.Write(_options.NumFineLayers); w.Write(_options.Temperature);
-        w.Write(_options.TopK); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); _options.MaxDurationSeconds = r.ReadDouble();
-        _options.SemanticVocabSize = r.ReadInt32(); _options.SemanticDim = r.ReadInt32();
-        _options.NumSemanticLayers = r.ReadInt32(); _options.NumSemanticHeads = r.ReadInt32();
-        _options.SemanticFrameRate = r.ReadInt32(); _options.CoarseCodebookSize = r.ReadInt32();
-        _options.NumCoarseQuantizers = r.ReadInt32(); _options.CoarseDim = r.ReadInt32();
-        _options.NumCoarseLayers = r.ReadInt32(); _options.FineCodebookSize = r.ReadInt32();
-        _options.NumFineQuantizers = r.ReadInt32(); _options.FineDim = r.ReadInt32();
-        _options.NumFineLayers = r.ReadInt32(); _options.Temperature = r.ReadDouble();
-        _options.TopK = r.ReadInt32(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new AudioLM<T>(Architecture, mp, _options);
-        return new AudioLM<T>(Architecture, _options);
-    }
+
 
     #endregion
 

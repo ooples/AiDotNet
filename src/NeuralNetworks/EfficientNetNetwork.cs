@@ -69,7 +69,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks", "https://arxiv.org/abs/1905.11946", Year = 2019, Authors = "Mingxing Tan, Quoc V. Le")]
-public class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
+public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly EfficientNetOptions _options;
 
@@ -407,12 +407,7 @@ public class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     }
 
     /// <inheritdoc />
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_configuration.Variant);
-        writer.Write(_configuration.InputChannels);
-        writer.Write(_configuration.NumClasses);
-    }
+
 
     /// <summary>
     /// Deserializes and validates network-specific configuration data.
@@ -437,62 +432,7 @@ public class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// desired configuration, then call <see cref="NeuralNetworkBase{T}.Load"/> on that instance.
     /// </para>
     /// </remarks>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        // Read serialized configuration values
-        var variant = (EfficientNetVariant)reader.ReadInt32();
-        var inputChannels = reader.ReadInt32();
-        var numClasses = reader.ReadInt32();
 
-        // Validate configuration matches - layer structure depends on these values
-        // and cannot be changed after construction
-        if (variant != _configuration.Variant ||
-            inputChannels != _configuration.InputChannels ||
-            numClasses != _configuration.NumClasses)
-        {
-            throw new InvalidDataException(
-                $"Serialized EfficientNet configuration (Variant={variant}, InputChannels={inputChannels}, " +
-                $"NumClasses={numClasses}) does not match current configuration " +
-                $"(Variant={_configuration.Variant}, InputChannels={_configuration.InputChannels}, " +
-                $"NumClasses={_configuration.NumClasses}). Create a new network with matching configuration to load this model.");
-        }
-    }
-
-    /// <inheritdoc />
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        var config = new EfficientNetConfiguration(
-            _configuration.Variant,
-            _configuration.NumClasses,
-            _configuration.InputChannels,
-            _configuration.CustomInputHeight,
-            _configuration.CustomWidthMultiplier,
-            _configuration.CustomDepthMultiplier);
-
-        // A FRESH OPTIMIZER, not this model's. Adam keeps per-parameter first and second moment
-        // state, so two models sharing one instance corrupt each other's moment estimates and the
-        // step count advances twice per logical step, doubling the bias correction. The rest of this
-        // method exists to make the clone faithful; a shared optimizer defeats that.
-        //
-        // Rebuilt with the same settings the constructor's default path uses, since a clone of a
-        // model that took the default should also take the default.
-        // FlamingoNeuralNetwork.CreateNewInstance does the same, for the same reason.
-        var freshOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = 1e-4,
-                Epsilon = 1e-6,
-            });
-
-        return new EfficientNetNetwork<T>(Architecture, config, freshOptimizer, _lossFunction);
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
-    {
-        return DeepCopy();
-    }
 
     /// <summary>
     /// Gets the layer at the specified index.

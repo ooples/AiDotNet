@@ -97,6 +97,7 @@ public partial class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private readonly CAMLOptions<T, TInput, TOutput> _camlOptions;
 
     /// <summary>Parameters for the lightweight context module.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _contextParams = new Vector<T>(0);
 
     /// <inheritdoc/>

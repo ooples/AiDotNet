@@ -49,6 +49,7 @@ public partial class GMMDetector<T> : AnomalyDetectorBase<T>
     private readonly int _maxIterations;
     private Vector<T>[] _means = Array.Empty<Vector<T>>();
     private Matrix<T>[] _covariances = Array.Empty<Matrix<T>>();
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _weights = new Vector<T>(0);
     private int _nFeatures;
     [Buffer]

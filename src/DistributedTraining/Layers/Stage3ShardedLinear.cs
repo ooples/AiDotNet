@@ -18,7 +18,7 @@ namespace AiDotNet.DistributedTraining.Layers;
 /// </summary>
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.Projection)]
-[LayerProperty(IsTrainable = true, ChangesShape = true)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestConstructorArgs = "new AiDotNet.DistributedTraining.InMemoryCommunicationBackend<double>(0, 1), 4, 8", TestInputShape = "1, 4")]
 // SHARDING IS A STORAGE CONCERN, NOT A SHAPE ONE, and that is the whole point of the contract here.
 // _shardLen splits the weight across ranks, but ForwardTraced all-gathers it back to the full
 // [outputSize, inputSize] before the matmul, so every rank returns the SAME full-width [batch,

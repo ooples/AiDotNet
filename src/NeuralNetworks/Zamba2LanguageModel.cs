@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("The Zamba2 Suite: Technical Report", "https://arxiv.org/abs/2411.15242", Year = 2024, Authors = "Paolo Glorioso, Quentin Anthony, Yury Tokpanov, Anna Golubeva, Vasudev Shyam, James Whittington, Jonathan Pilault, Beren Millidge")]
-public class Zamba2LanguageModel<T> : TokenLanguageModelLayoutBase<T>
+public partial class Zamba2LanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly Zamba2Options _options;
     private readonly int _vocabSize;
@@ -152,34 +152,9 @@ public class Zamba2LanguageModel<T> : TokenLanguageModelLayoutBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_vocabSize);
-        writer.Write(_modelDimension);
-        writer.Write(_numLayers);
-        writer.Write(_stateDimension);
-        writer.Write(_numHeads);
-        writer.Write(_attentionInterval);
-        writer.Write(_maxSeqLength);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new Zamba2LanguageModel<T>(
-            Architecture, _vocabSize, _modelDimension, _numLayers, _stateDimension,
-            _numHeads, _attentionInterval, _maxSeqLength, LossFunction, _options);
-    }
+
 
     #endregion
 }

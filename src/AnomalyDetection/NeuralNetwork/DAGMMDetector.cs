@@ -63,21 +63,33 @@ public partial class DAGMMDetector<T> : AnomalyDetectorBase<T>
     private readonly double _learningRate;
 
     // Encoder weights
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _encW1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _encB1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _encW2;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _encB2;
 
     // Decoder weights
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _decW1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _decB1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _decW2;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _decB2;
 
     // Estimation network weights
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _estW1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _estB1;
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T>? _estW2;
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T>? _estB2;
 
     // GMM parameters (kept as double for numerical stability in probability computations)

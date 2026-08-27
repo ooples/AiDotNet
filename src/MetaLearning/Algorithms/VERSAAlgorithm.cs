@@ -103,6 +103,7 @@ public partial class VERSAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     /// <summary>
     /// Amortization network parameters that produce classifier weights from support features.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _amortizationParams = new Vector<T>(0);
 
     /// <inheritdoc/>

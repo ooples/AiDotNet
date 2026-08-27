@@ -42,7 +42,7 @@ namespace AiDotNet.AnomalyDetection.Statistical;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ResearchPaper("Percentage Points for a Generalized ESD Many-Outlier Procedure", "https://doi.org/10.2307/1268549", Year = 1983, Authors = "Bernard Rosner")]
-public class GESDDetector<T> : AnomalyDetectorBase<T>
+public partial class GESDDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _alpha;
     private readonly int _maxOutliers;

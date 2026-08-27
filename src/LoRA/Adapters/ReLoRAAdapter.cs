@@ -53,7 +53,7 @@ namespace AiDotNet.LoRA.Adapters;
 /// https://arxiv.org/abs/2307.05695
 /// </para>
 /// </remarks>
-public class ReLoRAAdapter<T> : LoRAAdapterBase<T>
+public partial class ReLoRAAdapter<T> : LoRAAdapterBase<T>
 {
     /// <summary>
     /// Number of training steps between restart operations.
@@ -94,6 +94,7 @@ public class ReLoRAAdapter<T> : LoRAAdapterBase<T>
     /// This is how we prevent forgetting - all previous learning is saved here.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _accumulatedWeight;
 
     /// <summary>

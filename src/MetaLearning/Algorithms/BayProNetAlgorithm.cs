@@ -68,6 +68,7 @@ public partial class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     private const double SpsaLearningRateMultiplier = 0.1;
 
     /// <summary>Meta-learned per-parameter log-variance for the posterior distribution.</summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _posteriorLogVar;
 
     /// <inheritdoc/>

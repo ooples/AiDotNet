@@ -49,11 +49,23 @@ public partial class SwinPatchMergingLayer<T> : LayerBase<T>, IShapeContract
     /// Linear reduction layer that projects concatenated patches to output dimension.
     /// Input: 4 * inputDim (concatenated 2x2 patches), Output: 2 * inputDim
     /// </summary>
+    /// <remarks>
+    /// Both children are built with their output size alone, so both stayed shape-deferred and
+    /// ParameterCount -- which does not materialize -- reported 0. What GetParameters produced
+    /// instead was worse than a missing count: with nothing declared, the base sized the children by
+    /// CHAINING them in registration order, so reduction was built from this layer's own 8-wide
+    /// input and norm from reduction's 16-wide output, for 176 values. The forward feeds both the
+    /// 4x-concatenated tensor, and norm runs BEFORE reduction, so the real block is 592 values and
+    /// every one of those 176 had the wrong shape. Declaring the width states what the doc comments
+    /// above already say.
+    /// </remarks>
+    [SubLayerInput("_inputDim * 4")]
     private readonly DenseLayer<T> _reduction;
 
     /// <summary>
     /// Layer normalization applied before reduction.
     /// </summary>
+    [SubLayerInput("_inputDim * 4")]
     private readonly LayerNormalizationLayer<T> _norm;
 
     // Cached values for backward pass

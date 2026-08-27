@@ -61,21 +61,25 @@ public partial class StateSpaceModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// The state transition matrix that describes how the hidden state evolves from one time step to the next.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _transitionMatrix;
 
     /// <summary>
     /// The observation matrix that relates the hidden state to the observed measurements.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _observationMatrix;
 
     /// <summary>
     /// The covariance matrix of the process noise, representing uncertainty in the state transition.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _processNoise;
 
     /// <summary>
     /// The covariance matrix of the observation noise, representing measurement uncertainty.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter]
     private Matrix<T> _observationNoise;
 
     /// <summary>
@@ -496,45 +500,7 @@ public partial class StateSpaceModel<T> : TimeSeriesModelBase<T>
     /// - Other parameters like learning rate and convergence settings
     /// </para>
     /// </remarks>
-    protected override void SerializeCore(BinaryWriter writer)
-    {
-        // Serialize dimensions
-        writer.Write(_stateSize);
-        writer.Write(_observationSize);
 
-        // Serialize matrices
-        SerializationHelper<T>.SerializeMatrix(writer, _transitionMatrix);
-        SerializationHelper<T>.SerializeMatrix(writer, _observationMatrix);
-        SerializationHelper<T>.SerializeMatrix(writer, _processNoise);
-        SerializationHelper<T>.SerializeMatrix(writer, _observationNoise);
-
-        // Serialize vector
-        SerializationHelper<T>.SerializeVector(writer, _initialState);
-
-        // Serialize other parameters
-        writer.Write(_learningRate);
-        writer.Write(_maxIterations);
-        writer.Write(_tolerance);
-        writer.Write(_convergenceThreshold);
-
-        // Serialize ALL smoothed states for in-sample prediction support
-        if (_smoothedStates != null && _smoothedStates.Count > 0)
-        {
-            writer.Write(_smoothedStates.Count);
-            writer.Write(_smoothedStates[0].Length);
-            foreach (var state in _smoothedStates)
-            {
-                for (int i = 0; i < state.Length; i++)
-                {
-                    writer.Write(Convert.ToDouble(state[i]));
-                }
-            }
-        }
-        else
-        {
-            writer.Write(0);
-        }
-    }
 
     /// <summary>
     /// Deserializes the model's core parameters from a binary reader.
@@ -552,51 +518,7 @@ public partial class StateSpaceModel<T> : TimeSeriesModelBase<T>
     /// having to figure out the ingredients and proportions from scratch.
     /// </para>
     /// </remarks>
-    protected override void DeserializeCore(BinaryReader reader)
-    {
-        // Deserialize dimensions
-        _stateSize = reader.ReadInt32();
-        _observationSize = reader.ReadInt32();
 
-        // Deserialize matrices
-        _transitionMatrix = SerializationHelper<T>.DeserializeMatrix(reader, _stateSize, _stateSize);
-        _observationMatrix = SerializationHelper<T>.DeserializeMatrix(reader, _observationSize, _stateSize);
-        _processNoise = SerializationHelper<T>.DeserializeMatrix(reader, _stateSize, _stateSize);
-        _observationNoise = SerializationHelper<T>.DeserializeMatrix(reader, _observationSize, _observationSize);
-
-        // Deserialize vector
-        _initialState = SerializationHelper<T>.DeserializeVector(reader, _stateSize);
-
-        // Deserialize other parameters
-        _learningRate = reader.ReadDouble();
-        _maxIterations = reader.ReadInt32();
-        _tolerance = reader.ReadDouble();
-        _convergenceThreshold = reader.ReadDouble();
-
-        // Deserialize ALL smoothed states for in-sample prediction support
-        _smoothedStates = new List<Vector<T>>();
-        try
-        {
-            int smoothedCount = reader.ReadInt32();
-            if (smoothedCount > 0)
-            {
-                int stateLen = reader.ReadInt32();
-                for (int s = 0; s < smoothedCount; s++)
-                {
-                    var state = new Vector<T>(stateLen);
-                    for (int i = 0; i < stateLen; i++)
-                    {
-                        state[i] = NumOps.FromDouble(reader.ReadDouble());
-                    }
-                    _smoothedStates.Add(state);
-                }
-            }
-        }
-        catch (EndOfStreamException)
-        {
-            // Older serialized models don't include smoothed states — leave empty
-        }
-    }
 
     /// <summary>
     /// Core implementation of the training logic for the State Space Model.

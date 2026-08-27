@@ -64,7 +64,7 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2103.16206",
     Year = 2021,
     Authors = "Hyeonjun Sim, Jihyong Oh, Munchurl Kim")]
-public class XVFI<T> : FrameInterpolationBase<T>
+public partial class XVFI<T> : FrameInterpolationBase<T>
 {
     private readonly XVFIOptions _options;
 
@@ -201,36 +201,10 @@ public class XVFI<T> : FrameInterpolationBase<T>
     }
 
     /// <inheritdoc/>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write((int)_options.Variant);
-        writer.Write(_options.NumFeatures);
-        writer.Write(_options.NumPyramidLevels);
-        writer.Write(_options.NumResBlocks);
-        writer.Write(_options.NumAffineParams);
-        writer.Write(_options.UseComplementaryFlow);
-        writer.Write(_options.LearningRate);
-        writer.Write(_options.DropoutRate);
-    }
+
 
     /// <inheritdoc/>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _options.Variant = (VideoModelVariant)reader.ReadInt32();
-        _options.NumFeatures = reader.ReadInt32();
-        _options.NumPyramidLevels = reader.ReadInt32();
-        _options.NumResBlocks = reader.ReadInt32();
-        _options.NumAffineParams = reader.ReadInt32();
-        _options.UseComplementaryFlow = reader.ReadBoolean();
-        _options.LearningRate = reader.ReadDouble();
-        _options.DropoutRate = reader.ReadDouble();
-    }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new XVFI<T>(Architecture, _options);
-    }
 
     private void ThrowIfDisposed()
     {

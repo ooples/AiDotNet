@@ -124,6 +124,7 @@ public partial class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
     /// use smaller rates for fine-tuning. These rates are learned automatically.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _perStepLearningRates;
 
     /// <inheritdoc/>

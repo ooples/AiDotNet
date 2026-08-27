@@ -55,7 +55,7 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
 
     #region Fields
 
-    private readonly FinancialSACAgentOptions<T> _options;
+    private readonly TradingAgentOptions<T> _options;
     private readonly INeuralNetwork<T> _actor;
     private readonly INeuralNetwork<T> _critic1;
     private readonly INeuralNetwork<T> _critic2;
@@ -98,7 +98,7 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
         TradingAgentOptions<T> options)
         : base(options)
     {
-        _options = options as FinancialSACAgentOptions<T> ?? new FinancialSACAgentOptions<T>();
+        _options = options;
         _actorArchitecture = actorArchitecture;
         _criticArchitecture = criticArchitecture;
 
@@ -107,9 +107,9 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
 
         _actor = new NeuralNetwork<T>(actorArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         _critic1 = new NeuralNetwork<T>(criticArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
-        _critic2 = new NeuralNetwork<T>(criticArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
-        _targetCritic1 = new NeuralNetwork<T>(criticArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
-        _targetCritic2 = new NeuralNetwork<T>(criticArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        _critic2 = new NeuralNetwork<T>(criticArchitecture.CloneForModelConstruction(), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        _targetCritic1 = new NeuralNetwork<T>(criticArchitecture.CloneForModelConstruction(), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        _targetCritic2 = new NeuralNetwork<T>(criticArchitecture.CloneForModelConstruction(), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
         
         UpdateTargetNetworks(1.0); // Hard sync at start
@@ -259,40 +259,6 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
 
     #region Serialization
 
-    /// <summary>
-    /// Executes Serialize for the FinancialSACAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialSACAgent model, Serialize saves or restores model-specific settings. This lets the FinancialSACAgent architecture be reused later.
-    /// </para>
-    /// </remarks>
-    public override byte[] Serialize()
-    {
-        using var ms = new MemoryStream();
-        using var writer = new BinaryWriter(ms);
-        var actorData = _actor.Serialize();
-        writer.Write(actorData.Length);
-        writer.Write(actorData);
-        return ms.ToArray();
-    }
-
-    /// <summary>
-    /// Executes Deserialize for the FinancialSACAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialSACAgent model, Deserialize saves or restores model-specific settings. This lets the FinancialSACAgent architecture be reused later.
-    /// </para>
-    /// </remarks>
-    public override void Deserialize(byte[] data)
-    {
-        using var ms = new MemoryStream(data);
-        using var reader = new BinaryReader(ms);
-        int actorLen = reader.ReadInt32();
-        _actor.Deserialize(reader.ReadBytes(actorLen));
-    }
-
     #endregion
 
     #region Model Metadata
@@ -315,21 +281,6 @@ public partial class FinancialSACAgent<T> : TradingAgentBase<T>, IGradientComput
                 { "ParameterCount", ParameterCount }
             }
         };
-    }
-
-    /// <summary>
-    /// Executes Clone for the FinancialSACAgent.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the FinancialSACAgent model, Clone performs a supporting step in the workflow. It keeps the FinancialSACAgent architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override IFullModel<T, Vector<T>, Vector<T>> Clone()
-    {
-        var clone = new FinancialSACAgent<T>(_actorArchitecture, _criticArchitecture, TradingOptions);
-        clone.SetParameters(GetParameters());
-        return clone;
     }
 
     /// <summary>

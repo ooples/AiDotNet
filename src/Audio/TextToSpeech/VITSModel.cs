@@ -842,121 +842,12 @@ public partial class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <summary>
     /// Serializes network-specific data.
     /// </summary>
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_useNativeMode);
-        writer.Write(SampleRate);
-        writer.Write(NumMels);
-        writer.Write(_speakingRate);
-        writer.Write(_noiseScale);
-        writer.Write(_lengthScale);
-        writer.Write(_hiddenDim);
-        writer.Write(_numHeads);
-        writer.Write(_numEncoderLayers);
-        writer.Write(_numFlowLayers);
-        writer.Write(_speakerEmbeddingDim);
-        writer.Write(_numSpeakers);
-        writer.Write(_maxPhonemeLength);
-        writer.Write(_fftSize);
-        writer.Write(_hopLength);
-        writer.Write(_phonemeVocabSize);
-        writer.Write(_upsampleRates.Length);
-        foreach (var rate in _upsampleRates)
-        {
-            writer.Write(rate);
-        }
-    }
+
 
     /// <summary>
     /// Deserializes network-specific data.
     /// </summary>
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _useNativeMode = reader.ReadBoolean();
-        SampleRate = reader.ReadInt32();
-        NumMels = reader.ReadInt32();
-        _speakingRate = reader.ReadDouble();
-        _noiseScale = reader.ReadDouble();
-        _lengthScale = reader.ReadDouble();
-        _hiddenDim = reader.ReadInt32();
-        _numHeads = reader.ReadInt32();
-        _numEncoderLayers = reader.ReadInt32();
-        _numFlowLayers = reader.ReadInt32();
-        _speakerEmbeddingDim = reader.ReadInt32();
-        _numSpeakers = reader.ReadInt32();
-        _maxPhonemeLength = reader.ReadInt32();
-        _fftSize = reader.ReadInt32();
-        _hopLength = reader.ReadInt32();
-        if (reader.BaseStream.Position < reader.BaseStream.Length)
-        {
-            _phonemeVocabSize = reader.ReadInt32();
-            if (_phonemeVocabSize <= 0)
-                throw new InvalidDataException($"Invalid phonemeVocabSize: {_phonemeVocabSize}. Must be positive.");
-            // Maximum expected upsample rate entries (typical VITS uses 4-5 rates)
-            const int MaxUpsampleRatesLength = 64;
-            int ratesLen = reader.ReadInt32();
-            if (ratesLen <= 0 || ratesLen > MaxUpsampleRatesLength)
-                throw new InvalidDataException($"Invalid upsample rates length: {ratesLen}. Expected 1-{MaxUpsampleRatesLength}.");
-            _upsampleRates = new int[ratesLen];
-            for (int i = 0; i < ratesLen; i++)
-            {
-                _upsampleRates[i] = reader.ReadInt32();
-                if (_upsampleRates[i] <= 0)
-                    throw new InvalidDataException($"Invalid upsample rate at index {i}: {_upsampleRates[i]}. Must be positive.");
-            }
-        }
-        else
-        {
-            _phonemeVocabSize = 128;
-            _upsampleRates = [8, 8, 2, 2];
-        }
 
-        if (_useNativeMode)
-            RelinkNativeLayerViews();
-    }
-
-    /// <summary>
-    /// Creates a new instance of this model for cloning.
-    /// </summary>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _modelPath is not null)
-        {
-            return new VITSModel<T>(
-                Architecture,
-                _modelPath,
-                _speakerEncoderPath,
-                SampleRate,
-                NumMels,
-                _speakingRate,
-                _noiseScale,
-                _lengthScale,
-                _fftSize,
-                _hopLength);
-        }
-        else
-        {
-            return new VITSModel<T>(
-                Architecture,
-                SampleRate,
-                NumMels,
-                _speakingRate,
-                _noiseScale,
-                _lengthScale,
-                _hiddenDim,
-                _numHeads,
-                _numEncoderLayers,
-                _numFlowLayers,
-                _speakerEmbeddingDim,
-                _numSpeakers,
-                _maxPhonemeLength,
-                _phonemeVocabSize,
-                _upsampleRates,
-                _fftSize,
-                _hopLength,
-                lossFunction: _lossFunction);
-        }
-    }
 
     #endregion
 

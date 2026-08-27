@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Eagle and Finch: RWKV with Matrix-Valued States and Dynamic Recurrence", "https://arxiv.org/abs/2404.05892", Year = 2024, Authors = "Bo Peng, Daniel Goldstein, Quentin Anthony, Alon Albalak, Eric Alcaide, Stella Biderman, Eugene Cheah, Teddy Ferdinan, Haowen Hou, Przemyslaw Kazienko, Kranthi Kiran GV, Jan Kocon, Bartlomiej Koptyra, Satyapriya Krishna, Ronald McClelland Jr., Niklas Muennighoff, Fares Obeid, Atsushi Saito, Guangyu Song, Haoqin Tu, Stanislaw Wozniak, Ruichong Zhang, Bingchen Zhao, Qihang Zhao, Peng Zhou, Jian Zhu, Rui-Jie Zhu")]
-public class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
+public partial class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
 {
     private readonly FinchOptions _options;
     private readonly int _vocabSize;
@@ -157,30 +157,9 @@ public class FinchLanguageModel<T> : TokenLanguageModelLayoutBase<T>
         };
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_vocabSize);
-        writer.Write(_modelDimension);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_maxSeqLength);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-        _ = reader.ReadInt32();
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new FinchLanguageModel<T>(
-            Architecture, _vocabSize, _modelDimension, _numLayers, _numHeads,
-            _maxSeqLength, LossFunction, _options, _learningRate);
-    }
+
 
     #endregion
 }

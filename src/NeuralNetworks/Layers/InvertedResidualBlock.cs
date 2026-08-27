@@ -115,6 +115,7 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
     // path: sub-layers are still null then, so we stash the vector here
     // and replay it inside OnFirstForward once the channel-count-driven
     // layout is known and sub-layers exist.
+    [Scratch]
     private Vector<T>? _pendingParameters;
 
     // Non-readonly: lazy ctor leaves _useResidual = false until
@@ -123,15 +124,25 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
     private readonly bool _hasExpansion;
     private readonly bool _useSE;
 
+    [Scratch]
     private Tensor<T>? _lastInput;
+    [Scratch]
     private Tensor<T>? _lastExpandOut;
+    [Scratch]
     private Tensor<T>? _lastExpandBnOut;
+    [Scratch]
     private Tensor<T>? _lastExpandActOut;
+    [Scratch]
     private Tensor<T>? _lastDwOut;
+    [Scratch]
     private Tensor<T>? _lastDwBnOut;
+    [Scratch]
     private Tensor<T>? _lastDwActOut;
+    [Scratch]
     private Tensor<T>? _lastSeOut;
+    [Scratch]
     private Tensor<T>? _lastProjectOut;
+    [Scratch]
     private Tensor<T>? _lastProjectBnOut;
 
     /// <summary>
@@ -659,6 +670,7 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
     /// called pre-OnFirstForward. Replayed inside OnFirstForward once
     /// _expandBn/_dwBn/_projectBn are allocated.
     /// </summary>
+    [Scratch]
     private Vector<T>? _pendingExtraParameters;
 
     private void ApplyExtraParametersUnsafe(Vector<T> extraParameters)

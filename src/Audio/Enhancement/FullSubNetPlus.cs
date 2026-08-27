@@ -57,7 +57,7 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FullSubNet+: Channel Attention FullSubNet with Complex Spectrograms for Speech Enhancement", "https://arxiv.org/abs/2203.12188", Year = 2022, Authors = "Jun Chen, Zilin Wang, Deyi Tuo, Zhiyong Wu, Shiyin Kang, Helen Meng")]
-public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
+public partial class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -76,7 +76,7 @@ public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     private ShortTimeFourierTransform<T> _stft;
     [Scratch]
     private Tensor<T>? _lastPhase;
-    [Buffer]
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Tensor<T>? _noiseProfile;
     private bool _useNativeMode;
     private bool _disposed;
@@ -314,37 +314,9 @@ public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         return m;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter w)
-    {
-        w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty);
-        w.Write(_options.SampleRate); w.Write(_options.FftSize); w.Write(_options.HopLength);
-        w.Write(_options.NumFreqBins); w.Write(_options.FullBandLayers); w.Write(_options.FullBandHiddenSize);
-        w.Write(_options.SubBandLayers); w.Write(_options.SubBandHiddenSize);
-        w.Write(_options.EnhancementStrength); w.Write(_options.DropoutRate);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader r)
-    {
-        _useNativeMode = r.ReadBoolean();
-        string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
-        _options.SampleRate = r.ReadInt32(); base.SampleRate = _options.SampleRate;
-        _options.FftSize = r.ReadInt32(); _options.HopLength = r.ReadInt32();
-        _options.NumFreqBins = r.ReadInt32(); _options.FullBandLayers = r.ReadInt32(); _options.FullBandHiddenSize = r.ReadInt32();
-        _options.SubBandLayers = r.ReadInt32(); _options.SubBandHiddenSize = r.ReadInt32();
-        _options.EnhancementStrength = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
-            OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
-        int nFft = NextPowerOfTwo(_options.FftSize);
-        _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,
-            windowLength: _options.FftSize <= nFft ? _options.FftSize : null);
-    }
 
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new FullSubNetPlus<T>(Architecture, mp, _options);
-        return new FullSubNetPlus<T>(Architecture, _options);
-    }
+
 
     #endregion
 

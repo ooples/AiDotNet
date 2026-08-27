@@ -209,19 +209,6 @@ public partial class SECBERT<T> : FinancialNLPModelBase<T>, ITrainingObjectivePr
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <summary>
-    /// Executes CreateNewInstance for the SECBERT.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the SECBERT model, CreateNewInstance builds and wires up model components. This sets up the SECBERT architecture before use.
-    /// </para>
-    /// </remarks>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-    {
-        return new SECBERT<T>(
-            Architecture, new ModelOptions.SECBERTOptions<T>(_options), _optimizer, LossFunction);
-    }
 
     /// <summary>
     /// Executes SerializeModelSpecificData for the SECBERT.
@@ -231,10 +218,7 @@ public partial class SECBERT<T> : FinancialNLPModelBase<T>, ITrainingObjectivePr
     /// <b>For Beginners:</b> In the SECBERT model, SerializeModelSpecificData saves or restores model-specific settings. This lets the SECBERT architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void SerializeModelSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_dropout);
-    }
+
 
     /// <summary>
     /// Executes DeserializeModelSpecificData for the SECBERT.
@@ -244,10 +228,7 @@ public partial class SECBERT<T> : FinancialNLPModelBase<T>, ITrainingObjectivePr
     /// <b>For Beginners:</b> In the SECBERT model, DeserializeModelSpecificData saves or restores model-specific settings. This lets the SECBERT architecture be reused later.
     /// </para>
     /// </remarks>
-    protected override void DeserializeModelSpecificData(BinaryReader reader)
-    {
-        _dropout = reader.ReadDouble();
-    }
+
 
     /// <summary>
     /// Executes ForecastNative for the SECBERT.

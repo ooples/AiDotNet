@@ -240,19 +240,6 @@ public partial class DeepCompressionVAE<T> : VAEModelBase<T>
     }
 
 
-    /// <inheritdoc />
-    public override IVAEModel<T> Clone()
-    {
-        var clone = new DeepCompressionVAE<T>(
-            _inputChannels, _latentChannels, _downsampleFactor, _baseChannels,
-            LossFunction);
-        if (!clone.TryShareParametersFrom(this)) clone.SetParameterChunks(GetParameterChunks());
-        return clone;
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
-
     protected override Vector<T> GetParameterGradients()
     {
         var gradients = new List<T>();

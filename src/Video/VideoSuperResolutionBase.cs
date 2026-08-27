@@ -50,7 +50,7 @@ namespace AiDotNet.Video;
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output,
     Note = "A single frame with both spatial axes multiplied by ScaleFactor.")]
-public abstract class VideoSuperResolutionBase<T> : VideoNeuralNetworkBase<T>, IVideoSuperResolution<T>, IShapeContract
+public abstract partial class VideoSuperResolutionBase<T> : VideoNeuralNetworkBase<T>, IVideoSuperResolution<T>, IShapeContract
 {
     /// <summary>
     /// The super-resolution family's law: both spatial axes scale by <see cref="ScaleFactor"/> and

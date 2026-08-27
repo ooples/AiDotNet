@@ -261,6 +261,7 @@ public partial class SwinPatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         return metadata;
     }
 
+    [Scratch]
     private Vector<T>? _pendingParameters;
 
     /// <inheritdoc/>

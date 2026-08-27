@@ -673,26 +673,9 @@ public partial class GMFlow<T> : OpticalFlowBase<T>
         ModelData = SerializeForMetadata()
     };
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
-    {
-        writer.Write(_height);
-        writer.Write(_width);
-        writer.Write(_channels);
-        writer.Write(_numFeatures);
-        writer.Write(_numTransformerLayers);
-        writer.Write(_numHeads);
-    }
 
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
-    {
-        for (int i = 0; i < 6; i++) _ = reader.ReadInt32();
 
-        // The base deserializer has replaced Layers with the loaded-weight layers;
-        // re-point the forward-pass sub-lists at them so a clone/reload runs the
-        // trained weights rather than the constructor's random-init layers
-        // (Clone_ShouldProduceIdenticalOutput / Clone_AfterTraining).
-        ExtractLayerReferences();
-    }
+
 
     /// <summary>
     /// Resolves each convolution's lazy input depth by running the REAL computation
@@ -728,9 +711,6 @@ public partial class GMFlow<T> : OpticalFlowBase<T>
         catch { /* best-effort; a genuine forward failure surfaces on the real Train/Predict */ }
         finally { if (wasTraining) SetTrainingMode(true); }
     }
-
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new GMFlow<T>(Architecture, _numFeatures, _numTransformerLayers, _numHeads);
 
     #endregion
 

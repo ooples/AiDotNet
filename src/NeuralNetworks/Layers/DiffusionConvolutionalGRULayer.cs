@@ -29,7 +29,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [TensorLayout(TensorAxis.Other, TensorAxis.Time, TensorAxis.Features,
     Direction = TensorLayoutDirection.Output,
     Note = "Graph nodes, sequence steps, and hidden features.")]
-internal sealed class DiffusionConvolutionalGRULayer<T> : LayerBase<T>, IShapeContract
+internal sealed partial class DiffusionConvolutionalGRULayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly int _inputSize;
     private readonly int _hiddenSize;

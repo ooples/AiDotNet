@@ -108,6 +108,12 @@ public partial class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, IContextAwareInfe
     /// </summary>
     public int NumberOfTasks => _taskAdapters.Count;
 
+    /// <summary>Construction state: the 'defaultTaskName' the layer was built with.</summary>
+    private readonly string _defaultTaskName;
+
+    /// <summary>Construction state: the 'defaultRank' the layer was built with.</summary>
+    private readonly int _defaultRank;
+
     /// <summary>
     /// Initializes a new Multi-LoRA adapter with an initial default task.
     /// </summary>
@@ -143,6 +149,8 @@ public partial class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, IContextAwareInfe
         bool freezeBaseLayer = true)
         : base(baseLayer, defaultRank, alpha, freezeBaseLayer)
     {
+        _defaultRank = defaultRank;
+        _defaultTaskName = defaultTaskName;
         if (string.IsNullOrWhiteSpace(defaultTaskName))
         {
             throw new ArgumentException("Default task name cannot be null or whitespace", nameof(defaultTaskName));
