@@ -245,10 +245,14 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     /// </para>
     /// </remarks>
     /// <returns><c>false</c> when the SVD cannot be formed, leaving the caller its random fallback.</returns>
-    private bool TryInitializeNndsvd(Matrix<T> V, int m, int n, int k, out Matrix<T> W, out Matrix<T> H)
+    private bool TryInitializeNndsvd(
+        Matrix<T> V, int m, int n, int k, out Matrix<T> initialW, out Matrix<T> initialH)
     {
-        W = new Matrix<T>(0, 0);
-        H = new Matrix<T>(0, 0);
+        // Named initialW/initialH rather than W/H: this type already exposes W and H as the RESULT
+        // of the factorization, and out parameters with those names shadowed them inside this
+        // method -- so a reader, or a later edit, could not tell the seed from the answer.
+        initialW = new Matrix<T>(0, 0);
+        initialH = new Matrix<T>(0, 0);
 
         SvdDecomposition<T> svd;
         try
@@ -265,8 +269,8 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         Matrix<T> vt = svd.Vt;
         if (u.Rows != m || vt.Columns != n || singular.Length == 0) return false;
 
-        W = new Matrix<T>(m, k);
-        H = new Matrix<T>(k, n);
+        initialW = new Matrix<T>(m, k);
+        initialH = new Matrix<T>(k, n);
 
         // A strictly zero start is absorbing under multiplicative updates: 0 * anything stays 0, so
         // a component seeded with zeros can never recover. Seed those with a small positive floor.
@@ -276,8 +280,8 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         {
             if (component >= singular.Length)
             {
-                for (int i = 0; i < m; i++) W[i, component] = floor;
-                for (int j = 0; j < n; j++) H[component, j] = floor;
+                for (int i = 0; i < m; i++) initialW[i, component] = floor;
+                for (int j = 0; j < n; j++) initialH[component, j] = floor;
                 continue;
             }
 
@@ -287,9 +291,9 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
             {
                 // The leading pair is nonnegative up to a global sign, so its magnitude is used.
                 for (int i = 0; i < m; i++)
-                    W[i, 0] = MaxOf(NumOps.Multiply(sqrtSigma, NumOps.Abs(u[i, 0])), floor);
+                    initialW[i, 0] = MaxOf(NumOps.Multiply(sqrtSigma, NumOps.Abs(u[i, 0])), floor);
                 for (int j = 0; j < n; j++)
-                    H[0, j] = MaxOf(NumOps.Multiply(sqrtSigma, NumOps.Abs(vt[0, j])), floor);
+                    initialH[0, j] = MaxOf(NumOps.Multiply(sqrtSigma, NumOps.Abs(vt[0, j])), floor);
                 continue;
             }
 
@@ -324,7 +328,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
                 T part = usePositive
                     ? (NumOps.GreaterThan(value, NumOps.Zero) ? value : NumOps.Zero)
                     : (NumOps.LessThan(value, NumOps.Zero) ? NumOps.Negate(value) : NumOps.Zero);
-                W[i, component] = MaxOf(NumOps.Multiply(sqrtSigma, part), floor);
+                initialW[i, component] = MaxOf(NumOps.Multiply(sqrtSigma, part), floor);
             }
             for (int j = 0; j < n; j++)
             {
@@ -332,7 +336,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
                 T part = usePositive
                     ? (NumOps.GreaterThan(value, NumOps.Zero) ? value : NumOps.Zero)
                     : (NumOps.LessThan(value, NumOps.Zero) ? NumOps.Negate(value) : NumOps.Zero);
-                H[component, j] = MaxOf(NumOps.Multiply(sqrtSigma, part), floor);
+                initialH[component, j] = MaxOf(NumOps.Multiply(sqrtSigma, part), floor);
             }
         }
 

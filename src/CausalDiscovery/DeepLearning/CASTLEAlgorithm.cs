@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
@@ -54,7 +54,13 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
     /// <inheritdoc/>
     public override bool SupportsNonlinear => true;
 
-    public CASTLEAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
+    public CASTLEAlgorithm(CausalDiscoveryOptions? options = null)
+    {
+        // See AmortizedCDAlgorithm: this solve needs far more than the base class's 100 steps.
+        // Set BEFORE options are applied so it stays an overridable default.
+        MaxEpochs = 2000;
+        ApplyDeepOptions(options);
+    }
 
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
@@ -132,7 +138,11 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
         // problem are microseconds, so we run a robust number of them (the paper uses
         // Adam over many epochs). Reconstruction-first warmup (no L1 / acyclicity)
         // lets the true-parent weights grow before sparsity + the DAG constraint prune.
-        int steps = Math.Max(MaxEpochs, 2000);
+        // MaxEpochs is documented as a MAXIMUM, so it is honoured as one. The step count this solve
+        // needs is expressed as this algorithm's DEFAULT instead, set before options are applied so
+        // a caller who asks for fewer gets fewer -- clamping their value upward made MaxEpochs = 10
+        // silently run 2,000 steps, which is not what the option says it does.
+        int steps = MaxEpochs;
         int warmupSteps = steps / 4;
 
         // Adam hyperparameters (CASTLE optimizes with Adam).
@@ -163,8 +173,16 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
         // edges. The diagnostic tell was that the failure got WORSE with a larger step budget --
         // 10000 steps recovered an edge, 12000 recovered none -- which is the opposite of an
         // under-training curve and the signature of a penalty that never stops growing.
-        T alpha = NumOps.One;
-        T rho = NumOps.One;
+        // AUGMENTED-LAGRANGIAN POLICY, FIXED RATHER THAN ESCALATED.
+        // alpha is the Lagrange multiplier on the acyclicity residual and rho the quadratic penalty
+        // weight. Both are held at 1 for the whole solve. The classic schedule multiplies rho and
+        // accumulates alpha every outer iteration, which is what produced the failure recorded
+        // above: the penalty grew without bound, collapsed every edge to zero -- an empty graph is
+        // trivially acyclic -- and got WORSE with more steps.
+        const double AcyclicityMultiplier = 1.0;
+        const double AcyclicityPenaltyWeight = 1.0;
+        T alpha = NumOps.FromDouble(AcyclicityMultiplier);
+        T rho = NumOps.FromDouble(AcyclicityPenaltyWeight);
 
         // ---- Pre-allocate every per-step tensor ONCE (allocation-flat inner loop).
         // The solve runs `steps` (>= 2000) full-batch iterations over d sub-networks. Allocating

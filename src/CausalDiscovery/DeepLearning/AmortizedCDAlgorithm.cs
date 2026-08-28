@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
@@ -53,7 +53,15 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
     /// <inheritdoc/>
     public override bool SupportsNonlinear => true;
 
-    public AmortizedCDAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
+    public AmortizedCDAlgorithm(CausalDiscoveryOptions? options = null)
+    {
+        // This solve needs far more steps than the 100 the base class defaults to: below roughly
+        // 500 the acyclicity penalty in the second half outruns a data fit that has not
+        // converged and the graph comes back empty. Set BEFORE options are applied, so it is a
+        // default a caller can still override in either direction.
+        MaxEpochs = 2000;
+        ApplyDeepOptions(options);
+    }
 
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
@@ -94,7 +102,11 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
         // had not converged -- against a floor of 0.483, so the graph came back EMPTY. Measured on
         // the linear-SEM fixture: 100 steps -> 0 edges; 500 -> the exact true structure
         // (0.998 / 0.997 / 0.996). Full-batch steps on a problem this size are microseconds.
-        int steps = Math.Max(MaxEpochs, 2000);
+        // MaxEpochs is documented as a MAXIMUM, so it is honoured as one. The step count this solve
+        // needs is expressed as this algorithm's DEFAULT instead, set before options are applied so
+        // a caller who asks for fewer gets fewer -- clamping their value upward made MaxEpochs = 10
+        // silently run 2,000 steps, which is not what the option says it does.
+        int steps = MaxEpochs;
 
         T lr = NumOps.FromDouble(LearningRate);
         // Acyclicity warm-up: rho = 0 (no NOTEARS penalty) for the first half of training so the data fit
