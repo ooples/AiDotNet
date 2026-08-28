@@ -106,6 +106,20 @@ public partial class RepViTSAM<T> : Common.PromptableSegmentationBase<T>
     }
 
     /// <summary>
+    /// RepViTSAM's default training recipe, taken from its options rather than the base's generic one.
+    /// </summary>
+    /// <remarks>
+    /// Expressed by overriding the rate the base already exposes for this purpose -- "derived paper
+    /// implementations override this instead of reimplementing optimizer plumbing" -- so a caller
+    /// who passes their own optimizer still wins, and one who only wants a different rate can set
+    /// it on the options.
+    /// </remarks>
+    protected override double DefaultLearningRate => _options.LearningRate;
+
+    /// <inheritdoc cref="DefaultLearningRate"/>
+    protected override double DefaultWeightDecay => _options.WeightDecay;
+
+    /// <summary>
     /// Initializes RepViTSAM in ONNX (inference-only) mode.
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
