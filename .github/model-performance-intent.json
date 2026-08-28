@@ -4,6 +4,20 @@
     "origin": "cb9ecf59db",
     "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.DCRNNTests",
     "metric": "peakWorkingSetBytes",
-    "reason": "cb9ecf59db restored the paper's recurrent diffusion: DCRNN now builds real DiffusionConvolutionalGRU layers for its encoder and decoder, and each one owns forward and backward graph transition matrices and runs MaxDiffusionStep diffusion steps per gate. That is more memory than the layers it replaced, and it is the model the paper describes. The measured step is 1.69x, from 349 MB to 592 MB, and it holds steady across every run since - a level change, not a leak."
+    "reason": "cb9ecf59db restored the paper's recurrent diffusion: DCRNN now builds real DiffusionConvolutionalGRU layers for its encoder and decoder, each owning forward and backward graph transition matrices and running MaxDiffusionStep diffusion steps per gate. That is more memory than the layers it replaced, and it is the model the paper describes. Measured step 1.69x, 349 MB to 592 MB, steady across every run since - a level change, not a leak."
+  },
+  {
+    "commit": "9e2d5031",
+    "origin": "9e2d5031fb",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.GR00TN1Tests",
+    "metric": "allocatedBytes",
+    "reason": "GR00TN1 gained a trainable parameter slot it should always have had. Measured either side of the merge on one machine: 39 slots and 1,277,364 parameters before, 40 slots and 5,373,364 after. The difference is exactly 4,096,000 = VocabSize 1000 x DecoderDim 4096, which is the instruction token embedding the paper describes (NVIDIA GR00T N1 2025, section 3.1). The forward pass already used that table; parameter enumeration did not see it, so it was never trained, never saved and never counted. Now it is, and 4.1M more float parameters carry their weights, gradients and optimizer state - about 98 MB, which is the whole of the measured increase."
+  },
+  {
+    "commit": "9e2d5031",
+    "origin": "9e2d5031fb",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.GR00TN1Tests",
+    "metric": "peakWorkingSetBytes",
+    "reason": "The same 4,096,000-parameter token embedding, seen in peak process memory rather than in cumulative allocation. See the allocatedBytes entry for the measurement."
   }
 ]
