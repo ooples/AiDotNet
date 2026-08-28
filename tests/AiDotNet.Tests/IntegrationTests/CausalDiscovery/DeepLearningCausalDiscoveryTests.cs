@@ -111,6 +111,130 @@ public class DeepLearningCausalDiscoveryTests
 
     private static readonly string[] FeatureNames = ["X0", "X1", "X2"];
 
+    /// <summary>
+    /// A purely LAGGED causal chain, for the temporal methods.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="CreateSyntheticData"/> cannot support a temporal claim, even though it has lag
+    /// structure. Its driver is AR(1), so X0[t-1] predicts X0[t]; and X1 and X2 are built from the
+    /// CONTEMPORANEOUS X0, so X1[t-1] and X2[t-1] both contain X0[t-1] too. A method that scores
+    /// each variable against the others' histories therefore finds X1[t-1] and X2[t-1] predicting
+    /// X0[t] about as well as X0's own past does, and the declared DAG has no incoming edge to X0
+    /// at all. The signal is real in the data and wrong about the graph: it is the driver's
+    /// autocorrelation reflected back through its own children.
+    /// </para>
+    /// <para>
+    /// Here X0 is i.i.d., so nothing -- its own past included -- predicts X0[t], and the only
+    /// incoming edges available to find are the true ones. The dependence is carried entirely by
+    /// lag 1, which is what a causal-convolution model is built to detect:
+    /// </para>
+    /// <code>
+    /// X0[t] = e0[t]                                  (i.i.d.)
+    /// X1[t] = 1.5 * X0[t]   + 0.8 * X0[t-1] + e1[t]
+    /// X2[t] = 1.0 * X0[t]   + 0.7 * X1[t-1] + e2[t]
+    /// </code>
+    /// <para>
+    /// The contemporaneous terms are kept deliberately. They are not what created the reverse
+    /// signal -- the AR(1) driver was. With an i.i.d. X0 a child's history carries no information
+    /// about X0's future, so the edges stay strong enough to detect without becoming ambiguous.
+    /// </para>
+    /// <para>
+    /// The graph is the same one the rest of the file asserts -- X0 to X1, X0 to X2, X1 to X2 --
+    /// so this tests the same claim on data that can actually carry it.
+    /// </para>
+    /// </remarks>
+    private static Matrix<double> CreateLaggedTemporalData()
+    {
+        const int n = 400;
+        const double noise = 0.15;
+        var rng = RandomHelper.CreateSeededRandom(1337);
+        var data = new double[n, 3];
+
+        double Gaussian()
+        {
+            double u1 = 1.0 - rng.NextDouble();
+            double u2 = rng.NextDouble();
+            return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        }
+
+        double prevX0 = Gaussian();
+        double prevX1 = Gaussian();
+        for (int i = 0; i < n; i++)
+        {
+            // i.i.d. driver: X0[t-1] says nothing about X0[t], so no history -- its own or a
+            // child's -- can predict X0, and the reverse edges the shared fixture invites do not
+            // exist here. The children keep their strong CONTEMPORANEOUS coupling as well as a lag
+            // term, so the dependence is easy to detect while the direction stays unambiguous.
+            double x0 = 2.0 * Gaussian();
+            double x1 = 1.5 * x0 + 0.8 * prevX0 + noise * Gaussian();
+            double x2 = 1.0 * x0 + 0.7 * prevX1 + noise * Gaussian();
+
+            data[i, 0] = x0;
+            data[i, 1] = x1;
+            data[i, 2] = x2;
+
+            prevX0 = x0;
+            prevX1 = x1;
+        }
+
+        return new Matrix<double>(data);
+    }
+
+    /// <summary>
+    /// The same causal chain with variance DECREASING along it, for the variance-ordered methods.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="DAGGNNAlgorithm{T}"/> orients its final graph by descending raw column variance,
+    /// so the fixture's spread decides the answer before the model does. In
+    /// <see cref="CreateSyntheticData"/>, X1 = 2 * X0, which gives X1 roughly four times X0's
+    /// variance: the algorithm can rank X1 above X0 and orient the edge backwards, and the test
+    /// would still pass because it only asks for a meaningful graph. That makes it a test of the
+    /// fixture's accidental scaling rather than of the method.
+    /// </para>
+    /// <para>
+    /// Coefficients below one put the variance ordering where the topological order already is:
+    /// with Var(X0) = 9, the chain gives Var(X1) ~ 8.1 and Var(X2) ~ 5.9, strictly decreasing with
+    /// margins of roughly 10% and 27% -- comfortably wider than the sampling error on a variance at
+    /// n = 500, so the ordering cannot invert by chance.
+    /// </para>
+    /// <para>
+    /// They are close to one rather than small, which matters on the other side: BuildFinalAdjacency
+    /// requires a learned influence of at least max(1/d + 0.15, 0.3), which is 0.483 for three
+    /// variables. Shrinking the coefficients far enough to make the variance ordering obvious also
+    /// shrinks the dependence until nothing clears that threshold and the graph comes back empty,
+    /// so the fixture has to satisfy both constraints at once rather than either alone.
+    /// </para>
+    /// </remarks>
+    private static Matrix<double> CreateVarianceOrderedSemData()
+    {
+        const int n = 500;
+        const double noise = 0.05;
+        var rng = RandomHelper.CreateSeededRandom(4242);
+        var data = new double[n, 3];
+
+        double Gaussian()
+        {
+            double u1 = 1.0 - rng.NextDouble();
+            double u2 = rng.NextDouble();
+            return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        }
+
+        for (int i = 0; i < n; i++)
+        {
+            double x0 = 3.0 * Gaussian();
+            double x1 = 0.95 * x0 + noise * Gaussian();
+            double x2 = 0.10 * x0 + 0.75 * x1 + noise * Gaussian();
+
+            data[i, 0] = x0;
+            data[i, 1] = x1;
+            data[i, 2] = x2;
+        }
+
+        return new Matrix<double>(data);
+    }
+
     private static Matrix<double> CreateCgnnDagRegressionData()
     {
         const int n = 200;
@@ -137,10 +261,25 @@ public class DeepLearningCausalDiscoveryTests
     [Fact(Timeout = 120000)]
     public async Task DAGGNN_FindsCausalStructure()
     {
+        // Variance-ordered fixture: DAGGNN orients by descending column variance, so a fixture
+        // whose spread contradicts its own topology tests the scaling, not the method.
         var algo = new DAGGNNAlgorithm<double>();
-        var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
+        var graph = algo.DiscoverStructure(CreateVarianceOrderedSemData(), FeatureNames);
         CausalDiscoveryTestHelper.AssertMeaningfulGraph(graph);
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
+
+        // ASSERT THE STRUCTURE, not just that something was returned. Counting edges alone let this
+        // test pass while every edge pointed the wrong way: on the shared fixture, whose variance
+        // ordering contradicts its topology, the algorithm returned X1 -> X0 and X2 -> X0 and the
+        // assertions above were satisfied. A discovery test that cannot tell a recovered DAG from
+        // its transpose is not testing discovery.
+        var a = graph.AdjacencyMatrix;
+        Assert.True(a[0, 1] != 0.0, "X0 -> X1 should be recovered; got adjacency[0,1] = 0.");
+        Assert.True(a[0, 2] != 0.0, "X0 -> X2 should be recovered; got adjacency[0,2] = 0.");
+        Assert.True(a[1, 2] != 0.0, "X1 -> X2 should be recovered; got adjacency[1,2] = 0.");
+        Assert.True(a[1, 0] == 0.0, $"X1 -> X0 is the reverse of a true edge; got {a[1, 0]}.");
+        Assert.True(a[2, 0] == 0.0, $"X2 -> X0 is the reverse of a true edge; got {a[2, 0]}.");
+        Assert.True(a[2, 1] == 0.0, $"X2 -> X1 is the reverse of a true edge; got {a[2, 1]}.");
     }
 
     [Fact(Timeout = 120000)]
@@ -319,8 +458,10 @@ public class DeepLearningCausalDiscoveryTests
     [Fact(Timeout = 120000)]
     public async Task TCDF_FindsCausalStructure()
     {
+        // Lagged fixture: the shared one carries the driver's autocorrelation into its children,
+        // so every child's history predicts the driver and the reverse edges look real.
         var algo = new TCDFAlgorithm<double>();
-        var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
+        var graph = algo.DiscoverStructure(CreateLaggedTemporalData(), FeatureNames);
         CausalDiscoveryTestHelper.AssertMeaningfulGraph(graph);
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
     }
