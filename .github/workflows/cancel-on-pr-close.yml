@@ -40,11 +40,26 @@ jobs:
     name: Evict Build & SonarCloud concurrency group
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    # A MERGED pr's validation run must be left alone to finish. sonarcloud.yml reuses a merged
+    # PR's completed run to skip ~115 shards on master, and that reuse requires a conclusion of
+    # success or failure -- it explicitly refuses `cancelled`. Killing the run here to reclaim one
+    # CI slot therefore costs a full 115-shard master rerun, which is what happened to #2004:
+    # merged 21:49:03Z with its run still in flight, evicted 21:49:07Z, and master re-ran everything.
+    #
+    # Expressed by REDIRECTING the group rather than by `if:`. This job cancels through the group it
+    # claims at queue time, and a skipped job very probably claims nothing -- but "very probably" is
+    # a poor foundation for the one mechanism that does the cancelling. Naming a per-PR no-op group
+    # leaves no doubt: the heavy group is never entered at all.
     concurrency:
-      group: build-${{ github.event.pull_request.number }}
+      group: ${{ github.event.pull_request.merged && format('noop-merged-build-{0}', github.event.pull_request.number) || format('build-{0}', github.event.pull_request.number) }}
       cancel-in-progress: true
     steps:
-      - run: echo "Evicted concurrency group build-${{ github.event.pull_request.number }} (cancellation happened server-side at queue time)."
+      - run: |
+          if [ "${{ github.event.pull_request.merged }}" = "true" ]; then
+            echo "PR was MERGED: left group build-${{ github.event.pull_request.number }} untouched so its validation run can complete and stay reusable."
+          else
+            echo "Evicted concurrency group build-${{ github.event.pull_request.number }} (cancellation happened server-side at queue time)."
+          fi
 
   evict-ci-website-group:
     name: Evict ci-website concurrency group
@@ -82,6 +97,10 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
+          # Must match sonarcloud.yml's `name:` exactly; this is the run whose completion master
+          # reuses, so it is the one run this sweep must not touch on a merge.
+          REUSABLE_RUN_NAME: Build & SonarCloud
         run: |
           set -euo pipefail
           # Find in-progress AND queued runs that match this PR's head ref or
@@ -103,6 +122,15 @@ jobs:
                   # head SHA. Avoids false-positives if the same branch name
                   # gets reused for a different PR later.
                   if [ "$head_sha" = "$PR_HEAD_SHA" ]; then
+                    # Same exemption as the eviction job above: a MERGED PR's validation run is the
+                    # artifact master reuses to skip its own ~115 shards, and reuse refuses a
+                    # `cancelled` conclusion. Cancelling it here saves one slot and costs a full
+                    # master matrix. Runs for a PR closed WITHOUT merging are cancelled as before,
+                    # since nothing will ever reuse those.
+                    if [ "$PR_MERGED" = "true" ] && [ "$run_name" = "$REUSABLE_RUN_NAME" ]; then
+                      echo "Keeping run $run_id ($run_name): PR #$PR_NUMBER was merged and master reuses this run."
+                      continue
+                    fi
                     echo "Cancelling run $run_id ($run_name) for PR #$PR_NUMBER head $head_sha"
                     gh run cancel "$run_id" --repo "${{ github.repository }}" || true
                   fi

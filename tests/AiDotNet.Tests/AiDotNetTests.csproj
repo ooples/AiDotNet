@@ -1,18 +1,16 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-	  <!-- net8.0 is OPT-IN. The Build job compiles the whole solution and every one of the
-	       ~116 test shards waits on it, so a third target framework for the largest compile in
-	       the repo lands squarely on the critical path. The net8.0 smoke shard sets this
-	       property and builds the target itself, in parallel, where it costs nobody else. -->
-	  <TargetFrameworks>net10.0;net471</TargetFrameworks>
-	  <TargetFrameworks Condition="'$(IncludeNet8TestTarget)' == 'true'">net10.0;net8.0;net471</TargetFrameworks>
-	  <!-- The compat build job compiles the whole solution for the frameworks the Build job
-	       did NOT, and net10.0 of THIS project is the most expensive compile in the repo.
-	       Narrowing it here lets that job stay a single parallel solution build, which keeps
-	       tools/ and the satellites covered, without recompiling what Build just did.
-	       Last wins: this must stay below the other TargetFrameworks assignments. -->
-	  <TargetFrameworks Condition="'$(CompatBuildOnly)' == 'true'">net471</TargetFrameworks>
+	  <!-- net8.0 is treated exactly like net471: the library ships it, so the test code is
+	       COMPILED against it every build, but no shard EXECUTES it. net10.0 carries the full
+	       matrix. Compiling is what earns its keep here anyway: adding net8.0 exposed seven
+	       files whose #if named the wrong condition. -->
+	  <TargetFrameworks>net10.0;net8.0;net471</TargetFrameworks>
+	  <!-- The compat build job compiles the frameworks the Build job did not, so it narrows
+	       this project to those two. net10.0 of this project is the most expensive compile in
+	       the repo and Build has just done it; repeating it on a second runner buys nothing.
+	       Last wins: this must stay below the assignment above. -->
+	  <TargetFrameworks Condition="'$(CompatBuildOnly)' == 'true'">net8.0;net471</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 	  <IsPackable>false</IsPackable>
