@@ -367,11 +367,28 @@ public class ModelParameterGenerator : IIncrementalGenerator
                         and not ParameterMemberSemanticModel.Kind.External
                         and not ParameterMemberSemanticModel.Kind.Conflicting)
                 {
-                    var kind = ComponentKindFor(memberType, elem);
+                    // An ABSTRACT interface-typed member is a declared component SLOT: the base names
+                    // the role and each subclass supplies the implementation, exactly as
+                    // LatentDiffusionModelBase does for Conditioner beside NoisePredictor and VAE.
+                    // Requiring that keeps the runtime-cast registration to genuine slots instead of
+                    // every interface-typed member a model happens to hold.
+                    var kind = ComponentKindFor(memberType, elem, isDeclaredSlot: member.IsAbstract);
                     if (kind == "one")
                     {
                         components.Add((member.Name,
                             $"new ComponentAccessorParameterSource<{elem}>(() => {member.Name})",
+                            RoleExpression(classification.Kind),
+                            AvailabilityExpression(member, classification.Kind)));
+                        continue;
+                    }
+                    if (kind == "adapt")
+                    {
+                        // The declared type cannot prove it carries parameters, but an
+                        // implementation may. Casting inside the accessor lets the registry hold the
+                        // slot either way: ComponentAccessorParameterSource reports 0 when the cast
+                        // yields null, and the real surface when it does not.
+                        components.Add((member.Name,
+                            $"new ComponentAccessorParameterSource<{elem}>(() => {member.Name} as global::AiDotNet.Interfaces.IParameterSource<{elem}>)",
                             RoleExpression(classification.Kind),
                             AvailabilityExpression(member, classification.Kind)));
                         continue;
@@ -442,12 +459,30 @@ public class ModelParameterGenerator : IIncrementalGenerator
     /// same weights twice through two different routes.
     /// </para>
     /// </remarks>
-    private static string? ComponentKindFor(ITypeSymbol? type, string elem)
+    private static string? ComponentKindFor(ITypeSymbol? type, string elem, bool isDeclaredSlot = false)
     {
         if (type is null) return null;
         var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
 
         if (IsParameterSourceOf(bare, elem) && !IsNeuralNetworkBase(bare)) return "one";
+
+        // A COMPONENT SLOT DECLARED AS AN INTERFACE THAT CANNOT PROVE IT CARRIES PARAMETERS.
+        //
+        // LatentDiffusionModelBase declares Conditioner as IConditioningModule<T>. Its siblings
+        // NoisePredictor and VAE are declared through interfaces that DO extend IParameterSource<T>,
+        // so both register and both appear in ParameterCount, GetParameters and every clone. The
+        // conditioner does not, so it appeared in none of them, and the chunk path reached it only
+        // through a hand-written runtime type test -- a second surface, which is what let
+        // ControlNet++ lose its VAE.
+        //
+        // Registering the slot behind a runtime cast closes that without touching the interface
+        // hierarchy: a conditioner with no parameters reports 0 and costs nothing, and one that
+        // does is finally counted, saved and cloned like its siblings.
+        //
+        // Deliberately narrow. Infrastructure is what a model USES rather than what it IS -- the
+        // same distinction ModelStateGenerator draws -- and registering an optimizer or a loss as
+        // parameter state would be wrong, not merely noisy.
+        if (isDeclaredSlot && IsAdaptableComponentInterface(bare)) return "adapt";
 
         ITypeSymbol? element = null;
         if (bare is IArrayTypeSymbol arr) element = arr.ElementType;
@@ -465,6 +500,30 @@ public class ModelParameterGenerator : IIncrementalGenerator
         element = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
         if (IsParameterSourceOf(element, elem) && !IsNeuralNetworkBase(element)) return "many";
         return null;
+    }
+
+    /// <summary>
+    /// Whether a member's declared type is an AiDotNet component interface that might, at runtime,
+    /// be a parameter source.
+    /// </summary>
+    /// <remarks>
+    /// Interfaces only: a concrete type either implements <c>IParameterSource&lt;T&gt;</c> or does
+    /// not, and there is nothing to discover at runtime. The infrastructure list mirrors
+    /// ModelStateGenerator's, for the same reason it gives: an optimizer, a loss, a scheduler or a
+    /// regularizer is machinery the model uses, not state the model owns.
+    /// </remarks>
+    private static bool IsAdaptableComponentInterface(ITypeSymbol type)
+    {
+        if (type.TypeKind != TypeKind.Interface) return false;
+
+        string name = type.Name;
+        if (name is "IOptimizer" or "IGradientBasedOptimizer" or "ILossFunction"
+            or "ILearningRateScheduler" or "IRegularization" or "IActivationFunction"
+            or "IVectorActivationFunction" or "IAudioFeatureExtractor")
+            return false;
+
+        return type.ContainingNamespace?.ToDisplayString()
+            .StartsWith("AiDotNet.", System.StringComparison.Ordinal) == true;
     }
 
     private static bool IsParameterSourceOf(ITypeSymbol type, string elem)
