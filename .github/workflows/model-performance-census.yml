@@ -241,26 +241,70 @@ jobs:
           if ($count -le 0) { throw 'No ModelPerformanceCensus fixtures were discovered.' }
           "count=$count" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: Download latest default-branch baseline
+      # THE BASELINE USED TO FREEZE ON THE FIRST RED RUN.
+      #
+      # This step asked for the last SUCCESSFUL master census. The census publishes its baseline
+      # with if: always(), so the measurements from a failed run exist and are perfectly good
+      # numbers - but they were never looked at. One red run therefore pinned the comparison point
+      # forever, and every later change, intended or not, piled up against a baseline that got
+      # older every day. It did: master's census went red on 26 August and the baseline stayed at
+      # the 25th while four more days of legitimate work accumulated against it.
+      #
+      # A run that COLLECTED its measurements is usable history whether or not the gate passed. The
+      # gate's verdict is about the code; the measurements are just what happened. So the series is
+      # built from recent master runs regardless of conclusion, and a run is excluded only when its
+      # baseline is missing or short - which is the real disqualifier, since a partial census would
+      # make fixtures look like they vanished.
+      - name: Download the master census series
         id: baseline
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $runs = gh run list --workflow model-performance-census.yml --branch master --status success --limit 1 --json databaseId | ConvertFrom-Json
-          if ($runs.Count -eq 0) {
+          $runs = gh run list --workflow model-performance-census.yml --branch master `
+            --limit 12 --json databaseId,headSha,createdAt,conclusion | ConvertFrom-Json
+          New-Item -ItemType Directory -Force -Path artifacts/model-performance/history | Out-Null
+          New-Item -ItemType Directory -Force -Path artifacts/model-performance/prior | Out-Null
+
+          $kept = @()
+          foreach ($run in $runs) {
+            $into = "artifacts/model-performance/history/$($run.databaseId)"
+            try {
+              gh run download $run.databaseId --name model-performance-baseline --dir $into 2>$null
+            } catch {
+              continue
+            }
+            $file = Join-Path $into 'baseline.json'
+            if (-not (Test-Path $file)) { continue }
+
+            # Stamp the commit the run measured. Baselines written before the probe recorded it
+            # carry none, and a step spanning them is reported as unattributable rather than
+            # attributed to the wrong commit.
+            try {
+              $document = Get-Content $file -Raw | ConvertFrom-Json
+            } catch {
+              continue
+            }
+            if (-not $document.entries -or $document.entries.Count -lt 1) { continue }
+            $document | Add-Member -NotePropertyName commit -NotePropertyValue $run.headSha -Force
+            $document | ConvertTo-Json -Depth 12 -Compress | Set-Content -Path $file -Encoding utf8
+            $kept += ,@($run.createdAt, $file)
+          }
+
+          if ($kept.Count -eq 0) {
             'present=false' | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host 'no prior master census baseline is available; this run establishes one'
             exit 0
           }
-          New-Item -ItemType Directory -Force -Path artifacts/model-performance/prior | Out-Null
-          gh run download $runs[0].databaseId --name model-performance-baseline --dir artifacts/model-performance/prior
-          $path = 'artifacts/model-performance/prior/baseline.json'
-          if (Test-Path $path) {
-            'present=true' | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-            "path=$path" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          } else {
-            'present=false' | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          }
+
+          # The most recent point stays the single-baseline comparison, so a repository without
+          # enough history behaves exactly as it did before.
+          $newest = ($kept | Sort-Object { $_[0] } -Descending)[0][1]
+          Copy-Item $newest 'artifacts/model-performance/prior/baseline.json' -Force
+          'present=true' | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          'path=artifacts/model-performance/prior/baseline.json' | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "count=$($kept.Count)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "series depth: $($kept.Count) prior master census run(s)"
 
       - name: Enforce coverage, ceilings and environment-qualified baseline
         shell: pwsh
@@ -296,7 +340,16 @@ jobs:
             '--max-correctness-probe-ms', '120000')
           if ('${{ steps.baseline.outputs.present }}' -eq 'true') {
             $arguments += @('--baseline', '${{ steps.baseline.outputs.path }}')
+            # The series behind that single point. With fewer than four usable runs the probe says
+            # so and compares against the one point, exactly as before.
+            $arguments += @('--history', 'artifacts/model-performance/history')
           }
+          # Cost changes somebody meant to make, each with the reason it was worth making.
+          if (Test-Path '.github/model-performance-intent.json') {
+            $arguments += @('--perf-intent', '.github/model-performance-intent.json')
+          }
+          # So this run's measurements can be attributed when a later run detects a step at them.
+          $arguments += @('--commit', '${{ github.sha }}')
           & dotnet @arguments
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

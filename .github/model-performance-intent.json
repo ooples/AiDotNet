@@ -1,0 +1,9 @@
+[
+  {
+    "commit": "bf812ffc",
+    "origin": "cb9ecf59db",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.DCRNNTests",
+    "metric": "peakWorkingSetBytes",
+    "reason": "cb9ecf59db restored the paper's recurrent diffusion: DCRNN now builds real DiffusionConvolutionalGRU layers for its encoder and decoder, and each one owns forward and backward graph transition matrices and runs MaxDiffusionStep diffusion steps per gate. That is more memory than the layers it replaced, and it is the model the paper describes. The measured step is 1.69x, from 349 MB to 592 MB, and it holds steady across every run since - a level change, not a leak."
+  }
+]
