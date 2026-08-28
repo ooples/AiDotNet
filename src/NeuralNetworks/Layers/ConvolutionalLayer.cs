@@ -329,6 +329,10 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// passes the answer down as <c>Always</c> or <c>Never</c>.
     /// </para>
     /// </remarks>
+    /// <remarks>
+    /// <c>Unspecified</c> reads as "has a bias", which is what a checkpoint predating this option
+    /// contains and therefore what restoring one must reproduce.
+    /// </remarks>
     public bool UseBias => _biasMode != BiasMode.Never;
 
     /// <summary>

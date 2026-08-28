@@ -302,6 +302,14 @@ public interface ILayer<T> : IParameterSource<T>, IDiagnosticsProvider, IWeightL
     /// Scale-only normalizations such as RMSNorm never qualify: with no mean subtraction the bias is
     /// not removed, and with no beta there is nothing to replace it.
     /// </para>
+    /// <para>
+    /// <b>Breaking change.</b> <c>ILayer{T}</c> is public and this member has no default
+    /// implementation, which .NET Framework 4.7.1 does not support, so any type implementing the
+    /// interface DIRECTLY rather than deriving from <c>LayerBase{T}</c> must add it. Everything in
+    /// this library derives from <c>LayerBase{T}</c> and inherits the safe <c>false</c>; two
+    /// hand-rolled test doubles did not, and had to be updated, which is evidence that external
+    /// direct implementers exist and will need the same one-line addition.
+    /// </para>
     /// </remarks>
     bool AbsorbsUpstreamChannelBias { get; }
 

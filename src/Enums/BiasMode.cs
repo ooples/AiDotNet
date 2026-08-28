@@ -28,6 +28,20 @@ namespace AiDotNet.Enums;
 public enum BiasMode
 {
     /// <summary>
+    /// Not stated. Produced only when reconstructing a layer from a checkpoint written before this
+    /// option existed, and treated as <see cref="Always"/>.
+    /// </summary>
+    /// <remarks>
+    /// This must stay the zero value. The generated layer factory falls back to
+    /// <c>default(BiasMode)</c> when a checkpoint has no <c>biasMode</c> key, so zero is exactly the
+    /// "this checkpoint predates the option" signal. Such a checkpoint holds a bias for every
+    /// convolution, and restoring it under <see cref="Auto"/> would look for fewer parameter slots
+    /// than the file contains and fail the count check. Mapping it to <see cref="Always"/> restores
+    /// it as written.
+    /// </remarks>
+    Unspecified = 0,
+
+    /// <summary>
     /// Decide from what follows: no bias when the next layer supplies a learnable shift, a bias
     /// otherwise.
     /// </summary>
@@ -35,14 +49,14 @@ public enum BiasMode
     /// The default, and what a layer assumes when nothing tells it what comes next -- a standalone
     /// convolution keeps its bias, matching <c>nn.Conv2d(bias=True)</c>.
     /// </remarks>
-    Auto = 0,
+    Auto = 1,
 
     /// <summary>Always carry a bias, even under a normalization that already shifts.</summary>
-    Always = 1,
+    Always = 2,
 
     /// <summary>
     /// Never carry a bias. The layer reports no bias parameters at all -- absent from the parameter
     /// count, gradients and checkpoints, not merely frozen at zero.
     /// </summary>
-    Never = 2,
+    Never = 3,
 }

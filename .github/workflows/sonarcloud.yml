@@ -1685,7 +1685,11 @@ jobs:
             # after xUnit parallelism and Server GC were disabled, so run them
             # as correctness-only shards and collect coverage from the lighter
             # matrix entries.
-            Write-Host "Heavy shard: XPlat Code Coverage disabled to keep the runner under its memory envelope"
+            if ($heavyShard) {
+              Write-Host "Heavy shard: XPlat Code Coverage disabled to keep the runner under its memory envelope"
+            } else {
+              Write-Host "Timing shard: XPlat Code Coverage disabled because instrumentation would distort the ratio under test"
+            }
           }
           # Detailed VSTest output still prints individual tests only on completion with the current
           # xUnit adapter. The opt-in AIDOTNET_TEST_TRACE_FILE below is written by every source-generated

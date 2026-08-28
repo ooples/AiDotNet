@@ -123,6 +123,17 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private readonly BatchNormalizationLayer<T>?[] _norms;
 
+    /// <summary>
+    /// The bias policy this discriminator was built with, kept so a reload rebuilds the same
+    /// architecture rather than re-deciding it.
+    /// </summary>
+    /// <remarks>
+    /// Without this the saved layer reconstructs at whatever the current default happens to be. A
+    /// checkpoint taken under <c>Always</c> would then be restored under <c>Auto</c>, which asks for
+    /// fewer bias slots than the file holds and fails the parameter-count check.
+    /// </remarks>
+    private readonly BiasMode _biasMode;
+
     /// <summary>The LeakyReLU of each Ck block, applied after the block's BatchNorm.</summary>
     private readonly ActivationLayer<T>[] _activations;
 
@@ -285,7 +296,7 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
         int kernelSize = DefaultKernelSize,
         double leakySlope = DefaultLeakySlope,
         bool applySigmoid = true,
-        BiasMode biasMode = BiasMode.Auto)
+        [LayerState] BiasMode biasMode = BiasMode.Auto)
         : base([-1, -1, -1], [1, -1, -1])
     {
         if (numLayers <= 0)
@@ -298,6 +309,7 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
             throw new ArgumentOutOfRangeException(
                 nameof(kernelSize), kernelSize, "Kernel size must be positive.");
 
+        _biasMode = biasMode;
         _numLayers = numLayers;
         _numFilters = numFilters;
         _kernelSize = kernelSize;

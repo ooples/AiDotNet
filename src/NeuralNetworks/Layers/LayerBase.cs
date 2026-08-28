@@ -398,6 +398,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     protected static bool ResolveBias(BiasMode mode, ILayer<T>? consumer) => mode switch
     {
+        // A checkpoint written before this option existed holds a bias for every convolution, so
+        // restoring it must keep them all -- dropping one would not match the file.
+        BiasMode.Unspecified => true,
         BiasMode.Always => true,
         BiasMode.Never => false,
         _ => consumer is null || !consumer.AbsorbsUpstreamChannelBias,

@@ -30,8 +30,14 @@ namespace AiDotNet.Tests.IntegrationTests.Inference;
 //
 // TransformerTrainPathReproIssue1227And1228Tests has since been routed to its own CI shard
 // ("Integration - CPU Parallelism Probe"), so these classes no longer all share one shard. That
-// removes contention between those two workloads but NOT the need for this attribute: the
-// collection is what keeps classes inside the SAME shard's process from running concurrently.
+// removes contention between those two workloads but is not on its own what keeps these classes
+// apart.
+//
+// Note that tests/AiDotNet.Tests/xunit.runner.json already sets parallelizeAssembly and
+// parallelizeTestCollections to false, so for THIS assembly as configured today the attribute
+// changes nothing. It is kept as defence in depth: the collection states the requirement in the
+// test itself, so a runner invoked with different settings, or a future change to that json,
+// cannot quietly start running these timing-sensitive classes beside each other again.
 [Collection("NonParallelIntegration")]
 public class Int8InferenceModelIntegrationTests
 {
