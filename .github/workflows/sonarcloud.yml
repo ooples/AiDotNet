@@ -1368,10 +1368,24 @@ jobs:
           # they run ALONE here so no sibling collection contends for CPU/memory and invalidates
           # the measurement — keeps the assertions at full strength (no bound relaxation). Tiny
           # (2 classes), so a whole shard is cheap.
+          # SPLIT DELIBERATELY. Both halves are Category=SerialPerf, but they cannot share a
+          # process: Issue1296LargeXTrainBatchingTests builds multi-gigabyte training tensors on
+          # purpose (it exists to prove batching avoids an OOM), and the CPU/wall probe below reads
+          # PROCESS-WIDE CPU against its own wall clock, so it measures whatever that left behind.
+          #
+          # Measured at 4 cores: the probe passes alone, reports ratio 0.99 against a 1.15 floor
+          # after Issue1296 in the same process, and passes again when Issue1296 is excluded from
+          # the same shard. Marking the classes non-parallel does not help -- xUnit's
+          # DisableParallelization stops CONCURRENT execution, and this is state left SEQUENTIALLY.
+          # A separate shard is a separate process, which is the only thing that isolates it.
           - name: Integration - Serial Perf
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category=SerialPerf&Category!=GPU'
+            filter: 'Category=SerialPerf&Category!=GPU&FullyQualifiedName!~TransformerTrainPathReproIssue1227And1228Tests'
+          - name: Integration - CPU Parallelism Probe
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category=SerialPerf&Category!=GPU&FullyQualifiedName~TransformerTrainPathReproIssue1227And1228Tests'
           # =====================================================================
           # TOP-LEVEL TEST NAMESPACES that no shard covered (distinct from the
           # UnitTests.* and IntegrationTests.* trees).
