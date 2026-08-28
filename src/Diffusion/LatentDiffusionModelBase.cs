@@ -64,20 +64,32 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
         // way to enumerate.
         yield break;
 #else
-        if (NoisePredictor is IParameterizable<T, Tensor<T>, Tensor<T>> np)
+        // DRIVEN BY THE COMPONENT REGISTRY, not by a hand-written list of the three sub-models
+        // this base happens to know about.
+        //
+        // ParameterCount and GetParameters already come from that registry, so hand-listing the
+        // members here made the chunk surface a SECOND definition of the same thing, and a subclass
+        // registering anything else silently fell outside it. ControlNet++ registers a control
+        // encoder in addition to the inherited members: it had to override both chunk methods to
+        // reach its encoder, that override then dropped the VAE, and the clone path failed with
+        // "Expected 28804275 parameters, got 28800532" -- a difference of 3,743, exactly the
+        // registry's VAE entry. Following the registry makes the surfaces agree by construction and
+        // removes the reason for such an override to exist.
+        foreach (var component in ParameterComponents)
         {
-            foreach (var chunk in np.GetParameterChunks())
-                yield return chunk;
-        }
-        if (VAE is IParameterizable<T, Tensor<T>, Tensor<T>> vae)
-        {
-            foreach (var chunk in vae.GetParameterChunks())
-                yield return chunk;
-        }
-        if (Conditioner is IParameterizable<T, Tensor<T>, Tensor<T>> conditioner)
-        {
-            foreach (var chunk in conditioner.GetParameterChunks())
-                yield return chunk;
+            if (component is null) continue;
+            if (component is IParameterizable<T, Tensor<T>, Tensor<T>> parameterizable)
+            {
+                foreach (var chunk in parameterizable.GetParameterChunks())
+                    yield return chunk;
+                continue;
+            }
+
+            // A component that owns parameters without implementing the chunked API still belongs
+            // in the stream; it travels as one chunk rather than being skipped.
+            var flat = component.GetParameters();
+            if (flat.Length > 0)
+                yield return new Tensor<T>(new[] { flat.Length }, flat);
         }
 #endif
     }
@@ -106,13 +118,32 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
         // front of the stream — one chunk in flight at a time. Never buffer the whole stream (that would
         // re-create the flat-aggregate OOM as a pile of per-block copies for FLUX/Sora-scale predictors).
         using var e = chunks.GetEnumerator();
-        PullInto(NoisePredictor as IParameterizable<T, Tensor<T>, Tensor<T>>, e);
-        PullInto(VAE as IParameterizable<T, Tensor<T>, Tensor<T>>, e);
-        PullInto(Conditioner as IParameterizable<T, Tensor<T>, Tensor<T>>, e);
+
+        // Same registry, same order as GetParameterChunks. The read and write halves must walk one
+        // enumeration or a model can be written back in an order it was never read in.
+        foreach (var component in ParameterComponents)
+        {
+            if (component is null) continue;
+            if (component is IParameterizable<T, Tensor<T>, Tensor<T>> parameterizable)
+            {
+                PullInto(parameterizable, e);
+                continue;
+            }
+
+            // The single-chunk counterpart of the read side's flat fallback.
+            long width = component.ParameterCount;
+            if (width <= 0) continue;
+            if (!e.MoveNext() || e.Current is null)
+                throw new ArgumentException(
+                    "SetParameterChunks ran out of chunks before every registered component was "
+                    + "restored.", nameof(chunks));
+            component.SetParameters(e.Current.ToVector());
+        }
+
         if (e.MoveNext())
             throw new ArgumentException(
-                "SetParameterChunks received more chunks than the model's " +
-                "noise-predictor/VAE/conditioner structure consumes.", nameof(chunks));
+                "SetParameterChunks received more chunks than the model's registered components "
+                + "consume.", nameof(chunks));
 #endif
     }
 
