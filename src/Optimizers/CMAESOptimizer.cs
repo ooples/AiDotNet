@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using AiDotNet.Helpers;
 using AiDotNet.Extensions;
 using Newtonsoft.Json;
@@ -431,7 +431,7 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
             NumOps.Divide(
                 NumOps.Divide(
                     _ps.Norm(),
-                    NumOps.Sqrt(NumOps.Subtract(NumOps.One, NumOps.Power(NumOps.Subtract(NumOps.One, cs), NumOps.FromDouble(2 * _options.MaxGenerations))))
+                    NumOps.Sqrt(NumOps.Subtract(NumOps.One, NumOps.Power(NumOps.Subtract(NumOps.One, cs), NumOps.FromDouble(2.0 * _options.MaxGenerations))))
                 ),
                 chiN
             ),

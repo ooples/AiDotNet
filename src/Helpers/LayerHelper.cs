@@ -1791,7 +1791,6 @@ public static partial class LayerHelper<T>
         // and the controller's own previous hidden state. Graves et al. 2016 use a RECURRENT
         // controller, and its recurrence is what lets the DNC hold working state across a sequence's
         // timesteps alongside the external memory.
-        int controllerInputSize = inputSize + readHeads * memoryWordSize + controllerSize;
 
         // LSTM gate pre-activations, [i | f | g | o], four blocks of controllerSize.
         //
@@ -1819,7 +1818,6 @@ public static partial class LayerHelper<T>
         // back to controllerOutput, so the controller layers never received gradients.
         // ProcessThroughController walks Layers[0..N-2]; CombineControllerOutputWithReadVectors
         // calls Layers[N-1].Forward(combinedTensor) for this final projection.
-        int outputProjectionInputSize = controllerSize + readHeads * memoryWordSize;
         yield return new DenseLayer<T>(outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
     }
 

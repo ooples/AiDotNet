@@ -46,17 +46,15 @@ public partial class YourTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 
     public override ModelOptions GetOptions() => _options;
 
-    // Not readonly: a restore rewrites _options, and the default optimizer is BUILT FROM
-    // those options, so it has to be rebuilt afterwards or the model keeps running on the
-    // coefficients it happened to be constructed with.
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    // Constructed once, from the options the constructor saw. #2004 moved settings onto the
+    // declared-state envelope, which restores _options by name, but nothing rebuilds an object
+    // DERIVED from them, so a restore that rewrites the learning rate leaves this optimizer on the
+    // coefficients it was built with. That gap is real and deliberately NOT patched here: ADN0063
+    // rejects per-model lifecycle plumbing precisely because a per-model override makes the shared
+    // gap permanent and invites the next model to copy it. The fix belongs in the generator or a
+    // family base, where every model gets it at once.
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
-    /// <summary>
-    /// Whether <see cref="_optimizer"/> is the one this model built from its options rather than
-    /// one the caller supplied. Only the former may be rebuilt when a restore rewrites those
-    /// options; substituting AdamW for a caller's optimizer would change how the model trains.
-    /// </summary>
-    private readonly bool _usesDefaultOptimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -91,7 +89,6 @@ public partial class YourTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         _options = options ?? new YourTTSOptions();
         _useNativeMode = true;
-        _usesDefaultOptimizer = optimizer is null;
         _optimizer = optimizer ?? CreatePaperOptimizer();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;

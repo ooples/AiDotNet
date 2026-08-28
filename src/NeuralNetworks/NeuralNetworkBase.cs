@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
@@ -12070,10 +12070,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 {
                     ForwardForTraining(input);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Best effort only. The compiled training forward below will surface
-                    // the original model error with its full context.
+                    // Best effort only: this pass exists to resolve shapes, and the compiled
+                    // training forward below surfaces the original model error with its full
+                    // context. Still recorded rather than swallowed silently -- an invisible
+                    // failure here shows up later as an unexplained fused miss. Same channel the
+                    // GPU-forward fallbacks in this class already use.
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[NeuralNetworkBase] shape-resolution warm-up forward failed ({ex.GetType().Name}): {ex.Message}");
                 }
                 finally
                 {
