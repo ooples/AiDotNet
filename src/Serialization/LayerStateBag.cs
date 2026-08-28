@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Reflection;
 
 namespace AiDotNet.Serialization;
@@ -1195,29 +1196,16 @@ public readonly struct LayerStateBag
     /// </remarks>
     private static string CaptureComponentConfiguration(object value, Type type)
     {
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (ConstructorInfo constructor in type.GetConstructors())
-        {
-            foreach (ParameterInfo parameter in constructor.GetParameters())
-            {
-                if (parameter.Name is { Length: > 0 } name && IsCapturableConfigurationType(parameter.ParameterType))
-                    names.Add(name);
-            }
-        }
-        if (names.Count == 0) return string.Empty;
+        ConfigurationSlot[] plan = ConfigurationPlans.GetOrAdd(type, BuildConfigurationPlan);
+        if (plan.Length == 0) return string.Empty;
 
-        var recorded = new List<string>();
-        foreach (string name in names.OrderBy(n => n, StringComparer.Ordinal))
+        List<string>? recorded = null;
+        foreach (ConfigurationSlot slot in plan)
         {
-            PropertyInfo? property = type.GetProperty(
-                name,
-                BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
-            if (property is null || !property.CanRead || property.GetIndexParameters().Length > 0) continue;
-
             object? current;
             try
             {
-                current = property.GetValue(value);
+                current = slot.Property.GetValue(value);
             }
             catch (TargetInvocationException)
             {
@@ -1227,10 +1215,75 @@ public readonly struct LayerStateBag
             if (current is null) continue;
 
             if (!TryFormatConfigurationValue(current, out string text)) continue;
-            recorded.Add(name + "=" + text);
+            if (recorded is null) recorded = new List<string>(plan.Length);
+            recorded.Add(slot.Name + "=" + text);
         }
 
-        return string.Join(ConfigurationPairSeparator.ToString(), recorded);
+        return recorded is null ? string.Empty : string.Join(ConfigurationPairSeparatorText, recorded);
+    }
+
+    /// <summary>One configuration input: the constructor parameter name and the property supplying it.</summary>
+    private readonly struct ConfigurationSlot
+    {
+        public ConfigurationSlot(string name, PropertyInfo property)
+        {
+            Name = name;
+            Property = property;
+        }
+
+        public string Name { get; }
+
+        public PropertyInfo Property { get; }
+    }
+
+    /// <summary>
+    /// Which configuration values each component type records, worked out once per type.
+    /// </summary>
+    /// <remarks>
+    /// The reflection here - every public constructor, every parameter, then a property lookup per
+    /// name - depends only on the TYPE, but it used to run again for every instance written. A
+    /// foundation model writes a component descriptor for every activation of every layer, and the
+    /// per-instance cost showed up as a measured regression rather than as a theory: GR00TN1
+    /// allocated 2.50x its baseline (65.5 MB to 163.9 MB) and its peak working set rose 1.81x,
+    /// both past the CI ceilings. Caching the type-level plan leaves the emitted descriptor byte
+    /// for byte what it was - the ordinal ordering of the names is preserved - and reduces the
+    /// per-instance work to reading the properties.
+    /// </remarks>
+    private static readonly ConcurrentDictionary<Type, ConfigurationSlot[]> ConfigurationPlans =
+        new ConcurrentDictionary<Type, ConfigurationSlot[]>();
+
+    /// <summary>The pair separator as a string, so formatting one does not allocate per component.</summary>
+    private static readonly string ConfigurationPairSeparatorText =
+        ConfigurationPairSeparator.ToString();
+
+    /// <summary>Shared empty plan, so a type that records nothing allocates no array.</summary>
+    private static readonly ConfigurationSlot[] NoConfiguration = new ConfigurationSlot[0];
+
+    private static ConfigurationSlot[] BuildConfigurationPlan(Type type)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (ConstructorInfo constructor in type.GetConstructors())
+        {
+            foreach (ParameterInfo parameter in constructor.GetParameters())
+            {
+                if (parameter.Name is { Length: > 0 } name && IsCapturableConfigurationType(parameter.ParameterType))
+                    names.Add(name);
+            }
+        }
+        if (names.Count == 0) return NoConfiguration;
+
+        var slots = new List<ConfigurationSlot>(names.Count);
+        foreach (string name in names.OrderBy(n => n, StringComparer.Ordinal))
+        {
+            PropertyInfo? property = type.GetProperty(
+                name,
+                BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (property is null || !property.CanRead || property.GetIndexParameters().Length > 0) continue;
+
+            slots.Add(new ConfigurationSlot(name, property));
+        }
+
+        return slots.Count == 0 ? NoConfiguration : slots.ToArray();
     }
 
     /// <summary>
