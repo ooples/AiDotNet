@@ -164,11 +164,17 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
     /// and beta (shift) parameters that are learned during training.
     /// </para>
     /// </remarks>
-    /// <inheritdoc />
-    /// <remarks>Beta is this layer's learnable shift, so a bias on the layer feeding it is redundant.</remarks>
-    public override bool ProvidesLearnableShift => true;
-
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// No, despite owning a beta. Layer normalization reduces across the feature dimension, so a
+    /// per-feature bias from the layer below is not a constant within the reduction: it moves the
+    /// mean and the variance and remains visible in the output. Beta is applied after normalizing
+    /// and cannot stand in for it. This is stated explicitly rather than inherited so the reasoning
+    /// is recorded where someone would otherwise be tempted to "fix" it to true.
+    /// </remarks>
+    public override bool AbsorbsUpstreamChannelBias => false;
 
     /// <inheritdoc/>
     /// <remarks>Normalization is elementwise over the feature axis, so the output shape is the input shape.</remarks>

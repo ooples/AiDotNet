@@ -105,16 +105,17 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
+    public override bool SupportsTraining => true;
+
     /// <inheritdoc />
     /// <remarks>
-    /// Only when affine. A non-affine instance norm normalizes without adding anything back, so a
-    /// bias on the layer feeding it still has work to do. This is exactly the distinction pix2pix
-    /// encodes as <c>use_bias = norm_layer == nn.InstanceNorm2d</c>; here it follows from the
-    /// layer's actual configuration rather than from its type.
+    /// Only when affine. The mean is taken over (H, W) within each (N, C), so a per-channel constant
+    /// IS absorbed -- but a non-affine instance norm adds nothing back, leaving the layer below no
+    /// way to express a shift, so its bias still has work to do. This is exactly the distinction
+    /// pix2pix encodes as <c>use_bias = norm_layer == nn.InstanceNorm2d</c>; here it follows from
+    /// the layer's actual configuration rather than from its type.
     /// </remarks>
-    public override bool ProvidesLearnableShift => _affine;
-
-    public override bool SupportsTraining => true;
+    public override bool AbsorbsUpstreamChannelBias => _affine;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.

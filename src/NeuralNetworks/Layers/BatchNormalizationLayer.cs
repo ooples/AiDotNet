@@ -382,11 +382,14 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         };
     }
 
-    /// <inheritdoc />
-    /// <remarks>Beta is this layer's learnable shift, so a bias on the layer feeding it is redundant.</remarks>
-    public override bool ProvidesLearnableShift => true;
-
     public override bool SupportsTraining => true;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Yes. The mean is computed per channel over (N, H, W), so a per-channel constant from the
+    /// layer below is subtracted away exactly, and beta supplies the shift in its place.
+    /// </remarks>
+    public override bool AbsorbsUpstreamChannelBias => true;
 
     /// <summary>
     /// Initializes a new instance of the BatchNormalizationLayer class.

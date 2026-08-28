@@ -275,22 +275,35 @@ public interface ILayer<T> : IParameterSource<T>, IDiagnosticsProvider, IWeightL
     bool SupportsTraining { get; }
 
     /// <summary>
-    /// Whether this layer applies its own learnable additive shift to the values passing through it.
+    /// Whether this layer makes a per-output-channel additive bias on the layer feeding it
+    /// mathematically redundant.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// True for normalizations that own a beta/shift parameter: BatchNorm, GroupNorm, LayerNorm, and
-    /// InstanceNorm when affine. False for everything else, including scale-only normalizations such
-    /// as RMSNorm and weight reparameterizations such as spectral norm, neither of which adds
-    /// anything back after normalizing.
+    /// Two conditions must BOTH hold, which is why this is not simply "has a beta". The layer must
+    /// subtract a mean computed PER CHANNEL, so that a constant added to a whole channel is removed
+    /// exactly; and it must add back its own learnable per-channel shift, so the degree of freedom
+    /// the bias represented is not lost.
     /// </para>
     /// <para>
-    /// A preceding layer reads this to decide whether its own bias would be redundant. Asking the
-    /// question, rather than testing the consumer's type, is what keeps <c>BiasMode.Auto</c> correct
-    /// for normalizations the reference implementations never considered.
+    /// BatchNorm qualifies: it reduces over (N, H, W) within each channel, so a per-channel constant
+    /// is entirely absorbed and beta replaces it. Affine InstanceNorm qualifies for the same reason,
+    /// reducing over (H, W) within each (N, C).
+    /// </para>
+    /// <para>
+    /// GroupNorm and LayerNorm do NOT, even though both own a beta. Their reduction spans several
+    /// channels or features at once, so a per-channel bias shifts the members of a reduction group
+    /// by DIFFERENT amounts: it changes the group's mean and variance and survives normalization as
+    /// a real change in the output. Removing it there would change the function the layer computes,
+    /// not merely remove a redundant parameter. GroupNorm qualifies only in the degenerate case
+    /// where every group holds exactly one channel, which is instance normalization.
+    /// </para>
+    /// <para>
+    /// Scale-only normalizations such as RMSNorm never qualify: with no mean subtraction the bias is
+    /// not removed, and with no beta there is nothing to replace it.
     /// </para>
     /// </remarks>
-    bool ProvidesLearnableShift { get; }
+    bool AbsorbsUpstreamChannelBias { get; }
 
     /// <summary>
     /// Sets the layer to training or evaluation mode.

@@ -358,10 +358,25 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
     /// <inheritdoc />
     /// <remarks>
-    /// Default false: most layers do not shift their output by a learned constant. Normalization
-    /// layers that own a beta parameter override this to true.
+    /// Default false, which is the safe answer: assuming a layer absorbs an upstream bias when it
+    /// does not would delete a parameter the model still needs.
     /// </remarks>
-    public virtual bool ProvidesLearnableShift => false;
+    public virtual bool AbsorbsUpstreamChannelBias => false;
+
+    /// <summary>
+    /// Whether this layer must reproduce its reference computation exactly, or may take the fastest
+    /// route available. Defaults to <c>Exact</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Layers that have only one way to compute their output ignore this. Layers that have several
+    /// -- a fused kernel, an in-place variant, a fast convolution algorithm -- consult it, and it is
+    /// the ONLY thing permitted to select among them. In particular, an active gradient tape and
+    /// training mode must never change the values a layer produces; they change only whether the
+    /// computation is recorded.
+    /// </para>
+    /// </remarks>
+    public NumericalReproducibility Reproducibility { get; set; } = NumericalReproducibility.Exact;
 
     /// <summary>
     /// Resolves a requested <c>BiasMode</c> against the layer that consumes this layer's output.
@@ -373,17 +388,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// <returns><c>true</c> when the layer should carry its own bias.</returns>
     /// <remarks>
     /// <para>
-    /// <c>Auto</c> asks <c>ProvidesLearnableShift</c> instead of testing the consumer's type, so it
-    /// remains correct for normalizations this library has not seen yet. <c>Always</c> and
-    /// <c>Never</c> are unconditional: a caller who wants the redundant parameter, or wants it gone
-    /// whatever follows, says so and is obeyed.
+    /// <c>Auto</c> asks <c>AbsorbsUpstreamChannelBias</c> instead of testing the consumer's type, so
+    /// it remains correct for normalizations this library has not seen yet -- and, because that
+    /// property asks whether the bias is genuinely absorbed rather than merely whether a beta
+    /// exists, it does not strip a bias that GroupNorm or LayerNorm would leave observable.
+    /// <c>Always</c> and <c>Never</c> are unconditional: a caller who wants the redundant parameter,
+    /// or wants it gone whatever follows, says so and is obeyed.
     /// </para>
     /// </remarks>
     protected static bool ResolveBias(BiasMode mode, ILayer<T>? consumer) => mode switch
     {
         BiasMode.Always => true,
         BiasMode.Never => false,
-        _ => consumer is null || !consumer.ProvidesLearnableShift,
+        _ => consumer is null || !consumer.AbsorbsUpstreamChannelBias,
     };
 
     /// <summary>
