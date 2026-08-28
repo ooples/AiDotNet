@@ -102,6 +102,48 @@ internal static class CopyOnWriteCloneHelper
             return false;
         }
 
+        // A model-level parameter registry may include sources that are not layers. The reflective
+        // layer walk cannot share those matrices/vectors, so reject the COW path when the manifest
+        // proves that its live surface is wider than the trainable tensors and persistent buffers
+        // about to be rebound. Check this definitive global blocker before detailed layer shapes:
+        // conditional zero-length placeholders can have different current views while both graphs
+        // are still deferred, but they cannot make an uncovered registered component shareable.
+        // Some legacy aggregate manifests expose one ShapeResolvedUnmaterialized slot for a mixed
+        // live/deferred graph; their MaterializedParameterCount is zero even when live layer state
+        // exists, so a smaller manifest total is not evidence of missing coverage and must not reject
+        // a valid share.
+        if (source is AiDotNet.Models.Parameters.IParameterManifestProvider manifestProvider)
+        {
+            long covered = 0;
+            for (int i = 0; i < srcLayers.Count; i++)
+            {
+                if (srcLayers[i] is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layerBase)
+                {
+                    var stateSlots = layerBase.GetOwnParameterStateValueSlots();
+                    if (stateSlots.Count > 0)
+                    {
+                        foreach (var slot in stateSlots)
+                            covered = checked(covered + slot.ScalarCount);
+                        continue;
+                    }
+                }
+
+                // Legacy/non-LayerBase trainables have no declared checkpoint-state slots.
+                foreach (Tensor<T> tensor in GetAuthoritativeSourceValues(srcLayers[i]))
+                    covered = checked(covered + tensor.Length);
+            }
+
+            long registered = manifestProvider.ParameterLayout.MaterializedParameterCount;
+            if (registered > covered)
+            {
+                status = CopyOnWriteShareStatus.IncompleteCoverage;
+                mismatch = $"registered layer state covers {covered} parameters, but the registered "
+                           + $"parameter surface proves at least {registered} materialized values";
+                return false;
+            }
+        }
+
+
         // Verify the full structure — per-layer parameter COUNT and per-tensor SHAPE — matches BEFORE
         // mutating anything, so we never leave a half-shared clone and never rebind a shape-incompatible
         // tensor. A count-only check would let a same-count but differently-shaped graph (e.g. a custom
@@ -165,44 +207,6 @@ internal static class CopyOnWriteCloneHelper
             {
                 mismatch = $"layer {i} ({srcLayers[i].GetType().Name}) has incompatible trainable shapes: "
                            + $"source={DescribeShapes(sps)}, clone={DescribeShapes(dps)}";
-                return false;
-            }
-        }
-
-        // A model-level parameter registry may include sources that are not layers. The reflective
-        // layer walk cannot share those matrices/vectors, so reject the COW path when the manifest
-        // proves that its live surface is wider than the trainable tensors and persistent buffers
-        // about to be rebound. Some legacy aggregate manifests expose one
-        // ShapeResolvedUnmaterialized slot for a mixed live/deferred graph; their
-        // MaterializedParameterCount is zero even when live layer state exists, so a smaller
-        // manifest total is not evidence of missing coverage and must not reject a valid share.
-        if (source is AiDotNet.Models.Parameters.IParameterManifestProvider manifestProvider)
-        {
-            long covered = 0;
-            for (int i = 0; i < srcLayers.Count; i++)
-            {
-                if (srcLayers[i] is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layerBase)
-                {
-                    var stateSlots = layerBase.GetOwnParameterStateValueSlots();
-                    if (stateSlots.Count > 0)
-                    {
-                        foreach (var slot in stateSlots)
-                            covered = checked(covered + slot.ScalarCount);
-                        continue;
-                    }
-                }
-
-                // Legacy/non-LayerBase trainables have no declared checkpoint-state slots.
-                foreach (Tensor<T> tensor in GetAuthoritativeSourceValues(srcLayers[i]))
-                    covered = checked(covered + tensor.Length);
-            }
-
-            long registered = manifestProvider.ParameterLayout.MaterializedParameterCount;
-            if (registered > covered)
-            {
-                status = CopyOnWriteShareStatus.IncompleteCoverage;
-                mismatch = $"registered layer state covers {covered} parameters, but the registered "
-                           + $"parameter surface proves at least {registered} materialized values";
                 return false;
             }
         }
