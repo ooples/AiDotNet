@@ -1626,6 +1626,21 @@ jobs:
             'TopLevel - Audio/Onnx/Tokenization'
           )
           $heavyShard = $heavyShards -contains $shardName
+
+          # SHARDS WHOSE ASSERTIONS ARE THEMSELVES TIMING MEASUREMENTS.
+          # Coverage instrumentation inflates CPU time and wall time by different amounts, which
+          # corrupts the exact quantities these shards assert on: the FP32/INT8 throughput ratio
+          # and the CPU-to-wall engagement ratio. 'Integration - Serial Perf' escaped that only
+          # because it happens to sit in $heavyShards; when the transformer probe was split into
+          # its own shard it inherited no such protection and would have run instrumented -- which
+          # is the same class of interference the split was made to remove.
+          # Kept as its own list rather than folded into $heavyShards, because that list also
+          # decides collection serialization, which is a memory concern unrelated to timing.
+          $performanceShards = @(
+            'Integration - Serial Perf',
+            'Integration - CPU Parallelism Probe'
+          )
+          $measuresTiming = $performanceShards -contains $shardName
           # EVERY heavy shard serializes. D-F used to be carved out of this on the grounds that
           # it needed "the repository's four-thread xUnit default" to fit the 45-minute budget, but
           # that default no longer exists: tests/AiDotNet.Tests/xunit.runner.json now sets
@@ -1634,7 +1649,7 @@ jobs:
           # now split into D/E/F, each serialized like every other heavy shard and each given a
           # 60-minute ceiling to pay for the lost concurrency.
           $serializeShard = $heavyShard
-          $collectCoverage = -not $heavyShard
+          $collectCoverage = -not ($heavyShard -or $measuresTiming)
           Write-Host "Running shard '$shardName' (serialized: $serializeShard; coverage: $collectCoverage)"
 
           # Build the argument list as a PowerShell array so the `--`

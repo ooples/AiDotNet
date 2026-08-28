@@ -189,6 +189,12 @@ public class AllModelsCloneTests
         System.Threading.Tasks.Task? draining = null;
         string drainingName = string.Empty;
 
+        // The abandoned attempt's RESULT travels with the task. Without it the drain below could
+        // only clear the task and move on, so an attempt that went over budget and then failed was
+        // recorded in budgetExceeded and nowhere else -- and budgetExceeded is not asserted on,
+        // while failed is. A slow clone failure could therefore pass this test.
+        string?[]? drainingSlot = null;
+
         foreach (var open in candidates)
         {
             Type closed;
@@ -207,19 +213,31 @@ public class AllModelsCloneTests
             if (draining is not null)
             {
                 bool drained;
+                bool faulted = false;
                 try
                 {
                     drained = draining.Wait(AbandonedAttemptDrainBudget);
                 }
                 catch (Exception)
                 {
+                    faulted = true;
                     // The attempt faulted after we stopped watching it. It has already been counted
                     // as over-budget and its memory is released either way; observing the exception
                     // here just keeps it from resurfacing as an unobserved task exception.
                     drained = true;
                 }
 
-                if (!drained)
+                if (drained)
+                {
+                    // Read the result we stopped waiting for. Every attempt is classified exactly
+                    // once, here or at the point it completed in time.
+                    if (faulted)
+                        failed.Add(
+                            $"{drainingName}: attempt faulted after exceeding its observation budget");
+                    else if (drainingSlot is not null)
+                        Classify(drainingName, drainingSlot[0]);
+                }
+                else
                 {
                     unresolved.Add(
                         $"{drainingName}: still running {AbandonedAttemptDrainBudget.TotalMinutes:0} minutes "
@@ -230,6 +248,7 @@ public class AllModelsCloneTests
 
                 draining = null;
                 drainingName = string.Empty;
+                drainingSlot = null;
 
                 // The drained attempt's model is unreachable now; reclaim it before the next one
                 // allocates rather than letting several generations of them coexist.
@@ -245,8 +264,8 @@ public class AllModelsCloneTests
             // shard, but it is only an observation budget. It cannot distinguish a true deadlock
             // from valid work that needs more time on this runner, so report it separately and do
             // not turn the budget-sensitive count into a claimed hang rate.
-            string? outcome = null;
-            var work = System.Threading.Tasks.Task.Run(() => outcome = Attempt(open, closed));
+            var slot = new string?[1];
+            var work = System.Threading.Tasks.Task.Run(() => slot[0] = Attempt(open, closed));
 
             if (!work.Wait(PerModelProbeBudget))
             {
@@ -255,18 +274,39 @@ public class AllModelsCloneTests
                 Note($"LIMIT {open.Name}");
                 draining = work;
                 drainingName = open.Name;
+                drainingSlot = slot;
                 continue;
             }
 
-            if (outcome is null) cloned.Add(open.Name);
-            else if (!ReferenceEquals(outcome, SkipMarker) && outcome != SkipMarker) failed.Add(outcome);
+            Classify(open.Name, slot[0]);
         }
 
         // Don't leave a final abandoned attempt allocating underneath the report write-out.
+        bool finalDrainCompleted = true;
         if (draining is not null)
         {
-            try { draining.Wait(AbandonedAttemptDrainBudget); } catch (Exception) { /* already counted */ }
+            bool finalFaulted = false;
+            try { finalDrainCompleted = draining.Wait(AbandonedAttemptDrainBudget); }
+            catch (Exception) { finalDrainCompleted = true; finalFaulted = true; }
+
+            if (finalFaulted)
+                failed.Add($"{drainingName}: attempt faulted after exceeding its observation budget");
+            else if (finalDrainCompleted && drainingSlot is not null)
+                Classify(drainingName, drainingSlot[0]);
         }
+
+        // A STILL-RUNNING ATTEMPT IS NOT A REPORTABLE STATE.
+        //
+        // Wait returning false means the background Attempt is still going. It appends to failed,
+        // notConstructed and unresolved and writes to the report file, all of which the write-out
+        // below reads -- so the published counts would be a snapshot taken while they were still
+        // changing, and enumerating a List<string> mid-Add can throw outright. Stop here instead of
+        // reporting numbers that are not yet true. Unconditional: a completed drain passes it.
+        Assert.True(
+            finalDrainCompleted,
+            $"{drainingName}: abandoned attempt was still running "
+                + $"{AbandonedAttemptDrainBudget.TotalMinutes:0} minutes after the sweep ended; "
+                + "report withheld because its counts were still being written.");
 
         _output.WriteLine($"model types        : {candidates.Count}");
         _output.WriteLine($"cloned OK          : {cloned.Count}");
@@ -312,6 +352,17 @@ public class AllModelsCloneTests
             failed.Count == 0,
             $"{failed.Count} model(s) failed cloning in shard {shard}:{Environment.NewLine}"
                 + string.Join(Environment.NewLine, failed));
+    }
+
+    /// <summary>Records one completed attempt's result.</summary>
+    /// <remarks>
+    /// Every attempt passes through here exactly once -- whether it finished inside its observation
+    /// budget or was drained afterwards -- so that no completed attempt's result goes unread.
+    /// </remarks>
+    private void Classify(string name, string? outcome)
+    {
+        if (outcome is null) cloned.Add(name);
+        else if (!ReferenceEquals(outcome, SkipMarker) && outcome != SkipMarker) failed.Add(outcome);
     }
 
     /// <summary>Constructs, copies and checks one model. Returns null when it cloned cleanly.</summary>
