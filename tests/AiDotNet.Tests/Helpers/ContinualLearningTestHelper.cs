@@ -531,9 +531,6 @@ public class MockLayer<T> : ILayer<T>
 
     public bool SupportsTraining => true;
 
-    /// <summary>Not a normalization: this double adds no learnable shift.</summary>
-    public bool ProvidesLearnableShift => false;
-
     public void SetTrainingMode(bool isTraining)
     {
         _isTraining = isTraining;
