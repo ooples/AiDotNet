@@ -40,7 +40,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSource<T>,
-    IParameterLayoutSource, IParameterSurfaceLifecycle, IDisposable
+    IParameterLayoutSource, IParameterChunkSource<T>, IParameterSurfaceLifecycle,
+    IUpstreamBiasRedundancy, IDisposable
 {
     /// <summary>
     /// Counter for generating unique instance IDs across all layer instances.
@@ -361,8 +362,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// Default false, which is the safe answer: assuming a layer absorbs an upstream bias when it
     /// does not would delete a parameter the model still needs.
     /// </remarks>
-    public virtual bool AbsorbsUpstreamChannelBias => false;
-
     /// <summary>
     /// Whether this layer must reproduce its reference computation exactly, or may take the fastest
     /// route available. Defaults to <c>Exact</c>.
@@ -378,6 +377,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     public NumericalReproducibility Reproducibility { get; set; } = NumericalReproducibility.Exact;
 
+    public virtual bool MakesUpstreamBiasRedundant => false;
+
     /// <summary>
     /// Resolves a requested <c>BiasMode</c> against the layer that consumes this layer's output.
     /// </summary>
@@ -388,12 +389,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// <returns><c>true</c> when the layer should carry its own bias.</returns>
     /// <remarks>
     /// <para>
-    /// <c>Auto</c> asks <c>AbsorbsUpstreamChannelBias</c> instead of testing the consumer's type, so
-    /// it remains correct for normalizations this library has not seen yet -- and, because that
-    /// property asks whether the bias is genuinely absorbed rather than merely whether a beta
-    /// exists, it does not strip a bias that GroupNorm or LayerNorm would leave observable.
-    /// <c>Always</c> and <c>Never</c> are unconditional: a caller who wants the redundant parameter,
-    /// or wants it gone whatever follows, says so and is obeyed.
+    /// <c>Auto</c> asks an optional bias-redundancy capability instead of testing the consumer's
+    /// concrete type, so it remains correct for normalizations this library has not seen yet without
+    /// adding a breaking member to <see cref="ILayer{T}"/>. GroupNorm and LayerNorm only opt in when
+    /// their axes genuinely make a per-channel upstream bias unobservable. <c>Always</c> and
+    /// <c>Never</c> are unconditional.
     /// </para>
     /// </remarks>
     protected static bool ResolveBias(BiasMode mode, ILayer<T>? consumer) => mode switch
@@ -403,7 +403,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         BiasMode.Unspecified => true,
         BiasMode.Always => true,
         BiasMode.Never => false,
-        _ => consumer is null || !consumer.AbsorbsUpstreamChannelBias,
+        _ => consumer is null
+            || consumer is not IUpstreamBiasRedundancy redundancy
+            || !redundancy.MakesUpstreamBiasRedundant,
     };
 
     /// <summary>
@@ -3131,9 +3133,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </para>
     /// <para>
     /// Registering here adds the freshly-initialized weight to the LRU and drops
-    /// its resident copy to the backing store; this layer's own immediately-
-    /// following matmul transparently rehydrates it, and the next layer's
-    /// allocation evicts it again once the resident budget is crossed — keeping
+    /// its resident copy to the backing store. This hook then materializes the
+    /// current layer's weights as one execution-residency boundary; the next layer's
+    /// allocation may evict them again once the resident budget is crossed — keeping
     /// the resident set bounded across the whole forward. No-op unless streaming
     /// was enabled for this layer (<see cref="UseStreamingAllocator"/>);
     /// idempotent via the already-registered handle gate.
@@ -3146,10 +3148,17 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         {
             if (tensor is null || tensor.Length == 0) continue;
             // Only streaming-allocated tensors carry Lifetime.Streaming; skip
-            // anything already registered (handle assigned) to stay idempotent.
+            // resident tensors that are not managed by the streaming pool.
             if (tensor.Lifetime != WeightLifetime.Streaming) continue;
-            if (tensor.StreamingPoolHandle >= 0) continue;
-            WeightRegistry.RegisterWeight(tensor);
+            if (tensor.StreamingPoolHandle < 0)
+                WeightRegistry.RegisterWeight(tensor);
+
+            // RegisterWeight replaces the resident vector with Vector.Empty. Most kernels call
+            // AsSpan/GetFlat and therefore page it back transparently, but view-only operations
+            // such as Reshape can inspect the storage before either guard runs. A layer is the
+            // correct residency boundary: make all of its managed weights resident immediately
+            // before its computation, while the next layer remains free to evict them.
+            WeightRegistry.Materialize(tensor);
         }
     }
 
@@ -6955,6 +6964,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
         foreach (var chunk in EnumerateParameterStateChunks(stablePrefix, includeChildren: true))
             yield return chunk;
+    }
+
+    /// <inheritdoc />
+    IEnumerable<ParameterChunk<T>> IParameterChunkSource<T>.GetParameterStateChunks()
+    {
+        // The registry supplies the owning component prefix. Expose this layer's manifest IDs
+        // relative to that prefix so nesting does not produce paths such as "component/$/...".
+        foreach (var chunk in GetParameterStateChunks("$"))
+        {
+            string stableId = chunk.StableId.StartsWith("$/", StringComparison.Ordinal)
+                ? chunk.StableId.Substring(2)
+                : chunk.StableId;
+            yield return new ParameterChunk<T>(stableId, chunk.Role, chunk.Tensor, chunk.SourceTensor);
+        }
     }
 
     /// <summary>

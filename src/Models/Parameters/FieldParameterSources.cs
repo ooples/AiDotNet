@@ -378,6 +378,9 @@ public sealed class ComponentCollectionParameterSource<T> : IParameterSource<T>,
         }
     }
 
+    /// <summary>The currently present collection members, evaluated lazily.</summary>
+    internal IEnumerable<IParameterSource<T>> Current => Members();
+
     /// <summary>Whether this live collection currently owns a particular component instance.</summary>
     internal bool ContainsCurrent(IParameterSource<T>? candidate)
     {

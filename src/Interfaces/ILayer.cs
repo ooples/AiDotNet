@@ -275,45 +275,6 @@ public interface ILayer<T> : IParameterSource<T>, IDiagnosticsProvider, IWeightL
     bool SupportsTraining { get; }
 
     /// <summary>
-    /// Whether this layer makes a per-output-channel additive bias on the layer feeding it
-    /// mathematically redundant.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Two conditions must BOTH hold, which is why this is not simply "has a beta". The layer must
-    /// subtract a mean computed PER CHANNEL, so that a constant added to a whole channel is removed
-    /// exactly; and it must add back its own learnable per-channel shift, so the degree of freedom
-    /// the bias represented is not lost.
-    /// </para>
-    /// <para>
-    /// BatchNorm qualifies: it reduces over (N, H, W) within each channel, so a per-channel constant
-    /// is entirely absorbed and beta replaces it. Affine InstanceNorm qualifies for the same reason,
-    /// reducing over (H, W) within each (N, C).
-    /// </para>
-    /// <para>
-    /// GroupNorm and LayerNorm do NOT, even though both own a beta. Their reduction spans several
-    /// channels or features at once, so a per-channel bias shifts the members of a reduction group
-    /// by DIFFERENT amounts: it changes the group's mean and variance and survives normalization as
-    /// a real change in the output. Removing it there would change the function the layer computes,
-    /// not merely remove a redundant parameter. GroupNorm qualifies only in the degenerate case
-    /// where every group holds exactly one channel, which is instance normalization.
-    /// </para>
-    /// <para>
-    /// Scale-only normalizations such as RMSNorm never qualify: with no mean subtraction the bias is
-    /// not removed, and with no beta there is nothing to replace it.
-    /// </para>
-    /// <para>
-    /// <b>Breaking change.</b> <c>ILayer{T}</c> is public and this member has no default
-    /// implementation, which .NET Framework 4.7.1 does not support, so any type implementing the
-    /// interface DIRECTLY rather than deriving from <c>LayerBase{T}</c> must add it. Everything in
-    /// this library derives from <c>LayerBase{T}</c> and inherits the safe <c>false</c>; two
-    /// hand-rolled test doubles did not, and had to be updated, which is evidence that external
-    /// direct implementers exist and will need the same one-line addition.
-    /// </para>
-    /// </remarks>
-    bool AbsorbsUpstreamChannelBias { get; }
-
-    /// <summary>
     /// Sets the layer to training or evaluation mode.
     /// </summary>
     /// <param name="isTraining">True to set the layer to training mode, false for evaluation mode.</param>

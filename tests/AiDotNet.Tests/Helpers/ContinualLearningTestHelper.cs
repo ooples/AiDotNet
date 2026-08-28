@@ -531,9 +531,6 @@ public class MockLayer<T> : ILayer<T>
 
     public bool SupportsTraining => true;
 
-    /// <summary>Not a normalization: absorbs no upstream bias.</summary>
-    public bool AbsorbsUpstreamChannelBias => false;
-
     public void SetTrainingMode(bool isTraining)
     {
         _isTraining = isTraining;

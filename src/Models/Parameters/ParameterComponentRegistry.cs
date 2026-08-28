@@ -106,6 +106,41 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
         }
     }
 
+    /// <summary>
+    /// The live component objects behind generated accessors, in manifest order.
+    /// </summary>
+    /// <remarks>
+    /// Registry operations intentionally retain their accessor wrappers so an absent construction
+    /// slot can still contribute readiness metadata. Streaming callers need the opposite view: the
+    /// concrete component supplies its per-tensor chunk API, while flattening the wrapper would
+    /// collapse a foundation-scale model into one aggregate allocation. Absent conditional
+    /// accessors are omitted, and generated collections are expanded in their declared order.
+    /// </remarks>
+    internal IReadOnlyList<IParameterSource<T>> CurrentComponents
+    {
+        get
+        {
+            var ordered = OrderedEntries();
+            var result = new List<IParameterSource<T>>(ordered.Count);
+            for (int i = 0; i < ordered.Count; i++)
+            {
+                switch (ordered[i].Source)
+                {
+                    case ComponentAccessorParameterSource<T> accessor:
+                        if (accessor.Current is { } current) result.Add(current);
+                        break;
+                    case ComponentCollectionParameterSource<T> collection:
+                        result.AddRange(collection.Current);
+                        break;
+                    case { } source:
+                        result.Add(source);
+                        break;
+                }
+            }
+            return result;
+        }
+    }
+
     /// <summary>True once at least one component identity has been registered.</summary>
     public bool HasComponents => _entries.Count > 0;
 

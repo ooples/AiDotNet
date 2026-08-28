@@ -2859,7 +2859,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         var kernels = conv.GetFilters();   // live [outC, inC, kH, kW]
         var biases = conv.GetBiases();     // live [outC]
         int outC = kernels.Shape[0];
-        if (biases.Length != outC) return false;
+        if (biases is null || biases.Length != outC) return false;
 
         var gamma = bn.GetGamma();
         var beta = bn.GetBeta();

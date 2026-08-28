@@ -257,9 +257,9 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// Gets the biases tensor of the convolutional layer.
     /// </summary>
     /// <returns>The bias values added to each output channel.</returns>
-    public override Tensor<T> GetBiases()
+    public override Tensor<T>? GetBiases()
     {
-        return _biases;
+        return UseBias ? _biases : null;
     }
 
     public override bool SupportsTraining => true;
@@ -566,6 +566,20 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     public ConvolutionalLayer(
+        int outputDepth,
+        int kernelSize,
+        int stride,
+        int padding,
+        IActivationFunction<T>? activationFunction,
+        IInitializationStrategy<T>? initializationStrategy,
+        IActivationFunction<T>? nonlinearityForInit,
+        int groups)
+        : this(outputDepth, kernelSize, stride, padding, activationFunction,
+            initializationStrategy, nonlinearityForInit, groups, BiasMode.Auto)
+    {
+    }
+
+    public ConvolutionalLayer(
         [LayerState] int outputDepth,
         [LayerState] int kernelSize,
         [LayerState] int stride = 1,
@@ -722,6 +736,14 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// needs to be applied to groups of outputs rather than individual values.
     /// </para>
     /// </remarks>
+    public ConvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding,
+                              IVectorActivationFunction<T> vectorActivationFunction,
+                              IInitializationStrategy<T>? initializationStrategy)
+        : this(outputDepth, kernelSize, stride, padding, vectorActivationFunction,
+            initializationStrategy, BiasMode.Auto)
+    {
+    }
+
     public ConvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding,
                               IVectorActivationFunction<T> vectorActivationFunction,
                               IInitializationStrategy<T>? initializationStrategy = null,
@@ -1964,6 +1986,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         metadata["Stride"] = Stride.ToString();
         metadata["Padding"] = Padding.ToString();
         metadata["Groups"] = Groups.ToString(); // #639: depthwise marker — Clone/Deserialize must restore it
+        metadata["BiasMode"] = _biasMode.ToString();
 
         // Serialize activation type so deserialization restores it correctly
         // (default is ReLU, but MobileNetV3 uses Identity)

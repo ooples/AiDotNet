@@ -104,18 +104,14 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
 
     #endregion
 
-    public override bool SupportsTraining => true;
-
     /// <inheritdoc />
     /// <remarks>
-    /// Only when every group holds exactly one channel, which is instance normalization by another
-    /// name. Owning a beta is not sufficient here: with more than one channel per group the mean is
-    /// taken ACROSS channels, so a per-channel bias shifts the members of a group by different
-    /// amounts. It changes the group's statistics and survives normalization as a real change in the
-    /// output, and a single per-channel beta cannot reproduce it. Dropping the bias in that case
-    /// would change the function, not remove a redundant parameter.
+    /// A per-channel bias is canceled only when each group contains one channel. With wider groups,
+    /// channel-relative biases change the normalized values and cannot be replaced by beta.
     /// </remarks>
-    public override bool AbsorbsUpstreamChannelBias => _numGroups == _numChannels;
+    public override bool MakesUpstreamBiasRedundant => _numGroups == _numChannels;
+
+    public override bool SupportsTraining => true;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.

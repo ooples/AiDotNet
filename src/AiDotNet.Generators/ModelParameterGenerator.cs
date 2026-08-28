@@ -390,7 +390,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
                         components.Add((member.Name,
                             $"new ComponentAccessorParameterSource<{elem}>(() => {member.Name} as global::AiDotNet.Interfaces.IParameterSource<{elem}>)",
                             RoleExpression(classification.Kind),
-                            AvailabilityExpression(member, classification.Kind)));
+                            AvailabilityExpression(member, classification.Kind, runtimeOptional: true)));
                         continue;
                     }
                     if (kind == "many")
@@ -1790,7 +1790,8 @@ public class ModelParameterGenerator : IIncrementalGenerator
 
     private static string AvailabilityExpression(
         ISymbol member,
-        ParameterMemberSemanticModel.Kind kind)
+        ParameterMemberSemanticModel.Kind kind,
+        bool runtimeOptional = false)
     {
         foreach (var attribute in member.GetAttributes())
         {
@@ -1825,6 +1826,14 @@ public class ModelParameterGenerator : IIncrementalGenerator
         // which Construction could not have been true.
         if (kind == ParameterMemberSemanticModel.Kind.Buffer && !HasConstructionValue(member))
             return "global::AiDotNet.Models.Parameters.ParameterAvailability.Fit";
+
+        // A runtime adapter is optional by construction: the declared interface cannot promise
+        // IParameterSource<T>, and both a null member and a parameter-free implementation make the
+        // cast return null. Treating that state as construction-required turns a legitimate absent
+        // branch into ShapeDeferred and makes ParameterCount/GetParameters throw. Explicit
+        // availability annotations above still win.
+        if (runtimeOptional)
+            return "global::AiDotNet.Models.Parameters.ParameterAvailability.Conditional";
 
         return "global::AiDotNet.Models.Parameters.ParameterAvailability.Construction";
     }

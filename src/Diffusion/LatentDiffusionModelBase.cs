@@ -39,9 +39,9 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
     /// <summary>
     /// Streams the network's trainable weight tensors per-tensor without
     /// materialising a flat aggregate, mirroring PyTorch's
-    /// <c>nn.Module.parameters()</c> generator pattern. Yields the noise
-    /// predictor's chunks first, then the VAE's, then any chunks the
-    /// conditioner exposes (text encoder, IP-Adapter, etc.). Foundation-
+    /// <c>nn.Module.parameters()</c> generator pattern. Yields every live
+    /// registry component in stable manifest order, preserving each component's
+    /// own per-tensor chunking. Foundation-
     /// scale latent diffusion stacks (HiDream Full, SD3.5 Large, Sora,
     /// HunyuanVideo, Flux 2, Veo) overflow <see cref="int.MaxValue"/> in
     /// the aggregate <see cref="ParameterCount"/>; callers walking these
@@ -96,7 +96,7 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
 
     /// <summary>
     /// Streaming counterpart to <see cref="SetParameters"/>: distributes per-tensor chunks to the
-    /// noise predictor, then the VAE, then the conditioner — the SAME order
+    /// live registry component in the SAME stable manifest order
     /// <see cref="GetParameterChunks"/> yields them — without materializing a flat aggregate. Each
     /// sub-model consumes exactly as many chunks as its own <see cref="GetParameterChunks"/> emits.
     /// This is the set-side of the #1624 foundation-scale streaming path: FLUX/Sora/SD3.5-Large-class
@@ -126,7 +126,7 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
             if (component is null) continue;
             if (component is IParameterizable<T, Tensor<T>, Tensor<T>> parameterizable)
             {
-                PullInto(parameterizable, e);
+                PullInto(parameterizable, e, component.ParameterCount);
                 continue;
             }
 
@@ -149,30 +149,40 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
 
 #if !NETFRAMEWORK
     private static void PullInto(
-        IParameterizable<T, Tensor<T>, Tensor<T>>? sub, IEnumerator<Tensor<T>> source)
+        IParameterizable<T, Tensor<T>, Tensor<T>>? sub,
+        IEnumerator<Tensor<T>> source,
+        long expectedScalarCount)
     {
-        if (sub is null) return;
+        if (sub is null || expectedScalarCount == 0) return;
 
-        // How many chunks does this sub-model expect? Enumerating its generator costs one block in
-        // flight at a time (never a flat aggregate), so counting is cheap memory-wise.
-        int count = 0;
-        foreach (var _ in sub.GetParameterChunks()) count++;
-        if (count == 0) return;
-
-        // Hand the sub-model a LAZY view over the next `count` items of the shared enumerator. The
-        // sub-model's own SetParameterChunks pulls them one at a time, so peak stays at one chunk.
-        sub.SetParameterChunks(TakeFrom(source, count));
+        // Frame the component by its canonical scalar width. Counting its chunks by enumerating the
+        // read surface first performed every materialization/allocation twice and made restore O(n)
+        // extra work before it copied a value. The receiving component still validates exact tensor
+        // boundaries; this layer only prevents it from consuming the following component's chunks.
+        sub.SetParameterChunks(TakeFrom(source, expectedScalarCount));
     }
 
-    private static IEnumerable<Tensor<T>> TakeFrom(IEnumerator<Tensor<T>> source, int count)
+    private static IEnumerable<Tensor<T>> TakeFrom(
+        IEnumerator<Tensor<T>> source,
+        long expectedScalarCount)
     {
-        for (int i = 0; i < count; i++)
+        long actualScalarCount = 0;
+        while (actualScalarCount < expectedScalarCount)
         {
             if (!source.MoveNext())
                 throw new ArgumentException(
                     "SetParameterChunks received fewer chunks than the model's sub-models expect.",
                     nameof(source));
-            yield return source.Current;
+            var chunk = source.Current;
+            if (chunk is null || chunk.Length == 0)
+                throw new ArgumentException(
+                    "SetParameterChunks received a null or empty chunk.", nameof(source));
+            actualScalarCount = checked(actualScalarCount + chunk.Length);
+            if (actualScalarCount > expectedScalarCount)
+                throw new ArgumentException(
+                    "SetParameterChunks received a chunk that crosses a registered component boundary.",
+                    nameof(source));
+            yield return chunk;
         }
     }
 #endif

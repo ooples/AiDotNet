@@ -645,8 +645,6 @@ public partial class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
         public Vector<float> GetParameters() => Vector<float>.Empty();
         public bool SupportsTraining => false;
 
-        /// <summary>Not a normalization: absorbs no upstream bias.</summary>
-        public bool AbsorbsUpstreamChannelBias => false;
         public void SetTrainingMode(bool isTraining) { }
         public IReadOnlyList<ILayer<float>> GetSubLayers() => Array.Empty<ILayer<float>>();
         public Vector<float> GetParameterGradients() => Vector<float>.Empty();

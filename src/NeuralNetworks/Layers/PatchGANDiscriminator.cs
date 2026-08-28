@@ -230,6 +230,18 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override bool SupportsTraining => true;
 
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["NumLayers"] = _numLayers.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["NumFilters"] = _numFilters.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["KernelSize"] = _kernelSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["LeakySlope"] = _leakySlope.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        metadata["ApplySigmoid"] = _applySigmoid.ToString();
+        metadata["BiasMode"] = _biasMode.ToString();
+        return metadata;
+    }
+
     #endregion
 
     #region Constructors
@@ -247,7 +259,8 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
     /// <param name="applySigmoid">Whether to apply the paper's final Sigmoid. Default true (paper).
     /// Pass false to emit raw logits for a numerically stable with-logits adversarial loss.</param>
     /// <param name="biasMode">
-    /// Whether each convolution carries its own bias. Default <c>Auto</c>, which drops the bias on
+    /// Whether each convolution carries its own bias. The compatibility default is <c>Always</c>,
+    /// matching releases from before this option existed. <c>Auto</c> drops the bias on
     /// any block whose convolution is followed by BatchNorm -- the norm's beta already supplies the
     /// shift, so the bias is inert. The first block and the output convolution have no norm after
     /// them and keep theirs, which is what pix2pix does. Pass <c>Always</c> or <c>Never</c> to
@@ -258,7 +271,7 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
         int numFilters = DefaultNumFilters,
         double leakySlope = DefaultLeakySlope,
         bool applySigmoid = true,
-        BiasMode biasMode = BiasMode.Auto)
+        BiasMode biasMode = BiasMode.Always)
         : this(
             numLayers: LayerCountFor(receptiveField),
             numFilters: numFilters,
@@ -273,6 +286,19 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
+    /// Preserves the constructor signature used by binaries compiled before <see cref="BiasMode"/>
+    /// was introduced.
+    /// </summary>
+    public PatchGANDiscriminator(
+        PatchGANReceptiveField receptiveField,
+        int numFilters,
+        double leakySlope,
+        bool applySigmoid)
+        : this(receptiveField, numFilters, leakySlope, applySigmoid, BiasMode.Always)
+    {
+    }
+
+    /// <summary>
     /// Creates a PatchGAN discriminator with an explicit depth, for receptive fields other than the
     /// four the paper tabulates.
     /// </summary>
@@ -284,7 +310,8 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
     /// <param name="leakySlope">LeakyReLU slope. Default 0.2, per section 6.1.2.</param>
     /// <param name="applySigmoid">Whether to apply the paper's final Sigmoid. Default true.</param>
     /// <param name="biasMode">
-    /// Whether each convolution carries its own bias. Default <c>Auto</c>, which drops the bias on
+    /// Whether each convolution carries its own bias. The compatibility default is <c>Always</c>,
+    /// matching releases from before this option existed. <c>Auto</c> drops the bias on
     /// any block whose convolution is followed by BatchNorm -- the norm's beta already supplies the
     /// shift, so the bias is inert. The first block and the output convolution have no norm after
     /// them and keep theirs, which is what pix2pix does. Pass <c>Always</c> or <c>Never</c> to
@@ -296,7 +323,7 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
         int kernelSize = DefaultKernelSize,
         double leakySlope = DefaultLeakySlope,
         bool applySigmoid = true,
-        [LayerState] BiasMode biasMode = BiasMode.Auto)
+        [LayerState] BiasMode biasMode = BiasMode.Always)
         : base([-1, -1, -1], [1, -1, -1])
     {
         if (numLayers <= 0)
@@ -314,6 +341,7 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
         _numFilters = numFilters;
         _kernelSize = kernelSize;
         _applySigmoid = applySigmoid;
+        _leakySlope = leakySlope;
 
         // The PixelGAN variant uses 1x1 filters throughout; downsampling there would discard pixels
         // the discriminator is supposed to judge individually, so it also keeps stride 1 everywhere.
@@ -379,6 +407,20 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
         }
 
         RegisterSubLayer(_convOut);
+    }
+
+    /// <summary>
+    /// Preserves the explicit-depth constructor signature used by binaries compiled before
+    /// <see cref="BiasMode"/> was introduced.
+    /// </summary>
+    public PatchGANDiscriminator(
+        int numLayers,
+        int numFilters,
+        int kernelSize,
+        double leakySlope,
+        bool applySigmoid)
+        : this(numLayers, numFilters, kernelSize, leakySlope, applySigmoid, BiasMode.Always)
+    {
     }
 
     #endregion
