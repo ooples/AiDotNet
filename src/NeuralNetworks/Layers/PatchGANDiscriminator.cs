@@ -235,11 +235,19 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
     /// <param name="leakySlope">LeakyReLU slope. Default 0.2, per section 6.1.2.</param>
     /// <param name="applySigmoid">Whether to apply the paper's final Sigmoid. Default true (paper).
     /// Pass false to emit raw logits for a numerically stable with-logits adversarial loss.</param>
+    /// <param name="biasMode">
+    /// Whether each convolution carries its own bias. Default <c>Auto</c>, which drops the bias on
+    /// any block whose convolution is followed by BatchNorm -- the norm's beta already supplies the
+    /// shift, so the bias is inert. The first block and the output convolution have no norm after
+    /// them and keep theirs, which is what pix2pix does. Pass <c>Always</c> or <c>Never</c> to
+    /// override the decision entirely.
+    /// </param>
     public PatchGANDiscriminator(
         PatchGANReceptiveField receptiveField = PatchGANReceptiveField.Patch70x70,
         int numFilters = DefaultNumFilters,
         double leakySlope = DefaultLeakySlope,
-        bool applySigmoid = true)
+        bool applySigmoid = true,
+        BiasMode biasMode = BiasMode.Auto)
         : this(
             numLayers: LayerCountFor(receptiveField),
             numFilters: numFilters,
@@ -247,7 +255,8 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
             // 1 x 1 spatial filters)" — section 6.1.2.
             kernelSize: receptiveField == PatchGANReceptiveField.Pixel1x1 ? 1 : DefaultKernelSize,
             leakySlope: leakySlope,
-            applySigmoid: applySigmoid)
+            applySigmoid: applySigmoid,
+            biasMode: biasMode)
     {
         _leakySlope = leakySlope;
     }
@@ -263,12 +272,20 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
     /// A value of 1 selects the paper's all-1x1 PixelGAN behaviour.</param>
     /// <param name="leakySlope">LeakyReLU slope. Default 0.2, per section 6.1.2.</param>
     /// <param name="applySigmoid">Whether to apply the paper's final Sigmoid. Default true.</param>
+    /// <param name="biasMode">
+    /// Whether each convolution carries its own bias. Default <c>Auto</c>, which drops the bias on
+    /// any block whose convolution is followed by BatchNorm -- the norm's beta already supplies the
+    /// shift, so the bias is inert. The first block and the output convolution have no norm after
+    /// them and keep theirs, which is what pix2pix does. Pass <c>Always</c> or <c>Never</c> to
+    /// override the decision entirely.
+    /// </param>
     public PatchGANDiscriminator(
         int numLayers,
         int numFilters = DefaultNumFilters,
         int kernelSize = DefaultKernelSize,
         double leakySlope = DefaultLeakySlope,
-        bool applySigmoid = true)
+        bool applySigmoid = true,
+        BiasMode biasMode = BiasMode.Auto)
         : base([-1, -1, -1], [1, -1, -1])
     {
         if (numLayers <= 0)
@@ -297,18 +314,29 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
         _activations = new ActivationLayer<T>[numLayers];
         for (int i = 0; i < numLayers; i++)
         {
+            // "BatchNorm is not applied to the first C64 layer."
+            // Constructed BEFORE the convolution, because whether the convolution carries a bias
+            // depends on what follows it.
+            _norms[i] = i == 0 ? null : new BatchNormalizationLayer<T>();
+
             // Channels: numFilters * min(2^i, 8) -> 64, 128, 256, 512, 512, 512 ...
             // The convolution itself is linear: Ck is Convolution -> BatchNorm -> LeakyReLU, so the
             // nonlinearity must come AFTER the normalization, not inside the convolution.
+            //
+            // The bias is resolved against that normalization rather than assumed. BatchNorm's beta
+            // already shifts the block's output, so a bias on the convolution feeding it is a
+            // parameter that cannot receive a meaningful gradient: at the 70x70 default that is
+            // 128 + 256 + 512 = 896 inert values in the discriminator. The official pix2pix
+            // implementation drops them too, via `use_bias = norm_layer == nn.InstanceNorm2d`;
+            // asking the norm directly reaches the same answer here and stays right if the norm is
+            // ever changed to one that does not shift.
             _convBlocks[i] = new ConvolutionalLayer<T>(
                 outputDepth: ChannelsAt(i),
                 kernelSize: kernelSize,
                 stride: StrideAt(i),
                 padding: padding,
-                activationFunction: null);
-
-            // "BatchNorm is not applied to the first C64 layer."
-            _norms[i] = i == 0 ? null : new BatchNormalizationLayer<T>();
+                activationFunction: null,
+                biasMode: ResolveBias(biasMode, _norms[i]) ? BiasMode.Always : BiasMode.Never);
 
             // Each block gets its own activation layer instance rather than sharing one, so training
             // mode and any per-layer state stay independent.
@@ -321,12 +349,15 @@ public partial class PatchGANDiscriminator<T> : LayerBase<T>, IShapeContract
         // "After the last layer, a convolution is applied to map to a 1-dimensional output, followed
         // by a Sigmoid function." Stride 1 so the patch grid keeps the resolution the last Ck block
         // produced.
+        // Nothing normalizes this convolution's output, so Auto keeps its bias -- as pix2pix
+        // does, where the final 1-channel convolution is constructed with the default bias=True.
         _convOut = new ConvolutionalLayer<T>(
             outputDepth: 1,
             kernelSize: kernelSize,
             stride: 1,
             padding: padding,
-            activationFunction: applySigmoid ? new SigmoidActivation<T>() : null);
+            activationFunction: applySigmoid ? new SigmoidActivation<T>() : null,
+            biasMode: ResolveBias(biasMode, null) ? BiasMode.Always : BiasMode.Never);
 
         for (int i = 0; i < numLayers; i++)
         {
