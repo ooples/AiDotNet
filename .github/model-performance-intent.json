@@ -4,20 +4,20 @@
     "origin": "cb9ecf59db",
     "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.DCRNNTests",
     "metric": "peakWorkingSetBytes",
-    "reason": "cb9ecf59db restored the paper's recurrent diffusion: DCRNN now builds real DiffusionConvolutionalGRU layers for its encoder and decoder, each owning forward and backward graph transition matrices and running MaxDiffusionStep diffusion steps per gate. That is more memory than the layers it replaced, and it is the model the paper describes. Measured step 1.69x, 349 MB to 592 MB, steady across every run since - a level change, not a leak."
+    "reason": "cb9ecf59db restored the paper's recurrent diffusion: DCRNN now builds real DiffusionConvolutionalGRU layers for its encoder and decoder, each owning forward and backward graph transition matrices and running MaxDiffusionStep diffusion steps per gate. That is more memory than the layers it replaced, and it is the model Li et al. 2018 describe. Measured step 1.69x, 349 MB to 592 MB, steady across every run since - a level change, not a leak."
   },
   {
     "commit": "9e2d5031",
     "origin": "9e2d5031fb",
     "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.GR00TN1Tests",
     "metric": "allocatedBytes",
-    "reason": "GR00TN1 gained a trainable parameter slot it should always have had. Measured either side of the merge on one machine: 39 slots and 1,277,364 parameters before, 40 slots and 5,373,364 after. The difference is exactly 4,096,000 = VocabSize 1000 x DecoderDim 4096, which is the instruction token embedding the paper describes (NVIDIA GR00T N1 2025, section 3.1). The forward pass already used that table; parameter enumeration did not see it, so it was never trained, never saved and never counted. Now it is, and 4.1M more float parameters carry their weights, gradients and optimizer state - about 98 MB, which is the whole of the measured increase."
+    "reason": "GR00TN1's instruction token embedding entered the parameter surface. Measured either side of the merge on one machine: 39 slots and 1,277,364 parameters before, 40 slots and 5,373,364 after - a difference of exactly 4,096,000, which is VocabSize 1000 x DecoderDim 4096, the table NVIDIA GR00T N1 2025 section 3.1 describes. ACCEPTED AS A SERIALIZATION COST ONLY. This entry previously claimed the embedding is now trained; that is not established and the code says otherwise. EmbedInstructionTokens is reached only from the forward that takes an instruction string, and only when it is non-empty, while Train(input, expected) calls TrainWithTape with no instruction - so the table contributes nothing to the loss and receives no gradient from this entry point. Registration is also not what feeds the optimizer: the trainable set comes from CollectParameters(Layers), and _tokenEmbedding is never added to Layers. Tracking issue: either training has to carry instructions, as an instruction-conditioned policy implies, or the table should not be paying for gradients and optimizer state it cannot use. Do not resolve this by adding the field to Layers - that list is indexed by range through _encoderLayerEnd and _system2EndLayerIndex, and inserting into it would break those boundaries."
   },
   {
     "commit": "9e2d5031",
     "origin": "9e2d5031fb",
     "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.GR00TN1Tests",
     "metric": "peakWorkingSetBytes",
-    "reason": "The same 4,096,000-parameter token embedding, seen in peak process memory rather than in cumulative allocation. See the allocatedBytes entry for the measurement."
+    "reason": "The same 4,096,000-entry token embedding, seen in peak process memory rather than in cumulative allocation. See the allocatedBytes entry, including the correction: the cost is real, the training benefit is not established."
   }
 ]

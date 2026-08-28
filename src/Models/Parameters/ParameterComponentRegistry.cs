@@ -29,6 +29,37 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
         public ParameterAvailability Availability { get; }
     }
 
+    /// <summary>
+    /// Which components the incoming vector was expected to fill, and how many values each wanted.
+    /// </summary>
+    /// <remarks>
+    /// A bare "Expected 28804275 parameters, got 28800532" says a total disagrees without saying
+    /// which component the difference belongs to, and the two sides of that comparison are built by
+    /// different enumerations - the registry sums what is registered, while the caller's chunk
+    /// stream is assembled by hand and can conditionally omit a component. Every occurrence of this
+    /// mismatch has therefore cost a manual hunt for the missing piece. Naming the components turns
+    /// the arithmetic into a diagnosis: the entry whose count matches the shortfall is the one whose
+    /// chunk was not produced.
+    /// </remarks>
+    private static string DescribeExpectedLayout(CapturedLayout captured, int variableIndex)
+    {
+        var parts = new List<string>(captured.Entries.Count);
+        for (int i = 0; i < captured.Entries.Count; i++)
+        {
+            CapturedEntry entry = captured.Entries[i];
+            string count = entry.ParameterCount.HasValue
+                ? entry.ParameterCount.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : "not yet known";
+            parts.Add(i == variableIndex
+                ? $"{entry.Entry.StableId}={count} (variable)"
+                : $"{entry.Entry.StableId}={count}");
+        }
+
+        return parts.Count == 0
+            ? "No components are registered."
+            : "Expected by component: " + string.Join(", ", parts) + ".";
+    }
+
     private sealed class CapturedEntry
     {
         public CapturedEntry(Entry entry, IReadOnlyList<ParameterSlotDescriptor> localSlots,
@@ -555,7 +586,9 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
         }
         if (variableIndex < 0 && parameters.Length != fixedParameterCount)
             throw new ArgumentException(
-                $"Expected {fixedParameterCount} parameters, got {parameters.Length}.",
+                $"Expected {fixedParameterCount} parameters, got {parameters.Length}"
+                + $" (short by {fixedParameterCount - parameters.Length}). "
+                + DescribeExpectedLayout(captured, variableIndex),
                 nameof(parameters));
         if (variableIndex >= 0 && parameters.Length < fixedParameterCount)
             throw new ArgumentException(
