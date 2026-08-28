@@ -1599,20 +1599,6 @@ jobs:
             'Integration C - ComputerVision Detection',
             'Integration C - ComputerVision Segmentation Models',
             'Integration C - ComputerVision Segmentation Contracts',
-            # Core is here for COVERAGE, not for model size. It is the light complement - "algorithm
-            # /config/causal tests with small models" - and it still died with a shutdown signal.
-            # Measured in a 16 GiB runner-parity container, same shard, one variable changed:
-            #
-            #     without --collect:"XPlat Code Coverage"   peak  9.2 GB
-            #     with coverage, which is what CI ran        peak 15.56 GB   (97% of the cap)
-            #
-            # $collectCoverage is `-not $heavyShard`, so listing it here is what turns the
-            # instrumentation off. That matches the reason given below for every other entry:
-            # coverage "instruments every loaded assembly and keeps extra per-test state in the
-            # VSTest process", which is the remaining multiplier once parallelism and Server GC are
-            # already disabled. Serializing it is incidental - the committed xunit.runner.json
-            # already sets parallelizeTestCollections=false repo-wide.
-            'Integration C - Core',
             'Integration D',
             'Integration E-G',
             'Integration M',
