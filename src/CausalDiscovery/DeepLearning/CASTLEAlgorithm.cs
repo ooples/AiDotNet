@@ -320,12 +320,14 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
             }
         }
 
-        // Adjacency = first-layer weight-row norms A[i,j] = ‖Wh_j[i,:]‖, normalized to
-        // [0,1] so BuildFinalAdjacency's 0.3 gate applies. Direction is resolved there
-        // by A[i,j] vs A[j,i]; edge magnitude comes from the covariance ratio.
+        // Adjacency = first-layer weight-row norms A[i,j] = ‖Wh_j[i,:]‖. CASTLE's
+        // reference implementation thresholds these raw group norms at w_threshold=0.3;
+        // normalizing by the largest edge would make every other edge's apparent
+        // strength depend on that one edge and can promote weak rows as n changes.
+        // Direction is resolved by A[i,j] vs A[j,i]; edge magnitude comes from the
+        // covariance ratio.
         var cov = ComputeCovarianceMatrix(Xs.ToMatrix());
         var learnedP = new double[d, d];
-        double maxA = 0.0;
         for (int j = 0; j < d; j++)
             for (int i = 0; i < d; i++)
             {
@@ -338,14 +340,9 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
                 }
                 double a = Math.Sqrt(s2);
                 learnedP[i, j] = a;
-                if (a > maxA) maxA = a;
             }
-        if (maxA > 1e-12)
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    learnedP[i, j] /= maxA;
 
-        return BuildFinalAdjacency(learnedP, cov, d);
+        return BuildFinalAdjacency(learnedP, cov, d, learnedThreshold: 0.3);
     }
 
 }
