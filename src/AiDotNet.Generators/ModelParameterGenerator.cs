@@ -385,10 +385,20 @@ public class ModelParameterGenerator : IIncrementalGenerator
                     {
                         // The declared type cannot prove it carries parameters, but an
                         // implementation may. Casting inside the accessor lets the registry hold the
-                        // slot either way: ComponentAccessorParameterSource reports 0 when the cast
-                        // yields null, and the real surface when it does not.
+                        // slot either way: the real surface when the cast succeeds, and an ABSENT
+                        // slot when it does not.
+                        //
+                        // optional: true is what makes the absent case safe, and leaving it off was a
+                        // real regression. ComponentAccessorParameterSource's ParameterCount does
+                        // return 0 for a null component, but its LAYOUT reported ShapeDeferred with a
+                        // null count -- and ParameterManifest treats either of those as an unresolved
+                        // slot, which makes the WHOLE model's layout unresolved. Every latent
+                        // diffusion model whose conditioner is absent, or is not an IParameterSource,
+                        // then threw ParameterLayoutNotReadyException from ParameterCount: 21 CI
+                        // shards, all of them diffusion. A conditioner this model does not have is a
+                        // resolved fact, not a deferred shape.
                         components.Add((member.Name,
-                            $"new ComponentAccessorParameterSource<{elem}>(() => {member.Name} as global::AiDotNet.Interfaces.IParameterSource<{elem}>)",
+                            $"new ComponentAccessorParameterSource<{elem}>(() => {member.Name} as global::AiDotNet.Interfaces.IParameterSource<{elem}>, optional: true)",
                             RoleExpression(classification.Kind),
                             AvailabilityExpression(member, classification.Kind, runtimeOptional: true)));
                         continue;

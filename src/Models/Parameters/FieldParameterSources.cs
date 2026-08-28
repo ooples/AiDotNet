@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -563,11 +563,35 @@ public sealed class ComponentAccessorParameterSource<T> : IParameterSource<T>, I
     IParameterSurfaceLifecycle
 {
     private readonly Func<IParameterSource<T>?> _get;
+    private readonly bool _optional;
 
     /// <summary>Creates a source that re-reads the component on every operation.</summary>
-    public ComponentAccessorParameterSource(Func<IParameterSource<T>?> get)
+    /// <param name="get">Returns the component, or <c>null</c> if it is not available.</param>
+    /// <param name="optional">
+    /// What a <c>null</c> component MEANS. <c>false</c> (the default) means "not constructed yet",
+    /// so the slot's shape is genuinely unknown. <c>true</c> means the owner legitimately does not
+    /// have this component -- an unconditional diffusion model with no conditioner, or one whose
+    /// conditioner is not a parameter source -- which is a RESOLVED fact and contributes zero
+    /// parameters.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// The distinction is not cosmetic. <c>ParameterManifest</c> marks a layout unresolved when any
+    /// slot is <c>ShapeDeferred</c> OR has no parameter count, and an unresolved layout makes
+    /// <c>ParameterCount</c> THROW for the entire model rather than return a number. Reporting an
+    /// absent optional component as deferred therefore does not degrade one slot; it takes the whole
+    /// model's parameter surface offline.
+    /// </para>
+    /// <para>
+    /// Defaults to <c>false</c> deliberately: every existing registration means "not constructed
+    /// yet", and treating those as absent would report a confident zero for a component whose real
+    /// size is simply not known yet.
+    /// </para>
+    /// </remarks>
+    public ComponentAccessorParameterSource(Func<IParameterSource<T>?> get, bool optional = false)
     {
         _get = get ?? throw new ArgumentNullException(nameof(get));
+        _optional = optional;
     }
 
     /// <summary>The current component, used internally to deduplicate and materialize its storage.</summary>
@@ -593,10 +617,32 @@ public sealed class ComponentAccessorParameterSource<T> : IParameterSource<T>, I
         var component = _get();
         if (component is null)
         {
+            // ParameterFree with a count of 0, not ShapeDeferred with no count.
+            //
+            // The count matters because ParameterManifest computes
+            //     unresolved = shapeDeferred || fitDeferred || slots.Any(s => !s.ParameterCount.HasValue)
+            // so a null count alone keeps the whole manifest unresolved and makes ParameterCount
+            // throw for the entire model.
+            //
+            // The READINESS matters for a second, subtler reason. ParameterManifest folds slot
+            // readiness into one value for the model, and in that fold ConditionalAbsent outranks
+            // the fallback: a single absent slot relabels the WHOLE model ConditionalAbsent whenever
+            // no other slot happens to be materialized yet, and the read paths reject that with
+            // "Cannot read parameters while the layout is ConditionalAbsent". ConditionalAbsent is
+            // the right word for a slot that a condition removed from a layout that still describes
+            // it; it is the wrong word here, where the owner simply has no such component. It also
+            // must not be able to speak for the model.
+            //
+            // ParameterFree -- "the owner deliberately has no parameters" -- says exactly that, and
+            // sets none of the dominating flags in the fold, so an absent optional component stays
+            // invisible to the model's aggregate readiness instead of overriding it.
             return new[]
             {
-                new ParameterSlotDescriptor(
-                    "$", ParameterSlotRole.Trainable, ParameterReadiness.ShapeDeferred, null)
+                _optional
+                    ? new ParameterSlotDescriptor(
+                        "$", ParameterSlotRole.Trainable, ParameterReadiness.ParameterFree, 0L)
+                    : new ParameterSlotDescriptor(
+                        "$", ParameterSlotRole.Trainable, ParameterReadiness.ShapeDeferred, null)
             };
         }
 
