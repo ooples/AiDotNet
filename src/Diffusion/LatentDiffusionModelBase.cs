@@ -91,6 +91,20 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
             if (flat.Length > 0)
                 yield return new Tensor<T>(new[] { flat.Length }, flat);
         }
+
+        // THE CONDITIONER IS NOT IN THE REGISTRY and cannot be: it is declared as
+        // IConditioningModule<T>, which is not an IParameterSource<T>, so the generator has nothing
+        // to register. The previous hand-written list reached it through a runtime IParameterizable
+        // test, so a conditioner that carries weights DID travel in the chunk stream even though it
+        // has never been part of ParameterCount or GetParameters. Walking the registry alone would
+        // therefore have silently dropped those weights from every clone -- trading one asymmetry
+        // for another. It is appended here, after the registered components, which preserves the
+        // previous predictor/VAE/conditioner order for models that have one.
+        if (Conditioner is IParameterizable<T, Tensor<T>, Tensor<T>> conditioner)
+        {
+            foreach (var chunk in conditioner.GetParameterChunks())
+                yield return chunk;
+        }
 #endif
     }
 
@@ -140,10 +154,13 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
             component.SetParameters(e.Current.ToVector());
         }
 
+        // Mirrors the read half: the conditioner is not registrable, so it is consumed last.
+        PullInto(Conditioner as IParameterizable<T, Tensor<T>, Tensor<T>>, e);
+
         if (e.MoveNext())
             throw new ArgumentException(
                 "SetParameterChunks received more chunks than the model's registered components "
-                + "consume.", nameof(chunks));
+                + "and conditioner consume.", nameof(chunks));
 #endif
     }
 
