@@ -75,6 +75,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         RegisterGeneratedStateCore(state);
     }
 
+    /// <summary>
+    /// Runs after generated/model-declared mutable constructor configuration has been restored.
+    /// </summary>
+    /// <remarks>
+    /// Derived models use this to rebuild objects derived from restored options. It is invoked by
+    /// external deserialization and every shared clone path after the state envelope is applied.
+    /// </remarks>
+    protected virtual void OnMutableConstructorConfigurationRestored()
+    {
+    }
+
     /// <summary>The declared state, registered once and lazily so it runs after the constructor.</summary>
     protected AiDotNet.Models.ModelStateRegistry<T> DeclaredState
     {
@@ -12077,7 +12088,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     // context. Still recorded rather than swallowed silently -- an invisible
                     // failure here shows up later as an unexplained fused miss. Same channel the
                     // GPU-forward fallbacks in this class already use.
-                    System.Diagnostics.Debug.WriteLine(
+                    AiDotNet.Configuration.GpuDiagnosticsConfig.Emit(
+                        AiDotNet.Configuration.GpuDiagnosticLevel.Minimal,
                         $"[NeuralNetworkBase] shape-resolution warm-up forward failed ({ex.GetType().Name}): {ex.Message}");
                 }
                 finally
@@ -14139,6 +14151,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         byte[] inner = AiDotNet.Models.ModelStateEnvelope.ExtractBeforeParameters(DeclaredState, data);
         DeserializeInternalUnchecked(inner);
         _ = AiDotNet.Models.ModelStateEnvelope.ExtractAfterParameters(DeclaredState, declaredStateEnvelope);
+        OnMutableConstructorConfigurationRestored();
         InvalidateWeightCachesAfterSuccessfulWeightUpdate();
     }
 
@@ -15304,6 +15317,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             }
             CopyGeneratedLayerAliasesTo(copyBase);
             _ = ModelStateEnvelope.ExtractAfterParameters(copyBase.DeclaredState, serialized);
+            copyBase.OnMutableConstructorConfigurationRestored();
             CopyGeneratedTrainableTensorsTo(copyBase);
             CopyCloneRuntimeConfigurationTo(copyBase);
             // Base LayerBase.Serialize does NOT persist the per-layer RandomSeed, so the
@@ -16168,6 +16182,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         byte[] inner = ModelStateEnvelope.ExtractAfterParameters(destination.DeclaredState, envelope);
         if (inner.Length != 0)
             throw new InvalidOperationException("Declared-state clone envelope retained an unexpected payload.");
+        destination.OnMutableConstructorConfigurationRestored();
     }
 
     // Set only while an internal eager clone is deserializing. Some architecture objects retain

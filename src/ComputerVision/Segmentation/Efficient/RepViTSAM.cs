@@ -100,7 +100,7 @@ public partial class RepViTSAM<T> : Common.PromptableSegmentationBase<T>
         ApplySamDefaultGeometry(architecture);
         _dropRate = dropRate;
         _channelDims = [48, 96, 192, 384];
-        _depths = [2, 2, 14, 2];
+        _depths = [3, 4, 16, 3];
         _decoderDim = 256;
         InitializeLayers();
     }
@@ -143,7 +143,7 @@ public partial class RepViTSAM<T> : Common.PromptableSegmentationBase<T>
         ApplySamDefaultGeometry(architecture);
         _dropRate = 0;
         _channelDims = [48, 96, 192, 384];
-        _depths = [2, 2, 14, 2];
+        _depths = [3, 4, 16, 3];
         _decoderDim = 256;
         InitializeLayers();
     }

@@ -239,13 +239,13 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
     /// <returns>Weighted adjacency matrix.</returns>
     protected Matrix<T> BuildFinalAdjacency(double[,] learnedP, Matrix<T> cov, int d)
     {
-        // Threshold scales with d only when uniform attention (= 1/d) crowds
-        // a fixed 0.3 floor. For d ≤ 3 keep the historical 0.3 floor —
-        // 1/d > 0.3 already, so the discrimination floor is "above uniform"
-        // by margin regardless. For d ≥ 4 require uniform + 0.15 margin so
-        // an algorithm that just spreads attention near uniform doesn't
-        // cross the bar.
-        double scaleAwareThreshold = d <= 3 ? 0.3 : Math.Max(1.0 / d + 0.15, 0.3);
+        if (d <= 0)
+            throw new ArgumentOutOfRangeException(nameof(d), d, "The variable count must be positive.");
+
+        // Require a fixed margin above uniform influence for every graph size.
+        // This matters most for d = 2 and d = 3, where 1/d already exceeds the
+        // historical 0.3 floor and an uninformative uniform predictor would pass it.
+        double scaleAwareThreshold = Math.Max(1.0 / d + 0.15, 0.3);
         return BuildFinalAdjacency(learnedP, cov, d, scaleAwareThreshold);
     }
 

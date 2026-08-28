@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Reflection;
@@ -1183,6 +1183,9 @@ public readonly struct LayerStateBag
     /// in the numeric, boolean or enum forms written here.</remarks>
     private const char ConfigurationPairSeparator = (char)31;
 
+    /// <summary>Marks descriptors whose values use explicit present/null tags and escaping.</summary>
+    private const string ConfigurationFormatV1 = "v1";
+
     /// <summary>
     /// Records the constructor inputs of a component whose configuration changes what it computes.
     /// </summary>
@@ -1190,9 +1193,8 @@ public readonly struct LayerStateBag
     /// Scoped deliberately: a value is recorded only when some public constructor takes a parameter
     /// of that name AND a readable public property of the same name can supply it, so this captures
     /// construction inputs rather than derived state. Values are written in invariant culture, and
-    /// the numeric conversion is via double so a component that stores its parameter in the
-    /// network's numeric type (LeakyReLU holds Alpha as T while its constructor takes double) still
-    /// round-trips.
+    /// numeric values keep their own invariant representation so wide integers, decimals and generic
+    /// floating-point activation parameters all reach the rebuilding constructor without precision loss.
     /// </remarks>
     private static string CaptureComponentConfiguration(object value, Type type)
     {
@@ -1212,14 +1214,22 @@ public readonly struct LayerStateBag
                 // A property that throws is not construction state worth recording.
                 continue;
             }
-            if (current is null) continue;
+            if (current is null)
+            {
+                if (recorded is null) recorded = new List<string>(plan.Length);
+                recorded.Add(slot.Name + "=n:");
+                continue;
+            }
 
             if (!TryFormatConfigurationValue(current, out string text)) continue;
             if (recorded is null) recorded = new List<string>(plan.Length);
-            recorded.Add(slot.Name + "=" + text);
+            recorded.Add(slot.Name + "=v:" + EscapeConfigurationText(text));
         }
 
-        return recorded is null ? string.Empty : string.Join(ConfigurationPairSeparatorText, recorded);
+        return recorded is null
+            ? string.Empty
+            : ConfigurationFormatV1 + ConfigurationPairSeparatorText
+                + string.Join(ConfigurationPairSeparatorText, recorded);
     }
 
     /// <summary>One configuration input: the constructor parameter name and the property supplying it.</summary>
@@ -1302,12 +1312,31 @@ public readonly struct LayerStateBag
         created = null;
         if (configuration.Length == 0) return false;
 
-        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (string pair in configuration.Split(ConfigurationPairSeparator))
+        string[] pairs = configuration.Split(ConfigurationPairSeparator);
+        bool tagged = pairs.Length > 1
+            && string.Equals(pairs[0], ConfigurationFormatV1, StringComparison.Ordinal);
+        int firstPair = tagged ? 1 : 0;
+        var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        for (int pairIndex = firstPair; pairIndex < pairs.Length; pairIndex++)
         {
+            string pair = pairs[pairIndex];
             int equals = pair.IndexOf('=');
             if (equals <= 0) continue;
-            values[pair.Substring(0, equals)] = pair.Substring(equals + 1);
+            string encoded = pair.Substring(equals + 1);
+            if (!tagged)
+            {
+                // Pre-v1 descriptors were unescaped. Preserve their text byte-for-byte, including
+                // a literal sequence such as "\\n", instead of interpreting it as a new delimiter.
+                values[pair.Substring(0, equals)] = encoded;
+            }
+            else if (string.Equals(encoded, "n:", StringComparison.Ordinal))
+            {
+                values[pair.Substring(0, equals)] = null;
+            }
+            else if (encoded.StartsWith("v:", StringComparison.Ordinal))
+            {
+                values[pair.Substring(0, equals)] = UnescapeConfigurationText(encoded.Substring(2));
+            }
         }
         if (values.Count == 0) return false;
 
@@ -1328,13 +1357,26 @@ public readonly struct LayerStateBag
             {
                 ParameterInfo parameter = parameters[i];
                 if (parameter.Name is { Length: > 0 } name
-                    && values.TryGetValue(name, out string? text)
-                    && TryParseConfigurationValue(text, parameter.ParameterType, out object? value))
+                    && values.TryGetValue(name, out string? text))
                 {
-                    arguments[i] = value;
-                    matched++;
+                    bool acceptsNull = !parameter.ParameterType.IsValueType
+                        || Nullable.GetUnderlyingType(parameter.ParameterType) is not null;
+                    if (text is null && acceptsNull)
+                    {
+                        arguments[i] = null;
+                        matched++;
+                        continue;
+                    }
+                    if (text is not null
+                        && TryParseConfigurationValue(text, parameter.ParameterType, out object? value))
+                    {
+                        arguments[i] = value;
+                        matched++;
+                        continue;
+                    }
                 }
-                else if (parameter.IsOptional)
+
+                if (parameter.IsOptional)
                 {
                     arguments[i] = Type.Missing;
                 }
@@ -1388,9 +1430,37 @@ public readonly struct LayerStateBag
                 value = parsed;
                 return true;
             }
-            if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double numeric))
-                return false;
-            value = Convert.ChangeType(numeric, actual, CultureInfo.InvariantCulture);
+            if (actual == typeof(char))
+            {
+                if (text.Length != 1) return false;
+                value = text[0];
+                return true;
+            }
+            if (actual == typeof(double))
+            {
+                if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed))
+                    return false;
+                value = parsed;
+                return true;
+            }
+            if (actual == typeof(float))
+            {
+                if (!float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out float parsed))
+                    return false;
+                value = parsed;
+                return true;
+            }
+            if (actual == typeof(decimal))
+            {
+                if (!decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out decimal parsed))
+                    return false;
+                value = parsed;
+                return true;
+            }
+
+            // Convert from the invariant string directly to an integral target. Routing through double
+            // rounds long and ulong values above 2^53 before the constructor ever sees them.
+            value = Convert.ChangeType(text, actual, CultureInfo.InvariantCulture);
             return true;
         }
         catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException or ArgumentException)
@@ -1403,7 +1473,21 @@ public readonly struct LayerStateBag
     private static bool IsCapturableConfigurationType(Type type)
     {
         Type target = Nullable.GetUnderlyingType(type) ?? type;
-        return target.IsPrimitive || target.IsEnum || target == typeof(decimal) || target == typeof(string);
+        return target.IsEnum
+            || target == typeof(string)
+            || target == typeof(bool)
+            || target == typeof(char)
+            || target == typeof(byte)
+            || target == typeof(sbyte)
+            || target == typeof(short)
+            || target == typeof(ushort)
+            || target == typeof(int)
+            || target == typeof(uint)
+            || target == typeof(long)
+            || target == typeof(ulong)
+            || target == typeof(float)
+            || target == typeof(double)
+            || target == typeof(decimal);
     }
 
     /// <summary>Writes a configuration value in a culture-independent, re-parseable form.</summary>
@@ -1416,13 +1500,23 @@ public readonly struct LayerStateBag
             if (type == typeof(string)) { text = (string)value; return true; }
             if (type == typeof(bool)) { text = ((bool)value) ? "true" : "false"; return true; }
             if (type.IsEnum) { text = value.ToString() ?? string.Empty; return text.Length > 0; }
-            if (value is IConvertible)
+            if (type == typeof(char)) { text = ((char)value).ToString(); return true; }
+            if (type == typeof(double))
             {
-                // Through double so a generic numeric parameter stored as T is still recorded, which
-                // is the shape every parameterized activation in this library uses.
-                text = Convert.ToDouble(value, CultureInfo.InvariantCulture)
-                    .ToString("R", CultureInfo.InvariantCulture);
+                text = ((double)value).ToString("R", CultureInfo.InvariantCulture);
                 return true;
+            }
+            if (type == typeof(float))
+            {
+                text = ((float)value).ToString("R", CultureInfo.InvariantCulture);
+                return true;
+            }
+            if (value is IFormattable formattable)
+            {
+                // Integral and decimal values stay in their own exact representation. In particular,
+                // long/ulong must not pass through double, whose integer precision stops at 2^53.
+                text = formattable.ToString(null, CultureInfo.InvariantCulture);
+                return text.Length > 0;
             }
         }
         catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException)
@@ -1430,6 +1524,66 @@ public readonly struct LayerStateBag
             return false;
         }
         return false;
+    }
+
+    private static string EscapeConfigurationText(string text)
+    {
+        System.Text.StringBuilder? escaped = null;
+        for (int i = 0; i < text.Length; i++)
+        {
+            string? replacement = text[i] switch
+            {
+                '\\' => "\\\\",
+                '\r' => "\\r",
+                ComponentConfigurationSeparator => "\\n",
+                ConfigurationPairSeparator => "\\u",
+                _ => null
+            };
+            if (replacement is null)
+            {
+                escaped?.Append(text[i]);
+                continue;
+            }
+
+            if (escaped is null)
+            {
+                escaped = new System.Text.StringBuilder(text.Length + 4);
+                escaped.Append(text, 0, i);
+            }
+            escaped.Append(replacement);
+        }
+        return escaped?.ToString() ?? text;
+    }
+
+    private static string UnescapeConfigurationText(string text)
+    {
+        int firstEscape = text.IndexOf('\\');
+        if (firstEscape < 0) return text;
+
+        var unescaped = new System.Text.StringBuilder(text.Length);
+        unescaped.Append(text, 0, firstEscape);
+        for (int i = firstEscape; i < text.Length; i++)
+        {
+            if (text[i] != '\\' || i + 1 >= text.Length)
+            {
+                unescaped.Append(text[i]);
+                continue;
+            }
+
+            char code = text[++i];
+            switch (code)
+            {
+                case '\\': unescaped.Append('\\'); break;
+                case 'r': unescaped.Append('\r'); break;
+                case 'n': unescaped.Append(ComponentConfigurationSeparator); break;
+                case 'u': unescaped.Append(ConfigurationPairSeparator); break;
+                default:
+                    unescaped.Append('\\');
+                    unescaped.Append(code);
+                    break;
+            }
+        }
+        return unescaped.ToString();
     }
 
     private InvalidOperationException Unparseable(string key, object value, string wanted)
