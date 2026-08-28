@@ -6,11 +6,19 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <summary>
 /// Implements the token mixer and channel mixer from a RepViT block.
 /// </summary>
+/// <typeparam name="T">The numeric type used by tensors and trainable parameters.</typeparam>
 /// <remarks>
+/// <para>
 /// The training graph follows the authors' reference implementation: a re-parameterizable
 /// depthwise token mixer, optional squeeze-and-excitation, then a residual two-layer pointwise
 /// channel mixer with GELU. Re-parameterization is an inference optimization and does not change
 /// the training graph represented here.
+/// </para>
+/// <para><b>For Beginners:</b> This layer first mixes nearby image pixels and then mixes feature
+/// channels. The residual path preserves the input features while the new transformations learn.
+/// </para>
+/// <para><b>Reference:</b> Ao Wang et al., <i>RepViT: Revisiting Mobile CNN From ViT Perspective</i>,
+/// 2023, <see href="https://arxiv.org/abs/2307.09283">arXiv:2307.09283</see>.</para>
 /// </remarks>
 [LayerCategory(LayerCategory.Convolution)]
 [LayerCategory(LayerCategory.Residual)]

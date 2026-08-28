@@ -252,6 +252,9 @@ internal static class Program
             return;
         }
 
+        Dictionary<(string Fixture, string EnvironmentKey, string Metric), List<SeriesPoint>> seriesIndex =
+            IndexHistory(history);
+
         var index = baseline.Entries.ToDictionary(
             entry => (entry.Fixture, entry.Environment),
             entry => entry,
@@ -311,7 +314,11 @@ internal static class Program
                 //
                 // With too little history this is exactly the old comparison, so nothing loosens
                 // on a repository that has not accumulated a window yet.
-                IReadOnlyList<SeriesPoint> series = SeriesFor(history, record.Fixture, record.Environment, metric);
+                (string Fixture, string EnvironmentKey, string Metric) seriesKey =
+                    (record.Fixture, SeriesEnvironmentKey(record.Environment, stability), metric);
+                IReadOnlyList<SeriesPoint> series = seriesIndex.TryGetValue(seriesKey, out List<SeriesPoint>? cached)
+                    ? cached
+                    : Array.Empty<SeriesPoint>();
                 if (series.Count >= MinimumSeriesPoints)
                 {
                     StepChange? step = FindLastStep(series, limit, noiseFloor);
@@ -331,7 +338,8 @@ internal static class Program
                             diagnostics.Add(Diagnostic.Error(record.Fixture, metric,
                                 $"stepped {step.Ratio:F2}x ({step.Before:F2} -> {step.After:F2}) at "
                                 + $"{step.Range} and stayed there; limit is {limit:F2}x. Fix it, or "
-                                + "declare it with a Perf-Intent trailer on the commit that caused it"));
+                                + "declare it in .github/model-performance-intent.json with the census commit, "
+                                + "fixture, metric, and reason"));
                         }
                     }
 
@@ -383,9 +391,10 @@ internal static class Program
         double noiseFloor = 67_108_864.0;
         double limit = 1.6;
 
-        BaselineDocument Point(string commit, int day, double value) => new()
+        BaselineDocument Point(string commit, int day, double value,
+            int schemaVersion = CurrentBaselineSchemaVersion) => new()
         {
-            SchemaVersion = CurrentBaselineSchemaVersion,
+            SchemaVersion = schemaVersion,
             GeneratedUtc = new DateTimeOffset(2026, 1, day, 0, 0, 0, TimeSpan.Zero),
             Commit = commit,
             Entries = new[]
@@ -399,13 +408,31 @@ internal static class Program
             },
         };
 
+        // Duplicate fixture entries in one artifact retain the first usable metric, matching the
+        // pre-index scan. This guards the one-time index against silently changing malformed-input
+        // behavior.
+        BaselineDocument duplicate = Point("fffffff", 6, 300_000_000);
+        duplicate.Entries = duplicate.Entries.Concat(new[]
+        {
+            new BaselineEntry
+            {
+                Fixture = Fixture,
+                Environment = Environment,
+                Metrics = new Dictionary<string, double> { [Metric] = 900_000_000 },
+            },
+        }).ToArray();
+        IReadOnlyList<SeriesPoint> duplicateSeries = SeriesFor(
+            new[] { duplicate }, Fixture, Environment, Metric);
+        if (duplicateSeries.Count != 1 || Math.Abs(duplicateSeries[0].Value - 300_000_000) > 0.5)
+            return Fail("the history index must preserve first-entry-per-document behavior");
+
         // One high reading between low ones is a spike. A point comparison calls that a regression;
         // a series must not, because the level did not change.
         var spike = new[]
         {
-            Point("a", 1, 300_000_000), Point("b", 2, 300_000_000),
-            Point("c", 3, 900_000_000),
-            Point("d", 4, 300_000_000), Point("e", 5, 300_000_000),
+            Point("aaaaaaa", 1, 300_000_000), Point("bbbbbbb", 2, 300_000_000),
+            Point("ccccccc", 3, 900_000_000),
+            Point("ddddddd", 4, 300_000_000), Point("eeeeeee", 5, 300_000_000),
         };
         if (FindLastStep(SeriesFor(spike, Fixture, Environment, Metric), limit, noiseFloor) is not null)
             return Fail("a single spike must not read as a step change");
@@ -414,13 +441,15 @@ internal static class Program
         // the first high one.
         var step = new[]
         {
-            Point("a", 1, 300_000_000), Point("b", 2, 300_000_000),
-            Point("c", 3, 900_000_000), Point("d", 4, 900_000_000), Point("e", 5, 900_000_000),
+            Point("aaaaaaa", 1, 300_000_000), Point("bbbbbbb", 2, 300_000_000),
+            Point("ccccccc", 3, 900_000_000), Point("ddddddd", 4, 900_000_000),
+            Point("eeeeeee", 5, 900_000_000),
         };
-        StepChange? found = FindLastStep(SeriesFor(step, Fixture, Environment, Metric), limit, noiseFloor);
+        StepChange? found = FindLastStep(
+            SeriesFor(step.Reverse().ToArray(), Fixture, Environment, Metric), limit, noiseFloor);
         if (found is null) return Fail("a sustained level shift must read as a step change");
-        if (found.FromCommit != "b" || found.ToCommit != "c")
-            return Fail($"the step must be attributed to b..c, not {found.FromCommit}..{found.ToCommit}");
+        if (found.FromCommit != "bbbbbbb" || found.ToCommit != "ccccccc")
+            return Fail($"the step must be attributed to bbbbbbb..ccccccc, not {found.FromCommit}..{found.ToCommit}");
 
         // Judged against the level it has been sitting at since the step, a run AT that level is
         // not a fresh regression - which is what stops one accepted change failing forever.
@@ -428,26 +457,41 @@ internal static class Program
         if (Math.Abs(reference - 900_000_000) > 0.5)
             return Fail($"the reference level after a step must be the level since it, got {reference}");
 
-        // An intent naming the commit accepts it; one naming a different commit does not.
-        var declared = new[] { new PerfIntent { Commit = "c", Reason = "paper fidelity" } };
+        // Schema-2 points have no commit. The boundary index, not an empty commit lookup, must
+        // still exclude the old level from the post-step reference median.
+        var unstamped = new[]
+        {
+            Point("", 1, 300_000_000, schemaVersion: 2), Point("", 2, 300_000_000, schemaVersion: 2),
+            Point("", 3, 900_000_000, schemaVersion: 2), Point("", 4, 900_000_000, schemaVersion: 2),
+        };
+        IReadOnlyList<SeriesPoint> unstampedSeries = SeriesFor(unstamped, Fixture, Environment, Metric);
+        StepChange? unstampedStep = FindLastStep(unstampedSeries, limit, noiseFloor);
+        if (unstampedStep is null || Math.Abs(ReferenceLevel(unstampedSeries, unstampedStep) - 900_000_000) > 0.5)
+            return Fail("an unstamped schema-2 step must use its boundary index for the new reference level");
+
+        // An intent naming the census commit accepts it; one naming a different commit does not.
+        var declared = new[] { new PerfIntent { Commit = "ccccccc", Reason = "paper fidelity" } };
         if (IntentFor(declared, found, Fixture, Metric) is null)
             return Fail("an intent naming the step's commit must cover it");
-        var elsewhere = new[] { new PerfIntent { Commit = "zz", Reason = "something else" } };
+        var elsewhere = new[] { new PerfIntent { Commit = "zzzzzzz", Reason = "something else" } };
         if (IntentFor(elsewhere, found, Fixture, Metric) is not null)
             return Fail("an intent naming another commit must not cover this step");
-        var otherMetric = new[] { new PerfIntent { Commit = "c", Metric = "allocatedBytes", Reason = "scoped" } };
+        var otherMetric = new[] { new PerfIntent { Commit = "ccccccc", Metric = "allocatedBytes", Reason = "scoped" } };
         if (IntentFor(otherMetric, found, Fixture, Metric) is not null)
             return Fail("an intent scoped to another metric must not cover this step");
+        if (Same("ccccccc", "c"))
+            return Fail("a commit reference shorter than the collision-safe floor must never match");
 
         // A reason is mandatory, exactly as a tolerance's why is.
         var reasonless = new List<Diagnostic>();
         string path = Path.Combine(Path.GetTempPath(), "perf-intent-" + Guid.NewGuid().ToString("N") + ".json");
-        File.WriteAllText(path, """[{"commit":"c","reason":"   "}]""");
+        File.WriteAllText(path,
+            """[{"commit":"ccccccc","reason":"   "},{"commit":"c","reason":"short"},{"commit":"","reason":"missing"}]""");
         try
         {
             PerfIntent[] loaded = LoadIntents(path, reasonless);
-            if (loaded.Length != 0 || !reasonless.Any(d => d.Severity == "error"))
-                return Fail("an intent without a reason must be refused");
+            if (loaded.Length != 0 || reasonless.Count(d => d.Severity == "error") != 3)
+                return Fail("reasonless, short, and empty commit intents must each be refused with a diagnostic");
         }
         finally
         {
@@ -459,8 +503,12 @@ internal static class Program
 
     // ---------------------------------------------------------------- declared intent
 
+    /// <summary>Shortest commit prefix that an intent may match without unsafe overreach.</summary>
+    /// <remarks>Seven characters is Git's conventional abbreviation floor.</remarks>
+    private const int MinimumCommitReferenceLength = 7;
+
     /// <summary>
-    /// A cost change somebody meant to make, declared by the commit that made it.
+    /// A deliberate cost change declared in the repository-owned performance-intent file.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -471,12 +519,10 @@ internal static class Program
     /// more expensive.
     /// </para>
     /// <para>
-    /// So intent travels with its cause. A commit that knowingly changes a fixture's cost says so
-    /// in a <c>Perf-Intent:</c> trailer, and the step is accepted and annotated with that sentence
-    /// rather than silently absorbed. This is deliberately not a suppression list maintained
-    /// somewhere else: such a list outlives the reason it was written for, and nobody deletes an
-    /// entry they cannot remember the justification for. A trailer cannot drift from its change
-    /// because it IS its change.
+    /// Deliberate changes are recorded in <c>.github/model-performance-intent.json</c> with the
+    /// census commit, fixture, metric, and reason. The checked-in list stays auditable, while the
+    /// census-commit key makes each record expire naturally when that measurement leaves the
+    /// history window.
     /// </para>
     /// <para>
     /// A reason is mandatory - an intent record without one is refused - for the same reason a
@@ -509,8 +555,8 @@ internal static class Program
         [JsonPropertyName("reason")] public string Reason { get; set; } = "";
 
         public bool Covers(string fixture, string metric) =>
-            (Fixture.Length == 0 || string.Equals(Fixture, fixture, StringComparison.Ordinal))
-            && (Metric.Length == 0 || string.Equals(Metric, metric, StringComparison.Ordinal));
+            (string.IsNullOrEmpty(Fixture) || string.Equals(Fixture, fixture, StringComparison.Ordinal))
+            && (string.IsNullOrEmpty(Metric) || string.Equals(Metric, metric, StringComparison.Ordinal));
     }
 
     private static PerfIntent[] LoadIntents(string? path, ICollection<Diagnostic> diagnostics)
@@ -530,14 +576,31 @@ internal static class Program
         var usable = new List<PerfIntent>();
         foreach (PerfIntent intent in intents)
         {
-            if (intent.Commit.Length == 0) continue;
-            if (intent.Reason.Trim().Length == 0)
+            string commit = intent.Commit?.Trim() ?? "";
+            if (commit.Length < MinimumCommitReferenceLength)
+            {
+                string displayed = commit.Length == 0 ? "<empty>" : commit;
+                diagnostics.Add(Diagnostic.Error("<census>", "intent",
+                    $"the declared intent for fixture '{intent.Fixture ?? ""}' names commit '{displayed}'; "
+                    + $"at least {MinimumCommitReferenceLength} characters are required so a short prefix "
+                    + "cannot cover unrelated census commits"));
+                continue;
+            }
+
+            string reason = intent.Reason?.Trim() ?? "";
+            if (reason.Length == 0)
             {
                 diagnostics.Add(Diagnostic.Error("<census>", "intent",
-                    $"the declared intent for {intent.Commit} has no reason; a cost change is "
+                    $"the declared intent for {commit} has no reason; a cost change is "
                     + "accepted only with a stated justification"));
                 continue;
             }
+
+            intent.Commit = commit;
+            intent.Origin = intent.Origin?.Trim() ?? "";
+            intent.Fixture = intent.Fixture?.Trim() ?? "";
+            intent.Metric = intent.Metric?.Trim() ?? "";
+            intent.Reason = reason;
             usable.Add(intent);
         }
 
@@ -551,7 +614,7 @@ internal static class Program
         foreach (PerfIntent intent in intents)
         {
             if (!intent.Covers(fixture, metric)) continue;
-            if (intent.Commit.Length == 0) continue;
+            if (string.IsNullOrEmpty(intent.Commit)) continue;
             if (Same(step.ToCommit, intent.Commit) || Same(step.FromCommit, intent.Commit))
             {
                 return intent;
@@ -561,10 +624,12 @@ internal static class Program
         return null;
     }
 
-    /// <summary>Whether two commit references name the same commit, allowing either to be short.</summary>
-    private static bool Same(string left, string right)
+    /// <summary>Whether two collision-safe commit references name the same commit.</summary>
+    private static bool Same(string? left, string? right)
     {
-        if (left.Length == 0 || right.Length == 0) return false;
+        if (left is null || right is null
+            || left.Length < MinimumCommitReferenceLength || right.Length < MinimumCommitReferenceLength)
+            return false;
         return left.StartsWith(right, StringComparison.OrdinalIgnoreCase)
             || right.StartsWith(left, StringComparison.OrdinalIgnoreCase);
     }
@@ -589,7 +654,7 @@ internal static class Program
     {
         public SeriesPoint(string commit, DateTimeOffset takenUtc, double value)
         {
-            Commit = commit;
+            Commit = commit ?? "";
             TakenUtc = takenUtc;
             Value = value;
         }
@@ -602,12 +667,13 @@ internal static class Program
     /// <summary>A sustained level shift inside a series, and the commits it happened between.</summary>
     private sealed class StepChange
     {
-        public StepChange(double before, double after, string fromCommit, string toCommit)
+        public StepChange(double before, double after, string fromCommit, string toCommit, int boundaryIndex)
         {
             Before = before;
             After = after;
-            FromCommit = fromCommit;
-            ToCommit = toCommit;
+            FromCommit = fromCommit ?? "";
+            ToCommit = toCommit ?? "";
+            BoundaryIndex = boundaryIndex;
         }
 
         public double Before { get; }
@@ -618,6 +684,9 @@ internal static class Program
 
         /// <summary>The first commit measured at the new level; the culprit is in (From, To].</summary>
         public string ToCommit { get; }
+
+        /// <summary>Index of the first measurement at the new level.</summary>
+        public int BoundaryIndex { get; }
 
         public double Ratio => Before > 0.0 ? After / Before : double.PositiveInfinity;
 
@@ -640,24 +709,47 @@ internal static class Program
         IReadOnlyList<BaselineDocument> history, string fixture, string environment, string metric)
     {
         MetricStability stability = ClassifyMetric(metric);
-        string wanted = SeriesEnvironmentKey(environment, stability);
+        var key = (Fixture: fixture, EnvironmentKey: SeriesEnvironmentKey(environment, stability), Metric: metric);
+        Dictionary<(string Fixture, string EnvironmentKey, string Metric), List<SeriesPoint>> index =
+            IndexHistory(history);
+        return index.TryGetValue(key, out List<SeriesPoint>? points)
+            ? points
+            : Array.Empty<SeriesPoint>();
+    }
 
-        var points = new List<SeriesPoint>();
-        foreach (BaselineDocument document in history)
+    /// <summary>Indexes every usable history point once for constant-time series lookup.</summary>
+    /// <remarks>
+    /// A per-document key set preserves the previous first-matching-entry behavior when a malformed
+    /// artifact contains duplicate fixture entries. Documents are ordered here so every cached
+    /// series remains chronological even when callers provide an unsorted history collection.
+    /// </remarks>
+    private static Dictionary<(string Fixture, string EnvironmentKey, string Metric), List<SeriesPoint>>
+        IndexHistory(IReadOnlyList<BaselineDocument> history)
+    {
+        var index = new Dictionary<(string Fixture, string EnvironmentKey, string Metric), List<SeriesPoint>>();
+        foreach (BaselineDocument document in history.OrderBy(item => item.GeneratedUtc))
         {
+            var seenInDocument = new HashSet<(string Fixture, string EnvironmentKey, string Metric)>();
             foreach (BaselineEntry entry in document.Entries)
             {
-                if (!string.Equals(entry.Fixture, fixture, StringComparison.Ordinal)) continue;
-                if (!string.Equals(SeriesEnvironmentKey(entry.Environment, stability), wanted,
-                        StringComparison.Ordinal)) continue;
-                if (!entry.Metrics.TryGetValue(metric, out double value) || value <= 0.0) continue;
-                points.Add(new SeriesPoint(document.Commit, document.GeneratedUtc, value));
-                break;
+                foreach ((string metric, double value) in entry.Metrics)
+                {
+                    if (value <= 0.0) continue;
+                    var key = (
+                        Fixture: entry.Fixture,
+                        EnvironmentKey: SeriesEnvironmentKey(entry.Environment, ClassifyMetric(metric)),
+                        Metric: metric);
+                    if (!seenInDocument.Add(key)) continue;
+                    if (!index.TryGetValue(key, out List<SeriesPoint>? points))
+                    {
+                        points = new List<SeriesPoint>();
+                        index.Add(key, points);
+                    }
+                    points.Add(new SeriesPoint(document.Commit, document.GeneratedUtc, value));
+                }
             }
         }
-
-        points.Sort((left, right) => left.TakenUtc.CompareTo(right.TakenUtc));
-        return points;
+        return index;
     }
 
     /// <summary>
@@ -747,7 +839,7 @@ internal static class Program
             }
 
             if (found < 0) break;
-            latest = new StepChange(was, now, series[found - 1].Commit, series[found].Commit);
+            latest = new StepChange(was, now, series[found - 1].Commit, series[found].Commit, found);
             start = found;
         }
 
@@ -759,18 +851,11 @@ internal static class Program
     /// </summary>
     private static double ReferenceLevel(IReadOnlyList<SeriesPoint> series, StepChange? step)
     {
-        if (step is null) return Median(series.Select(p => p.Value).ToList());
+        if (step is null) return Median(series.Select(point => point.Value).ToList());
+        if (step.BoundaryIndex < 0 || step.BoundaryIndex >= series.Count)
+            return Median(series.Select(point => point.Value).ToList());
 
-        var since = new List<double>();
-        bool reached = false;
-        foreach (SeriesPoint point in series)
-        {
-            if (!reached && string.Equals(point.Commit, step.ToCommit, StringComparison.Ordinal))
-                reached = true;
-            if (reached) since.Add(point.Value);
-        }
-
-        return since.Count > 0 ? Median(since) : Median(series.Select(p => p.Value).ToList());
+        return Median(series.Skip(step.BoundaryIndex).Select(point => point.Value).ToList());
     }
 
     private static void DetectCohortOutliers(
@@ -790,8 +875,8 @@ internal static class Program
             double[] values = cohort.Select(r => Math.Log(1.0 + TrainingAmplification(r)))
                 .OrderBy(v => v).ToArray();
             if (values.Length < 5) continue;
-            double median = Median(values);
-            double mad = Median(values.Select(v => Math.Abs(v - median)).OrderBy(v => v).ToArray());
+            double median = MedianOfSorted(values);
+            double mad = MedianOfSorted(values.Select(v => Math.Abs(v - median)).OrderBy(v => v).ToArray());
             if (mad <= 1e-9) continue;
 
             foreach (CensusRecord record in cohort)
@@ -813,8 +898,8 @@ internal static class Program
         {
             double[] values = cohort.Select(r => Math.Log(1.0 + r.Metric("peakWorkingSetBytes"))).OrderBy(v => v).ToArray();
             if (values.Length < 5) continue;
-            double median = Median(values);
-            double mad = Median(values.Select(v => Math.Abs(v - median)).OrderBy(v => v).ToArray());
+            double median = MedianOfSorted(values);
+            double mad = MedianOfSorted(values.Select(v => Math.Abs(v - median)).OrderBy(v => v).ToArray());
             if (mad <= 1e-9) continue;
 
             foreach (CensusRecord record in cohort)
@@ -978,7 +1063,7 @@ internal static class Program
             {
                 document = JsonSerializer.Deserialize<BaselineDocument>(File.ReadAllText(path), JsonOptions);
             }
-            catch (JsonException ex)
+            catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
             {
                 diagnostics.Add(Diagnostic.Warning("<census>", "history",
                     $"could not read {Path.GetFileName(path)} as a baseline ({ex.Message}); "
@@ -987,6 +1072,7 @@ internal static class Program
             }
 
             if (document is null) continue;
+            document.Commit ??= "";
             if (Array.IndexOf(ComparableBaselineSchemaVersions, document.SchemaVersion) < 0) continue;
             documents.Add(document);
         }
@@ -996,12 +1082,17 @@ internal static class Program
         // Say how much history the gate actually has. A census that silently fell back to a single
         // prior point looks identical in its output to one reasoning over a window, and the two
         // give different answers - so the depth is stated rather than assumed.
-        diagnostics.Add(Diagnostic.Warning("<census>", "history",
-            documents.Count >= MinimumSeriesPoints
-                ? $"comparing against a series of {documents.Count} prior census run(s)"
-                : $"only {documents.Count} prior census run(s) available; "
-                  + $"{MinimumSeriesPoints} are needed before step detection engages, so this run "
-                  + "is compared against the single most recent baseline"));
+        if (documents.Count >= MinimumSeriesPoints)
+        {
+            Console.WriteLine($"history: comparing against a series of {documents.Count} prior census run(s)");
+        }
+        else
+        {
+            diagnostics.Add(Diagnostic.Warning("<census>", "history",
+                $"only {documents.Count} prior census run(s) available; "
+                + $"{MinimumSeriesPoints} are needed before step detection engages, so this run "
+                + "is compared against the single most recent baseline"));
+        }
 
         return documents;
     }
@@ -1040,7 +1131,8 @@ internal static class Program
         Console.WriteLine($"summary: {outputPath}");
     }
 
-    private static double Median(double[] sorted) => sorted.Length % 2 == 1
+    /// <summary>Returns the median of an array that the caller has already sorted.</summary>
+    private static double MedianOfSorted(double[] sorted) => sorted.Length % 2 == 1
         ? sorted[sorted.Length / 2]
         : (sorted[(sorted.Length / 2) - 1] + sorted[sorted.Length / 2]) / 2.0;
 
@@ -1164,6 +1256,7 @@ internal static class Program
     {
         Console.WriteLine("ModelPerfProbe --results DIR --output FILE [--expected-count N]");
         Console.WriteLine("  [--baseline FILE] [--write-baseline FILE] [--max-regression-ratio 2.5]");
+        Console.WriteLine("  [--history DIR] [--perf-intent FILE] [--commit SHA]");
         Console.WriteLine("  [--max-allocation-regression-ratio 2.5] [--max-memory-regression-ratio 1.6]");
         Console.WriteLine("  [--max-volatile-timing-regression-ratio 5.0]");
         Console.WriteLine("  [--uncorroborated-timing-ratio 4.0] [--corroboration-ratio 1.25]");
