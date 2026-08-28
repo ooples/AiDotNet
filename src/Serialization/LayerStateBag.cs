@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Collections;
 using System.Reflection;
 
@@ -997,8 +997,19 @@ public readonly struct LayerStateBag
                 new Dictionary<object, object>(ConstructionReferenceComparer.Instance));
         }
 
-        var typeName = AsText(v);
-        if (typeName.Length == 0) return null;
+        var descriptor = AsText(v);
+        if (descriptor.Length == 0) return null;
+
+        // A descriptor written before configuration capture is a bare type name and has no
+        // separator, so it parses unchanged here and rebuilds exactly as it always did.
+        string typeName = descriptor;
+        string configuration = string.Empty;
+        int separator = descriptor.IndexOf(ComponentConfigurationSeparator);
+        if (separator >= 0)
+        {
+            typeName = descriptor.Substring(0, separator);
+            configuration = descriptor.Substring(separator + 1);
+        }
 
         var type = Type.GetType(typeName);
         // Legacy layer metadata stored activation enum names (for example "ReLU") rather than
@@ -1081,8 +1092,15 @@ public readonly struct LayerStateBag
         try
         {
             object? created;
-            var parameterless = type.GetConstructor(Type.EmptyTypes);
-            if (parameterless is not null)
+            // CONFIGURATION FIRST. The parameterless constructor is what silently downgraded
+            // LeakyReLU(0.2) to LeakyReLU(0.01): it succeeds, so nothing below ever ran and nothing
+            // reported that the rebuilt component computes something else. When the payload carries
+            // the values a constructor takes, that constructor is the faithful one.
+            if (TryConstructConfigured(type, configuration, out object? configured))
+            {
+                created = configured;
+            }
+            else if (type.GetConstructor(Type.EmptyTypes) is { } parameterless)
             {
                 created = parameterless.Invoke(null);
             }
@@ -1122,9 +1140,244 @@ public readonly struct LayerStateBag
     /// <param name="value">The component instance, or <c>null</c>.</param>
     /// <returns>The assembly-qualified type name, or empty when there is nothing to record.</returns>
     public static string FormatType(object? value)
-        => value is null
-            ? string.Empty
-            : value.GetType().AssemblyQualifiedName ?? value.GetType().FullName ?? string.Empty;
+    {
+        if (value is null) return string.Empty;
+
+        Type type = value.GetType();
+        string assemblyQualified = type.AssemblyQualifiedName ?? type.FullName ?? string.Empty;
+        if (assemblyQualified.Length == 0) return string.Empty;
+
+        // THE TYPE ALONE IS NOT THE COMPONENT. This class already refuses to rebuild a component
+        // whose recorded type is wrong, on the grounds that "a layer built with a Multiquadric
+        // kernel that reloads as the default Gaussian is a different function that nothing
+        // downstream would report". A PARAMETERIZED component has exactly that problem one level
+        // down: recording only the type of LeakyReLU(0.2) rebuilds it through the parameterless
+        // constructor as LeakyReLU(0.01), a different function, silently. Measured on GraFPrint,
+        // whose paper stem activation is LeakyReLU(0.2): every weight round-tripped bit-identically
+        // and the clone's first activation output was still off by exactly the ratio of the two
+        // slopes, 20x.
+        //
+        // So the configuration travels with the type. Only values that a constructor actually
+        // takes are recorded, which keeps this to genuine construction inputs rather than arbitrary
+        // computed properties.
+        string configuration = CaptureComponentConfiguration(value, type);
+        return configuration.Length == 0
+            ? assemblyQualified
+            : assemblyQualified + ComponentConfigurationSeparator + configuration;
+    }
+
+    /// <summary>
+    /// Separates a component's assembly-qualified type name from its recorded configuration.
+    /// </summary>
+    /// <remarks>
+    /// A newline, because an assembly-qualified name cannot contain one while it CAN contain the
+    /// commas, equals signs and spaces that a more obvious delimiter would need. A payload written
+    /// before configuration was captured has no separator and therefore still parses as a bare type
+    /// name, which is what keeps existing saved models loadable.
+    /// </remarks>
+    private const char ComponentConfigurationSeparator = (char)10; // newline
+
+    /// <summary>Separates one recorded name=value pair from the next.</summary>
+    /// <remarks>ASCII unit separator: it cannot appear in a parameter name and does not appear
+    /// in the numeric, boolean or enum forms written here.</remarks>
+    private const char ConfigurationPairSeparator = (char)31;
+
+    /// <summary>
+    /// Records the constructor inputs of a component whose configuration changes what it computes.
+    /// </summary>
+    /// <remarks>
+    /// Scoped deliberately: a value is recorded only when some public constructor takes a parameter
+    /// of that name AND a readable public property of the same name can supply it, so this captures
+    /// construction inputs rather than derived state. Values are written in invariant culture, and
+    /// the numeric conversion is via double so a component that stores its parameter in the
+    /// network's numeric type (LeakyReLU holds Alpha as T while its constructor takes double) still
+    /// round-trips.
+    /// </remarks>
+    private static string CaptureComponentConfiguration(object value, Type type)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (ConstructorInfo constructor in type.GetConstructors())
+        {
+            foreach (ParameterInfo parameter in constructor.GetParameters())
+            {
+                if (parameter.Name is { Length: > 0 } name && IsCapturableConfigurationType(parameter.ParameterType))
+                    names.Add(name);
+            }
+        }
+        if (names.Count == 0) return string.Empty;
+
+        var recorded = new List<string>();
+        foreach (string name in names.OrderBy(n => n, StringComparer.Ordinal))
+        {
+            PropertyInfo? property = type.GetProperty(
+                name,
+                BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (property is null || !property.CanRead || property.GetIndexParameters().Length > 0) continue;
+
+            object? current;
+            try
+            {
+                current = property.GetValue(value);
+            }
+            catch (TargetInvocationException)
+            {
+                // A property that throws is not construction state worth recording.
+                continue;
+            }
+            if (current is null) continue;
+
+            if (!TryFormatConfigurationValue(current, out string text)) continue;
+            recorded.Add(name + "=" + text);
+        }
+
+        return string.Join(ConfigurationPairSeparator.ToString(), recorded);
+    }
+
+    /// <summary>
+    /// Rebuilds a component through the constructor its recorded configuration satisfies.
+    /// </summary>
+    /// <remarks>
+    /// Picks the constructor that consumes the MOST recorded values, so a type offering both
+    /// <c>LeakyReLU()</c> and <c>LeakyReLU(double)</c> is rebuilt through the one that carries the
+    /// slope. Any parameter the payload does not name must be optional, and the value is converted
+    /// to the parameter's own type, which is what lets a slope stored as T satisfy a
+    /// <c>double</c> parameter. Returns false when nothing was recorded or nothing fits, leaving
+    /// the existing parameterless and all-optional paths to run exactly as before.
+    /// </remarks>
+    private static bool TryConstructConfigured(Type type, string configuration, out object? created)
+    {
+        created = null;
+        if (configuration.Length == 0) return false;
+
+        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string pair in configuration.Split(ConfigurationPairSeparator))
+        {
+            int equals = pair.IndexOf('=');
+            if (equals <= 0) continue;
+            values[pair.Substring(0, equals)] = pair.Substring(equals + 1);
+        }
+        if (values.Count == 0) return false;
+
+        ConstructorInfo? best = null;
+        object?[]? bestArguments = null;
+        int bestMatched = 0;
+
+        foreach (ConstructorInfo constructor in type.GetConstructors())
+        {
+            ParameterInfo[] parameters = constructor.GetParameters();
+            if (parameters.Length == 0) continue;
+
+            var arguments = new object?[parameters.Length];
+            int matched = 0;
+            bool usable = true;
+
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                ParameterInfo parameter = parameters[i];
+                if (parameter.Name is { Length: > 0 } name
+                    && values.TryGetValue(name, out string? text)
+                    && TryParseConfigurationValue(text, parameter.ParameterType, out object? value))
+                {
+                    arguments[i] = value;
+                    matched++;
+                }
+                else if (parameter.IsOptional)
+                {
+                    arguments[i] = Type.Missing;
+                }
+                else
+                {
+                    usable = false;
+                    break;
+                }
+            }
+
+            if (usable && matched > bestMatched)
+            {
+                best = constructor;
+                bestArguments = arguments;
+                bestMatched = matched;
+            }
+        }
+
+        if (best is null || bestArguments is null) return false;
+
+        try
+        {
+            created = best.Invoke(
+                BindingFlags.OptionalParamBinding | BindingFlags.Instance | BindingFlags.Public | BindingFlags.CreateInstance,
+                binder: null,
+                bestArguments,
+                CultureInfo.InvariantCulture);
+            return created is not null;
+        }
+        catch (Exception ex) when (ex is TargetInvocationException or MemberAccessException or ArgumentException)
+        {
+            // A component that rejects its own recorded values is not rebuildable this way; the
+            // caller's existing paths still get their turn.
+            created = null;
+            return false;
+        }
+    }
+
+    /// <summary>Converts a recorded configuration value to a constructor parameter's type.</summary>
+    private static bool TryParseConfigurationValue(string text, Type target, out object? value)
+    {
+        value = null;
+        Type actual = Nullable.GetUnderlyingType(target) ?? target;
+        try
+        {
+            if (actual == typeof(string)) { value = text; return true; }
+            if (actual.IsEnum) { value = System.Enum.Parse(actual, text, ignoreCase: true); return true; }
+            if (actual == typeof(bool))
+            {
+                if (!bool.TryParse(text, out bool parsed)) return false;
+                value = parsed;
+                return true;
+            }
+            if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double numeric))
+                return false;
+            value = Convert.ChangeType(numeric, actual, CultureInfo.InvariantCulture);
+            return true;
+        }
+        catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Whether a constructor parameter type is one this records as configuration.</summary>
+    private static bool IsCapturableConfigurationType(Type type)
+    {
+        Type target = Nullable.GetUnderlyingType(type) ?? type;
+        return target.IsPrimitive || target.IsEnum || target == typeof(decimal) || target == typeof(string);
+    }
+
+    /// <summary>Writes a configuration value in a culture-independent, re-parseable form.</summary>
+    private static bool TryFormatConfigurationValue(object value, out string text)
+    {
+        text = string.Empty;
+        Type type = value.GetType();
+        try
+        {
+            if (type == typeof(string)) { text = (string)value; return true; }
+            if (type == typeof(bool)) { text = ((bool)value) ? "true" : "false"; return true; }
+            if (type.IsEnum) { text = value.ToString() ?? string.Empty; return text.Length > 0; }
+            if (value is IConvertible)
+            {
+                // Through double so a generic numeric parameter stored as T is still recorded, which
+                // is the shape every parameterized activation in this library uses.
+                text = Convert.ToDouble(value, CultureInfo.InvariantCulture)
+                    .ToString("R", CultureInfo.InvariantCulture);
+                return true;
+            }
+        }
+        catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException)
+        {
+            return false;
+        }
+        return false;
+    }
 
     private InvalidOperationException Unparseable(string key, object value, string wanted)
         => new($"Cannot rebuild {_layerName}: metadata key '{key}' should be {wanted} but held '{AsText(value)}'.");
