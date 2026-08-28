@@ -1734,13 +1734,42 @@ public static class DeserializationHelper
             int groups = TryGetInt(additionalParams, "Groups") ?? 1;
             int deformGroups = TryGetInt(additionalParams, "DeformGroups") ?? 1;
             bool useModulation = TryGetBool(additionalParams, "UseModulation") ?? true;
+            // Absent in checkpoints written before the separable (DCNv3) projection existed, and
+            // false is what those models were built with.
+            bool separableOffsetProjection = TryGetBool(additionalParams, "SeparableOffsetProjection") ?? false;
 
             var engineType = typeof(AiDotNet.Tensors.Engines.IEngine);
+
+            // Prefer the form that carries the projection mode. Falling back to the older signature
+            // keeps this working against a build that predates it, and the older form can only ever
+            // mean a dense projection, which is what separableOffsetProjection already defaults to.
             var ctor = type.GetConstructor(new Type[]
-                { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(bool), engineType });
-            if (ctor is null)
-                throw new MissingLayerCtorException("Cannot find DeformableConvolutionalLayer constructor with expected signature.");
-            instance = ctor.Invoke(new object?[] { outputChannels, kernelSize, stride, padding, groups, deformGroups, useModulation, null });
+                { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(bool), typeof(bool), engineType });
+            if (ctor is not null)
+            {
+                instance = ctor.Invoke(new object?[]
+                    { outputChannels, kernelSize, stride, padding, groups, deformGroups, useModulation, separableOffsetProjection, null });
+            }
+            else
+            {
+                ctor = type.GetConstructor(new Type[]
+                    { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(bool), engineType });
+                if (ctor is null)
+                    throw new MissingLayerCtorException("Cannot find DeformableConvolutionalLayer constructor with expected signature.");
+                instance = ctor.Invoke(new object?[] { outputChannels, kernelSize, stride, padding, groups, deformGroups, useModulation, null });
+            }
+
+            // Modulation normalization is a settable property rather than a constructor parameter,
+            // so that adding it did not change this type's constructor signature a second time.
+            if (instance is NeuralNetworks.Layers.DeformableConvolutionalLayer<T> withModulation
+                && additionalParams is not null
+                && additionalParams.TryGetValue("ModulationNormalization", out var modulationValue)
+                && modulationValue is not null
+                && System.Enum.TryParse<AiDotNet.Enums.DeformableModulationNormalization>(
+                       modulationValue.ToString(), ignoreCase: true, out var parsedModulation))
+            {
+                withModulation.ModulationNormalization = parsedModulation;
+            }
 
             // Pre-resolve from saved inputShape so SetParameters sizes the (offset/mask/main) weights to
             // match the saved parameter vector. inputShape is rank-3 [C,H,W] (layer-only) or rank-4
