@@ -307,9 +307,29 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// perfectly match what the kernel is looking for.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "OutputDepth")]
-
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "OutputDepth", Condition = nameof(UseBias))]
     private Tensor<T> _biases;
+
+    /// <summary>What the caller asked for; <see cref="UseBias"/> is the resolved answer.</summary>
+    private readonly BiasMode _biasMode;
+
+    /// <summary>
+    /// Whether this convolution carries its own additive bias.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Gates <c>_biases</c> through <c>TrainableParameterAttribute.Condition</c>. When false the
+    /// bias stays a zero-length placeholder and is absent from ParameterCount, GetParameters,
+    /// gradients, checkpoints and clones alike -- it is not merely frozen at zero.
+    /// </para>
+    /// <para>
+    /// <c>BiasMode.Auto</c> resolves to true here. A convolution built on its own cannot see what
+    /// consumes its output, and <c>nn.Conv2d</c> defaults to <c>bias=True</c> for the same reason.
+    /// A composite that DOES know what follows resolves Auto with <c>LayerBase.ResolveBias</c> and
+    /// passes the answer down as <c>Always</c> or <c>Never</c>.
+    /// </para>
+    /// </remarks>
+    public bool UseBias => _biasMode != BiasMode.Never;
 
     /// <summary>
     /// Reference-keyed cache of the rank-1 <c>_biases</c> reshaped to
@@ -512,7 +532,8 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null,
         IActivationFunction<T>? nonlinearityForInit = null,
-        [LayerState] int groups = 1)
+        [LayerState] int groups = 1,
+        [LayerState] BiasMode biasMode = BiasMode.Auto)
         // Linear by default, matching PyTorch nn.Conv2d and Keras Conv2D, both of which apply no
         // activation unless one is requested. This previously defaulted to ReLU, which is the
         // same defect this PR fixed in DenseLayer: every caller that wanted a plain convolution —
@@ -560,6 +581,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 
         // Always start fully deferred: shape, channel count, and weights resolve on first Forward.
         _kernels = new Tensor<T>([0, 0, 0, 0]);
+        _biasMode = biasMode;
         _biases = new Tensor<T>([0]);
         _lastInput = new Tensor<T>([0, 0, 0, 0]);
         _lastOutput = new Tensor<T>([0, 0, 0, 0]);
@@ -661,7 +683,8 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public ConvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding,
                               IVectorActivationFunction<T> vectorActivationFunction,
-                              IInitializationStrategy<T>? initializationStrategy = null)
+                              IInitializationStrategy<T>? initializationStrategy = null,
+                              BiasMode biasMode = BiasMode.Auto)
         : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 }, vectorActivationFunction)
     {
         if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth), "outputDepth must be positive.");
@@ -680,6 +703,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 
         // Always start fully deferred: shape, channel count, and weights resolve on first Forward.
         _kernels = new Tensor<T>([0, 0, 0, 0]);
+        _biasMode = biasMode;
         _biases = new Tensor<T>([0]);
         _lastInput = new Tensor<T>([0, 0, 0, 0]);
         _lastOutput = new Tensor<T>([0, 0, 0, 0]);
@@ -1002,13 +1026,16 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
                 _kernels.Shape[1] == kShape[1] &&
                 _kernels.Shape[2] == kShape[2] &&
                 _kernels.Shape[3] == kShape[3];
-            bool hasExpectedBiases =
-                _biases.Rank == 1 && _biases.Shape[0] == bShape[0];
+            // A bias-free convolution's expected bias is the zero-length placeholder it was
+            // constructed with, not an [OutputDepth] tensor that is never going to exist.
+            bool hasExpectedBiases = UseBias
+                ? _biases.Rank == 1 && _biases.Shape[0] == bShape[0]
+                : _biases.Length == 0;
 
             if (hasExpectedKernels && hasExpectedBiases)
             {
                 RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-                RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+                if (UseBias) RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
                 _isInitialized = true;
                 return;
             }
@@ -1023,14 +1050,14 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             }
 
             _kernels = AllocateLazyWeight(kShape, () => TensorAllocator.RentPinned<T>(kShape));
-            _biases = AllocateLazyWeight(bShape);
+            _biases = UseBias ? AllocateLazyWeight(bShape) : new Tensor<T>([0]);
 
             // Initialize weights (fills _kernels and _biases with He-uniform values)
             InitializeWeights();
 
             // Register trainable parameters with the engine for GPU persistence
             RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+            if (UseBias) RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
 
             _isInitialized = true;
         }
@@ -1320,10 +1347,15 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             // the tape-tracked Engine ops and the backward (DepthwiseConv2DBackward)
             // flows automatically in both eager and compiled-plan training.
             var dw = Engine.DepthwiseConv2D(input4D, _kernels, new[] { Stride, Stride }, new[] { Padding, Padding });
-            var biasReshapedDw = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
-            result = ApplyActivation(Engine.TensorAdd(dw, biasReshapedDw));
+            result = ApplyActivation(UseBias
+                ? Engine.TensorAdd(dw, Engine.Reshape(_biases, [1, OutputDepth, 1, 1]))
+                : dw);
         }
-        else if (fusedActivation != FusedActivationType.None)
+        // FusedConv2D takes its bias as a required tensor and has no bias-free overload, so a
+        // bias-free convolution takes the unfused path rather than being handed a zero vector to
+        // add. Nothing is lost when the activation is linear: GetFusedActivationType already
+        // returns None there and this branch is not entered at all.
+        else if (UseBias && fusedActivation != FusedActivationType.None)
         {
             // Pass _biases as the rank-1 [C] vector — Engine.FusedConv2D auto-reshapes
             // to [1, C, 1, 1] internally when needed (under tape) and otherwise feeds
@@ -1367,8 +1399,9 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             // would make the gradient walk hit a dead end at _biasReshaped4D,
             // leaving _biases with zero gradient on every training step.
             var conv = Engine.Conv2D(input4D, _kernels, Stride, Padding, dilation: 1);
-            var biasReshapedForTape = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
-            result = Engine.TensorAdd(conv, biasReshapedForTape);
+            result = UseBias
+                ? Engine.TensorAdd(conv, Engine.Reshape(_biases, [1, OutputDepth, 1, 1]))
+                : conv;
         }
         else
         {
@@ -1390,9 +1423,10 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             // record per layer per forward. Tape-inactive guard at the branch
             // level (entered only when neither tape nor IsTrainingMode is set)
             // makes this safe — no GradFn needs to bind through the reshape.
-            if (!ReferenceEquals(_biasReshaped4DSource, _biases)
-                || _biasReshaped4D is null
-                || _biasReshaped4DVersion != _biases.Version)
+            if (UseBias
+                && (!ReferenceEquals(_biasReshaped4DSource, _biases)
+                    || _biasReshaped4D is null
+                    || _biasReshaped4DVersion != _biases.Version))
             {
                 // Reshape returns a VIEW over the bias's storage, and a streaming-allocated
                 // weight has none until it is paged in: the tensor carries its shape while its
@@ -1409,7 +1443,8 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
                 _biasReshaped4DSource = _biases;
                 _biasReshaped4DVersion = _biases.Version;
             }
-            Engine.TensorBroadcastAddInPlace(output, _biasReshaped4D);
+            if (UseBias && _biasReshaped4D is not null)
+                Engine.TensorBroadcastAddInPlace(output, _biasReshaped4D);
 
             result = ApplyActivation(output);
         }
@@ -1659,7 +1694,9 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        if (_kernelsGradient == null || _biasesGradient == null)
+        // A bias-free convolution legitimately has no bias gradient. Only a missing KERNEL
+        // gradient means nothing has been computed yet.
+        if (_kernelsGradient == null || (UseBias && _biasesGradient == null))
             return;
 
         if (Engine is DirectGpuTensorEngine gpuEngine)
@@ -1673,7 +1710,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
                 _kernelsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_kernelsVelocity, PersistentTensorRole.OptimizerState);
             }
-            if (_biasesVelocity == null)
+            if (UseBias && _biasesVelocity == null)
             {
                 _biasesVelocity = new Tensor<T>(_biases._shape);
                 _biasesVelocity.Fill(NumOps.Zero);
@@ -1683,15 +1720,19 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             // Perform GPU-resident SGD update
             // Momentum = 0, WeightDecay = 0 to match CPU implementation
             gpuEngine.SgdMomentumUpdateGpu(_kernels, _kernelsGradient, _kernelsVelocity, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_biases, _biasesGradient, _biasesVelocity, lr, 0.0f, 0.0f);
+            if (UseBias && _biasesGradient is not null && _biasesVelocity is not null)
+                gpuEngine.SgdMomentumUpdateGpu(_biases, _biasesGradient, _biasesVelocity, lr, 0.0f, 0.0f);
         }
         else
         {
             // CPU SGD using in-place ops to preserve tensor identity (cached references like _biasReshaped4D)
             var scaledKernelGrad = Engine.TensorMultiplyScalar(_kernelsGradient, learningRate);
             Engine.TensorSubtractInPlace(_kernels, scaledKernelGrad);
-            var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
-            Engine.TensorSubtractInPlace(_biases, scaledBiasGrad);
+            if (UseBias && _biasesGradient is not null)
+            {
+                var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
+                Engine.TensorSubtractInPlace(_biases, scaledBiasGrad);
+            }
         }
 
         // Notify engine that parameters have changed (for GPU cache invalidation if needed)
@@ -1754,13 +1795,18 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         // size from constructor-time shapes when the layer is uninitialized,
         // so there's no need to allocate/randomize the full weight tensors
         // just to return a zero vector.
-        if (_kernelsGradient == null || _biasesGradient == null)
+        if (_kernelsGradient == null || (UseBias && _biasesGradient == null))
         {
             return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         }
         EnsureInitialized();
 
         // Bulk copy from contiguous tensor storage — replaces 4-nested scalar loops
+        // The gradient surface must mirror the parameter surface exactly. With no bias there is
+        // no bias slot to fill, and appending one would shift every consumer's offsets.
+        if (!UseBias || _biasesGradient is null)
+            return Vector<T>.FromMemory(_kernelsGradient.Data);
+
         return Vector<T>.Concatenate(
             Vector<T>.FromMemory(_kernelsGradient.Data),
             Vector<T>.FromMemory(_biasesGradient.Data));
