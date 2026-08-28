@@ -1794,11 +1794,53 @@ public sealed class ModelStateRegistry<T>
             }
         }
 
+        // A serialized VectorModel has one required construction argument: its coefficient vector.
+        // The payload, rather than this seed, is authoritative, so an empty vector is sufficient to
+        // create the object before Deserialize restores the exact fitted width and values. Restrict
+        // this convention to the VectorModel family and exactly one required Vector<T> plus optional
+        // arguments; applying it to an arbitrary vector-accepting type would guess that its vector is
+        // fitted state rather than architecture and could create a structurally different child.
+        Type vectorType = typeof(AiDotNet.Tensors.LinearAlgebra.Vector<T>);
+        var withRequiredVector = typeof(VectorModel<T>).IsAssignableFrom(childType)
+            ? childType
+                .GetConstructors(System.Reflection.BindingFlags.Public
+                    | System.Reflection.BindingFlags.NonPublic
+                    | System.Reflection.BindingFlags.Instance)
+                .FirstOrDefault(c =>
+                {
+                    var parameters = c.GetParameters();
+                    return parameters.Count(p => !p.IsOptional) == 1
+                        && parameters.All(p => p.IsOptional || p.ParameterType == vectorType);
+                })
+            : null;
+
+        if (withRequiredVector is not null)
+        {
+            var parameters = withRequiredVector.GetParameters();
+            var arguments = new object?[parameters.Length];
+            for (int i = 0; i < arguments.Length; i++)
+            {
+                arguments[i] = parameters[i].IsOptional
+                    ? Type.Missing
+                    : AiDotNet.Tensors.LinearAlgebra.Vector<T>.Empty();
+            }
+
+            if (withRequiredVector.Invoke(
+                    System.Reflection.BindingFlags.OptionalParamBinding,
+                    binder: null,
+                    arguments,
+                    culture: null) is TChild built)
+            {
+                return built;
+            }
+        }
+
         throw new InvalidOperationException(
-            $"State '{name}' carries a list of {typeof(TChild).Name}, and the model being restored has "
-            + "fewer of them than the payload holds. Restoring cannot create one because "
-            + $"{childType.Name} has no constructor callable without arguments. Either give it one, "
-            + "or have the model build its list before Deserialize runs.");
+            $"State '{name}' carries a {typeof(TChild).Name} child that is absent from the model being "
+            + "restored. Restoring cannot create it because "
+            + $"{childType.Name} has no safe persistence constructor (parameterless, all optional, "
+            + "or the fitted-state VectorModel coefficient form). Either give it one, "
+            + "or have the model build the child before Deserialize runs.");
     }
 
     /// <summary>Declares a decision tree, carried whole.</summary>

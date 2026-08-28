@@ -153,17 +153,36 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
         InitializeLayers();
     }
 
+    /// <summary>Creates an AudioEventDetector for native training mode with the default objective.</summary>
+    /// <remarks>
+    /// Kept as its own three-parameter constructor rather than relying on the defaulted
+    /// parameter below: a defaulted parameter is a compile-time convenience but only ONE CLR
+    /// signature, so adding it removed the arity already-compiled callers bind to and they
+    /// would fail with MissingMethodException.
+    /// </remarks>
+    public AudioEventDetector(
+        NeuralNetworkArchitecture<T> architecture,
+        AudioEventDetectorOptions? options,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+        : this(architecture, options, optimizer, null)
+    {
+    }
+
     /// <summary>
     /// Creates an AudioEventDetector for native training mode.
     /// </summary>
     /// <param name="architecture">The neural network architecture.</param>
     /// <param name="options">Detection options.</param>
     /// <param name="optimizer">Optional custom optimizer (defaults to AdamW).</param>
+    /// <param name="lossFunction">
+    /// Optional custom training loss; defaults to binary cross-entropy with logits for multi-label detection.
+    /// </param>
     public AudioEventDetector(
         NeuralNetworkArchitecture<T> architecture,
         AudioEventDetectorOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new AudioEventDetectorOptions();
         _useNativeMode = true;

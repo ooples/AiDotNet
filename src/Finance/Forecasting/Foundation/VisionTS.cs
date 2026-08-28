@@ -290,12 +290,6 @@ public partial class VisionTS<T> : TimeSeriesFoundationModelBase<T>
         return selected;
     }
 
-    /// <summary>
-    /// Fused compiled updates operate on the complete parameter vector and
-    /// therefore cannot preserve VisionTS's LayerNorm-only fine-tuning contract.
-    /// </summary>
-    protected override bool SupportsFusedCompiledTraining => false;
-
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {

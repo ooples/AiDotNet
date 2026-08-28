@@ -214,8 +214,20 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
     {
     }
 
-    public DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, double epsilon = 1.0, DeepQNetworkOptions? options = null) :
-        this(architecture, lossFunction, epsilon, isTargetNetwork: false, options: options)
+    /// <summary>Creates a Deep Q-Network using the published RMSProp settings.</summary>
+    /// <remarks>
+    /// Kept as its own four-parameter constructor rather than relying on the defaulted optimizer
+    /// parameter below: a defaulted parameter is a compile-time convenience but only ONE CLR
+    /// signature, so adding it removed the arity already-compiled callers bind to and they would
+    /// fail with MissingMethodException.
+    /// </remarks>
+    public DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction, double epsilon, DeepQNetworkOptions? options) :
+        this(architecture, lossFunction, epsilon, options, null)
+    {
+    }
+
+    public DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, double epsilon = 1.0, DeepQNetworkOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) :
+        this(architecture, lossFunction, epsilon, isTargetNetwork: false, options: options, optimizer: optimizer)
     {
     }
 
@@ -226,13 +238,35 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
     /// <param name="lossFunction">The loss function to use for training.</param>
     /// <param name="epsilon">The initial exploration rate.</param>
     /// <param name="isTargetNetwork">If true, this is a target network and won't create its own target network.</param>
-    private DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction, double epsilon, bool isTargetNetwork, DeepQNetworkOptions? options = null) :
+    private DeepQNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction, double epsilon, bool isTargetNetwork, DeepQNetworkOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _options = options ?? new DeepQNetworkOptions();
         Options = _options;
         _epsilon = NumOps.FromDouble(epsilon);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+
+        // THE PUBLISHED OPTIMIZER, NOT WHATEVER THE BASE DEFAULTS TO. _trainOptimizer was declared
+        // and never assigned, so Train handed TrainWithTape a null and the network learned through
+        // the base's generic optimizer -- none of Mnih et al. 2015's Extended Data Table 1 settings
+        // were in effect. That table specifies RMSProp at 0.00025 with gradient momentum 0.95,
+        // squared gradient momentum 0.95 and a minimum squared gradient of 0.01, the last being far
+        // larger than a generic epsilon precisely so the effective step stays bounded when recent
+        // gradients are small. Every value is an option, and a caller can still replace the whole
+        // optimizer.
+        // Validate before the optimizer is built: these four values are handed straight to it, so
+        // they are external input to it, and a non-finite one would only surface as poisoned
+        // parameters after the first update.
+        _options.Validate();
+        _trainOptimizer = optimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new RootMeanSquarePropagationOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                InitialMomentum = _options.GradientMomentum,
+                Decay = _options.SquaredGradientMomentum,
+                Epsilon = _options.MinSquaredGradient,
+            });
 
         // Only create the target network if this is not already a target network (prevents infinite recursion)
         if (!isTargetNetwork)
@@ -571,15 +605,18 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
         // Set network to training mode
         SetTrainingMode(true);
 
-        // Forward pass with memory
-        var predictions = ForwardWithMemoryBatch(statesBatch);
-
-        // Calculate loss using the configured loss function
-        LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), targetsBatch.ToVector());
-
-        // Compute gradients and update network
-        var outputGradients = predictions.Subtract(targetsBatch);
-        UpdateParameters(NumOps.FromDouble(0.001)); // Learning rate
+        // THE REPLAY BATCH IS WHERE DQN ACTUALLY LEARNS, and it was not learning from it. The
+        // previous body ran a bookkeeping forward, computed a loss, computed an output-gradient
+        // tensor, DISCARDED that tensor, and then called a per-layer update with a hardcoded 0.001 --
+        // so no backward pass ran for the batch and the layers were stepped on whatever gradients
+        // they happened to be holding. The configured optimizer was reached only by the supervised
+        // fallback taken while the buffer is below one batch, which meant none of the published
+        // RMSProp settings applied once the buffer filled, which is nearly always.
+        //
+        // TrainWithTape runs the same forward this walked (neither this model nor the base overrides
+        // ForwardForTraining away from the Layers walk), then a real backward and a real optimizer
+        // step, and records LastLoss itself.
+        TrainWithTape(statesBatch, targetsBatch, _trainOptimizer);
 
         // Set network back to inference mode
         SetTrainingMode(false);
@@ -623,44 +660,6 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
         return batch;
     }
 
-    /// <summary>
-    /// Performs a forward pass for a batch of inputs while storing intermediate values for backpropagation.
-    /// </summary>
-    /// <param name="inputs">A tensor containing a batch of input states.</param>
-    /// <returns>A tensor containing a batch of predicted Q-values.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method processes a batch of inputs through the network, storing intermediate values
-    /// needed for backpropagation during training. It's similar to ForwardWithMemory but handles
-    /// batched inputs for more efficient training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method processes multiple inputs at once and remembers
-    /// intermediate values to help with learning.
-    /// 
-    /// Processing inputs in batches:
-    /// - Is more efficient than processing one at a time
-    /// - Helps the network learn more stable patterns
-    /// - Requires keeping track of intermediate values for learning
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ForwardWithMemoryBatch(Tensor<T> inputs)
-    {
-        var current = inputs;
-
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            // Store input to each layer for backpropagation
-            _layerInputs[i] = current;
-
-            // Forward pass through layer
-            current = Layers[i].Forward(current);
-
-            // Store output from each layer for backpropagation
-            _layerOutputs[i] = current;
-        }
-
-        return current;
-    }
 
     /// <summary>
     /// Updates the parameters of all layers in the network using the calculated gradients.

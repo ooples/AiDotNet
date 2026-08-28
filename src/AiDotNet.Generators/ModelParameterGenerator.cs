@@ -1190,6 +1190,37 @@ public class ModelParameterGenerator : IIncrementalGenerator
         if (bare is not INamedTypeSymbol { Name: "List", TypeArguments.Length: 1 } list)
             return null;
         var element = list.TypeArguments[0].WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+        if (element is INamedTypeSymbol { Name: "List", TypeArguments.Length: 1 } nestedList)
+        {
+            var nestedElement = nestedList.TypeArguments[0]
+                .WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+            if (!IsLayerOf(nestedElement, elem)) return null;
+
+            string outerElementName = element.ToDisplayString();
+            string nestedElementName = nestedElement.ToDisplayString();
+            bool nestedCollectionNullable = ParameterMemberSemanticModel.IsNullable(member);
+            bool nestedCollectionWritable = member switch
+            {
+                IFieldSymbol field => !field.IsReadOnly,
+                IPropertySymbol property => property.SetMethod is not null && !property.SetMethod.IsInitOnly,
+                _ => false,
+            };
+            string nestedGetter = nestedCollectionNullable
+                ? $"() => ({member.Name} ?? (global::System.Collections.Generic.IEnumerable<{outerElementName}>)" +
+                  $"global::System.Array.Empty<{outerElementName}>()).SelectMany(__layers => __layers)"
+                : $"() => {member.Name}.SelectMany(__layers => __layers)";
+            string partitionGetter =
+                $"() => GetGeneratedAdditionalLayerPartitionSizes<{nestedElementName}>({member.Name})";
+            string nestedReplace = nestedCollectionNullable
+                ? nestedCollectionWritable
+                    ? $"(__layers, __partitions) => {member.Name} = RestoreGeneratedNestedAdditionalLayerCollections({member.Name}, __layers, __partitions, nameof({member.Name}))"
+                    : "null"
+                : $"(__layers, __partitions) => ReplaceGeneratedNestedAdditionalLayerCollections({member.Name}, __layers, __partitions, nameof({member.Name}))";
+            if (nestedReplace == "null") return null;
+
+            return $"new GeneratedAdditionalLayerGroup(\"{id}\", {nestedGetter}, {partitionGetter}, {nestedReplace})";
+        }
+
         if (!IsLayerOf(element, elem)) return null;
         string elementName = element.ToDisplayString();
         bool collectionNullable = ParameterMemberSemanticModel.IsNullable(member);

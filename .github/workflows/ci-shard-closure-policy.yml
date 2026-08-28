@@ -38,8 +38,11 @@ jobs:
           #   "[PR #1290 CI] Tests (net10.0) - ModelFamily - NeuralNetworks: 5 failing tests"
           #   "[PR #1290 CI Cluster 6] Long-training timeouts ..."
           #   "[CI] Tests (net10.0) - Unit - 08d NN-Adapters/Other: MoE MoreData failing"
-          # Try to extract the shard short name (the bit after "Tests (net10.0) - ").
-          shard=$(echo "$ISSUE_TITLE" | grep -oP 'Tests \(net10\.0\) - \K[^:]+' | head -1 | sed 's/[[:space:]]*$//')
+          # Try to extract the shard short name (the bit after "Tests (<framework>) - ").
+          # The framework is matched as a pattern, not spelled out: shards no longer all run
+          # net10.0, and a hardcoded framework silently yields an empty shard name for any
+          # other one, which skips the audit below rather than failing it.
+          shard=$(echo "$ISSUE_TITLE" | grep -oP 'Tests \(net[0-9.]+\) - \K[^:]+' | head -1 | sed 's/[[:space:]]*$//')
           if [ -z "$shard" ]; then
             echo "No shard name found in title — issue not bound to a named shard, skipping check."
             echo "shard=" >> "$GITHUB_OUTPUT"

@@ -350,9 +350,6 @@ public partial class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    protected override bool SupportsFusedCompiledTraining => false;
-
-    /// <inheritdoc/>
     protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
     {
         return ForwardNativeForTrainingCore(input);

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 using AiDotNet.RetrievalAugmentedGeneration.Filtering;
@@ -192,7 +192,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.DocumentStores
                 AzureSearchDocumentStore<float>.TranslateFilter(MetadataFilter.Exists("author")));
         }
 
-#if NET5_0_OR_GREATER
+#if NET10_0_OR_GREATER
         // ------------------------------------------------------------------
         // pgvector: parameterised jsonb WHERE (net10-only Storage.Postgres).
         // ------------------------------------------------------------------

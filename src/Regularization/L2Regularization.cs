@@ -130,7 +130,7 @@ public class L2Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
     public override Matrix<T> Regularize(Matrix<T> data)
     {
         var regularizationStrength = NumOps.FromDouble(Options.Strength);
-        var shrinkageFactor = NumOps.Subtract(NumOps.One, regularizationStrength);
+        var shrinkageFactor = ShrinkTowardZero(regularizationStrength);
         var result = new Matrix<T>(data.Rows, data.Columns);
 
         for (int i = 0; i < data.Rows; i++)
@@ -160,7 +160,7 @@ public class L2Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
     public override Vector<T> Regularize(Vector<T> data)
     {
         var regularizationStrength = NumOps.FromDouble(Options.Strength);
-        var shrinkageFactor = NumOps.Subtract(NumOps.One, regularizationStrength);
+        var shrinkageFactor = ShrinkTowardZero(regularizationStrength);
         var result = new Vector<T>(data.Length);
 
         for (int i = 0; i < data.Length; i++)

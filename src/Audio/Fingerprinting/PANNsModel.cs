@@ -407,16 +407,6 @@ public partial class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => base.ForwardForTraining(PreprocessAudio(input));
 
     /// <summary>
-    /// Named-layer activations must run over the same log-mel front end as inference — the base
-    /// walk feeds its raw argument straight into the CNN14 conv stack, so the raw [batch, samples]
-    /// waveform's tiny spatial extent collapses under the five 2x2 pooling stages ("Pool size (2x2)
-    /// cannot exceed input spatial dimensions (2x1)"). Preprocess to the tiled log-mel first, then
-    /// delegate to the base walk, mirroring <see cref="PredictCore"/> / <see cref="ForwardForTraining"/>.
-    /// </summary>
-    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
-        => base.GetNamedLayerActivations(PreprocessAudio(input));
-
-    /// <summary>
     /// Classifies audio into AudioSet categories. Returns labels with
     /// probability ≥ <paramref name="threshold"/>, sorted descending.
     /// </summary>

@@ -470,14 +470,16 @@ public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILan
     {
         var preprocessed = PreprocessAudio(input);
 
-        if (IsOnnxMode && OnnxModel is not null)
-        {
-            return OnnxModel.Run(preprocessed);
-        }
-        else
-        {
-            return ForwardNative(preprocessed);
-        }
+        // A language IDENTIFIER's public output is a distribution over the 107 languages, which is
+        // what PostprocessOutput has always produced -- but nothing ever called it. It is declared
+        // abstract on AudioNeuralNetworkBase and implemented by every audio model, while the
+        // prediction pipeline runs PredictCore and stops, so this model returned raw classifier
+        // logits instead. Training is unaffected: ForwardForTraining returns ForwardNative, so the
+        // objective still sees logits, the standard train-on-logits / predict-with-softmax split.
+        var logits = IsOnnxMode && OnnxModel is not null
+            ? OnnxModel.Run(preprocessed)
+            : ForwardNative(preprocessed);
+        return PostprocessOutput(logits);
     }
 
     /// <inheritdoc/>
@@ -502,7 +504,13 @@ public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILan
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> ForwardForTraining(Tensor<T> input) => ForwardNative(input);
+    /// <remarks>
+    /// Runs the SAME MFCC front end prediction runs. Without it the training forward fed the raw
+    /// waveform straight into a stack whose first layer expects cepstral frames, so the objective
+    /// optimized a different function from the one inference evaluates.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        => ForwardNative(PreprocessAudio(input));
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.

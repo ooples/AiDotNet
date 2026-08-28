@@ -4,6 +4,7 @@ using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
@@ -92,10 +93,26 @@ public partial class FDYSED<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         InitializeLayers();
     }
 
+    /// <summary>Creates a FDYSED for native training mode with the default objective.</summary>
+    /// <remarks>
+    /// Kept as its own three-parameter constructor rather than relying on the defaulted
+    /// parameter below: a defaulted parameter is a compile-time convenience but only ONE CLR
+    /// signature, so adding it removed the arity already-compiled callers bind to and they
+    /// would fail with MissingMethodException.
+    /// </remarks>
+    public FDYSED(
+        NeuralNetworkArchitecture<T> architecture,
+        FDYSEDOptions? options,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+        : this(architecture, options, optimizer, null)
+    {
+    }
+
     /// <summary>Creates an FDY-SED model for native training mode.</summary>
     public FDYSED(NeuralNetworkArchitecture<T> architecture, FDYSEDOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new FDYSEDOptions();
         ValidateOptions(_options);

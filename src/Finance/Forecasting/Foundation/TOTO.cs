@@ -200,7 +200,7 @@ public partial class TOTO<T> : TimeSeriesFoundationModelBase<T>
             throw new ArgumentOutOfRangeException(nameof(options.Beta2), "Beta2 must be finite and in [0, 1).");
         if (double.IsNaN(options.WeightDecay) || double.IsInfinity(options.WeightDecay) || options.WeightDecay < 0.0)
             throw new ArgumentOutOfRangeException(nameof(options.WeightDecay), "Weight decay must be finite and non-negative.");
-        Guard.Positive(options.WarmupSteps, nameof(options.WarmupSteps));
+        Guard.NonNegative(options.WarmupSteps, nameof(options.WarmupSteps));
         Guard.Positive(options.TotalTrainingSteps, nameof(options.TotalTrainingSteps));
         if (options.TotalTrainingSteps < options.WarmupSteps)
             throw new ArgumentException("Total training steps must be at least the warmup steps.", nameof(options));
@@ -234,7 +234,9 @@ public partial class TOTO<T> : TimeSeriesFoundationModelBase<T>
                     baseLearningRate: options.LearningRate,
                     warmupSteps: options.WarmupSteps,
                     totalSteps: options.TotalTrainingSteps,
-                    warmupInitLr: options.LearningRate / options.WarmupSteps,
+                    warmupInitLr: options.WarmupSteps > 0
+                        ? options.LearningRate / options.WarmupSteps
+                        : options.LearningRate,
                     decayMode: LinearWarmupScheduler.DecayMode.Cosine,
                     endLr: 0.0),
                 SchedulerStepMode = SchedulerStepMode.StepPerBatch

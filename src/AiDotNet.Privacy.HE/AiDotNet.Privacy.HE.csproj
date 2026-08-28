@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <!--
@@ -6,7 +6,7 @@
       Carries the Microsoft SEAL native dependency so the core AiDotNet package
       stays free of it. Matches the core package's TFM set.
     -->
-    <TargetFrameworks>net10.0;net471</TargetFrameworks>
+    <TargetFrameworks>net10.0;net8.0;net471</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>

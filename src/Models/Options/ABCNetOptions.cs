@@ -19,6 +19,37 @@ namespace AiDotNet.Models.Options;
 /// <typeparam name="T">The numeric type.</typeparam>
 public class ABCNetOptions<T> : NeuralNetworkOptions
 {
+    /// <summary>Initializes a new instance with the paper's defaults.</summary>
+    public ABCNetOptions()
+    {
+    }
+
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public ABCNetOptions(ABCNetOptions<T> other)
+    {
+        if (other is null)
+            throw new ArgumentNullException(nameof(other));
+
+        // Inherited from ModelOptions: a clone that drops it initializes and trains differently
+        // from the configuration it was copied from.
+        Seed = other.Seed;
+        InputHeight = other.InputHeight;
+        InputWidth = other.InputWidth;
+        InputChannels = other.InputChannels;
+        FeatureChannels = other.FeatureChannels;
+        FeatureStride = other.FeatureStride;
+        BezierSampleHeight = other.BezierSampleHeight;
+        BezierSampleWidth = other.BezierSampleWidth;
+        NumCharacterClasses = other.NumCharacterClasses;
+        RecognitionHiddenSize = other.RecognitionHiddenSize;
+        ConfidenceThreshold = other.ConfidenceThreshold;
+        MaxInstances = other.MaxInstances;
+        LearningRate = other.LearningRate;
+        Momentum = other.Momentum;
+    }
+
     /// <summary>Gets or sets the input image height. Default 256.</summary>
     public int InputHeight { get; set; } = 256;
 
@@ -93,19 +124,33 @@ public class ABCNetOptions<T> : NeuralNetworkOptions
     /// <value>Defaults to 0.01, the rate the ABCNet paper trains with (arXiv:2002.10200).</value>
     /// <remarks>
     /// <para>
-    /// READ THIS BEFORE RELYING ON THE DEFAULT. The paper's 0.01 is an <b>SGD with momentum</b>
-    /// rate. ABCNet builds an <c>AdamOptimizer</c> when the caller supplies none, and 0.01 is
-    /// roughly two orders of magnitude above the usual Adam scale, so the published value and the
-    /// default optimizer are not matched to each other. To reproduce the paper, inject an
-    /// SGD-with-momentum optimizer and keep this rate; to train with the default Adam optimizer,
-    /// lower this to an Adam-appropriate value such as 1e-4.
+    /// The paper's 0.01 is an <b>SGD with momentum</b> rate, and the default optimizer is now that
+    /// same SGD-with-momentum, so the published value and the optimizer it is applied to match.
+    /// They previously did not: the model built an <c>AdamOptimizer</c>, whose step is roughly the
+    /// learning rate itself, making 0.01 about two orders of magnitude too large and driving the
+    /// shared backbone's activations negative until every input produced the same detection map.
+    /// Lower this to roughly 1e-4 if you inject an Adam-family optimizer instead.
     /// </para>
-    /// <para>
-    /// Previously the optimizer was constructed bare, so training silently used Adam's own generic
-    /// default and no caller could change it short of building the whole optimizer themselves.
-    /// </para>
+    /// <para><b>For Beginners:</b> The learning rate sets how big a step the model takes each time
+    /// it learns from a mistake. It has to suit the optimizer it is used with: the same number that
+    /// is sensible for SGD is far too large for an Adam-style optimizer, which is why the default
+    /// optimizer here is the SGD the paper used.</para>
     /// </remarks>
     public double LearningRate { get; set; } = 0.01;
+
+    /// <summary>
+    /// Momentum coefficient for the default SGD optimizer.
+    /// </summary>
+    /// <remarks>
+    /// The paper trains with SGD at momentum 0.9. Exposed for the same reason the learning rate is:
+    /// a published default is only useful if a caller can retune it without having to rebuild the
+    /// whole optimizer.
+    /// </para>
+    /// <para><b>For Beginners:</b> Momentum lets each update keep part of the direction of the
+    /// updates before it, like a ball rolling downhill rather than restarting from a standstill at
+    /// every step. It smooths out noisy steps and speeds up steady progress.</para>
+    /// </remarks>
+    public double Momentum { get; set; } = 0.9;
 
     /// <summary>
     /// Validates the configuration, throwing on values that cannot describe a working model.
@@ -138,6 +183,12 @@ public class ABCNetOptions<T> : NeuralNetworkOptions
         {
             throw new ArgumentOutOfRangeException(nameof(LearningRate), LearningRate,
                 "LearningRate must be a positive, finite number.");
+        }
+
+        if (Momentum < 0.0 || Momentum >= 1.0 || double.IsNaN(Momentum))
+        {
+            throw new ArgumentOutOfRangeException(nameof(Momentum), Momentum,
+                "Momentum must be finite and within [0, 1).");
         }
 
         // WHAT THIS CHECK ACTUALLY ENFORCES: the alphabet must hold at least one real symbol plus

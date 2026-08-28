@@ -165,13 +165,35 @@ public enum ParameterAvailability
 public sealed class ParameterChunk<T>
 {
     /// <summary>Creates one role-aware state chunk.</summary>
+    /// <param name="sourceTensor">
+    /// The tensor this chunk's payload was taken FROM, when <paramref name="tensor"/> is a
+    /// re-shaped or snapshot view rather than that storage itself. Defaults to
+    /// <paramref name="tensor"/>.
+    /// </param>
+    /// <remarks>
+    /// Kept as its own three-argument constructor rather than folded into the overload below with a
+    /// defaulted parameter: an optional parameter is a compile-time convenience but only ONE CLR
+    /// signature, so collapsing them would break already-compiled callers of this shape with a
+    /// MissingMethodException.
+    /// </remarks>
     public ParameterChunk(string stableId, ParameterSlotRole role, Tensor<T> tensor)
+        : this(stableId, role, tensor, null)
+    {
+    }
+
+    /// <summary>Creates one role-aware state chunk whose payload is a view of other storage.</summary>
+    internal ParameterChunk(
+        string stableId,
+        ParameterSlotRole role,
+        Tensor<T> tensor,
+        Tensor<T>? sourceTensor)
     {
         if (string.IsNullOrWhiteSpace(stableId))
             throw new ArgumentException("A parameter chunk requires a stable ID.", nameof(stableId));
         StableId = stableId;
         Role = role;
         Tensor = tensor ?? throw new ArgumentNullException(nameof(tensor));
+        SourceTensor = sourceTensor ?? Tensor;
     }
 
     /// <summary>The durable path of this chunk in the owning model manifest.</summary>
@@ -182,6 +204,18 @@ public sealed class ParameterChunk<T>
 
     /// <summary>The concrete payload, in the same scalar order as the flat state surface.</summary>
     public Tensor<T> Tensor { get; }
+
+    /// <summary>
+    /// The storage <see cref="Tensor"/> was taken from, or <see cref="Tensor"/> itself when the
+    /// chunk already exposes that storage directly.
+    /// </summary>
+    /// <remarks>
+    /// A dense trainable weight IS its own chunk payload, but a sparse component is presented as a
+    /// dense run of its non-zero values, so its payload is a different object from the registered
+    /// tensor. Callers keyed by tensor REFERENCE -- looking a chunk up in a tape's gradient
+    /// dictionary, for instance -- must use this, or a sparse weight silently reads as absent.
+    /// </remarks>
+    internal Tensor<T> SourceTensor { get; }
 }
 
 /// <summary>

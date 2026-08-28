@@ -1,3 +1,5 @@
+using AiDotNet.Regularization;
+
 namespace AiDotNet.Models.Options;
 
 /// <summary>
@@ -46,9 +48,32 @@ public class ProximalGradientDescentOptimizerOptions<T, TInput, TOutput> : Gradi
     /// <summary>
     /// Initializes a new instance of the ProximalGradientDescentOptimizerOptions class with appropriate defaults.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The proximal operator defaults to L1, which is the one this optimizer exists for. The base class
+    /// defaults it to L2 - a sensible default for a gradient optimizer that ADDS a penalty to the
+    /// gradient, and the wrong one here, where the regularizer IS the proximal step. L2's prox shrinks
+    /// coordinates toward zero without ever setting them there, which
+    /// <see cref="AiDotNet.Optimizers.ProximalGradientDescentOptimizer{T, TInput, TOutput}"/>'s own
+    /// remarks call "a different algorithm"; L1's prox is soft-thresholding, which is ISTA, which those
+    /// same remarks call "the canonical proximal case".
+    /// </para>
+    /// <para>
+    /// Inheriting the L2 default made the canonical case unreachable without constructing a regularizer
+    /// by hand: setting RegularizationStrength alone rebuilt an L2 at that strength, so a caller asking
+    /// for sparsity got shrinkage and no exact zeros. Measured on 0.5(w-1)^2 + 1.5|w| from w = 2, whose
+    /// answer is exactly 0: strength alone returned -0.0714285671710968, and the same run with an
+    /// explicit L1 returned 0.
+    /// </para>
+    /// <para>
+    /// Set <c>Regularization</c> explicitly for anything else; this only changes what you get when you
+    /// say nothing.
+    /// </para>
+    /// </remarks>
     public ProximalGradientDescentOptimizerOptions()
     {
         MaxIterations = 1000;
+        Regularization = new L1Regularization<T, TInput, TOutput>();
     }
 
     /// <summary>

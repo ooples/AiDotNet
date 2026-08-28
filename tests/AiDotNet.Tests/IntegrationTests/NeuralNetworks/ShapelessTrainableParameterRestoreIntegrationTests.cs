@@ -32,6 +32,24 @@ public class ShapelessTrainableParameterRestoreIntegrationTests
         VerifyCheckpointFirstForward(() => new SVTRThinPlateSplineLayer<float>(), input);
     }
 
+    [Fact(Timeout = 120000)]
+    [Trait("Category", "Integration")]
+    public async Task DeformableConvolutional_Checkpoint_FirstForwardPreservesEveryRestoredValue()
+    {
+        await Task.Yield();
+        var input = Ramp([1, 4, 5, 5]);
+        VerifyCheckpointFirstForward(
+            () => new DeformableConvolutionalLayer<float>(
+                outputChannels: 4,
+                kernelSize: 3,
+                stride: 1,
+                padding: 1,
+                groups: 2,
+                deformGroups: 2,
+                useModulation: true),
+            input);
+    }
+
     private static void VerifyCheckpointFirstForward(
         Func<LayerBase<float>> createLayer,
         Tensor<float> input)

@@ -137,7 +137,7 @@ public partial class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
     {
         _options = options ?? new HelixOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateConfiguredOptimizer();
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
@@ -294,6 +294,24 @@ public partial class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
         }
         return clamped;
     }
+
+    /// <summary>
+    /// Builds the default optimizer from this model's OWN declared training options.
+    /// </summary>
+    /// <remarks>
+    /// Constructing AdamW with no options at all silently took the library default learning rate
+    /// of 1e-3 and ignored the 1e-4 / weight decay 0.01 HelixOptions declares, so the model trained
+    /// at ten times its configured rate and the loss ROSE across the conformance budget
+    /// (1.032210 to 1.391279). Passing an explicit optimizer still bypasses this entirely.
+    /// </remarks>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateConfiguredOptimizer()
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+            });
 
     protected override void InitializeLayers()
     {

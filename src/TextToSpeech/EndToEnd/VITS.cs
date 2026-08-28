@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -59,7 +59,17 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 public partial class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly VITSOptions _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    // Not readonly: a restore rewrites _options, and the default optimizer is BUILT FROM
+    // those options, so it has to be rebuilt afterwards or the model keeps running on the
+    // coefficients it happened to be constructed with.
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+
+    /// <summary>
+    /// Whether <see cref="_optimizer"/> is the one this model built from its options rather than
+    /// one the caller supplied. Only the former may be rebuilt when a restore rewrites those
+    /// options; substituting AdamW for a caller's optimizer would change how the model trains.
+    /// </summary>
+    private readonly bool _usesDefaultOptimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -108,7 +118,8 @@ public partial class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         _options = options ?? new VITSOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _usesDefaultOptimizer = optimizer is null;
+        _optimizer = optimizer ?? CreatePaperOptimizer();
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -172,6 +183,30 @@ public partial class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     /// <inheritdoc />
+    /// <summary>
+    /// Builds the optimizer the paper prescribes: AdamW at the configured learning rate with
+    /// beta = (Beta1, Beta2) and decoupled weight decay. Kim et al. 2021, section 4.1: AdamW, beta = (0.8, 0.99), weight decay 0.01, lr 2e-4.
+    /// </summary>
+    /// <remarks>
+    /// Constructing AdamW with no options at all took the library defaults -- lr 1e-3 and
+    /// beta = (0.9, 0.999) -- rather than the published recipe, and the resulting steps drove the
+    /// loss UP on this stack across the conformance budget. Every coefficient stays a caller-visible
+    /// option, and passing an explicit optimizer still bypasses this entirely.
+    /// </remarks>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
+        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Beta1 = _options.Beta1,
+                Beta2 = _options.Beta2,
+                Epsilon = _options.Epsilon,
+                WeightDecay = _options.WeightDecay,
+                UseAMSGrad = false,
+                UseAdaptiveBetas = false,
+            });
+
     protected override void InitializeLayers()
     {
         if (!_useNativeMode)
@@ -244,12 +279,6 @@ public partial class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
             },
         };
     }
-
-    /// <inheritdoc />
-
-
-    /// <inheritdoc />
-
 
     private void ThrowIfDisposed()
     {

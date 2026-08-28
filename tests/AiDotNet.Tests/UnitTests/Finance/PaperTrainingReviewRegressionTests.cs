@@ -1,7 +1,9 @@
 using System.Reflection;
+using AiDotNet.Audio.Classification;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Forecasting.Foundation;
 using AiDotNet.Finance.Graph;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using Xunit;
@@ -10,6 +12,25 @@ namespace AiDotNet.Tests.UnitTests.Finance;
 
 public class PaperTrainingReviewRegressionTests
 {
+    [Fact]
+    public void AudioEventDetector_DefaultsToPaperMultiLabelLogitObjective()
+    {
+        var options = new AudioEventDetectorOptions
+        {
+            CustomLabels = ["Speech", "Music"]
+        };
+
+        using var model = new AudioEventDetector<double>(
+            CreateArchitecture(inputSize: 64, outputSize: options.CustomLabels.Length),
+            options);
+
+        var loss = typeof(NeuralNetworkBase<double>).GetField(
+            "LossFunction",
+            BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(model);
+
+        Assert.IsType<BinaryCrossEntropyWithLogitsLoss<double>>(loss);
+    }
+
     [Theory]
     [InlineData(0.0)]
     [InlineData(double.NaN)]

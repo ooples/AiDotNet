@@ -249,4 +249,37 @@ public abstract class RegularizationBase<T, TInput, TOutput> : IRegularization<T
     {
         return Options;
     }
+
+    /// <summary>
+    /// A multiplicative shrink factor that can pull a coefficient toward zero but never past it.
+    /// </summary>
+    /// <param name="amount">How much to shrink by, as a fraction: 0 leaves a coefficient alone.</param>
+    /// <returns><c>1 - amount</c>, floored at zero.</returns>
+    /// <remarks>
+    /// <para>
+    /// Every shrinking regularizer here multiplies by <c>1 - something</c>. That is a shrink only
+    /// while the something is below one. At exactly one it erases the coefficient, and above one it
+    /// goes NEGATIVE - multiplying by it reflects every coefficient through zero instead of pulling
+    /// it toward zero, and past two it also makes them bigger.
+    /// </para>
+    /// <para>
+    /// Nothing bounds a strength, so this was reachable from ordinary configuration. L2 at strength
+    /// 1.5 turned 1 into -0.5; ElasticNet at strength 5 with an even ratio turned 7.5 into -7.5, and
+    /// at strength 100 turned 1234.5 into -58040.5 - forty-seven times larger, and on the wrong side
+    /// of zero. Found through ProximalGradientDescentOptimizer, where this is the proximal operator:
+    /// minimising 0.5(w-1)^2 + 1.5|w| from w = 2 settled at -1/14 on a problem whose answer is 0.
+    /// </para>
+    /// <para>
+    /// Floored rather than rescaled, so everything in the range the doc comments describe - a factor
+    /// slightly less than one - behaves exactly as it did. It lives on the base class because the
+    /// arithmetic is the same wherever it appears, and a per-class copy is a per-class chance to
+    /// leave one out; ElasticNet's was left out of the first pass at this fix.
+    /// </para>
+    /// </remarks>
+    protected T ShrinkTowardZero(T amount)
+    {
+        var factor = NumOps.Subtract(NumOps.One, amount);
+        return NumOps.LessThan(factor, NumOps.Zero) ? NumOps.Zero : factor;
+    }
+
 }

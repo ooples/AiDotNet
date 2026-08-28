@@ -1191,7 +1191,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             yield return new AiDotNet.Models.Parameters.ParameterChunk<T>(
                 "components/" + chunk.StableId,
                 chunk.Role,
-                chunk.Tensor);
+                chunk.Tensor,
+                // Re-prefixing the id must not drop the source-storage reference, or a sparse
+                // registered component becomes unresolvable to reference-keyed callers.
+                chunk.SourceTensor);
         }
     }
 
@@ -4810,6 +4813,20 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected virtual IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(
         IReadOnlyList<Tensor<T>> parameters) => parameters;
 
+    private bool? _hasCustomTrainableParameterSelection;
+
+    private bool HasCustomTrainableParameterSelection()
+    {
+        if (_hasCustomTrainableParameterSelection.HasValue)
+            return _hasCustomTrainableParameterSelection.Value;
+
+        var selector = GetType().GetMethod(
+            nameof(SelectTrainableParametersForTraining),
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        _hasCustomTrainableParameterSelection =
+            selector is not null && selector.DeclaringType != typeof(NeuralNetworkBase<T>);
+        return _hasCustomTrainableParameterSelection.Value;
+    }
 
     /// <summary>Collects every trainable tensor owned by this model in canonical order.</summary>
     protected IReadOnlyList<Tensor<T>> CollectModelTrainableTensors()
@@ -4835,6 +4852,36 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             Add(tensor);
 
         return SelectTrainableParametersForTraining(allParameters);
+    }
+
+    private IReadOnlyList<Tensor<T>>? CollectFusedExtraTrainableTensors()
+    {
+        List<Tensor<T>>? extraParameters = null;
+        HashSet<Tensor<T>>? seen = null;
+
+        foreach (var layer in GetExtraTrainableLayers())
+        {
+            if (layer is null) continue;
+            foreach (var parameter in layer.GetTrainableParameters())
+            {
+                if (parameter is null || parameter.Length == 0) continue;
+                seen ??= new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                if (!seen.Add(parameter)) continue;
+                extraParameters ??= [];
+                extraParameters.Add(parameter);
+            }
+        }
+
+        foreach (var parameter in GetExtraTrainableTensors())
+        {
+            if (parameter is null || parameter.Length == 0) continue;
+            seen ??= new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            if (!seen.Add(parameter)) continue;
+            extraParameters ??= [];
+            extraParameters.Add(parameter);
+        }
+
+        return extraParameters;
     }
 
     /// <summary>
@@ -8978,9 +9025,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             Replace = replace;
         }
 
+        internal GeneratedAdditionalLayerGroup(
+            string stableId,
+            Func<IEnumerable<ILayer<T>?>> get,
+            Func<IReadOnlyList<int>> getPartitionSizes,
+            Action<IReadOnlyList<ILayer<T>>, IReadOnlyList<int>> replacePartitioned)
+            : this(stableId, get, replace: null)
+        {
+            GetPartitionSizes = getPartitionSizes
+                ?? throw new ArgumentNullException(nameof(getPartitionSizes));
+            ReplacePartitioned = replacePartitioned
+                ?? throw new ArgumentNullException(nameof(replacePartitioned));
+        }
+
         internal string StableId { get; }
         internal Func<IEnumerable<ILayer<T>?>> Get { get; }
         internal Action<IReadOnlyList<ILayer<T>>>? Replace { get; }
+        internal Func<IReadOnlyList<int>>? GetPartitionSizes { get; }
+        internal Action<IReadOnlyList<ILayer<T>>, IReadOnlyList<int>>? ReplacePartitioned { get; }
     }
 
     /// <summary>Generated override chain describing layer-bearing fields and collections.</summary>
@@ -9089,6 +9151,106 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         collection ??= new List<TLayer>();
         ReplaceGeneratedAdditionalLayerCollection(collection, replacements, memberName);
         return collection;
+    }
+
+    /// <summary>Returns the independently-owned count in each nested layer collection.</summary>
+    protected IReadOnlyList<int> GetGeneratedAdditionalLayerPartitionSizes<TLayer>(
+        IEnumerable<IEnumerable<TLayer>>? collections)
+        where TLayer : ILayer<T>
+    {
+        var sizes = new List<int>();
+        if (collections is null) return sizes;
+
+        foreach (var collection in collections)
+        {
+            int count = 0;
+            foreach (var layer in collection)
+            {
+                if (layer is not null && !IsCanonicalLayerReference(layer)) count++;
+            }
+            sizes.Add(count);
+        }
+        return sizes;
+    }
+
+    /// <summary>Rebuilds nested layer collections using their serialized partition boundaries.</summary>
+    protected void ReplaceGeneratedNestedAdditionalLayerCollections<TLayer>(
+        IList<List<TLayer>> collections,
+        IReadOnlyList<ILayer<T>> replacements,
+        IReadOnlyList<int> partitionSizes,
+        string memberName)
+        where TLayer : ILayer<T>
+    {
+        if (collections is null) throw new ArgumentNullException(nameof(collections));
+        long partitionLayerCount = 0;
+        bool hasInvalidPartition = false;
+        for (int i = 0; i < partitionSizes.Count; i++)
+        {
+            if (partitionSizes[i] < 0) hasInvalidPartition = true;
+            partitionLayerCount += partitionSizes[i];
+        }
+        if (hasInvalidPartition || partitionLayerCount != replacements.Count)
+        {
+            throw new InvalidDataException(
+                $"Generated auxiliary-layer group '{memberName}' has invalid nested partition sizes.");
+        }
+
+        var aliases = new List<List<TLayer>>(collections.Count);
+        for (int i = 0; i < collections.Count; i++)
+        {
+            var partitionAliases = new List<TLayer>();
+            for (int j = 0; j < collections[i].Count; j++)
+            {
+                if (IsCanonicalLayerReference(collections[i][j]))
+                    partitionAliases.Add(collections[i][j]);
+            }
+            aliases.Add(partitionAliases);
+        }
+
+        if (aliases.Any(partition => partition.Count > 0) && aliases.Count != partitionSizes.Count)
+        {
+            throw new InvalidDataException(
+                $"Generated auxiliary-layer group '{memberName}' cannot preserve canonical aliases " +
+                "because its nested partition count changed.");
+        }
+
+        for (int i = 0; i < replacements.Count; i++)
+        {
+            if (replacements[i] is not TLayer)
+            {
+                throw new InvalidDataException(
+                    $"Generated auxiliary-layer group '{memberName}' cannot accept restored type " +
+                    $"'{replacements[i].GetType().FullName}' as '{typeof(TLayer).FullName}'.");
+            }
+        }
+
+        var rebuilt = new List<List<TLayer>>(partitionSizes.Count);
+        int replacementIndex = 0;
+        for (int partitionIndex = 0; partitionIndex < partitionSizes.Count; partitionIndex++)
+        {
+            var partition = new List<TLayer>();
+            if (partitionIndex < aliases.Count) partition.AddRange(aliases[partitionIndex]);
+            for (int i = 0; i < partitionSizes[partitionIndex]; i++)
+                partition.Add((TLayer)replacements[replacementIndex++]);
+            rebuilt.Add(partition);
+        }
+
+        collections.Clear();
+        for (int i = 0; i < rebuilt.Count; i++) collections.Add(rebuilt[i]);
+    }
+
+    /// <summary>Creates a nullable nested layer collection when fitted topology first appears.</summary>
+    protected List<List<TLayer>> RestoreGeneratedNestedAdditionalLayerCollections<TLayer>(
+        List<List<TLayer>>? collections,
+        IReadOnlyList<ILayer<T>> replacements,
+        IReadOnlyList<int> partitionSizes,
+        string memberName)
+        where TLayer : ILayer<T>
+    {
+        collections ??= new List<List<TLayer>>();
+        ReplaceGeneratedNestedAdditionalLayerCollections(
+            collections, replacements, partitionSizes, memberName);
+        return collections;
     }
 
     /// <summary>Restores one independently-owned layer field.</summary>
@@ -11748,7 +11910,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     // an exact norm — so it samples a deterministic stride instead of every element.
     private const int FusedChecksumTargetSamples = 1 << 16; // 65536
 
-    private double FusedTrainableParamChecksum(IReadOnlyList<ITrainableLayer<T>> layers)
+    private double FusedTrainableParamChecksum(IReadOnlyList<Tensor<T>> parameters)
     {
         // Bounded persistence probe (#1822). Summing ALL parameters is O(N) scalar
         // generic ToDouble; at foundation scale (e.g. 385M params) that alone is
@@ -11764,26 +11926,72 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // cap; for larger models it's a faithful subset that still catches the
         // silent-no-op the guard exists for.
         long total = 0;
-        for (int li = 0; li < layers.Count; li++)
-            foreach (var p in layers[li].GetTrainableParameters())
-                if (p is not null) total += p.AsSpan().Length;
+        for (int i = 0; i < parameters.Count; i++)
+            total += parameters[i].AsSpan().Length;
         if (total == 0) return 0.0;
 
         int stride = (int)System.Math.Max(1, total / FusedChecksumTargetSamples);
         double acc = 0.0;
-        for (int li = 0; li < layers.Count; li++)
+        for (int pi = 0; pi < parameters.Count; pi++)
         {
-            foreach (var p in layers[li].GetTrainableParameters())
+            var span = parameters[pi].AsSpan();
+            for (int i = 0; i < span.Length; i += stride)
             {
-                if (p is null) continue;
-                var span = p.AsSpan();
+                double v = NumOps.ToDouble(span[i]);
+                acc += v * v;
+            }
+        }
+        return acc;
+    }
+
+    private double FusedTrainableParamChecksum(
+        IReadOnlyList<ITrainableLayer<T>> layers,
+        IReadOnlyList<Tensor<T>>? extraParameters)
+    {
+        long total = 0;
+        for (int layerIndex = 0; layerIndex < layers.Count; layerIndex++)
+        {
+            foreach (var parameter in layers[layerIndex].GetTrainableParameters())
+            {
+                if (parameter is not null)
+                    total += parameter.AsSpan().Length;
+            }
+        }
+        if (extraParameters is not null)
+        {
+            for (int i = 0; i < extraParameters.Count; i++)
+                total += extraParameters[i].AsSpan().Length;
+        }
+        if (total == 0) return 0.0;
+
+        int stride = (int)System.Math.Max(1, total / FusedChecksumTargetSamples);
+        double acc = 0.0;
+        for (int layerIndex = 0; layerIndex < layers.Count; layerIndex++)
+        {
+            foreach (var parameter in layers[layerIndex].GetTrainableParameters())
+            {
+                if (parameter is null) continue;
+                var span = parameter.AsSpan();
                 for (int i = 0; i < span.Length; i += stride)
                 {
-                    double v = NumOps.ToDouble(span[i]);
-                    acc += v * v;
+                    double value = NumOps.ToDouble(span[i]);
+                    acc += value * value;
                 }
             }
         }
+        if (extraParameters is not null)
+        {
+            for (int parameterIndex = 0; parameterIndex < extraParameters.Count; parameterIndex++)
+            {
+                var span = extraParameters[parameterIndex].AsSpan();
+                for (int i = 0; i < span.Length; i += stride)
+                {
+                    double value = NumOps.ToDouble(span[i]);
+                    acc += value * value;
+                }
+            }
+        }
+
         return acc;
     }
 
@@ -11842,6 +12050,54 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (trainableLayers.Length == 0)
             return EmitFusedMissAndFallback("no trainable layers");
 
+        IReadOnlyList<Tensor<T>>? selectedParameters = null;
+        IReadOnlyList<Tensor<T>>? fusedExtraParameters;
+
+        // Only models that override the paper-selection hook pay for a complete canonical
+        // parameter walk. Doing this unconditionally duplicates parameter materialization for
+        // every ordinary model and is observable as training-step allocation, especially in
+        // recurrent and composite architectures.
+        if (HasCustomTrainableParameterSelection())
+        {
+            // A paper-defined selector must see the live parameter tensors rather than lazy
+            // placeholders. Materialize in inference mode before selecting the subset, matching
+            // the eager path's no-RNG/no-running-stat warmup contract.
+            if (AnyLayerNeedsShapeResolution() || AnyLayerHasUnmaterializedParameters())
+            {
+                bool wasTraining = IsTrainingMode;
+                if (wasTraining) SetTrainingMode(false);
+                try
+                {
+                    ForwardForTraining(input);
+                }
+                catch
+                {
+                    // Best effort only. The compiled training forward below will surface
+                    // the original model error with its full context.
+                }
+                finally
+                {
+                    if (wasTraining) SetTrainingMode(true);
+                }
+            }
+
+            // Use the same canonical selection as eager, streaming and accumulated tape
+            // training. This includes extra trainable layers/tensors as well as Layers.
+            selectedParameters = CollectModelTrainableTensors();
+            if (selectedParameters.Count == 0)
+                return EmitFusedMissAndFallback("parameter selection returned no trainable tensors");
+
+            // The explicit selection doubles as the extras source so selected tensors owned
+            // outside Layers are still available to the compiled collector.
+            fusedExtraParameters = selectedParameters;
+        }
+        else
+        {
+            // Preserve the original one-pass primary-layer path for ordinary models while
+            // still including trainable state owned outside Layers.
+            fusedExtraParameters = CollectFusedExtraTrainableTensors();
+        }
+
         var loss = LossFunction as LossFunctions.LossFunctionBase<T>;
         if (loss is null)
             return EmitFusedMissAndFallback("loss function not derived from LossFunctionBase<T>");
@@ -11897,9 +12153,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         bool verifyFusedPersistence =
             (!_fusedPersistenceVerified && !_fusedTrainingCommitted)
             || (++_fusedStepsSincePersistenceCheck >= FusedPersistenceRecheckInterval);
-        double fusedParamChecksumBefore = verifyFusedPersistence
-            ? FusedTrainableParamChecksum(trainableLayers)
-            : 0.0;
+        double fusedParamChecksumBefore = 0.0;
+        if (verifyFusedPersistence)
+        {
+            fusedParamChecksumBefore = selectedParameters is not null
+                ? FusedTrainableParamChecksum(selectedParameters)
+                : FusedTrainableParamChecksum(trainableLayers, fusedExtraParameters);
+        }
 
         bool ran;
         T lossValue;
@@ -11929,12 +12189,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // fused optimizers beyond the inline Adam/SGD fast paths by applying this
                 // optimizer's own master update to the FP16-computed FP32 gradients.
                 eagerOptimizer: resolvedOptimizer,
+                // Carry selected or ordinary model-owned extras that are not discoverable
+                // from the primary layer list.
+                extraTensors: fusedExtraParameters,
                 fusedExtras: fusedCfg.Extras,
                 // Publish the fused kernel's gradients onto the layer surface. The fused path
                 // updates parameters in-replay and returns without ever passing through the eager
                 // gradient code below, which is why the surface stayed empty for every model that
                 // engages fusion -- the largest single cause of the all-zero gradient reports.
-                onGradients: ScatterFusedGradients);
+                onGradients: ScatterFusedGradients,
+                trainableSelection: selectedParameters);
         }
         finally
         {
@@ -11953,7 +12217,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // is a clean fall-through (no plan-embedded moment state to lose).
             if (verifyFusedPersistence)
             {
-                double fusedParamChecksumAfter = FusedTrainableParamChecksum(trainableLayers);
+                double fusedParamChecksumAfter = selectedParameters is not null
+                    ? FusedTrainableParamChecksum(selectedParameters)
+                    : FusedTrainableParamChecksum(trainableLayers, fusedExtraParameters);
                 bool persisted = fusedParamChecksumAfter != fusedParamChecksumBefore;
                 // Do NOT gate on fusedParamChecksumBefore != 0.0: the checksum is a sum of
                 // squares, so 0.0 means every trainable parameter starts exactly at zero. A
@@ -13675,7 +13941,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     // layers participate in parameter counting, optimization and cloning already; omitting them
     // from Save/Load made auxiliary GAN heads and multimodal encoder streams come back freshly
     // initialized even though the shared parameter surface claimed to own them.
-    private const int SerializationVersion = 6;
+    // v7 adds partition sizes for nested layer lists so a fitted topology can be rebuilt without
+    // flattening distinct blocks, teacher networks or encoder streams into one unusable collection.
+    private const int SerializationVersion = 7;
 
     // Mirrors System.Array.MaxLength (introduced in .NET 6). Hardcoded
     // here so the check still compiles on net471, where Array.MaxLength
@@ -13718,6 +13986,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // OutOfMemoryException on a 774M-parameter model being torn down. A save legitimately needs the
         // values it is about to write; a count does not.
         MaterializeParameters();
+        ReconcileCanonicalNestedNetworkLayerViews();
 
         // Pre-size the MemoryStream to avoid ensureCapacity doubling near the
         // 2GB array cap on large models. ViLBERT (~174M params × 8 B = 1.4 GB)
@@ -14075,7 +14344,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Independent layer members are left alone because rebinding is reference-identity based.
         RebindLayerAliases(previousLayers, _layers);
 
-        if (version >= 6) RestoreGeneratedAdditionalLayerState(reader);
+        if (version >= 6) RestoreGeneratedAdditionalLayerState(reader, version);
 
         // Deserialized models should be in inference mode by default.
         // This ensures BatchNorm uses running statistics (not batch statistics)
@@ -14186,6 +14455,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // while a fresh restore target constructed two, making the same model unable to load.
         // Enumerate once, then let the generated member graph claim the resulting objects.
         var extraLayers = GetExtraTrainableLayers().ToList();
+        ReconcileCanonicalNestedNetworkLayerViews();
         var groups = GetGeneratedAdditionalLayerGroups().ToList();
         var claimed = new List<object>();
         for (int i = 0; i < groups.Count; i++)
@@ -14231,6 +14501,26 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             var group = groups[groupIndex];
             writer.Write(group.StableId);
             var layers = IndependentLayers(group);
+            var partitionSizes = group.GetPartitionSizes?.Invoke();
+            writer.Write(partitionSizes is not null);
+            if (partitionSizes is not null)
+            {
+                long partitionLayerCount = 0;
+                bool hasInvalidPartition = false;
+                for (int i = 0; i < partitionSizes.Count; i++)
+                {
+                    if (partitionSizes[i] < 0) hasInvalidPartition = true;
+                    partitionLayerCount += partitionSizes[i];
+                }
+                if (hasInvalidPartition || partitionLayerCount != layers.Count)
+                {
+                    throw new InvalidOperationException(
+                        $"Generated auxiliary-layer group '{group.StableId}' reported partition sizes " +
+                        "that do not cover its independently-owned layers exactly.");
+                }
+                writer.Write(partitionSizes.Count);
+                for (int i = 0; i < partitionSizes.Count; i++) writer.Write(partitionSizes[i]);
+            }
             writer.Write(layers.Count);
             for (int i = 0; i < layers.Count; i++)
             {
@@ -14259,7 +14549,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
     }
 
-    private void RestoreGeneratedAdditionalLayerState(BinaryReader reader)
+    private void RestoreGeneratedAdditionalLayerState(BinaryReader reader, int version)
     {
         var groups = CaptureAdditionalLayerGroups();
         var byId = new Dictionary<string, GeneratedAdditionalLayerGroup>(StringComparer.Ordinal);
@@ -14274,7 +14564,44 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         for (int groupIndex = 0; groupIndex < groupCount; groupIndex++)
         {
             string stableId = reader.ReadString();
+            IReadOnlyList<int>? savedPartitionSizes = null;
+            if (version >= 7 && reader.ReadBoolean())
+            {
+                int partitionCount = reader.ReadInt32();
+                if (partitionCount < 0)
+                    throw new InvalidDataException(
+                        $"Serialized auxiliary-layer group '{stableId}' has a negative partition count.");
+                if (reader.BaseStream.CanSeek
+                    && partitionCount > (reader.BaseStream.Length - reader.BaseStream.Position) / sizeof(int))
+                {
+                    throw new EndOfStreamException(
+                        $"Serialized auxiliary-layer group '{stableId}' ends before its partition table.");
+                }
+                var partitions = new int[partitionCount];
+                for (int i = 0; i < partitionCount; i++) partitions[i] = reader.ReadInt32();
+                savedPartitionSizes = partitions;
+            }
             int layerCount = reader.ReadInt32();
+            if (layerCount < 0)
+                throw new InvalidDataException(
+                    $"Serialized auxiliary-layer group '{stableId}' has a negative layer count.");
+            long savedPartitionLayerCount = 0;
+            bool hasInvalidSavedPartition = false;
+            if (savedPartitionSizes is not null)
+            {
+                for (int i = 0; i < savedPartitionSizes.Count; i++)
+                {
+                    if (savedPartitionSizes[i] < 0) hasInvalidSavedPartition = true;
+                    savedPartitionLayerCount += savedPartitionSizes[i];
+                }
+            }
+            if (savedPartitionSizes is not null
+                && (hasInvalidSavedPartition || savedPartitionLayerCount != layerCount))
+            {
+                throw new InvalidDataException(
+                    $"Serialized auxiliary-layer group '{stableId}' has partition sizes that do not " +
+                    "cover its layers exactly.");
+            }
             var saved = new List<SerializedAdditionalLayer>(layerCount);
             for (int i = 0; i < layerCount; i++)
             {
@@ -14305,6 +14632,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
             var current = IndependentLayers(targetGroup);
             bool canRestoreInPlace = current.Count == saved.Count;
+            if (canRestoreInPlace && savedPartitionSizes is not null)
+            {
+                var currentPartitionSizes = targetGroup.GetPartitionSizes?.Invoke();
+                canRestoreInPlace = currentPartitionSizes is not null
+                    && currentPartitionSizes.SequenceEqual(savedPartitionSizes);
+            }
             for (int i = 0; canRestoreInPlace && i < saved.Count; i++)
                 canRestoreInPlace = string.Equals(
                     GetPersistentLayerTypeName(current[i]), saved[i].TypeName, StringComparison.Ordinal);
@@ -14315,7 +14648,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 continue;
             }
 
-            if (targetGroup.Replace is null)
+            if ((savedPartitionSizes is null && targetGroup.Replace is null)
+                || (savedPartitionSizes is not null && targetGroup.ReplacePartitioned is null))
             {
                 throw new InvalidDataException(
                     $"Serialized auxiliary-layer group '{stableId}' contains {saved.Count} layers, but " +
@@ -14334,7 +14668,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 DeserializeAdditionalLayer(layer, item);
                 replacements.Add(layer);
             }
-            targetGroup.Replace(replacements);
+            if (savedPartitionSizes is not null)
+                targetGroup.ReplacePartitioned!(replacements, savedPartitionSizes);
+            else
+                targetGroup.Replace!(replacements);
         }
 
         InvalidateParameterCountCache();
@@ -14717,6 +15054,28 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     protected virtual bool SupportsCopyOnWriteDeepCopy => true;
 
+    /// <summary>
+    /// Determines whether every layer in the executable graph can safely consume shared parameter
+    /// storage during its forward pass.
+    /// </summary>
+    private bool SupportsCopyOnWriteLayerGraph()
+    {
+        foreach (var layer in AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<T>(this))
+        {
+            // Batch-normalization inference keeps gamma and beta on the active autodiff tape by using
+            // engine tensor operations. CpuEngine's optimized TensorDivide kernel currently obtains its
+            // input arrays through the mutable DataVector surface, which copy-on-write tensors correctly
+            // reject because an escaped array could mutate every alias without detaching. The eager clone
+            // path remains fully faithful and preserves both inference values and eval-mode gradients.
+            // Remove this guard only after every TensorDivide backend reads its operands through a
+            // read-only span (and writes only through the destination's writable surface).
+            if (layer is AiDotNet.NeuralNetworks.Layers.BatchNormalizationLayer<T>)
+                return false;
+        }
+
+        return true;
+    }
+
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
 
@@ -14724,6 +15083,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Falls back to the eager paths below for any model it cannot share safely (layer-count or
         // parameter-count mismatch, a layer whose SetTrainableParameters can't re-sync its fields).
         if (UseCopyOnWriteDeepCopy && SupportsCopyOnWriteDeepCopy
+            && SupportsCopyOnWriteLayerGraph()
             && TryDeepCopyCopyOnWrite(out var cowCopy))
             return cowCopy;
 
@@ -17349,18 +17709,44 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         var allGrads = ComputeAndPublishParameterGradients(tape, lossTensor, sources: null);
         var grads = allGrads;
 
-        // Flatten exactly the parameter tensors selected by the shared training hook. This keeps
-        // IGradientComputable's gradient vector aligned with ApplyGradients, including model-owned
-        // tensors and off-chain trainable layers while excluding paper-frozen parameters.
-        var chunks = CollectModelTrainableTensors().ToList();
+        // Flatten in the CANONICAL PARAMETER ORDER, the one GetParameters / SetParameters use.
+        //
+        // THERE ARE TWO DIFFERENT WALKS OVER "the model's trainable tensors" and they do not agree.
+        // GetParameters flattens each layer through LayerBase.FillParameters, which follows the
+        // layer's DECLARED COMPONENT MANIFEST and therefore interleaves a layer's own weights with
+        // its sub-layers in declaration order. CollectModelTrainableTensors instead walks
+        // TapeTrainingStep.CollectParameters, which emits ALL of a layer's own tensors first and
+        // only then recurses into children. For a layer whose manifest declares a child BEFORE its
+        // own weights the two orders differ, so flattening gradients the second way produced a
+        // vector whose index i did not describe theta[i].
+        //
+        // Every consumer pairs the two: IGradientComputable's contract is that this vector lines up
+        // with the parameter vector, and the finite-difference conformance probe perturbs
+        // GetParameters()[i] while reading gradient[i]. The mismatch is invisible for the majority
+        // of models, whose manifests happen to list own weights first and therefore agree with the
+        // recursive walk, which is why it survived: it surfaced only on nested components, as
+        // gradients attributed to the wrong slot (ViTCoMer read -7.77e-4 at a slot whose true
+        // gradient is +7.78e-2) or as an exact zero from the fallback below (OccupancyNetwork).
+        //
+        // GetParameterStateChunks is that canonical walk, and it already carries the owning tensor
+        // for each chunk, so gradients can be looked up by reference against the same enumeration
+        // the flat parameter APIs are defined by. Its own scope contract says chunks must match
+        // exactly what ParameterCount / GetParameters / SetParameters operate on.
+        var chunks = GetParameterStateChunks().ToList();
+
+        // Ordering comes from the canonical walk; ELIGIBILITY still comes from the training hook.
+        // GetParameterStateChunks enumerates the whole parameter surface, including buffers and any
+        // weights a partial-freeze recipe deliberately excludes, so membership is checked against
+        // the selected set before a gradient is emitted. Without this a frozen backbone would
+        // receive a real gradient here and ApplyGradients would then move it, undoing the freeze
+        // that SelectTrainableParametersForTraining exists to enforce.
+        var selected = new HashSet<Tensor<T>>(
+            CollectModelTrainableTensors(),
+            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
 
         long totalLength = 0;
-        foreach (var paramTensor in chunks)
-        {
-            totalLength += grads.TryGetValue(paramTensor, out var sizingGrad)
-                ? sizingGrad.Length
-                : paramTensor.Length;
-        }
+        foreach (var chunk in chunks)
+            totalLength += chunk.Tensor.Length;
 
         var flatGradients = new Vector<T>((int)Math.Min(totalLength, int.MaxValue));
         // Write through the span, not the indexer. Vector<T>'s indexer is virtual and runs
@@ -17369,17 +17755,26 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // single allocation won. The span is resolved once and written contiguously.
         var destination = flatGradients.AsWritableSpan();
         int writeOffset = 0;
-        foreach (var paramTensor in chunks)
+        foreach (var chunk in chunks)
         {
-            if (grads.TryGetValue(paramTensor, out var grad))
+            // Size from the PAYLOAD but resolve the gradient by the SOURCE: they are the same
+            // object for an ordinary dense weight, and differ for a sparse component whose payload
+            // is the dense run of its non-zero values.
+            var paramTensor = chunk.Tensor;
+            var gradientKey = chunk.SourceTensor;
+            if (selected.Contains(gradientKey)
+                && grads.TryGetValue(gradientKey, out var grad)
+                && grad.Length == paramTensor.Length)
             {
                 for (int i = 0; i < grad.Length; i++)
                     destination[writeOffset++] = grad[i];
             }
             else
             {
-                // Written explicitly rather than relying on the ctor's zero-init: default(T)
-                // is not guaranteed to be NumOps.Zero for a custom numeric type.
+                // No recorded gradient for this slot: a buffer, a frozen sub-layer, or a chunk the
+                // backward never reached. Written explicitly rather than relying on the ctor's
+                // zero-init: default(T) is not guaranteed to be NumOps.Zero for a custom numeric
+                // type.
                 for (int i = 0; i < paramTensor.Length; i++)
                     destination[writeOffset++] = NumOps.Zero;
             }
@@ -17428,28 +17823,41 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (gradients == null)
             throw new ArgumentNullException(nameof(gradients));
 
-        var parameters = CollectModelTrainableTensors();
-        long expectedLength = 0;
-        foreach (var parameter in parameters)
-            expectedLength += parameter.Length;
+        // Consume the SAME canonical order ComputeGradients now emits, which is the order
+        // GetParameters / SetParameters define. Walking CollectModelTrainableTensors here instead
+        // would re-introduce the mismatch described on ComputeGradients from the other side: the
+        // two walks disagree for any layer whose declared component manifest interleaves a child
+        // with the layer's own weights, so a caller's gradient[i] would be subtracted from a
+        // different parameter than the one it belongs to.
+        //
+        // Apply through the flat parameter vector. That keeps the alignment true BY CONSTRUCTION
+        // rather than by two walks happening to agree, and it is the only route that lands for
+        // every component kind: a ParameterChunk's tensor is the live storage for an ordinary
+        // dense weight, but a SNAPSHOT for sparse and low-precision components, whose restore path
+        // goes through the component's value slot. Writing chunk tensors in place would therefore
+        // silently fail to update a SparseLinearLayer's weights.
+        //
+        // Parameters the training hook excludes are safe: ComputeGradients emits an explicit zero
+        // for them, so a frozen backbone is subtracted by zero rather than skipped by position.
+        var parameters = GetParameters();
 
-        if (expectedLength != gradients.Length)
+        if (parameters.Length != gradients.Length)
         {
             throw new ArgumentException(
-                $"Gradient vector length {gradients.Length} does not match the selected trainable parameter length {expectedLength}.",
+                $"Gradient vector length {gradients.Length} does not match the parameter vector length {parameters.Length}.",
                 nameof(gradients));
         }
 
-        int offset = 0;
-        foreach (var parameter in parameters)
+        var updated = new Vector<T>(parameters.Length);
+        var destination = updated.AsWritableSpan();
+        for (int i = 0; i < parameters.Length; i++)
         {
-            for (int i = 0; i < parameter.Length; i++)
-            {
-                parameter[i] = NumOps.Subtract(
-                    parameter[i],
-                    NumOps.Multiply(learningRate, gradients[offset++]));
-            }
+            destination[i] = NumOps.Subtract(
+                parameters[i],
+                NumOps.Multiply(learningRate, gradients[i]));
         }
+
+        SetParameters(updated);
 
         InvalidateWeightCachesAfterSuccessfulWeightUpdate();
     }

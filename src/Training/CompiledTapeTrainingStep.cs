@@ -86,6 +86,16 @@ public static class CompiledTapeTrainingStep<T>
     private static Tensor<T>[]? _cachedParameters;
 
     /// <summary>
+    /// Tensor identities of the explicit partial-freeze selection that produced
+    /// <see cref="_cachedParameters"/>. Count alone is insufficient: two paper-defined
+    /// stages may select different tensors while keeping the same cardinality.
+    /// </summary>
+    [ThreadStatic]
+    private static Tensor<T>[]? _cachedSelectionIdentities;
+    [ThreadStatic]
+    private static bool _cachedUsesExplicitSelection;
+
+    /// <summary>
     /// AiDotNet#1406: identity of the trainable-layer set that produced
     /// <see cref="_cachedParameters"/> and the cached compiled plan. The
     /// per-thread cache above keys plans by tensor shape only, so two
@@ -283,6 +293,7 @@ public static class CompiledTapeTrainingStep<T>
                 // Caches cleared; cache field rebound below.
                 _mpPlan = null; _mpAdamPlan = null; _mpGenericPlan = null; // also drop the mixed-precision plans (#558)
             }
+            InvalidateIfSelectionChanged(null);
             var cache = _cache ??= new CompiledModelCache<T>();
 
             // Force layer initialization before collecting parameters.
@@ -298,7 +309,11 @@ public static class CompiledTapeTrainingStep<T>
             // wrong for the fused kernel's m/v buffers downstream.
             bool firstCollectThisLifecycle = _cachedParameters is null;
             var parameters = _cachedParameters ??= CollectDeduplicatedParameters(layers);
-            if (firstCollectThisLifecycle) RememberLayerSet(layers);
+            if (firstCollectThisLifecycle)
+            {
+                RememberLayerSet(layers);
+                RememberSelection(null);
+            }
 
             // Zero gradients before forward pass
             foreach (var layer in layers)
@@ -432,11 +447,60 @@ public static class CompiledTapeTrainingStep<T>
         _cachedLayerSetIdentities = ids;
     }
 
+    /// <summary>
+    /// Invalidates when a cached compiled plan was built for a different explicit
+    /// parameter subset. The comparison is ordered reference identity, matching the
+    /// parameter order captured by the optimizer plan.
+    /// </summary>
+    private static bool InvalidateIfSelectionChanged(
+        IReadOnlyCollection<Tensor<T>>? selection)
+    {
+        if (_cachedParameters is null)
+            return false;
+
+        bool usesExplicitSelection = selection is not null;
+        if (_cachedUsesExplicitSelection != usesExplicitSelection)
+        {
+            Invalidate();
+            return true;
+        }
+
+        if (!usesExplicitSelection)
+            return false;
+
+        var cached = _cachedSelectionIdentities;
+        if (cached is null || cached.Length != selection!.Count)
+        {
+            Invalidate();
+            return true;
+        }
+
+        int index = 0;
+        foreach (var parameter in selection)
+        {
+            if (!ReferenceEquals(cached[index++], parameter))
+            {
+                Invalidate();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void RememberSelection(IReadOnlyCollection<Tensor<T>>? selection)
+    {
+        _cachedUsesExplicitSelection = selection is not null;
+        _cachedSelectionIdentities = selection?.ToArray();
+    }
+
     public static void Invalidate()
     {
         _cache?.Invalidate();
         _cachedParameters = null;
         _cachedLayerSetIdentities = null;
+        _cachedSelectionIdentities = null;
+        _cachedUsesExplicitSelection = false;
         _configuredPlan = null;
         _configuredOptimizerConfig = null;
         // AiDotNet#1331: drop the persistent input/target tensors so the next
@@ -564,7 +628,11 @@ public static class CompiledTapeTrainingStep<T>
         // ASGD and Rprop. Null for every other kernel — see FusedOptimizerConfig.Extras for
         // why this is not defaulted to a fresh instance.
         AiDotNet.Tensors.Engines.Compilation.FusedOptimizerExtras? fusedExtras = null,
-        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null)
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null,
+        // The subset of layer/extra tensors the model's published recipe actually optimizes
+        // (see NeuralNetworkBase.SelectTrainableParametersForTraining). Null = optimize
+        // everything, which is what all but the partial-freeze models want.
+        IReadOnlyCollection<Tensor<T>>? trainableSelection = null)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
         // AiDotNet#1395: clear the previous-call's exception buffer so the
@@ -627,6 +695,9 @@ public static class CompiledTapeTrainingStep<T>
             // to pre-Train, even though LastLoss reports a non-zero loss
             // (the plan ran on the previous model's now-stale tensors).
             InvalidateIfLayerSetChanged(layers);
+            // Cached optimizer state is tied to the exact ordered tensor subset, not merely
+            // its size. A same-cardinality stage switch must compile a fresh plan.
+            InvalidateIfSelectionChanged(trainableSelection);
             using var firstCompiledStepAllocations =
                 FirstCompiledStepAllocationScope.Enter(_configuredPlan is null);
             var cache = _cache ??= new CompiledModelCache<T>();
@@ -710,8 +781,13 @@ public static class CompiledTapeTrainingStep<T>
             // would otherwise drive the fused kernel's m/v buffers to update
             // the same parameter twice per step, breaking Adam's moment math.
             bool firstCollectThisLifecycle = _cachedParameters is null;
-            var parameters = _cachedParameters ??= CollectDeduplicatedParametersWithExtras(layers, extraTensors);
-            if (firstCollectThisLifecycle) RememberLayerSet(layers);
+            var parameters = _cachedParameters ??=
+                CollectDeduplicatedParametersWithExtras(layers, extraTensors, trainableSelection);
+            if (firstCollectThisLifecycle)
+            {
+                RememberLayerSet(layers);
+                RememberSelection(trainableSelection);
+            }
 
             // GPU-RESIDENCY (campaign M1): on the DirectGpu engine, make the parameters GPU-resident ONCE so
             // CompiledTrainingPlan.ConfigureOptimizerFloat takes its GPU Adam branch (param.TryGetGpuBuffer()
@@ -1110,15 +1186,28 @@ public static class CompiledTapeTrainingStep<T>
     /// </summary>
     private static Tensor<T>[] CollectDeduplicatedParametersWithExtras(
         IReadOnlyList<ITrainableLayer<T>> layers,
-        IReadOnlyList<Tensor<T>>? extras)
+        IReadOnlyList<Tensor<T>>? extras,
+        IReadOnlyCollection<Tensor<T>>? selection)
     {
         var seen = new HashSet<Tensor<T>>(AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
         var result = new List<Tensor<T>>();
+        // A model whose published recipe fine-tunes only part of a pretrained backbone
+        // (VisionTS's LayerNorm-only adaptation, TOTEM's frozen tokenizer) narrows the
+        // optimized set through NeuralNetworkBase.SelectTrainableParametersForTraining.
+        // Honour it here so the fused kernel is configured with — and therefore updates —
+        // exactly those leaves. The forward graph is unchanged: the frozen tensors are
+        // still traced, they simply carry no optimizer state and are never written.
+        HashSet<Tensor<T>>? allowed = selection is null
+            ? null
+            : new HashSet<Tensor<T>>(selection, AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+
         foreach (var layer in layers)
         {
             foreach (var p in layer.GetTrainableParameters())
             {
-                if (p is not null && seen.Add(p))
+                if (p is null || (allowed is not null && !allowed.Contains(p)))
+                    continue;
+                if (seen.Add(p))
                     result.Add(p);
             }
         }
@@ -1127,7 +1216,9 @@ public static class CompiledTapeTrainingStep<T>
             for (int i = 0; i < extras.Count; i++)
             {
                 var p = extras[i];
-                if (p is not null && seen.Add(p))
+                if (p is null || (allowed is not null && !allowed.Contains(p)))
+                    continue;
+                if (seen.Add(p))
                     result.Add(p);
             }
         }

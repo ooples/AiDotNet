@@ -1,6 +1,14 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- Not shipped. release-please packs and pushes src/AiDotNet.csproj ALONE, so this
+         produced a package nothing publishes or consumes. A BUILD-TIME source generator, consumed by AiDotNet and the test project through
+       ProjectReference OutputItemType="Analyzer". Its output is compiled INTO those
+       assemblies. Consumers DO receive it, but through AiDotNet's own package: AiDotNet.csproj
+       includes this project's built dll at analyzers/dotnet/cs/, which is how a PackageReference
+       consumer gets the generated factories, and release-please fails the release if that entry
+       is missing. A second standalone package would be an unreferenced duplicate. -->
+    <IsPackable>false</IsPackable>
     <TargetFramework>netstandard2.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>

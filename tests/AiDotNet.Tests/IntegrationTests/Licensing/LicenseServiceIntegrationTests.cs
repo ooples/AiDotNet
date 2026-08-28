@@ -1,5 +1,5 @@
-using System.Threading.Tasks;
-#if !NET471
+﻿using System.Threading.Tasks;
+#if NET10_0_OR_GREATER
 namespace AiDotNet.Tests.IntegrationTests.Licensing;
 
 using System;

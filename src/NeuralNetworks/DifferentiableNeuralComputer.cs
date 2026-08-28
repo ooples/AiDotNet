@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.Engines;
+﻿using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -366,6 +366,43 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     /// deterministic re-evaluation replay (see the reset comment in <see cref="ProcessInput"/>).
     /// </summary>
     private bool _suppressMemoryReset;
+
+    /// <summary>
+    /// The recurrent controller's carried state, threaded EXPLICITLY the way the external memory
+    /// is rather than hidden inside a layer.
+    /// </summary>
+    /// <remarks>
+    /// Graves et al. 2016 use a recurrent controller, and its state belongs to the DNC's state the
+    /// same way the memory matrix, usage and temporal links do. PyTorch expresses the same shape
+    /// with <c>nn.LSTMCell</c>, which takes and returns <c>(h, c)</c> per timestep, and DeepMind's
+    /// reference core is <c>(inputs, prev_state) -&gt; (output, next_state)</c>.
+    ///
+    /// Explicit state is also what makes this correct under the training loop: TrainWithTape replays
+    /// the forward pass to re-evaluate the loss after a tentative update, and a layer holding its own
+    /// mutable hidden state would evolve across those replays exactly as the memory did before the
+    /// per-call reset was introduced.
+    /// </remarks>
+    [Scratch]
+    private Tensor<T>? _controllerHidden;
+
+    /// <inheritdoc cref="_controllerHidden"/>
+    [Scratch]
+    private Tensor<T>? _controllerCell;
+
+    /// <summary>
+    /// Whether InitializeLayers built the DEFAULT recurrent controller, and therefore whether the
+    /// first layer's output is this model's LSTM gate block.
+    /// </summary>
+    /// <remarks>
+    /// Recorded explicitly rather than inferred from the first layer's output width. A caller that
+    /// supplies Architecture.Layers can legitimately have a first layer four times the controller
+    /// width without it being a gate projection, and treating it as one would silently collapse its
+    /// output before the next custom layer ever saw it.
+    /// </remarks>
+    private bool _usesDefaultRecurrentController;
+
+    /// <summary>Zeroed controller state, one row of <see cref="_controllerSize"/> columns.</summary>
+    private Tensor<T> ZeroControllerState() => new Tensor<T>([1, _controllerSize]);
 
     /// <summary>
     /// Gets or sets the list of vectors read from memory.
@@ -808,9 +845,11 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
             // Use the layers provided by the user
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
+            _usesDefaultRecurrentController = false;
         }
         else
         {
+            _usesDefaultRecurrentController = true;
             // Use default layer configuration if no layers are provided
             Layers.AddRange(LayerHelper<T>.CreateDefaultDNCLayers(Architecture, _controllerSize, _memoryWordSize, _readHeads, CalculateDNCInterfaceSize(_memoryWordSize, _readHeads)));
         }
@@ -884,10 +923,18 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // Reset memory and layer state for deterministic inference
-        ResetMemoryState();
-        foreach (var layer in Layers)
-            layer.ResetState();
+        // Reset memory and layer state for deterministic inference -- UNLESS a sequence is being
+        // carried. ProcessSequence suppresses the reset precisely so memory, the temporal links and
+        // the controller's recurrence evolve across its timesteps, and it drives those timesteps
+        // through Predict; resetting unconditionally here undid that suppression on every step, so
+        // the controller saw a zero hidden state throughout and the allocation and link mechanisms
+        // never left their initial state.
+        if (!_suppressMemoryReset)
+        {
+            ResetMemoryState();
+            foreach (var layer in Layers)
+                layer.ResetState();
+        }
 
         return ProcessInput(input, false);
     }
@@ -1405,7 +1452,17 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
             }
         }
 
-        return Engine.TensorConcatenate(new[] { inputFlat, readVecTensor }, axis: 1);
+        // [x_t ; r_{t-1} ; h_{t-1}] -- the recurrent controller reads its own previous hidden state,
+        // which is what carries working state across a sequence's timesteps.
+        //
+        // DETACHED, matching the cell state in ApplyControllerCell. Both halves of the carried state
+        // must cross the timestep boundary the same way: leaving the hidden half attached would keep
+        // the previous step's graph alive through this concat, so a sequence would accumulate one
+        // graph per timestep and backpropagate through all of them while the cell half stopped at
+        // one step -- neither truncated recurrence nor full BPTT, and unbounded in memory.
+        var previousHidden = Engine.StopGradient(_controllerHidden ?? ZeroControllerState());
+
+        return Engine.TensorConcatenate(new[] { inputFlat, readVecTensor, previousHidden }, axis: 1);
     }
 
     /// <summary>
@@ -1446,6 +1503,13 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
         {
             currentOutput = Layers[i].Forward(currentOutput);
 
+            // Layers[0] emits the LSTM gate pre-activations; the cell arithmetic turns them into the
+            // controller's hidden state, which is what the rest of the controller consumes.
+            if (i == 0 && _usesDefaultRecurrentController)
+            {
+                currentOutput = ApplyControllerCell(currentOutput);
+            }
+
             // Store input/output for each layer if in training mode
             if (IsTrainingMode)
             {
@@ -1454,6 +1518,43 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
         }
 
         return currentOutput;
+    }
+
+
+    /// <summary>
+    /// One LSTM cell step over pre-activations laid out as <c>[i | f | g | o]</c>.
+    /// </summary>
+    /// <remarks>
+    /// The arithmetic is the standard cell PyTorch's <c>nn.LSTMCell</c> documents:
+    /// <c>i, f, o = sigmoid(.)</c>, <c>g = tanh(.)</c>, <c>c' = f * c + i * g</c>,
+    /// <c>h' = o * tanh(c')</c>. Every step goes through Engine ops so the gates stay on the tape
+    /// and the gradient reaches the projection's weights.
+    ///
+    /// The carried state enters DETACHED. Within one forward the cell is a single step, so nothing
+    /// is lost; across the timesteps of a sequence this is the truncation boundary that keeps the
+    /// graph from growing without bound, which is the standard treatment of carried recurrent state.
+    /// </remarks>
+    private Tensor<T> ApplyControllerCell(Tensor<T> gates)
+    {
+        int width = _controllerSize;
+        Tensor<T> Gate(int index) => Engine.TensorNarrow(gates, dim: 1, start: index * width, length: width);
+
+        Tensor<T> inputGate = Engine.Sigmoid(Gate(0));
+        Tensor<T> forgetGate = Engine.Sigmoid(Gate(1));
+        Tensor<T> candidate = Engine.Tanh(Gate(2));
+        Tensor<T> outputGate = Engine.Sigmoid(Gate(3));
+
+        Tensor<T> previousCell = Engine.StopGradient(_controllerCell ?? ZeroControllerState());
+
+        Tensor<T> cell = Engine.TensorAdd(
+            Engine.TensorMultiply(forgetGate, previousCell),
+            Engine.TensorMultiply(inputGate, candidate));
+        Tensor<T> hidden = Engine.TensorMultiply(outputGate, Engine.Tanh(cell));
+
+        _controllerCell = cell;
+        _controllerHidden = hidden;
+
+        return hidden;
     }
 
     /// <summary>
@@ -1550,54 +1651,6 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     }
 
     /// <summary>
-    /// Serializes Differentiable Neural Computer-specific data to a binary writer.
-    /// </summary>
-    /// <param name="writer">The BinaryWriter to write the data to.</param>
-    /// <remarks>
-    /// <para>
-    /// This method writes DNC-specific configuration and state data to a binary stream. It includes
-    /// properties such as memory size, memory word size, controller size, read heads count, and the
-    /// current state of the memory matrix, usage vector, and other memory tracking structures.
-    /// </para>
-    /// <para><b>For Beginners:</b> This saves the special configuration and current state of your DNC.
-    /// 
-    /// It's like taking a snapshot of the DNC that includes:
-    /// - Its structural configuration (memory size, read heads, etc.)
-    /// - The current contents of memory
-    /// - The current state of all memory tracking systems
-    /// - The current state of all memory connections
-    /// 
-    /// This allows you to save both the network's learned parameters and its current memory state,
-    /// so you can resume from exactly the same state later.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Deserializes Differentiable Neural Computer-specific data from a binary reader.
-    /// </summary>
-    /// <param name="reader">The BinaryReader to read the data from.</param>
-    /// <remarks>
-    /// <para>
-    /// This method reads DNC-specific configuration and state data from a binary stream. It retrieves
-    /// properties such as memory size, memory word size, controller size, read heads count, and the
-    /// saved state of the memory matrix, usage vector, and other memory tracking structures.
-    /// </para>
-    /// <para><b>For Beginners:</b> This restores the special configuration and state of your DNC from saved data.
-    /// 
-    /// It's like restoring a snapshot of the DNC that includes:
-    /// - Its structural configuration (memory size, read heads, etc.)
-    /// - The saved contents of memory
-    /// - The saved state of all memory tracking systems
-    /// - The saved state of all memory connections
-    /// 
-    /// This allows you to resume from exactly the same state that was saved,
-    /// with both the network's learned parameters and its memory contents intact.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
     /// Resets the state of the Differentiable Neural Computer.
     /// </summary>
     /// <remarks>
@@ -1624,6 +1677,12 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     /// </remarks>
     public void ResetMemoryState()
     {
+        // The controller's carried state resets with the memory. Both are the DNC's state, and the
+        // reference implementation builds a fresh initial state -- controller and memory together --
+        // for each new batch, carrying them only across the timesteps of one sequence.
+        _controllerHidden = null;
+        _controllerCell = null;
+
         // Reset memory matrix
         for (int i = 0; i < _memorySize; i++)
         {

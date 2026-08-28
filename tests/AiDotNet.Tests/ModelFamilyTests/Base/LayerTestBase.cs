@@ -1193,6 +1193,7 @@ public abstract class LayerTestBase<T>
         if (!ExpectsTrainableParameters || !ExpectsNonZeroGradients) return;
 
         using var _arena = TensorArena.Create();
+
         var layer = CreateLayer();
         // Numerical derivatives require a deterministic eval-mode function. This also matches the
         // generated model gradcheck, so fused/eval operator paths cannot escape layer-level coverage.
