@@ -1,5 +1,6 @@
 using AiDotNet.CausalDiscovery.DeepLearning;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 using Xunit;
 using System.Threading.Tasks;
 
@@ -20,16 +21,89 @@ public class DeepLearningCausalDiscoveryTests
             => BuildFinalAdjacency(learned, covariance, dimensions, threshold);
     }
 
+    /// <summary>
+    /// A linear structural equation model with the DAG X0 -> X1, X0 -> X2, X1 -> X2.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The previous fixture was <c>x = i*0.1</c> with <c>X0 = x</c>, <c>X1 = 2x + 0.5</c> and
+    /// <c>X2 = x + 0.3*X1</c>, and no noise at all. Every column was then an exact affine function
+    /// of the same <c>x</c> — <c>X2</c> reduces to <c>1.6x + 0.15</c> — so all three were perfectly
+    /// collinear, every pairwise correlation was exactly 1 and the covariance matrix had rank 1.
+    /// </para>
+    /// <para>
+    /// On rank-deficient noiseless data a structure learner has nothing to recover: infinitely many
+    /// weight configurations reconstruct each variable from the others equally well, so which
+    /// weights grow is decided by the optimization path rather than by the data. CASTLE thresholds
+    /// raw weight-row norms at the reference implementation's 0.3, so "did any norm clear 0.3"
+    /// became a coin toss — which is why CASTLE_FindsCausalStructure and
+    /// AmortizedCD_FindsCausalStructure failed locally in Debug while passing CI in Release on the
+    /// same commit. Nothing about the algorithms changed between those runs; floating-point
+    /// differences moved an undetermined answer across a fixed threshold.
+    /// </para>
+    /// <para>
+    /// Noise is what makes the structure identifiable, so the SEM below adds it. The coefficients
+    /// are the ones the old fixture intended, the graph is a genuine DAG, the covariance is full
+    /// rank, and the sample is large enough for the edges to be estimated rather than guessed.
+    /// Seeded, so every run sees the same data.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// A linear structural equation model over X0 -> X1, X0 -> X2, X1 -> X2, driven by an
+    /// AUTOREGRESSIVE exogenous series so both the contemporaneous and the temporal methods in this
+    /// file have signal to find.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The original fixture was <c>x = i*0.1; X0 = x; X1 = 2x + 0.5; X2 = x + 0.3*X1</c> — noiseless
+    /// and therefore RANK 1. Every variable was an exact affine function of the loop counter, so all
+    /// pairwise correlations were exactly 1 and the covariance matrix was singular. Any threshold on
+    /// a quantity estimated from that matrix sits on a knife edge, which is how
+    /// <c>CASTLE_FindsCausalStructure</c> came to fail in Debug and pass in Release on the same sha:
+    /// nothing about the model changed, only the last bits of the arithmetic.
+    /// </para>
+    /// <para>
+    /// Two properties are needed at once, and getting only the first is a trap worth recording.
+    /// Adding Gaussian exogenous noise fixes the degeneracy but, on its own, makes the rows i.i.d. —
+    /// and <see cref="TCDFAlgorithm{T}"/> is a TEMPORAL method that predicts each variable from the
+    /// others' histories through causal convolutions. On i.i.d. rows it has nothing to find, so an
+    /// i.i.d. fixture does not test it, it starves it. The old ramp was accidentally supplying that
+    /// temporal structure as a monotonic trend.
+    /// </para>
+    /// <para>
+    /// So the driver X0 is an AR(1) series: autocorrelated, giving the temporal methods real lag
+    /// structure, while the additive noise keeps the covariance full rank for everything else. The
+    /// causal structure and coefficients are unchanged from the original fixture, so this is the
+    /// same claim tested on data that can actually support it.
+    /// </para>
+    /// </remarks>
     private static Matrix<double> CreateSyntheticData()
     {
-        int n = 50;
+        const int n = 200;
+        const double ar = 0.8;      // AR(1) coefficient on the exogenous driver
+        const double noise = 0.2;   // exogenous noise on the structural equations
+        var rng = RandomHelper.CreateSeededRandom(42);
         var data = new double[n, 3];
+
+        // Box-Muller, so the exogenous noise is Gaussian rather than uniform.
+        double Gaussian()
+        {
+            double u1 = 1.0 - rng.NextDouble();
+            double u2 = rng.NextDouble();
+            return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        }
+
+        double prev = Gaussian();
         for (int i = 0; i < n; i++)
         {
-            double x = i * 0.1;
-            data[i, 0] = x;
-            data[i, 1] = 2.0 * x + 0.5;
-            data[i, 2] = x + data[i, 1] * 0.3;
+            double x0 = ar * prev + Gaussian();
+            double x1 = 2.0 * x0 + 0.5 + noise * Gaussian();
+            double x2 = x0 + 0.3 * x1 + noise * Gaussian();
+
+            data[i, 0] = x0;
+            data[i, 1] = x1;
+            data[i, 2] = x2;
+            prev = x0;
         }
 
         return new Matrix<double>(data);
