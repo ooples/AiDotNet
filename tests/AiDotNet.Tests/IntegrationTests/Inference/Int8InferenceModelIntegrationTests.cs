@@ -19,14 +19,19 @@ namespace AiDotNet.Tests.IntegrationTests.Inference;
 ///   2. Storage: INT8 weight bytes are ~4x smaller than FP32 weight bytes.
 ///   3. Surface: <c>Predict</c> runs end-to-end without exposing internal sealed types.
 /// </summary>
-// The three Category=SerialPerf classes share one CI shard ("Integration - Serial Perf") and
-// each measures throughput or CPU/wall engagement. xUnit parallelizes ACROSS collections, so a
-// class left out of this one runs CONCURRENTLY with the others and competes for the very cores
-// they are measuring. That is what made Issue1228_TransformerTrain_CpuToWallRatio intermittent:
+// The Category=SerialPerf classes each measure throughput or CPU/wall engagement, and xUnit
+// parallelizes ACROSS collections, so a class left out of this one runs CONCURRENTLY with the
+// others and competes for the very cores they are measuring. That is what made
+// Issue1228_TransformerTrain_CpuToWallRatio intermittent:
 // it reads process-wide CPU time against its own wall clock and reported ratio 1.01 against a
 // 1.15 floor on a 4-core runner -- Train could not get worker threads because this class was
 // running beside it. The other two SerialPerf classes were already in this collection; this one
 // was the odd one out.
+//
+// TransformerTrainPathReproIssue1227And1228Tests has since been routed to its own CI shard
+// ("Integration - CPU Parallelism Probe"), so these classes no longer all share one shard. That
+// removes contention between those two workloads but NOT the need for this attribute: the
+// collection is what keeps classes inside the SAME shard's process from running concurrently.
 [Collection("NonParallelIntegration")]
 public class Int8InferenceModelIntegrationTests
 {

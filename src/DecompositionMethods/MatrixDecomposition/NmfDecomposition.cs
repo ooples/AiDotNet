@@ -193,13 +193,21 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
                 RunNmfTrialFrom(V, seedW, seedH, m, n, k, maxIterations, tolerance);
             bestW = deterministicW;
             bestH = deterministicH;
-            bestError = ComputeReconstructionError(V, bestW, bestH);
         }
 
-        // Only pay for restarts when the deterministic start did not already reconstruct well.
-        // Identity-like and other well-conditioned inputs finish here on the first attempt.
-        T restartThreshold = NumOps.FromDouble(tolerance);
-        if (bestW.Rows == 0 || NumOps.GreaterThan(bestError, restartThreshold))
+        // FALLBACK ONLY -- entered when no deterministic start could be formed at all.
+        //
+        // This gate deliberately ignores how WELL the deterministic run reconstructed. `tolerance`
+        // is the update loop's convergence tolerance: it bounds the CHANGE in reconstruction error
+        // between iterations, not the error itself. A perfectly good rank-k approximation of a
+        // higher-rank matrix converges with a residual far above it, so using it as a quality bar
+        // fired the restarts on ordinary inputs -- and a random trial that happened to score lower
+        // then replaced the deterministic result, restoring exactly the run-to-run variance NNDSVD
+        // was introduced to remove.
+        //
+        // scikit-learn draws the same line: with an SVD-based init its NMF runs the update loop
+        // once and never restarts, because the start no longer depends on a draw.
+        if (bestW.Rows == 0)
         {
             const int nRestarts = 5;
             for (int restart = 0; restart < nRestarts; restart++)

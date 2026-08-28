@@ -587,7 +587,9 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
         if (variableIndex < 0 && parameters.Length != fixedParameterCount)
             throw new ArgumentException(
                 $"Expected {fixedParameterCount} parameters, got {parameters.Length}"
-                + $" (short by {fixedParameterCount - parameters.Length}). "
+                + (parameters.Length < fixedParameterCount
+                    ? $" (short by {fixedParameterCount - parameters.Length}). "
+                    : $" (long by {parameters.Length - fixedParameterCount}). ")
                 + DescribeExpectedLayout(captured, variableIndex),
                 nameof(parameters));
         if (variableIndex >= 0 && parameters.Length < fixedParameterCount)
