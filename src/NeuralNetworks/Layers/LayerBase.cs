@@ -356,6 +356,36 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     public virtual bool PropagatesInputDomain => false;
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Default false: most layers do not shift their output by a learned constant. Normalization
+    /// layers that own a beta parameter override this to true.
+    /// </remarks>
+    public virtual bool ProvidesLearnableShift => false;
+
+    /// <summary>
+    /// Resolves a requested <c>BiasMode</c> against the layer that consumes this layer's output.
+    /// </summary>
+    /// <param name="mode">What the caller asked for.</param>
+    /// <param name="consumer">
+    /// The layer applied immediately to this layer's output, or <c>null</c> when nothing follows.
+    /// </param>
+    /// <returns><c>true</c> when the layer should carry its own bias.</returns>
+    /// <remarks>
+    /// <para>
+    /// <c>Auto</c> asks <c>ProvidesLearnableShift</c> instead of testing the consumer's type, so it
+    /// remains correct for normalizations this library has not seen yet. <c>Always</c> and
+    /// <c>Never</c> are unconditional: a caller who wants the redundant parameter, or wants it gone
+    /// whatever follows, says so and is obeyed.
+    /// </para>
+    /// </remarks>
+    protected static bool ResolveBias(BiasMode mode, ILayer<T>? consumer) => mode switch
+    {
+        BiasMode.Always => true,
+        BiasMode.Never => false,
+        _ => consumer is null || !consumer.ProvidesLearnableShift,
+    };
+
     /// <summary>
     /// Gets the output shape for this layer.
     /// </summary>

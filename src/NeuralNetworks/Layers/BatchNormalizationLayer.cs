@@ -382,6 +382,10 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         };
     }
 
+    /// <inheritdoc />
+    /// <remarks>Beta is this layer's learnable shift, so a bias on the layer feeding it is redundant.</remarks>
+    public override bool ProvidesLearnableShift => true;
+
     public override bool SupportsTraining => true;
 
     /// <summary>

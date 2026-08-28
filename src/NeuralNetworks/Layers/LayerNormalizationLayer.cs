@@ -164,6 +164,10 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
     /// and beta (shift) parameters that are learned during training.
     /// </para>
     /// </remarks>
+    /// <inheritdoc />
+    /// <remarks>Beta is this layer's learnable shift, so a bias on the layer feeding it is redundant.</remarks>
+    public override bool ProvidesLearnableShift => true;
+
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>

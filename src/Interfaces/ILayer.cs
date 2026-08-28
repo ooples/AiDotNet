@@ -275,6 +275,24 @@ public interface ILayer<T> : IParameterSource<T>, IDiagnosticsProvider, IWeightL
     bool SupportsTraining { get; }
 
     /// <summary>
+    /// Whether this layer applies its own learnable additive shift to the values passing through it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// True for normalizations that own a beta/shift parameter: BatchNorm, GroupNorm, LayerNorm, and
+    /// InstanceNorm when affine. False for everything else, including scale-only normalizations such
+    /// as RMSNorm and weight reparameterizations such as spectral norm, neither of which adds
+    /// anything back after normalizing.
+    /// </para>
+    /// <para>
+    /// A preceding layer reads this to decide whether its own bias would be redundant. Asking the
+    /// question, rather than testing the consumer's type, is what keeps <c>BiasMode.Auto</c> correct
+    /// for normalizations the reference implementations never considered.
+    /// </para>
+    /// </remarks>
+    bool ProvidesLearnableShift { get; }
+
+    /// <summary>
     /// Sets the layer to training or evaluation mode.
     /// </summary>
     /// <param name="isTraining">True to set the layer to training mode, false for evaluation mode.</param>
