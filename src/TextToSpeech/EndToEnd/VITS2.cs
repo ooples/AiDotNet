@@ -46,17 +46,10 @@ public partial class VITS2<T> : TtsModelBase<T>, IEndToEndTts<T>
 
     public override ModelOptions GetOptions() => _options;
 
-    // Not readonly: a restore rewrites _options, and the default optimizer is BUILT FROM
-    // those options, so it has to be rebuilt afterwards or the model keeps running on the
-    // coefficients it happened to be constructed with.
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-
-    /// <summary>
-    /// Whether <see cref="_optimizer"/> is the one this model built from its options rather than
-    /// one the caller supplied. Only the former may be rebuilt when a restore rewrites those
-    /// options; substituting AdamW for a caller's optimizer would change how the model trains.
-    /// </summary>
+    [Scratch]
     private readonly bool _usesDefaultOptimizer;
+
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -226,6 +219,14 @@ public partial class VITS2<T> : TtsModelBase<T>, IEndToEndTts<T>
                 UseAMSGrad = false,
                 UseAdaptiveBetas = false,
             });
+
+    /// <inheritdoc />
+    protected override void OnMutableConstructorConfigurationRestored()
+    {
+        base.OnMutableConstructorConfigurationRestored();
+        if (_useNativeMode && _usesDefaultOptimizer)
+            _optimizer = CreatePaperOptimizer();
+    }
 
     protected override void InitializeLayers()
     {

@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -8,6 +8,17 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Training;
 
 namespace AiDotNet.Helpers;
+
+/// <summary>Structured outcome for a copy-on-write parameter-share attempt.</summary>
+internal enum CopyOnWriteShareStatus
+{
+    Shared,
+    BothGraphsEmpty,
+    InvalidArguments,
+    TypeMismatch,
+    StructureMismatch,
+    IncompleteCoverage
+}
 
 /// <summary>
 /// Copy-on-write clone lever (#1624): shares a model's trainable weight tensors with its clone via the
@@ -37,29 +48,55 @@ internal static class CopyOnWriteCloneHelper
     internal static bool TryShareTrainableParameters<T>(
         IFullModel<T, Tensor<T>, Tensor<T>>? source,
         IFullModel<T, Tensor<T>, Tensor<T>>? dest)
-        => TryShareTrainableParameters(source, dest, out _);
+        => TryShareTrainableParameters(source, dest, out _, out _);
 
     /// <summary>Attempts the complete state share and reports the first preflight mismatch.</summary>
     internal static bool TryShareTrainableParameters<T>(
         IFullModel<T, Tensor<T>, Tensor<T>>? source,
         IFullModel<T, Tensor<T>, Tensor<T>>? dest,
         out string mismatch)
+        => TryShareTrainableParameters(source, dest, out _, out mismatch);
+
+    /// <summary>Attempts the complete state share and reports a stable outcome plus diagnostic detail.</summary>
+    internal static bool TryShareTrainableParameters<T>(
+        IFullModel<T, Tensor<T>, Tensor<T>>? source,
+        IFullModel<T, Tensor<T>, Tensor<T>>? dest,
+        out CopyOnWriteShareStatus status,
+        out string mismatch)
     {
+        status = CopyOnWriteShareStatus.StructureMismatch;
         mismatch = string.Empty;
         if (source is null || dest is null || ReferenceEquals(source, dest))
         {
+            status = CopyOnWriteShareStatus.InvalidArguments;
             mismatch = "source and destination must be distinct non-null models";
             return false;
         }
         if (source.GetType() != dest.GetType())
         {
+            status = CopyOnWriteShareStatus.TypeMismatch;
             mismatch = $"model types differ ({source.GetType().Name} vs {dest.GetType().Name})";
             return false;
         }
 
         var srcLayers = CollectTrainableLayers<T>(source);
         var dstLayers = CollectTrainableLayers<T>(dest);
-        if (srcLayers.Count == 0 || srcLayers.Count != dstLayers.Count)
+        if (srcLayers.Count == 0 && dstLayers.Count == 0)
+        {
+            mismatch = $"trainable layer counts differ ({srcLayers.Count} vs {dstLayers.Count})";
+            if (source is AiDotNet.Models.Parameters.IParameterManifestProvider emptyManifest
+                && emptyManifest.ParameterLayout.MaterializedParameterCount != 0)
+            {
+                status = CopyOnWriteShareStatus.IncompleteCoverage;
+                mismatch += $"; registered parameter surface contains "
+                            + $"{emptyManifest.ParameterLayout.MaterializedParameterCount} materialized values";
+                return false;
+            }
+
+            status = CopyOnWriteShareStatus.BothGraphsEmpty;
+            return false;
+        }
+        if (srcLayers.Count != dstLayers.Count)
         {
             mismatch = $"trainable layer counts differ ({srcLayers.Count} vs {dstLayers.Count})";
             return false;
@@ -132,6 +169,44 @@ internal static class CopyOnWriteCloneHelper
             }
         }
 
+        // A model-level parameter registry may include sources that are not layers. The reflective
+        // layer walk cannot share those matrices/vectors, so reject the COW path when the manifest
+        // proves that its live surface is wider than the trainable tensors and persistent buffers
+        // about to be rebound. Some legacy aggregate manifests expose one
+        // ShapeResolvedUnmaterialized slot for a mixed live/deferred graph; their
+        // MaterializedParameterCount is zero even when live layer state exists, so a smaller
+        // manifest total is not evidence of missing coverage and must not reject a valid share.
+        if (source is AiDotNet.Models.Parameters.IParameterManifestProvider manifestProvider)
+        {
+            long covered = 0;
+            for (int i = 0; i < srcLayers.Count; i++)
+            {
+                if (srcLayers[i] is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layerBase)
+                {
+                    var stateSlots = layerBase.GetOwnParameterStateValueSlots();
+                    if (stateSlots.Count > 0)
+                    {
+                        foreach (var slot in stateSlots)
+                            covered = checked(covered + slot.ScalarCount);
+                        continue;
+                    }
+                }
+
+                // Legacy/non-LayerBase trainables have no declared checkpoint-state slots.
+                foreach (Tensor<T> tensor in GetAuthoritativeSourceValues(srcLayers[i]))
+                    covered = checked(covered + tensor.Length);
+            }
+
+            long registered = manifestProvider.ParameterLayout.MaterializedParameterCount;
+            if (registered > covered)
+            {
+                status = CopyOnWriteShareStatus.IncompleteCoverage;
+                mismatch = $"registered layer state covers {covered} parameters, but the registered "
+                           + $"parameter surface proves at least {registered} materialized values";
+                return false;
+            }
+        }
+
         // The parameter-state contract is wider than the optimizer view: registered buffers carry
         // running statistics, learned non-gradient state, and shape-bearing constants. Validate the
         // complete buffer graph before sharing any trainable tensor; otherwise the helper can return
@@ -198,6 +273,7 @@ internal static class CopyOnWriteCloneHelper
                 destinationBase.AdoptRegisteredBuffersFrom(sourceBase);
         }
 
+        status = CopyOnWriteShareStatus.Shared;
         return true;
     }
 

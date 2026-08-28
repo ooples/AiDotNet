@@ -501,7 +501,11 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     /// eager flat copy.
     /// </summary>
     protected bool TryShareParametersFrom(VAEModelBase<T> source)
-        => AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(source, this);
+    {
+        bool shared = AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(
+            source, this, out AiDotNet.Helpers.CopyOnWriteShareStatus status, out _);
+        return shared || status == AiDotNet.Helpers.CopyOnWriteShareStatus.BothGraphsEmpty;
+    }
 
     /// <inheritdoc />
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)

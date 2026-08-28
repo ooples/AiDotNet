@@ -1791,7 +1791,6 @@ public static partial class LayerHelper<T>
         // and the controller's own previous hidden state. Graves et al. 2016 use a RECURRENT
         // controller, and its recurrence is what lets the DNC hold working state across a sequence's
         // timesteps alongside the external memory.
-        int controllerInputSize = inputSize + readHeads * memoryWordSize + controllerSize;
 
         // LSTM gate pre-activations, [i | f | g | o], four blocks of controllerSize.
         //
@@ -1819,7 +1818,6 @@ public static partial class LayerHelper<T>
         // back to controllerOutput, so the controller layers never received gradients.
         // ProcessThroughController walks Layers[0..N-2]; CombineControllerOutputWithReadVectors
         // calls Layers[N-1].Forward(combinedTensor) for this final projection.
-        int outputProjectionInputSize = controllerSize + readHeads * memoryWordSize;
         yield return new DenseLayer<T>(outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
@@ -30708,27 +30706,30 @@ public static partial class LayerHelper<T>
         int inputChannels, int inputHeight, int inputWidth,
         int[] channelDims, int[] depths, double dropRate)
     {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth, inC = inputChannels;
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+        var gelu = (IActivationFunction<T>)new GELUActivation<T>();
 
+        // RepViT's patch embedding is two 3x3 stride-2 Conv-BN layers with GELU
+        // between them, not a 7x7 stride-4 ReLU convolution.
+        int stemChannels = System.Math.Max(1, channelDims[0] / 2);
+        yield return new ConvolutionalLayer<T>(stemChannels, 3, 2, 1, identity);
+        yield return new BatchNormalizationLayer<T>(stemChannels) { Layout = BatchNormDataLayout.ChannelsFirst };
+        yield return new ActivationLayer<T>(gelu);
+        yield return new ConvolutionalLayer<T>(channelDims[0], 3, 2, 1, identity);
+        yield return new BatchNormalizationLayer<T>(channelDims[0]) { Layout = BatchNormDataLayout.ChannelsFirst };
+        int inC = channelDims[0];
         for (int stage = 0; stage < channelDims.Length; stage++)
         {
             int outC = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
-            h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
-
-            for (int d = 1; d < depths[stage]; d++)
+            for (int d = 0; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
+                int stride = stage > 0 && d == 0 ? 2 : 1;
+                bool useSE = stage == 0
+                    ? d == 0
+                    : d > 0 && d < depths[stage] - 1 && d % 2 == 1;
+                yield return new RepViTBlockLayer<T>(inC, outC, stride, useSE);
+                inC = outC;
             }
-
-            inC = outC;
         }
     }
 

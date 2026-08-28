@@ -1,4 +1,4 @@
-using AiDotNet.Enums;
+﻿using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -283,26 +283,53 @@ public class ParameterBufferScopeTests
     }
 
     [Fact]
-    public void CifCompositeParameterSurface_IsDetectedBeforeBufferReplacement()
+    public void CifCompositeParameterSurface_OwnsThePredictorExactlyOnce()
     {
         var layer = new CifAlignmentLayer<double>(encoderDim: 4);
         var input = new Tensor<double>([1, 3, 4]);
         for (int i = 0; i < input.Length; i++)
             input.SetFlat(i, 0.1 * (i + 1));
 
-        // Materialize the registered alpha-predictor child. CifAlignmentLayer exposes that
-        // child's weights through its composite surface and through GetSubLayers().
+        // Materialize the registered alpha-predictor child.
         _ = layer.Forward(input);
 
-        var detector = typeof(NeuralNetworkBase<double>).GetMethod(
-            "HasOverlappingParameterOwnership",
-            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+        // WHAT THIS REPLACED, AND WHY. This assertion used to require that
+        // HasOverlappingParameterOwnership report TRUE for CIF, because the composite re-exposed
+        // its child's weights through its own surface as well as through GetSubLayers, and the
+        // ParameterBuffer fast path cannot install independent views over a tensor with two owners.
+        //
+        // Ownership now lives in generated declarations: CifAlignmentLayer declares its predictor
+        // through DeclareParameterSubLayer, so the CHILD owns those weights and the parent does not
+        // restate them. The overlap is gone by construction, which is the stronger position -- so
+        // asserting that it still exists would be asserting the defect.
+        //
+        // The invariant that actually matters is asserted directly instead, and it is strictly
+        // stronger than the old one because it fails in BOTH directions: the predictor's weights
+        // must appear in the collected surface (never zero -- a child owned by nobody is a dead
+        // weight that silently stops training) and must appear exactly once (never twice -- which
+        // is the buffer hazard the old check existed to catch).
+        var child = Assert.Single(layer.GetSubLayers());
+        var childParameters = Assert.IsAssignableFrom<ITrainableLayer<double>>(child).GetTrainableParameters();
+        Assert.NotEmpty(childParameters);
 
-        Assert.NotNull(detector);
-        bool overlaps = Assert.IsType<bool>(detector.Invoke(
-            null,
-            new object[] { new ILayer<double>[] { layer } }));
-        Assert.True(overlaps,
-            "CIF's registered predictor must be detected before ParameterBuffer mutates both parameter owners.");
+        var collected = AiDotNet.Training.TapeTrainingStep<double>.CollectParameters(
+            new[] { (ILayer<double>)layer },
+            structureVersion: -1);
+
+        foreach (var parameter in childParameters)
+        {
+            int owners = 0;
+            for (int i = 0; i < collected.Count; i++)
+            {
+                if (ReferenceEquals(collected[i], parameter)) owners++;
+            }
+
+            Assert.True(
+                owners == 1,
+                $"CIF's predictor weights must be owned exactly once in the collected parameter "
+                    + $"surface; found {owners}. Zero means the child trains through nobody, two "
+                    + "means ParameterBuffer would install independent views over one tensor.");
+        }
     }
+
 }

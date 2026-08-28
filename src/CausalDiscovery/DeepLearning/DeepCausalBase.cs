@@ -239,23 +239,36 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
     /// <returns>Weighted adjacency matrix.</returns>
     protected Matrix<T> BuildFinalAdjacency(double[,] learnedP, Matrix<T> cov, int d)
     {
-        var result = new Matrix<T>(d, d);
+        if (d <= 0)
+            throw new ArgumentOutOfRangeException(nameof(d), d, "The variable count must be positive.");
 
-        // Threshold scales with d only when uniform attention (= 1/d) crowds
-        // a fixed 0.3 floor. For d ≤ 3 keep the historical 0.3 floor —
-        // 1/d > 0.3 already, so the discrimination floor is "above uniform"
-        // by margin regardless. For d ≥ 4 require uniform + 0.15 margin so
-        // an algorithm that just spreads attention near uniform doesn't
-        // cross the bar.
-        double scaleAwareThreshold = d <= 3 ? 0.3 : Math.Max(1.0 / d + 0.15, 0.3);
+        // Require a fixed margin above uniform influence for every graph size.
+        // This matters most for d = 2 and d = 3, where 1/d already exceeds the
+        // historical 0.3 floor and an uninformative uniform predictor would pass it.
+        double scaleAwareThreshold = Math.Max(1.0 / d + 0.15, 0.3);
+        return BuildFinalAdjacency(learnedP, cov, d, scaleAwareThreshold);
+    }
+
+    /// <summary>
+    /// Converts learned directed influence strengths into a weighted adjacency matrix
+    /// using an algorithm-defined absolute influence threshold.
+    /// </summary>
+    /// <param name="learnedP">Learned directed influence strengths [d x d].</param>
+    /// <param name="cov">Covariance matrix [d x d].</param>
+    /// <param name="d">Number of variables.</param>
+    /// <param name="learnedThreshold">Minimum learned influence required for an edge.</param>
+    /// <returns>Weighted adjacency matrix.</returns>
+    protected Matrix<T> BuildFinalAdjacency(double[,] learnedP, Matrix<T> cov, int d, double learnedThreshold)
+    {
+        var result = new Matrix<T>(d, d);
 
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
             {
                 if (i == j) continue;
 
-                // Only add edge if learned probability exceeds threshold
-                if (learnedP[i, j] < scaleAwareThreshold) continue;
+                // Only add edge if learned influence exceeds threshold
+                if (learnedP[i, j] < learnedThreshold) continue;
 
                 // Direction: edge i→j only if P[i,j] > P[j,i]
                 // For ties, only process the (i,j) pair where i < j to avoid 2-cycles.

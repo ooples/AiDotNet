@@ -104,4 +104,94 @@ public sealed class LayerStateBagTests
         Assert.NotSame(source, typed);
         Assert.Equal(source.Alpha, typed.Alpha);
     }
+
+    [Fact]
+    public void Component_configuration_round_trips_delimiters_and_exact_numeric_types()
+    {
+        const long largeInteger = 9_007_199_254_740_993L;
+        const decimal preciseDecimal = 1234567890.1234567890123456789m;
+        string delimiterText = "literal\\n" + '\n' + (char)31 + "tail\\value";
+        var source = new ConfigurationProbe(delimiterText, largeInteger, preciseDecimal, (char)31);
+        var bag = new LayerStateBag(new Dictionary<string, object>
+        {
+            ["component"] = LayerStateBag.FormatType(source),
+        }, "ConfigurationProbeLayer");
+
+        var copy = bag.Component<ConfigurationProbe>("component");
+
+        Assert.NotNull(copy);
+        Assert.Equal(delimiterText, copy!.Text);
+        Assert.Equal(largeInteger, copy.LargeInteger);
+        Assert.Equal(preciseDecimal, copy.PreciseDecimal);
+        Assert.Equal((char)31, copy.Marker);
+    }
+
+    [Fact]
+    public void Component_configuration_round_trips_explicit_null_values()
+    {
+        var source = new NullableConfigurationProbe(label: null, limit: null);
+        var bag = new LayerStateBag(new Dictionary<string, object>
+        {
+            ["component"] = LayerStateBag.FormatType(source),
+        }, "NullableConfigurationProbeLayer");
+
+        var copy = bag.Component<NullableConfigurationProbe>("component");
+
+        Assert.NotNull(copy);
+        Assert.Null(copy!.Label);
+        Assert.Null(copy.Limit);
+    }
+
+    [Fact]
+    public void Component_configuration_keeps_legacy_untagged_escape_text_literal()
+    {
+        const string legacyText = @"literal\n\u\\tail";
+        string descriptor = typeof(ConfigurationProbe).AssemblyQualifiedName + '\n'
+            + "text=" + legacyText + (char)31
+            + "largeInteger=9007199254740993" + (char)31
+            + "preciseDecimal=1234567890.1234567890123456789" + (char)31
+            + "marker=X";
+        var bag = new LayerStateBag(new Dictionary<string, object>
+        {
+            ["component"] = descriptor,
+        }, "LegacyConfigurationProbeLayer");
+
+        var copy = bag.Component<ConfigurationProbe>("component");
+
+        Assert.NotNull(copy);
+        Assert.Equal(legacyText, copy!.Text);
+        Assert.Equal('X', copy.Marker);
+    }
+
+    public sealed class ConfigurationProbe
+    {
+        public ConfigurationProbe(string text, long largeInteger, decimal preciseDecimal, char marker)
+        {
+            Text = text;
+            LargeInteger = largeInteger;
+            PreciseDecimal = preciseDecimal;
+            Marker = marker;
+        }
+
+        public string Text { get; }
+
+        public long LargeInteger { get; }
+
+        public decimal PreciseDecimal { get; }
+
+        public char Marker { get; }
+    }
+
+    public sealed class NullableConfigurationProbe
+    {
+        public NullableConfigurationProbe(string? label = "constructor-default", long? limit = 42)
+        {
+            Label = label;
+            Limit = limit;
+        }
+
+        public string? Label { get; }
+
+        public long? Limit { get; }
+    }
 }

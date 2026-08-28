@@ -11,6 +11,15 @@ namespace AiDotNet.Tests.IntegrationTests.CausalDiscovery;
 /// </summary>
 public class DeepLearningCausalDiscoveryTests
 {
+    private sealed class CastleAdjacencyHarness : CASTLEAlgorithm<double>
+    {
+        public Matrix<double> BuildScaleAware(double[,] learned, Matrix<double> covariance, int dimensions)
+            => BuildFinalAdjacency(learned, covariance, dimensions);
+
+        public Matrix<double> Build(double[,] learned, Matrix<double> covariance, int dimensions, double threshold)
+            => BuildFinalAdjacency(learned, covariance, dimensions, threshold);
+    }
+
     private static Matrix<double> CreateSyntheticData()
     {
         int n = 50;
@@ -143,6 +152,58 @@ public class DeepLearningCausalDiscoveryTests
         var graph = algo.DiscoverStructure(CreateSyntheticData(), FeatureNames);
         CausalDiscoveryTestHelper.AssertMeaningfulGraph(graph);
         CausalDiscoveryTestHelper.AssertGraphAPIConsistency(graph);
+    }
+
+    [Fact]
+    public void CASTLE_FinalAdjacency_UsesInclusiveThresholdDirectionAndCovarianceRatio()
+    {
+        var learned = new double[,]
+        {
+            { 0.0, 0.29, 0.30 },
+            { 0.10, 0.0, 0.31 },
+            { 0.10, 0.20, 0.0 },
+        };
+        var covariance = new Matrix<double>(new double[,]
+        {
+            { 2.0, 0.5, 1.0 },
+            { 0.5, 4.0, 2.0 },
+            { 1.0, 2.0, 8.0 },
+        });
+
+        Matrix<double> adjacency = new CastleAdjacencyHarness()
+            .Build(learned, covariance, dimensions: 3, threshold: 0.3);
+
+        Assert.Equal(0.0, adjacency[0, 1]); // 0.29 is below the inclusive 0.30 boundary.
+        Assert.Equal(0.5, adjacency[0, 2], 12); // 0.30 retained; cov(0,2) / var(0) = 1 / 2.
+        Assert.Equal(0.5, adjacency[1, 2], 12); // 0.31 retained; cov(1,2) / var(1) = 2 / 4.
+        Assert.Equal(0.0, adjacency[2, 0]);
+        Assert.Equal(0.0, adjacency[2, 1]);
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void DeepCausal_FinalAdjacency_RejectsUniformInfluenceForSmallGraphs(int dimensions)
+    {
+        var learned = new double[dimensions, dimensions];
+        var covariance = new Matrix<double>(dimensions, dimensions);
+        for (int i = 0; i < dimensions; i++)
+        {
+            covariance[i, i] = 1.0;
+            for (int j = 0; j < dimensions; j++)
+            {
+                if (i == j) continue;
+                learned[i, j] = 1.0 / dimensions;
+                covariance[i, j] = 0.5;
+            }
+        }
+
+        Matrix<double> adjacency = new CastleAdjacencyHarness()
+            .BuildScaleAware(learned, covariance, dimensions);
+
+        for (int i = 0; i < dimensions; i++)
+            for (int j = 0; j < dimensions; j++)
+                Assert.Equal(0.0, adjacency[i, j]);
     }
 
     [Fact(Timeout = 120000)]

@@ -1824,11 +1824,14 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     /// structure doesn't line up 1:1, so the caller falls back to the eager flat copy.
     /// </summary>
     protected bool TryShareParametersFrom(NoisePredictorBase<T> source)
-        => AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(source, this);
+        => TryShareParametersFrom(source, out _);
 
     private bool TryShareParametersFrom(NoisePredictorBase<T> source, out string mismatch)
-        => AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(
-            source, this, out mismatch);
+    {
+        bool shared = AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(
+            source, this, out AiDotNet.Helpers.CopyOnWriteShareStatus status, out mismatch);
+        return shared || status == AiDotNet.Helpers.CopyOnWriteShareStatus.BothGraphsEmpty;
+    }
 
     /// <inheritdoc />
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)

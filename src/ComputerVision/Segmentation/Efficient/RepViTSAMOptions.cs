@@ -1,4 +1,4 @@
-using AiDotNet.Models.Options;
+﻿using AiDotNet.Models.Options;
 
 namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 
@@ -23,6 +23,27 @@ public class RepViTSAMOptions : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
     }
 
+    /// <summary>
+    /// The AdamW learning rate used when the caller supplies no optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The RepViT reference training recipe uses AdamW with a 1e-3 learning rate. Keeping the
+    /// value in the options preserves caller configurability while making the default explicit.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> The learning rate controls how large each training update is. This
+    /// default follows the reference recipe and can still be changed for a specific data set.
+    /// </para>
+    /// </remarks>
+    public double LearningRate { get; set; } = 1e-3;
+
+    /// <summary>
+    /// The decoupled AdamW weight decay used when the caller supplies no optimizer.
+    /// </summary>
+    public double WeightDecay { get; set; } = 0.025;
 }

@@ -1,7 +1,9 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Helpers;
 using AiDotNet.Tests.ModelFamilyTests.Base;
+using Xunit;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
@@ -27,5 +29,22 @@ public class MusicGenModelTests : DiffusionModelTestBase<float>
             contextDim: 0, numHeads: 4, inputHeight: 16, seed: 42);
 
         return new MusicGenModel<float>(unet: unet, seed: 42);
+    }
+
+    [Fact]
+    public void CopyOnWriteShare_RejectsUncoveredRegisteredEncoders()
+    {
+        using var source = (MusicGenModel<float>)CreateModel();
+        using var destination = (MusicGenModel<float>)CreateModel();
+
+        bool shared = CopyOnWriteCloneHelper.TryShareTrainableParameters<float>(
+            source,
+            destination,
+            out CopyOnWriteShareStatus status,
+            out string mismatch);
+
+        Assert.False(shared);
+        Assert.Equal(CopyOnWriteShareStatus.IncompleteCoverage, status);
+        Assert.Contains("registered parameter surface", mismatch);
     }
 }

@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using AiDotNet.Autodiff;
 using AiDotNet.Deployment.Optimization.Quantization;
 using AiDotNet.Deployment.Optimization.Quantization.Training;
@@ -2373,9 +2373,9 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     /// flat <c>GetParameters()</c> → <c>SetParameters()</c> round-trip that materializes the entire model a
     /// second time (and a giant intermediate flat vector) — the source of the large-diffusion-model Clone
     /// OOM on the 16 GB runner. The first in-place write to either side privatizes that tensor, so the clone
-    /// is observationally identical to the flat-copy clone. Fidelity is equivalent to the existing path
-    /// because both transfer exactly the model's trainable tensors (diffusion models carry no non-trainable
-    /// running statistics / serialization extras) — this just shares them rather than copying.
+    /// is observationally identical to the flat-copy clone. Before sharing, the helper verifies that
+    /// the layer tensors cover the model's complete registered parameter surface; a model with raw
+    /// non-layer parameter sources uses the existing parameter-chunk fallback instead.
     ///
     /// <para>Walks <paramref name="source"/> and <c>this</c> in parallel via reflection (identical type ⇒
     /// identical field order ⇒ matching layer order, the same assumption <see cref="CollectTrainableParameters"/>
@@ -2386,8 +2386,25 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     /// </summary>
     protected bool TryShareParametersFrom(DiffusionModelBase<T> source)
     {
-        if (!AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(source, this))
-            return false;
+        if (!AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(
+                source, this, out AiDotNet.Helpers.CopyOnWriteShareStatus status, out _))
+        {
+            // NOTHING MATERIALIZED IS NOT A MISMATCH. The share walks both graphs and declines when
+            // the trainable-layer structures do not line up, and a model whose lazy layers have not
+            // been resolved presents ZERO layers on both sides. That is a vacuous share, not a
+            // failed one: the freshly constructed destination is already structurally identical to
+            // an unmaterialized source, and there is no state to move.
+            //
+            // Treating it as a failure is what made WanVideo unclonable. The fallback copies
+            // parameter chunks, and enumerating those calls EnsureOwnParametersMaterialized on the
+            // way past, so a model that had allocated NOTHING was forced to allocate everything --
+            // ~15.2 billion parameters, about 61 GB at float, to clone a model that was empty.
+            // Measured in a 16 GB runner-parity container: 28 minutes, then OutOfMemoryException in
+            // TensorBase..ctor under DenseLayer.EnsureInitialized, which reaches CI as the whole
+            // test host dying with no test name attached.
+            if (status != AiDotNet.Helpers.CopyOnWriteShareStatus.BothGraphsEmpty) return false;
+        }
+
         InvalidateTrainableParametersCache();
         return true;
     }

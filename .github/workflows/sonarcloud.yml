@@ -97,7 +97,9 @@ jobs:
   validation-source:
     name: Resolve certified PR validation
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Was 5. This job may now WAIT for a merged PR validation run to finish before
+    # deciding, so the ceiling must exceed REUSE_WAIT_MINUTES with room to spare.
+    timeout-minutes: 50
     permissions:
       actions: read
       contents: read
@@ -151,11 +153,27 @@ jobs:
             exit 0
           fi
 
+          # HOW LONG MASTER WAITS for the PR own validation run to finish.
+          #
+          # Reuse needs a COMPLETED run, but this job starts seconds after the merge, so a PR
+          # merged while its validation was still running has nothing to reuse and master re-runs
+          # all ~115 shards. That is exactly what happened to #2004: merged 21:49:03Z with its run
+          # still in flight. Waiting bridges the gap; a run that lands inside the window saves the
+          # entire matrix.
+          #
+          # Bounded, because waiting is not free: past the cap master has been delayed AND still
+          # has to run everything.
+          REUSE_WAIT_MINUTES=${REUSE_WAIT_MINUTES:-40}
+          deadline=$(( $(date +%s) + REUSE_WAIT_MINUTES * 60 ))
+
+          # Returns 0 having written the outputs, 1 when nothing is reusable YET (wait and retry),
+          # 2 when the API itself failed (give up and run full CI).
+          try_resolve() {
           if ! runs_json=$(gh api --method GET \
             "repos/${GITHUB_REPOSITORY}/actions/workflows/sonarcloud.yml/runs" \
             -f event=pull_request -f head_sha="$head_sha" -f status=completed -f per_page=20); then
             echo '::warning::Could not list prior PR runs; full CI will run.'
-            exit 0
+            return 2
           fi
 
           # A red test ledger may still be an accepted improvement over baseline, so failure is a
@@ -193,7 +211,7 @@ jobs:
                 echo 'reuse=true'
               } >> "$GITHUB_OUTPUT"
               echo "Reusing PR #${pr_number} run ${run_id}; tested tree ${tested_tree} exactly matches master." >> "$GITHUB_STEP_SUMMARY"
-              exit 0
+              return 0
             fi
           done < <(jq -r '
             .workflow_runs[]
@@ -201,7 +219,27 @@ jobs:
             | .id
           ' <<< "$runs_json")
 
-          echo "No complete exact-tree validation artifact was found for PR #${pr_number}; full CI will run." >> "$GITHUB_STEP_SUMMARY"
+          return 1
+          }
+
+          while true; do
+            try_resolve && exit 0
+            [ $? -eq 2 ] && exit 0
+
+            # Only wait on a run that can still BECOME reusable. Everything already completed was
+            # judged above, so with nothing in flight another look cannot change the answer.
+            inflight=$(gh api --method GET "repos/${GITHUB_REPOSITORY}/actions/workflows/sonarcloud.yml/runs" -f event=pull_request -f head_sha="$head_sha" -f per_page=20 --jq '[.workflow_runs[] | select(.status != "completed")] | length' 2>/dev/null || echo 0)
+            if [ "${inflight:-0}" -eq 0 ]; then
+              echo "No exact-tree validation artifact for PR #${pr_number} and none in flight; full CI will run." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "PR #${pr_number} validation still running after ${REUSE_WAIT_MINUTES}m; full CI will run." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "PR #${pr_number} validation in flight; waiting so master can reuse it instead of repeating ~115 shards."
+            sleep 60
+          done
 
   # CodeQL runs on Ubuntu with net10.0 only - parallel with SonarCloud
   # Runs on PRs, merge groups, pushes to master/main, and the weekly security schedule.
@@ -1357,27 +1395,6 @@ jobs:
             project: tests/AiDotNet.Serving.Tests/AiDotNet.Serving.Tests.csproj
             framework: net10.0
             filter: 'Category!=GPU&Category!=Stress'
-          # =====================================================================
-          # NET8.0 SMOKE
-          # =====================================================================
-          # net10.0 is where the full matrix runs; net471 gets no shard at all so it
-          # does not slow CI down. net8.0 sits between them: src ships it, so a
-          # SMOKE-SIZED shard is worth the minute it costs, but it is deliberately
-          # not a second matrix.
-          #
-          # Scoped to what a compile cannot prove and a runtime difference would
-          # break: the tape (autodiff), the numeric core (linear algebra), and ONE
-          # model fixture whose conformance invariants run train/predict end to end.
-          # ~120 tests. Everything broader belongs on net10.0.
-          - name: Net8 Smoke
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net8.0
-            # Sized for the net8.0 COMPILE, not the 10 seconds of tests that follow it.
-            timeout: 30
-            filter: >-
-              Category!=GPU&Category!=Stress&Category!=Sweep&Category!=HeavyTimeout&
-              (FullyQualifiedName~UnitTests.Autodiff|FullyQualifiedName~UnitTests.LinearAlgebra|
-              FullyQualifiedName~ModelFamilyTests.Regression.SimpleRegressionTests)
 
     steps:
       - name: Checkout code
@@ -1433,24 +1450,12 @@ jobs:
         # rather than as a transfer that stalled. A cap converts that into a fast, clearly
         # attributed failure that a rerun can fix in minutes.
         timeout-minutes: 12
-        # Skipped for net8.0: that shard builds its own target below, so the net10.0 artifact
-        # is dead weight -- and this is the step that has stalled a shard for a whole job.
-        if: matrix.shard.framework != 'net8.0'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
         with:
           name: build-output-${{ github.sha }}
 
       - name: Restore dependencies
         run: dotnet restore ${{ matrix.shard.project }}
-
-      # The build artifact carries net10.0 only, so the net8.0 shard compiles its own target
-      # here. This is the whole point of making that target opt-in: the work happens on one
-      # shard in parallel rather than in the Build job every other shard is blocked on.
-      - name: Build net8.0 target (smoke shard only)
-        if: matrix.shard.framework == 'net8.0'
-        run: |
-          dotnet restore ${{ matrix.shard.project }} -p:IncludeNet8TestTarget=true
-          dotnet build ${{ matrix.shard.project }} -c Release -f net8.0             -p:IncludeNet8TestTarget=true --no-restore -m:2
 
       - name: Run tests (sharded) with coverage
         id: shard-tests

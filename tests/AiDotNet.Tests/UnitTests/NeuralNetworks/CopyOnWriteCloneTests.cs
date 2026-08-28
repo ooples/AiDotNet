@@ -31,8 +31,50 @@ public class CopyOnWriteCloneTests
         return new FeedForwardNeuralNetwork<double>(arch);
     }
 
+    private static NeuralNetwork<double> BuildBufferedModel()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 4,
+            layers: new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<double>>
+            {
+                new BatchNormalizationLayer<double>(numFeatures: 4)
+            });
+        return new NeuralNetwork<double>(architecture);
+    }
+
     private static Tensor<double> Input() =>
         new(new Vector<double>(new[] { 0.1, -0.2, 0.3, -0.4 }), new[] { 1, 4 });
+
+    [Fact]
+    public void MaterializedPersistentBuffers_AreIncludedInCopyOnWriteCoverage()
+    {
+        using var source = BuildBufferedModel();
+        using var destination = BuildBufferedModel();
+        var input = Input();
+        _ = source.Predict(input);
+        _ = destination.ParameterCount;
+
+        var sourceState = source.GetParameters().Clone();
+        for (int i = 0; i < sourceState.Length; i++)
+            sourceState[i] = 0.125 + i * 0.03125;
+        source.SetParameters(sourceState);
+
+        bool shared = CopyOnWriteCloneHelper.TryShareTrainableParameters<double>(
+            source,
+            destination,
+            out CopyOnWriteShareStatus status,
+            out string mismatch);
+
+        Assert.True(shared, $"Status={status}; mismatch={mismatch}");
+        Assert.Equal(CopyOnWriteShareStatus.Shared, status);
+        var destinationState = destination.GetParameters();
+        Assert.Equal(sourceState.Length, destinationState.Length);
+        for (int i = 0; i < sourceState.Length; i++)
+            Assert.Equal(sourceState[i], destinationState[i]);
+    }
 
     [Fact]
     public void RejectedCandidate_WithBorrowedArchitectureLayers_DoesNotDisposeSource()
@@ -234,7 +276,11 @@ public class CopyOnWriteCloneTests
                     $"layout=[{string.Join(",", layer.GetParameterLayout().Select(slot => $"{slot.Readiness}:{slot.ParameterCount}"))}]"));
         Assert.True(destinationCount > 0, countDiagnostics);
 
-        bool sharedParameters = CopyOnWriteCloneHelper.TryShareTrainableParameters<float>(source, destination);
+        bool sharedParameters = CopyOnWriteCloneHelper.TryShareTrainableParameters<float>(
+            source,
+            destination,
+            out CopyOnWriteShareStatus shareStatus,
+            out string shareMismatch);
         var sourceLayers = CopyOnWriteCloneHelper.CollectTrainableLayers<float>(source);
         var destinationLayers = CopyOnWriteCloneHelper.CollectTrainableLayers<float>(destination);
         var shareDiagnostics = string.Join("; ", sourceLayers.Zip(destinationLayers, (sourceLayer, destinationLayer) =>
@@ -247,7 +293,8 @@ public class CopyOnWriteCloneTests
         }));
         Assert.True(
             sharedParameters,
-            $"Generated shape declarations should authorize COW binding into lazy DiT placeholders. {shareDiagnostics}");
+            $"Generated shape declarations should authorize COW binding into lazy DiT placeholders. " +
+            $"Status={shareStatus}; mismatch={shareMismatch}. {shareDiagnostics}");
 
         for (int layerIndex = 0; layerIndex < sourceLayers.Count; layerIndex++)
         {
