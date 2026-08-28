@@ -622,6 +622,10 @@ public partial class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
             _vocabSize = vocabSize;
         }
 
+        // Not a normalization, so it re-centers nothing and a preceding bias is not redundant.
+        // Same answer LayerBase gives by default.
+        public bool ProvidesLearnableShift => false;
+
         public int[] GetInputShape() => [1];
         public int[] GetOutputShape() => [_vocabSize];
 

@@ -429,6 +429,10 @@ public class MockNeuralNetwork<T> : INeuralNetwork<T>
 /// </summary>
 public class MockLayer<T> : ILayer<T>
 {
+    // Not a normalization, so it re-centers nothing and a preceding bias is not redundant.
+    // Same answer LayerBase gives by default.
+    public bool ProvidesLearnableShift => false;
+
     private readonly INumericOperations<T> _ops;
     private readonly int _parameterCount;
     private readonly Vector<T> _parameters;
