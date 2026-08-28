@@ -67,6 +67,27 @@ public class AllModelsCloneTests
     private static readonly TimeSpan PerModelProbeBudget = TimeSpan.FromSeconds(20);
 
     /// <summary>
+    /// How long to let a single over-budget attempt finish before giving up on the sweep entirely.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="System.Threading.Tasks.Task.Wait(TimeSpan)"/> does NOT cancel. An attempt that
+    /// exceeds <see cref="PerModelProbeBudget"/> keeps running and keeps its model rooted, so
+    /// starting the next attempt on top of it stacks a second model-sized allocation, and the one
+    /// after that a third. Shard 13 hit the budget thirteen times and the pile-up, not any single
+    /// model, is what exhausted the heap: four attempts threw <c>OutOfMemoryException</c> long after
+    /// their own LIMIT line, and the test host then died outright with no report written at all.
+    /// </para>
+    /// <para>
+    /// So the budget now bounds CLASSIFICATION only, never concurrency: at most one abandoned
+    /// attempt is ever in flight, and it must finish before the next model starts. If it will not
+    /// finish even within this much larger drain window it is a genuine stall, and the sweep stops
+    /// and reports what it has -- which is strictly more than a host crash reports.
+    /// </para>
+    /// </remarks>
+    private static readonly TimeSpan AbandonedAttemptDrainBudget = TimeSpan.FromMinutes(5);
+
+    /// <summary>
     /// Models whose original never materialized under the probe, so the two sides are not comparable.
     /// </summary>
     /// <remarks>
@@ -164,6 +185,10 @@ public class AllModelsCloneTests
         System.IO.File.WriteAllText(ReportPath, string.Empty);
 
 
+        // The single over-budget attempt still running, if any, and the model it belongs to.
+        System.Threading.Tasks.Task? draining = null;
+        string drainingName = string.Empty;
+
         foreach (var open in candidates)
         {
             Type closed;
@@ -175,6 +200,42 @@ public class AllModelsCloneTests
             {
                 notConstructed.Add($"{open.Name}: constraints reject float"); Note($"skip  {open.Name}: constraints reject float");
                 continue;
+            }
+
+            // Let any previously abandoned attempt finish BEFORE allocating another model on top of
+            // it. This is the whole pile-up fix; see AbandonedAttemptDrainBudget.
+            if (draining is not null)
+            {
+                bool drained;
+                try
+                {
+                    drained = draining.Wait(AbandonedAttemptDrainBudget);
+                }
+                catch (Exception)
+                {
+                    // The attempt faulted after we stopped watching it. It has already been counted
+                    // as over-budget and its memory is released either way; observing the exception
+                    // here just keeps it from resurfacing as an unobserved task exception.
+                    drained = true;
+                }
+
+                if (!drained)
+                {
+                    unresolved.Add(
+                        $"{drainingName}: still running {AbandonedAttemptDrainBudget.TotalMinutes:0} minutes "
+                            + "after its budget; sweep stopped here to keep the report");
+                    Note($"STOP  sweep at {drainingName}: abandoned attempt would not drain");
+                    break;
+                }
+
+                draining = null;
+                drainingName = string.Empty;
+
+                // The drained attempt's model is unreachable now; reclaim it before the next one
+                // allocates rather than letting several generations of them coexist.
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
             }
 
             // BEFORE the attempt, so a shard-level timeout still names the model it was observing.
@@ -192,11 +253,19 @@ public class AllModelsCloneTests
                 budgetExceeded.Add(
                     $"{open.Name}: exceeded {PerModelProbeBudget.TotalSeconds:0}s observation budget");
                 Note($"LIMIT {open.Name}");
+                draining = work;
+                drainingName = open.Name;
                 continue;
             }
 
             if (outcome is null) cloned.Add(open.Name);
             else if (!ReferenceEquals(outcome, SkipMarker) && outcome != SkipMarker) failed.Add(outcome);
+        }
+
+        // Don't leave a final abandoned attempt allocating underneath the report write-out.
+        if (draining is not null)
+        {
+            try { draining.Wait(AbandonedAttemptDrainBudget); } catch (Exception) { /* already counted */ }
         }
 
         _output.WriteLine($"model types        : {candidates.Count}");
