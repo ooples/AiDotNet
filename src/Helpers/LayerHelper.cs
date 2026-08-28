@@ -3234,9 +3234,11 @@ public static partial class LayerHelper<T>
 
         // Controller (feed-forward network). NeuralTuringMachine.ForwardTape
         // concatenates the external input with the previous read vector before
-        // running this stack; the controller's output is then partitioned into
-        // read/write interface parameters per Graves et al. 2014.
-        int controllerInputSize = inputSize + memoryVectorSize;
+        // running this stack, so the width this layer actually sees is
+        // inputSize + memoryVectorSize. It is not passed here: DenseLayer resolves
+        // its input width from the tensor it first receives, which is why computing
+        // that sum locally was a dead store. The controller's output is then
+        // partitioned into read/write interface parameters per Graves et al. 2014.
         yield return new DenseLayer<T>(controllerSize, new TanhActivation<T>() as IActivationFunction<T>);
 
         // Output layer. ForwardTape concatenates controller output with the
