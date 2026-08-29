@@ -1442,20 +1442,87 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
                 AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
                 && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
 
-            // The definition. Tape-tracked ops throughout, so the backward pass can follow the chain
-            // back to the kernel and the bias.
+            // Conv2D and Conv2DInto have different platform winners in Tensors 0.129.4.
+            // Linux CI makes Conv2D the MiDaS bottleneck, while the Winograd Conv2D path is
+            // materially faster on Windows. Whichever kernel is selected must be canonical for
+            // both tape and no-tape execution: Conv2DInto does not record its own backward edge,
+            // so attach the same metadata CpuEngine.Conv2D records, including a lazy graph node.
+            Tensor<T> TrackedConv2DInto()
+            {
+                const int dilation = 1;
+
+                object[] CreateBackwardState() =>
+                [
+                    new[] { Stride, Stride },
+                    new[] { Padding, Padding },
+                    new[] { dilation, dilation },
+                ];
+
+                if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+                {
+                    var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current!;
+                    var capturedInput = input4D;
+                    var capturedKernel = _kernels;
+                    int capturedStride = Stride;
+                    int capturedPadding = Padding;
+                    return scope.RecordBinary(
+                        AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Conv2D,
+                        "Conv2D",
+                        input4D,
+                        _kernels,
+                        expectedShape,
+                        (engine, output) => engine.Conv2DInto(
+                            output,
+                            capturedInput,
+                            capturedKernel,
+                            capturedStride,
+                            capturedPadding,
+                            dilation),
+                        AiDotNet.Tensors.Engines.Autodiff.BackwardFunctions<T>.Conv2DBackward,
+                        CreateBackwardState());
+                }
+
+                var output = TensorAllocator.Rent<T>(expectedShape);
+                Engine.Conv2DInto(output, input4D, _kernels, Stride, Padding, dilation);
+                if (tapeActive)
+                {
+                    AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.RecordBinary(
+                        "Conv2D",
+                        output,
+                        input4D,
+                        _kernels,
+                        AiDotNet.Tensors.Engines.Autodiff.BackwardFunctions<T>.Conv2DBackward,
+                        CreateBackwardState());
+                }
+
+                return output;
+            }
+
+            bool preferConv2DInto =
+                !System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                    System.Runtime.InteropServices.OSPlatform.Windows);
+
+            Tensor<T> CanonicalConvolution() => preferConv2DInto
+                ? TrackedConv2DInto()
+                : Engine.Conv2D(input4D, _kernels, Stride, Padding, dilation: 1);
+
+            // Fused-capable activations retain Conv2D because FusedConv2D uses that kernel.
+            // All other activations use the platform-selected canonical convolution above, avoiding
+            // any tape/no-tape algorithm split while preserving the faster kernel on each platform.
             Tensor<T> Reference()
             {
-                var conv = Engine.Conv2D(input4D, _kernels, Stride, Padding, dilation: 1);
+                var conv = UseBias && fusedActivation != FusedActivationType.None
+                    ? Engine.Conv2D(input4D, _kernels, Stride, Padding, dilation: 1)
+                    : CanonicalConvolution();
                 var biased = UseBias
                     ? Engine.TensorAdd(conv, Engine.Reshape(_biases, [1, OutputDepth, 1, 1]))
                     : conv;
                 return ApplyActivation(biased);
             }
 
-            // The fast routes: a fused conv+bias+activation kernel where one covers this activation,
-            // otherwise Conv2DInto into a rented buffer with an in-place bias add. Both write
-            // through paths the tape does not observe, so neither may run while a tape records.
+            // The fast routes use a fused kernel where one covers this activation, otherwise
+            // the platform-selected canonical convolution with an in-place bias add. Training uses
+            // Reference because the in-place bias/activation portion is intentionally not tape-tracked.
             Tensor<T> Optimized()
             {
                 if (UseBias && fusedActivation != FusedActivationType.None)
@@ -1470,8 +1537,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
                 // change the function when one layer instance is called more than once in a graph:
                 // the later call overwrites an earlier result that is still live (shared encoders,
                 // recurrent blocks, Siamese networks, any caller retaining multiple outputs).
-                var output = TensorAllocator.Rent<T>(expectedShape);
-                Engine.Conv2DInto(output, input4D, _kernels, Stride, Padding, dilation: 1);
+                var output = CanonicalConvolution();
 
                 if (UseBias)
                 {
@@ -1508,8 +1574,8 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 
             if (tapeActive || IsTrainingMode)
             {
-                // Not a numerical choice: the fast routes write where the tape cannot see, so they
-                // would silently produce a leaf with no gradient path.
+                // Not a numerical choice: the optimized in-place epilogue is invisible to the
+                // tape and would silently produce a leaf with no complete gradient path.
                 useOptimized = false;
             }
             else if (Reproducibility == NumericalReproducibility.Fast)
