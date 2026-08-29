@@ -320,7 +320,12 @@ public partial class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutB
             // (Re)build the per-layer scratch buffers when the batch geometry changes.
             // Shapes are fully determined by batch + layer config; weights are read
             // fresh per call, so no weight-based invalidation is needed.
-            if (_convStemBuf is null || _convStemBuf.Length != flattenIdx || _convStemBatch != batch)
+            // Both scratch arrays are built together below, so testing both here states that
+            // invariant instead of assuming it - and it is what lets the zero-bias fallback read
+            // _convStemZeroBias without a null-forgiving operator, exactly as _convStemBuf is
+            // read further down.
+            if (_convStemBuf is null || _convStemZeroBias is null
+                || _convStemBuf.Length != flattenIdx || _convStemBatch != batch)
             {
                 _convStemBuf = new Tensor<T>[flattenIdx];
                 _convStemZeroBias = new float[flattenIdx][];
@@ -371,7 +376,7 @@ public partial class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutB
                     {
                         var biasData = biases is not null
                             ? (float[])(object)biases.GetDataArray()
-                            : _convStemZeroBias![li];
+                            : _convStemZeroBias[li];
                         AiDotNet.Tensors.Helpers.CpuFusedOperations.ApplyBiasActivationNCHWInPlace(
                             (float[])(object)buf.GetDataArray(), biasData,
                             buf.Shape[0], buf.Shape[1], buf.Shape[2], buf.Shape[3], act);
