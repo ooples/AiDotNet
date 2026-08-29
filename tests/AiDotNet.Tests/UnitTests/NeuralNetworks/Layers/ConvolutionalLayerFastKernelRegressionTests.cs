@@ -27,13 +27,34 @@ public class ConvolutionalLayerFastKernelRegressionTests
         var firstSnapshot = first.AsSpan().ToArray();
         var second = layer.Forward(input);
 
-        var matchField = typeof(ConvolutionalLayer<float>).GetField(
-            "_optimizedMatchesReference",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        Assert.NotNull(matchField);
-        Assert.True((bool)matchField.GetValue(layer)!,
+        AssertOptimizedRouteMatch(layer, expected: true,
             "Exact inference must keep the platform-fast canonical route after its first-shape " +
             "parity check; falling back to the platform-slow kernel reintroduces the MiDaS regression.");
+        Assert.Equal(firstSnapshot, second.AsSpan().ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ExactInference_ThreeByThreeRelu_SelectsBitwiseEquivalentPlatformRoute()
+    {
+        await Task.Yield();
+
+        var input = CreateInput([1, 3, 8, 8]);
+        var layer = CreateInitializedLayer(
+            input,
+            inputDepth: 3,
+            outputDepth: 4,
+            activationFunction: new ReLUActivation<float>());
+        layer.SetTrainingMode(false);
+
+        var first = layer.Forward(input);
+        var firstSnapshot = first.AsSpan().ToArray();
+        var second = layer.Forward(input);
+
+        bool expectFusedRoute = !System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+            System.Runtime.InteropServices.OSPlatform.Windows);
+        AssertOptimizedRouteMatch(layer, expectFusedRoute,
+            "Exact inference must reject Windows' non-bitwise fused result, while non-Windows must " +
+            "retain the array-form fused route instead of falling back to its slow scalar kernel.");
         Assert.Equal(firstSnapshot, second.AsSpan().ToArray());
     }
 
@@ -106,7 +127,8 @@ public class ConvolutionalLayerFastKernelRegressionTests
     private static ConvolutionalLayer<float> CreateInitializedLayer(
         Tensor<float> input,
         int inputDepth,
-        int outputDepth)
+        int outputDepth,
+        IActivationFunction<float>? activationFunction = null)
     {
         var layer = ConvolutionalLayer<float>.WithInputDepth(
             inputDepth,
@@ -114,7 +136,7 @@ public class ConvolutionalLayerFastKernelRegressionTests
             kernelSize: 3,
             stride: 1,
             padding: 1,
-            activationFunction: new ELUActivation<float>());
+            activationFunction: activationFunction ?? new ELUActivation<float>());
         layer.SetTrainingMode(false);
         _ = layer.Forward(input);
 
@@ -128,6 +150,19 @@ public class ConvolutionalLayerFastKernelRegressionTests
         }
 
         return layer;
+    }
+
+    private static void AssertOptimizedRouteMatch(
+        ConvolutionalLayer<float> layer,
+        bool expected,
+        string message)
+    {
+        var matchField = typeof(ConvolutionalLayer<float>).GetField(
+            "_optimizedMatchesReference",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(matchField);
+        bool actual = (bool)matchField.GetValue(layer)!;
+        Assert.True(actual == expected, $"{message} Expected match={expected}, actual={actual}.");
     }
 
     private static Tensor<float> CreateInput(int[] shape)

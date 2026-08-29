@@ -1502,18 +1502,31 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
                 !System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
                     System.Runtime.InteropServices.OSPlatform.Windows);
 
-            Tensor<T> CanonicalConvolution() => preferConv2DInto
-                ? TrackedConv2DInto()
-                : Engine.Conv2D(input4D, _kernels, Stride, Padding, dilation: 1);
+            Tensor<T> CanonicalConvolution()
+            {
+                // On non-Windows FusedConv2D calls the array overload, so its tape-aware reference
+                // must use that exact overload too. Tensors 0.129.4 chooses a different 3x3 algorithm
+                // for scalar Conv2D there. Windows keeps its materially faster scalar Winograd route.
+                if (preferConv2DInto && UseBias && fusedActivation != FusedActivationType.None)
+                {
+                    return Engine.Conv2D(
+                        input4D,
+                        _kernels,
+                        [Stride, Stride],
+                        [Padding, Padding],
+                        [1, 1]);
+                }
 
-            // Fused-capable activations retain Conv2D because FusedConv2D uses that kernel.
-            // All other activations use the platform-selected canonical convolution above, avoiding
-            // any tape/no-tape algorithm split while preserving the faster kernel on each platform.
+                return preferConv2DInto
+                    ? TrackedConv2DInto()
+                    : Engine.Conv2D(input4D, _kernels, Stride, Padding, dilation: 1);
+            }
+
+            // The reference and optimized routes share one convolution algorithm. Only the no-tape
+            // optimized epilogue may differ, and exact mode still requires it to match bit for bit.
             Tensor<T> Reference()
             {
-                var conv = UseBias && fusedActivation != FusedActivationType.None
-                    ? Engine.Conv2D(input4D, _kernels, Stride, Padding, dilation: 1)
-                    : CanonicalConvolution();
+                var conv = CanonicalConvolution();
                 var biased = UseBias
                     ? Engine.TensorAdd(conv, Engine.Reshape(_biases, [1, OutputDepth, 1, 1]))
                     : conv;
