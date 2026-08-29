@@ -383,6 +383,42 @@ internal static class Program
                     continue;
                 }
 
+                // WITHIN AN ENVELOPE THE FIXTURE HAS ALREADY OCCUPIED.
+                //
+                // A regression claim is "this run is worse than what this fixture does". When the
+                // series contains no sustained step, the comparison falls back to a SINGLE prior
+                // point - and if that point happened to be the series minimum, the ratio measures
+                // where the baseline landed rather than anything about this run.
+                //
+                // Measured: PaLI's constructMs over twelve environment-qualified runs spans 48.0 to
+                // 477.2 ms, a 9.94x spread, with two points on the very same EPYC 9V74 at 360.8 and
+                // 477.2. The baseline drew 48.0, the lowest of all thirteen, so a mid-range 142.4
+                // read as a 2.97x regression. Every one of those higher values was itself a passing
+                // baseline at the time, so calling this one a regression contradicts the runs the
+                // window already accepted.
+                //
+                // Scoped to the timing classes on purpose. Their run-over-run spread is machine
+                // dominated, which is what makes a single low point unrepresentative. Allocation and
+                // memory are stable enough that their envelope is not a licence - RepViT-SAM's peak
+                // held inside 397.8-461.3 MB across the same twelve runs - so those keep comparing
+                // against the exact latest point and a genuine step there still fails.
+                //
+                // Still reported, because a fixture creeping toward the top of its envelope is worth
+                // seeing before it leaves it.
+                if (timing && series.Count >= MinimumSeriesPoints)
+                {
+                    double envelope = series.Max(point => point.Value);
+                    if (current <= envelope)
+                    {
+                        diagnostics.Add(Diagnostic.Warning(record.Fixture, metric,
+                            $"moved {ratio:F2}x ({previous:F2} -> {current:F2}), but {current:F2} is "
+                            + $"inside the {series.Count}-run envelope this fixture has already "
+                            + $"occupied on this environment (max {envelope:F2}); the baseline drew a "
+                            + "low point rather than this run regressing"));
+                        continue;
+                    }
+                }
+
                 PerfIntent? directIntent = IntentForBaseline(intents, baseline.Commit, record.Fixture, metric);
                 if (directIntent is not null)
                 {
@@ -584,6 +620,95 @@ internal static class Program
             spike);
         if (comparisonDiagnostics.Any(d => d.Severity == "error"))
             return Fail("a history window without a step must retain the exact latest baseline");
+
+        // A TIMING VALUE INSIDE THE ENVELOPE THE FIXTURE ALREADY OCCUPIES IS NOT A REGRESSION,
+        // and one above that envelope still is. Both arms matter: the first is the PaLI case, where
+        // a 9.94x-spread metric drew its series minimum as the baseline; the second is the
+        // StreamDiffVSR case, which must keep failing or this rule would blunt real regressions.
+        const string TimingMetric = "constructMs";
+        const string Allocation = "allocatedBytes";
+
+        BaselineDocument TimingPoint(string commit, int day, double timing, double allocated) => new()
+        {
+            SchemaVersion = CurrentBaselineSchemaVersion,
+            GeneratedUtc = new DateTimeOffset(2026, 2, day, 0, 0, 0, TimeSpan.Zero),
+            Commit = commit,
+            Entries =
+            [
+                new BaselineEntry
+                {
+                    Fixture = Fixture,
+                    Environment = Environment,
+                    Metrics = new Dictionary<string, double>(StringComparer.Ordinal)
+                    {
+                        [TimingMetric] = timing,
+                        [Allocation] = allocated,
+                    },
+                },
+            ],
+        };
+
+        // Corroborated by allocation (1.30x, over the 1.25x corroboration ratio but under the 2.5x
+        // allocation limit), so these reach the envelope rule instead of stopping at the
+        // uncorroborated-Stopwatch branch ahead of it.
+        CensusRecord TimingRun(double timing) => Current((TimingMetric, timing), (Allocation, 130_000_000));
+
+        // PaLI's real numbers: baseline 48.0 is the minimum of a series reaching 477.2.
+        BaselineDocument[] dispersed =
+        [
+            TimingPoint("aaaaaaa", 1, 100.8, 100_000_000),
+            TimingPoint("bbbbbbb", 2, 477.2, 100_000_000),
+            TimingPoint("ccccccc", 3, 95.1, 100_000_000),
+            TimingPoint("ddddddd", 4, 360.8, 100_000_000),
+            TimingPoint("eeeeeee", 5, 48.0, 100_000_000),
+        ];
+
+        comparisonDiagnostics.Clear();
+        CompareBaseline(
+            [TimingRun(142.4)],
+            TimingPoint("eeeeeee", 5, 48.0, 100_000_000),
+            new Options(),
+            comparisonDiagnostics,
+            dispersed);
+        if (comparisonDiagnostics.Any(d => d.Severity == "error" && d.Metric == TimingMetric))
+            return Fail("a timing value inside the fixture's own measured envelope must not be an error");
+        if (!comparisonDiagnostics.Any(d => d.Metric == TimingMetric
+                && d.Message.Contains("envelope", StringComparison.Ordinal)))
+            return Fail("suppressing on the envelope must still report why");
+
+        // StreamDiffVSR's real numbers: 2765.9 is 2.5x above everything the fixture has ever done.
+        BaselineDocument[] tight =
+        [
+            TimingPoint("aaaaaaa", 1, 833.5, 100_000_000),
+            TimingPoint("bbbbbbb", 2, 646.3, 100_000_000),
+            TimingPoint("ccccccc", 3, 684.6, 100_000_000),
+            TimingPoint("ddddddd", 4, 1108.7, 100_000_000),
+            TimingPoint("eeeeeee", 5, 825.9, 100_000_000),
+        ];
+
+        comparisonDiagnostics.Clear();
+        CompareBaseline(
+            [TimingRun(2765.9)],
+            TimingPoint("eeeeeee", 5, 825.9, 100_000_000),
+            new Options(),
+            comparisonDiagnostics,
+            tight);
+        if (!comparisonDiagnostics.Any(d => d.Severity == "error" && d.Metric == TimingMetric))
+            return Fail("a timing value above everything the fixture has measured must remain an error");
+
+        // The envelope is a timing-only allowance. Memory keeps comparing against the exact latest
+        // point, so RepViT-SAM's kind of step still fails even though its series contains it.
+        comparisonDiagnostics.Clear();
+        CompareBaseline(
+            [Current((Metric, 739_753_984))],
+            Point("eeeeeee", 5, 397_791_232),
+            new Options(),
+            comparisonDiagnostics,
+            [Point("aaaaaaa", 1, 461_254_656), Point("bbbbbbb", 2, 406_716_416),
+             Point("ccccccc", 3, 437_084_160), Point("ddddddd", 4, 441_790_464),
+             Point("eeeeeee", 5, 397_791_232)]);
+        if (!comparisonDiagnostics.Any(d => d.Severity == "error" && d.Metric == Metric))
+            return Fail("the envelope allowance must not extend to memory");
 
         const string Allocated = "allocatedBytes";
         BaselineDocument allocationBaseline = DirectBaseline("base000", (Allocated, 100_000_000));
