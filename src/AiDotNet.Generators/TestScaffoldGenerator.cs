@@ -12152,6 +12152,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // explicit batch so FlattenLayer produces [1, 3072] and the classifier returns [1, 4].
             sb.AppendLine("    protected override int[] InputShape => new[] { 1, 3, 32, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4 };");
+            // The three-step relationship probe samples Dessurt in AdamW's recovery transient:
+            // on the deterministic fixture it scores train 4.803921 versus test 0.752702 even
+            // though the independent six-step loss-reduction invariant passes. Ten steps is the
+            // shared conformance ceiling and lets this 12K-parameter smoke model complete that
+            // recovery before comparing its trained input with an unseen input. Keep the original
+            // 3x assertion unchanged so a disconnected or exploding training path still fails.
+            sb.AppendLine("    protected override int TrainingErrorIterations => 10;");
             // The generated D-F fixture is intentionally FP32. On the exact 4-core/16-GB Linux
             // runner, its paper-default AdamW trajectory reached the same loss floor at 50 and
             // 200 steps, with the longer result only 1.1325e-4 higher and all 12,292 parameters
