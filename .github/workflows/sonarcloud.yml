@@ -2017,7 +2017,7 @@ jobs:
         with:
           name: crash-evidence-${{ github.sha }}-${{ strategy.job-index }}
           path: |
-            TestResults/**/Sequence_*.xml
+            TestResults/**/Sequence.xml
             TestResults/**/gpu-diagnostics.txt
           if-no-files-found: ignore
           retention-days: 14
@@ -2033,7 +2033,7 @@ jobs:
           name: ${{ env.TEST_RESULTS_ARTIFACT_NAME }}
           path: |
             TestResults/**/*.trx
-            TestResults/**/Sequence_*.xml
+            TestResults/**/Sequence.xml
           if-no-files-found: ignore
           retention-days: 30
 
