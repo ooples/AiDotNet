@@ -223,10 +223,16 @@ public class ExperienceReplay<T> : IContinualLearningStrategy<T>
         var batchSize = Math.Min(_buffer.Count, (int)(_maxBufferSize * _replayRatio / 10));
         batchSize = Math.Max(1, batchSize);
 
-        var indices = Enumerable.Range(0, _buffer.Count)
-            .OrderBy(_ => _random.Next())
-            .Take(batchSize)
-            .ToList();
+        // An exhaustive sample is the complete replay distribution, so its order must be
+        // stable. Randomly permuting every buffered item changes only floating-point
+        // accumulation order—not the sample—and can make identical duplicated tasks report
+        // microscopically different losses. Keep randomness only for genuine subsampling.
+        var indices = batchSize == _buffer.Count
+            ? Enumerable.Range(0, _buffer.Count).ToList()
+            : Enumerable.Range(0, _buffer.Count)
+                .OrderBy(_ => _random.Next())
+                .Take(batchSize)
+                .ToList();
 
         return BuildBatchFromIndices(indices);
     }

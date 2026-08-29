@@ -19,5 +19,12 @@
     "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.GR00TN1Tests",
     "metric": "peakWorkingSetBytes",
     "reason": "The same 4,096,000-entry token embedding, seen in peak process memory rather than in cumulative allocation. See the allocatedBytes entry, including the correction: the cost is real, the training benefit is not established."
+  },
+  {
+    "commit": "9e2d5031",
+    "origin": "80bcb89c06",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.RepViTSAMTests",
+    "metric": "allocatedBytes",
+    "reason": "80bcb89c06 corrected RepViT-SAM's M0.9 backbone from the inconsistent [2,2,14,2] block counts to the official [3,4,16,3] stage depths for its [48,96,192,384] channels. The census measured 358,094,848 to 941,241,064 allocated bytes while the corrected implementation remained stable at 936,752,400 to 941,241,064 across two PR runs. This is the bounded cost of six required RepViT blocks, not a leak; the lease is scoped to this fixture, metric, and exact pre-change baseline."
   }
 ]

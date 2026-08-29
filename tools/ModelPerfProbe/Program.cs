@@ -218,14 +218,16 @@ internal static class Program
     /// </summary>
     /// <remarks>
     /// <para>
-    /// A wall-clock regression on its own is not evidence of a slower library - the runner is shared
-    /// and its speed is not controlled. So a <see cref="MetricStability.Timing"/> or
-    /// <see cref="MetricStability.VolatileTiming"/> regression is only raised as an ERROR when the
-    /// same fixture's allocation moved too, which is the part of the measurement the machine cannot
-    /// influence. Uncorroborated timing is reported as a warning rather than dropped, so a real
-    /// CPU-side regression stays visible in the summary; and a gross one - above
-    /// <see cref="Options.UncorroboratedTimingRatio"/> - is an error regardless, because no plausible
-    /// amount of runner contention explains it.
+    /// A wall-clock regression on its own is not evidence of slower library code. It is an error only when the
+    /// same fixture's allocation or whole-workload process CPU moved too. Those are independent
+    /// signals that the measured code did more work. A timing-only movement is still reported as a
+    /// warning, regardless of size, because even a gross single-phase stopwatch result can be caused
+    /// by descheduling while process CPU and allocation remain flat.
+    /// </para>
+    /// <para>
+    /// A declared cost increase is a scoped, expiring lease: it names the exact baseline commit,
+    /// fixture, metric, and reason. It suppresses only that comparison and expires when the baseline
+    /// advances; unrelated metrics and later regressions still fail.
     /// </para>
     /// <para>
     /// The case this is built from: MeshCNN's cold forward measured 3.29x its baseline on PR #2009,
@@ -276,6 +278,15 @@ internal static class Program
                 && prior.Metrics.TryGetValue("allocatedBytes", out double allocWas)
                 && allocWas > 0.0
                 && allocNow / allocWas > options.CorroborationRatio;
+
+            // A timing-only slowdown can be real without allocating more (for example, an
+            // accidentally quadratic loop). Whole-workload process CPU is an independent signal
+            // that separates that case from a descheduled Stopwatch phase.
+            bool cpuRegressed =
+                record.Metrics.TryGetValue("cpuMs", out double cpuNow)
+                && prior.Metrics.TryGetValue("cpuMs", out double cpuWas)
+                && cpuWas > 0.0
+                && cpuNow / cpuWas > options.CorroborationRatio;
 
             foreach ((string metric, double current) in record.Metrics)
             {
@@ -333,30 +344,53 @@ internal static class Program
                                 + (intent.Origin.Length > 0 ? $", caused by {intent.Origin}" : "")
                                 + $", declared: {intent.Reason}"));
                         }
-                        else
+                        else if (Same(options.Commit, step.ToCommit))
                         {
+                            // Only the commit under test can be required to declare its own step.
+                            // Re-failing every later PR for an older main-branch change turns
+                            // historical context into unrelated permanent CI debt.
                             diagnostics.Add(Diagnostic.Error(record.Fixture, metric,
                                 $"stepped {step.Ratio:F2}x ({step.Before:F2} -> {step.After:F2}) at "
                                 + $"{step.Range} and stayed there; limit is {limit:F2}x. Fix it, or "
                                 + "declare it in .github/model-performance-intent.json with the census commit, "
                                 + "fixture, metric, and reason"));
                         }
-                    }
+                        else
+                        {
+                            diagnostics.Add(Diagnostic.Warning(record.Fixture, metric,
+                                $"historical step {step.Ratio:F2}x ({step.Before:F2} -> {step.After:F2}) at "
+                                + $"{step.Range}; current commit {options.Commit} is judged against the post-step level"));
+                        }
 
-                    previous = ReferenceLevel(series, step);
-                    if (previous <= 0.0) continue;
+                        previous = ReferenceLevel(series, step);
+                        if (previous <= 0.0) continue;
+                    }
+                    // If history contains no defensible sustained step, retain the exact latest,
+                    // environment-qualified baseline. Replacing it with a stale series median can
+                    // report a regression even when current and latest-prior values are identical.
                 }
 
                 double ratio = current / previous;
                 if (ratio <= limit || current - previous <= noiseFloor) continue;
 
                 bool timing = stability is MetricStability.Timing or MetricStability.VolatileTiming;
-                if (timing && !allocationRegressed && ratio < options.UncorroboratedTimingRatio)
+                if (timing && !allocationRegressed && !cpuRegressed)
                 {
                     diagnostics.Add(Diagnostic.Warning(record.Fixture, metric,
-                        $"timing moved {ratio:F2}x ({previous:F2} -> {current:F2}) but allocation did not; " +
-                        $"treating as runner variance (limit is {limit:F2}x, " +
-                        $"{options.UncorroboratedTimingRatio:F2}x without corroboration)"));
+                        $"timing moved {ratio:F2}x ({previous:F2} -> {current:F2}) but neither "
+                        + "allocation nor whole-workload process CPU regressed; treating the "
+                        + $"Stopwatch-only movement as runner variance (limit is {limit:F2}x)"));
+                    continue;
+                }
+
+                PerfIntent? directIntent = IntentForBaseline(intents, baseline.Commit, record.Fixture, metric);
+                if (directIntent is not null)
+                {
+                    diagnostics.Add(Diagnostic.Warning(record.Fixture, metric,
+                        $"regressed {ratio:F2}x ({previous:F2} -> {current:F2}) from declared baseline "
+                        + $"{baseline.Commit}"
+                        + (directIntent.Origin.Length > 0 ? $", caused by {directIntent.Origin}" : "")
+                        + $"; declared: {directIntent.Reason}"));
                     continue;
                 }
 
@@ -498,6 +532,128 @@ internal static class Program
             File.Delete(path);
         }
 
+
+        CensusRecord Current(params (string Name, double Value)[] values) => new()
+        {
+            Fixture = Fixture,
+            Model = "Synthetic",
+            Status = "ok",
+            Environment = Environment,
+            Cohort = "System.Single|10^1",
+            Phase = "",
+            Error = "",
+            Metrics = values.ToDictionary(pair => pair.Name, pair => pair.Value, StringComparer.Ordinal),
+        };
+
+        BaselineDocument DirectBaseline(string commit, params (string Name, double Value)[] values) => new()
+        {
+            SchemaVersion = CurrentBaselineSchemaVersion,
+            Commit = commit,
+            Entries =
+            [
+                new BaselineEntry
+                {
+                    Fixture = Fixture,
+                    Environment = Environment,
+                    Metrics = values.ToDictionary(pair => pair.Name, pair => pair.Value, StringComparer.Ordinal),
+                },
+            ],
+        };
+
+        var comparisonDiagnostics = new List<Diagnostic>();
+
+        // A historical step that predates the commit under test is context, not permanent CI debt.
+        CompareBaseline(
+            [Current((Metric, 900_000_000))],
+            Point("eeeeeee", 5, 900_000_000),
+            new Options(),
+            comparisonDiagnostics,
+            step);
+        if (comparisonDiagnostics.Any(d => d.Severity == "error")
+            || !comparisonDiagnostics.Any(d => d.Message.Contains("historical step", StringComparison.Ordinal)))
+            return Fail("an old sustained step must be warning-only for an unrelated later commit");
+
+        // If history has no sustained step, the exact newest environment-qualified point wins. A
+        // stale whole-window median must not manufacture a regression against an unchanged latest value.
+        comparisonDiagnostics.Clear();
+        CompareBaseline(
+            [Current((Metric, 900_000_000))],
+            Point("fffffff", 6, 900_000_000),
+            new Options(),
+            comparisonDiagnostics,
+            spike);
+        if (comparisonDiagnostics.Any(d => d.Severity == "error"))
+            return Fail("a history window without a step must retain the exact latest baseline");
+
+        const string Allocated = "allocatedBytes";
+        BaselineDocument allocationBaseline = DirectBaseline("base000", (Allocated, 100_000_000));
+        CensusRecord allocationIncrease = Current((Allocated, 300_000_000));
+
+        comparisonDiagnostics.Clear();
+        CompareBaseline([allocationIncrease], allocationBaseline, new Options(), comparisonDiagnostics);
+        if (!comparisonDiagnostics.Any(d => d.Severity == "error" && d.Metric == Allocated))
+            return Fail("a genuine undeclared allocation regression must remain an error");
+
+        var allocationIntent = new[]
+        {
+            new PerfIntent
+            {
+                Commit = "base000",
+                Origin = "change00",
+                Fixture = Fixture,
+                Metric = Allocated,
+                Reason = "paper-faithful capacity",
+            },
+        };
+        comparisonDiagnostics.Clear();
+        CompareBaseline(
+            [allocationIncrease],
+            allocationBaseline,
+            new Options(),
+            comparisonDiagnostics,
+            declaredIntents: allocationIntent);
+        if (comparisonDiagnostics.Any(d => d.Severity == "error")
+            || !comparisonDiagnostics.Any(d => d.Severity == "warning"
+                && d.Message.Contains("paper-faithful capacity", StringComparison.Ordinal)))
+            return Fail("a fixture-and-metric-scoped intent must accept only its exact baseline comparison");
+
+        allocationIntent[0].Commit = "other00";
+        comparisonDiagnostics.Clear();
+        CompareBaseline(
+            [allocationIncrease],
+            allocationBaseline,
+            new Options(),
+            comparisonDiagnostics,
+            declaredIntents: allocationIntent);
+        if (!comparisonDiagnostics.Any(d => d.Severity == "error" && d.Metric == Allocated))
+            return Fail("a declared intent for another baseline must not suppress a real allocation regression");
+
+        // Stopwatch time alone is not proof: a 5x phase spike with identical allocation and total CPU is
+        // warning-only, but the same spike with corroborating whole-process CPU remains an error.
+        const string Cold = "coldForwardMs";
+        const string Cpu = "cpuMs";
+        BaselineDocument timingBaseline = DirectBaseline(
+            "timing0", (Cold, 100), (Allocated, 100_000_000), (Cpu, 100));
+
+        comparisonDiagnostics.Clear();
+        CompareBaseline(
+            [Current((Cold, 500), (Allocated, 100_000_000), (Cpu, 100))],
+            timingBaseline,
+            new Options(),
+            comparisonDiagnostics);
+        if (comparisonDiagnostics.Any(d => d.Severity == "error")
+            || !comparisonDiagnostics.Any(d => d.Severity == "warning" && d.Metric == Cold))
+            return Fail("an uncorroborated stopwatch spike must be visible but warning-only");
+
+        comparisonDiagnostics.Clear();
+        CompareBaseline(
+            [Current((Cold, 500), (Allocated, 100_000_000), (Cpu, 130))],
+            timingBaseline,
+            new Options(),
+            comparisonDiagnostics);
+        if (!comparisonDiagnostics.Any(d => d.Severity == "error" && d.Metric == Cold))
+            return Fail("a timing spike corroborated by whole-process CPU must remain an error");
+
         return 0;
     }
 
@@ -532,16 +688,17 @@ internal static class Program
     private sealed class PerfIntent
     {
         /// <summary>
-        /// The census point this step was first measured at - an endpoint of the detected range.
+        /// A census endpoint for the cost change: the exact baseline for a first direct comparison,
+        /// or either boundary of a sustained step once history contains the new level.
         /// </summary>
         /// <remarks>
-        /// Keyed to the measurement rather than to the source commit, because that is what makes an
-        /// intent EXPIRE. Once the step scrolls out of the history window the entry stops matching
-        /// anything and can be deleted without anyone having to reconstruct why it was written. A
-        /// suppression list keyed to source commits never expires, which is how such lists come to
-        /// outlive their reasons.
+        /// Keyed to a measurement rather than to the source commit because that makes the intent
+        /// expire. A direct-comparison lease stops matching when the baseline advances; a step lease
+        /// stops matching when the step scrolls out of the history window. A suppression keyed only
+        /// to the source commit would never expire and could hide unrelated later regressions.
         /// </remarks>
         [JsonPropertyName("commit")] public string Commit { get; set; } = "";
+
 
         /// <summary>The commit that actually caused it, for the message. Informational.</summary>
         [JsonPropertyName("origin")] public string Origin { get; set; } = "";
@@ -619,6 +776,26 @@ internal static class Program
             {
                 return intent;
             }
+        }
+
+        return null;
+    }
+
+
+    /// <summary>
+    /// Finds an intent leased to the exact baseline used by a direct comparison.
+    /// </summary>
+    /// <remarks>
+    /// This covers the first census run that observes an intentional change, before enough post-change
+    /// history exists to detect a sustained step. Naming the baseline makes the lease expire as soon as
+    /// a newer baseline is published.
+    /// </remarks>
+    private static PerfIntent? IntentForBaseline(
+        IReadOnlyList<PerfIntent> intents, string baselineCommit, string fixture, string metric)
+    {
+        foreach (PerfIntent intent in intents)
+        {
+            if (intent.Covers(fixture, metric) && Same(baselineCommit, intent.Commit)) return intent;
         }
 
         return null;

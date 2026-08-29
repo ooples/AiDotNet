@@ -186,18 +186,24 @@ public class GeneratedFloatScaffoldSmokeTests
     }
 
     [Fact]
-    public void GeneratedScaffolds_EmitTargetedRegressionGuards()
+    public async Task GeneratedScaffolds_EmitTargetedRegressionGuards()
     {
+        await Task.Yield();
+
         var scaffolds = GeneratedScaffolds();
 
-        var vmamba = Assert.Single(scaffolds, type => type.Name == "VMambaTests");
-        var deterministicLoss = vmamba.GetProperty(
-            "MemorizationTaskUsesDeterministicEvalLoss",
-            System.Reflection.BindingFlags.Instance |
-            System.Reflection.BindingFlags.NonPublic |
-            System.Reflection.BindingFlags.DeclaredOnly);
-        Assert.NotNull(deterministicLoss);
-        Assert.True(Assert.IsType<bool>(deterministicLoss.GetValue(Activator.CreateInstance(vmamba))));
+        foreach (string scaffoldName in new[] { "VMambaTests", "DeepARTests" })
+        {
+            var scaffold = Assert.Single(scaffolds, type => type.Name == scaffoldName);
+            var deterministicLoss = scaffold.GetProperty(
+                "MemorizationTaskUsesDeterministicEvalLoss",
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.DeclaredOnly);
+            Assert.NotNull(deterministicLoss);
+            Assert.True(Assert.IsType<bool>(
+                deterministicLoss.GetValue(Activator.CreateInstance(scaffold))));
+        }
 
         var demucs = Assert.Single(scaffolds, type => type.Name == "DemucsNoiseTests");
         var collection = Assert.Single(demucs.CustomAttributes,

@@ -6,6 +6,9 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.VisionLanguage.Generative;
+using AiDotNet.VisionLanguage.InstructionTuned;
+using AiDotNet.VisionLanguage.Unified;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -489,6 +492,8 @@ public class AllModelsCloneTests
             for (var i = 0; i < formal.Length && usable; i++)
             {
                 if (formal[i].ParameterType.IsInstanceOfType(architecture)) args[i] = architecture;
+                else if (TryCreateBoundedArgument(closed, formal[i], out var bounded)) args[i] = bounded;
+                else if (CreateBoundedOptions(formal[i].ParameterType) is { } options) args[i] = options;
                 else if (formal[i].HasDefaultValue) args[i] = formal[i].DefaultValue;
                 else usable = false;
             }
@@ -506,6 +511,88 @@ public class AllModelsCloneTests
         }
 
         return null;
+    }
+
+    private static bool TryCreateBoundedArgument(
+        Type modelType,
+        ParameterInfo parameter,
+        out object? value)
+    {
+        // DocOwl deliberately treats a small image as its public smoke-test configuration and
+        // scales the 7B-style dimensions down internally. The reflection sweep used the 448px
+        // default, bypassed that contract and started materializing the production-scale graph.
+        if (modelType.Name == "DocOwl`1" && parameter.Name == "imageSize")
+        {
+            value = 64;
+            return true;
+        }
+
+        value = null;
+        return false;
+    }
+
+    /// <summary>Creates explicit small configurations for paper-scale models in the clone sweep.</summary>
+    /// <remarks>
+    /// This sweep verifies construction-state cloning, not whether a CI runner can materialize a
+    /// published foundation model. Passing null used the paper defaults: Chameleon alone exposed
+    /// more than <see cref="int.MaxValue"/> parameters, while DeepSeek-VL2 built sixty 4096-wide
+    /// decoder layers. Those attempts cannot be cancelled and can terminate the whole test host
+    /// before any clone result is reported. Small but structurally representative options exercise
+    /// the same generated construction plan and state payload without turning the test into a
+    /// multi-billion-parameter allocation benchmark.
+    /// </remarks>
+    private static object? CreateBoundedOptions(Type optionType)
+    {
+        if (!typeof(GenerativeVLMOptions).IsAssignableFrom(optionType))
+        {
+            return null;
+        }
+
+        GenerativeVLMOptions? options;
+        try
+        {
+            options = Activator.CreateInstance(optionType) as GenerativeVLMOptions;
+        }
+        catch (Exception)
+        {
+            // Let the constructor sweep fall back to the declared optional value. A specialized
+            // options type is allowed to reject parameterless construction; that is unrelated to
+            // whether its owning model can be cloned.
+            return null;
+        }
+
+        if (options is null) return null;
+
+        options.ImageSize = 16;
+        options.VisionDim = 16;
+        options.DecoderDim = 16;
+        options.NumVisionLayers = 1;
+        options.NumDecoderLayers = 2;
+        options.NumHeads = 4;
+        options.VocabSize = 128;
+        options.MaxSequenceLength = 16;
+        options.MaxGenerationLength = 4;
+
+        if (options is InstructionTunedVLMOptions instructionTuned)
+        {
+            instructionTuned.ProjectionDim = 16;
+            instructionTuned.MaxVisualTokens = 16;
+        }
+
+        if (options is UnifiedVisionOptions unified)
+        {
+            unified.NumVisualTokens = 16;
+            unified.OutputImageSize = 16;
+        }
+
+        if (options is DeepSeekVL2Options deepSeek)
+        {
+            deepSeek.NumExperts = 2;
+            deepSeek.NumActiveExperts = 1;
+            deepSeek.EnableDynamicTiling = false;
+        }
+
+        return options;
     }
 
     private static bool DerivesFromNeuralNetworkBase(Type type)

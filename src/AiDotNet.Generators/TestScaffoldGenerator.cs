@@ -671,6 +671,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // decrease assertion and iteration count remain unchanged.
             { "VMamba", new WarmupIterationOverride(deterministicMemorizationLoss: true) },
 
+            // DeepAR's default stack inserts DropoutLayer instances between its recurrent layers.
+            // GetLastLoss is therefore one training-mode dropout draw at each endpoint, so it can
+            // reverse even when the fixed example's evaluation loss decreases. Measure the same
+            // trained parameters in evaluation mode; the strict 1% decrease and 20 updates remain.
+            { "DeepAR", new WarmupIterationOverride(deterministicMemorizationLoss: true) },
+
             // NaturalSpeech: the same shape, over a LONGER warm-up, and on every repeated-training
             // probe rather than just one. Measured evaluation loss on a fixed pair, from untrained:
             //   0.253 | 0.267, 0.292, 0.294, 0.281, 0.294, 0.301, 0.279, 0.249, 0.207, 0.175, 0.173
