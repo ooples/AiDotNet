@@ -1997,8 +1997,19 @@ jobs:
 
       # Crash evidence lives in its OWN artifact so the result artifacts stay small and their
       # `if-no-files-found: error` keeps meaning something. This one uses `ignore`: a healthy run
-      # produces no dump and no Sequence file, and that absence is the expected case, not a
-      # failure to report.
+      # produces no Sequence file, and that absence is the expected case, not a failure to report.
+      #
+      # PROCESS DUMPS ARE DELIBERATELY NOT UPLOADED. This repository is PUBLIC, so workflow artifacts
+      # are downloadable by anyone, and this job's environment carries AIDOTNET_LICENSE_KEY -- an
+      # enterprise CI key with effectively unlimited activations. A process dump contains the
+      # environment block and in-memory secrets, so publishing one here would disclose that key
+      # (CWE-200). The dumps are still WRITTEN on the runner by --blame-crash and discarded with it;
+      # a maintainer who needs one can re-run this job with the license secret removed.
+      #
+      # What is published instead is the evidence that actually resolves these failures and carries
+      # no secrets: the Sequence file naming the test in flight when the host died -- which blame
+      # writes as tests execute, so it survives a NATIVE crash that produces no managed dump at all
+      # -- and the GPU launch journal plus buffer residency totals.
       - name: Upload crash evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         if: always()
@@ -2006,7 +2017,6 @@ jobs:
         with:
           name: crash-evidence-${{ github.sha }}-${{ strategy.job-index }}
           path: |
-            TestResults/**/*.dmp
             TestResults/**/Sequence_*.xml
             TestResults/**/gpu-diagnostics.txt
           if-no-files-found: ignore
