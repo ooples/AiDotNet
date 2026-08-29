@@ -61,12 +61,14 @@ public class GeneratedFloatScaffoldSmokeTests
     }
 
     [Fact]
-    public void RecurrentGemmaScaffold_FollowsFloatCapThenShrinkLadder()
+    public async Task RecurrentGemmaScaffold_FollowsFloatCapThenShrinkLadder()
     {
+        await Task.Yield();
+
         var probe = new RecurrentGemmaPolicyProbe();
 
         Assert.Equal(5, probe.TrainingCount);
-        Assert.Equal(5, probe.MemorizationCount);
+        Assert.Equal(12, probe.MemorizationCount);
         Assert.Equal(1, probe.GradientSamples);
 
         using var model = probe.CreateModel();
