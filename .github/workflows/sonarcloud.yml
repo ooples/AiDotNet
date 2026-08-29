@@ -1613,6 +1613,16 @@ jobs:
             'Integration C - ComputerVision Detection',
             'Integration C - ComputerVision Segmentation Models',
             'Integration C - ComputerVision Segmentation Contracts',
+            # Core was the one Integration letter-shard missing from this list, and it holds the
+            # heaviest content of any of them: AllModelsCloneTests deep-copies 200+ models across 24
+            # InlineData shards, beside Classification, Clustering and ContinualLearning. It was
+            # therefore the only one running at the 4-way collection default AND with coverage
+            # instrumentation attached. It OOM-killed its runner 8m53s into a 60-minute budget after
+            # only 83 tests (80 Classification, 3 Clustering) - `The runner has received a shutdown
+            # signal`, which this file already documents as the OOM-kill signature. Listing it here
+            # serializes it like every sibling, drops coverage from it, and turns on the MemAvailable
+            # sampler so the next occurrence names the test instead of vanishing with the runner.
+            'Integration C - Core',
             'Integration D',
             'Integration E-G',
             'Integration M',
