@@ -26,5 +26,12 @@
     "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.RepViTSAMTests",
     "metric": "allocatedBytes",
     "reason": "80bcb89c06 corrected RepViT-SAM's M0.9 backbone from the inconsistent [2,2,14,2] block counts to the official [3,4,16,3] stage depths for its [48,96,192,384] channels. The census measured 358,094,848 to 941,241,064 allocated bytes while the corrected implementation remained stable at 936,752,400 to 941,241,064 across two PR runs. This is the bounded cost of six required RepViT blocks, not a leak; the lease is scoped to this fixture, metric, and exact pre-change baseline."
+  },
+  {
+    "commit": "9e2d5031",
+    "origin": "80bcb89c06",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.RepViTSAMTests",
+    "metric": "peakWorkingSetBytes",
+    "reason": "The same six required RepViT blocks from 80bcb89c06 that the allocatedBytes lease above covers. Correcting the M0.9 backbone from [2,2,14,2] to the official [3,4,16,3] stage depths raises the block count from 20 to 26, and the added depth lands on the [48,96,192,384] channel stages, so peak working set moves for the same reason allocation does; declaring one metric and not the other left the intended cost half-covered. Twelve environment-matched census runs held peak between 397,791,232 and 461,254,656 bytes (32000578975 through 33158119919, mean ~432 MB); this run measures 739,753,984, a 1.86x step against a 1.60x memory limit. That is a level change at the corrected architecture, not a leak, and it is proportionally smaller than the 2.63x allocation growth already accepted for the same commit. The lease is keyed to baseline 9e2d5031 and expires when the baseline advances past it."
   }
 ]
