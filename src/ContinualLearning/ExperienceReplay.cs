@@ -1,4 +1,4 @@
-using AiDotNet.ActiveLearning.Interfaces;
+﻿using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -101,7 +101,25 @@ public class ExperienceReplay<T> : IContinualLearningStrategy<T>
     }
 
     /// <inheritdoc />
-    public bool AccumulatesAcrossTasks => true;
+    /// <remarks>
+    /// <para>
+    /// False, because experience replay is a REHEARSAL method and not a regularization one. The
+    /// interface defines this flag as whether the strategy accumulates regularization STRENGTH
+    /// across tasks -- true for EWC, MAS and Online EWC, which sum Fisher or importance weights per
+    /// task so their penalty can only grow. Replay has no such term: <c>ComputeLoss</c> draws a
+    /// sample from a fixed-capacity reservoir buffer and returns the MEAN error over it, scaled by
+    /// lambda, exactly as in Rolnick et al. (2019) and Chaudhry et al. (2019). Learning a second
+    /// task changes what the buffer holds; it does not add a penalty term.
+    /// </para>
+    /// <para>
+    /// Because that mean is over a mixture that changes composition, the replay loss at a fixed
+    /// perturbation can move in either direction from one task to the next -- which is what the
+    /// continual-learning invariant observed, reporting the two losses as equal to five significant
+    /// figures with the second a fraction lower. Claiming accumulation here asserted a property
+    /// replay does not have. VCL is already carved out on the same grounds in the interface docs.
+    /// </para>
+    /// </remarks>
+    public bool AccumulatesAcrossTasks => false;
 
     public double Lambda
     {

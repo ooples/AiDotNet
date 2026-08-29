@@ -1229,25 +1229,23 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
             return outputs[0];
         }
 
-        var combined = new T[numCentroids * _outputChannels];
-        int channelOffset = 0;
-        foreach (var branchOutput in outputs)
-        {
-            int branchChannels = branchOutput.Shape[1];
-            for (int c = 0; c < numCentroids; c++)
-            {
-                int dstBase = c * _outputChannels + channelOffset;
-                int srcBase = c * branchChannels;
-                for (int ch = 0; ch < branchChannels; ch++)
-                {
-                    combined[dstBase + ch] = branchOutput.Data.Span[srcBase + ch];
-                }
-            }
-
-            channelOffset += branchChannels;
-        }
-
-        return new Tensor<T>(combined, [numCentroids, _outputChannels]);
+        // Engine.Concat, NOT a hand-rolled copy into a fresh tensor.
+        //
+        // This used to copy each branch's values element by element out of branchOutput.Data.Span
+        // into a plain T[] and wrap the result in a new Tensor<T>. That produces the right NUMBERS
+        // and no gradient graph: the returned tensor has no GradFn, so every multi-scale branch's
+        // MLP weights became unreachable from the loss and received exactly zero gradient.
+        //
+        // Gradients_MatchFiniteDifference caught it as analytic=0.0000E+000 against a numeric
+        // gradient of -1.6212E-003 that was stable across the whole step ladder. It looked flaky
+        // only because the check samples 12 parameters at random and the single-branch path below
+        // returns its branch directly, keeping ITS graph -- so whether a run sampled a dead slot
+        // varied even though the defect never did.
+        //
+        // Concat is tape-tracked, and the widths line up by construction: _outputChannels is
+        // defined as _branches.Sum(b => b.OutputChannels), which is exactly what concatenating the
+        // branch outputs along the channel axis produces.
+        return Engine.Concat(outputs, 1);
     }
 
     public override void UpdateParameters(T learningRate)
@@ -1380,11 +1378,20 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
         }
 
         int outChannels = branch.OutputChannels;
-        var output = new T[numCentroids * outChannels];
         var maxIndices = new int[numCentroids * outChannels];
+        var selection = new T[numCentroids * maxNeighbors * outChannels];
         var data = features.Data.Span;
         var numOps = NumOps;
 
+        // ARGMAX in plain loops is fine -- an index is not differentiable and never carried a
+        // gradient. Only the SELECTION has to stay on the tape, and it used to be written straight
+        // into a new T[] and wrapped in a new Tensor<T>, which produced the right numbers with no
+        // GradFn. Every branch MLP weight upstream of this pooling was therefore unreachable from
+        // the loss and got exactly zero gradient: Gradients_MatchFiniteDifference reported
+        // analytic=0.0000E+000 against a numeric gradient of -1.6212E-003 that was stable across
+        // the entire step ladder. It looked intermittent only because the check samples 12
+        // parameters at random, so whether a run happened to draw a dead slot varied while the
+        // defect did not.
         for (int c = 0; c < numCentroids; c++)
         {
             int count = neighborCounts[c];
@@ -1403,13 +1410,25 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
                         maxIdx = k;
                     }
                 }
-                output[c * outChannels + ch] = maxVal;
                 maxIndices[c * outChannels + ch] = maxIdx;
+                selection[(c * maxNeighbors + maxIdx) * outChannels + ch] = numOps.One;
             }
         }
 
         branch.MaxIndices = maxIndices;
-        return new Tensor<T>(output, [numCentroids, outChannels]);
+
+        // One-hot select, expressed with tape-tracked ops. Multiplying by a constant mask that is 1
+        // at the winning neighbour and 0 elsewhere and summing over the neighbour axis yields the
+        // max EXACTLY -- the sum has a single non-zero term -- while routing the gradient to that
+        // one element and nowhere else, which is precisely max pooling's backward.
+        //
+        // Deliberately not ReduceMax over the whole neighbour axis: padded neighbours are filled
+        // with zeros by BuildGroupedFeatures rather than replicated, so a padded row can carry a
+        // larger post-MLP activation than a real one and would win a plain reduction. Pooling stays
+        // over neighborCounts[c] exactly as before.
+        var mask = new Tensor<T>(selection, [numCentroids, maxNeighbors, outChannels]);
+        var perNeighbour = Engine.Reshape(features, [numCentroids, maxNeighbors, outChannels]);
+        return Engine.ReduceSum(Engine.TensorMultiply(perNeighbour, mask), [1], false);
     }
 
     private Tensor<T> BuildGroupedFeatures(
