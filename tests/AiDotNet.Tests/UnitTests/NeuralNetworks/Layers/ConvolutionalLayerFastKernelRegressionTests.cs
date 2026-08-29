@@ -188,7 +188,8 @@ public class ConvolutionalLayerFastKernelRegressionTests
     {
         Assert.True(gradients.TryGetValue(parameter, out var analytical),
             "The optimized convolution must remain connected to every trainable parameter.");
-        Assert.All(analytical.AsSpan().ToArray(), value => Assert.True(float.IsFinite(value)));
+        Assert.All(analytical.AsSpan().ToArray(), value =>
+            Assert.True(!float.IsNaN(value) && !float.IsInfinity(value)));
 
         const float epsilon = 1e-3f;
         float original = parameter[index];
