@@ -6,6 +6,7 @@ using AiDotNet.Models.Results;
 using AiDotNet.Optimizers;
 using AiDotNet.Regression;
 using Xunit;
+using System.Reflection;
 using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Optimizers;
@@ -237,6 +238,91 @@ public class MetaheuristicOptimizerIntegrationTests
         var result = optimizer.Optimize(inputData);
 
         AssertValidOptimizationResult(result, "ParticleSwarm");
+    }
+
+    /// <summary>
+    /// Both generators a swarm draws from are seeded when the caller supplies a seed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>Seed</c> lives on the shared options and the function-minimisation overload has always
+    /// honoured it through <c>CreateSearchRandom</c>. Two generators on the model-based path did
+    /// not. <c>OptimizerBase</c> ran <c>Random = new()</c> on the line ABOVE its <c>Options</c>
+    /// assignment, so it could not have read a seed even in principle, and
+    /// <c>ParticleSwarmOptimizer</c> built its own field with <c>CreateSecureRandom()</c>,
+    /// ignoring the seed outright. Feature selection, solution initialisation and every velocity
+    /// draw come from those two.
+    /// </para>
+    /// <para>
+    /// This asserts the generators, not a whole optimization run, because that is exactly what has
+    /// been fixed and no more. A same-seed <c>Optimize(inputData)</c> still does not reproduce - at
+    /// least one further source of nondeterminism remains on that path, and it is not parallel
+    /// reduction order, since neither type parallelises. Claiming reproducibility here would be
+    /// claiming more than is true.
+    /// </para>
+    /// </remarks>
+    [Fact(Timeout = 120000)]
+    public async Task ParticleSwarm_WithTheSameSeed_RepeatsItselfOnTheModelPath()
+    {
+        await Task.Yield();
+
+        var (X, y) = CreateSimpleRegressionData(30);
+        int numFeatures = X.Columns;
+
+        double RunWithSeed(int seed)
+        {
+            var optimizer = new ParticleSwarmOptimizer<double, Matrix<double>, Vector<double>>(
+                new MultipleRegression<double>(),
+                new ParticleSwarmOptimizationOptions<double, Matrix<double>, Vector<double>>
+                {
+                    MaxIterations = 20,
+                    SwarmSize = 20,
+                    MinimumFeatures = numFeatures,
+                    MaximumFeatures = numFeatures,
+                    Seed = seed,
+                });
+
+            return optimizer.Optimize(new OptimizationInputData<double, Matrix<double>, Vector<double>>
+            {
+                XTrain = X,
+                YTrain = y,
+                XValidation = X,
+                YValidation = y,
+                XTest = X,
+                YTest = y,
+            }).BestFitnessScore;
+        }
+
+        Assert.Equal(RunWithSeed(20250829), RunWithSeed(20250829));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ParticleSwarm_WithASeed_BuildsBothItsGeneratorsFromIt()
+    {
+        await Task.Yield();
+
+        static (int Shared, double Swarm) FirstDraws(int seed)
+        {
+            var optimizer = new ParticleSwarmOptimizer<double, Matrix<double>, Vector<double>>(
+                new MultipleRegression<double>(),
+                new ParticleSwarmOptimizationOptions<double, Matrix<double>, Vector<double>>
+                {
+                    SwarmSize = 8,
+                    Seed = seed,
+                });
+
+            var shared = (Random)typeof(OptimizerBase<double, Matrix<double>, Vector<double>>)
+                .GetField("Random", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(optimizer)!;
+            var swarm = (Random)typeof(ParticleSwarmOptimizer<double, Matrix<double>, Vector<double>>)
+                .GetField("_random", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(optimizer)!;
+
+            return (shared.Next(), swarm.NextDouble());
+        }
+
+        Assert.Equal(FirstDraws(20250829), FirstDraws(20250829));
+        Assert.NotEqual(FirstDraws(20250829), FirstDraws(19700101));
     }
 
     #endregion

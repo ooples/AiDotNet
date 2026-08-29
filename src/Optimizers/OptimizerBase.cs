@@ -89,6 +89,13 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <summary>
     /// Provides random number generation for all derived classes.
     /// </summary>
+    /// <remarks>
+    /// Seeded from <see cref="OptimizationAlgorithmOptions{T, TInput, TOutput}.Seed"/> when the
+    /// caller supplies one, and cryptographically secure otherwise. The function-minimisation
+    /// overloads have always honoured that seed through <see cref="CreateSearchRandom"/>; this is
+    /// the same contract for the model-based path, which draws from here for feature selection and
+    /// solution initialisation.
+    /// </remarks>
     protected readonly Random Random;
 
     /// <summary>
@@ -277,9 +284,17 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
         _model = model;
-        Random = new();
         NumOps = MathHelper.GetNumericOperations<T>();
         Options = options ?? new OptimizationAlgorithmOptions<T, TInput, TOutput>();
+
+        // Ordered deliberately: Options has to be assigned before the generator is built, because
+        // the generator is derived from Options.Seed. This previously read `Random = new()` on the
+        // line above the Options assignment, which could not have honoured a seed even if it had
+        // tried to - and left every model-based Optimize(inputData) run unrepeatable, since
+        // RandomlySelectFeatures and InitializeRandomSolution both draw from here.
+        Random = Options.Seed.HasValue
+            ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Options.Seed.Value)
+            : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
         PredictionOptions = Options.PredictionOptions;
         ModelStatsOptions = Options.ModelStatsOptions;
         FitDetector = Options.FitDetector;
@@ -2452,7 +2467,10 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             {
                 var current = nnCloneParameterizable.GetParameters();
                 var perturbed = new Vector<T>(current.Length);
-                var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+                // The shared generator, so a seeded run perturbs identically. A fresh secure
+                // generator here would reintroduce the nondeterminism Options.Seed exists to
+                // remove, and this perturbation seeds every candidate the search starts from.
+                var rng = Random;
                 for (int i = 0; i < current.Length; i++)
                 {
                     // Gaussian noise ~ N(0, σ²) where σ = max(|current[i]|, ε) * 0.1.
