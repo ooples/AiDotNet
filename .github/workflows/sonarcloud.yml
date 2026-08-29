@@ -1663,13 +1663,38 @@ jobs:
           # test constructor before its model/component factory runs and streamed by the sampler, so an OOM has
           # an attributable [test-start] class marker in the live log.
           $consoleVerbosity = if ($heavyShard) { 'detailed' } else { 'normal' }
+
+          # WHY THERE IS EVIDENCE AT ALL NOW. When the test host dies -- an access violation, a
+          # stack overflow, an OOM kill -- it writes no TRX and the shard reports zero failures, so
+          # the run looks like an infrastructure blip and the real cause is unobservable. A skipped
+          # artifact plus an empty log is exactly that signature. Two things change it:
+          #
+          #   --blame-crash   a Sequence file naming the test in flight, plus a dump.
+          #   MINI, not full  a full dump of a 16 GB host cannot fit a runner's free disk; a mini
+          #                   dump carries the faulting stacks, which is what actually gets read.
+          #
+          # The hang dump is promoted from 'none' for the same reason: a 5-minute hang currently
+          # aborts leaving no state at all.
           $dotnetArgs += @(
             '--logger', 'trx;LogFileName=test-results.trx',
             '--logger', "console;verbosity=$consoleVerbosity",
             '--results-directory', $results,
+            '--blame-crash',
+            '--blame-crash-dump-type', 'mini',
             '--blame-hang-timeout', '5min',
-            '--blame-hang-dump-type', 'none'
+            '--blame-hang-dump-type', 'mini'
           )
+
+          # AiDotNet.Tensors writes its GPU launch journal and buffer residency here as the process
+          # exits. This is the cheap half of the evidence and often the decisive half: a host that
+          # dies holding gigabytes of device buffers looks, in every managed tool AND in a heap
+          # dump, like a process with a small tidy heap, because the managed wrappers are tiny and
+          # collectible while the native allocations are not visible to them. The counters are what
+          # separate "leaked device memory" from "the GC had simply not collected yet", and the
+          # journal names the last kernels to reach the device. A few kilobytes of text on a
+          # healthy run, and useful even with no GPU present, since the totals are recorded
+          # whether or not any launch happened.
+          $env:AIDOTNET_GPU_DIAGNOSTICS_DUMP = Join-Path $results 'gpu-diagnostics.txt'
           # OOM root cause + fix: the heavy shards exhaust the 16 GB runner
           # because xUnit runs many test CLASSES in parallel (default
           # maxParallelThreads = ProcessorCount), and each big-model class
@@ -1969,6 +1994,23 @@ jobs:
             TestResults/shard-metadata.json
             TestResults/rerun-candidates.json
           if-no-files-found: error
+
+      # Crash evidence lives in its OWN artifact so the result artifacts stay small and their
+      # `if-no-files-found: error` keeps meaning something. This one uses `ignore`: a healthy run
+      # produces no dump and no Sequence file, and that absence is the expected case, not a
+      # failure to report.
+      - name: Upload crash evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        if: always()
+        continue-on-error: true
+        with:
+          name: crash-evidence-${{ github.sha }}-${{ strategy.job-index }}
+          path: |
+            TestResults/**/*.dmp
+            TestResults/**/Sequence_*.xml
+            TestResults/**/gpu-diagnostics.txt
+          if-no-files-found: ignore
+          retention-days: 14
 
       # Keep the aggregate diagnostic input small. Downloading every coverage XML merely to inspect
       # TRX results makes the final reporter needlessly slow and expensive, while this artifact also
