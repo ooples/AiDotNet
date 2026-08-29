@@ -324,19 +324,11 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
 
             for (int i = 0; i < m; i++)
             {
-                T value = u[i, component];
-                T part = usePositive
-                    ? (NumOps.GreaterThan(value, NumOps.Zero) ? value : NumOps.Zero)
-                    : (NumOps.LessThan(value, NumOps.Zero) ? NumOps.Negate(value) : NumOps.Zero);
-                initialW[i, component] = MaxOf(NumOps.Multiply(sqrtSigma, part), floor);
+                initialW[i, component] = ScaledPart(u[i, component], usePositive, sqrtSigma, floor);
             }
             for (int j = 0; j < n; j++)
             {
-                T value = vt[component, j];
-                T part = usePositive
-                    ? (NumOps.GreaterThan(value, NumOps.Zero) ? value : NumOps.Zero)
-                    : (NumOps.LessThan(value, NumOps.Zero) ? NumOps.Negate(value) : NumOps.Zero);
-                initialH[component, j] = MaxOf(NumOps.Multiply(sqrtSigma, part), floor);
+                initialH[component, j] = ScaledPart(vt[component, j], usePositive, sqrtSigma, floor);
             }
         }
 
@@ -344,6 +336,27 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     }
 
     private T MaxOf(T value, T floor) => NumOps.GreaterThan(value, floor) ? value : floor;
+
+    /// <summary>
+    /// One NNDSVD entry: take the positive or negative part of <paramref name="value"/>, scale it by
+    /// the singular value, and clamp it up to <paramref name="floor"/>.
+    /// </summary>
+    /// <remarks>
+    /// Both the W and the H loop computed this identically inline, as a nested conditional inside a
+    /// nested loop - which is what CodeQL flagged as a block with too many complex statements, and
+    /// it was also a copy of the same expression in two places. NNDSVD (Boutsidis and Gallopoulos,
+    /// 2008) initializes from either the positive or the negative part of each singular vector pair,
+    /// whichever carries more energy; the unused part contributes zero, and the floor keeps the
+    /// factor strictly non-negative so the multiplicative updates cannot divide by zero.
+    /// </remarks>
+    private T ScaledPart(T value, bool usePositive, T sqrtSigma, T floor)
+    {
+        T part = usePositive
+            ? (NumOps.GreaterThan(value, NumOps.Zero) ? value : NumOps.Zero)
+            : (NumOps.LessThan(value, NumOps.Zero) ? NumOps.Negate(value) : NumOps.Zero);
+
+        return MaxOf(NumOps.Multiply(sqrtSigma, part), floor);
+    }
 
     /// <summary>
     /// Runs a single trial of NMF with random initialization.
