@@ -346,7 +346,7 @@
          Bumped 0.129.7 to 0.129.8: AiDotNet.Tensors#999 makes the GPU launch journal and buffer
          residency survive a HARD crash. They were written only from ProcessExit/DomainUnload, which
          run on an orderly shutdown and not on an access violation, stack overflow, OOM-kill or
-         FailFast -- verified by forcing one, which produced a crash dump and no journal at all. They
+         FailFast; verified by forcing one, which produced a crash dump and no journal at all. They
          are now also flushed periodically. That is the half of the crash evidence a process dump
          cannot give cheaply, and this bump is what makes it reach the shard artifacts.
 
