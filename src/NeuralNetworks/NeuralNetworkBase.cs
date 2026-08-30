@@ -480,6 +480,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     public virtual double MaxGradNormValue => NumOps.ToDouble(MaxGradNorm);
 
     /// <summary>
+    /// Gets whether this model clips each gradient component independently
+    /// instead of scaling the global L2 norm. The default remains global-norm
+    /// clipping; research models override this only when their training
+    /// procedure explicitly requires value clipping.
+    /// </summary>
+    protected virtual bool UsesElementWiseGradientClipping => false;
+
+    /// <summary>
     /// Backwards-compatible <c>T</c>-typed accessor for code that historically
     /// read the protected field directly. Routes through the public
     /// <see cref="MaxGradNormValue"/> virtual so subclasses that override
@@ -11536,6 +11544,41 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         IReadOnlyList<Tensor<T>> iterationOrder)
     {
         LastStepHadNonFiniteGradients = false;
+        if (UsesElementWiseGradientClipping)
+        {
+            // Detect non-finite values before mutating any tensor. This preserves
+            // the existing diagnostic contract: a poisoned step is left intact
+            // so the originating layer can still be identified.
+            for (int p = 0; p < iterationOrder.Count; p++)
+            {
+                if (!grads.TryGetValue(iterationOrder[p], out var g)) continue;
+                if (g is null || g.Length == 0) continue;
+                var span = g.Data.Span;
+                for (int i = 0; i < g.Length; i++)
+                {
+                    double value = NumOps.ToDouble(span[i]);
+                    if (double.IsNaN(value) || double.IsInfinity(value))
+                    {
+                        LastStepHadNonFiniteGradients = true;
+                        return;
+                    }
+                }
+            }
+
+            T lower = NumOps.FromDouble(-maxNorm);
+            T upper = NumOps.FromDouble(maxNorm);
+            for (int p = 0; p < iterationOrder.Count; p++)
+            {
+                if (!grads.TryGetValue(iterationOrder[p], out var g)) continue;
+                if (g is null || g.Length == 0) continue;
+                var span = g.Data.Span;
+                for (int i = 0; i < g.Length; i++)
+                    span[i] = MathHelper.Max(lower, MathHelper.Min(upper, span[i]));
+            }
+
+            return;
+        }
+
         // Step 1: total L2 norm across all gradient tensors, iterating in
         // the caller-supplied deterministic order (NOT dict bucket order —
         // that's process-randomized for reference-keyed dicts).

@@ -20,8 +20,7 @@ namespace AiDotNet.Enums;
 /// governs whether a graph is built, not the values that flow through it.
 /// </para>
 /// <para><b>For Beginners:</b> leave this alone. The default already gives you the accurate answer,
-/// and it still uses the fast route wherever the fast route is provably identical, so you are not
-/// paying for accuracy you were getting anyway.
+/// Use <see cref="Fast"/> explicitly when last-bit replay equality is less important than throughput.
 /// </para>
 /// </remarks>
 public enum NumericalReproducibility
@@ -30,9 +29,8 @@ public enum NumericalReproducibility
     /// The layer's output must match its reference computation exactly, bit for bit.
     /// </summary>
     /// <remarks>
-    /// The default. A faster route is still used wherever it has been shown to reproduce the
-    /// reference exactly for the shape in hand, so this costs nothing when the routes agree -- which
-    /// is most of the time. It only falls back where they genuinely differ.
+    /// The default. Exact always uses the canonical computation. A successful comparison for one
+    /// input cannot certify a parallel fused reduction for later inputs, even when the shape is unchanged.
     /// </remarks>
     Exact = 0,
 

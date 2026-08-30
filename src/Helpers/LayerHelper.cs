@@ -18785,14 +18785,26 @@ public static partial class LayerHelper<T>
     {
         var silu = (IActivationFunction<T>)new SiLUActivation<T>();
         int prevDim = inputDim;
+        bool firstLayer = true;
 
         for (int i = 0; i < hiddenDims.Length; i++)
         {
-            yield return new DenseLayer<T>(hiddenDims[i], silu);
+            var hiddenLayer = new DenseLayer<T>(hiddenDims[i], silu);
+            hiddenLayer.ResolveStructureShapesOnly([prevDim]);
+            yield return firstLayer
+                ? LayerGraphContract.FromDerivedInput(hiddenLayer, "diffusion-input")
+                : hiddenLayer;
+            firstLayer = false;
             prevDim = hiddenDims[i];
         }
 
-        yield return new DenseLayer<T>(outputDim, (IActivationFunction<T>)new IdentityActivation<T>());
+        var outputLayer = new DenseLayer<T>(
+            outputDim,
+            (IActivationFunction<T>)new IdentityActivation<T>());
+        outputLayer.ResolveStructureShapesOnly([prevDim]);
+        yield return firstLayer
+            ? LayerGraphContract.FromDerivedInput(outputLayer, "diffusion-input")
+            : outputLayer;
     }
 
     /// <summary>
@@ -18803,7 +18815,11 @@ public static partial class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreateDefaultFinDiffTimestepProjectionLayers(
         int timestepEmbDim)
     {
-        yield return new DenseLayer<T>(timestepEmbDim, (IActivationFunction<T>)new SiLUActivation<T>());
+        var projectionLayer = new DenseLayer<T>(
+            timestepEmbDim,
+            (IActivationFunction<T>)new SiLUActivation<T>());
+        projectionLayer.ResolveStructureShapesOnly([timestepEmbDim]);
+        yield return LayerGraphContract.FromDerivedInput(projectionLayer, "timestep-embedding");
     }
 
     /// <summary>
@@ -21935,125 +21951,119 @@ public static partial class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates layers for GraFPrint graph neural network fingerprinting.
-    /// GNN message passing layers + graph readout + embedding head.
+    /// Creates the native GraFPrint encoder and projection head from the official implementation.
     /// </summary>
+    /// <remarks>
+    /// The pipeline is: spectrogram min-max normalization + time/frequency coordinates, learned
+    /// peak extraction, a 2-2-6-2 dynamic max-relative graph pyramid, 1024-D graph readout, and the
+    /// 1024 -> 4096 -> 128 SimCLR projection head. Smaller channel/depth values retain the same
+    /// operations for bounded tests and constrained deployments.
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultGraFPrintLayers(
-        int numMels = 256, int gnnHiddenDim = 256, int numGnnLayers = 4,
-        int numAttentionHeads = 4, int embeddingDim = 128, double dropoutRate = 0.1)
+        int numMels = 64, int gnnHiddenDim = 256, int numGnnLayers = 6,
+        int numAttentionHeads = 4, int embeddingDim = 128, double dropoutRate = 0.1,
+        int kNeighbors = 3, int peakFilters = 8, int peakStride = 2,
+        int peakKernelSize = 7, int encoderEmbeddingDim = 1024,
+        int projectionExpansion = 32)
     {
-        // LeakyReLU(0.2) is the paper's stem activation (see
-        // graph_encoder.py line 138: nn.LeakyReLU(negative_slope=0.2)).
-        // The FFN modules use the same act='relu' string the paper
-        // wires through the encoder's activation registry, which maps
-        // to LeakyReLU(0.2) in chymaera96/GraFP/encoder/gcn_lib/torch_nn.py.
-        var leaky = (IActivationFunction<T>)new LeakyReLUActivation<T>(alpha: 0.2);
+        if (gnnHiddenDim <= 0) throw new ArgumentOutOfRangeException(nameof(gnnHiddenDim));
+        if (numGnnLayers <= 0) throw new ArgumentOutOfRangeException(nameof(numGnnLayers));
+        if (embeddingDim <= 0) throw new ArgumentOutOfRangeException(nameof(embeddingDim));
+        if (kNeighbors <= 0) throw new ArgumentOutOfRangeException(nameof(kNeighbors));
+        if (peakFilters <= 0) throw new ArgumentOutOfRangeException(nameof(peakFilters));
+        if (peakStride <= 0) throw new ArgumentOutOfRangeException(nameof(peakStride));
+        if (peakKernelSize <= 0 || peakKernelSize % 2 == 0)
+            throw new ArgumentOutOfRangeException(nameof(peakKernelSize), "Peak kernel size must be positive and odd.");
+        if (encoderEmbeddingDim <= 0) throw new ArgumentOutOfRangeException(nameof(encoderEmbeddingDim));
+        if (projectionExpansion <= 0) throw new ArgumentOutOfRangeException(nameof(projectionExpansion));
+        if (dropoutRate < 0.0 || dropoutRate >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate));
+
+        // Retained in the public signature for source compatibility. GraFPrint uses dynamic graph
+        // convolution, not attention heads.
+        _ = numMels;
+        _ = numAttentionHeads;
+
         var identity = (IActivationFunction<T>)new IdentityActivation<T>();
+        var relu = (IActivationFunction<T>)new ReLUActivation<T>();
+        var leaky = (IActivationFunction<T>)new LeakyReLUActivation<T>(alpha: 0.2);
 
-        // Paper's tiny ('t') channel widths from rapidflow encoder source
-        // (graph_encoder.py: self.channels = [64, 128, 256, 512]).
-        // Scale them off gnnHiddenDim so the same factory can emit smaller
-        // test variants without changing the geometric channel-doubling
-        // shape the paper defines.
-        int stem = Math.Max(8, gnnHiddenDim / 4);          // 64 when gnnHiddenDim = 256
-        int stage1 = Math.Max(8, gnnHiddenDim / 2);        // 128
-        int stage2 = Math.Max(8, gnnHiddenDim);            // 256
-        int stage3 = Math.Max(8, gnnHiddenDim * 2);        // 512
+        // Official GPUPeakExtractorv2:
+        // normalize -> concat(time, frequency, spectrogram) -> Conv7x7(3->8,stride 2x1) -> ReLU.
+        // The frequency-only gather after a stride-1 convolution is exactly Conv stride=(2,1).
+        yield return new GraFPrintCoordinateAugmentationLayer<T>();
+        yield return new ConvolutionalLayer<T>(
+            outputDepth: peakFilters,
+            kernelSize: peakKernelSize,
+            stride: 1,
+            padding: peakKernelSize / 2,
+            activationFunction: relu,
+            nonlinearityForInit: relu,
+            biasMode: BiasMode.Always);
+        yield return new GraFPrintFrequencyStrideLayer<T>(peakStride);
 
-        // Stem: 1×1 Conv + BN + LeakyReLU (graph_encoder.py:
-        // self.stem = nn.Sequential(Conv2d(...), BN(...), LeakyReLU(0.2))).
-        // The Conv carries `identity` in its own activation slot because the
-        // paper applies LeakyReLU two layers later (after BN), but its weight
-        // init still needs the LeakyReLU(0.2) Kaiming gain — without that the
-        // 53-layer pyramid produces single-step Adam explosions on small-batch
-        // training. nonlinearityForInit decouples the init gain from the
-        // layer's own activation slot, mirroring PyTorch's
-        // `nn.init.kaiming_uniform_(weight, nonlinearity='leaky_relu', a=0.2)`.
-        yield return new ConvolutionalLayer<T>(outputDepth: stem, kernelSize: 1, stride: 1, padding: 0, activationFunction: identity, nonlinearityForInit: leaky);
+        // Official tiny-encoder widths [64,128,256,512], scaled from the existing
+        // GnnHiddenDim option (256 is the published tiny configuration).
+        int[] channels =
+        [
+            Math.Max(8, gnnHiddenDim / 4),
+            Math.Max(8, gnnHiddenDim / 2),
+            Math.Max(8, gnnHiddenDim),
+            Math.Max(8, gnnHiddenDim * 2),
+        ];
+
+        // The published tiny model is [2,2,6,2]. NumGnnLayers represents the deep-stage
+        // count; setting it to one yields a bounded [1,1,1,1] model without removing graph ops.
+        int sideStageBlocks = Math.Max(1, (numGnnLayers + 2) / 3);
+        int[] blockCounts = [sideStageBlocks, sideStageBlocks, numGnnLayers, sideStageBlocks];
+        int totalBlocks = blockCounts.Sum();
+
+        // Stem: Conv1x1(bias=False) -> BN -> LeakyReLU(0.2).
+        yield return new ConvolutionalLayer<T>(
+            outputDepth: channels[0], kernelSize: 1, stride: 1, padding: 0,
+            activationFunction: identity, nonlinearityForInit: leaky,
+            biasMode: BiasMode.Never);
         yield return new BatchNormalizationLayer<T>();
         yield return new ActivationLayer<T>(leaky);
 
-        // Paper's per-stage block counts: self.blocks = [2, 2, 6, 2]. Scale
-        // proportionally off numGnnLayers (default 4) so callers can dial
-        // the test variant down without losing the 2-2-6-2 RATIO the paper
-        // uses. With numGnnLayers=4: stage0=1, stage1=1, stage2=4, stage3=1
-        // — same 1:1:4:1 ratio as the paper's 2:2:6:2 (the paper's middle
-        // stage is the deep one). With numGnnLayers=16 (full paper depth):
-        // 4, 4, 16, 4 — matches the published tiny variant exactly.
-        int stage0Blocks = Math.Max(1, numGnnLayers / 4);
-        int stage1Blocks = Math.Max(1, numGnnLayers / 4);
-        int stage2Blocks = Math.Max(1, numGnnLayers);
-        int stage3Blocks = Math.Max(1, numGnnLayers / 4);
+        int blockIndex = 0;
+        int maxDilation = Math.Max(1, 128 / kNeighbors);
+        for (int stage = 0; stage < channels.Length; stage++)
+        {
+            if (stage > 0)
+            {
+                // Official Downsample: Conv3x3 stride 2, padding 1 -> BN.
+                yield return new ConvolutionalLayer<T>(
+                    outputDepth: channels[stage], kernelSize: 3, stride: 2, padding: 1,
+                    activationFunction: identity, nonlinearityForInit: leaky,
+                    biasMode: BiasMode.Always);
+                yield return new BatchNormalizationLayer<T>();
+            }
 
-        // Stage 0: stem-width FFN blocks. Each FFN follows the paper's
-        // inverted-bottleneck shape (Conv1×1 4× expand, LeakyReLU, Conv1×1
-        // contract) with BN between every layer.
-        for (int i = 0; i < stage0Blocks; i++)
-            foreach (var l in BlockFFN(stem, leaky, identity, dropoutRate))
-                yield return l;
+            for (int block = 0; block < blockCounts[stage]; block++)
+            {
+                int dilation = Math.Min(blockIndex / 4 + 1, maxDilation);
+                double dropPath = totalBlocks > 1
+                    ? dropoutRate * blockIndex / (totalBlocks - 1)
+                    : 0.0;
+                yield return new GraFPrintGraphBlockLayer<T>(
+                    channels[stage], kNeighbors, dilation, dropPath);
+                blockIndex++;
+            }
+        }
 
-        // Stage 1: stride-2 downsample (the paper's Downsample module:
-        // 3×3 Conv stride 2 + BN) then per-stage FFN blocks.
-        yield return new ConvolutionalLayer<T>(outputDepth: stage1, kernelSize: 3, stride: 2, padding: 1, activationFunction: identity, nonlinearityForInit: leaky);
-        yield return new BatchNormalizationLayer<T>();
-        for (int i = 0; i < stage1Blocks; i++)
-            foreach (var l in BlockFFN(stage1, leaky, identity, dropoutRate))
-                yield return l;
-
-        // Stage 2: the deep stage (2:2:6:2 — middle one is deepest).
-        yield return new ConvolutionalLayer<T>(outputDepth: stage2, kernelSize: 3, stride: 2, padding: 1, activationFunction: identity, nonlinearityForInit: leaky);
-        yield return new BatchNormalizationLayer<T>();
-        for (int i = 0; i < stage2Blocks; i++)
-            foreach (var l in BlockFFN(stage2, leaky, identity, dropoutRate))
-                yield return l;
-
-        // Stage 3: final stage at the deepest channel width.
-        yield return new ConvolutionalLayer<T>(outputDepth: stage3, kernelSize: 3, stride: 2, padding: 1, activationFunction: identity, nonlinearityForInit: leaky);
-        yield return new BatchNormalizationLayer<T>();
-        for (int i = 0; i < stage3Blocks; i++)
-            foreach (var l in BlockFFN(stage3, leaky, identity, dropoutRate))
-                yield return l;
-
-        // Projection head: 1×1 Conv to embedding dim (graph_encoder.py:
-        // self.proj = nn.Conv2d(self.channels[-1], 1024, 1, bias=True)).
-        // Identity activation — fingerprints are L2-normalised by the
-        // caller's Fingerprint(...) wrapper, so an extra nonlinearity
-        // here would distort angular geometry.
-        yield return new ConvolutionalLayer<T>(outputDepth: embeddingDim, kernelSize: 1, stride: 1, padding: 0, activationFunction: identity);
-
-        // Readout: global mean pool over spatial axes. Reference does
-        // torch.mean(x, dim=2).squeeze(-1).squeeze(-1) — equivalent to a
-        // GlobalAveragePool followed by reshape, which the caller's
-        // GraFPrint.Predict applies after this factory's chain.
+        // Encoder readout and the exact SimCLR projector used by the official training code.
+        yield return new ConvolutionalLayer<T>(
+            outputDepth: encoderEmbeddingDim, kernelSize: 1, stride: 1, padding: 0,
+            activationFunction: identity, biasMode: BiasMode.Always);
         yield return new GlobalPoolingLayer<T>(PoolingType.Average);
+        yield return new FlattenLayer<T>();
+        yield return new DenseLayer<T>(
+            checked(embeddingDim * projectionExpansion),
+            new ELUActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(embeddingDim, identity);
     }
 
-    /// <summary>
-    /// Emits the paper-faithful FFN block: <c>Conv1×1 expand 4× → BN →
-    /// LeakyReLU → Conv1×1 contract → BN → Dropout</c>. Matches the
-    /// reference implementation's <c>FFN</c> module in
-    /// <c>chymaera96/GraFP/encoder/graph_encoder.py</c>.
-    /// </summary>
-    private static IEnumerable<ILayer<T>> BlockFFN(
-        int channels,
-        IActivationFunction<T> leaky,
-        IActivationFunction<T> identity,
-        double dropoutRate)
-    {
-        // Conv1×1 expand 4× → BN → LeakyReLU. The expand Conv is followed by
-        // BN+LeakyReLU so its weights need the LeakyReLU(0.2) Kaiming gain.
-        yield return new ConvolutionalLayer<T>(outputDepth: channels * 4, kernelSize: 1, stride: 1, padding: 0, activationFunction: identity, nonlinearityForInit: leaky);
-        yield return new BatchNormalizationLayer<T>();
-        yield return new ActivationLayer<T>(leaky);
-        // Contract Conv1×1 → BN → (Dropout). The contract Conv has no
-        // downstream nonlinearity in this block (BN normalizes, Dropout is
-        // multiplicative noise), so its eventual nonlinearity is whatever
-        // the NEXT block's first activation is — also LeakyReLU(0.2) in the
-        // paper's stacked-FFN topology. Initialize with the matching gain.
-        yield return new ConvolutionalLayer<T>(outputDepth: channels, kernelSize: 1, stride: 1, padding: 0, activationFunction: identity, nonlinearityForInit: leaky);
-        yield return new BatchNormalizationLayer<T>();
-        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-    }
 
     /// <summary>
     /// Creates layers for ConformerFP (Conformer-based fingerprinting).

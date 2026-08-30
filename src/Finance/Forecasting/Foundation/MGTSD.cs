@@ -135,7 +135,7 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     {
         if (string.IsNullOrWhiteSpace(onnxModelPath)) throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath)) throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
-        options ??= new MGTSDOptions<T>(); _options = options; Options = _options;
+        options = ResolveOptions(architecture, options); _options = options; Options = _options;
         _useNativeMode = false; OnnxModelPath = onnxModelPath; OnnxSession = new InferenceSession(onnxModelPath);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         CopyOptionsToFields(options);
@@ -145,7 +145,7 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
         MGTSDOptions<T>? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
-        options ??= new MGTSDOptions<T>();
+        options = ResolveOptions(architecture, options);
         _options = options;
         Options = _options;
 
@@ -168,6 +168,36 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
         CopyOptionsToFields(options);
         InitializeLayers();
     }
+
+
+    private static MGTSDOptions<T> ResolveOptions(
+        NeuralNetworkArchitecture<T> architecture,
+        MGTSDOptions<T>? options)
+    {
+        if (options is null)
+        {
+            options = new MGTSDOptions<T>();
+            if (architecture.InputSize > 0) options.ContextLength = architecture.InputSize;
+            if (architecture.OutputSize > 0) options.ForecastHorizon = architecture.OutputSize;
+        }
+
+        if (architecture.InputSize > 0 && architecture.InputSize != options.ContextLength)
+        {
+            throw new ArgumentException(
+                $"Architecture input size ({architecture.InputSize}) must match MGTSD ContextLength ({options.ContextLength}).",
+                nameof(architecture));
+        }
+
+        if (architecture.OutputSize > 0 && architecture.OutputSize != options.ForecastHorizon)
+        {
+            throw new ArgumentException(
+                $"Architecture output size ({architecture.OutputSize}) must match MGTSD ForecastHorizon ({options.ForecastHorizon}).",
+                nameof(architecture));
+        }
+
+        return options;
+    }
+
 
     private void CopyOptionsToFields(MGTSDOptions<T> options)
     {

@@ -386,6 +386,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// Gradient of the biases computed during backpropagation via autodiff.
     /// </summary>
     [Scratch]
+
     /// <summary>
     /// Input shape the fast-route verification was performed for, or <c>null</c> if never verified.
     /// </summary>
@@ -422,6 +423,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             if (!comparer.Equals(a[i], b[i])) return false;
         return true;
     }
+
 
     private Tensor<T>? _biasesGradient;
 
@@ -1602,13 +1604,10 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             }
             else
             {
-                // FIRST inference forward at this shape: run both once and keep the fast route only
-                // if it reproduces the reference bit for bit. This is what lets Exact stay the
-                // default without giving up speed -- for every shape where the routes agree (k1, k4,
-                // k5 and stride-2 layers, measured) the fast route is used from here on, and only a
-                // genuinely divergent shape such as 3x3 stride 1 pays the reference cost. Verifying
-                // beats a hardcoded shape list: it stays correct when the engine changes which
-                // algorithm it picks.
+                // First inference forward at this shape: run both once and keep the fast route only
+                // when it reproduces the reference bit for bit. AiDotNet.Tensors 0.129.7 unifies
+                // the allocating and destination convolution paths, so the optimized route should
+                // now pass this guard without sacrificing deterministic serialize/replay behavior.
                 var referenceOnce = Reference();
                 var optimizedOnce = Optimized();
                 _optimizedMatchesReference = BitwiseEquals(referenceOnce, optimizedOnce);

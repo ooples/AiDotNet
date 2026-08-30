@@ -216,6 +216,19 @@ public class TapeOptimizerSerializationTests
         yield return new object[] { "Nadam", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new NadamOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new NadamOptimizerOptions<double, Tensor<double>, Tensor<double>>()))) };
         yield return new object[] { "Nesterov", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new NesterovAcceleratedGradientOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new NesterovAcceleratedGradientOptimizerOptions<double, Tensor<double>, Tensor<double>>()))) };
         yield return new object[] { "RMSProp", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new RootMeanSquarePropagationOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new RootMeanSquarePropagationOptimizerOptions<double, Tensor<double>, Tensor<double>>()))) };
+        yield return new object[]
+        {
+            "RMSProp-CenteredMomentum",
+            (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() =>
+                new RootMeanSquarePropagationOptimizer<double, Tensor<double>, Tensor<double>>(
+                    null,
+                    Common(new RootMeanSquarePropagationOptimizerOptions<double, Tensor<double>, Tensor<double>>
+                    {
+                        Centered = true,
+                        InitialMomentum = 0.9,
+                        UseAdaptiveMomentum = false
+                    })))
+        };
 #pragma warning restore CS8625
     }
 

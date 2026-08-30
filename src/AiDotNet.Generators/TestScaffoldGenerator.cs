@@ -4552,7 +4552,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "new AiDotNet.Audio.Fingerprinting.GraFPrintOptions { NumMels = 32, EmbeddingDim = 4, " +
                     "GnnHiddenDim = 16, NumGnnLayers = 1, NumAttentionHeads = 1, KNeighbors = 2, " +
-                    "DropoutRate = 0.0, DisableFusedOptimizerStep = true })";
+                    "EncoderEmbeddingDim = 16, ProjectionExpansion = 2, PeakFilters = 4, DropoutRate = 0.0 })";
+
             }
             else if (model.ClassName == "GPTSoVITS" && model.TypeParameterCount == 1)
             {
@@ -5106,15 +5107,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "SAM2" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Segmentation.", System.StringComparison.Ordinal))
             {
-                // The video fixture below supplies [4, 3, 32, 32], but the parameterless SAM2
-                // constructor declares 256x256. SAM2 upsamples its low-resolution mask to the
-                // architecture dimensions, so the generated fixture exercised a different output
-                // geometry than the image it supplied. Keep the production Base model-size default
-                // and align only the generated architecture with its existing 32x32 input geometry.
+                // Exercise SAM 2's complete Hiera/FPN, four-layer RoPE memory transformer,
+                // two-way decoder, mask-conditioned memory encoder, and object-pointer path at CI
+                // width. Only capacity is scaled; no stage/module or generated invariant is removed.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1))";
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), memoryBankSize: 2, " +
+                    "options: new AiDotNet.Video.Options.SAM2Options { " +
+                    "HieraEmbeddingDimension = 16, HieraStageDepths = new[] { 1, 1, 1, 1 }, " +
+                    "HieraInitialHeadCount = 1, HieraWindowSizes = new[] { 8, 4, 2, 1 }, " +
+                    "HieraGlobalAttentionBlockIndexes = new[] { 2 }, " +
+                    "ModelDimension = 16, MemoryDimension = 8, DecoderHeadCount = 4, " +
+                    "MemoryAttentionLayerCount = 4, MaskDecoderDepth = 2, MaskDecoderMlpDimension = 64 })";
             }
             else if (model.ClassName == "SAM21" && model.TypeParameterCount == 1)
             {

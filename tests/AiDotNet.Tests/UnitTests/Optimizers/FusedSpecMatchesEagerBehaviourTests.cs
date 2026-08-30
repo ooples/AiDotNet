@@ -94,26 +94,43 @@ public class FusedSpecMatchesEagerBehaviourTests
         Assert.Equal(Tensors.Engines.Compilation.OptimizerType.SGD, config.Type);
     }
 
-    /// <summary>
-    /// RMSprop must keep fusing at the default momentum. Its <c>Step</c> has no momentum term, so it matches
-    /// the momentum-free RMSprop kernel exactly; declining on <c>InitialMomentum != 0</c> would drop every
-    /// default-configured RMSprop off the fused path for no reason.
-    /// </summary>
     [Theory]
-    [InlineData(0.9)]
-    [InlineData(0.0)]
-    public void RmsProp_FusesRegardlessOfInitialMomentum(double initialMomentum)
+    [InlineData(0.9, true)]
+    [InlineData(0.0, false)]
+    public async Task RmsProp_UncenteredPreservesLegacyFusion(
+        double initialMomentum,
+        bool adaptiveMomentum)
     {
+        await Task.Yield();
+
         var options = new RootMeanSquarePropagationOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
             InitialMomentum = initialMomentum,
+            UseAdaptiveMomentum = adaptiveMomentum,
             UseAdaptiveLearningRate = false,
+            Centered = false,
         };
         var optimizer = new RootMeanSquarePropagationOptimizer<double, Matrix<double>, Vector<double>>(null, options);
 
-        Assert.True(TryGetConfig(optimizer, out var config),
-            "RMSprop declined fusion; its Step applies no momentum, so it matches the RMSprop kernel.");
+        Assert.True(TryGetConfig(optimizer, out var config));
         Assert.Equal(Tensors.Engines.Compilation.OptimizerType.RMSprop, config.Type);
+    }
+
+    [Fact]
+    public async Task RmsProp_CenteredDeclinesUncenteredFusedKernel()
+    {
+        await Task.Yield();
+
+        var options = new RootMeanSquarePropagationOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            InitialMomentum = 0.9,
+            UseAdaptiveMomentum = false,
+            UseAdaptiveLearningRate = false,
+            Centered = true,
+        };
+        var optimizer = new RootMeanSquarePropagationOptimizer<double, Matrix<double>, Vector<double>>(null, options);
+
+        Assert.False(TryGetConfig(optimizer, out _));
     }
 
     /// <summary>

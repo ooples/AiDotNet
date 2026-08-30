@@ -15,7 +15,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
 public class ConvolutionalLayerFastKernelRegressionTests
 {
     [Fact(Timeout = 120000)]
-    public async Task ExactInference_ThreeByThreeElu_PromotesFastKernelAfterParityCheck()
+    public async Task ExactInference_ThreeByThreeElu_PromotesFastKernelAndReplaysBitwise()
     {
         await Task.Yield();
 
@@ -25,16 +25,16 @@ public class ConvolutionalLayerFastKernelRegressionTests
 
         var first = layer.Forward(input);
         var firstSnapshot = first.AsSpan().ToArray();
-        var second = layer.Forward(input);
 
         AssertOptimizedRouteMatch(layer, expected: true,
-            "Exact inference must keep the platform-fast canonical route after its first-shape " +
-            "parity check; falling back to the platform-slow kernel reintroduces the MiDaS regression.");
-        Assert.Equal(firstSnapshot, second.AsSpan().ToArray());
+            "AiDotNet.Tensors 0.129.7 must make the exact and optimized convolution routes " +
+            "bitwise-equal; a slow reference fallback only hides the PatchGAN regression.");
+        for (int replay = 0; replay < 32; replay++)
+            Assert.Equal(firstSnapshot, layer.Forward(input).AsSpan().ToArray());
     }
 
     [Fact(Timeout = 120000)]
-    public async Task ExactInference_ThreeByThreeRelu_SelectsBitwiseEquivalentPlatformRoute()
+    public async Task ExactInference_ThreeByThreeRelu_PromotesFastKernelAndReplaysBitwise()
     {
         await Task.Yield();
 
@@ -48,14 +48,12 @@ public class ConvolutionalLayerFastKernelRegressionTests
 
         var first = layer.Forward(input);
         var firstSnapshot = first.AsSpan().ToArray();
-        var second = layer.Forward(input);
 
-        bool expectFusedRoute = !System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
-            System.Runtime.InteropServices.OSPlatform.Windows);
-        AssertOptimizedRouteMatch(layer, expectFusedRoute,
-            "Exact inference must reject Windows' non-bitwise fused result, while non-Windows must " +
-            "retain the array-form fused route instead of falling back to its slow scalar kernel.");
-        Assert.Equal(firstSnapshot, second.AsSpan().ToArray());
+        AssertOptimizedRouteMatch(layer, expected: true,
+            "The fused ReLU route must be bitwise-equal on every platform after the Tensors " +
+            "upgrade; retaining the old Windows fallback would preserve a performance regression.");
+        for (int replay = 0; replay < 32; replay++)
+            Assert.Equal(firstSnapshot, layer.Forward(input).AsSpan().ToArray());
     }
 
     [Fact(Timeout = 120000)]

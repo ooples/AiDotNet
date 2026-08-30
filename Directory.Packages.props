@@ -347,10 +347,30 @@
          AiDotNet.Tensors (0.129.4) on master; 0.129.7 is published for OpenBLAS, OneDNN, CLBlast and
          Tensors alike, so the lockstep this comment describes is actually restored rather than
          merely asserted. AiDotNet.Tensors 0.129.7 is required for the GPU launch journal and buffer
-         residency diagnostics that #2056 collects. -->
+         residency diagnostics that #2056 collects.
+
+         Then bumped Tensors alone from 0.129.7 to 0.129.8 for AiDotNet.Tensors #998, after
+         rejecting the earlier 0.129.5 / #988 implementation.
+         Although 0.129.5 makes the scalar Conv2D and Conv2DInto overloads bitwise-equal,
+         an isolated full-model A/B showed a severe compute regression. Three fresh MiDaS
+         processes per package on the same AiDotNet build measured:
+
+           0.129.4  steady median 44.02 ms, cold 1230.21 ms, train 2912.63 ms
+           0.129.5  steady median 324.60 ms, cold 1614.40 ms, train 3396.83 ms
+
+         That is 7.37x slower steady-state, 31% slower cold, and 16.6% slower training;
+         CPU and wall time both rose about 37% while allocation stayed effectively flat.
+         A single 64-channel convolution microbenchmark did not predict the model-level cost.
+
+         AiDotNet.Tensors 0.129.8 / #998 preserves Conv2D entry-point parity while retaining
+         the platform-appropriate CPU route, removing the Windows performance regression that
+         blocked this upgrade. ConvolutionalLayer still selects one canonical kernel per platform
+         and records Conv2DInto with the same eager/compiled backward metadata as Conv2D. The
+         regression tests cover exact routing, finite-difference gradients, and a real cached
+         compiled training trace/replay. -->
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.129.7" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.129.7" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.129.7" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.129.8" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.129.7" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
