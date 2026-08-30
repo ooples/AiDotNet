@@ -29,7 +29,9 @@ public partial class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, T
     /// <summary>
     /// Options specific to the Ant Colony Optimization algorithm.
     /// </summary>
-    private AntColonyOptimizationOptions<T, TInput, TOutput> _antColonyOptions;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private AntColonyOptimizationOptions<T, TInput, TOutput> _antColonyOptions => (AntColonyOptimizationOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The current rate at which pheromone evaporates from the trails.
@@ -58,7 +60,6 @@ public partial class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, T
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _antColonyOptions = options ?? new AntColonyOptimizationOptions<T, TInput, TOutput>();
         _currentPheromoneEvaporationRate = NumOps.Zero;
         _currentPheromoneIntensity = NumOps.Zero;
 
@@ -384,26 +385,6 @@ public partial class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, T
         }
     }
 
-    /// <summary>
-    /// Updates the options for the Ant Colony Optimization algorithm.
-    /// </summary>
-    /// <param name="options">The new options to be set.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method allows you to change how the ant colony algorithm behaves
-    /// by updating its settings. It checks to make sure you're providing the right kind of settings.</para>
-    /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is AntColonyOptimizationOptions<T, TInput, TOutput> antColonyOptions)
-        {
-            _antColonyOptions = antColonyOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected AntColonyOptimizationOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current options for the Ant Colony Optimization algorithm.
@@ -429,7 +410,6 @@ public partial class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, T
     private AntColonyOptimizer(AntColonyOptimizationOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _antColonyOptions = options ?? new AntColonyOptimizationOptions<T, TInput, TOutput>();
         _currentPheromoneEvaporationRate = NumOps.Zero;
         _currentPheromoneIntensity = NumOps.Zero;
 

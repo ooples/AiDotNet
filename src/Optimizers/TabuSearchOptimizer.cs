@@ -32,7 +32,9 @@ public partial class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// <summary>
     /// The options specific to the Tabu Search algorithm.
     /// </summary>
-    private TabuSearchOptions<T, TInput, TOutput> _tabuOptions;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private TabuSearchOptions<T, TInput, TOutput> _tabuOptions => (TabuSearchOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The current mutation rate used in generating neighboring solutions.
@@ -69,7 +71,6 @@ public partial class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _tabuOptions = options ?? new TabuSearchOptions<T, TInput, TOutput>();
 
         // If no genetic algorithm is provided, create a default StandardGeneticAlgorithm
         if (geneticAlgorithm == null)
@@ -320,22 +321,6 @@ public partial class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
         tabuList.Add(solutionHash);
     }
 
-    /// <summary>
-    /// Updates the options for the Tabu Search algorithm.
-    /// </summary>
-    /// <param name="options">The new options to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of type TabuSearchOptions.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is TabuSearchOptions<T, TInput, TOutput> tabuOptions)
-        {
-            _tabuOptions = tabuOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected TabuSearchOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current options for the Tabu Search algorithm.
@@ -358,7 +343,6 @@ public partial class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     private TabuSearchOptimizer(TabuSearchOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _tabuOptions = options ?? new TabuSearchOptions<T, TInput, TOutput>();
 
         // With no model to clone, the genetic machinery the model-training path uses gets a
         // trivial factory. Minimize never touches it.

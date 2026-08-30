@@ -2217,7 +2217,29 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// or might have additional specialized options.
     /// </para>
     /// </remarks>
-    protected abstract void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options);
+    /// <remarks>
+    /// <para>
+    /// Overriding this is now the EXCEPTION rather than the rule. It used to be abstract, so all 42
+    /// concrete optimizers implemented it, and 36 of those implementations were the same eight lines:
+    /// downcast the options, assign them to a private typed field, throw otherwise. That field was a
+    /// second copy of state the base already owns, and keeping two copies in step is the whole
+    /// reason the method existed.
+    /// </para>
+    /// <para>
+    /// Those optimizers now read their typed options through a computed property over
+    /// <see cref="Options"/>, so there is no second copy and nothing to synchronise - which also
+    /// closed a latent bug, since a constructor written as <c>base(model, options ?? new())</c>
+    /// alongside <c>_options = options ?? new()</c> built TWO different default instances whenever
+    /// the caller passed null.
+    /// </para>
+    /// <para>
+    /// Override it only to REACT to a new option set - rebuilding a regularizer, updating a kernel,
+    /// validating hyperparameters. Six optimizers do. Do not override it merely to hold a typed copy.
+    /// </para>
+    /// </remarks>
+    protected virtual void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
+    {
+    }
 
     /// <summary>
     /// Performs a single optimization step, updating the model parameters based on gradients.

@@ -55,7 +55,9 @@ public partial class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientB
     /// <summary>
     /// The options specific to the Levenberg-Marquardt algorithm.
     /// </summary>
-    private LevenbergMarquardtOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private LevenbergMarquardtOptimizerOptions<T, TInput, TOutput> _options => (LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The current iteration count of the optimization process.
@@ -90,7 +92,6 @@ public partial class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientB
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>();
         _dampingFactor = NumOps.Zero;
 
         InitializeAdaptiveParameters();
@@ -122,7 +123,6 @@ public partial class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientB
     private LevenbergMarquardtOptimizer(LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _options = options ?? new LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>();
         _dampingFactor = NumOps.Zero;
 
         InitializeAdaptiveParameters();
@@ -455,33 +455,6 @@ public partial class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientB
         }
     }
 
-    /// <summary>
-    /// Updates the optimizer's options with new settings.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method allows updating the optimizer's settings during runtime. It ensures that only compatible
-    /// option types are used with this optimizer.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like changing the settings on a machine while it's running. It makes sure that we're only
-    /// using settings that work for this specific type of optimizer. If someone tries to use the wrong
-    /// type of settings, it lets them know there's a problem.
-    /// </para>
-    /// </remarks>
-    /// <param name="options">The new options to be applied to the optimizer.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is LevenbergMarquardtOptimizerOptions<T, TInput, TOutput> lmOptions)
-        {
-            _options = lmOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected LevenbergMarquardtOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Retrieves the current options of the optimizer.

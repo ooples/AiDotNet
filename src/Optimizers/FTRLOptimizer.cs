@@ -99,7 +99,9 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// The options specific to the FTRL algorithm.
     /// </summary>
-    private FTRLOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private FTRLOptimizerOptions<T, TInput, TOutput> _options => (FTRLOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// Auxiliary vector used in the FTRL update rule.
@@ -148,7 +150,6 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new FTRLOptimizerOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -179,7 +180,6 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     private FTRLOptimizer(FTRLOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _options = options ?? new FTRLOptimizerOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -627,28 +627,6 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         }
     }
 
-    /// <summary>
-    /// Updates the options for the FTRL optimizer.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method allows you to change the settings of the optimizer while it's running.
-    /// It's like adjusting the controls on a machine while it's operating. This can be useful if you want to
-    /// fine-tune the optimizer's behavior based on its performance or other factors.
-    /// </para>
-    /// </remarks>
-    /// <param name="options">The new options to be set.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of type FTRLOptimizerOptions.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is FTRLOptimizerOptions<T, TInput, TOutput> ftrlOptions)
-        {
-            _options = ftrlOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected FTRLOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Retrieves the current options of the FTRL optimizer.

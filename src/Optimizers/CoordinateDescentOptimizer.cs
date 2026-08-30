@@ -74,7 +74,9 @@ public partial class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBa
     /// <summary>
     /// The options specific to the Coordinate Descent optimization algorithm.
     /// </summary>
-    private CoordinateDescentOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private CoordinateDescentOptimizerOptions<T, TInput, TOutput> _options => (CoordinateDescentOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// Vector of learning rates for each coordinate (variable) in the optimization problem.
@@ -111,7 +113,6 @@ public partial class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBa
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new CoordinateDescentOptimizerOptions<T, TInput, TOutput>();
         _learningRates = Vector<T>.Empty();
         _momentums = Vector<T>.Empty();
         _previousUpdate = Vector<T>.Empty();
@@ -143,7 +144,6 @@ public partial class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBa
     private CoordinateDescentOptimizer(CoordinateDescentOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _options = options ?? new CoordinateDescentOptimizerOptions<T, TInput, TOutput>();
         _learningRates = Vector<T>.Empty();
         _momentums = Vector<T>.Empty();
         _previousUpdate = Vector<T>.Empty();
@@ -373,27 +373,6 @@ public partial class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBa
         _momentums = _momentums.Transform(mom => MathHelper.Clamp(mom, minMom, maxMom));
     }
 
-    /// <summary>
-    /// Updates the options for the Coordinate Descent optimizer.
-    /// </summary>
-    /// <param name="options">The new options to be set.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of type CoordinateDescentOptimizerOptions.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method allows you to change the settings of the optimizer during runtime.
-    /// It ensures that only the correct type of options (specific to Coordinate Descent) can be used.
-    /// </para>
-    /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is CoordinateDescentOptimizerOptions<T, TInput, TOutput> cdOptions)
-        {
-            _options = cdOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Options must be of type CoordinateDescentOptimizerOptions", nameof(options));
-        }
-    }
 
     /// <summary>
     /// Retrieves the current options of the Coordinate Descent optimizer.

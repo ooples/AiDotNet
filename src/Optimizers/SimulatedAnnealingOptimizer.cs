@@ -51,7 +51,9 @@ public partial class SimulatedAnnealingOptimizer<T, TInput, TOutput> : Optimizer
     /// Adjusting these settings can help the algorithm work better for different types of problems.
     /// </para>
     /// </remarks>
-    private SimulatedAnnealingOptions<T, TInput, TOutput> _saOptions;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private SimulatedAnnealingOptions<T, TInput, TOutput> _saOptions => (SimulatedAnnealingOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The current temperature controlling the acceptance probability of worse solutions.
@@ -104,7 +106,6 @@ public partial class SimulatedAnnealingOptimizer<T, TInput, TOutput> : Optimizer
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _saOptions = options ?? new SimulatedAnnealingOptions<T, TInput, TOutput>();
         _currentTemperature = NumOps.FromDouble(_saOptions.InitialTemperature);
     }
 
@@ -346,39 +347,6 @@ public partial class SimulatedAnnealingOptimizer<T, TInput, TOutput> : Optimizer
         return Random.NextDouble() < acceptanceProbability;
     }
 
-    /// <summary>
-    /// Updates the optimizer's options with the provided options.
-    /// </summary>
-    /// <param name="options">The options to apply to this optimizer.</param>
-    /// <exception cref="ArgumentException">Thrown when the options are not of the expected type.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method overrides the base implementation to update the Simulated Annealing-specific options.
-    /// It checks that the provided options are of the correct type (SimulatedAnnealingOptions)
-    /// and throws an exception if they are not.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates the settings that control how the optimizer works.
-    /// 
-    /// It's like changing the rule book:
-    /// - You provide a set of options to use
-    /// - The method checks that these are the right kind of options for a Simulated Annealing optimizer
-    /// - If they are, it applies these new settings
-    /// - If not, it lets you know there's a problem
-    /// 
-    /// This ensures that only appropriate settings are used with this specific optimizer.
-    /// </para>
-    /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is SimulatedAnnealingOptions<T, TInput, TOutput> saOptions)
-        {
-            _saOptions = saOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected SimulatedAnnealingOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current options for this optimizer.
@@ -478,7 +446,6 @@ public partial class SimulatedAnnealingOptimizer<T, TInput, TOutput> : Optimizer
     private SimulatedAnnealingOptimizer(SimulatedAnnealingOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _saOptions = options ?? new SimulatedAnnealingOptions<T, TInput, TOutput>();
         _currentTemperature = NumOps.FromDouble(_saOptions.InitialTemperature);
     }
 

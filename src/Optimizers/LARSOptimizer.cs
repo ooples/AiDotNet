@@ -55,7 +55,9 @@ public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// The options specific to the LARS optimizer.
     /// </summary>
-    private LARSOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private LARSOptimizerOptions<T, TInput, TOutput> _options => (LARSOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The velocity/momentum buffer for each parameter.
@@ -103,7 +105,6 @@ public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         _velocity = Vector<T>.Empty();
         _t = 0;
         _warmupSteps = 0;
-        _options = options ?? new();
 
         InitializeAdaptiveParameters();
     }
@@ -666,20 +667,6 @@ public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         _t = 0;
     }
 
-    /// <summary>
-    /// Updates the optimizer's options.
-    /// </summary>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is LARSOptimizerOptions<T, TInput, TOutput> larsOptions)
-        {
-            _options = larsOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected LARSOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current optimizer options.
