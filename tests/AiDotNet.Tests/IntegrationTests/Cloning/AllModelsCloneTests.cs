@@ -107,7 +107,8 @@ public class AllModelsCloneTests
             var nl = Environment.NewLine;
             System.IO.File.WriteAllText(
                 path,
-                "model" + Tab + "seconds" + Tab + "allocated_bytes" + Tab + "status" + nl
+                "model" + Tab + "seconds" + Tab + "bytes" + Tab + "status" + nl
+                    // bytes = allocation volume in-process, PEAK working set when isolated.
                     + string.Join(nl, costs) + nl);
         }
         catch (System.IO.IOException) { }
@@ -170,7 +171,29 @@ public class AllModelsCloneTests
         Assert.True(outcome is null || ReferenceEquals(outcome, SkipMarker), outcome ?? string.Empty);
     }
 
-    /// <summary>Set AIDOTNET_SWEEP_ISOLATED=1 to probe each model in its own process.</summary>
+    /// <summary>
+    /// Set AIDOTNET_SWEEP_ISOLATED=1 to probe each model in its own process. NOT YET TRUSTWORTHY.
+    /// </summary>
+    /// <remarks>
+    /// EXPERIMENTAL, AND DELIBERATELY NOT ENABLED IN CI. Measured on shards 13 and 18, it does bound
+    /// a stuck model and leaves no orphaned processes, but two defects make its output unusable as a
+    /// gate today:
+    ///
+    /// 1. The peak it records is the `dotnet vstest` LAUNCHER, about 50 MB, not the testhost
+    ///    grandchild that does the work. A model measured at 9.27 GB of allocation in-process shows
+    ///    as 0.04 GB here, so the memory column is wrong by two orders of magnitude.
+    /// 2. It reports false failures. CLAP and Chameleon come back "failed" in isolation and pass
+    ///    in-process, so the child's exit code is not reliably the probe's verdict.
+    ///
+    /// It also costs about 20 s of process startup per model (25 models took 14m32s), which is
+    /// affordable for a sweep that used to kill the runner but is not free.
+    ///
+    /// The in-process path is what carries the fix: it takes the shard from 49,586 MB to 8,646 MB
+    /// and from 4 completed tests to 876. Isolation remains the correct end state, because only a
+    /// child can be killed - an in-process attempt cannot be cancelled and keeps its two
+    /// materialized models - but it needs the grandchild measured and the verdict plumbed through
+    /// something other than the exit code before it can be turned on.
+    /// </remarks>
     private static bool IsolatedMode =>
         !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_SWEEP_ISOLATED"));
 
@@ -223,8 +246,23 @@ public class AllModelsCloneTests
         proc.BeginOutputReadLine();
         proc.BeginErrorReadLine();
 
-        bool exited = proc.WaitForExit((int)StuckModelCeiling.TotalMilliseconds);
-        try { peak = proc.PeakWorkingSet64; } catch (InvalidOperationException) { }
+        // SAMPLED WHILE ALIVE, not read after exit. PeakWorkingSet64 throws
+        // InvalidOperationException once the process has exited, and swallowing that leaves the
+        // column reading 0 for every model -- which is exactly what the first isolated run produced.
+        // Polling costs nothing next to a ~20s probe and yields the number the manifest exists for.
+        bool exited = false;
+        var deadline = DateTime.UtcNow + StuckModelCeiling;
+        while (DateTime.UtcNow < deadline)
+        {
+            try
+            {
+                proc.Refresh();
+                if (proc.PeakWorkingSet64 > peak) peak = proc.PeakWorkingSet64;
+            }
+            catch (InvalidOperationException) { /* exited between Refresh and read */ }
+
+            if (proc.WaitForExit(250)) { exited = true; break; }
+        }
 
         if (!exited)
         {
@@ -334,6 +372,35 @@ public class AllModelsCloneTests
             // shard, but it is only an observation budget. It cannot distinguish a true deadlock
             // from valid work that needs more time on this runner, so report it separately and do
             // not turn the budget-sensitive count into a claimed hang rate.
+            // ISOLATED PATH. A child process is the only thing here that can be reclaimed: an
+            // in-process attempt cannot be cancelled, so a stuck one keeps its two materialized
+            // models for the life of the host. Killing a child costs nothing beyond that child.
+            if (IsolatedMode)
+            {
+                var isolated = ProbeInChildProcess(open.Name, dir);
+                costs.Add(open.Name + Tab + isolated.Elapsed.TotalSeconds.ToString("0.00") + Tab
+                    + isolated.PeakBytes.ToString() + Tab + isolated.Status);
+
+                switch (isolated.Status)
+                {
+                    case "ok":
+                        cloned.Add(open.Name);
+                        Note($"ok    {open.Name} (isolated)");
+                        break;
+                    case "stuck":
+                        budgetExceeded.Add(
+                            $"{open.Name}: killed after {StuckModelCeiling.TotalMinutes:0} min in an isolated probe");
+                        Note($"STUCK {open.Name} (isolated, killed)");
+                        break;
+                    default:
+                        failed.Add($"{open.Name}: isolated probe reported {isolated.Status}");
+                        Note($"fail  {open.Name} (isolated)");
+                        break;
+                }
+
+                continue;
+            }
+
             string? outcome = null;
             var started = System.Diagnostics.Stopwatch.StartNew();
             long allocBefore = GC.GetTotalAllocatedBytes(precise: false);
