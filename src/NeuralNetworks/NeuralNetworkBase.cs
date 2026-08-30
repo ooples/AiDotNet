@@ -15606,6 +15606,25 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // conservative eager fallback without rejecting every valid model that owns such tensors.
         var srcStandaloneTensors = GetExtraTrainableTensors().Where(t => t is not null).ToList();
         var dstStandaloneTensors = copyBase.GetExtraTrainableTensors().Where(t => t is not null).ToList();
+        bool standaloneLayoutMatches = srcStandaloneTensors.Count == dstStandaloneTensors.Count
+            && srcStandaloneTensors.Zip(dstStandaloneTensors,
+                (source, destination) => source._shape.SequenceEqual(destination._shape)).All(matches => matches);
+        if (!standaloneLayoutMatches)
+        {
+            // A generated trainable tensor can be fitted or materialized after construction, so a
+            // fresh destination may not expose it yet (GOGGLE's learned adjacency is one example).
+            // Repair only an actual layout mismatch: calling the hook on every candidate would
+            // replace already-correct constructor tensors and add work to the normal COW path.
+            try
+            {
+                CopyGeneratedTrainableTensorsTo(copyBase);
+                dstStandaloneTensors = copyBase.GetExtraTrainableTensors().Where(t => t is not null).ToList();
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                return RejectCandidate($"generated trainable tensors could not be copied: {ex.Message}");
+            }
+        }
         if (srcStandaloneTensors.Count != dstStandaloneTensors.Count)
         {
             return RejectCandidate(
