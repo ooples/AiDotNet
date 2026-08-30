@@ -67,6 +67,53 @@ public class AllModelsCloneTests
     private static readonly TimeSpan PerModelProbeBudget = TimeSpan.FromSeconds(20);
 
     /// <summary>
+    /// How long a model gets to FINISH after it has already blown its observation budget.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="PerModelProbeBudget"/> on purpose. The budget answers "is this model
+    /// slow" and is allowed to be tight. This answers "will it ever finish", and crossing it means
+    /// the sweep stops rather than accumulating abandoned work.
+    /// </remarks>
+    private static readonly TimeSpan StuckModelCeiling = TimeSpan.FromMinutes(5);
+
+    /// <summary>Per-model cost: how long it took and how much it grew the heap.</summary>
+    /// <remarks>
+    /// PyTorch records per-test DURATION centrally (test-times.json) and shards by it. Recording
+    /// PEAK BYTES alongside is the part that catches this failure: a model can stay fast while its
+    /// memory regresses, and duration alone would never show it. Committing the file turns "a shard
+    /// died again" into "this model regressed at this commit".
+    /// </remarks>
+    private const string Tab = "\t";
+
+    private readonly List<string> costs = new();
+
+    private void RecordCost(string model, TimeSpan elapsed, long allocBefore, bool stuck)
+    {
+        // ALLOCATED, not GetTotalMemory. GetTotalMemory(false) reports the live heap WITHOUT
+        // collecting, so its delta is dominated by whatever garbage happens to be uncollected and
+        // can even read negative when a GC lands mid-window -- useless as a regression signal.
+        // GetTotalAllocatedBytes is monotonic and counts everything this model's probe allocated,
+        // which is the quantity that actually regresses. Cheap enough to call per model.
+        long allocated = GC.GetTotalAllocatedBytes(precise: false) - allocBefore;
+        costs.Add(model + Tab + elapsed.TotalSeconds.ToString("0.00") + Tab
+            + allocated.ToString() + Tab + (stuck ? "stuck" : "ok"));
+    }
+
+    private void WriteCostManifest(string dir, int shard)
+    {
+        try
+        {
+            var path = System.IO.Path.Combine(dir, $"aidotnet-model-clone-cost-{shard}.tsv");
+            var nl = Environment.NewLine;
+            System.IO.File.WriteAllText(
+                path,
+                "model" + Tab + "seconds" + Tab + "allocated_bytes" + Tab + "status" + nl
+                    + string.Join(nl, costs) + nl);
+        }
+        catch (System.IO.IOException) { }
+    }
+
+    /// <summary>
     /// Models whose original never materialized under the probe, so the two sides are not comparable.
     /// </summary>
     /// <remarks>
@@ -85,6 +132,109 @@ public class AllModelsCloneTests
     /// Written as it goes rather than at the end. The first two runs timed out having written
     /// nothing, which said only that the sweep was slow and not which model it was stuck on.
     /// </remarks>
+    /// <summary>
+    /// Probes ONE model, named by AIDOTNET_PROBE_MODEL. The isolated half of the sweep.
+    /// </summary>
+    /// <remarks>
+    /// WHY A SEPARATE PROCESS AT ALL. A probe cannot be cancelled: Task.Wait(timeout) returns but
+    /// the work keeps running, holding the original AND its DeepCopy (IsIndependent needs both, so
+    /// the 2x is inherent). Measured on this suite: 256 abandoned attempts across 15 shards, 10-27
+    /// outstanding at once, a 49.6 GB peak, and on CI a runner shutdown with no TRX and no culprit.
+    /// Bounding the loop stops repeated leaking inside one case but cannot reclaim a stuck attempt.
+    /// A child process can simply be killed, which is what PyTorch relies on too -- pytest-timeout
+    /// kills the process rather than abandoning in-process work.
+    ///
+    /// Exit code is the result: 0 probed cleanly, non-zero did not. The PARENT reads the child's
+    /// peak working set after exit, which is how the cost manifest gets a real memory number
+    /// instead of an allocation estimate.
+    /// </remarks>
+    [Fact]
+    public void ProbeOneModel()
+    {
+        var wanted = Environment.GetEnvironmentVariable("AIDOTNET_PROBE_MODEL");
+        if (string.IsNullOrEmpty(wanted)) return;   // no-op in a normal run
+
+        var open = typeof(NeuralNetworkBase<>).Assembly.GetTypes()
+            .Where(t => t.IsClass && !t.IsAbstract && !t.IsNested)
+            .Where(t => t.IsGenericTypeDefinition && t.GetGenericArguments().Length == 1)
+            .Where(DerivesFromNeuralNetworkBase)
+            .FirstOrDefault(t => string.Equals(t.Name, wanted, StringComparison.Ordinal));
+
+        Assert.True(open is not null, $"no model type named {wanted}");
+
+        Type closed;
+        try { closed = open!.MakeGenericType(typeof(float)); }
+        catch (Exception) { return; }   // constraints reject float: not a clone failure
+
+        var outcome = Attempt(open, closed);
+        Assert.True(outcome is null || ReferenceEquals(outcome, SkipMarker), outcome ?? string.Empty);
+    }
+
+    /// <summary>Set AIDOTNET_SWEEP_ISOLATED=1 to probe each model in its own process.</summary>
+    private static bool IsolatedMode =>
+        !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_SWEEP_ISOLATED"));
+
+    /// <summary>Heap cap handed to each child, as a hex byte count for DOTNET_GCHeapHardLimit.</summary>
+    /// <remarks>
+    /// 2 GB. A model needing more than that inside a probe is the problem being hunted, and capping
+    /// it means the child dies cheaply and named instead of taking the runner with it. The CI runner
+    /// has 15 GB TOTAL, so anything approaching that is already fatal in practice.
+    /// </remarks>
+    private const string ChildHeapCap = "80000000";
+
+    /// <summary>
+    /// Runs one model's probe in a child process and returns its outcome, duration and PEAK memory.
+    /// </summary>
+    /// <remarks>
+    /// This is the only construct here that genuinely bounds a stuck model. An in-process budget can
+    /// report that a model is slow but cannot reclaim it: Task.Wait(timeout) does not cancel, so the
+    /// attempt keeps running and keeps its two materialized models. A child can simply be killed.
+    ///
+    /// Peak working set is read from the CHILD after it exits, so the cost manifest records what the
+    /// probe actually cost rather than an allocation estimate - the number that would have named
+    /// this problem on day one.
+    /// </remarks>
+    private (string Status, TimeSpan Elapsed, long PeakBytes) ProbeInChildProcess(string modelName, string dir)
+    {
+        var assembly = typeof(AllModelsCloneTests).Assembly.Location;
+        var childResults = System.IO.Path.Combine(dir, "isolated", modelName);
+
+        var psi = new System.Diagnostics.ProcessStartInfo("dotnet")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        psi.ArgumentList.Add("vstest");
+        psi.ArgumentList.Add(assembly);
+        psi.ArgumentList.Add("--Tests:ProbeOneModel");
+        psi.ArgumentList.Add($"--ResultsDirectory:{childResults}");
+        psi.Environment["AIDOTNET_PROBE_MODEL"] = modelName;
+        psi.Environment["DOTNET_GCHeapHardLimit"] = ChildHeapCap;
+        // The child must not recurse into isolation.
+        psi.Environment["AIDOTNET_SWEEP_ISOLATED"] = string.Empty;
+
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        long peak = 0;
+        using var proc = System.Diagnostics.Process.Start(psi);
+        if (proc is null) return ("spawn-failed", watch.Elapsed, 0);
+
+        // Drain the pipes, or a chatty child blocks on a full buffer and looks like a hang.
+        proc.BeginOutputReadLine();
+        proc.BeginErrorReadLine();
+
+        bool exited = proc.WaitForExit((int)StuckModelCeiling.TotalMilliseconds);
+        try { peak = proc.PeakWorkingSet64; } catch (InvalidOperationException) { }
+
+        if (!exited)
+        {
+            try { proc.Kill(entireProcessTree: true); } catch (Exception) { }
+            return ("stuck", watch.Elapsed, peak);
+        }
+
+        return (proc.ExitCode == 0 ? "ok" : "failed", watch.Elapsed, peak);
+    }
+
     private void Note(string line)
     {
         lock (ReportPath) System.IO.File.AppendAllLines(ReportPath, new[] { line });
@@ -185,6 +335,8 @@ public class AllModelsCloneTests
             // from valid work that needs more time on this runner, so report it separately and do
             // not turn the budget-sensitive count into a claimed hang rate.
             string? outcome = null;
+            var started = System.Diagnostics.Stopwatch.StartNew();
+            long allocBefore = GC.GetTotalAllocatedBytes(precise: false);
             var work = System.Threading.Tasks.Task.Run(() => outcome = Attempt(open, closed));
 
             if (!work.Wait(PerModelProbeBudget))
@@ -192,12 +344,52 @@ public class AllModelsCloneTests
                 budgetExceeded.Add(
                     $"{open.Name}: exceeded {PerModelProbeBudget.TotalSeconds:0}s observation budget");
                 Note($"LIMIT {open.Name}");
+
+                // ABANDONING IS WHAT KILLED THE RUNNER. Task.Wait(timeout) returns false but does
+                // NOT cancel the task: Attempt keeps running, and it holds the original AND its
+                // DeepCopy, both fully materialized (IsIndependent needs both, so the 2x is
+                // inherent). Every overrun therefore leaked two models and the next iteration
+                // started another. Measured: 256 abandoned attempts across 15 shard files, 10-27
+                // outstanding at once, driving a 49.6 GB peak on a 64 GB box -- and on CI,
+                // "The runner has received a shutdown signal" with no TRX and no named culprit.
+                //
+                // So the budget now bounds ATTRIBUTION, not memory: it records that this model is
+                // slow and moves on only once the work has actually finished. Within one shard case
+                // that holds memory to a single attempt no matter how many models are slow.
+                //
+                // WHAT THIS DOES NOT FIX: a genuinely stuck attempt cannot be cancelled, so the
+                // throw below fails this case while that task keeps running and keeps its two models
+                // alive for the rest of the process. Twenty-three sibling [InlineData] cases still
+                // execute in the same host and can each strand one. Bounding the loop is necessary
+                // but not sufficient - only running each probe in its own process makes a stuck
+                // model cost nothing beyond that process.
+                if (!work.Wait(StuckModelCeiling))
+                {
+                    // Past this it is not "slow", it is stuck. Continuing would resume leaking, and
+                    // a shard that dies later reports nothing at all -- so stop here, while the
+                    // model that did it can still be named.
+                    Note($"STUCK {open.Name} (no completion within {StuckModelCeiling.TotalMinutes:0} min)");
+                    RecordCost(open.Name, started.Elapsed, allocBefore, stuck: true);
+                    WriteCostManifest(dir, shard);
+                    throw new Xunit.Sdk.XunitException(
+                        $"{open.Name} did not complete within {StuckModelCeiling.TotalMinutes:0} minutes. "
+                        + "Aborting the shard rather than abandoning the attempt, which would leak two "
+                        + "materialized models and kill the runner without naming a culprit.");
+                }
+
+                RecordCost(open.Name, started.Elapsed, allocBefore, stuck: false);
                 continue;
             }
+
+            RecordCost(open.Name, started.Elapsed, allocBefore, stuck: false);
 
             if (outcome is null) cloned.Add(open.Name);
             else if (!ReferenceEquals(outcome, SkipMarker) && outcome != SkipMarker) failed.Add(outcome);
         }
+
+        // Always written, not only on the stuck path: the value is the TREND across runs, and a
+        // manifest that only appears on failure cannot establish one.
+        WriteCostManifest(dir, shard);
 
         _output.WriteLine($"model types        : {candidates.Count}");
         _output.WriteLine($"cloned OK          : {cloned.Count}");
