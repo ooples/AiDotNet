@@ -1,6 +1,8 @@
 #nullable disable
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Inputs;
+using AiDotNet.FitnessCalculators;
+using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Optimizers;
@@ -362,6 +364,70 @@ public class MetaheuristicOptimizerIntegrationTests
         Assert.Equal(FirstDraw(Build(RestoredFrom)), FirstDraw(restored));
         Assert.NotEqual(FirstDraw(Build(BuiltWith)), FirstDraw(restored));
     }
+
+    /// <summary>
+    /// Deserializing leaves Options and every field derived from it in agreement.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Adopting some option-derived state and not the rest is worse than adopting none: an optimizer
+    /// built with configuration A and restored from B would evaluate with B's settings and A's
+    /// evaluator, a state neither configuration describes. Construction and restoration route
+    /// through one method so that cannot happen.
+    /// </para>
+    /// <para>
+    /// The collaborators are deliberately NOT taken from the payload. Interface-typed properties
+    /// carry no type information through the options JSON, so Newtonsoft rebuilds each as its
+    /// property initializer's default - an optimizer configured with MeanSquaredError comes back
+    /// holding RSquared. Adopting that would swap a caller's evaluator for a default on every
+    /// deserialize, so the live ones are carried across instead, and this pins that.
+    /// </para>
+    /// </remarks>
+    [Fact(Timeout = 120000)]
+    public async Task Deserialize_AdoptsEveryOptionDerivedCollaborator()
+    {
+        await Task.Yield();
+
+        static ParticleSwarmOptimizer<double, Matrix<double>, Vector<double>> Build(
+            int seed, int maxIterations, IFitnessCalculator<double, Matrix<double>, Vector<double>> calculator) =>
+            new(null, new ParticleSwarmOptimizationOptions<double, Matrix<double>, Vector<double>>
+            {
+                MaxIterations = maxIterations,
+                SwarmSize = 8,
+                Seed = seed,
+                FitnessCalculator = calculator,
+            });
+
+        var restored = Build(19700101, 99, new RSquaredFitnessCalculator<double, Matrix<double>, Vector<double>>());
+        restored.Deserialize(
+            Build(20250829, 7, new MeanSquaredErrorFitnessCalculator<double, Matrix<double>, Vector<double>>()).Serialize());
+
+        // The values travel.
+        Assert.Equal(7, restored.GetOptions().MaxIterations);
+        Assert.Equal(20250829, restored.GetOptions().Seed);
+
+        // The collaborators do not, so they are preserved rather than reset to the property
+        // defaults the payload decodes to. The optimizer was BUILT with RSquared, the payload was
+        // written by one using MeanSquaredError, and RSquared is what must survive - anything else
+        // means a deserialize silently swapped the caller's evaluator.
+        Assert.IsType<RSquaredFitnessCalculator<double, Matrix<double>, Vector<double>>>(
+            Field<IFitnessCalculator<double, Matrix<double>, Vector<double>>>(restored, "FitnessCalculator"));
+
+        // And whatever they hold, Options and the cached fields agree - which is the property that
+        // makes partial adoption impossible rather than merely unlikely.
+        Assert.Same(restored.GetOptions().FitnessCalculator, Field<object>(restored, "FitnessCalculator"));
+        Assert.Same(restored.GetOptions().FitDetector, Field<object>(restored, "FitDetector"));
+        Assert.Same(restored.GetOptions().PredictionOptions, Field<object>(restored, "PredictionOptions"));
+        Assert.Same(restored.GetOptions().ModelStatsOptions, Field<object>(restored, "ModelStatsOptions"));
+        Assert.Same(restored.GetOptions().ModelCache, Field<object>(restored, "ModelCache"));
+    }
+
+    /// <summary>Reads a protected base field, which is where the adopted state actually lands.</summary>
+    private static TField Field<TField>(
+        OptimizerBase<double, Matrix<double>, Vector<double>> optimizer, string name)
+        => (TField)typeof(OptimizerBase<double, Matrix<double>, Vector<double>>)
+            .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(optimizer)!;
 
     /// <summary>The first draw from the one generator an optimizer owns, which lives on the base.</summary>
     private static int FirstDraw(OptimizerBase<double, Matrix<double>, Vector<double>> optimizer)
@@ -1179,6 +1245,7 @@ public class MetaheuristicOptimizerIntegrationTests
         var result = optimizer.Optimize(inputData);
         AssertValidOptimizationResult(result, "Normal_SingleIteration");
     }
+
 
     #endregion
 }

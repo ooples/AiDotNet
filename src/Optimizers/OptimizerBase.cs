@@ -106,22 +106,22 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <summary>
     /// Options for prediction statistics calculations.
     /// </summary>
-    protected readonly PredictionStatsOptions PredictionOptions;
+    protected PredictionStatsOptions PredictionOptions;
 
     /// <summary>
     /// Options for model statistics calculations.
     /// </summary>
-    protected readonly ModelStatsOptions ModelStatsOptions;
+    protected ModelStatsOptions ModelStatsOptions;
 
     /// <summary>
     /// Detects the quality of fit for models.
     /// </summary>
-    protected readonly IFitDetector<T, TInput, TOutput> FitDetector;
+    protected IFitDetector<T, TInput, TOutput> FitDetector;
 
     /// <summary>
     /// Calculates the fitness score of models.
     /// </summary>
-    protected readonly IFitnessCalculator<T, TInput, TOutput> FitnessCalculator;
+    protected IFitnessCalculator<T, TInput, TOutput> FitnessCalculator;
 
     /// <summary>
     /// Stores the fitness scores of evaluated models.
@@ -285,59 +285,48 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     {
         _model = model;
         NumOps = MathHelper.GetNumericOperations<T>();
-        Options = options ?? new OptimizationAlgorithmOptions<T, TInput, TOutput>();
-
-        // Ordered deliberately: Options has to be assigned before the generator is built, because
-        // the generator is derived from Options.Seed. This previously read `Random = new()` on the
-        // line above the Options assignment, which could not have honoured a seed even if it had
-        // tried to - and left every model-based Optimize(inputData) run unrepeatable, since
-        // RandomlySelectFeatures and InitializeRandomSolution both draw from here.
-        Random = CreateOptionsRandom(Options);
-        PredictionOptions = Options.PredictionOptions;
-        ModelStatsOptions = Options.ModelStatsOptions;
-        FitDetector = Options.FitDetector;
-        FitnessCalculator = Options.FitnessCalculator;
+        ApplyOptions(options ?? new OptimizationAlgorithmOptions<T, TInput, TOutput>());
         FitnessList = new List<T>();
         IterationHistoryList = new List<OptimizationIterationInfo<T>>();
-        ModelCache = Options.ModelCache;
         CurrentLearningRate = NumOps.Zero;
         CurrentMomentum = NumOps.Zero;
     }
 
 
     /// <summary>
-    /// The shared generator for a given set of options.
+    /// Adopts an option set: every piece of base state that is derived from options, in one place.
     /// </summary>
-    /// <param name="options">The options whose <c>Seed</c> decides reproducibility.</param>
-    /// <returns>A seeded generator when a seed was given, a cryptographically secure one otherwise.</returns>
-    private static Random CreateOptionsRandom(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-        => options.Seed.HasValue
-            ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(options.Seed.Value)
-            : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
-
-    /// <summary>
-    /// Adopts a restored set of options, so the base agrees with what the caller deserialized.
-    /// </summary>
-    /// <param name="options">The options read back from the stream.</param>
+    /// <param name="options">The options to take effect.</param>
     /// <remarks>
     /// <para>
-    /// <see cref="Deserialize"/> already hands restored options to <see cref="UpdateOptions"/> so a
-    /// derived optimizer can react, but the base kept its constructor values. That was invisible
-    /// while the shared generator ignored <c>Seed</c> entirely; once it honours the seed, a restored
-    /// optimizer would otherwise draw velocities from the restored seed and select features from the
-    /// original one - two different runs claiming to be the same.
+    /// The constructor and <see cref="Deserialize"/> both route through here so the two cannot drift.
+    /// Adopting only part of an option set is worse than adopting none of it: an optimizer built with
+    /// configuration A and restored from configuration B would evaluate with B's settings and A's
+    /// evaluator, which is a state neither configuration describes. Any future option-derived field
+    /// belongs in this method rather than in the constructor, and then it is restored for free.
     /// </para>
     /// <para>
-    /// Deliberately narrow: the option-derived collaborators cached at construction
-    /// (<see cref="FitDetector"/>, <see cref="FitnessCalculator"/> and the statistics options) are
-    /// left alone. Replacing live collaborators mid-lifetime is a separate concern from
-    /// reproducibility, and nothing here needs it.
+    /// The generator is included because it is derived from <c>Options.Seed</c>. Before this it read
+    /// <c>Random = new()</c> on the line ABOVE the <c>Options</c> assignment, so it could not have
+    /// honoured a seed even in principle - which left every model-based <c>Optimize(inputData)</c>
+    /// run unrepeatable, since <c>RandomlySelectFeatures</c> and <c>InitializeRandomSolution</c>
+    /// both draw from here.
     /// </para>
     /// </remarks>
-    private void AdoptRestoredOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(
+        nameof(Options), nameof(Random), nameof(PredictionOptions), nameof(ModelStatsOptions),
+        nameof(FitDetector), nameof(FitnessCalculator), nameof(ModelCache))]
+    private void ApplyOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
         Options = options;
-        Random = CreateOptionsRandom(options);
+        Random = options.Seed.HasValue
+            ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(options.Seed.Value)
+            : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+        PredictionOptions = options.PredictionOptions;
+        ModelStatsOptions = options.ModelStatsOptions;
+        FitDetector = options.FitDetector;
+        FitnessCalculator = options.FitnessCalculator;
+        ModelCache = options.ModelCache;
     }
 
     /// <summary>
@@ -2105,11 +2094,25 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         object? deserializedOptions = JsonConvert.DeserializeObject(optionsJson, optionsType);
         var options = deserializedOptions as OptimizationAlgorithmOptions<T, TInput, TOutput>;
 
-        // Update the options. The base adopts them first so that its own state - the shared
-        // generator above all - matches what was restored, then the derived class reacts.
+        // Update the options. The base adopts them first so its own state - the shared generator
+        // above all - matches what was restored, then the derived class reacts.
         if (options != null)
         {
-            AdoptRestoredOptions(options);
+            // The interface-typed collaborators do NOT survive the options JSON round-trip: with no
+            // type information in the payload, Newtonsoft rebuilds each one as its property
+            // initializer's default. Measured - an optimizer configured with
+            // MeanSquaredErrorFitnessCalculator serializes and comes back holding
+            // RSquaredFitnessCalculator, the default. Adopting them wholesale would therefore
+            // replace a caller's configured evaluator, detector and cache with defaults on every
+            // deserialize, which is a worse outcome than the stale-but-correct ones already held.
+            // So the restored payload contributes its VALUES, and the live collaborators are
+            // carried across - which also keeps Options and the cached fields in agreement rather
+            // than adopting half an option set.
+            options.FitnessCalculator = FitnessCalculator;
+            options.FitDetector = FitDetector;
+            options.ModelCache = ModelCache;
+
+            ApplyOptions(options);
             UpdateOptions(options);
         }
 
