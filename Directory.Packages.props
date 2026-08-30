@@ -343,15 +343,22 @@
          #978) that stop the gradients going non-finite. All four packages stay on the published
          lockstep release.
 
+         Bumped 0.129.7 to 0.129.8: AiDotNet.Tensors#999 makes the GPU launch journal and buffer
+         residency survive a HARD crash. They were written only from ProcessExit/DomainUnload, which
+         run on an orderly shutdown and not on an access violation, stack overflow, OOM-kill or
+         FailFast -- verified by forcing one, which produced a crash dump and no journal at all. They
+         are now also flushed periodically. That is the half of the crash evidence a process dump
+         cannot give cheaply, and this bump is what makes it reach the shard artifacts.
+
          Bumped 0.129.2 to 0.129.7 so all four move together again. The natives had drifted behind
          AiDotNet.Tensors (0.129.4) on master; 0.129.7 is published for OpenBLAS, OneDNN, CLBlast and
          Tensors alike, so the lockstep this comment describes is actually restored rather than
          merely asserted. AiDotNet.Tensors 0.129.7 is required for the GPU launch journal and buffer
          residency diagnostics that #2056 collects. -->
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.129.7" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.129.7" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.129.7" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.129.7" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.129.8" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.129.8" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.129.8" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.129.8" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.11" />
