@@ -44,25 +44,41 @@ $script:SummaryWriteFailed = $false
 $reportBody = {
 
 # --blame-hang kills the whole test host when any single test exceeds the hang timeout, and
-# --blame writes a Sequence_*.xml naming the test that was executing when it died. Everything
+# --blame writes a Sequence file naming the test that was executing when it died. Everything
 # queued behind that test never runs and never appears in the TRX, so a shard truncated this way
 # reports a handful of failures and looks like it merely has a handful of failures.
 #
 # That is the single most misleading state this pipeline can produce: it makes a shard look nearly
 # green when most of its suite never executed, and it is why fixing the visible failures kept
 # revealing new ones. Detect it and say so, loudly, before anything else.
-$sequenceFiles = Get-ChildItem -Path 'TestResults' -Recurse -Filter 'Sequence_*.xml' -ErrorAction SilentlyContinue
+# Sequence*.xml, not Sequence_*.xml: vstest writes Sequence.xml for a HANG and
+# Sequence_<guid>.xml for a CRASH. The old filter matched only the crash spelling, and the element
+# name below was wrong for both, so this reporter never identified a victim at all.
+$sequenceFiles = Get-ChildItem -Path 'TestResults' -Recurse -Filter 'Sequence*.xml' -ErrorAction SilentlyContinue
 $hangVictim = $null
 if ($sequenceFiles) {
   foreach ($seq in $sequenceFiles) {
     try {
       [xml]$seqXml = Get-Content $seq.FullName
-      # The last <UnitTestElement> is the test that was still running when the host was killed.
-      $elements = $seqXml.SelectNodes('//UnitTestElement')
+      # Real vstest output, captured from a forced FailFast under --blame-crash:
+      #
+      #   <TestSequence>
+      #     <Test Name="..." DisplayName="..." Source="....dll" Completed="True"  />
+      #     <Test Name="..." DisplayName="..." Source="....dll" Completed="False" />
+      #   </TestSequence>
+      #
+      # The element is <Test>, never <UnitTestElement>. Prefer the entry explicitly marked
+      # Completed="False" -- that IS the test that never finished -- and fall back to the last
+      # entry only if no such marker is present.
+      $elements = $seqXml.SelectNodes('//Test')
       if ($elements -and $elements.Count -gt 0) {
-        $last = $elements[$elements.Count - 1]
-        $hangVictim = "$($last.source)::$($last.FullyQualifiedName)".TrimStart(':')
-        if (-not $last.FullyQualifiedName) { $hangVictim = $last.InnerText }
+        $victim = $null
+        foreach ($el in $elements) {
+          if ($el.Completed -and $el.Completed -eq 'False') { $victim = $el }
+        }
+        if (-not $victim) { $victim = $elements[$elements.Count - 1] }
+        $name = if ($victim.Name) { $victim.Name } elseif ($victim.DisplayName) { $victim.DisplayName } else { $victim.InnerText }
+        $hangVictim = "$($victim.Source)::$name".TrimStart(':')
       }
     } catch {
       # A PARSE FAILURE IS NOT A HANG. Assigning a placeholder here left a truthy
