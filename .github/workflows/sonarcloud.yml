@@ -1510,6 +1510,18 @@ jobs:
           # the old `xunit.MaxParallelThreads=1` inline arg was silently
           # ignored by the VSTest adapter.)
           $heavyShards = @(
+            # ADDED after this shard OOM-killed the RUNNER on run 33321501718: the log shows two
+            # Cloning tests pass, then two minutes of silence, then "The runner has received a
+            # shutdown signal". Memory was healthy at start (14 GiB of 15 GiB available), so the
+            # shard grew into the kill; the test that did it never reported and is unnamed.
+            #
+            # It was the ONE dying shard getting none of the heavy-shard treatment: no serialized
+            # collections (the parallelism this file already identifies as the memory multiplier),
+            # no live memory + test-start sampler, and no detailed verbosity -- so nothing could
+            # name the culprit. Note the crash-evidence artifact CANNOT help here either: when the
+            # runner itself is killed, no upload step ever runs, and only the streamed live log
+            # survives.
+            'Integration C - Core',
             'ModelFamily - Diffusion A-C',
             'ModelFamily - Diffusion D-I',
             'ModelFamily - Diffusion J-K',
