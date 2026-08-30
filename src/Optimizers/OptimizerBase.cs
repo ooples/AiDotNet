@@ -2216,8 +2216,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// This is important because different optimizers might interpret the same options differently,
     /// or might have additional specialized options.
     /// </para>
-    /// </remarks>
-    /// <remarks>
+    /// </para>
     /// <para>
     /// Overriding this is now the EXCEPTION rather than the rule. It used to be abstract, so all 42
     /// concrete optimizers implemented it, and 36 of those implementations were the same eight lines:
@@ -2235,6 +2234,14 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <para>
     /// Override it only to REACT to a new option set - rebuilding a regularizer, updating a kernel,
     /// validating hyperparameters. Six optimizers do. Do not override it merely to hold a typed copy.
+    /// </para>
+    /// <para>
+    /// The empty default is deliberate and is not a silent-skip hazard introduced here. Under the
+    /// previous abstract contract every optimizer was forced to implement the method, and 33 of the
+    /// 34 that own adaptive parameters still did not re-seed them from the new options - only
+    /// LionOptimizer did. Compulsion produced boilerplate, not correctness. Nothing statically
+    /// distinguishes an optimizer that must react from one that need not, so the obligation is
+    /// documented here rather than pretended away by a signature.
     /// </para>
     /// </remarks>
     protected virtual void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)

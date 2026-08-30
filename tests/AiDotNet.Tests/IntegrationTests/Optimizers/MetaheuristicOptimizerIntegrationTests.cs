@@ -3,6 +3,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Inputs;
 using AiDotNet.FitnessCalculators;
 using AiDotNet.Interfaces;
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Optimizers;
@@ -420,6 +421,9 @@ public class MetaheuristicOptimizerIntegrationTests
         var livePrediction = Field<object>(restored, "PredictionOptions");
         var liveStats = Field<object>(restored, "ModelStatsOptions");
 
+        // Distinguishable non-default values on the concrete option objects, so the assertions below
+        // can tell an ADOPTED payload from a freshly allocated default. NotSame alone proves only
+        // that something new was allocated, not that it carries what was serialized.
         var source = new ParticleSwarmOptimizer<double, Matrix<double>, Vector<double>>(
             null,
             new ParticleSwarmOptimizationOptions<double, Matrix<double>, Vector<double>>
@@ -428,6 +432,8 @@ public class MetaheuristicOptimizerIntegrationTests
                 SwarmSize = 8,
                 Seed = 20250829,
                 FitnessCalculator = new MeanSquaredErrorFitnessCalculator<double, Matrix<double>, Vector<double>>(),
+                PredictionOptions = new PredictionStatsOptions { ConfidenceLevel = 0.777, LearningCurveSteps = 23 },
+                ModelStatsOptions = new ModelStatsOptions { MaxVIF = 42 },
             });
 
         restored.Deserialize(source.Serialize());
@@ -447,8 +453,17 @@ public class MetaheuristicOptimizerIntegrationTests
         // carry their own type through the JSON, so the decoded instance is the restored
         // configuration rather than a default standing in for it. A new instance here is correct,
         // and preserving the originals would have discarded what was restored.
-        Assert.NotSame(livePrediction, Field<object>(restored, "PredictionOptions"));
-        Assert.NotSame(liveStats, Field<object>(restored, "ModelStatsOptions"));
+        var restoredPrediction = Field<PredictionStatsOptions>(restored, "PredictionOptions");
+        var restoredStats = Field<ModelStatsOptions>(restored, "ModelStatsOptions");
+
+        Assert.NotSame(livePrediction, restoredPrediction);
+        Assert.NotSame(liveStats, restoredStats);
+
+        // And they carry the SERIALIZED values, which is the half NotSame cannot show: a default
+        // instance allocated in place of the payload would satisfy NotSame and fail here.
+        Assert.Equal(0.777, restoredPrediction.ConfidenceLevel, 12);
+        Assert.Equal(23, restoredPrediction.LearningCurveSteps);
+        Assert.Equal(42, restoredStats.MaxVIF);
 
         // And Options agrees with every cached field, which is what makes partial adoption
         // impossible rather than merely unlikely.
