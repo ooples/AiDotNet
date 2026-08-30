@@ -56,6 +56,7 @@ $reportBody = {
 # name below was wrong for both, so this reporter never identified a victim at all.
 $sequenceFiles = Get-ChildItem -Path 'TestResults' -Recurse -Filter 'Sequence*.xml' -ErrorAction SilentlyContinue
 $hangVictim = $null
+$seqKind = 'hang'
 if ($sequenceFiles) {
   foreach ($seq in $sequenceFiles) {
     try {
@@ -70,6 +71,10 @@ if ($sequenceFiles) {
       # The element is <Test>, never <UnitTestElement>. Prefer the entry explicitly marked
       # Completed="False" -- that IS the test that never finished -- and fall back to the last
       # entry only if no such marker is present.
+      # The FILENAME distinguishes the two deaths: vstest writes Sequence.xml for a hang and
+      # Sequence_<guid>.xml for a crash. They need different wording downstream -- calling a crash
+      # a hang sends the reader looking for a deadlock that does not exist.
+      if ($seq.Name -match '^Sequence_.+\.xml$') { $seqKind = 'crash' } else { $seqKind = 'hang' }
       $elements = $seqXml.SelectNodes('//Test')
       if ($elements -and $elements.Count -gt 0) {
         $victim = $null
@@ -107,7 +112,11 @@ if ($seqParseError) {
 if ($hangVictim) {
   Add-Summary '## :rotating_light: THIS SHARD WAS TRUNCATED -- the failure list below is INCOMPLETE'
   Add-Summary ''
-  Add-Summary "The test host was killed by ``--blame-hang`` while executing:"
+  if ($seqKind -eq 'crash') {
+    Add-Summary 'The test host CRASHED (``--blame-crash``) while executing:'
+  } else {
+    Add-Summary 'The test host was killed by ``--blame-hang`` (no progress for the timeout) while executing:'
+  }
   Add-Summary ''
   Add-Summary ('    ' + $hangVictim)
   Add-Summary ''
@@ -128,7 +137,7 @@ if (-not $trxFiles -or $trxFiles.Count -eq 0) {
   Add-Summary '_No TRX file was produced._ The test host most likely terminated'
   Add-Summary 'abnormally (out-of-memory kill, StackOverflow, or access violation)'
   Add-Summary 'before results were written, so the failing test cannot be named from'
-  Add-Summary 'results alone. Check the tail of the run log and any `Sequence_*.xml`'
+  Add-Summary 'results alone. Check the tail of the run log and any `Sequence*.xml`'
   Add-Summary 'blame file for the last test that started.'
   return
 }
