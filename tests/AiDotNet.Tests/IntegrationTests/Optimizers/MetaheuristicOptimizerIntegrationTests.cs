@@ -1247,5 +1247,60 @@ public class MetaheuristicOptimizerIntegrationTests
     }
 
 
+
+    /// <summary>
+    /// Deserializing restores the adaptive state a run had reached, rather than re-seeding it from
+    /// the options.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This exists to refuse a plausible-looking change. The constructor seeds
+    /// <c>_currentInertia</c> and its siblings from <c>Initial*</c> on the options, and no
+    /// <c>UpdateOptions</c> override re-runs <c>InitializeAdaptiveParameters</c> - which reads like
+    /// a restored optimizer keeping the configuration it was BUILT with. It is not: the state layer
+    /// carries the live values, so a mid-run optimizer serialized at inertia 0.137 comes back at
+    /// 0.137, not at whatever its options call the initial value.
+    /// </para>
+    /// <para>
+    /// Calling <c>ResetAdaptiveParameters()</c> from <c>Deserialize</c> to "fix" the apparent
+    /// staleness therefore DESTROYS restored state, silently rewinding a resumed optimizer to the
+    /// start of its schedule. Measured: with that call added this test reads 0.42 instead of 0.137.
+    /// The distinction is invisible unless the live value is driven away from the initial one, which
+    /// is why this test sets it explicitly rather than trusting a short run to diverge.
+    /// </para>
+    /// </remarks>
+    [Fact(Timeout = 120000)]
+    public async Task Deserialize_RestoresLiveAdaptiveState_RatherThanReseedingFromOptions()
+    {
+        await Task.Yield();
+
+        const double LiveInertia = 0.137;
+        const double SourceInitial = 0.42;
+        const double DestinationInitial = 0.91;
+
+        static ParticleSwarmOptimizer<double, Matrix<double>, Vector<double>> Build(double initialInertia) =>
+            new(null, new ParticleSwarmOptimizationOptions<double, Matrix<double>, Vector<double>>
+            {
+                MaxIterations = 10,
+                SwarmSize = 8,
+                InitialInertia = initialInertia,
+            });
+
+        static FieldInfo Inertia() =>
+            typeof(ParticleSwarmOptimizer<double, Matrix<double>, Vector<double>>)
+                .GetField("_currentInertia", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        var source = Build(SourceInitial);
+        Inertia().SetValue(source, LiveInertia);
+
+        var restored = Build(DestinationInitial);
+        Assert.Equal(DestinationInitial, (double)Inertia().GetValue(restored)!, 12);
+
+        restored.Deserialize(source.Serialize());
+
+        // The live value, not either side's Initial*.
+        Assert.Equal(LiveInertia, (double)Inertia().GetValue(restored)!, 12);
+    }
+
     #endregion
 }
