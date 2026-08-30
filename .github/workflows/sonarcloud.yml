@@ -1711,7 +1711,16 @@ jobs:
           # journal names the last kernels to reach the device. A few kilobytes of text on a
           # healthy run, and useful even with no GPU present, since the totals are recorded
           # whether or not any launch happened.
-          $env:AIDOTNET_GPU_DIAGNOSTICS_DUMP = Join-Path $results 'gpu-diagnostics.txt'
+          # ABSOLUTE, deliberately. $results is workspace-relative, but the test host does not run
+          # with the workspace as its working directory -- a relative path resolves against the test
+          # binary folder instead, so the file landed somewhere the workspace-relative upload glob
+          # could never see. Verified locally: a relative path wrote to
+          # tests/.../bin/Debug/net10.0/<path>/gpu-diagnostics.txt. Before AiDotNet.Tensors learned
+          # to create the directory it produced nothing at all, silently, which is why the env var
+          # was set on every shard of a full matrix and not one file was ever produced.
+          $diagDir = Join-Path (Get-Location).Path $results
+          New-Item -ItemType Directory -Force -Path $diagDir | Out-Null
+          $env:AIDOTNET_GPU_DIAGNOSTICS_DUMP = Join-Path $diagDir 'gpu-diagnostics.txt'
           # OOM root cause + fix: the heavy shards exhaust the 16 GB runner
           # because xUnit runs many test CLASSES in parallel (default
           # maxParallelThreads = ProcessorCount), and each big-model class
