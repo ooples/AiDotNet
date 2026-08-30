@@ -272,11 +272,20 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
 
 
     /// <summary>
-    /// Whether this node sits inside a type that inherits <c>OptimizerBase</c>'s seeded generator.
+    /// Whether this node sits inside a type that inherits <c>AiDotNet.Optimizers.OptimizerBase</c>'s
+    /// seeded generator.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <c>OptimizerBase</c> itself is excluded: it is the one type that must build the generator,
     /// and it is where <c>Options.Seed</c> is honoured on behalf of everything below it.
+    /// </para>
+    /// <para>
+    /// Resolved as a SYMBOL rather than by simple name. Matching <c>current.Name == "OptimizerBase"</c>
+    /// would fire on any unrelated hierarchy that happens to use the name - a consumer's own
+    /// OptimizerBase, or a test double - and report AIDN077 against code that inherits no seeded
+    /// generator and has nothing to draw from instead.
+    /// </para>
     /// </remarks>
     private static bool IsInsideOptimizer(GeneratorSyntaxContext ctx, SyntaxNode node)
     {
@@ -284,9 +293,15 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
         if (declaration is null) return false;
         if (ctx.SemanticModel.GetDeclaredSymbol(declaration) is not INamedTypeSymbol type) return false;
 
+        // Arity is part of the metadata name: OptimizerBase<T, TInput, TOutput>.
+        var optimizerBase = ctx.SemanticModel.Compilation
+            .GetTypeByMetadataName("AiDotNet.Optimizers.OptimizerBase`3");
+        if (optimizerBase is null) return false;
+
         for (var current = type.BaseType; current is not null; current = current.BaseType)
         {
-            if (current.Name == "OptimizerBase") return true;
+            if (SymbolEqualityComparer.Default.Equals(current.OriginalDefinition, optimizerBase))
+                return true;
         }
 
         return false;
