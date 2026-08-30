@@ -96,12 +96,12 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// the same contract for the model-based path, which draws from here for feature selection and
     /// solution initialisation.
     /// </remarks>
-    protected readonly Random Random;
+    protected Random Random;
 
     /// <summary>
     /// Contains the configuration options for the optimization algorithm.
     /// </summary>
-    protected readonly OptimizationAlgorithmOptions<T, TInput, TOutput> Options;
+    protected OptimizationAlgorithmOptions<T, TInput, TOutput> Options;
 
     /// <summary>
     /// Options for prediction statistics calculations.
@@ -292,9 +292,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         // line above the Options assignment, which could not have honoured a seed even if it had
         // tried to - and left every model-based Optimize(inputData) run unrepeatable, since
         // RandomlySelectFeatures and InitializeRandomSolution both draw from here.
-        Random = Options.Seed.HasValue
-            ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Options.Seed.Value)
-            : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+        Random = CreateOptionsRandom(Options);
         PredictionOptions = Options.PredictionOptions;
         ModelStatsOptions = Options.ModelStatsOptions;
         FitDetector = Options.FitDetector;
@@ -304,6 +302,42 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         ModelCache = Options.ModelCache;
         CurrentLearningRate = NumOps.Zero;
         CurrentMomentum = NumOps.Zero;
+    }
+
+
+    /// <summary>
+    /// The shared generator for a given set of options.
+    /// </summary>
+    /// <param name="options">The options whose <c>Seed</c> decides reproducibility.</param>
+    /// <returns>A seeded generator when a seed was given, a cryptographically secure one otherwise.</returns>
+    private static Random CreateOptionsRandom(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
+        => options.Seed.HasValue
+            ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(options.Seed.Value)
+            : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+
+    /// <summary>
+    /// Adopts a restored set of options, so the base agrees with what the caller deserialized.
+    /// </summary>
+    /// <param name="options">The options read back from the stream.</param>
+    /// <remarks>
+    /// <para>
+    /// <see cref="Deserialize"/> already hands restored options to <see cref="UpdateOptions"/> so a
+    /// derived optimizer can react, but the base kept its constructor values. That was invisible
+    /// while the shared generator ignored <c>Seed</c> entirely; once it honours the seed, a restored
+    /// optimizer would otherwise draw velocities from the restored seed and select features from the
+    /// original one - two different runs claiming to be the same.
+    /// </para>
+    /// <para>
+    /// Deliberately narrow: the option-derived collaborators cached at construction
+    /// (<see cref="FitDetector"/>, <see cref="FitnessCalculator"/> and the statistics options) are
+    /// left alone. Replacing live collaborators mid-lifetime is a separate concern from
+    /// reproducibility, and nothing here needs it.
+    /// </para>
+    /// </remarks>
+    private void AdoptRestoredOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
+    {
+        Options = options;
+        Random = CreateOptionsRandom(options);
     }
 
     /// <summary>
@@ -2071,9 +2105,11 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         object? deserializedOptions = JsonConvert.DeserializeObject(optionsJson, optionsType);
         var options = deserializedOptions as OptimizationAlgorithmOptions<T, TInput, TOutput>;
 
-        // Update the options
+        // Update the options. The base adopts them first so that its own state - the shared
+        // generator above all - matches what was restored, then the derived class reacts.
         if (options != null)
         {
+            AdoptRestoredOptions(options);
             UpdateOptions(options);
         }
 

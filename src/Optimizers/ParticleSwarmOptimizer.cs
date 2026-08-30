@@ -36,17 +36,6 @@ namespace AiDotNet.Optimizers;
 [PipelineStage(PipelineStage.Training)]
 public partial class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IDerivativeFreeFunctionOptimizer<T>
 {
-    /// <summary>
-    /// Random number generator for stochastic components of the algorithm.
-    /// </summary>
-    /// <remarks>
-    /// Derived from <see cref="OptimizationAlgorithmOptions{T, TInput, TOutput}.Seed"/> when the
-    /// caller supplies one, so a seeded swarm is reproducible on the model-based path as well as on
-    /// the function-minimisation one. It is not readonly because <see cref="UpdateOptions"/> can
-    /// replace the options, and a generator still drawing from the previous seed would contradict
-    /// them.
-    /// </remarks>
-    private Random _random;
 
     /// <summary>
     /// Configuration options specific to Particle Swarm Optimization.
@@ -69,22 +58,6 @@ public partial class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<
     private double _currentSocialWeight;
 
     /// <summary>
-    /// The generator this optimizer draws from, honouring a caller-supplied seed.
-    /// </summary>
-    /// <param name="options">The options whose <c>Seed</c> decides reproducibility.</param>
-    /// <returns>A seeded generator when a seed was given, a cryptographically secure one otherwise.</returns>
-    /// <remarks>
-    /// Every method in this family is stochastic, so a run is a random variable. One that cannot be
-    /// repeated cannot be debugged, and a benchmark from a single unrepeatable run says more about
-    /// its seed than about the method - which is the same reasoning behind
-    /// <c>OptimizerBase.CreateSearchRandom</c>, used by the function-minimisation overload.
-    /// </remarks>
-    private static Random CreateSwarmRandom(ParticleSwarmOptimizationOptions<T, TInput, TOutput> options)
-        => options.Seed.HasValue
-            ? RandomHelper.CreateSeededRandom(options.Seed.Value)
-            : RandomHelper.CreateSecureRandom();
-
-    /// <summary>
     /// Initializes a new instance of the ParticleSwarmOptimizer class with the specified options.
     /// </summary>
     /// <param name="model">The model to be optimized.</param>
@@ -95,7 +68,6 @@ public partial class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<
         : base(model, options ?? new())
     {
         _psoOptions = options ?? new ParticleSwarmOptimizationOptions<T, TInput, TOutput>();
-        _random = CreateSwarmRandom(_psoOptions);
 
         InitializeAdaptiveParameters();
     }
@@ -134,7 +106,7 @@ public partial class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<
             var velocity = new Vector<T>(dimensions);
             for (int j = 0; j < dimensions; j++)
             {
-                velocity[j] = NumOps.FromDouble(_random.NextDouble() * 0.1 - 0.05);
+                velocity[j] = NumOps.FromDouble(Random.NextDouble() * 0.1 - 0.05);
             }
             velocities.Add(velocity);
         }
@@ -251,8 +223,8 @@ public partial class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<
         var socialRandom = new Vector<T>(velocity.Length);
         for (int i = 0; i < velocity.Length; i++)
         {
-            cognitiveRandom[i] = NumOps.Multiply(cognitiveWeight, NumOps.FromDouble(_random.NextDouble()));
-            socialRandom[i] = NumOps.Multiply(socialWeight, NumOps.FromDouble(_random.NextDouble()));
+            cognitiveRandom[i] = NumOps.Multiply(cognitiveWeight, NumOps.FromDouble(Random.NextDouble()));
+            socialRandom[i] = NumOps.Multiply(socialWeight, NumOps.FromDouble(Random.NextDouble()));
         }
 
         // Vectorized computation: velocity = inertia*velocity + cognitive*personalDiff + social*globalDiff
@@ -293,10 +265,6 @@ public partial class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<
         if (options is ParticleSwarmOptimizationOptions<T, TInput, TOutput> psoOptions)
         {
             _psoOptions = psoOptions;
-
-            // The generator belongs to the options: leaving it on the previous seed would make the
-            // optimizer disagree with the configuration it reports.
-            _random = CreateSwarmRandom(_psoOptions);
         }
         else
         {
@@ -326,7 +294,6 @@ public partial class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<
         : base(null, options ?? new())
     {
         _psoOptions = options ?? new ParticleSwarmOptimizationOptions<T, TInput, TOutput>();
-        _random = CreateSwarmRandom(_psoOptions);
 
         InitializeAdaptiveParameters();
     }

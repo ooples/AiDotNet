@@ -241,25 +241,12 @@ public class MetaheuristicOptimizerIntegrationTests
     }
 
     /// <summary>
-    /// Both generators a swarm draws from are seeded when the caller supplies a seed.
+    /// The same seed gives the same optimization, which is the behaviour callers actually want.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// <c>Seed</c> lives on the shared options and the function-minimisation overload has always
-    /// honoured it through <c>CreateSearchRandom</c>. Two generators on the model-based path did
-    /// not. <c>OptimizerBase</c> ran <c>Random = new()</c> on the line ABOVE its <c>Options</c>
-    /// assignment, so it could not have read a seed even in principle, and
-    /// <c>ParticleSwarmOptimizer</c> built its own field with <c>CreateSecureRandom()</c>,
-    /// ignoring the seed outright. Feature selection, solution initialisation and every velocity
-    /// draw come from those two.
-    /// </para>
-    /// <para>
-    /// This asserts the generators, not a whole optimization run, because that is exactly what has
-    /// been fixed and no more. A same-seed <c>Optimize(inputData)</c> still does not reproduce - at
-    /// least one further source of nondeterminism remains on that path, and it is not parallel
-    /// reduction order, since neither type parallelises. Claiming reproducibility here would be
-    /// claiming more than is true.
-    /// </para>
+    /// The generator tests below localise a failure; this one states the contract. Equality rather
+    /// than a tolerance is deliberate - a seed either determines the run or it does not, and a
+    /// tolerance would let the defect back in unnoticed.
     /// </remarks>
     [Fact(Timeout = 120000)]
     public async Task ParticleSwarm_WithTheSameSeed_RepeatsItselfOnTheModelPath()
@@ -296,34 +283,91 @@ public class MetaheuristicOptimizerIntegrationTests
         Assert.Equal(RunWithSeed(20250829), RunWithSeed(20250829));
     }
 
+    /// <summary>
+    /// A seeded optimizer draws from a seeded generator, and a differently seeded one does not.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asserted for two optimizers because the fix is a base-class contract, not a per-optimizer
+    /// patch. <c>OptimizerBase</c> owns the one generator every derived optimizer draws from, and it
+    /// is built from <c>Options.Seed</c>. Particle swarm and simulated annealing each used to carry
+    /// a private <c>Random</c> built with <c>CreateSecureRandom()</c>, which no seed could reach;
+    /// both now use the inherited one, so there is nothing left to forget to seed.
+    /// </para>
+    /// <para>
+    /// The second assertion pins the other half - different seeds must diverge - so that a
+    /// degenerate generator returning a constant would not satisfy the first.
+    /// </para>
+    /// </remarks>
     [Fact(Timeout = 120000)]
-    public async Task ParticleSwarm_WithASeed_BuildsBothItsGeneratorsFromIt()
+    public async Task SeededOptimizers_DrawFromTheSeedTheyWereGiven()
     {
         await Task.Yield();
 
-        static (int Shared, double Swarm) FirstDraws(int seed)
-        {
-            var optimizer = new ParticleSwarmOptimizer<double, Matrix<double>, Vector<double>>(
-                new MultipleRegression<double>(),
+        static int SwarmDraw(int seed) => FirstDraw(
+            new ParticleSwarmOptimizer<double, Matrix<double>, Vector<double>>(
+                null,
                 new ParticleSwarmOptimizationOptions<double, Matrix<double>, Vector<double>>
                 {
                     SwarmSize = 8,
                     Seed = seed,
-                });
+                }));
 
-            var shared = (Random)typeof(OptimizerBase<double, Matrix<double>, Vector<double>>)
-                .GetField("Random", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .GetValue(optimizer)!;
-            var swarm = (Random)typeof(ParticleSwarmOptimizer<double, Matrix<double>, Vector<double>>)
-                .GetField("_random", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .GetValue(optimizer)!;
+        static int AnnealingDraw(int seed) => FirstDraw(
+            new SimulatedAnnealingOptimizer<double, Matrix<double>, Vector<double>>(
+                null,
+                new SimulatedAnnealingOptions<double, Matrix<double>, Vector<double>>
+                {
+                    Seed = seed,
+                }));
 
-            return (shared.Next(), swarm.NextDouble());
-        }
+        Assert.Equal(SwarmDraw(20250829), SwarmDraw(20250829));
+        Assert.NotEqual(SwarmDraw(20250829), SwarmDraw(19700101));
 
-        Assert.Equal(FirstDraws(20250829), FirstDraws(20250829));
-        Assert.NotEqual(FirstDraws(20250829), FirstDraws(19700101));
+        Assert.Equal(AnnealingDraw(20250829), AnnealingDraw(20250829));
+        Assert.NotEqual(AnnealingDraw(20250829), AnnealingDraw(19700101));
     }
+
+    /// <summary>
+    /// A restored optimizer draws from the seed it was restored with, not the one it was built with.
+    /// </summary>
+    /// <remarks>
+    /// <c>Deserialize</c> hands the restored options to <c>UpdateOptions</c> so a derived optimizer
+    /// can react, but the base kept its constructor values. That was harmless while the shared
+    /// generator ignored <c>Seed</c> outright; once it honours the seed, a restored optimizer would
+    /// otherwise report one seed and draw from another. The base now adopts the restored options
+    /// before handing them on, which is why this holds for every optimizer rather than the one
+    /// tested here.
+    /// </remarks>
+    [Fact(Timeout = 120000)]
+    public async Task ParticleSwarm_AfterDeserialize_UsesTheRestoredSeed()
+    {
+        await Task.Yield();
+
+        const int BuiltWith = 19700101;
+        const int RestoredFrom = 20250829;
+
+        static ParticleSwarmOptimizer<double, Matrix<double>, Vector<double>> Build(int seed) =>
+            new(null, new ParticleSwarmOptimizationOptions<double, Matrix<double>, Vector<double>>
+            {
+                MaxIterations = 10,
+                SwarmSize = 8,
+                Seed = seed,
+            });
+
+        var restored = Build(BuiltWith);
+        restored.Deserialize(Build(RestoredFrom).Serialize());
+
+        Assert.Equal(RestoredFrom, restored.GetOptions().Seed);
+        Assert.Equal(FirstDraw(Build(RestoredFrom)), FirstDraw(restored));
+        Assert.NotEqual(FirstDraw(Build(BuiltWith)), FirstDraw(restored));
+    }
+
+    /// <summary>The first draw from the one generator an optimizer owns, which lives on the base.</summary>
+    private static int FirstDraw(OptimizerBase<double, Matrix<double>, Vector<double>> optimizer)
+        => ((Random)typeof(OptimizerBase<double, Matrix<double>, Vector<double>>)
+            .GetField("Random", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(optimizer)!).Next();
 
     #endregion
 

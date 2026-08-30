@@ -30,26 +30,6 @@ using Newtonsoft.Json;
 [PipelineStage(PipelineStage.Training)]
 public partial class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IDerivativeFreeFunctionOptimizer<T>
 {
-    /// <summary>
-    /// Random number generator for stochastic decision-making.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field provides a source of randomness for the Simulated Annealing algorithm. It is used
-    /// to generate random perturbations when creating neighbor solutions and to make probabilistic
-    /// decisions about accepting worse solutions.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like the hiker's dice that helps make unpredictable choices.
-    /// 
-    /// The random number generator:
-    /// - Creates random variations when generating new solutions to try
-    /// - Determines whether to accept a worse solution based on probability
-    /// - Adds the element of chance that is essential to the algorithm's effectiveness
-    /// 
-    /// This randomness is crucial for the algorithm to escape local optima and explore the solution space effectively.
-    /// </para>
-    /// </remarks>
-    private readonly Random _random;
 
     /// <summary>
     /// Configuration options specific to the Simulated Annealing algorithm.
@@ -124,7 +104,6 @@ public partial class SimulatedAnnealingOptimizer<T, TInput, TOutput> : Optimizer
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _random = RandomHelper.CreateSecureRandom();
         _saOptions = options ?? new SimulatedAnnealingOptions<T, TInput, TOutput>();
         _currentTemperature = NumOps.FromDouble(_saOptions.InitialTemperature);
     }
@@ -364,7 +343,7 @@ public partial class SimulatedAnnealingOptimizer<T, TInput, TOutput> : Optimizer
             _currentTemperature
         )));
 
-        return _random.NextDouble() < acceptanceProbability;
+        return Random.NextDouble() < acceptanceProbability;
     }
 
     /// <summary>
@@ -478,7 +457,7 @@ public partial class SimulatedAnnealingOptimizer<T, TInput, TOutput> : Optimizer
         var perturbations = new Vector<T>(parameters.Length);
         for (int i = 0; i < parameters.Length; i++)
         {
-            perturbations[i] = NumOps.FromDouble((_random.NextDouble() * 2 - 1) * _saOptions.NeighborGenerationRange);
+            perturbations[i] = NumOps.FromDouble((Random.NextDouble() * 2 - 1) * _saOptions.NeighborGenerationRange);
         }
 
         // Add perturbations to parameters using vectorized Engine operation
@@ -499,7 +478,6 @@ public partial class SimulatedAnnealingOptimizer<T, TInput, TOutput> : Optimizer
     private SimulatedAnnealingOptimizer(SimulatedAnnealingOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _random = RandomHelper.CreateSecureRandom();
         _saOptions = options ?? new SimulatedAnnealingOptions<T, TInput, TOutput>();
         _currentTemperature = NumOps.FromDouble(_saOptions.InitialTemperature);
     }
