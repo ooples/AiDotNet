@@ -53,7 +53,9 @@ public partial class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOp
     /// <summary>
     /// The options specific to the Newton's Method optimizer.
     /// </summary>
-    private NewtonMethodOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private NewtonMethodOptimizerOptions<T, TInput, TOutput> _options => (NewtonMethodOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The current iteration count of the optimization process.
@@ -80,7 +82,6 @@ public partial class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOp
         NewtonMethodOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new NewtonMethodOptimizerOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -111,7 +112,6 @@ public partial class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOp
     private NewtonMethodOptimizer(NewtonMethodOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _options = options ?? new NewtonMethodOptimizerOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -405,32 +405,6 @@ public partial class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOp
         }
     }
 
-    /// <summary>
-    /// Updates the optimizer's options with new settings.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method ensures that only compatible option types are used with this optimizer.
-    /// It updates the internal options if the provided options are of the correct type.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like changing the rules for how you navigate the valley. It makes sure you're only using rules that work for
-    /// Newton's Method of exploring the valley.
-    /// </para>
-    /// </remarks>
-    /// <param name="options">The new options to be applied to the optimizer.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is NewtonMethodOptimizerOptions<T, TInput, TOutput> newtonOptions)
-        {
-            _options = newtonOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected NewtonMethodOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current options of the optimizer.

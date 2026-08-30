@@ -52,7 +52,9 @@ public partial class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     /// <summary>
     /// The options specific to the DFP optimization algorithm.
     /// </summary>
-    private DFPOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private DFPOptimizerOptions<T, TInput, TOutput> _options => (DFPOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The inverse Hessian matrix approximation used in the DFP algorithm.
@@ -95,7 +97,6 @@ public partial class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new DFPOptimizerOptions<T, TInput, TOutput>();
         _previousGradient = Vector<T>.Empty();
         _inverseHessian = Matrix<T>.Empty();
         _adaptiveLearningRate = NumOps.Zero;
@@ -129,7 +130,6 @@ public partial class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     private DFPOptimizer(DFPOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _options = options ?? new DFPOptimizerOptions<T, TInput, TOutput>();
         _previousGradient = Vector<T>.Empty();
         _inverseHessian = Matrix<T>.Empty();
         _adaptiveLearningRate = NumOps.Zero;
@@ -336,27 +336,6 @@ public partial class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
         }
     }
 
-    /// <summary>
-    /// Updates the options for the DFP optimizer.
-    /// </summary>
-    /// <param name="options">The new options to be set.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of type DFPOptimizerOptions.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method allows you to change the settings of the optimizer during runtime.
-    /// It ensures that only the correct type of options (specific to DFP) can be used.
-    /// </para>
-    /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is DFPOptimizerOptions<T, TInput, TOutput> dfpOptions)
-        {
-            _options = dfpOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Options must be of type DFPOptimizerOptions", nameof(options));
-        }
-    }
 
     /// <summary>
     /// Retrieves the current options of the DFP optimizer.

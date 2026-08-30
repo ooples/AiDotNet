@@ -29,7 +29,9 @@ public partial class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// <summary>
     /// The options specific to the Nelder-Mead optimizer.
     /// </summary>
-    private NelderMeadOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private NelderMeadOptimizerOptions<T, TInput, TOutput> _options => (NelderMeadOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The current iteration count.
@@ -76,7 +78,6 @@ public partial class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
         NelderMeadOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new NelderMeadOptimizerOptions<T, TInput, TOutput>();
         _alpha = NumOps.Zero;
         _beta = NumOps.Zero;
         _gamma = NumOps.Zero;
@@ -104,7 +105,6 @@ public partial class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     public NelderMeadOptimizer(NelderMeadOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(null, options ?? new())
     {
-        _options = options ?? new NelderMeadOptimizerOptions<T, TInput, TOutput>();
         _alpha = NumOps.Zero;
         _beta = NumOps.Zero;
         _gamma = NumOps.Zero;
@@ -637,31 +637,6 @@ public partial class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
     }
 
-    /// <summary>
-    /// Updates the optimizer's options with new settings.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method ensures that only compatible option types are used with this optimizer.
-    /// It updates the internal options if the provided options are of the correct type.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like changing the rules for how the explorers should search. It makes sure you're only using rules that work for this specific type of search (Nelder-Mead method).
-    /// </para>
-    /// </remarks>
-    /// <param name="options">The new options to be applied to the optimizer.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is NelderMeadOptimizerOptions<T, TInput, TOutput> nmOptions)
-        {
-            _options = nmOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected NelderMeadOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current options of the Nelder-Mead optimizer.

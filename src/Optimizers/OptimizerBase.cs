@@ -89,32 +89,39 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <summary>
     /// Provides random number generation for all derived classes.
     /// </summary>
-    protected readonly Random Random;
+    /// <remarks>
+    /// Seeded from <see cref="OptimizationAlgorithmOptions{T, TInput, TOutput}.Seed"/> when the
+    /// caller supplies one, and cryptographically secure otherwise. The function-minimisation
+    /// overloads have always honoured that seed through <see cref="CreateSearchRandom"/>; this is
+    /// the same contract for the model-based path, which draws from here for feature selection and
+    /// solution initialisation.
+    /// </remarks>
+    protected Random Random;
 
     /// <summary>
     /// Contains the configuration options for the optimization algorithm.
     /// </summary>
-    protected readonly OptimizationAlgorithmOptions<T, TInput, TOutput> Options;
+    protected OptimizationAlgorithmOptions<T, TInput, TOutput> Options;
 
     /// <summary>
     /// Options for prediction statistics calculations.
     /// </summary>
-    protected readonly PredictionStatsOptions PredictionOptions;
+    protected PredictionStatsOptions PredictionOptions;
 
     /// <summary>
     /// Options for model statistics calculations.
     /// </summary>
-    protected readonly ModelStatsOptions ModelStatsOptions;
+    protected ModelStatsOptions ModelStatsOptions;
 
     /// <summary>
     /// Detects the quality of fit for models.
     /// </summary>
-    protected readonly IFitDetector<T, TInput, TOutput> FitDetector;
+    protected IFitDetector<T, TInput, TOutput> FitDetector;
 
     /// <summary>
     /// Calculates the fitness score of models.
     /// </summary>
-    protected readonly IFitnessCalculator<T, TInput, TOutput> FitnessCalculator;
+    protected IFitnessCalculator<T, TInput, TOutput> FitnessCalculator;
 
     /// <summary>
     /// Stores the fitness scores of evaluated models.
@@ -277,18 +284,49 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         OptimizationAlgorithmOptions<T, TInput, TOutput> options)
     {
         _model = model;
-        Random = new();
         NumOps = MathHelper.GetNumericOperations<T>();
-        Options = options ?? new OptimizationAlgorithmOptions<T, TInput, TOutput>();
-        PredictionOptions = Options.PredictionOptions;
-        ModelStatsOptions = Options.ModelStatsOptions;
-        FitDetector = Options.FitDetector;
-        FitnessCalculator = Options.FitnessCalculator;
+        ApplyOptions(options ?? new OptimizationAlgorithmOptions<T, TInput, TOutput>());
         FitnessList = new List<T>();
         IterationHistoryList = new List<OptimizationIterationInfo<T>>();
-        ModelCache = Options.ModelCache;
         CurrentLearningRate = NumOps.Zero;
         CurrentMomentum = NumOps.Zero;
+    }
+
+
+    /// <summary>
+    /// Adopts an option set: every piece of base state that is derived from options, in one place.
+    /// </summary>
+    /// <param name="options">The options to take effect.</param>
+    /// <remarks>
+    /// <para>
+    /// The constructor and <see cref="Deserialize"/> both route through here so the two cannot drift.
+    /// Adopting only part of an option set is worse than adopting none of it: an optimizer built with
+    /// configuration A and restored from configuration B would evaluate with B's settings and A's
+    /// evaluator, which is a state neither configuration describes. Any future option-derived field
+    /// belongs in this method rather than in the constructor, and then it is restored for free.
+    /// </para>
+    /// <para>
+    /// The generator is included because it is derived from <c>Options.Seed</c>. Before this it read
+    /// <c>Random = new()</c> on the line ABOVE the <c>Options</c> assignment, so it could not have
+    /// honoured a seed even in principle - which left every model-based <c>Optimize(inputData)</c>
+    /// run unrepeatable, since <c>RandomlySelectFeatures</c> and <c>InitializeRandomSolution</c>
+    /// both draw from here.
+    /// </para>
+    /// </remarks>
+    [System.Diagnostics.CodeAnalysis.MemberNotNull(
+        nameof(Options), nameof(Random), nameof(PredictionOptions), nameof(ModelStatsOptions),
+        nameof(FitDetector), nameof(FitnessCalculator), nameof(ModelCache))]
+    private void ApplyOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
+    {
+        Options = options;
+        Random = options.Seed.HasValue
+            ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(options.Seed.Value)
+            : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+        PredictionOptions = options.PredictionOptions;
+        ModelStatsOptions = options.ModelStatsOptions;
+        FitDetector = options.FitDetector;
+        FitnessCalculator = options.FitnessCalculator;
+        ModelCache = options.ModelCache;
     }
 
     /// <summary>
@@ -2056,9 +2094,25 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         object? deserializedOptions = JsonConvert.DeserializeObject(optionsJson, optionsType);
         var options = deserializedOptions as OptimizationAlgorithmOptions<T, TInput, TOutput>;
 
-        // Update the options
+        // Update the options. The base adopts them first so its own state - the shared generator
+        // above all - matches what was restored, then the derived class reacts.
         if (options != null)
         {
+            // The interface-typed collaborators do NOT survive the options JSON round-trip: with no
+            // type information in the payload, Newtonsoft rebuilds each one as its property
+            // initializer's default. Measured - an optimizer configured with
+            // MeanSquaredErrorFitnessCalculator serializes and comes back holding
+            // RSquaredFitnessCalculator, the default. Adopting them wholesale would therefore
+            // replace a caller's configured evaluator, detector and cache with defaults on every
+            // deserialize, which is a worse outcome than the stale-but-correct ones already held.
+            // So the restored payload contributes its VALUES, and the live collaborators are
+            // carried across - which also keeps Options and the cached fields in agreement rather
+            // than adopting half an option set.
+            options.FitnessCalculator = FitnessCalculator;
+            options.FitDetector = FitDetector;
+            options.ModelCache = ModelCache;
+
+            ApplyOptions(options);
             UpdateOptions(options);
         }
 
@@ -2162,8 +2216,37 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// This is important because different optimizers might interpret the same options differently,
     /// or might have additional specialized options.
     /// </para>
+    /// </para>
+    /// <para>
+    /// Overriding this is now the EXCEPTION rather than the rule. It used to be abstract, so all 42
+    /// concrete optimizers implemented it, and 36 of those implementations were the same eight lines:
+    /// downcast the options, assign them to a private typed field, throw otherwise. That field was a
+    /// second copy of state the base already owns, and keeping two copies in step is the whole
+    /// reason the method existed.
+    /// </para>
+    /// <para>
+    /// Those optimizers now read their typed options through a computed property over
+    /// <see cref="Options"/>, so there is no second copy and nothing to synchronise - which also
+    /// closed a latent bug, since a constructor written as <c>base(model, options ?? new())</c>
+    /// alongside <c>_options = options ?? new()</c> built TWO different default instances whenever
+    /// the caller passed null.
+    /// </para>
+    /// <para>
+    /// Override it only to REACT to a new option set - rebuilding a regularizer, updating a kernel,
+    /// validating hyperparameters. Six optimizers do. Do not override it merely to hold a typed copy.
+    /// </para>
+    /// <para>
+    /// The empty default is deliberate and is not a silent-skip hazard introduced here. Under the
+    /// previous abstract contract every optimizer was forced to implement the method, and 33 of the
+    /// 34 that own adaptive parameters still did not re-seed them from the new options - only
+    /// LionOptimizer did. Compulsion produced boilerplate, not correctness. Nothing statically
+    /// distinguishes an optimizer that must react from one that need not, so the obligation is
+    /// documented here rather than pretended away by a signature.
+    /// </para>
     /// </remarks>
-    protected abstract void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options);
+    protected virtual void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
+    {
+    }
 
     /// <summary>
     /// Performs a single optimization step, updating the model parameters based on gradients.
@@ -2452,7 +2535,10 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             {
                 var current = nnCloneParameterizable.GetParameters();
                 var perturbed = new Vector<T>(current.Length);
-                var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+                // The shared generator, so a seeded run perturbs identically. A fresh secure
+                // generator here would reintroduce the nondeterminism Options.Seed exists to
+                // remove, and this perturbation seeds every candidate the search starts from.
+                var rng = Random;
                 for (int i = 0; i < current.Length; i++)
                 {
                     // Gaussian noise ~ N(0, σ²) where σ = max(|current[i]|, ε) * 0.1.

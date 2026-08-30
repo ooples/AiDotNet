@@ -84,7 +84,9 @@ public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOpt
     /// It includes parameters such as initial trust region radius, expansion and contraction factors,
     /// and thresholds for determining the success of each optimization step.
     /// </remarks>
-    private TrustRegionOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private TrustRegionOptimizerOptions<T, TInput, TOutput> _options => (TrustRegionOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The current radius of the trust region.
@@ -128,7 +130,6 @@ public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOpt
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new TrustRegionOptimizerOptions<T, TInput, TOutput>();
         _trustRegionRadius = NumOps.Zero;
 
         InitializeAdaptiveParameters();
@@ -160,7 +161,6 @@ public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOpt
     private TrustRegionOptimizer(TrustRegionOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _options = options ?? new TrustRegionOptimizerOptions<T, TInput, TOutput>();
         _trustRegionRadius = NumOps.Zero;
 
         InitializeAdaptiveParameters();
@@ -707,32 +707,6 @@ public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOpt
         }
     }
 
-    /// <summary>
-    /// Updates the optimizer options.
-    /// </summary>
-    /// <param name="options">The new options to be set.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of type TrustRegionOptimizerOptions.</exception>
-    /// <remarks>
-    /// This method allows updating the optimizer's configuration during runtime. It ensures that only
-    /// the correct type of options (TrustRegionOptimizerOptions) can be set for this optimizer.
-    /// 
-    /// <para><b>For Beginners:</b> This is like changing the settings on your GPS mid-journey:
-    /// - You can adjust how the optimizer behaves without starting over.
-    /// - It checks to make sure you're using the right kind of settings for this specific optimizer.
-    /// - If you try to use the wrong type of settings, it will let you know with an error.
-    /// </para>
-    /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is TrustRegionOptimizerOptions<T, TInput, TOutput> trustRegionOptions)
-        {
-            _options = trustRegionOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected TrustRegionOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Retrieves the current options of the optimizer.

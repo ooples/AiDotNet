@@ -61,7 +61,9 @@ public partial class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : Gra
     /// how many times to repeat the process, and how to adjust your step size.
     /// </para>
     /// </remarks>
-    private MiniBatchGradientDescentOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private MiniBatchGradientDescentOptions<T, TInput, TOutput> _options => (MiniBatchGradientDescentOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// Initializes a new instance of the MiniBatchGradientDescentOptimizer class.
@@ -83,7 +85,6 @@ public partial class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : Gra
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new MiniBatchGradientDescentOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -114,7 +115,6 @@ public partial class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : Gra
     private MiniBatchGradientDescentOptimizer(MiniBatchGradientDescentOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _options = options ?? new MiniBatchGradientDescentOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -328,32 +328,6 @@ public partial class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : Gra
         }
     }
 
-    /// <summary>
-    /// Updates the optimizer's options with new settings.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method allows updating the optimizer's settings during runtime. It ensures that only compatible
-    /// option types are used with this optimizer.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like changing your hiking strategy mid-journey. It makes sure you're only using strategies 
-    /// that work for this specific type of journey (Mini-Batch Gradient Descent).
-    /// </para>
-    /// </remarks>
-    /// <param name="options">The new options to be applied to the optimizer.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is MiniBatchGradientDescentOptions<T, TInput, TOutput> mbgdOptions)
-        {
-            _options = mbgdOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected MiniBatchGradientDescentOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current optimization algorithm options.

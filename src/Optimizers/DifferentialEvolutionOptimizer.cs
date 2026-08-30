@@ -39,7 +39,9 @@ public partial class DifferentialEvolutionOptimizer<T, TInput, TOutput> : Optimi
     /// (refining good solutions).
     /// </para>
     /// </remarks>
-    private DifferentialEvolutionOptions<T, TInput, TOutput> _deOptions;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private DifferentialEvolutionOptions<T, TInput, TOutput> _deOptions => (DifferentialEvolutionOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The current crossover rate used in the optimization process.
@@ -88,7 +90,6 @@ public partial class DifferentialEvolutionOptimizer<T, TInput, TOutput> : Optimi
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _deOptions = options ?? new DifferentialEvolutionOptions<T, TInput, TOutput>();
         _currentCrossoverRate = NumOps.Zero;
         _currentMutationRate = NumOps.Zero;
 
@@ -248,27 +249,6 @@ public partial class DifferentialEvolutionOptimizer<T, TInput, TOutput> : Optimi
         return InterfaceGuard.Parameterizable(currentModel).WithParameters(trialParams);
     }
 
-    /// <summary>
-    /// Updates the options for the Differential Evolution optimizer.
-    /// </summary>
-    /// <param name="options">The new options to be set.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of type DifferentialEvolutionOptions.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method allows you to change the settings of the optimizer during runtime.
-    /// It ensures that only the correct type of options (specific to Differential Evolution) can be used.
-    /// </para>
-    /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is DifferentialEvolutionOptions<T, TInput, TOutput> deOptions)
-        {
-            _deOptions = deOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Options must be of type DifferentialEvolutionOptions", nameof(options));
-        }
-    }
 
     /// <summary>
     /// Retrieves the current options of the Differential Evolution optimizer.
@@ -296,7 +276,6 @@ public partial class DifferentialEvolutionOptimizer<T, TInput, TOutput> : Optimi
     private DifferentialEvolutionOptimizer(DifferentialEvolutionOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _deOptions = options ?? new DifferentialEvolutionOptions<T, TInput, TOutput>();
         _currentCrossoverRate = NumOps.Zero;
         _currentMutationRate = NumOps.Zero;
 

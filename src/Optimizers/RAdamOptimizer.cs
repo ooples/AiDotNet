@@ -60,7 +60,9 @@ public partial class RAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// <summary>
     /// The options specific to the RAdam optimizer.
     /// </summary>
-    private RAdamOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private RAdamOptimizerOptions<T, TInput, TOutput> _options => (RAdamOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The first moment vector (exponential moving average of gradients).
@@ -93,7 +95,6 @@ public partial class RAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         RAdamOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new RAdamOptimizerOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -494,22 +495,6 @@ public partial class RAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         }
     }
 
-    /// <summary>
-    /// Updates the optimizer's options with new settings.
-    /// </summary>
-    /// <param name="options">The new options to be applied to the optimizer.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is RAdamOptimizerOptions<T, TInput, TOutput> radamOptions)
-        {
-            _options = radamOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected RAdamOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Retrieves the current options of the optimizer.

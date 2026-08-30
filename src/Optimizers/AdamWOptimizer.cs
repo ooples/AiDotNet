@@ -51,7 +51,9 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// <summary>
     /// The options specific to the AdamW optimizer.
     /// </summary>
-    private AdamWOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private AdamWOptimizerOptions<T, TInput, TOutput> _options => (AdamWOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The first moment vector (moving average of gradients).
@@ -116,7 +118,6 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         _m = Vector<T>.Empty();
         _v = Vector<T>.Empty();
         _t = 0;
-        _options = options ?? new();
         _currentBeta1 = NumOps.Zero;
         _currentBeta2 = NumOps.Zero;
 
@@ -933,20 +934,6 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         _tapeStep = 0;
     }
 
-    /// <summary>
-    /// Updates the optimizer's options.
-    /// </summary>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is AdamWOptimizerOptions<T, TInput, TOutput> adamWOptions)
-        {
-            _options = adamWOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected AdamWOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current optimizer options.

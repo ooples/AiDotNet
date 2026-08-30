@@ -77,7 +77,9 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
     /// its previous direction (momentum), and whether these properties change automatically during the experiment.
     /// </para>
     /// </remarks>
-    private MomentumOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private MomentumOptimizerOptions<T, TInput, TOutput> _options => (MomentumOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// Stores the current velocity vector for each parameter in the model.
@@ -116,7 +118,6 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         MomentumOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new MomentumOptimizerOptions<T, TInput, TOutput>();
         InitializeAdaptiveParameters();
     }
 
@@ -146,7 +147,6 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
     private MomentumOptimizer(MomentumOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _options = options ?? new MomentumOptimizerOptions<T, TInput, TOutput>();
         InitializeAdaptiveParameters();
     }
 
@@ -501,32 +501,6 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         }
     }
 
-    /// <summary>
-    /// Updates the optimizer's options with new settings.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method allows updating the optimizer's settings during runtime. It ensures that only compatible
-    /// option types are used with this optimizer.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like changing the rules of how you're rolling the ball mid-experiment. It makes sure you're only
-    /// using rules that work for this specific type of ball-rolling (Momentum optimization).
-    /// </para>
-    /// </remarks>
-    /// <param name="options">The new options to be applied to the optimizer.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is MomentumOptimizerOptions<T, TInput, TOutput> momentumOptions)
-        {
-            _options = momentumOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected MomentumOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current optimization algorithm options.
