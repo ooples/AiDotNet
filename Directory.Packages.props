@@ -341,11 +341,17 @@
          RecurrentGemmaLanguageModelTests.Training_ShouldChangeParameters failing with "Parameters
          did not change after training". 0.129.1 added the fused training corrections (#975, #977,
          #978) that stop the gradients going non-finite. All four packages stay on the published
-         lockstep release. -->
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.129.2" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.129.2" />
+         lockstep release.
+
+         Bumped 0.129.2 to 0.129.7 so all four move together again. The natives had drifted behind
+         AiDotNet.Tensors (0.129.4) on master; 0.129.7 is published for OpenBLAS, OneDNN, CLBlast and
+         Tensors alike, so the lockstep this comment describes is actually restored rather than
+         merely asserted. AiDotNet.Tensors 0.129.7 is required for the GPU launch journal and buffer
+         residency diagnostics that #2056 collects. -->
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.129.7" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.129.7" />
     <PackageVersion Include="AiDotNet.Tensors" Version="0.129.7" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.129.2" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.129.7" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.11" />
