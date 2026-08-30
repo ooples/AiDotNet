@@ -1673,8 +1673,13 @@ jobs:
           #   MINI, not full  a full dump of a 16 GB host cannot fit a runner's free disk; a mini
           #                   dump carries the faulting stacks, which is what actually gets read.
           #
-          # The hang dump is promoted from 'none' for the same reason: a 5-minute hang currently
-          # aborts leaving no state at all.
+          # THE HANG DUMP STAYS 'none', DELIBERATELY. Promoting it to 'mini' failed 29 shards: the
+          # 5-minute inactivity detector fires routinely here (a single long test reports nothing
+          # while it runs), the collector then tries to dump a process that has already moved on,
+          # and "Creating hang dump failed ... Process with an Id of N is not running" turns an
+          # otherwise passing run into exit 1. Observed on Other - Playground: "Passed: 3" of 3
+          # tests, step exit code 1. Crash dumps do not share this failure mode, because they are
+          # only collected when the host has actually died.
           $dotnetArgs += @(
             '--logger', 'trx;LogFileName=test-results.trx',
             '--logger', "console;verbosity=$consoleVerbosity",
@@ -1682,7 +1687,7 @@ jobs:
             '--blame-crash',
             '--blame-crash-dump-type', 'mini',
             '--blame-hang-timeout', '5min',
-            '--blame-hang-dump-type', 'mini'
+            '--blame-hang-dump-type', 'none'
           )
 
           # AiDotNet.Tensors writes its GPU launch journal and buffer residency here as the process
