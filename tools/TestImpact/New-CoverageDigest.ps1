@@ -100,19 +100,23 @@ foreach ($fid in $lines.Keys) {
     $path = $paths[$fid]
 
     $sorted = [int[]] ($lines[$fid] | Sort-Object)
-    $ranges = [System.Collections.Generic.List[object]]::new()
+    # FLAT pairs: [start, end, start, end, ...]. Nested arrays are a trap here - ConvertFrom-Json
+    # returns a one-element array as a bare value, so a file with exactly one executed range comes
+    # back as two loose integers and every index lookup silently shifts. Flat pairs cannot unroll
+    # into something that still indexes.
+    $ranges = [System.Collections.Generic.List[int]]::new()
     $start = $sorted[0]
     $prev = $sorted[0]
     for ($i = 1; $i -lt $sorted.Length; $i++) {
         if ($sorted[$i] -eq $prev + 1) { $prev = $sorted[$i]; continue }
-        [void] $ranges.Add(@($start, $prev))
+        [void] $ranges.Add($start); [void] $ranges.Add($prev)
         $start = $sorted[$i]; $prev = $sorted[$i]
     }
-    [void] $ranges.Add(@($start, $prev))
+    [void] $ranges.Add($start); [void] $ranges.Add($prev)
 
     # A partial class compiles into several <File> entries under one path; merge rather than replace.
     if ($files.Contains($path)) {
-        $merged = [System.Collections.Generic.List[object]] $files[$path]
+        $merged = [System.Collections.Generic.List[int]] $files[$path]
         foreach ($r in $ranges) { [void] $merged.Add($r) }
         $files[$path] = $merged
     }
