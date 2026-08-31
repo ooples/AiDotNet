@@ -30,7 +30,9 @@ public partial class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBa
     /// <summary>
     /// The options specific to the Conjugate Gradient optimization algorithm.
     /// </summary>
-    private ConjugateGradientOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private ConjugateGradientOptimizerOptions<T, TInput, TOutput> _options => (ConjugateGradientOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The direction vector from the previous iteration.
@@ -64,7 +66,6 @@ public partial class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBa
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new ConjugateGradientOptimizerOptions<T, TInput, TOutput>();
         _previousGradient = Vector<T>.Empty();
         InitializeAdaptiveParameters();
     }
@@ -95,7 +96,6 @@ public partial class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBa
     private ConjugateGradientOptimizer(ConjugateGradientOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _options = options ?? new ConjugateGradientOptimizerOptions<T, TInput, TOutput>();
         _previousGradient = Vector<T>.Empty();
         InitializeAdaptiveParameters();
     }
@@ -286,27 +286,6 @@ public partial class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBa
         }
     }
 
-    /// <summary>
-    /// Updates the options for the Conjugate Gradient optimizer.
-    /// </summary>
-    /// <param name="options">The new options to be set.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method allows you to change the settings of the Conjugate Gradient optimizer during runtime.
-    /// It checks to make sure you're providing the right kind of options specific to this algorithm.
-    /// </para>
-    /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is ConjugateGradientOptimizerOptions<T, TInput, TOutput> cgOptions)
-        {
-            _options = cgOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected ConjugateGradientOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Updates parameters using GPU-accelerated conjugate gradient.

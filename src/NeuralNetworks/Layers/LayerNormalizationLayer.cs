@@ -164,6 +164,13 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
     /// and beta (shift) parameters that are learned during training.
     /// </para>
     /// </remarks>
+    /// <inheritdoc />
+    /// <remarks>
+    /// A feature-wise upstream bias changes LayerNorm's joint mean and variance; beta cannot in
+    /// general reproduce that input-dependent effect, so Auto conservatively preserves the bias.
+    /// </remarks>
+    public override bool MakesUpstreamBiasRedundant => false;
+
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>

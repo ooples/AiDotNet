@@ -30,7 +30,9 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
     /// <summary>
     /// The options specific to the CMA-ES optimization algorithm.
     /// </summary>
-    private CMAESOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private CMAESOptimizerOptions<T, TInput, TOutput> _options => (CMAESOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The current population of candidate solutions.
@@ -84,7 +86,6 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _options = (CMAESOptimizerOptions<T, TInput, TOutput>)Options;
         _population = Matrix<T>.Empty();
         _mean = Vector<T>.Empty();
         _C = Matrix<T>.Empty();
@@ -461,27 +462,6 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
         )));
     }
 
-    /// <summary>
-    /// Updates the options for the CMA-ES optimizer.
-    /// </summary>
-    /// <param name="options">The new options to be set.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method allows you to change the settings of the CMA-ES optimizer during runtime.
-    /// It checks to make sure you're providing the right kind of options specific to the CMA-ES algorithm.
-    /// </para>
-    /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is CMAESOptimizerOptions<T, TInput, TOutput> cmaesOptions)
-        {
-            _options = cmaesOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected CMAESOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current options of the CMA-ES optimizer.
@@ -509,7 +489,6 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
     private CMAESOptimizer(CMAESOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _options = (CMAESOptimizerOptions<T, TInput, TOutput>)Options;
         _population = Matrix<T>.Empty();
         _mean = Vector<T>.Empty();
         _C = Matrix<T>.Empty();

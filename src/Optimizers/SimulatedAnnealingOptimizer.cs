@@ -30,26 +30,6 @@ using Newtonsoft.Json;
 [PipelineStage(PipelineStage.Training)]
 public partial class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IDerivativeFreeFunctionOptimizer<T>
 {
-    /// <summary>
-    /// Random number generator for stochastic decision-making.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field provides a source of randomness for the Simulated Annealing algorithm. It is used
-    /// to generate random perturbations when creating neighbor solutions and to make probabilistic
-    /// decisions about accepting worse solutions.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like the hiker's dice that helps make unpredictable choices.
-    /// 
-    /// The random number generator:
-    /// - Creates random variations when generating new solutions to try
-    /// - Determines whether to accept a worse solution based on probability
-    /// - Adds the element of chance that is essential to the algorithm's effectiveness
-    /// 
-    /// This randomness is crucial for the algorithm to escape local optima and explore the solution space effectively.
-    /// </para>
-    /// </remarks>
-    private readonly Random _random;
 
     /// <summary>
     /// Configuration options specific to the Simulated Annealing algorithm.
@@ -71,7 +51,9 @@ public partial class SimulatedAnnealingOptimizer<T, TInput, TOutput> : Optimizer
     /// Adjusting these settings can help the algorithm work better for different types of problems.
     /// </para>
     /// </remarks>
-    private SimulatedAnnealingOptions<T, TInput, TOutput> _saOptions;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private SimulatedAnnealingOptions<T, TInput, TOutput> _saOptions => (SimulatedAnnealingOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The current temperature controlling the acceptance probability of worse solutions.
@@ -124,8 +106,6 @@ public partial class SimulatedAnnealingOptimizer<T, TInput, TOutput> : Optimizer
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _random = RandomHelper.CreateSecureRandom();
-        _saOptions = options ?? new SimulatedAnnealingOptions<T, TInput, TOutput>();
         _currentTemperature = NumOps.FromDouble(_saOptions.InitialTemperature);
     }
 
@@ -364,42 +344,9 @@ public partial class SimulatedAnnealingOptimizer<T, TInput, TOutput> : Optimizer
             _currentTemperature
         )));
 
-        return _random.NextDouble() < acceptanceProbability;
+        return Random.NextDouble() < acceptanceProbability;
     }
 
-    /// <summary>
-    /// Updates the optimizer's options with the provided options.
-    /// </summary>
-    /// <param name="options">The options to apply to this optimizer.</param>
-    /// <exception cref="ArgumentException">Thrown when the options are not of the expected type.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method overrides the base implementation to update the Simulated Annealing-specific options.
-    /// It checks that the provided options are of the correct type (SimulatedAnnealingOptions)
-    /// and throws an exception if they are not.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates the settings that control how the optimizer works.
-    /// 
-    /// It's like changing the rule book:
-    /// - You provide a set of options to use
-    /// - The method checks that these are the right kind of options for a Simulated Annealing optimizer
-    /// - If they are, it applies these new settings
-    /// - If not, it lets you know there's a problem
-    /// 
-    /// This ensures that only appropriate settings are used with this specific optimizer.
-    /// </para>
-    /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is SimulatedAnnealingOptions<T, TInput, TOutput> saOptions)
-        {
-            _saOptions = saOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected SimulatedAnnealingOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current options for this optimizer.
@@ -478,7 +425,7 @@ public partial class SimulatedAnnealingOptimizer<T, TInput, TOutput> : Optimizer
         var perturbations = new Vector<T>(parameters.Length);
         for (int i = 0; i < parameters.Length; i++)
         {
-            perturbations[i] = NumOps.FromDouble((_random.NextDouble() * 2 - 1) * _saOptions.NeighborGenerationRange);
+            perturbations[i] = NumOps.FromDouble((Random.NextDouble() * 2 - 1) * _saOptions.NeighborGenerationRange);
         }
 
         // Add perturbations to parameters using vectorized Engine operation
@@ -499,8 +446,6 @@ public partial class SimulatedAnnealingOptimizer<T, TInput, TOutput> : Optimizer
     private SimulatedAnnealingOptimizer(SimulatedAnnealingOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _random = RandomHelper.CreateSecureRandom();
-        _saOptions = options ?? new SimulatedAnnealingOptions<T, TInput, TOutput>();
         _currentTemperature = NumOps.FromDouble(_saOptions.InitialTemperature);
     }
 

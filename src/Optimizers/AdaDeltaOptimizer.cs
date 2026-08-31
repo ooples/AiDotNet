@@ -67,7 +67,9 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
     /// These settings can be customized to make the optimizer work better for different types of problems.
     /// </para>
     /// </remarks>
-    private AdaDeltaOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private AdaDeltaOptimizerOptions<T, TInput, TOutput> _options => (AdaDeltaOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// Stores the exponential moving average of squared gradients for each parameter.
@@ -148,7 +150,6 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new AdaDeltaOptimizerOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -179,7 +180,6 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
     private AdaDeltaOptimizer(AdaDeltaOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _options = options ?? new AdaDeltaOptimizerOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -680,34 +680,6 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         }
     }
 
-    /// <summary>
-    /// Updates the optimizer options.
-    /// </summary>
-    /// <param name="options">The new options to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of type AdaDeltaOptimizerOptions.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method updates the optimizer's options with new settings. It ensures that only
-    /// AdaDeltaOptimizerOptions are used with this optimizer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like changing the settings on your learning assistant.
-    /// 
-    /// You can use this to adjust how the optimizer works, but you need to make sure you're
-    /// using the right type of settings (AdaDeltaOptimizerOptions). If you try to use the wrong
-    /// type of settings, it will give you an error message.
-    /// </para>
-    /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is AdaDeltaOptimizerOptions<T, TInput, TOutput> adaDeltaOptions)
-        {
-            _options = adaDeltaOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected AdaDeltaOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current optimizer options.

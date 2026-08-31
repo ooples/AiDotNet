@@ -1886,44 +1886,6 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
     /// </remarks>
 
 
-    /// <inheritdoc />
-    /// <remarks>
-    /// Streams parameters from <c>Generator</c> followed by
-    /// <c>Discriminator</c>. Per #1237, callers walking these chunks
-    /// accumulate length into a <see cref="long"/> when the aggregate
-    /// crosses int.MaxValue (BigGAN, ProgressiveGAN, SAGAN at full
-    /// scale all overflow).
-    /// </remarks>
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
-    {
-        // Force weight allocation in both subnetworks before yielding chunks.
-        // The base NeuralNetworkBase.GetParameterChunks runs an RNG-neutral
-        // shape-only resolution pass, which is correct for inference / shape-
-        // introspection callers but leaves lazy layers WITHOUT registered
-        // trainable tensors — Layer.GetTrainableParameters() returns the
-        // backing _registeredTensors list (populated only by the layer's
-        // OnFirstForward via RegisterTrainableParameter), so an unmaterialised
-        // lazy stack yields zero chunks. For DCGAN — whose paper-faithful
-        // Generator and Discriminator are entirely lazy (latent Dense, all
-        // ConvTranspose2D / Conv2D layers) — this would mean
-        // GetParameterChunks() returns nothing before the first GAN.Train
-        // step. The NeuralNetworkModelTestBase.Training_ShouldChangeParameters
-        // /  GradientFlow_ShouldBeNonZeroAndFinite invariants snapshot
-        // GetParameterChunks BEFORE training, compare chunks AFTER training,
-        // and assert at-least-one-parameter-changed; with an empty snapshot
-        // the diff loop never runs and the invariant fires "no parameters
-        // changed". Materialising via the architecture's input shape consumes
-        // one RNG draw per layer (same as the first real forward would) and
-        // is the same allocation path the test's subsequent train step would
-        // hit — no behaviour change downstream, just a snapshot that contains
-        // the actual parameter tensors so the invariant can do its job.
-        EnsureMaterialized(Generator);
-        EnsureMaterialized(Discriminator);
-
-        foreach (var chunk in Generator.GetParameterChunks()) yield return chunk;
-        foreach (var chunk in Discriminator.GetParameterChunks()) yield return chunk;
-    }
-
     private static void EnsureMaterialized(NeuralNetworkBase<T> subnet)
     {
         var archShape = subnet.Architecture?.GetInputShape();

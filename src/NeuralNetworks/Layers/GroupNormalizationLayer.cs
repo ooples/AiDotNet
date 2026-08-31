@@ -104,6 +104,13 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
 
     #endregion
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// A per-channel bias is canceled only when each group contains one channel. With wider groups,
+    /// channel-relative biases change the normalized values and cannot be replaced by beta.
+    /// </remarks>
+    public override bool MakesUpstreamBiasRedundant => _numGroups == _numChannels;
+
     public override bool SupportsTraining => true;
 
     /// <summary>

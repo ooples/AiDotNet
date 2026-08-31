@@ -99,7 +99,9 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// <summary>
     /// The options specific to the 8-bit Adam optimizer.
     /// </summary>
-    private Adam8BitOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private Adam8BitOptimizerOptions<T, TInput, TOutput> _options => (Adam8BitOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// Quantized first moment vector (moving average of gradients).
@@ -169,7 +171,6 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         : base(model, options ?? new())
     {
         _t = 0;
-        _options = options ?? new();
         _currentBeta1 = NumOps.Zero;
         _currentBeta2 = NumOps.Zero;
 
@@ -1454,20 +1455,6 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         _tapeStep = 0;
     }
 
-    /// <summary>
-    /// Updates the optimizer's options.
-    /// </summary>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is Adam8BitOptimizerOptions<T, TInput, TOutput> adamOptions)
-        {
-            _options = adamOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected Adam8BitOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current optimizer options.
@@ -2173,9 +2160,12 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             byte[] baseData = reader.ReadBytes(baseDataLength);
             base.Deserialize(baseData);
 
-            // Deserialize options
+            // Consume the options JSON. The read itself still matters - the stream position
+            // depends on it and a malformed payload must fail here - but the VALUE is discarded:
+            // base.Deserialize above already adopted the authoritative copy into Options, which
+            // _options now reads through. Keeping a second copy is what this refactor removed.
             string optionsJson = reader.ReadString();
-            _options = JsonConvert.DeserializeObject<Adam8BitOptimizerOptions<T, TInput, TOutput>>(optionsJson)
+            _ = JsonConvert.DeserializeObject<Adam8BitOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
             // Read magic header + format version (added in #1240 follow-

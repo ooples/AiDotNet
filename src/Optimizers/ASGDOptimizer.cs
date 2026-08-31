@@ -55,7 +55,9 @@ public partial class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// The options specific to the ASGD optimizer.
     /// </summary>
-    private ASGDOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private ASGDOptimizerOptions<T, TInput, TOutput> _options => (ASGDOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The running average of the iterates (the <c>ax</c> of the reference implementation).
@@ -83,7 +85,6 @@ public partial class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         ASGDOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new ASGDOptimizerOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -478,22 +479,6 @@ public partial class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         }
     }
 
-    /// <summary>
-    /// Updates the optimizer's options with new settings.
-    /// </summary>
-    /// <param name="options">The new options to be applied to the optimizer.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is ASGDOptimizerOptions<T, TInput, TOutput> asgdOptions)
-        {
-            _options = asgdOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected ASGDOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Retrieves the current options of the optimizer.

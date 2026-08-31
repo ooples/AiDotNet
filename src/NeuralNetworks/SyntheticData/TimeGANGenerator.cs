@@ -107,7 +107,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     private int _materializedNumLayers;
 
     // Embedder (auxiliary): data → latent
-    private readonly List<FullyConnectedLayer<T>> _embedderLayers = new();
+    private readonly List<GRULayer<T>> _embedderLayers = new();
     private FullyConnectedLayer<T>? _embedderOutput;
     [Scratch]
     private readonly List<Tensor<T>> _embedderPreActs = new();
@@ -118,18 +118,20 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     [Scratch]
     private readonly List<Tensor<T>> _recoveryPreActs = new();
 
-    // Generator pre-activation cache (Layers = generator)
+    // Generator output head and pre-activation cache (Layers = generator recurrent stack)
+    private FullyConnectedLayer<T>? _generatorOutput;
     [Scratch]
     private readonly List<Tensor<T>> _generatorPreActs = new();
 
     // Supervisor (auxiliary): latent_t → latent_{t+1}
-    private readonly List<FullyConnectedLayer<T>> _supervisorLayers = new();
+    private readonly List<GRULayer<T>> _supervisorLayers = new();
     private FullyConnectedLayer<T>? _supervisorOutput;
     [Scratch]
     private readonly List<Tensor<T>> _supervisorPreActs = new();
 
-    // Discriminator (auxiliary): latent → real/fake
-    private readonly List<FullyConnectedLayer<T>> _discriminatorLayers = new();
+    // Discriminator (auxiliary): bidirectional latent sequence → per-step real/fake
+    private readonly List<GRULayer<T>> _discriminatorForwardLayers = new();
+    private readonly List<GRULayer<T>> _discriminatorBackwardLayers = new();
     private readonly List<DropoutLayer<T>> _discDropoutLayers = new();
     private FullyConnectedLayer<T>? _discriminatorOutput;
     [Scratch]
@@ -230,6 +232,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
+            _generatorOutput = null;
             _usingCustomLayers = true;
         }
         else
@@ -238,9 +241,16 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
             for (int i = 0; i < numLayers; i++)
             {
-                Layers.Add(new FullyConnectedLayer<T>(hiddenDim, identity));
+                Layers.Add(new GRULayer<T>(hiddenDim, returnSequences: true));
             }
+            _generatorOutput = new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity);
             _usingCustomLayers = false;
+
+            // Before fitting, public activation inspection accepts the architecture width. Materialize
+            // the lazy recurrent stack with that contract now so ParameterLayout is stable and cannot
+            // later bind the generator to whichever probe happens to reach it first.
+            int initialNoiseWidth = Architecture.InputSize > 0 ? Architecture.InputSize : hiddenDim;
+            _ = GeneratorForwardBatched(new Tensor<T>([1, 1, initialNoiseWidth]), isTraining: false);
         }
 
         _materializedHiddenDimension = hiddenDim;
@@ -253,32 +263,28 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         int numLayers = _options.NumLayers;
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
-        // Rebuild generator (Layers) if not using custom
+        // Rebuild generator (Layers) if not using custom. TimeGAN's generator is recurrent:
+        // every output at t depends on the current noise and the preceding generated state.
         if (!_usingCustomLayers)
         {
-            // DECLARE THE INPUT WIDTH. Every layerInput below was already being computed and then
-            // discarded, so each layer took the (outputSize, activation) overload and was left with
-            // an input of -1 for lazy inference -- binding permanently to whatever tensor reached it
-            // first rather than to the width it was designed for. That is the same defect this PR
-            // fixes in PATEGAN, TabSyn and TabDDPM, and it is what makes the generator's expected
-            // latent width unenforceable: a mismatched caller silently rebinds the stack instead of
-            // failing. The widths are known here, so they are stated.
             Layers.Clear();
             for (int i = 0; i < numLayers; i++)
             {
-                Layers.Add(new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity));
+                Layers.Add(new GRULayer<T>(hiddenDim, returnSequences: true));
             }
+            _generatorOutput = new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity);
+        }
+        else
+        {
+            // A custom architecture remains a complete, caller-owned generator definition.
+            _generatorOutput = null;
         }
 
-        // Generator output head (always auxiliary)
-        // (Note: we store this separately as the last layer is a projection to hiddenDim)
-
-        // Embedder
+        // Embedder: paper §4.1 recurrent temporal mapping, followed by a pointwise head.
         _embedderLayers.Clear();
         for (int i = 0; i < numLayers; i++)
         {
-            int layerInput = i == 0 ? _dataWidth : hiddenDim;
-            _embedderLayers.Add(new FullyConnectedLayer<T>(layerInput, hiddenDim, identity));
+            _embedderLayers.Add(new GRULayer<T>(hiddenDim, returnSequences: true));
         }
         _embedderOutput = new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity);
 
@@ -290,25 +296,41 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         }
         _recoveryOutput = new FullyConnectedLayer<T>(hiddenDim, _dataWidth, identity);
 
-        // Supervisor: NOTE the loop bound is NumLayers - 1, so at NumLayers == 1 the hidden list is
-        // empty while _supervisorOutput still exists and performs a real projection. That is why
-        // GetNamedLayerActivations gates on the OUTPUT HEAD rather than on this list being non-empty.
+        // Supervisor: the authors use one fewer recurrent layer than the generator. At NumLayers == 1
+        // the pointwise output head remains the complete supervisor stage.
         _supervisorLayers.Clear();
         for (int i = 0; i < numLayers - 1; i++)
         {
-            _supervisorLayers.Add(new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity));
+            _supervisorLayers.Add(new GRULayer<T>(hiddenDim, returnSequences: true));
         }
         _supervisorOutput = new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity);
 
-        // Discriminator
-        _discriminatorLayers.Clear();
+        // Discriminator: paper §4.2 uses aligned forward/backward recurrent states and a
+        // feedforward per-step classification head. Keep the two directions explicit here so the
+        // backward result can be reversed back into the original time order before concatenation.
+        _discriminatorForwardLayers.Clear();
+        _discriminatorBackwardLayers.Clear();
         _discDropoutLayers.Clear();
         for (int i = 0; i < numLayers; i++)
         {
-            _discriminatorLayers.Add(new FullyConnectedLayer<T>(hiddenDim, identity));
+            _discriminatorForwardLayers.Add(new GRULayer<T>(hiddenDim, returnSequences: true));
+            _discriminatorBackwardLayers.Add(new GRULayer<T>(hiddenDim, returnSequences: true));
             _discDropoutLayers.Add(new DropoutLayer<T>(_options.DiscriminatorDropout));
         }
-        _discriminatorOutput = new FullyConnectedLayer<T>(1, identity);
+        _discriminatorOutput = new FullyConnectedLayer<T>(2 * hiddenDim, 1, identity);
+
+        // Materialize every lazy recurrent component before any phase collects its parameter list.
+        // Otherwise the first tape step would see zero GRU parameters and silently train only heads.
+        int probeLength = Math.Max(2, _options.SequenceLength);
+        var hiddenProbe = new Tensor<T>([1, probeLength, hiddenDim]);
+        _ = EmbedderForwardBatched(new Tensor<T>([1, probeLength, _dataWidth]), isTraining: false);
+        if (!_usingCustomLayers)
+        {
+            _ = GeneratorForwardBatched(hiddenProbe, isTraining: false);
+        }
+        _ = SupervisorForwardBatched(hiddenProbe, isTraining: false);
+        _ = RecoveryForwardBatched(hiddenProbe, isTraining: false);
+        _ = DiscriminatorForwardBatched(hiddenProbe, isTraining: false);
 
         // Commit the snapshot only after every component was rebuilt successfully.
         _materializedHiddenDimension = hiddenDim;
@@ -435,43 +457,26 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         int hiddenDim = _materializedHiddenDimension;
 
         int numSequences = (int)Math.Ceiling((double)numSamples / seqLen);
-        var allRows = new List<Vector<T>>();
-
-        for (int s = 0; s < numSequences; s++)
+        var result = new Matrix<T>(numSamples, _dataWidth);
+        if (numSequences == 0)
         {
-            var noiseSeq = new List<Vector<T>>();
-            for (int t = 0; t < seqLen; t++)
-            {
-                noiseSeq.Add(CreateStandardNormalVector(hiddenDim));
-            }
-
-            var fakeEmbeddings = new List<Vector<T>>();
-            for (int t = 0; t < seqLen; t++)
-            {
-                var genOut = GeneratorForward(noiseSeq[t], isTraining: false);
-                fakeEmbeddings.Add(genOut);
-            }
-
-            var supervisedEmbeddings = new List<Vector<T>>();
-            for (int t = 0; t < seqLen; t++)
-            {
-                var supOut = SupervisorForward(fakeEmbeddings[t], isTraining: false);
-                supervisedEmbeddings.Add(supOut);
-            }
-
-            for (int t = 0; t < seqLen; t++)
-            {
-                var recOut = RecoveryForward(supervisedEmbeddings[t], isTraining: false);
-                allRows.Add(recOut);
-            }
+            return result;
         }
 
-        var result = new Matrix<T>(numSamples, _dataWidth);
-        for (int i = 0; i < numSamples && i < allRows.Count; i++)
+        // Generate complete sequences in one recurrent pass. Processing one vector at a time resets
+        // a stateless GRU at every t and degenerates back into independent row generation.
+        var noise = GenerateNoiseBatchTensor(numSequences, seqLen, hiddenDim);
+        var generated = GeneratorForwardBatched(noise, isTraining: false);
+        var supervised = SupervisorForwardBatched(generated, isTraining: false);
+        var recovered = RecoveryForwardBatched(supervised, isTraining: false);
+
+        for (int row = 0; row < numSamples; row++)
         {
-            for (int j = 0; j < _dataWidth && j < allRows[i].Length; j++)
+            int sequence = row / seqLen;
+            int timestep = row % seqLen;
+            for (int j = 0; j < _dataWidth; j++)
             {
-                result[i, j] = allRows[i][j];
+                result[row, j] = recovered[sequence, timestep, j];
             }
         }
 
@@ -485,101 +490,35 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     private Vector<T> EmbedderForward(Vector<T> x, bool isTraining)
     {
         _embedderPreActs.Clear();
-        var current = VectorToTensor(x);
-
-        for (int i = 0; i < _embedderLayers.Count; i++)
-        {
-            current = _embedderLayers[i].Forward(current);
-            _embedderPreActs.Add(CloneTensor(current));
-            current = ApplySigmoid(current);
-        }
-
-        if (_embedderOutput is not null)
-        {
-            current = _embedderOutput.Forward(current);
-        }
-
+        var current = EmbedderForwardBatched(VectorToTensor(x), isTraining);
         return TensorToVector(current, current.Length);
     }
 
     private Vector<T> RecoveryForward(Vector<T> h, bool isTraining)
     {
         _recoveryPreActs.Clear();
-        var current = VectorToTensor(h);
-
-        for (int i = 0; i < _recoveryLayers.Count; i++)
-        {
-            current = _recoveryLayers[i].Forward(current);
-            _recoveryPreActs.Add(CloneTensor(current));
-            current = ApplySigmoid(current);
-        }
-
-        if (_recoveryOutput is not null)
-        {
-            current = _recoveryOutput.Forward(current);
-        }
-
+        var current = RecoveryForwardBatched(VectorToTensor(h), isTraining);
         return TensorToVector(current, current.Length);
     }
 
     private Vector<T> GeneratorForward(Vector<T> noise, bool isTraining)
     {
         _generatorPreActs.Clear();
-        var current = VectorToTensor(noise);
-
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            current = Layers[i].Forward(current);
-            _generatorPreActs.Add(CloneTensor(current));
-            current = ApplySigmoid(current);
-        }
-
+        var current = GeneratorForwardBatched(VectorToTensor(noise), isTraining);
         return TensorToVector(current, current.Length);
     }
 
     private Vector<T> SupervisorForward(Vector<T> h, bool isTraining)
     {
         _supervisorPreActs.Clear();
-        var current = VectorToTensor(h);
-
-        for (int i = 0; i < _supervisorLayers.Count; i++)
-        {
-            current = _supervisorLayers[i].Forward(current);
-            _supervisorPreActs.Add(CloneTensor(current));
-            current = ApplySigmoid(current);
-        }
-
-        if (_supervisorOutput is not null)
-        {
-            current = _supervisorOutput.Forward(current);
-        }
-
+        var current = SupervisorForwardBatched(VectorToTensor(h), isTraining);
         return TensorToVector(current, current.Length);
     }
 
     private Vector<T> DiscriminatorForward(Vector<T> h, bool isTraining)
     {
         _discPreActs.Clear();
-        var current = VectorToTensor(h);
-
-        for (int i = 0; i < _discriminatorLayers.Count; i++)
-        {
-            current = _discriminatorLayers[i].Forward(current);
-            _discPreActs.Add(CloneTensor(current));
-            current = ApplyLeakyReLU(current, 0.2);
-
-            if (i < _discDropoutLayers.Count)
-            {
-                _discDropoutLayers[i].SetTrainingMode(isTraining);
-                current = _discDropoutLayers[i].Forward(current);
-            }
-        }
-
-        if (_discriminatorOutput is not null)
-        {
-            current = _discriminatorOutput.Forward(current);
-        }
-
+        var current = DiscriminatorForwardBatched(VectorToTensor(h), isTraining);
         return TensorToVector(current, current.Length);
     }
 
@@ -606,6 +545,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     private void UpdateGenerator(T lr)
     {
         foreach (var layer in Layers) layer.UpdateParameters(lr);
+        _generatorOutput?.UpdateParameters(lr);
     }
 
     private void UpdateSupervisor(T lr)
@@ -616,7 +556,8 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
     private void UpdateDiscriminator(T lr)
     {
-        foreach (var layer in _discriminatorLayers) layer.UpdateParameters(lr);
+        foreach (var layer in _discriminatorForwardLayers) layer.UpdateParameters(lr);
+        foreach (var layer in _discriminatorBackwardLayers) layer.UpdateParameters(lr);
         _discriminatorOutput?.UpdateParameters(lr);
     }
 
@@ -632,7 +573,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// </summary>
     private void TrainEmbeddingStepBatched(List<Matrix<T>> sequences, int startIdx, int endIdx)
     {
-        var xBatch = BuildFlattenedSequenceBatch(sequences, startIdx, endIdx);
+        var xBatch = BuildSequenceBatch(sequences, startIdx, endIdx);
         if (xBatch.Shape[0] == 0) return;
 
         var embedderRecoveryLayers = new List<ILayer<T>>();
@@ -703,8 +644,8 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// </summary>
     private void TrainSupervisedStepBatched(List<Matrix<T>> sequences, int startIdx, int endIdx)
     {
-        var (xt, xtNext) = BuildPairedSequenceBatch(sequences, startIdx, endIdx);
-        if (xt.Shape[0] == 0) return;
+        var xBatch = BuildSequenceBatch(sequences, startIdx, endIdx);
+        if (xBatch.Shape[0] == 0 || xBatch.Shape[1] < 2) return;
 
         var supervisorLayers = new List<ILayer<T>>();
         supervisorLayers.AddRange(_supervisorLayers);
@@ -712,8 +653,8 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         var paramsList = TapeTrainingStep<T>.CollectParameters(supervisorLayers);
 
         // Embedder runs OUTSIDE the tape (frozen for this step).
-        var ht = EmbedderForwardBatched(xt, isTraining: false);
-        var htNext = EmbedderForwardBatched(xtNext, isTraining: false);
+        var embeddings = EmbedderForwardBatched(xBatch, isTraining: false);
+        var (ht, htNext) = BuildAdjacentLatentBatch(embeddings);
 
         // GPU-RESIDENT fast path — supervisor's next-step prediction. Embedder
         // is frozen; supervisor's layers are the only trainable set here.
@@ -769,22 +710,24 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// </summary>
     private void TrainDiscriminatorStepBatched(List<Matrix<T>> sequences, int startIdx, int endIdx)
     {
-        var xBatch = BuildFlattenedSequenceBatch(sequences, startIdx, endIdx);
+        var xBatch = BuildSequenceBatch(sequences, startIdx, endIdx);
         if (xBatch.Shape[0] == 0) return;
         int batchSize = xBatch.Shape[0];
+        int sequenceLength = xBatch.Shape[1];
         int hiddenDim = _materializedHiddenDimension;
 
         // Real embedded sequence: x -> embedder. Fake: noise -> generator -> supervisor.
         // Both produced OUTSIDE the critic's tape so the critic only updates its own params.
         var realEmb = EmbedderForwardBatched(xBatch, isTraining: false);
-        var noise = GenerateNoiseBatchTensor(batchSize, hiddenDim);
+        var noise = GenerateNoiseBatchTensor(batchSize, sequenceLength, hiddenDim);
         var fakeEmb = GeneratorForwardBatched(noise, isTraining: false);
         var fakeSup = SupervisorForwardBatched(fakeEmb, isTraining: false);
 
         using var tape = new GradientTape<T>();
 
         var discLayers = new List<ILayer<T>>();
-        discLayers.AddRange(_discriminatorLayers);
+        discLayers.AddRange(_discriminatorForwardLayers);
+        discLayers.AddRange(_discriminatorBackwardLayers);
         if (_discriminatorOutput is not null) discLayers.Add(_discriminatorOutput);
         var paramsList = TapeTrainingStep<T>.CollectParameters(discLayers);
 
@@ -838,20 +781,28 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         // Without the L_S term the supervisor is updated only through the
         // adversarial gradient — the next-step temporal structure that
         // L_S explicitly preserves is lost once joint training begins.
-        var (xt, xtNext) = BuildPairedSequenceBatch(sequences, startIdx, endIdx);
-        int supervisedBatch = xt.Shape[0];
+        var xBatch = BuildSequenceBatch(sequences, startIdx, endIdx);
+        if (xBatch.Shape[0] == 0 || xBatch.Shape[1] < 2) return;
+        int supervisedBatch = xBatch.Shape[0];
+        int sequenceLength = xBatch.Shape[1];
+
+        // The embedder is frozen in this step. Run the full real sequence first, then shift the
+        // recurrent embeddings; embedding x_t and x_(t+1) as unrelated rows loses their histories.
+        var realEmbeddings = EmbedderForwardBatched(xBatch, isTraining: false);
+        var (ht, htNext) = BuildAdjacentLatentBatch(realEmbeddings);
 
         using var tape = new GradientTape<T>();
 
         var genSupLayers = new List<ILayer<T>>();
         genSupLayers.AddRange(Layers);
+        if (_generatorOutput is not null) genSupLayers.Add(_generatorOutput);
         genSupLayers.AddRange(_supervisorLayers);
         if (_supervisorOutput is not null) genSupLayers.Add(_supervisorOutput);
         var paramsList = TapeTrainingStep<T>.CollectParameters(genSupLayers);
 
         // Adversarial term: minimize -log σ(D(s(g(z))))
         int advBatch = Math.Max(1, supervisedBatch);
-        var noise = GenerateNoiseBatchTensor(advBatch, hiddenDim);
+        var noise = GenerateNoiseBatchTensor(advBatch, sequenceLength, hiddenDim);
         var fakeEmb = GeneratorForwardBatched(noise, isTraining: true);
         var fakeSup = SupervisorForwardBatched(fakeEmb, isTraining: true);
         var fakeScores = DiscriminatorForwardBatched(fakeSup, isTraining: false);
@@ -865,8 +816,6 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             // sequence pairs. Embedder is frozen by Phase 1 and runs
             // outside the tape; the supervisor remains tape-tracked so its
             // gradient flows.
-            var ht = EmbedderForwardBatched(xt, isTraining: false);
-            var htNext = EmbedderForwardBatched(xtNext, isTraining: false);
             var htPred = SupervisorForwardBatched(ht, isTraining: true);
             var diff = Engine.TensorSubtract(htPred, htNext);
             var sq = Engine.TensorMultiply(diff, diff);
@@ -895,8 +844,8 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         // produced `grads` — replaying only the adversarial part silently
         // drops the temporal-supervision phase-3 contribution.
         int capturedSupervisedBatch = supervisedBatch;
-        var capturedXt = xt;
-        var capturedXtNext = xtNext;
+        var capturedHt = ht;
+        var capturedHtNext = htNext;
         var capturedAdvAxes = advAxes;
         double capturedSupWeight = _options.SupervisedWeight;
         Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(
@@ -905,10 +854,8 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         {
             var adv = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(pred), capturedAdvAxes, keepDims: false));
             if (capturedSupervisedBatch <= 0) return adv;
-            var ht = EmbedderForwardBatched(capturedXt, isTraining: false);
-            var htNext = EmbedderForwardBatched(capturedXtNext, isTraining: false);
-            var htPred = SupervisorForwardBatched(ht, isTraining: true);
-            var diff = Engine.TensorSubtract(htPred, htNext);
+            var htPred = SupervisorForwardBatched(capturedHt, isTraining: true);
+            var diff = Engine.TensorSubtract(htPred, capturedHtNext);
             var sq = Engine.TensorMultiply(diff, diff);
             var supAxes = Enumerable.Range(0, sq.Shape.Length).ToArray();
             var supLoss = Engine.ReduceMean(sq, supAxes, keepDims: false);
@@ -924,68 +871,70 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     }
 
     /// <summary>
-    /// Flattens timesteps across a slice of sequences into a single
-    /// <c>[batchSize, dataWidth]</c> tensor for batched processing.
-    /// Each row is one timestep observation.
+    /// Builds a batch of complete sequences as <c>[batch, time, features]</c>.
+    /// Keeping the time axis is required for every recurrent TimeGAN component.
     /// </summary>
-    private Tensor<T> BuildFlattenedSequenceBatch(List<Matrix<T>> sequences, int startIdx, int endIdx)
+    private Tensor<T> BuildSequenceBatch(List<Matrix<T>> sequences, int startIdx, int endIdx)
     {
-        int totalRows = 0;
-        for (int s = startIdx; s < endIdx && s < sequences.Count; s++) totalRows += sequences[s].Rows;
-        var batch = new Tensor<T>([Math.Max(1, totalRows), _dataWidth]);
-        int idx = 0;
-        for (int s = startIdx; s < endIdx && s < sequences.Count; s++)
+        int boundedEnd = Math.Min(endIdx, sequences.Count);
+        int batchSize = Math.Max(0, boundedEnd - startIdx);
+        if (batchSize == 0)
         {
-            var seq = sequences[s];
-            int cols = Math.Min(_dataWidth, seq.Columns);
-            for (int t = 0; t < seq.Rows; t++)
-            {
-                for (int j = 0; j < cols; j++) batch[idx, j] = seq[t, j];
-                idx++;
-            }
+            return new Tensor<T>([0, 0, _dataWidth]);
         }
-        // If the slice yielded zero rows, return an empty-batch tensor with
-        // first-dim zero so callers can early-exit on shape check.
-        return totalRows == 0 ? new Tensor<T>([0, _dataWidth]) : batch;
+
+        int sequenceLength = sequences[startIdx].Rows;
+        var batch = new Tensor<T>([batchSize, sequenceLength, _dataWidth]);
+        for (int s = startIdx; s < boundedEnd; s++)
+        {
+            var sequence = sequences[s];
+            if (sequence.Rows != sequenceLength)
+            {
+                throw new InvalidOperationException(
+                    "TimeGAN recurrent batches require equal sequence lengths within a batch.");
+            }
+
+            int batchIndex = s - startIdx;
+            int columns = Math.Min(_dataWidth, sequence.Columns);
+            for (int t = 0; t < sequenceLength; t++)
+                for (int j = 0; j < columns; j++)
+                    batch[batchIndex, t, j] = sequence[t, j];
+        }
+
+        return batch;
     }
 
     /// <summary>
-    /// Builds the paired (x_t, x_{t+1}) batches from sequence slices for the
-    /// supervisor's next-step prediction objective.
+    /// Splits a recurrent embedding sequence into aligned current/next latent sequences.
+    /// Engine narrowing preserves the gradient connection to the supervisor input.
     /// </summary>
-    private (Tensor<T> xt, Tensor<T> xtNext) BuildPairedSequenceBatch(List<Matrix<T>> sequences, int startIdx, int endIdx)
+    private (Tensor<T> Current, Tensor<T> Next) BuildAdjacentLatentBatch(Tensor<T> embeddings)
     {
-        int totalPairs = 0;
-        for (int s = startIdx; s < endIdx && s < sequences.Count; s++)
-            if (sequences[s].Rows >= 2) totalPairs += sequences[s].Rows - 1;
-
-        if (totalPairs == 0)
-            return (new Tensor<T>([0, _dataWidth]), new Tensor<T>([0, _dataWidth]));
-
-        var xt = new Tensor<T>([totalPairs, _dataWidth]);
-        var xtNext = new Tensor<T>([totalPairs, _dataWidth]);
-        int idx = 0;
-        for (int s = startIdx; s < endIdx && s < sequences.Count; s++)
+        if (embeddings.Shape.Length != 3)
         {
-            var seq = sequences[s];
-            if (seq.Rows < 2) continue;
-            int cols = Math.Min(_dataWidth, seq.Columns);
-            for (int t = 0; t < seq.Rows - 1; t++)
-            {
-                for (int j = 0; j < cols; j++)
-                {
-                    xt[idx, j] = seq[t, j];
-                    xtNext[idx, j] = seq[t + 1, j];
-                }
-                idx++;
-            }
+            throw new ArgumentException(
+                $"Expected recurrent embeddings shaped [batch, time, hidden], got rank {embeddings.Shape.Length}.",
+                nameof(embeddings));
         }
-        return (xt, xtNext);
+
+        int sequenceLength = embeddings.Shape[1];
+        if (sequenceLength < 2)
+        {
+            int batchSize = embeddings.Shape[0];
+            int hiddenDimension = embeddings.Shape[2];
+            return (
+                new Tensor<T>([batchSize, 0, hiddenDimension]),
+                new Tensor<T>([batchSize, 0, hiddenDimension]));
+        }
+
+        return (
+            Engine.TensorNarrow(embeddings, 1, 0, sequenceLength - 1),
+            Engine.TensorNarrow(embeddings, 1, 1, sequenceLength - 1));
     }
 
-    private Tensor<T> GenerateNoiseBatchTensor(int batchSize, int dim)
+    private Tensor<T> GenerateNoiseBatchTensor(int batchSize, int sequenceLength, int dim)
     {
-        int totalElements = batchSize * dim;
+        int totalElements = checked(batchSize * sequenceLength * dim);
         // Box–Muller via the seeded _random so TimeGANOptions.Seed makes
         // Fit reproducible — Engine.TensorRandomUniformRange bypasses _random
         // and breaks the seed contract that the rest of the sampler stack
@@ -1001,58 +950,129 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             if (i + 1 < totalElements)
                 noiseData[i + 1] = NumOps.FromDouble(r * Math.Sin(theta));
         }
-        return new Tensor<T>(noiseData, [batchSize, dim]);
+        return new Tensor<T>(noiseData, [batchSize, sequenceLength, dim]);
     }
 
-    // ----- Batched, tape-tracked forward methods (Engine.Sigmoid / LeakyReLU) -----
+    // ----- Batched, tape-tracked recurrent forward methods -----
 
     private Tensor<T> EmbedderForwardBatched(Tensor<T> x, bool isTraining)
     {
         var current = x;
-        foreach (var l in _embedderLayers) { current = l.Forward(current); current = Engine.Sigmoid(current); }
-        if (_embedderOutput is not null) current = _embedderOutput.Forward(current);
+        foreach (var layer in _embedderLayers) current = layer.Forward(current);
+        if (_embedderOutput is not null)
+        {
+            current = Engine.Sigmoid(ApplyPointwise(_embedderOutput, current));
+        }
         return current;
     }
 
     private Tensor<T> RecoveryForwardBatched(Tensor<T> h, bool isTraining)
     {
         var current = h;
-        foreach (var l in _recoveryLayers) { current = l.Forward(current); current = Engine.Sigmoid(current); }
-        if (_recoveryOutput is not null) current = _recoveryOutput.Forward(current);
+        foreach (var layer in _recoveryLayers)
+        {
+            current = ApplyPointwise(layer, current);
+            current = Engine.Sigmoid(current);
+        }
+        if (_recoveryOutput is not null) current = ApplyPointwise(_recoveryOutput, current);
         return current;
     }
 
     private Tensor<T> GeneratorForwardBatched(Tensor<T> noise, bool isTraining)
     {
         var current = noise;
-        foreach (var l in Layers) { current = l.Forward(current); current = Engine.Sigmoid(current); }
+        foreach (var layer in Layers)
+        {
+            current = layer.Forward(current);
+            if (_usingCustomLayers)
+            {
+                // Preserve the established custom-layer contract: Architecture.Layers describes the
+                // complete generator stack and each layer receives the historical sigmoid transform.
+                current = Engine.Sigmoid(current);
+            }
+        }
+        if (_generatorOutput is not null)
+        {
+            current = Engine.Sigmoid(ApplyPointwise(_generatorOutput, current));
+        }
         return current;
     }
 
     private Tensor<T> SupervisorForwardBatched(Tensor<T> h, bool isTraining)
     {
         var current = h;
-        foreach (var l in _supervisorLayers) { current = l.Forward(current); current = Engine.Sigmoid(current); }
-        if (_supervisorOutput is not null) current = _supervisorOutput.Forward(current);
+        foreach (var layer in _supervisorLayers) current = layer.Forward(current);
+        if (_supervisorOutput is not null)
+        {
+            current = Engine.Sigmoid(ApplyPointwise(_supervisorOutput, current));
+        }
         return current;
     }
 
     private Tensor<T> DiscriminatorForwardBatched(Tensor<T> h, bool isTraining)
     {
         var current = h;
-        T leakySlope = NumOps.FromDouble(0.2);
-        for (int i = 0; i < _discriminatorLayers.Count; i++)
+        for (int i = 0; i < _discriminatorForwardLayers.Count; i++)
         {
-            current = _discriminatorLayers[i].Forward(current);
-            current = Engine.LeakyReLU(current, leakySlope);
+            var forward = _discriminatorForwardLayers[i].Forward(current);
+            var reversedInput = ReverseTimeSequence(current);
+            var backwardReversed = _discriminatorBackwardLayers[i].Forward(reversedInput);
+            var backward = ReverseTimeSequence(backwardReversed);
+            current = Engine.Concat([forward, backward], forward.Shape.Length - 1);
+
             if (i < _discDropoutLayers.Count)
             {
                 _discDropoutLayers[i].SetTrainingMode(isTraining);
                 current = _discDropoutLayers[i].Forward(current);
             }
         }
-        if (_discriminatorOutput is not null) current = _discriminatorOutput.Forward(current);
+        if (_discriminatorOutput is not null) current = ApplyPointwise(_discriminatorOutput, current);
         return current;
+    }
+
+    private Tensor<T> ApplyPointwise(FullyConnectedLayer<T> layer, Tensor<T> input)
+    {
+        if (input.Shape.Length <= 2)
+        {
+            return layer.Forward(input);
+        }
+
+        // A dense head in a temporal model is applied independently at each [batch,time] position.
+        // Flattening the leading axes makes that contract explicit and ensures weight gradients are
+        // reduced into a matrix rather than retaining a spurious batch dimension.
+        int inputWidth = input.Shape[^1];
+        var flattened = Engine.Reshape(input, [input.Length / inputWidth, inputWidth]);
+        var projected = layer.Forward(flattened);
+        int[] outputShape = input.Shape.ToArray();
+        outputShape[^1] = projected.Shape[^1];
+        return Engine.Reshape(projected, outputShape);
+    }
+
+    private Tensor<T> ReverseTimeSequence(Tensor<T> sequence)
+    {
+        int timeAxis = sequence.Shape.Length switch
+        {
+            1 => -1,
+            2 => 0,
+            3 => 1,
+            _ => throw new ArgumentException(
+                $"TimeGAN recurrent components expect rank-1, rank-2, or rank-3 tensors; got rank {sequence.Shape.Length}.",
+                nameof(sequence))
+        };
+
+        if (timeAxis < 0 || sequence.Shape[timeAxis] <= 1)
+        {
+            return sequence;
+        }
+
+        int sequenceLength = sequence.Shape[timeAxis];
+        var timesteps = new Tensor<T>[sequenceLength];
+        for (int t = 0; t < sequenceLength; t++)
+        {
+            timesteps[t] = Engine.TensorNarrow(sequence, timeAxis, sequenceLength - 1 - t, 1);
+        }
+
+        return Engine.Concat(timesteps, timeAxis);
     }
 
     // Numerically stable log σ(x) = -softplus(-x). The naive
@@ -1069,7 +1089,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     #region Discriminator Layer List
 
     /// <summary>
-    /// Builds a combined list of discriminator layers (dense + dropout + output)
+    /// Builds a combined list of discriminator layers (forward/backward GRUs + dropout + output)
     /// for gradient-penalty and related analyses.
     /// </summary>
     private IReadOnlyList<ILayer<T>> BuildDiscLayerList()
@@ -1077,7 +1097,8 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         var allLayers = new List<ILayer<T>>();
         for (int i = 0; i < _discDropoutLayers.Count; i++)
         {
-            allLayers.Add(_discriminatorLayers[i]);
+            allLayers.Add(_discriminatorForwardLayers[i]);
+            allLayers.Add(_discriminatorBackwardLayers[i]);
             allLayers.Add(_discDropoutLayers[i]);
         }
         if (_discriminatorOutput is not null)
@@ -1091,21 +1112,33 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
     #region NeuralNetworkBase Overrides
 
-    private Vector<T> GetGeneratorNoise(Tensor<T> input)
+    private Tensor<T> GetGeneratorNoise(Tensor<T> input)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
 
-        if (IsFitted && input.Length != _materializedHiddenDimension)
+        int inputWidth = input.Shape.Length == 0 ? 0 : input.Shape[^1];
+        if (IsFitted && inputWidth != _materializedHiddenDimension)
         {
             throw new ArgumentException(
                 $"A fitted TimeGAN generator requires latent input with exactly "
                 + $"{_materializedHiddenDimension} values (the HiddenDimension used by the fitted topology), "
-                + $"but received {input.Length}.",
+                + $"but received a final dimension of {inputWidth}.",
                 nameof(input));
         }
 
-        return TensorToVector(input, input.Length);
+        return input;
+    }
+
+    private Tensor<T> RestoreInputRank(Tensor<T> output, Tensor<T> input)
+    {
+        return input.Shape.Length switch
+        {
+            1 => Engine.Reshape(output, [output.Shape[^1]]),
+            2 when output.Shape.Length == 3 && output.Shape[0] == 1 =>
+                Engine.Reshape(output, [output.Shape[1], output.Shape[2]]),
+            _ => output
+        };
     }
 
     /// <inheritdoc />
@@ -1114,10 +1147,10 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         if (!IsFitted) return input;
 
         var noise = GetGeneratorNoise(input);
-        var genOut = GeneratorForward(noise, isTraining: false);
-        var supOut = SupervisorForward(genOut, isTraining: false);
-        var recOut = RecoveryForward(supOut, isTraining: false);
-        return VectorToTensor(recOut);
+        var genOut = GeneratorForwardBatched(noise, isTraining: false);
+        var supOut = SupervisorForwardBatched(genOut, isTraining: false);
+        var recOut = RecoveryForwardBatched(supOut, isTraining: false);
+        return RestoreInputRank(recOut, input);
     }
 
     /// <summary>
@@ -1145,8 +1178,8 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         var activations = new Dictionary<string, Tensor<T>>();
 
         var noise = GetGeneratorNoise(input);
-        var current = GeneratorForward(noise, isTraining: false);
-        activations["Generator"] = VectorToTensor(current);
+        var current = GeneratorForwardBatched(noise, isTraining: false);
+        activations["Generator"] = RestoreInputRank(current, input);
 
         // ONLY STAGES THAT ACTUALLY EXIST. RebuildAllNetworks -- which Fit calls -- is what creates
         // the supervisor and recovery stacks; InitializeLayers alone populates just the generator's
@@ -1165,14 +1198,14 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         // last, so its presence is the honest signal that the stage exists.
         if (_supervisorOutput is not null)
         {
-            current = SupervisorForward(current, isTraining: false);
-            activations["Supervisor"] = VectorToTensor(current);
+            current = SupervisorForwardBatched(current, isTraining: false);
+            activations["Supervisor"] = RestoreInputRank(current, input);
         }
 
         if (_recoveryOutput is not null)
         {
-            current = RecoveryForward(current, isTraining: false);
-            activations["Recovery"] = VectorToTensor(current);
+            current = RecoveryForwardBatched(current, isTraining: false);
+            activations["Recovery"] = RestoreInputRank(current, input);
         }
 
         return activations;

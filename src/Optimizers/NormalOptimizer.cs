@@ -27,7 +27,9 @@ public partial class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInp
     /// <summary>
     /// Options specific to the normal optimizer, including parameters inherited from genetic algorithms.
     /// </summary>
-    private GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> _normalOptions;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> _normalOptions => (GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>)Options;
     private int _configuredMinFeatures;
     // Effective upper bound for the adaptive feature-selection range. Equals the
     // user-configured MaximumFeatures when explicitly set; otherwise totalFeatures
@@ -59,7 +61,6 @@ public partial class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInp
     public NormalOptimizer(IFullModel<T, TInput, TOutput> model, GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
-        _normalOptions = options ?? new();
 
         InitializeAdaptiveParameters();
     }
@@ -406,30 +407,4 @@ public partial class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInp
         return _normalOptions;
     }
 
-    /// <summary>
-    /// Updates the optimization algorithm options.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method updates the optimizer's options with a new set of options. It checks if the provided options
-    /// are of the correct type before applying them.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like updating your hiking plan with new information or equipment. You're making sure the new plan
-    /// is compatible with your current approach before adopting it.
-    /// </para>
-    /// </remarks>
-    /// <param name="options">The new optimization algorithm options to apply.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of the expected type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> geneticOptions)
-        {
-            _normalOptions = geneticOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected NormalOptimizerOptions.");
-        }
-    }
 }
