@@ -836,6 +836,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 }
 
                 var snapshot = BuildParameterLayout();
+                // Predict temporarily suppresses architecture-driven lazy-shape resolution while it
+                // switches execution modes. SetTrainingMode performs weight-streaming detection, which
+                // reads ParameterLayout inside that scope. Such a snapshot is an intentionally transient
+                // pre-forward view: publishing it would let a ShapeDeferred layout survive after Predict
+                // restores normal resolution, making ParameterCount depend on call order. Return the view
+                // to the in-scope planner, but let the first read outside the scope build the durable cache.
+                if (_deferLazyShapeResolutionToForward)
+                {
+                    return snapshot;
+                }
+
                 // Shape resolution and first-use component registration can mutate the graph while
                 // the snapshot is being captured. Publish against the versions after that work.
                 cached = new ParameterLayoutCacheEntry(

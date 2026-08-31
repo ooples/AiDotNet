@@ -2,6 +2,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
+using AiDotNet.Models.Parameters;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.SyntheticData;
@@ -1043,6 +1044,75 @@ public class SyntheticTabularGeneratorIntegrationTests
 
     #region Temporal Models
 
+    [Fact]
+    public async Task TimeGANGenerator_UnfittedPredict_DoesNotPoisonParameterLayout()
+    {
+        await Task.Yield();
+
+        var untouched = new TimeGANGenerator<double>(CreateArchitecture(4, 2));
+        long expectedCount = untouched.ParameterCount;
+        Assert.Equal(ParameterReadiness.Materialized, untouched.ParameterLayout.Readiness);
+
+        var predictedFirst = new TimeGANGenerator<double>(CreateArchitecture(4, 2));
+        _ = predictedFirst.Predict(new Tensor<double>(new[] { 1, 4 }));
+
+        Assert.Equal(ParameterReadiness.Materialized, predictedFirst.ParameterLayout.Readiness);
+        Assert.Equal(expectedCount, predictedFirst.ParameterCount);
+        Assert.Equal(predictedFirst.ParameterCount, predictedFirst.GetParameters().Length);
+    }
+
+    [Fact]
+    public async Task TimeGANGenerator_DefaultGenerator_PreservesTemporalContext()
+    {
+        await Task.Yield();
+
+        const int inputWidth = 2;
+        const int sequenceLength = 3;
+        const int hiddenDimension = 6;
+        var generator = new TimeGANGenerator<double>(
+            CreateArchitecture(inputWidth, inputWidth),
+            new TimeGANOptions<double>
+            {
+                Seed = Seed,
+                HiddenDimension = hiddenDimension,
+                NumLayers = 2,
+                SequenceLength = sequenceLength
+            });
+
+        Assert.All(generator.Layers, layer => Assert.IsType<GRULayer<double>>(layer));
+
+        var baseline = new Tensor<double>([sequenceLength, inputWidth]);
+        var changedHistory = new Tensor<double>([sequenceLength, inputWidth]);
+        for (int t = 0; t < sequenceLength; t++)
+        {
+            for (int feature = 0; feature < inputWidth; feature++)
+            {
+                double value = 0.1 * (t + 1) * (feature + 1);
+                baseline[t, feature] = value;
+                changedHistory[t, feature] = value;
+            }
+        }
+        changedHistory[0, 0] += 3.0;
+
+        var baselineOutput = generator.GetNamedLayerActivations(baseline)["Generator"];
+        var changedOutput = generator.GetNamedLayerActivations(changedHistory)["Generator"];
+
+        Assert.Equal([sequenceLength, hiddenDimension], baselineOutput.Shape);
+        Assert.Equal(baselineOutput.Shape, changedOutput.Shape);
+
+        double finalStepDifference = 0.0;
+        for (int feature = 0; feature < hiddenDimension; feature++)
+        {
+            finalStepDifference += Math.Abs(
+                baselineOutput[sequenceLength - 1, feature] -
+                changedOutput[sequenceLength - 1, feature]);
+        }
+
+        Assert.True(
+            finalStepDifference > 1e-12,
+            "Changing only an earlier timestep must affect a later generator output; independent dense row processing cannot satisfy this.");
+    }
+
     [Fact(Timeout = 120000)]
     public async Task TimeGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
@@ -1119,6 +1189,8 @@ public class SyntheticTabularGeneratorIntegrationTests
         Assert.Equal(fittedNumLayers, metadata.AdditionalInfo["NumLayers"]);
 
         var clone = Assert.IsType<TimeGANGenerator<double>>(generator.Clone());
+        Assert.Equal(generator.ParameterCount, clone.ParameterCount);
+        Assert.Equal(generator.GetParameters().ToArray(), clone.GetParameters().ToArray());
         Assert.Equal(TotalCols, clone.Predict(latentInput).Length);
         Assert.Equal(fittedHiddenDimension, clone.GetModelMetadata().AdditionalInfo["HiddenDimension"]);
 

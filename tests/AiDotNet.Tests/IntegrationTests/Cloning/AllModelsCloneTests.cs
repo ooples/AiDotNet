@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Parameters;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.SpeechRecognition.NeMo;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -509,7 +510,10 @@ public class AllModelsCloneTests
     /// A model that cannot accept the standard probe is left as it is; the comparison below then
     /// still holds, because both sides are measured in the same unresolved state.
     /// </remarks>
-    /// <returns>True when the probe ran, so the model's parameter surface is materialized.</returns>
+    /// <returns>
+    /// True only when the probe leaves a materialized or legitimately parameter-free surface.
+    /// A successful Predict call can still be a no-op for an unfitted model.
+    /// </returns>
     private static bool Resolve(NeuralNetworkBase<float> model)
     {
         try
@@ -517,7 +521,10 @@ public class AllModelsCloneTests
             var input = new Tensor<float>(new[] { 1, 4 });
             model.Predict(input);
 
-            return true;
+            return model.ParameterLayout.Readiness is
+                ParameterReadiness.Materialized or
+                ParameterReadiness.ParameterFree or
+                ParameterReadiness.ConditionalAbsent;
         }
         catch (Exception)
         {
