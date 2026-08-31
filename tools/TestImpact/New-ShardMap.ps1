@@ -18,6 +18,16 @@
                   alwaysRun is unknown to the map, which is a stale-map signal the selector escalates
                   on rather than quietly skipping.
 
+    SCALE, measured on a synthetic full-size set (106 digests, ~11 MB, built from a real shard's
+    file list so the shapes are realistic):
+
+        map build      6s      ->  9.4 MB
+        selection      2.8s        including parsing that map
+
+    Both are negligible against the ~2h matrix they decide, so neither is worth optimising. The
+    synthetic set deliberately gives every shard an overlapping subset of ONE file list, so its
+    selection RATE means nothing - only the timings transfer.
+
 .PARAMETER DigestDirectory
     Directory holding *.digest.json files, one per shard.
 
