@@ -7381,6 +7381,34 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
         if (!shapeKnown && !currentLayoutMatches)
         {
+            // A parked restore is trusted about the shapes this layer cannot know YET, but not
+            // about the ones it already knows. Summing the components whose size is resolved gives
+            // a floor no valid checkpoint can fall below: a PatchEmbeddingLayer whose weights are
+            // still [0, embeddingDim] already knows its bias is [embeddingDim], so a vector shorter
+            // than that is impossible whatever the weight shape turns out to be. Without this floor
+            // the layer accepted ANY length here and reported the error much later, or not at all.
+            long knownFloor = 0;
+            foreach (var component in GetOrderedParameterComponents())
+            {
+                if (component.Kind is not (DeclaredParameterComponentKind.Trainable
+                    or DeclaredParameterComponentKind.Buffer))
+                {
+                    continue;
+                }
+
+                knownFloor += ParameterComponentScalarCount(component);
+            }
+
+            if (parameters.Length < knownFloor)
+            {
+                throw new ArgumentException(
+                    $"{GetType().Name} received {parameters.Length} parameters, but its already-"
+                        + $"resolved components alone require {knownFloor}. The layer's remaining "
+                        + "shapes are still unresolved, so a longer vector may be valid, but this "
+                        + "one cannot be.",
+                    nameof(parameters));
+            }
+
             if (Parameters.Length != 0)
             {
                 throw new InvalidOperationException(
