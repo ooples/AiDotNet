@@ -34,7 +34,9 @@ public partial class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBa
     /// <summary>
     /// The options specific to the Genetic Algorithm.
     /// </summary>
-    private GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> _geneticOptions;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> _geneticOptions => (GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The current crossover rate, which determines how often solutions are combined.
@@ -68,7 +70,6 @@ public partial class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBa
         IFitnessCalculator<T, TInput, TOutput>? fitnessCalculator = null)
         : base(model, options ?? new())
     {
-        _geneticOptions = options ?? new GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>();
         _currentCrossoverRate = NumOps.Zero;
         _currentMutationRate = NumOps.Zero;
 
@@ -188,27 +189,6 @@ public partial class GeneticAlgorithmOptimizer<T, TInput, TOutput> : OptimizerBa
         return CreateOptimizationResult(bestStepData, inputData);
     }
 
-    /// <summary>
-    /// Updates the options for the genetic algorithm optimizer.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method allows you to change the settings of the genetic algorithm
-    /// while it's running. It's like adjusting the rules of your cooking competition mid-way through.
-    /// </para>
-    /// </remarks>
-    /// <param name="options">The new options to apply to the optimizer.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> geneticOptions)
-        {
-            _geneticOptions = geneticOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected GeneticAlgorithmOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current options for the genetic algorithm optimizer.

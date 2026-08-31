@@ -71,7 +71,9 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
     /// <summary>
     /// The options specific to the Nesterov Accelerated Gradient optimizer.
     /// </summary>
-    private NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput> _options => (NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The velocity vector used in the NAG algorithm.
@@ -105,7 +107,6 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -136,7 +137,6 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
     private NesterovAcceleratedGradientOptimizer(NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _options = options ?? new NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -541,31 +541,6 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
         }
     }
 
-    /// <summary>
-    /// Updates the optimizer's options with new settings.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method ensures that only compatible option types are used with this optimizer.
-    /// It updates the internal options if the provided options are of the correct type.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like changing the rules for how the skier should navigate the slope. It makes sure you're only using rules that work for this specific type of skiing technique (Nesterov Accelerated Gradient method).
-    /// </para>
-    /// </remarks>
-    /// <param name="options">The new options to be applied to the optimizer.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput> nagOptions)
-        {
-            _options = nagOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected NesterovAcceleratedGradientOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current options of the Nesterov Accelerated Gradient optimizer.

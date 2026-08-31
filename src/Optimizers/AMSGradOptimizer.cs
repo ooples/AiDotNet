@@ -29,7 +29,9 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// <summary>
     /// The options specific to the AMSGrad optimizer.
     /// </summary>
-    private AMSGradOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private AMSGradOptimizerOptions<T, TInput, TOutput> _options => (AMSGradOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The first moment vector (moving average of gradients).
@@ -70,7 +72,6 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new AMSGradOptimizerOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -101,7 +102,6 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     private AMSGradOptimizer(AMSGradOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _options = options ?? new AMSGradOptimizerOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -558,28 +558,6 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         }
     }
 
-    /// <summary>
-    /// Updates the optimizer's options with new settings.
-    /// </summary>
-    /// <param name="options">The new options to be applied to the optimizer.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method allows you to change the settings of the AMSGrad optimizer while it's running.
-    /// It's like adjusting the controls on a machine that's already operating. If you provide the wrong type of settings,
-    /// it will stop and let you know there's an error.
-    /// </para>
-    /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is AMSGradOptimizerOptions<T, TInput, TOutput> amsGradOptions)
-        {
-            _options = amsGradOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected AMSGradOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Retrieves the current options of the optimizer.

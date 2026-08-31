@@ -52,7 +52,9 @@ public partial class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInp
     /// Adjusting these settings can help the algorithm work better for different types of problems.
     /// </para>
     /// </remarks>
-    private PowellOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private PowellOptimizerOptions<T, TInput, TOutput> _options => (PowellOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The current iteration count of the optimization process.
@@ -123,7 +125,6 @@ public partial class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInp
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new PowellOptimizerOptions<T, TInput, TOutput>();
         _adaptiveStepSize = NumOps.Zero;
 
         InitializeAdaptiveParameters();
@@ -457,39 +458,6 @@ public partial class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInp
         }
     }
 
-    /// <summary>
-    /// Updates the optimizer's options with the provided options.
-    /// </summary>
-    /// <param name="options">The options to apply to this optimizer.</param>
-    /// <exception cref="ArgumentException">Thrown when the options are not of the expected type.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method overrides the base implementation to update the Powell-specific options.
-    /// It checks that the provided options are of the correct type (PowellOptimizerOptions)
-    /// and throws an exception if they are not.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates the settings that control how the optimizer works.
-    /// 
-    /// It's like changing the rules of the game:
-    /// - You provide a set of options to use
-    /// - The method checks that these are the right kind of options for a Powell optimizer
-    /// - If they are, it applies these new settings
-    /// - If not, it lets you know there's a problem
-    /// 
-    /// This ensures that only appropriate settings are used with this specific optimizer.
-    /// </para>
-    /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is PowellOptimizerOptions<T, TInput, TOutput> powellOptions)
-        {
-            _options = powellOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected PowellOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current options for this optimizer.
@@ -527,7 +495,6 @@ public partial class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInp
     private PowellOptimizer(PowellOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _options = options ?? new PowellOptimizerOptions<T, TInput, TOutput>();
         _adaptiveStepSize = NumOps.Zero;
 
         InitializeAdaptiveParameters();

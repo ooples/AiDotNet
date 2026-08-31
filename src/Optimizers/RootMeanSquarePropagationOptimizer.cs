@@ -127,7 +127,10 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
     /// Adjusting these settings can help the algorithm work better for different types of problems.
     /// </para>
     /// </remarks>
-    private RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput> _options
+        => (RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RootMeanSquarePropagationOptimizer{T}"/> class with the specified options and components.
@@ -159,7 +162,6 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
     {
         _t = 0;
         _squaredGradient = Vector<T>.Empty();
-        _options = options ?? new();
     }
 
     /// <summary>
@@ -190,7 +192,6 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
     {
         _t = 0;
         _squaredGradient = Vector<T>.Empty();
-        _options = options ?? new();
     }
 
     /// <summary>

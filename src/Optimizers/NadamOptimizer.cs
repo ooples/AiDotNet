@@ -50,7 +50,9 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// <summary>
     /// The options specific to the Nadam optimizer.
     /// </summary>
-    private NadamOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private NadamOptimizerOptions<T, TInput, TOutput> _options => (NadamOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The first moment vector (momentum).
@@ -112,7 +114,6 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         NadamOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new NadamOptimizerOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -143,7 +144,6 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     private NadamOptimizer(NadamOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _options = options ?? new NadamOptimizerOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -624,32 +624,6 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         }
     }
 
-    /// <summary>
-    /// Updates the optimizer's options with new settings.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method ensures that only compatible option types are used with this optimizer.
-    /// It updates the internal options if the provided options are of the correct type.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like changing the rules of how your smart ball rolls mid-experiment. It makes sure you're only
-    /// using rules that work for this specific type of smart ball (Nadam optimization).
-    /// </para>
-    /// </remarks>
-    /// <param name="options">The new options to be applied to the optimizer.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is NadamOptimizerOptions<T, TInput, TOutput> nadamOptions)
-        {
-            _options = nadamOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected NadamOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current optimization algorithm options.

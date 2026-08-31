@@ -1,11 +1,15 @@
 #nullable disable
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Inputs;
+using AiDotNet.FitnessCalculators;
+using AiDotNet.Interfaces;
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Optimizers;
 using AiDotNet.Regression;
 using Xunit;
+using System.Reflection;
 using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.Optimizers;
@@ -238,6 +242,250 @@ public class MetaheuristicOptimizerIntegrationTests
 
         AssertValidOptimizationResult(result, "ParticleSwarm");
     }
+
+    /// <summary>
+    /// The same seed gives the same optimization, which is the behaviour callers actually want.
+    /// </summary>
+    /// <remarks>
+    /// The generator tests below localise a failure; this one states the contract. Equality rather
+    /// than a tolerance is deliberate - a seed either determines the run or it does not, and a
+    /// tolerance would let the defect back in unnoticed.
+    /// </remarks>
+    [Fact(Timeout = 120000)]
+    public async Task ParticleSwarm_WithTheSameSeed_RepeatsItselfOnTheModelPath()
+    {
+        await Task.Yield();
+
+        var (X, y) = CreateSimpleRegressionData(30);
+        int numFeatures = X.Columns;
+
+        double RunWithSeed(int seed)
+        {
+            var optimizer = new ParticleSwarmOptimizer<double, Matrix<double>, Vector<double>>(
+                new MultipleRegression<double>(),
+                new ParticleSwarmOptimizationOptions<double, Matrix<double>, Vector<double>>
+                {
+                    MaxIterations = 20,
+                    SwarmSize = 20,
+                    MinimumFeatures = numFeatures,
+                    MaximumFeatures = numFeatures,
+                    Seed = seed,
+                });
+
+            return optimizer.Optimize(new OptimizationInputData<double, Matrix<double>, Vector<double>>
+            {
+                XTrain = X,
+                YTrain = y,
+                XValidation = X,
+                YValidation = y,
+                XTest = X,
+                YTest = y,
+            }).BestFitnessScore;
+        }
+
+        Assert.Equal(RunWithSeed(20250829), RunWithSeed(20250829));
+    }
+
+    /// <summary>
+    /// A seeded optimizer draws from a seeded generator, and a differently seeded one does not.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asserted for two optimizers because the fix is a base-class contract, not a per-optimizer
+    /// patch. <c>OptimizerBase</c> owns the one generator every derived optimizer draws from, and it
+    /// is built from <c>Options.Seed</c>. Particle swarm and simulated annealing each used to carry
+    /// a private <c>Random</c> built with <c>CreateSecureRandom()</c>, which no seed could reach;
+    /// both now use the inherited one, so there is nothing left to forget to seed.
+    /// </para>
+    /// <para>
+    /// The second assertion pins the other half - different seeds must diverge - so that a
+    /// degenerate generator returning a constant would not satisfy the first.
+    /// </para>
+    /// </remarks>
+    [Fact(Timeout = 120000)]
+    public async Task SeededOptimizers_DrawFromTheSeedTheyWereGiven()
+    {
+        await Task.Yield();
+
+        static int SwarmDraw(int seed) => FirstDraw(
+            new ParticleSwarmOptimizer<double, Matrix<double>, Vector<double>>(
+                null,
+                new ParticleSwarmOptimizationOptions<double, Matrix<double>, Vector<double>>
+                {
+                    SwarmSize = 8,
+                    Seed = seed,
+                }));
+
+        static int AnnealingDraw(int seed) => FirstDraw(
+            new SimulatedAnnealingOptimizer<double, Matrix<double>, Vector<double>>(
+                null,
+                new SimulatedAnnealingOptions<double, Matrix<double>, Vector<double>>
+                {
+                    Seed = seed,
+                }));
+
+        Assert.Equal(SwarmDraw(20250829), SwarmDraw(20250829));
+        Assert.NotEqual(SwarmDraw(20250829), SwarmDraw(19700101));
+
+        Assert.Equal(AnnealingDraw(20250829), AnnealingDraw(20250829));
+        Assert.NotEqual(AnnealingDraw(20250829), AnnealingDraw(19700101));
+    }
+
+    /// <summary>
+    /// A restored optimizer draws from the seed it was restored with, not the one it was built with.
+    /// </summary>
+    /// <remarks>
+    /// <c>Deserialize</c> hands the restored options to <c>UpdateOptions</c> so a derived optimizer
+    /// can react, but the base kept its constructor values. That was harmless while the shared
+    /// generator ignored <c>Seed</c> outright; once it honours the seed, a restored optimizer would
+    /// otherwise report one seed and draw from another. The base now adopts the restored options
+    /// before handing them on, which is why this holds for every optimizer rather than the one
+    /// tested here.
+    /// </remarks>
+    [Fact(Timeout = 120000)]
+    public async Task ParticleSwarm_AfterDeserialize_UsesTheRestoredSeed()
+    {
+        await Task.Yield();
+
+        const int BuiltWith = 19700101;
+        const int RestoredFrom = 20250829;
+
+        static ParticleSwarmOptimizer<double, Matrix<double>, Vector<double>> Build(int seed) =>
+            new(null, new ParticleSwarmOptimizationOptions<double, Matrix<double>, Vector<double>>
+            {
+                MaxIterations = 10,
+                SwarmSize = 8,
+                Seed = seed,
+            });
+
+        var restored = Build(BuiltWith);
+        restored.Deserialize(Build(RestoredFrom).Serialize());
+
+        Assert.Equal(RestoredFrom, restored.GetOptions().Seed);
+        Assert.Equal(FirstDraw(Build(RestoredFrom)), FirstDraw(restored));
+        Assert.NotEqual(FirstDraw(Build(BuiltWith)), FirstDraw(restored));
+    }
+
+    /// <summary>
+    /// Deserializing leaves Options and every field derived from it in agreement, and preserves the
+    /// live collaborators rather than the defaults the payload decodes to.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Adopting some option-derived state and not the rest is worse than adopting none: an optimizer
+    /// built with configuration A and restored from B would evaluate with B's settings and A's
+    /// evaluator, a state neither configuration describes. Construction and restoration route
+    /// through one method so that cannot happen.
+    /// </para>
+    /// <para>
+    /// The collaborators are deliberately NOT taken from the payload. Interface-typed properties
+    /// carry no type information through the options JSON, so Newtonsoft rebuilds each as its
+    /// property initializer's default. Adopting that would swap a caller's evaluator for a default
+    /// on every deserialize.
+    /// </para>
+    /// <para>
+    /// Asserted by REFERENCE, against instances captured before the restore. Asserting a type would
+    /// not distinguish the two outcomes: the default this payload decodes to is
+    /// <c>RSquaredFitnessCalculator</c>, so a test that merely checked for that type would pass
+    /// whether the live instance was preserved or silently replaced by the decoded default. Only
+    /// identity separates them.
+    /// </para>
+    /// <para>
+    /// The concrete options objects go the other way and are asserted NOT to be the originals.
+    /// <c>PredictionStatsOptions</c> and <c>ModelStatsOptions</c> carry their own type through the
+    /// JSON, so the decoded instance IS the restored configuration; preserving the originals there
+    /// would discard what was restored. The split is the whole point - preserve what cannot travel,
+    /// adopt what can.
+    /// </para>
+    /// </remarks>
+    [Fact(Timeout = 120000)]
+    public async Task Deserialize_PreservesTheLiveCollaborators_AndKeepsOptionsInAgreement()
+    {
+        await Task.Yield();
+
+        var liveCalculator = new RSquaredFitnessCalculator<double, Matrix<double>, Vector<double>>();
+
+        var restored = new ParticleSwarmOptimizer<double, Matrix<double>, Vector<double>>(
+            null,
+            new ParticleSwarmOptimizationOptions<double, Matrix<double>, Vector<double>>
+            {
+                MaxIterations = 99,
+                SwarmSize = 8,
+                Seed = 19700101,
+                FitnessCalculator = liveCalculator,
+            });
+
+        // The exact instances this optimizer is living with, captured before anything is restored.
+        var liveDetector = Field<object>(restored, "FitDetector");
+        var liveCache = Field<object>(restored, "ModelCache");
+        var livePrediction = Field<object>(restored, "PredictionOptions");
+        var liveStats = Field<object>(restored, "ModelStatsOptions");
+
+        // Distinguishable non-default values on the concrete option objects, so the assertions below
+        // can tell an ADOPTED payload from a freshly allocated default. NotSame alone proves only
+        // that something new was allocated, not that it carries what was serialized.
+        var source = new ParticleSwarmOptimizer<double, Matrix<double>, Vector<double>>(
+            null,
+            new ParticleSwarmOptimizationOptions<double, Matrix<double>, Vector<double>>
+            {
+                MaxIterations = 7,
+                SwarmSize = 8,
+                Seed = 20250829,
+                FitnessCalculator = new MeanSquaredErrorFitnessCalculator<double, Matrix<double>, Vector<double>>(),
+                PredictionOptions = new PredictionStatsOptions { ConfidenceLevel = 0.777, LearningCurveSteps = 23 },
+                ModelStatsOptions = new ModelStatsOptions { MaxVIF = 42 },
+            });
+
+        restored.Deserialize(source.Serialize());
+
+        // The values travel.
+        Assert.Equal(7, restored.GetOptions().MaxIterations);
+        Assert.Equal(20250829, restored.GetOptions().Seed);
+
+        // The INTERFACE-TYPED collaborators do not travel: these are the SAME objects, not merely
+        // the same types. Type equality would prove nothing here, since the default this payload
+        // decodes to is RSquaredFitnessCalculator - the very type the live instance already is.
+        Assert.Same(liveCalculator, Field<object>(restored, "FitnessCalculator"));
+        Assert.Same(liveDetector, Field<object>(restored, "FitDetector"));
+        Assert.Same(liveCache, Field<object>(restored, "ModelCache"));
+
+        // The CONCRETE options objects are a different case and are adopted from the payload: they
+        // carry their own type through the JSON, so the decoded instance is the restored
+        // configuration rather than a default standing in for it. A new instance here is correct,
+        // and preserving the originals would have discarded what was restored.
+        var restoredPrediction = Field<PredictionStatsOptions>(restored, "PredictionOptions");
+        var restoredStats = Field<ModelStatsOptions>(restored, "ModelStatsOptions");
+
+        Assert.NotSame(livePrediction, restoredPrediction);
+        Assert.NotSame(liveStats, restoredStats);
+
+        // And they carry the SERIALIZED values, which is the half NotSame cannot show: a default
+        // instance allocated in place of the payload would satisfy NotSame and fail here.
+        Assert.Equal(0.777, restoredPrediction.ConfidenceLevel, 12);
+        Assert.Equal(23, restoredPrediction.LearningCurveSteps);
+        Assert.Equal(42, restoredStats.MaxVIF);
+
+        // And Options agrees with every cached field, which is what makes partial adoption
+        // impossible rather than merely unlikely.
+        Assert.Same(restored.GetOptions().FitnessCalculator, Field<object>(restored, "FitnessCalculator"));
+        Assert.Same(restored.GetOptions().FitDetector, Field<object>(restored, "FitDetector"));
+        Assert.Same(restored.GetOptions().ModelCache, Field<object>(restored, "ModelCache"));
+        Assert.Same(restored.GetOptions().PredictionOptions, Field<object>(restored, "PredictionOptions"));
+        Assert.Same(restored.GetOptions().ModelStatsOptions, Field<object>(restored, "ModelStatsOptions"));
+    }
+
+    /// <summary>Reads a protected base field, which is where the adopted state actually lands.</summary>
+    private static TField Field<TField>(
+        OptimizerBase<double, Matrix<double>, Vector<double>> optimizer, string name)
+        => (TField)typeof(OptimizerBase<double, Matrix<double>, Vector<double>>)
+            .GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(optimizer)!;
+
+    /// <summary>The first draw from the one generator an optimizer owns, which lives on the base.</summary>
+    private static int FirstDraw(OptimizerBase<double, Matrix<double>, Vector<double>> optimizer)
+        => ((Random)typeof(OptimizerBase<double, Matrix<double>, Vector<double>>)
+            .GetField("Random", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(optimizer)!).Next();
 
     #endregion
 
@@ -1048,6 +1296,62 @@ public class MetaheuristicOptimizerIntegrationTests
         // Should complete without error even with single iteration
         var result = optimizer.Optimize(inputData);
         AssertValidOptimizationResult(result, "Normal_SingleIteration");
+    }
+
+
+
+    /// <summary>
+    /// Deserializing restores the adaptive state a run had reached, rather than re-seeding it from
+    /// the options.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This exists to refuse a plausible-looking change. The constructor seeds
+    /// <c>_currentInertia</c> and its siblings from <c>Initial*</c> on the options, and no
+    /// <c>UpdateOptions</c> override re-runs <c>InitializeAdaptiveParameters</c> - which reads like
+    /// a restored optimizer keeping the configuration it was BUILT with. It is not: the state layer
+    /// carries the live values, so a mid-run optimizer serialized at inertia 0.137 comes back at
+    /// 0.137, not at whatever its options call the initial value.
+    /// </para>
+    /// <para>
+    /// Calling <c>ResetAdaptiveParameters()</c> from <c>Deserialize</c> to "fix" the apparent
+    /// staleness therefore DESTROYS restored state, silently rewinding a resumed optimizer to the
+    /// start of its schedule. Measured: with that call added this test reads 0.42 instead of 0.137.
+    /// The distinction is invisible unless the live value is driven away from the initial one, which
+    /// is why this test sets it explicitly rather than trusting a short run to diverge.
+    /// </para>
+    /// </remarks>
+    [Fact(Timeout = 120000)]
+    public async Task Deserialize_RestoresLiveAdaptiveState_RatherThanReseedingFromOptions()
+    {
+        await Task.Yield();
+
+        const double LiveInertia = 0.137;
+        const double SourceInitial = 0.42;
+        const double DestinationInitial = 0.91;
+
+        static ParticleSwarmOptimizer<double, Matrix<double>, Vector<double>> Build(double initialInertia) =>
+            new(null, new ParticleSwarmOptimizationOptions<double, Matrix<double>, Vector<double>>
+            {
+                MaxIterations = 10,
+                SwarmSize = 8,
+                InitialInertia = initialInertia,
+            });
+
+        static FieldInfo Inertia() =>
+            typeof(ParticleSwarmOptimizer<double, Matrix<double>, Vector<double>>)
+                .GetField("_currentInertia", BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        var source = Build(SourceInitial);
+        Inertia().SetValue(source, LiveInertia);
+
+        var restored = Build(DestinationInitial);
+        Assert.Equal(DestinationInitial, (double)Inertia().GetValue(restored)!, 12);
+
+        restored.Deserialize(source.Serialize());
+
+        // The live value, not either side's Initial*.
+        Assert.Equal(LiveInertia, (double)Inertia().GetValue(restored)!, 12);
     }
 
     #endregion
