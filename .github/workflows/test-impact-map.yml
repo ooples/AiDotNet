@@ -1,0 +1,114 @@
+name: Test impact map
+
+# Rebuilds the coverage-derived map that drives shard selection in sonarcloud.yml.
+#
+# Nightly rather than per-push because the inputs only change when coverage changes, and a map a
+# few hours old costs nothing: the selector diffs FROM the map's commit, so any master churn since
+# then simply appears as extra changed files and over-selects. Over-selection is the safe direction.
+#
+# Note this workflow never runs tests. It reuses the digests the sharded test job already uploads,
+# so a rebuild is a few artifact downloads and a merge - about a minute, against the two hours a
+# full test run costs.
+
+on:
+  schedule:
+    # 07:00 UTC, after the nightly master activity has settled and before the working day.
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Optional: a specific Build & SonarCloud run to harvest digests from.'
+        required: false
+
+permissions: read-all
+
+concurrency:
+  group: test-impact-map
+  cancel-in-progress: true
+
+jobs:
+  build-map:
+    name: Build shard map
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Find the run to harvest
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id='${{ github.event.inputs.run_id }}'
+          if [ -z "$run_id" ]; then
+            # The most recent master run that actually finished. A cancelled or failed run can
+            # still carry digests, but only for the shards that got that far, and a partial map
+            # would mark the rest unknown - which escalates rather than under-selects, but wastes
+            # the saving. Prefer a clean run.
+            run_id=$(gh run list --workflow sonarcloud.yml --branch master --status success \
+                       --limit 1 --json databaseId --jq '.[0].databaseId')
+          fi
+          if [ -z "$run_id" ]; then
+            echo "::error::no successful master run of sonarcloud.yml to harvest digests from"
+            exit 1
+          fi
+          sha=$(gh run view "$run_id" --json headSha --jq '.headSha')
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha"       >> "$GITHUB_OUTPUT"
+          echo "harvesting run $run_id at $sha"
+
+      - name: Download digests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p digests
+          gh run download '${{ steps.source.outputs.run_id }}' --pattern 'impact-digest-*' --dir digests
+          echo "digest files: $(find digests -name '*.digest.json' | wc -l)"
+
+      - name: Build the map
+        shell: pwsh
+        run: |
+          $all = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
+          $covered = @(
+            Get-ChildItem digests -Filter '*.digest.json' -Recurse -File |
+              ForEach-Object { (Get-Content $_.FullName -Raw | ConvertFrom-Json).shard }
+          )
+
+          # Always-run is DERIVED, not declared: any shard that produced no digest cannot be
+          # selected against, whatever the reason. That covers the heavy and timing shards, which
+          # collect no coverage by design, and also any shard that failed, timed out or was
+          # cancelled in the harvested run. Re-deriving the workflow's coverage predicate here
+          # instead would be a second copy of it, free to drift, and drift in this direction means
+          # a shard silently stops running.
+          $alwaysRun = @($all.name | Where-Object { $covered -notcontains $_ })
+          Write-Host "shards: $($all.Count) total, $($covered.Count) with digests, $($alwaysRun.Count) always-run"
+          foreach ($s in $alwaysRun) { Write-Host "  always-run: $s" }
+
+          if ($covered.Count -eq 0) {
+            Write-Host '::error::no digests found - the map would select nothing and escalate every run'
+            exit 1
+          }
+
+          & ./tools/TestImpact/New-ShardMap.ps1 `
+              -DigestDirectory digests `
+              -AlwaysRun $alwaysRun `
+              -Sha '${{ steps.source.outputs.sha }}' `
+              -OutFile shard-map.json
+
+          $size = [Math]::Round((Get-Item shard-map.json).Length / 1MB, 2)
+          $map = Get-Content shard-map.json -Raw | ConvertFrom-Json
+          $files = @($map.files.PSObject.Properties).Count
+          Write-Host "map: $files file(s), $size MB"
+          "### Shard map rebuilt`n`n- commit ``${{ steps.source.outputs.sha }}```n- $files files indexed`n- $($covered.Count) shards mapped, $($alwaysRun.Count) always-run`n- $size MB" |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Upload the map
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: shard-map
+          path: shard-map.json
+          if-no-files-found: error
+          retention-days: 14

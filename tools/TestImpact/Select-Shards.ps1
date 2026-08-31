@@ -25,17 +25,12 @@
 .PARAMETER MapFile
     shard-map.json from New-ShardMap.ps1.
 
-.PARAMETER BaseRef
-    Accepted for compatibility and logging only. The diff is taken from the MAP's commit, because
-    that is the only reference whose line numbers the map's ranges are expressed in.
-
 .PARAMETER SelfTest
     Runs the built-in checks and exits. Proves selection both fires and refuses to fire.
 #>
 [CmdletBinding(DefaultParameterSetName = 'Select')]
 param(
     [Parameter(Mandatory, ParameterSetName = 'Select')] [string] $MapFile,
-    [Parameter(Mandatory, ParameterSetName = 'Select')] [string] $BaseRef,
     [Parameter(ParameterSetName = 'Select')] [string] $OutFile,
     [Parameter(Mandatory, ParameterSetName = 'SelfTest')] [switch] $SelfTest
 )
