@@ -15193,23 +15193,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Determines whether every layer in the executable graph can safely consume shared parameter
     /// storage during its forward pass.
     /// </summary>
-    private bool SupportsCopyOnWriteLayerGraph()
-    {
-        foreach (var layer in AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<T>(this))
-        {
-            // Batch-normalization inference keeps gamma and beta on the active autodiff tape by using
-            // engine tensor operations. CpuEngine's optimized TensorDivide kernel currently obtains its
-            // input arrays through the mutable DataVector surface, which copy-on-write tensors correctly
-            // reject because an escaped array could mutate every alias without detaching. The eager clone
-            // path remains fully faithful and preserves both inference values and eval-mode gradients.
-            // Remove this guard only after every TensorDivide backend reads its operands through a
-            // read-only span (and writes only through the destination's writable surface).
-            if (layer is AiDotNet.NeuralNetworks.Layers.BatchNormalizationLayer<T>)
-                return false;
-        }
-
-        return true;
-    }
 
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
@@ -15217,8 +15200,19 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // G6 COW fast path: share weight-tensor storage instead of materializing a second full copy.
         // Falls back to the eager paths below for any model it cannot share safely (layer-count or
         // parameter-count mismatch, a layer whose SetTrainableParameters can't re-sync its fields).
+        // SupportsCopyOnWriteLayerGraph() used to sit here and refused copy-on-write for ANY model
+        // containing a BatchNormalizationLayer, on the grounds that CpuEngine's TensorDivide read
+        // its operands through the mutable DataVector surface that copy-on-write tensors reject.
+        // Its own comment said to remove it once that was no longer true, and nothing ever checked.
+        // BatchNormModel_ClonePredictsIdentically_AndStaysIndependent now does: with the guard gone
+        // a batch-norm model takes the shared path, predicts bit-identically to its original, and
+        // stays independent when written through -- verified with AIDOTNET_TRACE_CLONE_REJECTION=1
+        // to confirm the copy-on-write path was actually taken rather than quietly falling back.
+        //
+        // The guard was expensive: it walked every nested layer and sent whole models down the eager
+        // serialize roundtrip. Chirp3 was blocked by a BatchNormalizationLayer it does not mention
+        // anywhere in its own source.
         if (UseCopyOnWriteDeepCopy && SupportsCopyOnWriteDeepCopy
-            && SupportsCopyOnWriteLayerGraph()
             && TryDeepCopyCopyOnWrite(out var cowCopy))
             return cowCopy;
 

@@ -48,6 +48,67 @@ public class CopyOnWriteCloneTests
     private static Tensor<double> Input() =>
         new(new Vector<double>(new[] { 0.1, -0.2, 0.3, -0.4 }), new[] { 1, 4 });
 
+    /// <summary>A cloned batch-norm model must predict exactly what its original predicts.</summary>
+    /// <remarks>
+    /// SupportsCopyOnWriteLayerGraph refuses copy-on-write for any model containing a
+    /// BatchNormalizationLayer, on the grounds that CpuEngine's TensorDivide reads its operands
+    /// through the mutable DataVector surface, which copy-on-write tensors reject. That guard's own
+    /// comment says to remove it once TensorDivide reads through a read-only span -- but nothing
+    /// verified either the hazard or its absence, so the guard could neither be trusted nor retired.
+    ///
+    /// This is that verification, and it is written to fail loudly if copy-on-write ever corrupts a
+    /// batch-norm clone: identical inputs must give identical outputs, and mutating one model must
+    /// not move the other. It is deliberately independent of whether the guard is currently on --
+    /// with the guard it exercises the eager path, without it the shared path.
+    /// </remarks>
+    [Fact]
+    public void BatchNormModel_ClonePredictsIdentically_AndStaysIndependent()
+    {
+        using var source = BuildBufferedModel();
+        var input = Input();
+
+        var beforeClone = source.Predict(input);
+
+        var clone = source.DeepCopy() as NeuralNetworkBase<double>;
+        Assert.NotNull(clone);
+
+        var original = source.Predict(input);
+        var copied = clone!.Predict(input);
+
+        Assert.Equal(original.Length, copied.Length);
+        for (var i = 0; i < original.Length; i++)
+        {
+            Assert.True(
+                Math.Abs(original[i] - copied[i]) < 1e-12,
+                $"clone diverged at {i}: {original[i]} vs {copied[i]}");
+        }
+
+        // The source must also be unchanged by having been cloned.
+        for (var i = 0; i < beforeClone.Length; i++)
+        {
+            Assert.True(
+                Math.Abs(beforeClone[i] - original[i]) < 1e-12,
+                $"cloning moved the source at {i}: {beforeClone[i]} vs {original[i]}");
+        }
+
+        // Writing through the clone must not reach the source -- the aliasing hazard the guard
+        // exists to prevent would show up exactly here.
+        var mutated = clone.GetParameters();
+        if (mutated.Length > 0)
+        {
+            for (var i = 0; i < mutated.Length; i++) mutated[i] = mutated[i] + 1.0;
+            clone.UpdateParameters(mutated);
+
+            var sourceAfter = source.Predict(input);
+            for (var i = 0; i < original.Length; i++)
+            {
+                Assert.True(
+                    Math.Abs(sourceAfter[i] - original[i]) < 1e-12,
+                    $"writing through the clone moved the source at {i}");
+            }
+        }
+    }
+
     [Fact]
     public void MaterializedPersistentBuffers_AreIncludedInCopyOnWriteCoverage()
     {
