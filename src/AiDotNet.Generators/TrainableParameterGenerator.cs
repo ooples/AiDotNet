@@ -631,11 +631,6 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             if (paramFields.Count == 0 && subLayerFields.Count == 0 && bufferFields.Count == 0
                 && !emitParameterFreeContract) continue;
 
-            // Only a generated child-layer graph can duplicate a legacy flat snapshot. Keep this
-            // syntax/semantic inspection off the overwhelmingly common leaf-layer path.
-            bool legacyParametersAreDerivedSnapshot = subLayerFields.Count > 0
-                && HasDerivedLegacyParameterSnapshot(compilation, classSymbol);
-
             // Stable sort by Order, preserving declaration order for equal Order values.
             // List.Sort is not stable, so we use a secondary key (original index).
             for (int idx = 0; idx < paramFields.Count; idx++)
@@ -651,7 +646,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             var source = GenerateSource(
                 classSymbol, paramFields, gradientFields, subLayerFields, bufferFields,
                 useRuntimeParameterRegistry, useConventionalTensorEnumerator,
-                emitParameterFreeContract, legacyParametersAreDerivedSnapshot,
+                emitParameterFreeContract,
                 suppressGeneratedParameterAccessors, unguardableAxes);
 
             // A declared axis the generator could not trace back to a guardable dimension. Emitting
@@ -672,51 +667,6 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         }
     }
 
-    /// <summary>
-    /// Finds the legacy migration pattern where a composite caches its already-declared parameter
-    /// graph in <c>LayerBase.Parameters</c>. That vector is a derived snapshot, not another owned
-    /// component, and publishing both representations duplicates every nested parameter.
-    /// </summary>
-    private static bool HasDerivedLegacyParameterSnapshot(
-        Compilation compilation,
-        INamedTypeSymbol classSymbol)
-    {
-        foreach (var reference in classSymbol.DeclaringSyntaxReferences)
-        {
-            if (reference.GetSyntax() is not ClassDeclarationSyntax declaration) continue;
-
-            foreach (var assignment in declaration.DescendantNodes().OfType<AssignmentExpressionSyntax>())
-            {
-                // Reject nearly every assignment syntactically before requesting Roslyn's semantic
-                // model. Asking it to bind every assignment in every generated layer dominated the
-                // solution build even though only a handful use this migration pattern.
-                if (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression)
-                    || !IsIdentifierOrMemberNamed(assignment.Left, "Parameters")
-                    || assignment.Right is not InvocationExpressionSyntax invocation
-                    || invocation.ArgumentList.Arguments.Count != 0
-                    || !IsIdentifierOrMemberNamed(invocation.Expression, "GetParameters"))
-                {
-                    continue;
-                }
-
-                var semanticModel = compilation.GetSemanticModel(declaration.SyntaxTree);
-                if (semanticModel.GetSymbolInfo(assignment.Left).Symbol is not IFieldSymbol target
-                    || target.Name != "Parameters"
-                    || !IsOnTypeHierarchy(target.ContainingType, classSymbol)
-                    || semanticModel.GetSymbolInfo(invocation).Symbol is not IMethodSymbol method
-                    || method.Name != "GetParameters"
-                    || !IsOnTypeHierarchy(method.ContainingType, classSymbol))
-                {
-                    continue;
-                }
-
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     private static bool IsIdentifierOrMemberNamed(ExpressionSyntax expression, string name)
         => expression switch
         {
@@ -734,7 +684,6 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         bool useRuntimeParameterRegistry,
         bool useConventionalTensorEnumerator,
         bool emitParameterFreeContract,
-        bool legacyParametersAreDerivedSnapshot,
         bool suppressGeneratedParameterAccessors,
         ICollection<string>? unguardableAxes = null)
     {
@@ -776,14 +725,6 @@ public class TrainableParameterGenerator : IIncrementalGenerator
 
         sb.AppendLine($"partial class {className}{typeParams}");
         sb.AppendLine("{");
-
-        if (legacyParametersAreDerivedSnapshot)
-        {
-            sb.AppendLine("    /// <summary>Auto-generated: the legacy flat vector is a derived view of declared parameter components.</summary>");
-            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
-            sb.AppendLine("    protected override bool LegacyParametersAreDerivedSnapshot => true;");
-            sb.AppendLine();
-        }
 
         if (emitParameterFreeContract)
         {
