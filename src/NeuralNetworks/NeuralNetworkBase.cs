@@ -1220,6 +1220,100 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             yield return chunk.Tensor;
     }
 
+    /// <summary>Writes a chunk stream back into this model without building a flat vector.</summary>
+    /// <param name="chunks">
+    /// One tensor per chunk <see cref="GetParameterChunks"/> yields, in that order and of that length.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// The write half of <see cref="GetParameterChunks"/>, which had none. Every caller wanting to
+    /// update parameters had to materialize the ENTIRE surface as one contiguous
+    /// <see cref="Vector{T}"/> for <see cref="SetParameters"/>. For a paper-scale model that is a
+    /// multi-gigabyte large-object allocation which can fail while the process still has headroom:
+    /// PaLI3 needs 2,438 MB contiguous and SenseVoiceLarge 2,554 MB, on top of the model itself.
+    /// </para>
+    /// <para>
+    /// Destinations come from the READ enumeration itself rather than a second walk of the layer
+    /// graph. That is deliberate: the two walks would have to stay aligned forever, and a silent
+    /// drift between them would write correct-looking values into the wrong tensors, which no count
+    /// or length check would catch.
+    /// </para>
+    /// <para>
+    /// Falls back to the flat path when any chunk is not writable in place. A layer that is not a
+    /// <c>LayerBase</c> exposes its parameters only through a flat vector, and an fp16-resident or
+    /// sparse component hands out a transient snapshot -- writing those would update nothing at all
+    /// rather than fail. <c>ParameterChunk.IsWritableInPlace</c> is what distinguishes them.
+    /// </para>
+    /// </remarks>
+    public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+
+        var destinations = new List<Tensor<T>>();
+        bool streamable = true;
+        foreach (var chunk in GetParameterStateChunks())
+        {
+            if (!chunk.IsWritableInPlace)
+            {
+                streamable = false;
+                break;
+            }
+
+            destinations.Add(chunk.Tensor);
+        }
+
+        if (!streamable)
+        {
+            SetParameters(AiDotNet.Diffusion.DiffusionParameterChunkHelper.BufferToFlatVector(chunks));
+            return;
+        }
+
+        // Validate the WHOLE stream before touching any weights. The pair list holds tensor
+        // references only -- no flat aggregate and no per-tensor data copy -- so a mis-framed stream
+        // fails atomically instead of leaving the model holding a mix of old and new values.
+        var pairs = new List<(Tensor<T> Source, Tensor<T> Destination)>(destinations.Count);
+        using (var incoming = chunks.GetEnumerator())
+        {
+            for (int i = 0; i < destinations.Count; i++)
+            {
+                if (!incoming.MoveNext())
+                {
+                    throw new ArgumentException(
+                        $"SetParameterChunks received fewer chunks than the model has parameter "
+                            + $"tensors (missing chunk {i} of {destinations.Count}).",
+                        nameof(chunks));
+                }
+
+                var source = incoming.Current;
+                if (source is null)
+                {
+                    throw new ArgumentException(
+                        $"Chunk sequence contains a null tensor at index {i}.", nameof(chunks));
+                }
+
+                if (source.Length != destinations[i].Length)
+                {
+                    throw new ArgumentException(
+                        $"SetParameterChunks chunk {i} length {source.Length} does not match "
+                            + $"parameter length {destinations[i].Length}.",
+                        nameof(chunks));
+                }
+
+                pairs.Add((source, destinations[i]));
+            }
+
+            if (incoming.MoveNext())
+            {
+                throw new ArgumentException(
+                    "SetParameterChunks received more chunks than the model has parameter tensors.",
+                    nameof(chunks));
+            }
+        }
+
+        foreach (var (source, destination) in pairs)
+            source.AsSpan().CopyTo(destination.AsWritableSpan());
+    }
+
     #region GPU Training Methods
 
     /// <summary>
