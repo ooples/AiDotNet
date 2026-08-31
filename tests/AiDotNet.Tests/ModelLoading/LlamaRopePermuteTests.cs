@@ -135,6 +135,56 @@ namespace AiDotNet.Tests.ModelLoading
             Assert.Equal(16, argmaxMatches);
         }
 
+        // Opt-in golden PERPLEXITY: loads SmolLM2-360M f32 and checks the 8-window (1024-token) perplexity against
+        // the PyTorch reference 15.372. A longer-sequence complement to the 16-token logit oracle above: it exercises
+        // full-context position handling across 8x1024 tokens, which a 16-token check cannot. Skips silently without
+        // the local fixtures (CI), since the checkpoint is too large to commit.
+        [Fact]
+        public void SmolLM2_HfSafetensors_Reproduces8WindowPerplexity()
+        {
+            const string dir = @"C:\Users\cheat\Temp\he-m2-audit\data\smollm2-360m";
+            const string dataRoot = @"C:\Users\cheat\Temp\he-m2-audit\data";
+            string modelPath = Path.Combine(dir, "model_f32.safetensors");
+            string configPath = Path.Combine(dir, "config.json");
+            string tokPath = Path.Combine(dataRoot, "wikitext2_test_tokens.i32");
+            if (!File.Exists(modelPath) || !File.Exists(configPath) || !File.Exists(tokPath))
+                return; // fixtures not present — local-only
+
+            const int V = 49152, S = 1024, windows = 8;
+            var config = HuggingFaceConfig.FromFile(configPath);
+            using var fs = File.OpenRead(modelPath);
+            var net = LlamaModelBuilder<float>.Build(config, SafetensorsReader.Read(fs));
+
+            int[] tokens = ReadInt32(tokPath);
+            double totalCe = 0;
+            long n = 0;
+            for (int w = 0; w < windows; w++)
+            {
+                int st = w * S;
+                if (st + S + 1 > tokens.Length) break;
+                var input = new Tensor<float>(new[] { 1, S });
+                for (int p = 0; p < S; p++) input[0, p] = tokens[st + p];
+                float[] logits = net.Predict(input).ToArray();
+                int cols = logits.Length / S;
+                for (int pos = 0; pos < S - 1; pos++)
+                {
+                    int b = pos * cols, target = tokens[st + pos + 1];
+                    double max = double.NegativeInfinity;
+                    for (int c = 0; c < V; c++)
+                        if (logits[b + c] > max) max = logits[b + c];
+                    double sum = 0;
+                    for (int c = 0; c < V; c++) sum += Math.Exp(logits[b + c] - max);
+                    totalCe += (max + Math.Log(sum)) - logits[b + target]; // next-token cross-entropy (nats)
+                    n++;
+                }
+                GC.Collect();
+                GC.WaitForPendingFinalizers(); // release Engine GPU buffers between full-sequence forwards
+            }
+
+            double ppl = Math.Exp(totalCe / n);
+            Assert.True(Math.Abs(ppl - 15.372) < 0.1, $"8-window perplexity {ppl:F3} differs from PyTorch 15.372 by more than 0.1");
+        }
+
         private static int[] ReadInt32(string path)
         {
             var bytes = File.ReadAllBytes(path);
