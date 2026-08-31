@@ -5,6 +5,7 @@ using System.Reflection;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.SpeechRecognition.NeMo;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.VisionLanguage.Foundational;
@@ -177,6 +178,7 @@ public class AllModelsCloneTests
         // filled to zero bytes free.
         var dir = Environment.GetEnvironmentVariable("AIDOTNET_SWEEP_DIR");
         if (string.IsNullOrEmpty(dir)) dir = System.IO.Path.GetTempPath();
+        System.IO.Directory.CreateDirectory(dir);
 
         ReportPath = System.IO.Path.Combine(dir, $"aidotnet-model-clone-sweep-{shard}.txt");
 
@@ -621,6 +623,37 @@ public class AllModelsCloneTests
     /// </remarks>
     private static object? CreateBoundedOptions(Type optionType)
     {
+        if (typeof(NemotronSpeechOptions).IsAssignableFrom(optionType))
+        {
+            NemotronSpeechOptions? speech;
+            try
+            {
+                speech = Activator.CreateInstance(optionType) as NemotronSpeechOptions;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+
+            if (speech is null) return null;
+
+            // Match the generated Nemotron smoke fixture: preserve the Fast-Conformer -> adapter
+            // -> decoder topology without materializing the 24+32-layer paper-scale defaults.
+            speech.SampleRate = 16000;
+            speech.MaxAudioLengthSeconds = 1;
+            speech.EncoderDim = 64;
+            speech.DecoderDim = 64;
+            speech.NumEncoderLayers = 2;
+            speech.NumDecoderLayers = 2;
+            speech.NumAttentionHeads = 4;
+            speech.NumMels = 32;
+            speech.VocabSize = 64;
+            speech.MaxTextLength = 16;
+            speech.DropoutRate = 0.0;
+            speech.Language = "en";
+            return speech;
+        }
+
         if (typeof(CodecTtsOptions).IsAssignableFrom(optionType))
         {
             CodecTtsOptions? codec;
