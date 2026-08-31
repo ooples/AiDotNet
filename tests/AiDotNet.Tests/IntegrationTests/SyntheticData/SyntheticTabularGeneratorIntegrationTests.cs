@@ -1097,7 +1097,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         var baselineOutput = generator.GetNamedLayerActivations(baseline)["Generator"];
         var changedOutput = generator.GetNamedLayerActivations(changedHistory)["Generator"];
 
-        Assert.Equal([sequenceLength, hiddenDimension], baselineOutput.Shape);
+        Assert.Equal(new[] { sequenceLength, hiddenDimension }, baselineOutput.Shape.ToArray());
         Assert.Equal(baselineOutput.Shape, changedOutput.Shape);
 
         double finalStepDifference = 0.0;

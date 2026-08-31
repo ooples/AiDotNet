@@ -2484,10 +2484,26 @@ jobs:
           }
           $ledger = Get-ChildItem baseline-ledger -Recurse -Filter ledger.json -ErrorAction SilentlyContinue |
             Select-Object -First 1
+          $measuredLedgerShards = 0
+          if ($ledger) {
+            $ledgerShardInventory = Join-Path $ledger.DirectoryName 'shards.csv'
+            try {
+              $measuredLedgerShards = @(
+                Import-Csv -LiteralPath $ledgerShardInventory -ErrorAction Stop |
+                  Where-Object { $_.missingTrx -ne 'True' }
+              ).Count
+            }
+            catch {
+              Write-Warning "Downloaded baseline ledger has no readable shard inventory: $($_.Exception.Message)"
+            }
+            if ($measuredLedgerShards -eq 0) {
+              Write-Warning 'Downloaded baseline ledger contains zero measured shards and will not be used for regression enforcement.'
+            }
+          }
           $legacyTrx = @(Get-ChildItem baseline-test-results -Recurse -Filter '*.trx' -File -ErrorAction SilentlyContinue)
           $promotedTrx = @(Get-ChildItem promoted-baseline-test-results -Recurse -Filter '*.trx' -File -ErrorAction SilentlyContinue)
           $baselineReady = $env:COMPARE -eq 'true' -and $env:BASELINE_AVAILABLE -eq 'true' -and (
-            ($env:BASELINE_MODE -eq 'ledger' -and $env:LEDGER_DOWNLOAD_OUTCOME -eq 'success' -and $null -ne $ledger) -or
+            ($env:BASELINE_MODE -eq 'ledger' -and $env:LEDGER_DOWNLOAD_OUTCOME -eq 'success' -and $null -ne $ledger -and $measuredLedgerShards -gt 0) -or
             ($env:BASELINE_MODE -eq 'trx' -and $env:TRX_DOWNLOAD_OUTCOME -eq 'success' -and $legacyTrx.Count -gt 0) -or
             ($env:BASELINE_MODE -eq 'promoted' -and $env:PROMOTED_TRX_DOWNLOAD_OUTCOME -eq 'success' -and $promotedTrx.Count -gt 0))
           if ($baselineReady) {
