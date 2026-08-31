@@ -18,15 +18,17 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 /// </summary>
 public class ConvNetFusedStemPredictTests
 {
-    private static ConvolutionalNeuralNetwork<float> BuildCnn()
+    private static ConvolutionalNeuralNetwork<float> BuildCnn(BiasMode biasMode)
     {
         var layers = new System.Collections.Generic.List<ILayer<float>>
         {
             new ConvolutionalLayer<float>(outputDepth: 8, kernelSize: 3, stride: 1, padding: 1,
-                                          activationFunction: new ReLUActivation<float>()),
+                                          activationFunction: new ReLUActivation<float>(),
+                                          biasMode: biasMode),
             new MaxPoolingLayer<float>(poolSize: 2, stride: 2),
             new ConvolutionalLayer<float>(outputDepth: 16, kernelSize: 3, stride: 1, padding: 1,
-                                          activationFunction: new ReLUActivation<float>()),
+                                          activationFunction: new ReLUActivation<float>(),
+                                          biasMode: biasMode),
             new MaxPoolingLayer<float>(poolSize: 2, stride: 2),
             new FlattenLayer<float>(),
             new DenseLayer<float>(4, activationFunction: (IActivationFunction<float>?)null),
@@ -41,11 +43,13 @@ public class ConvNetFusedStemPredictTests
     }
 
     [Theory]
-    [InlineData(1)]
-    [InlineData(4)]
-    public void Predict_FusedConvStem_MatchesGenericForward(int batch)
+    [InlineData(1, BiasMode.Auto)]
+    [InlineData(4, BiasMode.Auto)]
+    [InlineData(1, BiasMode.Never)]
+    [InlineData(4, BiasMode.Never)]
+    public void Predict_FusedConvStem_MatchesGenericForward(int batch, BiasMode biasMode)
     {
-        var model = BuildCnn();
+        var model = BuildCnn(biasMode);
         var rng = new Random(7);
         var data = new float[batch * 1 * 16 * 16];
         for (int i = 0; i < data.Length; i++) data[i] = (float)(rng.NextDouble() * 2 - 1);

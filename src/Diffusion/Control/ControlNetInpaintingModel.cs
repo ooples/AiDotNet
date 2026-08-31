@@ -121,36 +121,6 @@ public partial class ControlNetInpaintingModel<T> : LatentDiffusionModelBase<T>
 
 
     /// <inheritdoc />
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
-    {
-        // Stream this model's ACTUAL trainable sub-modules in GetParameters() order. The inherited
-        // LatentDiffusionModelBase path streams NoisePredictor + VAE + Conditioner, but this model's
-        // flat layout is baseUNet + VAE + controlEncoder, so that path would enumerate the wrong
-        // tensors (skipping the control encoder entirely). The two large sub-models stream per-tensor
-        // (flat-free, #1624); the smaller control encoder is wrapped as a single trailing chunk.
-        // These are concrete virtual calls (not the IParameterizable default-interface surface the
-        // base gates off on net471), so the read side streams on every target framework.
-        foreach (var c in _baseUNet.GetParameterChunks()) yield return c;
-        foreach (var c in _vae.GetParameterChunks()) yield return c;
-        var enc = _controlEncoder.GetParameters();
-        if (enc.Length > 0) yield return new Tensor<T>(new[] { enc.Length }, enc);
-    }
-
-    /// <inheritdoc />
-    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
-    {
-        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
-        // Buffer the streamed chunks into one flat vector and delegate to this model's SetParameters,
-        // which distributes to baseUNet + VAE + controlEncoder in the matching GetParameterChunks
-        // order. The inherited LatentDiffusionModelBase override routes chunks to NoisePredictor + VAE
-        // + Conditioner instead and would mis-assign this model's control-encoder parameters.
-        // EnsureOwnWeights detaches any copy-on-write-shared tensors first so a sibling clone isn't
-        // corrupted by the in-place writes SetParameters performs.
-        EnsureOwnWeights();
-        SetParameters(DiffusionParameterChunkHelper.BufferToFlatVector(chunks));
-    }
-
-    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = new ModelMetadata<T>

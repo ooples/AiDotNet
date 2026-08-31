@@ -343,20 +343,13 @@
          #978) that stop the gradients going non-finite. All four packages stay on the published
          lockstep release.
 
-         Bumped 0.129.7 to 0.129.8: AiDotNet.Tensors#999 makes the GPU launch journal and buffer
-         residency survive a HARD crash. They were written only from ProcessExit/DomainUnload, which
-         run on an orderly shutdown and not on an access violation, stack overflow, OOM-kill or
-         FailFast; verified by forcing one, which produced a crash dump and no journal at all. They
-         are now also flushed periodically. That is the half of the crash evidence a process dump
-         cannot give cheaply, and this bump is what makes it reach the shard artifacts.
-
-         Bumped 0.129.2 to 0.129.7 so all four move together again. The natives had drifted behind
-         AiDotNet.Tensors (0.129.4) on master; 0.129.7 is published for OpenBLAS, OneDNN, CLBlast and
+         Bumped 0.129.2 to 0.129.8 so all four move together again. The natives had drifted behind
+         AiDotNet.Tensors (0.129.4) on master; 0.129.8 is published for OpenBLAS, OneDNN, CLBlast and
          Tensors alike, so the lockstep this comment describes is actually restored rather than
-         merely asserted. AiDotNet.Tensors 0.129.7 is required for the GPU launch journal and buffer
+         merely asserted. AiDotNet.Tensors 0.129.8 is required for the GPU launch journal and buffer
          residency diagnostics that #2056 collects. -->
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.129.8" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.129.8" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.129.8" />
     <PackageVersion Include="AiDotNet.Tensors" Version="0.129.8" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.129.8" />
     <!-- Microsoft / .NET -->
@@ -374,16 +367,16 @@
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0-preview.1.25120.3" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.0-preview.1.25120.3" />
-    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.11" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="10.0.9" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.22.0" />
     <!-- Entity Framework Core -->
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.2" />
     <PackageVersion Include="Npgsql" Version="10.0.1" />
     <PackageVersion Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
@@ -409,19 +402,19 @@
     <PackageVersion Include="SharpZipLib" Version="1.4.2" />
     <!-- Pin Snappier to non-vulnerable 1.3.1 (1.3.0 has GHSA-pggp-6c3x-2xmx, transitive via Parquet.Net / Pipelines.Sockets.Unofficial) -->
     <PackageVersion Include="Snappier" Version="1.3.1" />
-    <PackageVersion Include="Xunit.SkippableFact" Version="1.5.61" />
+    <PackageVersion Include="Xunit.SkippableFact" Version="1.5.85" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
     <!-- Infrastructure -->
-    <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.5.0" />
+    <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.5.1" />
     <PackageVersion Include="Neo4j.Driver" Version="5.28.4" />
     <!-- Managed FAISS wrapper (native ANN: Flat/IVF/HNSW/PQ). Consumed only by the opt-in
          AiDotNet.Storage.Faiss metapackage; ships a net6.0 lib + win-x64 native runtime. -->
     <PackageVersion Include="Pinecone.Client" Version="4.0.2" />
     <PackageVersion Include="StackExchange.Redis" Version="2.13.17" />
-    <PackageVersion Include="Stripe.net" Version="52.3.0" />
+    <PackageVersion Include="Stripe.net" Version="52.4.0" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.3" />
     <!-- Code analysis (default version; source generators may override) -->
-    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0-1.26328.17" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Common" Version="5.0.0" />
     <PackageVersion Include="Basic.Reference.Assemblies.Net100" Version="1.8.3" />

@@ -66,7 +66,9 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// These settings can be customized to make the optimizer work better for different types of problems.
     /// </para>
     /// </remarks>
-    private AdagradOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private AdagradOptimizerOptions<T, TInput, TOutput> _options => (AdagradOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// Stores the sum of squared gradients for each parameter during optimization.
@@ -116,7 +118,6 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         AdagradOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new AdagradOptimizerOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -147,7 +148,6 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     private AdagradOptimizer(AdagradOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _options = options ?? new AdagradOptimizerOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -490,36 +490,6 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         }
     }
 
-    /// <summary>
-    /// Updates the options for the Adagrad optimizer.
-    /// </summary>
-    /// <param name="options">The new options to be set.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of type AdagradOptimizerOptions.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method updates the optimizer's configuration with new options. It ensures that only
-    /// AdagradOptimizerOptions are used to configure this optimizer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like updating the instructions for your learning assistant.
-    /// 
-    /// - It checks if the new instructions are the right type for this specific assistant (Adagrad)
-    /// - If they are, it updates the assistant's settings
-    /// - If they're not, it reports an error
-    /// 
-    /// This helps prevent accidentally using the wrong type of settings, which could cause problems.
-    /// </para>
-    /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is AdagradOptimizerOptions<T, TInput, TOutput> adagradOptions)
-        {
-            _options = adagradOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected AdagradOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Retrieves the current options of the Adagrad optimizer.

@@ -633,7 +633,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// it; the increase here lands only on the small and mid-sized models, which are the fast ones.
     /// </para>
     /// </remarks>
-    protected virtual int TrainingErrorIterations => 3;
+    protected virtual int TrainingErrorIterations => 10;
 
     /// <summary>
     /// Converts a requested repetition count into a model-independent conformance workload. The

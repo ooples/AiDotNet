@@ -515,8 +515,26 @@ public class SegmentationTrainingRobustnessTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// DiffCut is TRAINING-FREE, so the invariant is that it REJECTS supervised training --
+    /// repeatedly, and without corrupting itself.
+    /// </summary>
+    /// <remarks>
+    /// This was generated from the same "MultiStepTrain_DoesNotThrow" template as its neighbours,
+    /// which asserts that three successive Train calls raise nothing. That is the wrong contract for
+    /// this model. DiffCut (Couairon et al., NeurIPS 2024) is an unsupervised zero-shot method: it
+    /// segments frozen diffusion features with a recursive normalized cut and never learns from
+    /// labeled masks, so <see cref="DiffCutSegmentation{T}.Train"/> throws NotSupportedException by
+    /// design. The template test therefore demanded behaviour the paper rules out, and it began
+    /// failing when 5ed6c772f5 restored the paper training invariants -- the model became correct and
+    /// the test kept asserting the old, wrong behaviour.
+    ///
+    /// Asserting the rejection is strictly stronger than deleting the test: a future change that
+    /// silently gave DiffCut a trainable path would now fail here, and the Predict-still-works check
+    /// catches a rejection that leaves the model in a broken state.
+    /// </remarks>
     [Fact(Timeout = 120000)]
-    public async Task DiffCutSegmentation_MultiStepTrain_DoesNotThrow()
+    public async Task DiffCutSegmentation_MultiStepTrain_RejectsSupervisedTraining()
     {
         var model = new DiffCutSegmentation<float>(Arch(), numClasses: 5);
         var input = Rand(42, 1, 3, 32, 32);
@@ -525,8 +543,12 @@ public class SegmentationTrainingRobustnessTests : IDisposable
         for (int step = 0; step < 3; step++)
         {
             var expected = Rand(step + 100, predicted.Shape.ToArray());
-            Assert.Null(Record.Exception(() => model.Train(input, expected)));
+            Assert.Throws<NotSupportedException>(() => model.Train(input, expected));
         }
+
+        // Rejecting training must not leave the model unusable: inference still works afterwards.
+        var after = model.Predict(input);
+        Assert.Equal(predicted.Shape.ToArray(), after.Shape.ToArray());
     }
 
     [Fact(Timeout = 120000)]

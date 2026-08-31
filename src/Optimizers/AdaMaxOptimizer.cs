@@ -65,7 +65,9 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
     /// and how it balances new information with what it already knows.
     /// </para>
     /// </remarks>
-    private AdaMaxOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private AdaMaxOptimizerOptions<T, TInput, TOutput> _options => (AdaMaxOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The first moment vector that tracks the exponentially weighted moving average of gradients.
@@ -155,7 +157,6 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new AdaMaxOptimizerOptions<T, TInput, TOutput>();
         InitializeAdaptiveParameters();
     }
 
@@ -185,7 +186,6 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
     private AdaMaxOptimizer(AdaMaxOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _options = options ?? new AdaMaxOptimizerOptions<T, TInput, TOutput>();
         InitializeAdaptiveParameters();
     }
 
@@ -615,37 +615,6 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
         }
     }
 
-    /// <summary>
-    /// Updates the optimizer options with new AdaMax-specific options.
-    /// </summary>
-    /// <param name="options">The new options to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of type AdaMaxOptimizerOptions.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method updates the optimizer's configuration with new options. It ensures that only valid
-    /// AdaMax-specific options are applied.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is like updating the settings on your learning assistant.
-    /// 
-    /// Imagine you have a robot helper for studying:
-    /// - You can give it new instructions on how to help you (new options)
-    /// - But you need to make sure you're giving it the right kind of instructions (AdaMax-specific)
-    /// - If you try to give it instructions for a different type of helper, it will let you know there's a mistake
-    /// 
-    /// This ensures that your optimizer always has the correct and up-to-date settings to work with.
-    /// </para>
-    /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is AdaMaxOptimizerOptions<T, TInput, TOutput> adaMaxOptions)
-        {
-            _options = adaMaxOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected AdaMaxOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current options of the AdaMax optimizer.

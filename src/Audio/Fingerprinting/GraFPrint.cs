@@ -7,6 +7,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.SelfSupervisedLearning.Losses;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Audio.Fingerprinting;
@@ -52,9 +53,12 @@ internal partial class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
     private readonly GraFPrintOptions _options;
     public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private readonly NTXentLoss<T> _contrastiveLoss;
     private MelSpectrogram<T>? _melSpectrogram;
     private bool _useNativeMode;
     private bool _disposed;
+
+    internal IReadOnlyList<ILayer<T>> NativeLayers => Layers;
 
     private int EffectiveEmbeddingDim => Architecture.OutputSize > 0
         ? Architecture.OutputSize
@@ -64,7 +68,7 @@ internal partial class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
     public override double MaxGradNormValue => _options?.MaxGradNorm ?? 0.0;
 
     /// <summary>
-    /// Return our paper-faithful AdamW + cosine-annealing optimizer instead
+    /// Return the paper-faithful Adam + cosine-annealing optimizer instead
     /// of the default Adam that the base class falls back to. Without this
     /// override the constructor-wired <see cref="_optimizer"/> sits unused —
     /// <see cref="NeuralNetworkBase{T}.TrainWithTape(Tensor{T}, Tensor{T})"/>
@@ -104,6 +108,7 @@ internal partial class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new GraFPrintOptions();
+        _contrastiveLoss = new NTXentLoss<T>(_options.Temperature, normalize: true);
         NormalizeEmbeddingDimFromArchitecture();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
@@ -122,63 +127,24 @@ internal partial class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
         : base(architecture)
     {
         _options = options ?? new GraFPrintOptions();
+        _contrastiveLoss = new NTXentLoss<T>(_options.Temperature, normalize: true);
         NormalizeEmbeddingDimFromArchitecture();
         _useNativeMode = true;
-        // Pass an explicit AdamW options bundle when the caller doesn't
-        // supply one — the package-default LR (1e-3) is known to be unstable
-        // for this architecture's small-batch BN regime; GraFPrintOptions
-        // sources the paper-faithful 1e-4 from the network's own options
-        // (Bhattacharjee 2023, §4.1).
-        // AdamW with cosine annealing LR scheduler — paper-faithful per
-        // Bhattacharjee 2023 §4.1. The scheduler is honored end-to-end:
-        // the fused training kernel evaluates the per-step LR inline (no
-        // perf penalty vs constant LR) so compile-mode users get the same
-        // schedule the paper specifies. Without the schedule, AdamW on a
-        // small-batch repeated-sample training scenario tends to overshoot
-        // after ~5-10 iters as accumulated momentum pushes weights past
-        // the local optimum; cosine decay smoothly reduces step size and
-        // prevents that oscillation.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+        // Official training uses Adam (not AdamW) and cosine annealing from
+        // 8e-5 to 7e-7 over 400 epochs.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = _options.LearningRate,
                 LearningRateScheduler = new AiDotNet.LearningRateSchedulers.CosineAnnealingLRScheduler(
                     baseLearningRate: _options.LearningRate,
                     tMax: _options.LRSchedulerTMax,
-                    etaMin: _options.LearningRate * 0.01),
+                    etaMin: _options.MinimumLearningRate),
             });
         base.SampleRate = _options.SampleRate;
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels,
             _options.FftSize, _options.HopLength);
-
-        // Targeted opt-out from the fused-Adam optimizer step ONLY.
-        //
-        // Tensors PR #352 has fixed several layers of the original #350 issue:
-        //   - Engine routing through scope/tape (BindEngineIfUnset for
-        //     BatchNorm + TensorAdd/Subtract/Multiply/ReduceSum)
-        //   - BatchNorm specialized backward (BatchNormBackwardInto)
-        //   - LazyNode auto-rematerialize through wrong engine (clear
-        //     LazySource + IsRealized at compile time)
-        //
-        // After those fixes, BatchNormGradSlotResidualTests pass 18/18 (was
-        // 3 failing). But Training_ShouldReduceLoss on the 53-layer GraFPrint
-        // BN pyramid still diverges with fused-Adam: loss explodes from
-        // ~75 to >300_000 over the test's 30 iterations. A minimal custom
-        // testconsole harness (testconsole/GraFPrintLossTrace.cs) running
-        // the SAME architecture + SAME seed + SAME data + SAME 30 iter
-        // sequence shows loss DECREASING normally — so the divergence is
-        // sensitive to something in the xunit test execution context
-        // (static state, threading, allocator pool warm-up order) that
-        // hasn't been pinned down yet.
-        //
-        // Caller-driven opt-out — default false (production path). Tests
-        // that hit the unresolved 30-iter divergence on the 53-layer GraFPrint
-        // BN pyramid can flip GraFPrintOptions.DisableFusedOptimizerStep
-        // to true. ConvBnFusion / dataflow fusion / algebraic backward /
-        // forward CSE / BLAS batch / pointwise fusion all stay engaged —
-        // only the optimizer step itself runs through eager Adam.
-        _fusedTrainingDisabled = _options.DisableFusedOptimizerStep;
 
         InitializeLayers();
     }
@@ -309,7 +275,11 @@ internal partial class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
             Layers.AddRange(LayerHelper<T>.CreateDefaultGraFPrintLayers(
                 numMels: _options.NumMels, gnnHiddenDim: _options.GnnHiddenDim,
                 numGnnLayers: _options.NumGnnLayers, numAttentionHeads: _options.NumAttentionHeads,
-                embeddingDim: _options.EmbeddingDim, dropoutRate: _options.DropoutRate));
+                embeddingDim: _options.EmbeddingDim, dropoutRate: _options.DropoutRate,
+                kNeighbors: _options.KNeighbors, peakFilters: _options.PeakFilters,
+                peakStride: _options.PeakStride, peakKernelSize: _options.PeakKernelSize,
+                encoderEmbeddingDim: _options.EncoderEmbeddingDim,
+                projectionExpansion: _options.ProjectionExpansion));
         }
 
         // Per-layer deterministic seeding when the architecture pins a seed.
@@ -406,32 +376,91 @@ internal partial class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
             ? Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]])
             : input;
 
-        // ForwardForTraining walks Layers in order without the post-chain
-        // squeeze Predict applies. The chain ends at GlobalPoolingLayer
-        // with keepDims=true → rank-4 [B, embeddingDim, 1, 1]. Reshape the
-        // expected target to match so MSE / cross-entropy see same-rank
-        // tensors. Element count is preserved.
-        Tensor<T> alignedTarget = expected;
-        if (expected.Rank == 1)
-            alignedTarget = Engine.Reshape(expected, [1, expected.Shape[0], 1, 1]);
-        else if (expected.Rank == 2)
-            alignedTarget = Engine.Reshape(expected, [expected.Shape[0], expected.Shape[1], 1, 1]);
-
-        // Note: the per-model _fusedTrainingDisabled flag is set in the
-        // constructor (see ctor for the BN-pyramid divergence rationale).
-        // That bypasses ONLY the fused-Adam optimizer-step path while
-        // leaving every other compile-mode optimization engaged
-        // (ConvBnFusion, dataflow fusion, algebraic backward, etc.).
-
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(batchedInput, alignedTarget, _optimizer);
+            TrainWithTape(batchedInput, expected, _optimizer);
         }
         finally
         {
             SetTrainingMode(false);
         }
+    }
+
+    /// <summary>
+    /// Trains GraFPrint on two augmented views using the paper's NT-Xent objective.
+    /// </summary>
+    /// <param name="firstView">First augmented spectrogram batch [B,1,H,W].</param>
+    /// <param name="secondView">Second augmented spectrogram batch [B,1,H,W].</param>
+    /// <returns>The scalar NT-Xent loss before the optimizer update.</returns>
+    public T TrainContrastive(Tensor<T> firstView, Tensor<T> secondView)
+    {
+        if (IsOnnxMode)
+            throw new NotSupportedException("Contrastive training is not supported in ONNX mode.");
+        if (firstView is null) throw new ArgumentNullException(nameof(firstView));
+        if (secondView is null) throw new ArgumentNullException(nameof(secondView));
+
+        var first = PromoteSingleSpectrogram(firstView);
+        var second = PromoteSingleSpectrogram(secondView);
+        if (!first.Shape.ToArray().SequenceEqual(second.Shape.ToArray()))
+            throw new ArgumentException(
+                "GraFPrint contrastive views must have identical [B,C,H,W] shapes.",
+                nameof(secondView));
+        if (first.Shape[0] < 2)
+            throw new ArgumentException(
+                "NT-Xent requires at least two paired samples so each anchor has negatives.",
+                nameof(firstView));
+
+        int pairBatch = first.Shape[0];
+        var combined = Engine.TensorConcatenate(new[] { first, second }, axis: 0);
+        return TrainWithCustomLoss(
+            combined,
+            embeddings =>
+            {
+                if (embeddings.Rank != 2 || embeddings.Shape[0] != pairBatch * 2)
+                    throw new InvalidOperationException(
+                        $"GraFPrint projector must emit [2B,D]; received [{string.Join(",", embeddings.Shape)}].");
+
+                int[] firstIndices = Enumerable.Range(0, pairBatch).ToArray();
+                int[] secondIndices = Enumerable.Range(pairBatch, pairBatch).ToArray();
+                var z1 = Engine.TensorGather(
+                    embeddings, new Tensor<int>(firstIndices, [pairBatch]), axis: 0);
+                var z2 = Engine.TensorGather(
+                    embeddings, new Tensor<int>(secondIndices, [pairBatch]), axis: 0);
+                return _contrastiveLoss.ComputeLoss(z1, z2);
+            },
+            _optimizer);
+    }
+
+    /// <summary>Computes the paper's NT-Xent objective without updating parameters.</summary>
+    public T ComputeContrastiveLoss(Tensor<T> firstView, Tensor<T> secondView)
+    {
+        var first = PromoteSingleSpectrogram(firstView);
+        var second = PromoteSingleSpectrogram(secondView);
+        if (!first.Shape.ToArray().SequenceEqual(second.Shape.ToArray()))
+            throw new ArgumentException(
+                "GraFPrint contrastive views must have identical [B,C,H,W] shapes.",
+                nameof(secondView));
+        if (first.Shape[0] < 2)
+            throw new ArgumentException(
+                "NT-Xent requires at least two paired samples so each anchor has negatives.",
+                nameof(firstView));
+
+        var z1 = Predict(first);
+        var z2 = Predict(second);
+        var loss = _contrastiveLoss.ComputeLoss(z1, z2);
+        return loss[0];
+    }
+
+    private Tensor<T> PromoteSingleSpectrogram(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank == 4) return input;
+        if (input.Rank == 3)
+            return Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+        throw new ArgumentException(
+            $"GraFPrint expects rank-3 [C,H,W] or rank-4 [B,C,H,W] spectrograms; received rank {input.Rank}.",
+            nameof(input));
     }
 
     /// <inheritdoc />

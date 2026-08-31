@@ -447,10 +447,10 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
         InvalidateTrainableParametersCache();
     }
 
-    /// <summary>The registered components, in registration order.</summary>
+    /// <summary>The currently present registered components, in stable manifest order.</summary>
     protected IReadOnlyList<IParameterSource<T>> ParameterComponents
     {
-        get { EnsureComponentsRegistered(); return _parameterRegistry.Components; }
+        get { EnsureComponentsRegistered(); return _parameterRegistry.CurrentComponents; }
     }
 
     private bool _componentsRegistered;

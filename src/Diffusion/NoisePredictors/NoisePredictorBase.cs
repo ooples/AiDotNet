@@ -255,14 +255,10 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
                     }
                     else if (value is System.Collections.IEnumerable enumerable && value is not string)
                     {
-                        // We MUST enumerate the whole sequence: enumerating a streaming-placeholder
-                        // weight tensor (Tensor<T> as IEnumerable<float>) rehydrates it, and the
-                        // forward relies on that side effect (NoisePredictorWeightStreamingTests).
-                        // But value-type elements — the millions of boxed floats in a Tensor<T> /
-                        // float[] / double[] buffer — can never be, or own, a layer, so skip the
-                        // `visited` bookkeeping for them: hashing every boxed element
-                        // (RuntimeHelpers.GetHashCode) was the dominant walk cost (#1646). `continue`
-                        // still advances the enumerator, so rehydration is preserved.
+                        if (IsScalarStorageEnumerable(value.GetType()))
+                            continue;
+
+                        // Collections of layer or wrapper references must be walked completely.
                         foreach (var item in enumerable)
                         {
                             if (item is null || item is ValueType) continue;
@@ -290,6 +286,24 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
             }
         }
     }
+
+    private static bool IsScalarStorageEnumerable(Type type)
+    {
+        if (type.IsArray)
+            return IsScalarValueType(type.GetElementType());
+
+        if (type.Name is "Vector`1" or "Matrix`1" or "Tensor`1")
+            return true;
+
+        return type.IsGenericType
+            && type.GetGenericArguments().Length == 1
+            && IsScalarValueType(type.GetGenericArguments()[0])
+            && typeof(System.Collections.IEnumerable).IsAssignableFrom(type);
+    }
+
+    private static bool IsScalarValueType(Type? type)
+        => type is not null
+            && (type == typeof(T) || type.IsPrimitive || type.IsEnum || type == typeof(decimal));
 
     /// <summary>
     /// Returns true for reference types that look like AiDotNet-internal wrapper objects

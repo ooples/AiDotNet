@@ -1,4 +1,4 @@
-namespace AiDotNet.Initialization;
+﻿namespace AiDotNet.Initialization;
 
 /// <summary>
 /// Base class for initialization strategies providing common functionality.
@@ -28,7 +28,11 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
     /// process instances) — pass a seeded <see cref="Random"/> to the
     /// constructor when reproducible initialization is required.
     /// </summary>
-    protected readonly Random Random;
+    /// <remarks>
+    /// Not <c>readonly</c> so <see cref="WithSeededRandom"/> can swap it on a CLONE. It is never
+    /// reassigned on a live instance.
+    /// </remarks>
+    protected Random Random;
 
     /// <summary>Fixed work size used by deterministic parallel initialization.</summary>
     internal const int ParallelInitializationThreshold = 1 << 18;
@@ -72,7 +76,40 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
     /// strategies whose constructor accepts a <see cref="Random"/> override this
     /// to return a fresh seeded copy.
     /// </summary>
-    public virtual IInitializationStrategy<T> WithSeededRandom(Random rng) => this;
+    public virtual IInitializationStrategy<T> WithSeededRandom(Random rng)
+    {
+        if (rng is null) throw new ArgumentNullException(nameof(rng));
+
+        // THE DEFAULT USED TO BE `=> this`, WHICH SILENTLY THREW THE SEED AWAY.
+        //
+        // Callers ask for this when they need reproducible initialization -- LayerBase's
+        // InitializeLayerWeights does exactly that whenever a layer carries a RandomSeed:
+        //
+        //     seeded = sb.WithSeededRandom(rng)
+        //
+        // and then initializes from the result. Returning `this` unchanged meant the strategy kept
+        // drawing from RandomHelper.ThreadSafeRandom, a per-thread generator whose position depends
+        // on every draw made before it. Weight init therefore depended on how much unrelated work
+        // ran first on the same thread, so the SAME architecture at the SAME seed produced
+        // DIFFERENT weights -- the reproducibility the seed was requested for, silently absent.
+        //
+        // Only 3 of the 13 strategies overrode it (Eager, He, Normal), so the other ten inherited
+        // the no-op. Measured on Dessurt: initial parameter sums of 3.27575872 running alone versus
+        // 0.739498765 with a single sibling fixture ahead of it, which moved its training loss from
+        // 4.80392122 to 0.0138604036 and flipped a passing invariant to failing purely on ordering.
+        // That is the same signature recorded across the codebase for GLaMM, TemplateNER, WavLMSER,
+        // SeACo, SAM2 and TOTEM, each of which was worked around individually by pinning an init
+        // seed in the test scaffold. They share this one cause.
+        //
+        // Cloning rather than mutating: a strategy instance can be shared by several layers, and
+        // reseeding in place would change initialization for whichever layers happen to run later.
+        // MemberwiseClone carries each strategy's own configuration (fan-in mode, gain, bounds)
+        // across without this base needing to know what any of them are, so a derived strategy that
+        // adds state keeps working and cannot silently lose the seed by forgetting to override.
+        var seeded = (InitializationStrategyBase<T>)MemberwiseClone();
+        seeded.Random = rng;
+        return seeded;
+    }
 
     /// <inheritdoc />
     public abstract bool IsLazy { get; }

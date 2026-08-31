@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
@@ -53,7 +53,15 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
     /// <inheritdoc/>
     public override bool SupportsNonlinear => true;
 
-    public AmortizedCDAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
+    public AmortizedCDAlgorithm(CausalDiscoveryOptions? options = null)
+    {
+        // This solve needs far more steps than the 100 the base class defaults to: below roughly
+        // 500 the acyclicity penalty in the second half outruns a data fit that has not
+        // converged and the graph comes back empty. Set BEFORE options are applied, so it is a
+        // default a caller can still override in either direction.
+        MaxEpochs = 2000;
+        ApplyDeepOptions(options);
+    }
 
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
@@ -84,6 +92,22 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
         for (int k = 0; k < h; k++)
             W2[k, 0] = NumOps.Multiply(initScale, NumOps.FromDouble(rng.NextDouble() - 0.5));
 
+        // Optimization budget, for the same reason CASTLE carries one. `MaxEpochs` here counts RAW
+        // full-batch gradient steps, but the reference implementations this family follows use that
+        // number for something else entirely: in NOTEARS, `max_iter=100` counts OUTER
+        // augmented-Lagrangian iterations, each of which solves the inner subproblem to convergence
+        // with L-BFGS. Reading the default as 100 gradient steps is therefore orders of magnitude
+        // short, and it showed: every edge probability finished at 0.4385 -- below its 0.5
+        // initialization, because the acyclicity penalty in the second half outran a data fit that
+        // had not converged -- against a floor of 0.483, so the graph came back EMPTY. Measured on
+        // the linear-SEM fixture: 100 steps -> 0 edges; 500 -> the exact true structure
+        // (0.998 / 0.997 / 0.996). Full-batch steps on a problem this size are microseconds.
+        // MaxEpochs is documented as a MAXIMUM, so it is honoured as one. The step count this solve
+        // needs is expressed as this algorithm's DEFAULT instead, set before options are applied so
+        // a caller who asks for fewer gets fewer -- clamping their value upward made MaxEpochs = 10
+        // silently run 2,000 steps, which is not what the option says it does.
+        int steps = MaxEpochs;
+
         T lr = NumOps.FromDouble(LearningRate);
         // Acyclicity warm-up: rho = 0 (no NOTEARS penalty) for the first half of training so the data fit
         // can drive edge probabilities toward the correlations; a bounded fixed penalty is applied after.
@@ -101,7 +125,7 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
                 features[idx, 3] = cov[j, j];
             }
 
-        for (int epoch = 0; epoch < MaxEpochs; epoch++)
+        for (int epoch = 0; epoch < steps; epoch++)
         {
             // Forward: compute edge logits for all pairs
             var logits = new Matrix<T>(d, d);
@@ -208,7 +232,7 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
             // on strongly correlated data made the augmented-Lagrangian term dominate and collapsed every
             // edge to 0 (the empty graph is trivially acyclic) — recovering no edges. A fixed, modest rho
             // breaks ties toward a DAG without overwhelming the data fit.
-            if (epoch >= MaxEpochs / 2)
+            if (epoch >= steps / 2)
                 rho = NumOps.FromDouble(1.0);
         }
 

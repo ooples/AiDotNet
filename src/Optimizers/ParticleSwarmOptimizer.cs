@@ -36,15 +36,13 @@ namespace AiDotNet.Optimizers;
 [PipelineStage(PipelineStage.Training)]
 public partial class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutput>, IDerivativeFreeFunctionOptimizer<T>
 {
-    /// <summary>
-    /// Random number generator for stochastic components of the algorithm.
-    /// </summary>
-    private readonly Random _random;
 
     /// <summary>
     /// Configuration options specific to Particle Swarm Optimization.
     /// </summary>
-    private ParticleSwarmOptimizationOptions<T, TInput, TOutput> _psoOptions;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private ParticleSwarmOptimizationOptions<T, TInput, TOutput> _psoOptions => (ParticleSwarmOptimizationOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The current inertia weight that controls a particle's tendency to continue its current trajectory.
@@ -71,8 +69,6 @@ public partial class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<
         ParticleSwarmOptimizationOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
-        _random = RandomHelper.CreateSecureRandom();
-        _psoOptions = options ?? new ParticleSwarmOptimizationOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }
@@ -111,7 +107,7 @@ public partial class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<
             var velocity = new Vector<T>(dimensions);
             for (int j = 0; j < dimensions; j++)
             {
-                velocity[j] = NumOps.FromDouble(_random.NextDouble() * 0.1 - 0.05);
+                velocity[j] = NumOps.FromDouble(Random.NextDouble() * 0.1 - 0.05);
             }
             velocities.Add(velocity);
         }
@@ -228,8 +224,8 @@ public partial class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<
         var socialRandom = new Vector<T>(velocity.Length);
         for (int i = 0; i < velocity.Length; i++)
         {
-            cognitiveRandom[i] = NumOps.Multiply(cognitiveWeight, NumOps.FromDouble(_random.NextDouble()));
-            socialRandom[i] = NumOps.Multiply(socialWeight, NumOps.FromDouble(_random.NextDouble()));
+            cognitiveRandom[i] = NumOps.Multiply(cognitiveWeight, NumOps.FromDouble(Random.NextDouble()));
+            socialRandom[i] = NumOps.Multiply(socialWeight, NumOps.FromDouble(Random.NextDouble()));
         }
 
         // Vectorized computation: velocity = inertia*velocity + cognitive*personalDiff + social*globalDiff
@@ -260,22 +256,6 @@ public partial class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<
             Math.Min(_psoOptions.MaxSocialWeight, _currentSocialWeight * _psoOptions.SocialWeightAdaptationRate));
     }
 
-    /// <summary>
-    /// Updates the optimizer's options with the provided options.
-    /// </summary>
-    /// <param name="options">The options to apply to this optimizer.</param>
-    /// <exception cref="ArgumentException">Thrown when the options are not of the expected type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is ParticleSwarmOptimizationOptions<T, TInput, TOutput> psoOptions)
-        {
-            _psoOptions = psoOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected ParticleSwarmOptimizationOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current options for this optimizer.
@@ -298,8 +278,6 @@ public partial class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<
     private ParticleSwarmOptimizer(ParticleSwarmOptimizationOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _random = RandomHelper.CreateSecureRandom();
-        _psoOptions = options ?? new ParticleSwarmOptimizationOptions<T, TInput, TOutput>();
 
         InitializeAdaptiveParameters();
     }

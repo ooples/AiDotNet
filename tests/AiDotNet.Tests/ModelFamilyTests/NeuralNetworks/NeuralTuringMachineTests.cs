@@ -1,6 +1,10 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Optimizers;
 using AiDotNet.Tests.ModelFamilyTests.Base;
+using AiDotNet.Tensors.LinearAlgebra;
+using Xunit;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
@@ -12,19 +16,33 @@ public class NeuralTuringMachineTests : NeuralNetworkModelTestBase<float>
     protected override INeuralNetworkModel<float> CreateNetwork()
         => new NeuralTuringMachine<float>();
 
-    // NTM training is deterministic per-platform (the lazy-Dense resize re-randomization bug is fixed
-    // in DenseLayer.EnsureWeightShapeForInput). On this single-sample memorization task NTM converges
-    // to a shallow ~1e-4 floor by 50 iterations, then Adam takes a few more bounded steps by 200. The
-    // magnitude of that post-convergence Adam drift is platform-dependent: on Windows it's ~1.8e-4
-    // (well under the previous 1e-3), but on Linux CI the Adam floor is higher — measured
-    // lossLong=0.002073 vs lossShort=0.000133, a ~1.9e-3 drift that exceeds 1e-3 and reddened the
-    // NeuralNetworks M-N shard (#1753). Both losses are at the convergence noise floor (1e-4..1e-3),
-    // so this is Adam-past-convergence jitter, not divergence. The previous 1e-3 was a Windows-only
-    // "50x tighter than the noise floor because it's reproducible" calibration; that assumption breaks
-    // across platforms, so fall back to the ~0.05 noise-floor calibration (the SNN/NTM precedent from
-    // #1643) — it absorbs the Linux floor with run-to-run margin while still catching genuine
-    // divergence (orders of magnitude larger) and NaN (asserted separately above). The strict
-    // Training_ShouldReduceLoss / LossStrictlyDecreasesOnMemorizationTask / TrainingError invariants
-    // still pass at default strictness — only this floor-noise bound is relaxed.
-    protected override double MoreDataTolerance => 0.05;
+    [Fact]
+    public async Task DefaultTrainingRecipe_MatchesOriginalNtmPapers()
+    {
+        await Task.Yield();
+
+        var network = new InspectableNeuralTuringMachine();
+        var optimizer = Assert.IsType<RootMeanSquarePropagationOptimizer<float, Tensor<float>, Tensor<float>>>(
+            network.TrainingOptimizer);
+        var options = Assert.IsType<RootMeanSquarePropagationOptimizerOptions<float, Tensor<float>, Tensor<float>>>(
+            optimizer.GetOptions());
+
+        Assert.True(options.Centered);
+        Assert.Equal(0.95, options.Decay, 12);
+        Assert.Equal(0.9, options.InitialMomentum, 12);
+        Assert.Equal(1e-4, options.InitialLearningRate, 12);
+        Assert.Equal(1e-4, options.Epsilon, 12);
+        Assert.False(options.UseAdaptiveLearningRate);
+        Assert.False(options.UseAdaptiveMomentum);
+        Assert.True(network.ClipsGradientsElementWise);
+        Assert.Equal(10.0, network.MaxGradNormValue, 12);
+    }
+
+    private sealed class InspectableNeuralTuringMachine : NeuralTuringMachine<float>
+    {
+        public IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>> TrainingOptimizer
+            => GetOrCreateBaseOptimizer();
+
+        public bool ClipsGradientsElementWise => UsesElementWiseGradientClipping;
+    }
 }

@@ -56,7 +56,9 @@ public partial class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// The options specific to the BFGS optimization algorithm.
     /// </summary>
-    private BFGSOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private BFGSOptimizerOptions<T, TInput, TOutput> _options => (BFGSOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The approximation of the inverse Hessian matrix.
@@ -95,7 +97,6 @@ public partial class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new BFGSOptimizerOptions<T, TInput, TOutput>();
         InitializeAdaptiveParameters();
     }
 
@@ -125,7 +126,6 @@ public partial class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     private BFGSOptimizer(BFGSOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _options = options ?? new BFGSOptimizerOptions<T, TInput, TOutput>();
         InitializeAdaptiveParameters();
     }
 
@@ -330,27 +330,6 @@ public partial class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         }
     }
 
-    /// <summary>
-    /// Updates the options for the BFGS optimizer.
-    /// </summary>
-    /// <param name="options">The new options to be set.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method allows you to change the settings of the BFGS optimizer during runtime.
-    /// It checks to make sure you're providing the right kind of options specific to the BFGS algorithm.
-    /// </para>
-    /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is BFGSOptimizerOptions<T, TInput, TOutput> bfgsOptions)
-        {
-            _options = bfgsOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected BFGSOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Updates parameters using the BFGS algorithm with inverse Hessian approximation.

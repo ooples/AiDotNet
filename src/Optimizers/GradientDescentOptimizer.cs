@@ -65,7 +65,9 @@ public partial class GradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// <summary>
     /// Options specific to the Gradient Descent optimizer.
     /// </summary>
-    private GradientDescentOptimizerOptions<T, TInput, TOutput> _gdOptions;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private GradientDescentOptimizerOptions<T, TInput, TOutput> _gdOptions => (GradientDescentOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The regularization technique used to prevent overfitting.
@@ -89,7 +91,6 @@ public partial class GradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         IEngine? engine = null)
         : base(model, options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>())
     {
-        _gdOptions = options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>();
         _regularization = _gdOptions.Regularization ?? CreateRegularization(_gdOptions);
     }
 
@@ -119,7 +120,6 @@ public partial class GradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     private GradientDescentOptimizer(GradientDescentOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _gdOptions = options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>();
         _regularization = _gdOptions.Regularization ?? CreateRegularization(_gdOptions);
     }
 
@@ -325,27 +325,6 @@ public partial class GradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         return NumOps.Add(loss, regularizationTerm);
     }
 
-    /// <summary>
-    /// Updates the options for the Gradient Descent optimizer.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method allows you to change the settings of the optimizer
-    /// while it's running. It's like adjusting your hiking strategy mid-journey based on the terrain you encounter.
-    /// </para>
-    /// </remarks>
-    /// <param name="options">The new options to apply to the optimizer.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of the correct type.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is GradientDescentOptimizerOptions<T, TInput, TOutput> gdOptions)
-        {
-            _gdOptions = gdOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected GradientDescentOptions.");
-        }
-    }
 
     /// <summary>
     /// Retrieves the current options for the Gradient Descent optimizer.

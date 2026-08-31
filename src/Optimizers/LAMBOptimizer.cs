@@ -85,7 +85,9 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// The options specific to the LAMB optimizer.
     /// </summary>
-    private LAMBOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private LAMBOptimizerOptions<T, TInput, TOutput> _options => (LAMBOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The first moment vector (moving average of gradients).
@@ -145,7 +147,6 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         _v = Vector<T>.Empty();
         _t = 0;
         _warmupSteps = 0;
-        _options = options ?? new();
 
         InitializeAdaptiveParameters();
     }
@@ -828,20 +829,6 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         _t = 0;
     }
 
-    /// <summary>
-    /// Updates the optimizer's options.
-    /// </summary>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is LAMBOptimizerOptions<T, TInput, TOutput> lambOptions)
-        {
-            _options = lambOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected LAMBOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current optimizer options.

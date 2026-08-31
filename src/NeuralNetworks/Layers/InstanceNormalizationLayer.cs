@@ -105,6 +105,14 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
+    /// <inheritdoc />
+    /// <remarks>
+    /// InstanceNorm centers each sample and channel independently, so a preceding per-channel
+    /// constant bias is subtracted with that channel's mean whether or not affine gamma/beta is
+    /// enabled.
+    /// </remarks>
+    public override bool MakesUpstreamBiasRedundant => true;
+
     public override bool SupportsTraining => true;
 
     /// <summary>

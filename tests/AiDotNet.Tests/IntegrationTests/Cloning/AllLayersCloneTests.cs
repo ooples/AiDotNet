@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -31,7 +32,13 @@ namespace AiDotNet.Tests.IntegrationTests.Cloning;
 /// </remarks>
 public class AllLayersCloneTests
 {
+    private const int ShardCount = 128;
+    private const int MaxSynthesizedIntegralDefault = 16;
+    private static readonly ConcurrentDictionary<int, ShardCoverage> CoverageByShard = new();
     private readonly ITestOutputHelper _output;
+
+    public static IEnumerable<object[]> Shards =>
+        Enumerable.Range(0, ShardCount).Select(shard => new object[] { shard });
 
     /// <summary>Initializes a new instance of the <see cref="AllLayersCloneTests"/> class.</summary>
     /// <param name="output">Sink for the coverage summary.</param>
@@ -41,18 +48,23 @@ public class AllLayersCloneTests
     /// Reports how many layer types can be rebuilt by the clone adapter.
     /// </summary>
     /// <returns>A task representing the test.</returns>
-    [Fact(Timeout = 600000)]
-    public async Task EveryLayer_ReportsWhetherItCanBeCloned()
+    // Keeping every layer in one Fact exceeded CI's five-minute inactivity guard even after
+    // per-layer disposal fixed the memory growth. Striding at most three types into each row
+    // preserves the exact candidate union while giving the guard a completion event between rows.
+    [Theory(Timeout = 600000)]
+    [MemberData(nameof(Shards))]
+    public async Task EveryLayer_ReportsWhetherItCanBeCloned(int shard)
     {
         await Task.Yield();
 
         var layerBase = typeof(LayerBase<>);
-        var candidates = layerBase.Assembly.GetTypes()
+        var allCandidates = layerBase.Assembly.GetTypes()
             .Where(t => t.IsClass && !t.IsAbstract && !t.IsNested)
             .Where(t => t.IsGenericTypeDefinition && t.GetGenericArguments().Length == 1)
             .Where(t => DerivesFromLayerBase(t))
             .OrderBy(t => t.Name, StringComparer.Ordinal)
             .ToList();
+        var candidates = allCandidates.Where((_, index) => index % ShardCount == shard).ToList();
 
         var cloned = new List<string>();
         var failed = new List<string>();
@@ -71,6 +83,7 @@ public class AllLayersCloneTests
         {
             layerClock.Restart();
             Type closed;
+            LayerBase<double>? clone = null;
             try
             {
                 closed = open.MakeGenericType(typeof(double));
@@ -112,7 +125,7 @@ public class AllLayersCloneTests
                 // and in training mode every layer retains its activations for a backward that
                 // never comes: measured on one VAE decoder, 524.4MB retained versus 257.8MB in
                 // eval, and 49GB before OutOfMemoryException at the paper-default 512x512 size.
-                // Nothing about the coverage changes -- every layer is still built at full size,
+                // Nothing about the coverage changes -- every constructed fixture is still
                 // forwarded, cloned and compared.
                 typed.SetTrainingMode(false);
 
@@ -126,17 +139,12 @@ public class AllLayersCloneTests
                     // Holding 339 layers' worth of them made whichever of VAEDecoder/VAEEncoder ran
                     // first throw OutOfMemoryException, nondeterministically swapping between runs.
                     //
-                    // THIS REDUCES THE FAILURE, IT DOES NOT REMOVE IT. Measured over repeated runs:
-                    // without the reset the sweep failed every time; with it roughly two runs in
-                    // three pass. Forcing GC.Collect() between layers did not help, and neither did
-                    // LargeObjectHeapCompactionMode.CompactOnce (2 of 3), so the residue is not
-                    // simply uncollected garbage. The open item is VAEDecoder's own clone, which
-                    // still costs ~210-270s and has not been profiled yet.
-                    //
-                    // This does NOT shrink the workload: every layer is still constructed at its
-                    // full default size, forwarded, cloned and compared. What it gives up is cloning
-                    // a layer while its activations are still resident, and that case is covered
-                    // explicitly by CloneFidelityTests.CloneWithLiveActivations_* instead.
+                    // Reset remains necessary with bounded fixtures: sharding changes the lifetime
+                    // between test rows, not between layers in one row, and scratch state is not
+                    // part of the clone contract being verified here.
+                    // This does not skip any candidate or clone assertion. What it gives up is
+                    // cloning a layer while its activations are still resident, and that case is
+                    // covered explicitly by CloneFidelityTests.CloneWithLiveActivations_* instead.
                     typed.ResetState();
                 }
 
@@ -144,7 +152,7 @@ public class AllLayersCloneTests
                 // surviving mechanism after #1789 replaced this branch's LayerCloning extension with
                 // LayerStateGenerator's generated factory. The sweep itself is unchanged: construct
                 // every layer, forward it, clone it, and require the clone to be the same type.
-                var clone = typed.Clone();
+                clone = typed.Clone();
                 if (clone is null)
                 {
                     failed.Add($"{open.Name}: clone returned null");
@@ -189,6 +197,18 @@ public class AllLayersCloneTests
                 failed.Add($"{open.Name}: {(ex.InnerException ?? ex).GetType().Name}: "
                     + message.Substring(0, Math.Min(90, message.Length)));
             }
+            finally
+            {
+                try
+                {
+                    if (clone is not null && !ReferenceEquals(clone, instance))
+                        clone.Dispose();
+                }
+                finally
+                {
+                    (instance as IDisposable)?.Dispose();
+                }
+            }
         }
 
         _output.WriteLine($"layer types        : {candidates.Count}");
@@ -208,6 +228,7 @@ public class AllLayersCloneTests
         // AIDOTNET_SWEEP_DIR redirects it off the system drive when that drive is short.
         var dir = Environment.GetEnvironmentVariable("AIDOTNET_SWEEP_DIR");
         if (string.IsNullOrEmpty(dir)) dir = System.IO.Path.GetTempPath();
+        System.IO.Directory.CreateDirectory(dir);
 
         var report = new List<string>
         {
@@ -225,12 +246,11 @@ public class AllLayersCloneTests
         report.AddRange(failed.Select(f => $"FAIL  {f}"));
         report.AddRange(notConstructed.Select(n => $"skip  {n}"));
         System.IO.File.WriteAllLines(
-            System.IO.Path.Combine(dir, "aidotnet-layer-clone-sweep.txt"), report);
+            System.IO.Path.Combine(dir, $"aidotnet-layer-clone-sweep-{shard}.txt"), report);
 
         // Coverage can grow without pinning a brittle count, but every layer the harness actually
         // reaches must clone. The previous measurement-only assertion let a non-zero failure list
         // produce a green test, which made the sweep documentation rather than regression proof.
-        Assert.NotEmpty(cloned);
         Assert.True(
             failed.Count == 0,
             $"{failed.Count} constructed layer(s) failed cloning:{Environment.NewLine}"
@@ -243,12 +263,24 @@ public class AllLayersCloneTests
         // fails here instead of surfacing as a clone bug three PRs later.
         const int UnverifiedLayerBudget = 128;
         Assert.True(
-            notConstructed.Count <= UnverifiedLayerBudget,
-            $"{notConstructed.Count} layers could not be constructed, budget is "
-                + $"{UnverifiedLayerBudget}. Their clone behaviour is unknown, so this sweep cannot "
-                + $"vouch for them:{Environment.NewLine}"
-                + string.Join(Environment.NewLine, notConstructed.Take(20)));
+            CoverageByShard.TryAdd(shard, new ShardCoverage(cloned.Count, notConstructed.ToArray())),
+            $"Layer clone sweep shard {shard} ran more than once in the same process.");
+
+        if (CoverageByShard.Count == ShardCount)
+        {
+            var allCoverage = CoverageByShard.Values.ToArray();
+            var allNotConstructed = allCoverage.SelectMany(result => result.NotConstructed).ToArray();
+            Assert.True(allCoverage.Sum(result => result.ClonedCount) > 0, "No layer was cloned.");
+            Assert.True(
+                allNotConstructed.Length <= UnverifiedLayerBudget,
+                $"{allNotConstructed.Length} layers could not be constructed, budget is "
+                    + $"{UnverifiedLayerBudget}. Their clone behaviour is unknown, so this sweep cannot "
+                    + $"vouch for them:{Environment.NewLine}"
+                    + string.Join(Environment.NewLine, allNotConstructed.Take(20)));
+        }
     }
+
+    private sealed record ShardCoverage(int ClonedCount, string[] NotConstructed);
 
     private static bool DerivesFromLayerBase(Type type)
     {
@@ -342,10 +374,13 @@ public class AllLayersCloneTests
             return TryConstructSynthesized(closed, out constructionError);
         }
 
+        // TestConstructorArgs is C# source for the compile-time scaffold generator. This runtime
+        // sweep can interpret its integer-only subset; for richer expressions, use the same
+        // constructor-signature synthesis as an undeclared layer instead of treating it as absent.
         var literals = raw!.Split(',').Select(s => s.Trim()).ToArray();
         if (literals.Any(l => !int.TryParse(l, NumberStyles.Integer, CultureInfo.InvariantCulture, out _)))
         {
-            return null;
+            return TryConstructSynthesized(closed, out constructionError);
         }
 
         var values = literals
@@ -375,7 +410,7 @@ public class AllLayersCloneTests
             }
         }
 
-        return null;
+        return TryConstructSynthesized(closed, out constructionError);
     }
 
     /// <summary>
@@ -392,11 +427,17 @@ public class AllLayersCloneTests
             var parameters = ctor.GetParameters();
             var args = new object?[parameters.Length];
             bool usable = true;
+            bool boundedOptionalDefault = false;
 
             for (int i = 0; i < parameters.Length; i++)
             {
                 var p = parameters[i];
-                if (p.IsOptional) { args[i] = Type.Missing; continue; }
+                if (p.IsOptional)
+                {
+                    args[i] = BoundedOptionalDefault(p, out bool wasBounded);
+                    boundedOptionalDefault |= wasBounded;
+                    continue;
+                }
 
                 var value = SynthesizeArgument(p.ParameterType);
                 if (value is null && p.ParameterType.IsValueType) { usable = false; break; }
@@ -414,10 +455,56 @@ public class AllLayersCloneTests
                 // Remembered so the skip reason can say WHY -- an OutOfMemoryException is a
                 // resource failure, not a layer that cannot be described.
                 constructionError = ex;
+
+                // Relational constructor constraints can make an otherwise sensible bound invalid
+                // (for example, a width that must be divisible by a separately configured factor).
+                // Retry the public defaults before declaring the layer unreachable, so bounding can
+                // reduce fixture cost but can never reduce construction coverage.
+                if (!boundedOptionalDefault) continue;
+
+                var defaultArgs = (object?[])args.Clone();
+                for (int i = 0; i < parameters.Length; i++)
+                {
+                    if (parameters[i].IsOptional) defaultArgs[i] = Type.Missing;
+                }
+
+                try
+                {
+                    return ctor.Invoke(
+                        BindingFlags.OptionalParamBinding, binder: null, defaultArgs, culture: null);
+                }
+                catch (Exception defaultException)
+                {
+                    constructionError = defaultException;
+                }
             }
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Caps oversized integral defaults in reflection-created smoke fixtures without changing the
+    /// layer's public defaults. Small defaults and non-integral semantics retain their declared value.
+    /// </summary>
+    private static object BoundedOptionalDefault(ParameterInfo parameter, out bool wasBounded)
+    {
+        wasBounded = false;
+        if (!parameter.HasDefaultValue) return Type.Missing;
+
+        if (parameter.DefaultValue is int intValue && intValue > MaxSynthesizedIntegralDefault)
+        {
+            wasBounded = true;
+            return MaxSynthesizedIntegralDefault;
+        }
+
+        if (parameter.DefaultValue is long longValue && longValue > MaxSynthesizedIntegralDefault)
+        {
+            wasBounded = true;
+            return (long)MaxSynthesizedIntegralDefault;
+        }
+
+        return Type.Missing;
     }
 
     /// <summary>Small, shape-compatible defaults for the parameter kinds layer constructors use.</summary>

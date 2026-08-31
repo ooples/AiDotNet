@@ -68,6 +68,19 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
                      "share a seed. Use RandomHelper.CreateSeededRandom(seed) when reproducibility is required, " +
                      "RandomHelper.CreateSecureRandom() otherwise.");
 
+    internal static readonly DiagnosticDescriptor OptimizerOwnsRandomGenerator = new(
+        id: "AIDN077",
+        title: "Optimizer builds its own random generator",
+        messageFormat: "'{0}' creates a generator of its own; draw from the inherited OptimizerBase.Random, which is built from Options.Seed",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "OptimizerBase derives its Random from Options.Seed and re-derives it when options are " +
+                     "restored, so an optimizer that owns a private generator silently ignores the seed the " +
+                     "caller configured - every run unrepeatable, on the path a model actually uses. " +
+                     "ParticleSwarmOptimizer and SimulatedAnnealingOptimizer both did exactly that. Draw from " +
+                     "the inherited Random instead; there is then nothing left to forget to seed.");
+
     internal static readonly DiagnosticDescriptor RegexWithoutTimeout = new(
         id: "AIDN073",
         title: "Regex without a timeout (ReDoS)",
@@ -257,6 +270,43 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
         return null;
     }
 
+
+    /// <summary>
+    /// Whether this node sits inside a type that inherits <c>AiDotNet.Optimizers.OptimizerBase</c>'s
+    /// seeded generator.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>OptimizerBase</c> itself is excluded: it is the one type that must build the generator,
+    /// and it is where <c>Options.Seed</c> is honoured on behalf of everything below it.
+    /// </para>
+    /// <para>
+    /// Resolved as a SYMBOL rather than by simple name. Matching <c>current.Name == "OptimizerBase"</c>
+    /// would fire on any unrelated hierarchy that happens to use the name - a consumer's own
+    /// OptimizerBase, or a test double - and report AIDN077 against code that inherits no seeded
+    /// generator and has nothing to draw from instead.
+    /// </para>
+    /// </remarks>
+    private static bool IsInsideOptimizer(GeneratorSyntaxContext ctx, SyntaxNode node)
+    {
+        var declaration = node.FirstAncestorOrSelf<TypeDeclarationSyntax>();
+        if (declaration is null) return false;
+        if (ctx.SemanticModel.GetDeclaredSymbol(declaration) is not INamedTypeSymbol type) return false;
+
+        // Arity is part of the metadata name: OptimizerBase<T, TInput, TOutput>.
+        var optimizerBase = ctx.SemanticModel.Compilation
+            .GetTypeByMetadataName("AiDotNet.Optimizers.OptimizerBase`3");
+        if (optimizerBase is null) return false;
+
+        for (var current = type.BaseType; current is not null; current = current.BaseType)
+        {
+            if (SymbolEqualityComparer.Default.Equals(current.OriginalDefinition, optimizerBase))
+                return true;
+        }
+
+        return false;
+    }
+
     private static Finding? AnalyzeObjectCreation(GeneratorSyntaxContext ctx, BaseObjectCreationExpressionSyntax creation)
     {
         var type = ctx.SemanticModel.GetSymbolInfo(creation).Symbol?.ContainingType
@@ -266,7 +316,9 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
         switch (name)
         {
             case "System.Random":
-                return new Finding(RawRandomConstruction, creation.GetLocation());
+                return IsInsideOptimizer(ctx, creation)
+                    ? new Finding(OptimizerOwnsRandomGenerator, creation.GetLocation(), "new Random(...)")
+                    : new Finding(RawRandomConstruction, creation.GetLocation());
 
             case "System.NotImplementedException":
                 // A virtual member whose whole body is this throw is abstract-by-convention: it
@@ -291,6 +343,16 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
             return null;
 
         var owner = method.ContainingType?.ToDisplayString();
+
+        // RandomHelper is the right answer everywhere EXCEPT inside an optimizer, which already
+        // inherits a generator built from Options.Seed. Calling it there is how the seed gets lost.
+        if (owner == "AiDotNet.Tensors.Helpers.RandomHelper"
+            && (method.Name == "CreateSecureRandom" || method.Name == "CreateSeededRandom")
+            && IsInsideOptimizer(ctx, invocation))
+        {
+            return new Finding(
+                OptimizerOwnsRandomGenerator, invocation.GetLocation(), $"RandomHelper.{method.Name}()");
+        }
 
         if (owner == "System.Console" && (method.Name == "WriteLine" || method.Name == "Write"))
         {

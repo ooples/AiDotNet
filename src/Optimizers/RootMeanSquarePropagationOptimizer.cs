@@ -41,22 +41,17 @@ namespace AiDotNet.Optimizers;
 public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
-    /// Describes this RMSprop instance for the fused kernel (Tensors
-    /// <c>OptimizerType.RMSprop</c> = <c>RMSpropUpdateSimd(lr, decay, eps)</c>):
-    /// Decay → Beta2 slot, Epsilon → eps. No momentum/weight-decay term. Declines
-    /// (eager) on adaptive LR or an unmappable scheduler. Parity-gated.
+    /// Describes the momentum-free, uncentered RMSProp update supported by the
+    /// fused kernel. The opt-in centered Graves variant remains on the eager
+    /// path because the fused kernel cannot represent its mean-gradient or velocity state.
     /// </summary>
     bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
     {
         config = default;
-        if (_options.UseAdaptiveLearningRate) return false;
-
-        // Note for anyone auditing this against Optimize(): that loop calls ApplyMomentum and
-        // InitialMomentum defaults to 0.9, which looks like a mismatch with the momentum-free RMSprop
-        // kernel. It is not. Optimize()'s flat-vector loop drives non-neural models and never reaches the
-        // compiled plan; Step() — the tape path this kernel actually replaces — applies no momentum, so
-        // fused and eager agree. Declining here on non-zero InitialMomentum would needlessly drop every
-        // default-configured RMSprop off the fused path.
+        if (_options.UseAdaptiveLearningRate || _options.Centered)
+        {
+            return false;
+        }
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.RMSprop,
@@ -86,6 +81,13 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
     /// </para>
     /// </remarks>
     private Vector<T> _squaredGradient;
+
+    /// <summary>Moving average of gradients used by centered RMSProp.</summary>
+    private Vector<T> _meanGradient;
+
+    /// <summary>The most recent RMSProp velocity/update for each flat parameter.</summary>
+    private Vector<T> _velocity;
+
 
     /// <summary>
     /// The current iteration count of the optimization process.
@@ -127,7 +129,10 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
     /// Adjusting these settings can help the algorithm work better for different types of problems.
     /// </para>
     /// </remarks>
-    private RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput> _options
+        => (RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RootMeanSquarePropagationOptimizer{T}"/> class with the specified options and components.
@@ -159,8 +164,11 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
     {
         _t = 0;
         _squaredGradient = Vector<T>.Empty();
-        _options = options ?? new();
+        _meanGradient = Vector<T>.Empty();
+        _velocity = Vector<T>.Empty();
+        CurrentMomentum = NumOps.FromDouble(_options.InitialMomentum);
     }
+
 
     /// <summary>
     /// Creates an RMSProp optimizer for minimizing a plain function, with no model attached.
@@ -190,8 +198,11 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
     {
         _t = 0;
         _squaredGradient = Vector<T>.Empty();
-        _options = options ?? new();
+        _meanGradient = Vector<T>.Empty();
+        _velocity = Vector<T>.Empty();
+        CurrentMomentum = NumOps.FromDouble(_options.InitialMomentum);
     }
+
 
     /// <summary>
     /// Performs the RMSProp optimization to find the best solution for the given input data.
@@ -250,9 +261,9 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
             {
                 _t++;
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
-                gradient = ApplyMomentum(gradient);
-                var newSolution = UpdateSolution(currentSolution, gradient);
-                currentSolution = newSolution;
+                if (!_options.Centered)
+                    gradient = ApplyMomentum(gradient);
+                currentSolution = UpdateSolution(currentSolution, gradient);
             }
 
             var currentStepData = EvaluateSolution(currentSolution, inputData);
@@ -318,27 +329,28 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
                 nameof(gradient));
         }
 
-        // Lazy initialization of squared gradient state
-        if (_squaredGradient.Length != parameters.Length)
+        if (_squaredGradient.Length != parameters.Length
+            || (_options.Centered
+                && (_meanGradient.Length != parameters.Length || _velocity.Length != parameters.Length)))
         {
             _squaredGradient = new Vector<T>(parameters.Length);
+            _meanGradient = _options.Centered ? new Vector<T>(parameters.Length) : Vector<T>.Empty();
+            _velocity = _options.Centered ? new Vector<T>(parameters.Length) : Vector<T>.Empty();
         }
-
-        // === Vectorized RMSProp Update using IEngine ===
-        // Phase B: US-GPU-015 - GPU-accelerated gradient updates
 
         T decay = NumOps.FromDouble(_options.Decay);
         T oneMinusDecay = NumOps.FromDouble(1 - _options.Decay);
         T epsilon = NumOps.FromDouble(_options.Epsilon);
+        T momentum = CurrentMomentum;
+        T learningRate = CurrentLearningRate;
 
-        // Mutate the running average in place and write directly into the one vector the caller
-        // owns. The previous Engine chain materialized ten parameter-sized temporaries per step.
         var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
         var pSpan = parameters.AsSpan();
         var gSpan = gradient.AsSpan();
         var sqGradSpan = _squaredGradient.AsWritableSpan();
+        var meanGradSpan = _meanGradient.AsWritableSpan();
+        var velocitySpan = _velocity.AsWritableSpan();
         var outSpan = updatedParams.AsWritableSpan();
-        T learningRate = CurrentLearningRate;
 
         for (int i = 0; i < pSpan.Length; i++)
         {
@@ -348,16 +360,36 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
                 NumOps.Multiply(NumOps.Multiply(g, g), oneMinusDecay));
             sqGradSpan[i] = squaredGradient;
 
-            T denominator = NumOps.Add(NumOps.Sqrt(squaredGradient), epsilon);
-            T update = NumOps.Divide(NumOps.Multiply(g, learningRate), denominator);
-            outSpan[i] = NumOps.Subtract(pSpan[i], update);
+            if (_options.Centered)
+            {
+                T meanGradient = NumOps.Add(
+                    NumOps.Multiply(meanGradSpan[i], decay),
+                    NumOps.Multiply(g, oneMinusDecay));
+                meanGradSpan[i] = meanGradient;
+                T variance = NumOps.Subtract(squaredGradient, NumOps.Multiply(meanGradient, meanGradient));
+                variance = MathHelper.Max(variance, NumOps.Zero);
+                T denominator = NumOps.Sqrt(NumOps.Add(variance, epsilon));
+                T normalizedStep = NumOps.Divide(NumOps.Multiply(g, learningRate), denominator);
+                T velocity = NumOps.Add(NumOps.Multiply(velocitySpan[i], momentum), normalizedStep);
+                velocitySpan[i] = velocity;
+                outSpan[i] = NumOps.Subtract(pSpan[i], velocity);
+            }
+            else
+            {
+                T denominator = NumOps.Add(NumOps.Sqrt(squaredGradient), epsilon);
+                T update = NumOps.Divide(NumOps.Multiply(g, learningRate), denominator);
+                outSpan[i] = NumOps.Subtract(pSpan[i], update);
+            }
         }
 
         return updatedParams;
     }
 
-    // Per-parameter squared gradient cache for tape-based training
+    // Per-parameter state for tape-based training. These dictionaries are also
+    // captured by the optimizer's tape-state serializer.
     private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeSqGrad = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeMeanGrad = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeVelocity = new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
@@ -367,19 +399,27 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
         T decay = NumOps.FromDouble(_options.Decay);
         T oneMinusDecay = NumOps.FromDouble(1 - _options.Decay);
         T epsilon = NumOps.FromDouble(_options.Epsilon);
+        T momentum = CurrentMomentum;
+        bool requiresExtendedState = _options.Centered;
 
-        // GPU-resident step (AIDOTNET_GPU_ADAM=1); gated off, CPU fallback per-param when not GPU-resident.
-        bool gpuAdam = typeof(T) == typeof(float)
+        // Existing GPU and sparse kernels implement only uncentered, momentum-free RMSProp.
+        bool gpuRmsProp = SupportsGpuUpdate
+            && typeof(T) == typeof(float)
             && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         foreach (var param in context.Parameters)
         {
-            // True sparse scatter: update squaredAvg + param at touched embedding-table
-            // rows only. Skip when GPU-resident (no GPU sparse path for RMSProp yet).
-            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            if (!requiresExtendedState
+                && !gpuRmsProp
+                && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
             {
-                if (!_tapeSqGrad.TryGetValue(param, out var sqGradSp)) { sqGradSp = new Tensor<T>(param._shape); _tapeSqGrad[param] = sqGradSp; }
+                if (!_tapeSqGrad.TryGetValue(param, out var sqGradSp))
+                {
+                    sqGradSp = new Tensor<T>(param._shape);
+                    _tapeSqGrad[param] = sqGradSp;
+                }
+
                 if (SparseEmbeddingOptimizerHelpers.TryApplyRmspropSparse(
                         param, sqGradSp,
                         NumOps.ToDouble(CurrentLearningRate),
@@ -392,18 +432,87 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
             if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
-            if (!_tapeSqGrad.TryGetValue(param, out var sqGrad)) { sqGrad = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) sqGrad.AsWritableSpan().Clear(); _tapeSqGrad[param] = sqGrad; }
+            if (!_tapeSqGrad.TryGetValue(param, out var sqGrad))
+            {
+                sqGrad = gpuRmsProp
+                    ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape)
+                    : new Tensor<T>(param._shape);
+                if (gpuRmsProp) sqGrad.AsWritableSpan().Clear();
+                _tapeSqGrad[param] = sqGrad;
+            }
 
-            if (gpuAdam && param.Length == grad.Length
-                && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryRmspropStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)sqGrad,
-                    (float)NumOps.ToDouble(CurrentLearningRate), (float)_options.Decay, (float)_options.Epsilon, 0f))
+            if (gpuRmsProp && param.Length == grad.Length
+                && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryRmspropStep(
+                    (Tensor<float>)(object)param,
+                    (Tensor<float>)(object)grad,
+                    (Tensor<float>)(object)sqGrad,
+                    (float)NumOps.ToDouble(CurrentLearningRate),
+                    (float)_options.Decay,
+                    (float)_options.Epsilon,
+                    0f))
+            {
                 continue;
+            }
 
-            // sqGrad = decay * sqGrad + (1 - decay) * grad^2
-            var sqGradNew = Engine.TensorAdd(Engine.TensorMultiplyScalar(sqGrad, decay), Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusDecay));
+            if (requiresExtendedState)
+            {
+                if (!_tapeMeanGrad.TryGetValue(param, out var meanGrad))
+                {
+                    meanGrad = new Tensor<T>(param._shape);
+                    _tapeMeanGrad[param] = meanGrad;
+                }
+
+                if (!_tapeVelocity.TryGetValue(param, out var velocity))
+                {
+                    velocity = new Tensor<T>(param._shape);
+                    _tapeVelocity[param] = velocity;
+                }
+
+                var paramSpan = param.AsWritableSpan();
+                var gradSpan = grad.Data.Span;
+                var sqGradSpan = sqGrad.AsWritableSpan();
+                var meanGradSpan = meanGrad.AsWritableSpan();
+                var velocitySpan = velocity.AsWritableSpan();
+
+                for (int i = 0; i < param.Length; i++)
+                {
+                    T g = gradSpan[i];
+                    T squaredGradient = NumOps.Add(
+                        NumOps.Multiply(sqGradSpan[i], decay),
+                        NumOps.Multiply(NumOps.Multiply(g, g), oneMinusDecay));
+                    sqGradSpan[i] = squaredGradient;
+
+                    T denominator;
+                    if (_options.Centered)
+                    {
+                        T meanGradient = NumOps.Add(
+                            NumOps.Multiply(meanGradSpan[i], decay),
+                            NumOps.Multiply(g, oneMinusDecay));
+                        meanGradSpan[i] = meanGradient;
+                        T variance = NumOps.Subtract(squaredGradient, NumOps.Multiply(meanGradient, meanGradient));
+                        variance = MathHelper.Max(variance, NumOps.Zero);
+                        denominator = NumOps.Sqrt(NumOps.Add(variance, epsilon));
+                    }
+                    else
+                    {
+                        denominator = NumOps.Add(NumOps.Sqrt(squaredGradient), epsilon);
+                    }
+
+                    T normalizedStep = NumOps.Divide(NumOps.Multiply(g, CurrentLearningRate), denominator);
+                    T nextVelocity = NumOps.Add(NumOps.Multiply(velocitySpan[i], momentum), normalizedStep);
+                    velocitySpan[i] = nextVelocity;
+                    paramSpan[i] = NumOps.Subtract(paramSpan[i], nextVelocity);
+                }
+
+                continue;
+            }
+
+            // Momentum-free, uncentered path retained for fused/eager parity.
+            var sqGradNew = Engine.TensorAdd(
+                Engine.TensorMultiplyScalar(sqGrad, decay),
+                Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusDecay));
             Engine.TensorCopy(sqGradNew, sqGrad);
 
-            // param -= lr * grad / (sqrt(sqGrad) + epsilon)
             var denom = Engine.TensorAddScalar(Engine.TensorSqrt(sqGrad), epsilon);
             var update = Engine.TensorMultiplyScalar(Engine.TensorDivide(grad, denom), CurrentLearningRate);
             Engine.TensorSubtractInPlace(param, update);
@@ -457,30 +566,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
             return base.UpdateSolution(currentSolution, gradient);
         }
         var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
-
-        // === Vectorized RMSProp Update using IEngine ===
-        // Phase B: US-GPU-015 - GPU-accelerated gradient updates
-
-        T decay = NumOps.FromDouble(_options.Decay);
-        T oneMinusDecay = NumOps.FromDouble(1 - _options.Decay);
-        T epsilon = NumOps.FromDouble(_options.Epsilon);
-
-        // Update squared gradient: sqGrad = decay * sqGrad + (1 - decay) * grad^2
-        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
-        var sqGradScaled = (Vector<T>)Engine.Multiply(_squaredGradient, decay);
-        var gradSquaredScaled = (Vector<T>)Engine.Multiply(gradSquared, oneMinusDecay);
-        _squaredGradient = (Vector<T>)Engine.Add(sqGradScaled, gradSquaredScaled);
-
-        // Compute update: update = learningRate * gradient / (sqrt(sqGrad) + epsilon)
-        var sqGradSqrt = (Vector<T>)Engine.Sqrt(_squaredGradient);
-        var epsilonVec = Vector<T>.CreateDefault(sqGradSqrt.Length, epsilon);
-        var denominator = (Vector<T>)Engine.Add(sqGradSqrt, epsilonVec);
-        var gradScaled = (Vector<T>)Engine.Multiply(gradient, CurrentLearningRate);
-        var update = (Vector<T>)Engine.Divide(gradScaled, denominator);
-
-        // Apply update: params = params - update
-        var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
-
+        var updatedParams = UpdateParameters(parameters, gradient);
         return InterfaceGuard.Parameterizable(currentSolution).WithParameters(updatedParams);
     }
 
@@ -512,7 +598,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
     protected override string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
-        return $"{baseKey}_RMSprop_{CurrentLearningRate}_{_options.Decay}_{_options.Epsilon}_{_t}";
+        return $"{baseKey}_RMSprop_{CurrentLearningRate}_{CurrentMomentum}_{_options.Decay}_{_options.Epsilon}_{_options.Centered}_{_t}";
     }
 
     /// <summary>
@@ -540,9 +626,13 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
         base.Reset();
         _t = 0;
         _squaredGradient = Vector<T>.Empty();
-        // Clear the tape-side per-parameter squared averages so a reused instance
-        // does not carry RMSProp history into the next run.
+        _meanGradient = Vector<T>.Empty();
+        _velocity = Vector<T>.Empty();
         _tapeSqGrad.Clear();
+        _tapeMeanGrad.Clear();
+        _tapeVelocity.Clear();
+        CurrentMomentum = NumOps.FromDouble(_options.InitialMomentum);
+        DisposeGpuState();
     }
 
     /// <summary>
@@ -609,25 +699,24 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
                 nameof(appliedGradients));
         }
 
-        // If squared gradients are not initialized, fall back to vanilla SGD reversal
-        if (_squaredGradient == null || _squaredGradient.Length != updatedParameters.Length)
+        if (_options.Centered)
         {
-            return base.ReverseUpdate(updatedParameters, appliedGradients);
+            // The velocity stores the exact centered update subtracted by the latest call.
+            return _velocity.Length == updatedParameters.Length
+                ? (Vector<T>)Engine.Add(updatedParameters, _velocity)
+                : base.ReverseUpdate(updatedParameters, appliedGradients);
         }
 
-        // === Vectorized Reverse RMSprop Update (Phase B: US-GPU-015) ===
-        // Reverse RMSprop update: params_old = params_new + update
-        // Where update = learning_rate * gradient / (sqrt(squared_gradient) + epsilon)
+        if (_squaredGradient.Length != updatedParameters.Length)
+            return base.ReverseUpdate(updatedParameters, appliedGradients);
 
-        // Recalculate the adaptive update that was applied
-        var currentLrVec = Vector<T>.CreateDefault(appliedGradients.Length, CurrentLearningRate);
-        var numerator = (Vector<T>)Engine.Multiply(currentLrVec, appliedGradients);
-        var sqrtSquaredGrad = (Vector<T>)Engine.Sqrt(_squaredGradient);
-        var epsilonVec = Vector<T>.CreateDefault(sqrtSquaredGrad.Length, NumOps.FromDouble(_options.Epsilon));
-        var denominator = (Vector<T>)Engine.Add(sqrtSquaredGrad, epsilonVec);
+        var numerator = (Vector<T>)Engine.Multiply(
+            Vector<T>.CreateDefault(appliedGradients.Length, CurrentLearningRate),
+            appliedGradients);
+        var denominator = (Vector<T>)Engine.Add(
+            Engine.Sqrt(_squaredGradient),
+            Vector<T>.CreateDefault(appliedGradients.Length, NumOps.FromDouble(_options.Epsilon)));
         var update = (Vector<T>)Engine.Divide(numerator, denominator);
-
-        // Reverse the update: params_old = params_new + update
         return (Vector<T>)Engine.Add(updatedParameters, update);
     }
 
@@ -640,8 +729,9 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
 
     /// <summary>
     /// Gets whether this optimizer supports GPU-accelerated parameter updates.
+    /// The available kernel is uncentered and has no velocity state.
     /// </summary>
-    public override bool SupportsGpuUpdate => true;
+    public override bool SupportsGpuUpdate => !_options.Centered;
 
     /// <summary>
     /// Initializes RMSprop optimizer state on the GPU.
@@ -662,6 +752,10 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
     /// </summary>
     public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
     {
+        if (!SupportsGpuUpdate)
+            throw new NotSupportedException("The GPU RMSProp kernel does not support centered RMSProp.");
+
+
         if (!_gpuStateInitialized || _gpuSquaredAvg == null)
         {
             InitializeGpuState(parameterCount, backend);

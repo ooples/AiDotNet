@@ -131,4 +131,15 @@ public class RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput> : Gra
     /// </para>
     /// </remarks>
     public double Epsilon { get; set; } = 1e-8;
+
+    /// <summary>
+    /// Gets or sets whether RMSProp normalizes by an estimate of gradient variance,
+    /// <c>E[g²] - E[g]²</c>, rather than the uncentered second moment.
+    /// </summary>
+    /// <remarks>
+    /// This is the centered RMSProp form used by Graves (2013) and referenced by
+    /// the Neural Turing Machine paper. It is opt-in to preserve the historical
+    /// uncentered RMSProp behavior for existing callers.
+    /// </remarks>
+    public bool Centered { get; set; }
 }
