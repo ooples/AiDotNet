@@ -1918,9 +1918,28 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
         if (supplied != tensors.Count)
         {
+            // Naming the unresolved roles is the difference between "something is partial" and a
+            // diagnosis. Without it a caller sees only "1 of 2" and cannot tell whether the
+            // checkpoint is truly damaged or the layer simply has a lazily-shaped weight that no
+            // forward pass has sized yet.
+            var unresolved = new List<string>();
+            for (int i = 0; i < tensors.Count; i++)
+            {
+                var (tensor, role) = tensors[i];
+                if (tensor is null)
+                {
+                    unresolved.Add($"{role}=<null>");
+                }
+                else if (tensor.Length == 0 || tensor.Shape.Length == 0)
+                {
+                    unresolved.Add($"{role}=[{string.Join(",", tensor.Shape)}]");
+                }
+            }
+
             throw new InvalidOperationException(
                 $"{GetType().Name} received a partial parameter restore: {supplied} of " +
-                $"{tensors.Count} declared tensors were supplied. The layer cannot resolve its own " +
+                $"{tensors.Count} declared tensors were supplied (unresolved: " +
+                $"{string.Join("; ", unresolved)}). The layer cannot resolve its own " +
                 "shapes yet, so the checkpoint is the only description of them, and an incomplete " +
                 "one cannot be completed from anywhere else.");
         }

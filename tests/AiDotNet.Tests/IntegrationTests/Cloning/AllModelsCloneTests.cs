@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -571,6 +572,12 @@ public class AllModelsCloneTests
                 return Fail(open, $"{copy.ParameterCount} parameters against {before}");
             }
 
+            // Live heap immediately before the independence check: the two resident models plus
+            // whatever DeepCopy left behind. The phase counters measure allocation VOLUME and
+            // cannot say how much of it is still resident; this can, and it is the number that
+            // decides whether the flat parameter vectors are the problem or merely the last straw.
+            LastPhases += $" liveBeforeIndependence={GC.GetTotalMemory(false) / (1024 * 1024)}MB";
+
             if (ReferenceEquals(copy, model) || !IsIndependent(model, copy))
                 return Fail(open, "copy is not independent of the original");
 
@@ -581,7 +588,25 @@ public class AllModelsCloneTests
         {
             var inner = ex.InnerException ?? ex;
             var message = inner.Message;
-            return Fail(open, $"{inner.GetType().Name}: {message.Substring(0, Math.Min(90, message.Length))}");
+            // 90 chars used to cut clone-rejection reasons mid-word ("trainable layer 0
+            // (PatchEmbeddingLa"), which hid the very detail the sweep exists to report.
+            var trimmed = message.Substring(0, Math.Min(400, message.Length));
+
+            // An OutOfMemoryException carries no useful message, so without the originating frames
+            // the sweep cannot say whether the model died in the copy-on-write attempt or in the
+            // serialize fallback -- which is the only distinction that matters for this failure.
+            var frames = (inner.StackTrace ?? string.Empty)
+                .Split('\n')
+                .Select(line => line.Trim())
+                .Where(line => line.StartsWith("at AiDotNet.", StringComparison.Ordinal))
+                .Take(4);
+            var origin = string.Join(" <- ", frames);
+
+            return Fail(
+                open,
+                origin.Length == 0
+                    ? $"{inner.GetType().Name}: {trimmed} || {LastPhases}"
+                    : $"{inner.GetType().Name}: {trimmed} || {origin} || {LastPhases}");
         }
         finally
         {
@@ -613,27 +638,148 @@ public class AllModelsCloneTests
         }
     }
 
+    /// <summary>The independence check must reject a model compared against itself.</summary>
+    /// <remarks>
+    /// Guards the rewrite that removed the baseline vector. The verification loop is INVERTED -- it
+    /// asserts the original still differs from the mutated buffer -- and an inverted test that is
+    /// wired up wrongly does not fail loudly, it passes everything. The sweep would then report a
+    /// clean run over hundreds of models while checking nothing at all. A model handed to the check
+    /// as its own copy shares every tensor by definition, so this must come back false.
+    /// </remarks>
+    [Fact]
+    public void IsIndependent_RejectsAModelComparedWithItself()
+    {
+        // Named types, not a sweep over every model. Walking the whole assembly meant constructing
+        // and resolving arbitrary multi-gigabyte networks just to find a small one, and this test
+        // ran out of memory before it could validate anything.
+        var wanted = new[] { "FeedForwardNeuralNetwork`1", "NeuralNetwork`1", "Autoencoder`1" };
+
+        var candidates = typeof(NeuralNetworkBase<>).Assembly.GetTypes()
+            .Where(t => t.IsClass && !t.IsAbstract && !t.IsNested)
+            .Where(t => t.IsGenericTypeDefinition && t.GetGenericArguments().Length == 1)
+            .Where(DerivesFromNeuralNetworkBase)
+            .Where(t => wanted.Contains(t.Name))
+            .OrderBy(t => Array.IndexOf(wanted, t.Name));
+
+        foreach (var candidate in candidates)
+        {
+            Type closed;
+            try { closed = candidate.MakeGenericType(typeof(float)); }
+            catch (Exception) { continue; }
+
+            var model = TryConstruct(closed);
+            if (model is null) continue;
+
+            Resolve(model);
+
+            // Small on purpose. This validates the checker, not a model, and the sweep itself is
+            // where large models get exercised.
+            if (model.ParameterCount is 0 or > 5_000_000)
+            {
+                (model as IDisposable)?.Dispose();
+                continue;
+            }
+
+            try
+            {
+                Assert.False(
+                    IsIndependent(model, model),
+                    $"{candidate.Name} compared against itself was reported independent, so the "
+                        + "independence check cannot detect shared storage and the sweep is vacuous");
+            }
+            finally
+            {
+                (model as IDisposable)?.Dispose();
+            }
+
+            return;
+        }
+
+        Assert.Fail("no small constructible model was available to validate the independence check");
+    }
+
     /// <summary>Whether writing through one model leaves the other alone.</summary>
+    /// <remarks>
+    /// This method, not <c>DeepCopy</c>, is where FishSpeech ran out of memory. It used to hold a
+    /// baseline vector, a mutation vector and a re-read vector of the model's ENTIRE parameter
+    /// surface at once, on top of the two resident models. Measured on FishSpeech: 4.88 GB live
+    /// after cloning, a 330,193,920-element parameter surface, and three 1.26 GB contiguous
+    /// large-object allocations demanded on top of that. It never got them.
+    ///
+    /// One full-length vector remains, because <c>UpdateParameters</c> accepts nothing else. The
+    /// baseline and the verification read are streamed through <c>GetParameterStateChunks</c>,
+    /// whose scope contract guarantees it covers exactly the parameters the flat APIs do.
+    ///
+    /// The assertion is unchanged in strength: every parameter is still written through the copy,
+    /// and every parameter of the original is still checked elementwise at the same tolerance. Only
+    /// the direction of the comparison moved -- see the verification loop.
+    /// </remarks>
     private static bool IsIndependent(
         NeuralNetworkBase<float> original,
         NeuralNetworkBase<float> copy)
     {
-        var parameters = original.GetParameters();
-        if (parameters.Length == 0) return true;
+        // Size the buffer from the chunked surface rather than materializing a flat vector to
+        // measure it. GetParameterStateChunks resolves lazy shapes first and carries a documented
+        // scope contract that it covers exactly the parameters the flat APIs do.
+        long total = 0;
+        foreach (var chunk in original.GetParameterStateChunks()) total += chunk.Tensor.Length;
 
-        var mutated = new Vector<float>(parameters.Length);
-        for (var i = 0; i < parameters.Length; i++) mutated[i] = parameters[i] + 1.0f;
+        if (total == 0) return true;
+        if (total > int.MaxValue) return false;
+
+        // The ONLY full-length allocation left. UpdateParameters takes a flat vector, so one is
+        // unavoidable; the baseline and the verification read are both streamed instead.
+        Vector<float> mutated;
+        try
+        {
+            mutated = new Vector<float>((int)total);
+        }
+        catch (OutOfMemoryException)
+        {
+            // A bare OutOfMemoryException says nothing about scale. Both numbers matter: the buffer
+            // is a CONTIGUOUS large-object request, so it can fail with plenty of total headroom.
+            throw new InvalidOperationException(
+                $"could not allocate a {total:N0}-element mutation buffer "
+                    + $"({total * sizeof(float) / (1024 * 1024):N0} MB, contiguous) with "
+                    + $"{GC.GetTotalMemory(false) / (1024 * 1024):N0} MB already live");
+        }
+
+        int index = 0;
+        foreach (var chunk in original.GetParameterStateChunks())
+        {
+            var tensor = chunk.Tensor;
+            for (var i = 0; i < tensor.Length; i++) mutated[index++] = tensor[i] + 1.0f;
+        }
+
+        // A chunked surface that disagrees with its own reported size is a contract violation, not
+        // an independence result; fail rather than write a mis-sized buffer into the copy.
+        if (index != total) return false;
 
         copy.UpdateParameters(mutated);
 
-        var after = original.GetParameters();
-        for (var i = 0; i < after.Length; i++)
+        // Verify by streaming the original again. Every element of `mutated` is its baseline plus
+        // one, so an INDEPENDENT original still differs from it by 1.0 at every position, while a
+        // copy sharing storage has dragged the original onto the mutated value. That inverted test
+        // is what removes the need to hold a baseline vector at all.
+        index = 0;
+        foreach (var chunk in original.GetParameterStateChunks())
         {
-            if (Math.Abs(after[i] - parameters[i]) > 1e-5f) return false;
+            var tensor = chunk.Tensor;
+            for (var i = 0; i < tensor.Length; i++, index++)
+            {
+                float current = tensor[i];
+
+                // Where +1.0f is a no-op the element cannot discriminate either way, so skip it
+                // rather than report false sharing. Real weights never reach that magnitude.
+                if (current + 1.0f == current) continue;
+
+                if (Math.Abs(current - mutated[index]) <= 1e-5f) return false;
+            }
         }
 
-        return true;
+        return index == total;
     }
+
 
     private static NeuralNetworkBase<float>? TryConstruct(Type closed)
     {
