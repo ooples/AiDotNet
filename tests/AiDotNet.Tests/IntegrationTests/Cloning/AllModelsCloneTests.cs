@@ -718,66 +718,99 @@ public class AllModelsCloneTests
         NeuralNetworkBase<float> original,
         NeuralNetworkBase<float> copy)
     {
-        // Size the buffer from the chunked surface rather than materializing a flat vector to
-        // measure it. GetParameterStateChunks resolves lazy shapes first and carries a documented
-        // scope contract that it covers exactly the parameters the flat APIs do.
-        long total = 0;
-        foreach (var chunk in original.GetParameterStateChunks()) total += chunk.Tensor.Length;
-
-        if (total == 0) return true;
-        if (total > int.MaxValue) return false;
-
-        // The ONLY full-length allocation left. UpdateParameters takes a flat vector, so one is
-        // unavoidable; the baseline and the verification read are both streamed instead.
-        Vector<float> mutated;
-        try
-        {
-            mutated = new Vector<float>((int)total);
-        }
-        catch (OutOfMemoryException)
-        {
-            // A bare OutOfMemoryException says nothing about scale. Both numbers matter: the buffer
-            // is a CONTIGUOUS large-object request, so it can fail with plenty of total headroom.
-            throw new InvalidOperationException(
-                $"could not allocate a {total:N0}-element mutation buffer "
-                    + $"({total * sizeof(float) / (1024 * 1024):N0} MB, contiguous) with "
-                    + $"{GC.GetTotalMemory(false) / (1024 * 1024):N0} MB already live");
-        }
-
-        int index = 0;
+        // Both sides are walked chunk-by-chunk, so nothing full-length is ever allocated. That
+        // matters: PaLI3 and SenseVoiceLarge need a 2.4-2.6 GB CONTIGUOUS large-object block for a
+        // flat vector, on top of ~5 GB of legitimate resident model, and could not get one.
+        var originalChunks = new List<Tensor<float>>();
+        bool streamable = true;
         foreach (var chunk in original.GetParameterStateChunks())
         {
-            var tensor = chunk.Tensor;
-            for (var i = 0; i < tensor.Length; i++) mutated[index++] = tensor[i] + 1.0f;
-        }
-
-        // A chunked surface that disagrees with its own reported size is a contract violation, not
-        // an independence result; fail rather than write a mis-sized buffer into the copy.
-        if (index != total) return false;
-
-        copy.UpdateParameters(mutated);
-
-        // Verify by streaming the original again. Every element of `mutated` is its baseline plus
-        // one, so an INDEPENDENT original still differs from it by 1.0 at every position, while a
-        // copy sharing storage has dragged the original onto the mutated value. That inverted test
-        // is what removes the need to hold a baseline vector at all.
-        index = 0;
-        foreach (var chunk in original.GetParameterStateChunks())
-        {
-            var tensor = chunk.Tensor;
-            for (var i = 0; i < tensor.Length; i++, index++)
+            // A chunk that is not writable in place -- an fp16-resident or sparse component handing
+            // out a transient snapshot, or a layer that is not a LayerBase -- would swallow the
+            // mutation silently. Left unchecked that reads as "the copy never changed", which this
+            // method would report as SHARED storage: a false failure, not a missed one.
+            if (!chunk.IsWritableInPlace)
             {
-                float current = tensor[i];
+                streamable = false;
+                break;
+            }
+
+            originalChunks.Add(chunk.Tensor);
+        }
+
+        if (originalChunks.Count == 0 && streamable) return true;
+        if (!streamable) return IsIndependentViaFlatSurface(original, copy);
+
+        var copyChunks = new List<Tensor<float>>();
+        foreach (var chunk in copy.GetParameterStateChunks())
+        {
+            if (!chunk.IsWritableInPlace) return IsIndependentViaFlatSurface(original, copy);
+            copyChunks.Add(chunk.Tensor);
+        }
+
+        // A copy that does not present the same chunk surface as its original is not a faithful
+        // copy, and pairing the overlapping prefix would quietly pass that.
+        if (copyChunks.Count != originalChunks.Count) return false;
+        for (var c = 0; c < copyChunks.Count; c++)
+        {
+            if (copyChunks[c].Length != originalChunks[c].Length) return false;
+        }
+
+        // Write through the COPY. If the two are independent it ends at original + 1 everywhere; if
+        // they share storage the same write moved the original too, so afterwards they read equal.
+        // Comparing the two live surfaces is therefore the whole test, and needs no baseline copy.
+        for (var c = 0; c < copyChunks.Count; c++)
+        {
+            var target = copyChunks[c];
+            for (var i = 0; i < target.Length; i++) target[i] = target[i] + 1.0f;
+        }
+
+        for (var c = 0; c < originalChunks.Count; c++)
+        {
+            var before = originalChunks[c];
+            var after = copyChunks[c];
+            for (var i = 0; i < before.Length; i++)
+            {
+                float originalValue = before[i];
 
                 // Where +1.0f is a no-op the element cannot discriminate either way, so skip it
                 // rather than report false sharing. Real weights never reach that magnitude.
-                if (current + 1.0f == current) continue;
+                if (originalValue + 1.0f == originalValue) continue;
 
-                if (Math.Abs(current - mutated[index]) <= 1e-5f) return false;
+                if (Math.Abs(after[i] - originalValue) <= 1e-5f) return false;
             }
         }
 
-        return index == total;
+        return true;
+    }
+
+    /// <summary>Independence check for models whose chunks cannot be written in place.</summary>
+    /// <remarks>
+    /// The flat surface is the only way to reach an fp16-resident or sparse component, or a layer
+    /// that is not a LayerBase. It costs one contiguous full-length vector, which is exactly what
+    /// the chunked path above exists to avoid, so it runs only when that path cannot apply.
+    /// </remarks>
+    private static bool IsIndependentViaFlatSurface(
+        NeuralNetworkBase<float> original,
+        NeuralNetworkBase<float> copy)
+    {
+        var parameters = original.GetParameters();
+        if (parameters.Length == 0) return true;
+
+        var mutated = new Vector<float>(parameters.Length);
+        for (var i = 0; i < parameters.Length; i++) mutated[i] = parameters[i] + 1.0f;
+
+        copy.UpdateParameters(mutated);
+
+        var after = original.GetParameters();
+        if (after.Length != parameters.Length) return false;
+
+        for (var i = 0; i < after.Length; i++)
+        {
+            if (Math.Abs(after[i] - parameters[i]) > 1e-5f) return false;
+        }
+
+        return true;
     }
 
 
