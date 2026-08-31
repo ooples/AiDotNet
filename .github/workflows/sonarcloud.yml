@@ -667,6 +667,34 @@ jobs:
           if (-not $selectorTrusted) {
             Write-Host '::error::the shard selector failed its own self-test - running the full matrix. Fix tools/TestImpact/Select-Shards.ps1.'
           }
+          elseif ('${{ github.event_name }}' -eq 'push' -and (Test-Path map/shard-map.json)) {
+            # MASTER PUSH: validate the delta from the last master commit that was itself
+            # validated, rather than repeating the whole matrix.
+            #
+            # This is the waste that motivated the feature. Master's push for the #2073 merge
+            # re-ran all 116 shards to rediscover the same 3 pre-existing failures the PR had
+            # already found across 115 - because exact-tree reuse could not fire, master having
+            # moved 64 commits while the PR was open.
+            #
+            # The previous master commit is the right reference, NOT the PR's tested tree. The
+            # diff from a stale PR's tree is all of master's intervening commits, which is huge;
+            # the diff from the previous master commit is just the merged PR's own changes, and
+            # that is true no matter how stale the PR was.
+            $prev = gh api --method GET "repos/${{ github.repository }}/actions/workflows/sonarcloud.yml/runs" `
+                      -f event=push -f branch=master -f status=completed -f per_page=10 `
+                      --jq '[.workflow_runs[] | select(.head_sha != "${{ github.sha }}")][0].head_sha' 2>$null
+            if (-not $prev) {
+              Write-Host '::warning::no previously validated master commit - running the full matrix'
+            }
+            else {
+              Write-Host "master push: validating the delta from $prev"
+              & ./tools/TestImpact/Select-Shards.ps1 `
+                  -MapFile map/shard-map.json -FileLevelFrom $prev -OutFile selection.json
+              $result = Get-Content selection.json -Raw | ConvertFrom-Json
+              $escalate = [bool] $result.escalate
+              $selected = @($result.shards)
+            }
+          }
           elseif (-not $eventCanReduce) {
             Write-Host "event is '${{ github.event_name }}', not a pull request - running the full matrix"
           }

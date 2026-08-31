@@ -33,6 +33,7 @@
 param(
     [Parameter(Mandatory, ParameterSetName = 'Select')] [string] $MapFile,
     [Parameter(ParameterSetName = 'Select')] [string] $OutFile,
+    [Parameter(ParameterSetName = 'Select')] [string] $FileLevelFrom,
     [Parameter(Mandatory, ParameterSetName = 'SelfTest')] [switch] $SelfTest
 )
 
@@ -131,6 +132,58 @@ function Get-ChangedRanges {
     $diff = & git diff -U0 $MapSha HEAD
     if ($LASTEXITCODE -ne 0) { throw "git diff from the map commit '$MapSha' failed." }
     return ConvertTo-ChangedRanges -DiffLines $diff
+}
+
+function Select-ImpactedShardsByFile {
+    <#
+        FILE-level selection between two arbitrary trees, for the master-push case.
+
+        Master pushes a merge commit whose tree nothing tested, but a PR run DID test a real tree;
+        the only unverified part of master is diff(testedTree, master). A shard whose coverage
+        touches none of those files behaves identically on both trees, so its result from that run
+        still holds and it does not need running again.
+
+        File-level, not line-level, and that is forced rather than lazy. The map's ranges are in
+        the coordinates of the map's commit, while this diff is between two entirely different
+        commits, so line numbers from it cannot be looked up in the map at all - the same
+        coordinate mismatch that silently dropped covering shards before. File containment needs no
+        coordinates, so it stays correct across any pair of trees. It over-selects, which is the
+        safe direction.
+    #>
+    param(
+        [Parameter(Mandatory)] $Map,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $ChangedFiles
+    )
+
+    $selected = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($shard in $Map.alwaysRun) { [void] $selected.Add([string] $shard) }
+
+    $reasons = [System.Collections.Generic.List[string]]::new()
+    $escalate = $false
+
+    foreach ($path in ($ChangedFiles | Sort-Object -Unique)) {
+        if (-not $path) { continue }
+        if (Test-SharedInfrastructure -Path $path) {
+            $escalate = $true
+            [void] $reasons.Add("shared infrastructure: $path")
+            continue
+        }
+        $entry = $Map.files.PSObject.Properties[$path]
+        if (-not $entry) {
+            $escalate = $true
+            [void] $reasons.Add("not executed by any mapped shard: $path")
+            continue
+        }
+        foreach ($occurrence in @($entry.Value)) {
+            [void] $selected.Add([string] $Map.knownShards[[int] $occurrence.s])
+        }
+    }
+
+    return [pscustomobject]@{
+        Escalate = $escalate
+        Reasons  = $reasons
+        Shards   = @($selected | Sort-Object)
+    }
 }
 
 function Select-ImpactedShards {
@@ -277,6 +330,35 @@ if ($SelfTest) {
     $r = Select-ImpactedShards -Map $map -Changed (ConvertTo-ChangedRanges -DiffLines $diff)
     Assert-True ($r.Shards -contains 'Alpha') 'a one-line insertion above an edit must not lose the covering shard'
 
+    # 8. FILE-level selection, used when master validates only its delta from a tested tree.
+    #    It must select every shard touching a changed file regardless of WHERE in the file, since
+    #    the two trees share no line numbering.
+    $r = Select-ImpactedShardsByFile -Map $map -ChangedFiles @('src/Covered.cs')
+    Assert-True ($r.Shards -contains 'Alpha' -and $r.Shards -contains 'Beta') `
+        'file-level selection must select every shard executing that file'
+    Assert-True (-not $r.Escalate) 'a mapped file must not escalate'
+
+    # 9. And it must still refuse: an untouched file selects nothing beyond always-run. Without
+    #    this a selector returning everything would satisfy 8.
+    $r = Select-ImpactedShardsByFile -Map $map -ChangedFiles @('src/SingleRange.cs')
+    Assert-True ($r.Shards -contains 'Alpha') 'the shard executing the changed file is selected'
+    Assert-True (-not ($r.Shards -contains 'Beta')) 'a shard not executing the changed file is not selected'
+    Assert-True ($r.Shards -contains 'HeavyNoCoverage') 'always-run shards still appear'
+
+    # 10. Same fail-safes as line-level selection.
+    $r = Select-ImpactedShardsByFile -Map $map -ChangedFiles @('src/Unmapped.cs')
+    Assert-True $r.Escalate 'an unmapped file must escalate'
+    $r = Select-ImpactedShardsByFile -Map $map -ChangedFiles @('Directory.Packages.props')
+    Assert-True $r.Escalate 'shared infrastructure must escalate'
+
+    # 11. No changed files at all - the delta is empty, so only always-run shards remain. This is
+    #     the case worth the most: master merged a tree whose difference from the tested one
+    #     touches nothing, and the entire matrix collapses.
+    $r = Select-ImpactedShardsByFile -Map $map -ChangedFiles @()
+    Assert-True (-not $r.Escalate) 'an empty delta must not escalate'
+    Assert-True ($r.Shards.Count -eq 1 -and $r.Shards -contains 'HeavyNoCoverage') `
+        'an empty delta selects only the always-run shards'
+
     if ($failures.Count -gt 0) {
         Write-Host 'Select-Shards self-test FAILED:'
         foreach ($f in $failures) { Write-Host "  - $f" }
@@ -346,10 +428,23 @@ if ($LASTEXITCODE -ne 0) {
         -Message "the map's commit $mapSha is not present in this checkout - running the full matrix"
 }
 
-$changed = Get-ChangedRanges -MapSha $mapSha
-Write-Host "changed files: $($changed.Count)"
-
-$selection = Select-ImpactedShards -Map $map -Changed $changed
+if ($FileLevelFrom) {
+    # Master-push mode: validate only what differs from the tree a PR run already tested.
+    & git cat-file -e "$FileLevelFrom^{commit}" 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Exit-Escalated -Reason 'tested-sha-unresolvable' `
+            -Message "the tested commit $FileLevelFrom is not present in this checkout - running the full matrix"
+    }
+    $files = @(& git diff --name-only $FileLevelFrom HEAD)
+    if ($LASTEXITCODE -ne 0) { Exit-Escalated -Reason 'diff-failed' -Message "git diff from $FileLevelFrom failed" }
+    Write-Host "delta from $FileLevelFrom : $($files.Count) changed file(s)"
+    $selection = Select-ImpactedShardsByFile -Map $map -ChangedFiles $files
+}
+else {
+    $changed = Get-ChangedRanges -MapSha $mapSha
+    Write-Host "changed files: $($changed.Count)"
+    $selection = Select-ImpactedShards -Map $map -Changed $changed
+}
 if ($selection.Escalate) {
     Write-Host '::warning::selection escalated to the full matrix'
     foreach ($reason in $selection.Reasons) { Write-Host "  reason: $reason" }

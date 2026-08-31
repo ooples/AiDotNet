@@ -48,15 +48,33 @@ jobs:
         run: |
           run_id='${{ github.event.inputs.run_id }}'
           if [ -z "$run_id" ]; then
-            # The most recent master run that actually finished. A cancelled or failed run can
-            # still carry digests, but only for the shards that got that far, and a partial map
-            # would mark the rest unknown - which escalates rather than under-selects, but wastes
-            # the saving. Prefer a clean run.
-            run_id=$(gh run list --workflow sonarcloud.yml --branch master --status success \
-                       --limit 1 --json databaseId --jq '.[0].databaseId')
+            # The most recent master run that ran the FULL matrix.
+            #
+            # Not merely the most recent successful one. Master pushes now validate only their
+            # delta from the previously validated commit, so a reduced run has digests for the
+            # shards it ran and none for the rest - and "no digest" is exactly what marks a shard
+            # always-run. Building the map from a reduced run would convert every shard it skipped
+            # into an always-run shard, and the feature would decay into running everything while
+            # still looking healthy.
+            #
+            # Fullness is measured, not assumed: count the run's shard jobs against the shard list.
+            # A cancelled or partly-failed run fails the same check, for the same reason - its
+            # digests cover only the shards that got that far.
+            expected=$(yq -o=json -I=0 '.shard' .github/test-shards.yml | jq 'length')
+            run_id=''
+            for candidate in $(gh run list --workflow sonarcloud.yml --branch master                                  --status success --limit 15 --json databaseId --jq '.[].databaseId'); do
+              n=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/$candidate/jobs"                     --jq '[.jobs[] | select(.name | startswith("Tests ("))] | length' 2>/dev/null |
+                  awk '{s+=$1} END {print s+0}')
+              if [ "${n:-0}" -ge "$expected" ]; then
+                run_id="$candidate"
+                echo "run $candidate ran $n/$expected shards - using it"
+                break
+              fi
+              echo "run $candidate ran only ${n:-0}/$expected shards - skipping (reduced or partial)"
+            done
           fi
           if [ -z "$run_id" ]; then
-            echo "::error::no successful master run of sonarcloud.yml to harvest digests from"
+            echo "::error::no master run in the last 15 ran the full matrix, so no complete digest set exists. Dispatch sonarcloud.yml on master (workflow_dispatch escalates by design) before rebuilding the map."
             exit 1
           fi
           sha=$(gh run view "$run_id" --json headSha --jq '.headSha')
