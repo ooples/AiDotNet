@@ -11,7 +11,8 @@
     omission ships a regression - those are not symmetric, and the code treats them accordingly.
     Escalation triggers:
 
-      no map / unreadable        nothing to select against
+      no map                     nothing to select against
+      map unreadable / malformed read or parse failed, or a required property is absent
       map commit not present     its line numbers cannot be resolved against this checkout
       changed file not in index  never executed by ANY shard, or new - impact unknown
       shared-infrastructure path build, workflow or global config, whose blast radius is not
@@ -287,14 +288,48 @@ if ($SelfTest) {
 
 # ---------------------------------------------------------------- selection
 
-if (-not (Test-Path -LiteralPath $MapFile)) {
-    Write-Host "::warning::no shard map at $MapFile - running the full matrix"
-    $result = [pscustomobject]@{ escalate = $true; reason = 'map-missing'; reasons = @(); shards = @() }
+function Exit-Escalated {
+    <#
+        Emit the full-matrix result and stop. Every "we cannot be confident" path ends here, and
+        they must all write the SAME artifact: the caller reads selection.json to decide the matrix,
+        so a path that exits without writing it does not escalate - it kills the job, and the test
+        matrix never runs at all.
+    #>
+    param([Parameter(Mandatory)] [string] $Reason, [string] $Message)
+
+    if ($Message) { Write-Host "::warning::$Message" }
+    $result = [pscustomobject]@{ escalate = $true; reason = $Reason; reasons = @(); shards = @() }
     if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
     exit 0
 }
 
-$map = Get-Content -LiteralPath $MapFile -Raw | ConvertFrom-Json
+if (-not (Test-Path -LiteralPath $MapFile)) {
+    Exit-Escalated -Reason 'map-missing' -Message "no shard map at $MapFile - running the full matrix"
+}
+
+# Read and shape-check together, because both failures mean the same thing: the map cannot be
+# trusted to say which shards cover a line.
+#
+# The try/catch is load-bearing, not defensive habit. $ErrorActionPreference is Stop, so a truncated
+# or malformed map made ConvertFrom-Json THROW - and a throw exits before any result is written, so
+# the caller sees no selection.json, the job fails, and the matrix never runs. The header has always
+# listed "no map / unreadable" as an escalation trigger; only the missing half was implemented.
+$map = $null
+try {
+    $map = Get-Content -LiteralPath $MapFile -Raw | ConvertFrom-Json
+
+    # A map missing any of these is not a map. Checked explicitly because the failure is otherwise
+    # silent and much later: a null .files makes every changed file look unmapped, which escalates
+    # for a misleading reason, and a null .knownShards indexes as empty so every selected shard
+    # resolves to a blank name.
+    foreach ($required in 'sha', 'knownShards', 'alwaysRun', 'files') {
+        if (-not $map.PSObject.Properties[$required]) { throw "no '$required' property" }
+    }
+}
+catch {
+    Exit-Escalated -Reason 'map-unreadable' `
+        -Message "the shard map at $MapFile could not be read - running the full matrix ($($_.Exception.Message))"
+}
 
 # The map's own commit is the reference, NOT the merge base. An earlier revision required
 # map.sha -eq mergeBase, which reads like prudence and is in fact a switch that pins the feature
@@ -307,10 +342,8 @@ $map = Get-Content -LiteralPath $MapFile -Raw | ConvertFrom-Json
 $mapSha = [string] $map.sha
 & git cat-file -e "$mapSha^{commit}" 2>$null
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "::warning::the map's commit $mapSha is not present in this checkout - running the full matrix"
-    $result = [pscustomobject]@{ escalate = $true; reason = 'map-unresolvable'; reasons = @(); shards = @() }
-    if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
-    exit 0
+    Exit-Escalated -Reason 'map-unresolvable' `
+        -Message "the map's commit $mapSha is not present in this checkout - running the full matrix"
 }
 
 $changed = Get-ChangedRanges -MapSha $mapSha
