@@ -176,6 +176,22 @@ jobs:
             return 2
           fi
 
+          # Merge-queue runs are candidates too, and better ones. A merge_group run validates the
+          # exact commit that is about to become master, so its tree matches by construction -
+          # whereas a pull_request run only matches while master has not moved, which in a busy
+          # repo means almost never. #2073 missed reuse for exactly that reason: 64 commits landed
+          # on master during the six hours it was open, so the merged tree was a combination that
+          # nothing had ever tested, and master repeated all 116 shards to rediscover 3 known
+          # failures.
+          #
+          # They cannot be found by head_sha - a merge_group run's head is the queue's temporary
+          # merge commit, not the PR head - so recent ones are listed unfiltered and left to the
+          # tree comparison below. That comparison is the actual safety property; how a candidate
+          # was found cannot weaken it.
+          if mq_json=$(gh api --method GET             "repos/${GITHUB_REPOSITORY}/actions/workflows/sonarcloud.yml/runs"             -f event=merge_group -f status=completed -f per_page=20 2>/dev/null); then
+            runs_json=$(jq -n --argjson a "$runs_json" --argjson b "$mq_json"               '{workflow_runs: (($a.workflow_runs // []) + ($b.workflow_runs // []))}')
+          fi
+
           # A red test ledger may still be an accepted improvement over baseline, so failure is a
           # usable completed conclusion. Cancelled/timed-out runs are never reusable.
           while IFS= read -r run_id; do
