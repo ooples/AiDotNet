@@ -85,17 +85,22 @@ function Get-ChangedRanges {
                 $count = if ($Matches[2]) { [int] $Matches[2] } else { 1 }
                 if ($count -gt 0) {
                     if (-not $changed.ContainsKey($current)) {
-                        $changed[$current] = [System.Collections.Generic.List[object]]::new()
+                        $changed[$current] = [System.Collections.Generic.List[int]]::new()
                     }
-                    [void] $changed[$current].Add(@($start, $start + $count - 1))
+                    # Parenthesised deliberately: inside @(...) the comma binds tighter than +,
+                    # so @($start, $start + $count - 1) parses as ($start, $start) + $count - 1,
+                    # i.e. array concatenation followed by subtraction from an array.
+                    [void] $changed[$current].Add($start)
+                    [void] $changed[$current].Add($start + $count - 1)
                 }
                 else {
                     # A deletion executes no new line, but the surrounding code changed meaning.
                     # Treat the deletion point as touched rather than invisible.
                     if (-not $changed.ContainsKey($current)) {
-                        $changed[$current] = [System.Collections.Generic.List[object]]::new()
+                        $changed[$current] = [System.Collections.Generic.List[int]]::new()
                     }
-                    [void] $changed[$current].Add(@([Math]::Max(1, $start), [Math]::Max(1, $start + 1)))
+                    [void] $changed[$current].Add([Math]::Max(1, $start))
+                    [void] $changed[$current].Add([Math]::Max(1, $start + 1))
                 }
             }
         }
@@ -129,18 +134,25 @@ function Select-ImpactedShards {
             continue
         }
 
-        foreach ($occurrence in $entry.Value) {
+        foreach ($occurrence in @($entry.Value)) {
             $shardName = [string] $Map.knownShards[[int] $occurrence.s]
             if ($selected.Contains($shardName)) { continue }
-            foreach ($range in $occurrence.r) {
-                $hit = $false
-                foreach ($hunk in $Changed[$path]) {
-                    if (Test-RangeOverlap -AStart $hunk[0] -AEnd $hunk[1] -BStart $range[0] -BEnd $range[1]) {
+            # Both sides are FLAT [start, end, start, end, ...]. Nested arrays are a trap: a file
+            # with exactly one executed range comes back from ConvertFrom-Json as two loose
+            # integers, and @() on a one-element collection flattens the same way, so every index
+            # silently shifts. Flat pairs cannot be unrolled into something that still indexes.
+            $ranges = @($occurrence.r)
+            $hunks = @($Changed[$path])
+            $hit = $false
+            for ($i = 0; $i + 1 -lt $ranges.Count -and -not $hit; $i += 2) {
+                for ($j = 0; $j + 1 -lt $hunks.Count; $j += 2) {
+                    if (Test-RangeOverlap -AStart ([int] $hunks[$j]) -AEnd ([int] $hunks[$j + 1]) `
+                                          -BStart ([int] $ranges[$i]) -BEnd ([int] $ranges[$i + 1])) {
                         $hit = $true; break
                     }
                 }
-                if ($hit) { [void] $selected.Add($shardName); break }
             }
+            if ($hit) { [void] $selected.Add($shardName) }
         }
     }
 
@@ -158,20 +170,23 @@ if ($SelfTest) {
     function Assert-True { param([bool] $Condition, [string] $What)
         if (-not $Condition) { [void] $failures.Add($What) } }
 
-    $map = [pscustomobject]@{
+    # Round-tripped through JSON: an in-memory map hides ConvertFrom-Json's single-element
+    # unrolling, which is exactly what broke the real path while this self-test passed.
+    $map = @{
         schemaVersion = 1
         knownShards   = @('Alpha', 'Beta')
         alwaysRun     = @('HeavyNoCoverage')
-        files         = [pscustomobject]@{
+        files         = @{
             'src/Covered.cs' = @(
-                [pscustomobject]@{ s = 0; r = @(, @(10, 20)) },
-                [pscustomobject]@{ s = 1; r = @(, @(100, 110)) }
+                @{ s = 0; r = @(10, 20) },
+                @{ s = 1; r = @(100, 110) }
             )
+            'src/SingleRange.cs' = @( @{ s = 0; r = @(5, 6) } )
         }
-    }
+    } | ConvertTo-Json -Depth 8 -Compress | ConvertFrom-Json
 
     # 1. A change on a line a shard executed selects that shard - the gate must FIRE.
-    $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Covered.cs' = @(, @(12, 14)) }
+    $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Covered.cs' = @(12, 14) }
     Assert-True (-not $r.Escalate) 'a mapped, covered change must not escalate'
     Assert-True ($r.Shards -contains 'Alpha') 'a change on Alpha''s executed lines must select Alpha'
     Assert-True (-not ($r.Shards -contains 'Beta')) 'a change outside Beta''s lines must NOT select Beta'
@@ -179,7 +194,7 @@ if ($SelfTest) {
 
     # 2. A change in a GAP selects neither - the gate must REFUSE to fire. Without this check a
     #    selector that returned every shard for every input would satisfy check 1 and be useless.
-    $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Covered.cs' = @(, @(50, 60)) }
+    $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Covered.cs' = @(50, 60) }
     Assert-True (-not ($r.Shards -contains 'Alpha')) 'a change in an unexecuted gap must not select Alpha'
     Assert-True (-not ($r.Shards -contains 'Beta')) 'a change in an unexecuted gap must not select Beta'
 
@@ -187,20 +202,20 @@ if ($SelfTest) {
     Assert-True ($r.Shards -contains 'HeavyNoCoverage') 'shards without coverage must always be selected'
 
     # 4. Fail safe: an unmapped file, and shared infrastructure, both escalate.
-    $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Unmapped.cs' = @(, @(1, 5)) }
+    $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Unmapped.cs' = @(1, 5) }
     Assert-True $r.Escalate 'an unmapped file must escalate to the full matrix'
-    $r = Select-ImpactedShards -Map $map -Changed @{ 'Directory.Packages.props' = @(, @(1, 2)) }
+    $r = Select-ImpactedShards -Map $map -Changed @{ 'Directory.Packages.props' = @(1, 2) }
     Assert-True $r.Escalate 'a dependency-property change must escalate'
-    $r = Select-ImpactedShards -Map $map -Changed @{ '.github/workflows/ci.yml' = @(, @(1, 2)) }
+    $r = Select-ImpactedShards -Map $map -Changed @{ '.github/workflows/ci.yml' = @(1, 2) }
     Assert-True $r.Escalate 'a workflow change must escalate'
 
     # 5. Boundaries. The first and last executed line count as hits; the lines either side do not.
     foreach ($edge in @(10, 20)) {
-        $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Covered.cs' = @(, @($edge, $edge)) }
+        $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Covered.cs' = @($edge, $edge) }
         Assert-True ($r.Shards -contains 'Alpha') "executed boundary line $edge must select Alpha"
     }
     foreach ($edge in @(9, 21)) {
-        $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Covered.cs' = @(, @($edge, $edge)) }
+        $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Covered.cs' = @($edge, $edge) }
         Assert-True (-not ($r.Shards -contains 'Alpha')) "unexecuted boundary line $edge must not select Alpha"
     }
 
