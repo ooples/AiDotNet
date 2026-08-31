@@ -541,11 +541,21 @@ public class AllModelsCloneTests
             // and that distinction is the whole point - churn and residency need different fixes.
             long p0 = GC.GetTotalAllocatedBytes(precise: true);
 
+            // DO NOT read ParameterCount here. Doing so forces lazy shape resolution, and that
+            // single read is enough to change the outcome: with it, TimeGANGenerator's original
+            // materialized early and matched its copy, turning a real 8640-against-192 mismatch
+            // into a pass. The probe must observe the model, not resolve it.
+            // Non-mutating: reports what is materialized without resolving anything, so unlike
+            // ParameterCount it can be read before the probe without deciding the outcome.
+            var matBeforeProbe = model.MaterializedParameterCount();
             var probed = Resolve(model);
+            var matAfterProbe = model.MaterializedParameterCount();
             long p1 = GC.GetTotalAllocatedBytes(precise: true);
 
             var before = model.ParameterCount;
             var copy = model.DeepCopy() as NeuralNetworkBase<float>;
+            var matAfterCopy = copy is null ? -1 : copy.MaterializedParameterCount();
+            var afterCopy = copy is null ? -1 : copy.ParameterCount;
             long p2 = GC.GetTotalAllocatedBytes(precise: true);
 
             if (copy is null) return Fail(open, "DeepCopy returned null");
@@ -554,7 +564,14 @@ public class AllModelsCloneTests
             Resolve(copy);
             long p3 = GC.GetTotalAllocatedBytes(precise: true);
 
-            LastPhases = $"construct={pc1 - pc0} resolve1={p1 - p0} copy={p2 - p1} resolve2={p3 - p2}";
+            // Parameter counts alongside the allocation phases. A count that MOVES across DeepCopy
+            // means the two sides materialized different amounts of a lazy surface, which is a
+            // different defect from a copy that lost state, and the totals alone cannot tell them
+            // apart -- TimeGANGenerator reports 8640 against 192 with the probe having run on both.
+            LastPhases = $"construct={pc1 - pc0} resolve1={p1 - p0} copy={p2 - p1} resolve2={p3 - p2}"
+                + $" mat(beforeProbe={matBeforeProbe} afterProbe={matAfterProbe} afterCopy={matAfterCopy})"
+                + $" counts(afterResolve1={before}"
+                + $" afterCopy={afterCopy} afterResolve2={copy.ParameterCount})";
 
             if (copy.ParameterCount != before)
             {
@@ -569,7 +586,7 @@ public class AllModelsCloneTests
                     return SkipMarker;
                 }
 
-                return Fail(open, $"{copy.ParameterCount} parameters against {before}");
+                return Fail(open, $"{copy.ParameterCount} parameters against {before} || {LastPhases}");
             }
 
             // Live heap immediately before the independence check: the two resident models plus
@@ -602,11 +619,20 @@ public class AllModelsCloneTests
                 .Take(4);
             var origin = string.Join(" <- ", frames);
 
+            // An OutOfMemoryException cannot afford to describe itself -- building the message
+            // allocates, and the heap is exactly what has run out. LayerBase records the shape it
+            // was about to allocate beforehand, so the culprit weight survives the failure.
+            var attempted = AiDotNet.NeuralNetworks.Layers.LayerBase<float>.LastAttemptedWeightShape;
+            var attemptedOwner = AiDotNet.NeuralNetworks.Layers.LayerBase<float>.LastAttemptedWeightOwner;
+            var weight = attempted is null
+                ? string.Empty
+                : $" || last weight attempt: {attemptedOwner} [{string.Join(",", attempted)}]";
+
             return Fail(
                 open,
                 origin.Length == 0
-                    ? $"{inner.GetType().Name}: {trimmed} || {LastPhases}"
-                    : $"{inner.GetType().Name}: {trimmed} || {origin} || {LastPhases}");
+                    ? $"{inner.GetType().Name}: {trimmed}{weight} || {LastPhases}"
+                    : $"{inner.GetType().Name}: {trimmed} || {origin}{weight} || {LastPhases}");
         }
         finally
         {
