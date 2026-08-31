@@ -1957,6 +1957,44 @@ jobs:
           echo "ARTIFACT_NAME=coverage-${{ github.sha }}-$slug" >> $env:GITHUB_ENV
           echo "TEST_RESULTS_ARTIFACT_NAME=test-results-${{ github.sha }}-$slug" >> $env:GITHUB_ENV
 
+      # Test-impact digest: the executed source lines for this shard, ~200 KB against the coverage
+      # XML's ~234 MB. Uploaded separately so the nightly map build downloads kilobytes per shard
+      # rather than a quarter of a gigabyte; the XML stays available as a rebuild fallback.
+      #
+      # Heavy and timing shards collect no coverage at all ($collectCoverage above is
+      # `-not ($heavyShard -or $measuresTiming)`), so they legitimately produce no digest. They are
+      # recorded as always-run in the map instead, which is what stops selection silently skipping
+      # exactly the shards that have OOM-killed runners.
+      - name: Build test-impact digest
+        if: always()
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $coverage = @(Get-ChildItem -Path TestResults -Filter 'coverage.opencover.xml' -Recurse -File -ErrorAction SilentlyContinue |
+              Sort-Object Length -Descending)
+          if ($coverage.Count -eq 0) {
+            Write-Host "no coverage for '${{ matrix.shard.name }}' - this shard must be listed as always-run"
+            exit 0
+          }
+
+          # Largest wins: the collector writes both a raw file and an attachment copy of the same
+          # run, and a truncated copy would silently under-report executed lines.
+          New-Item -ItemType Directory -Path impact-digest -Force | Out-Null
+          $slug = "${{ matrix.shard.name }}" -replace '[\\/:*?"<>|\s-]+', '_'
+          & ./tools/TestImpact/New-CoverageDigest.ps1 `
+              -CoverageXml $coverage[0].FullName `
+              -Shard "${{ matrix.shard.name }}" `
+              -OutFile "impact-digest/$slug.digest.json"
+
+      - name: Upload test-impact digest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        if: always()
+        continue-on-error: true
+        with:
+          name: impact-digest-${{ env.ARTIFACT_NAME }}
+          path: impact-digest/*.digest.json
+          if-no-files-found: ignore
+
       - name: Upload coverage + test results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         if: always()
