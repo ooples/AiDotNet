@@ -1169,12 +1169,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             {
                 var flat = layer.GetParameters();
                 if (flat.Length == 0) continue;
+                // DETACHED. A layer that is not a LayerBase can only surface its parameters through
+                // a flat vector, so this payload is a copy: writing into it updates nothing.
                 yield return new AiDotNet.Models.Parameters.ParameterChunk<T>(
                     $"layers/{i:D8}",
                     layer.SupportsTraining
                         ? AiDotNet.Models.Parameters.ParameterSlotRole.Trainable
                         : AiDotNet.Models.Parameters.ParameterSlotRole.LearnedState,
-                    new Tensor<T>(new[] { flat.Length }, flat));
+                    new Tensor<T>(new[] { flat.Length }, flat),
+                    sourceTensor: null,
+                    writableInPlace: false);
             }
         }
 

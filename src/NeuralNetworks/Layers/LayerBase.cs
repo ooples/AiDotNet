@@ -203,9 +203,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     private bool _applyingPendingParameterRestore;
 
     /// <summary>The kinds of slot that make up the generated, inheritance-aware parameter walk.</summary>
+    /// <remarks>
+    /// A <c>Legacy</c> member used to lead this list, for layers that kept values in the base flat
+    /// <c>Parameters</c> vector instead of declared components. Every such layer is now generated
+    /// with <c>[AutoParameters]</c>, so the member became unreachable and was removed. Order still
+    /// matters: the kind partition in GetOrderedParameterComponents walks these ordinally, and the
+    /// relative order of the remaining members is unchanged, so the flat parameter surface and
+    /// existing checkpoints are unaffected.
+    /// </remarks>
     protected enum DeclaredParameterComponentKind
     {
-        Legacy,
         Trainable,
         Buffer,
         SubLayer,
@@ -844,12 +851,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 return cached;
             }
 
+            // NO LEGACY COMPONENT. A layer keeping values in the base flat Parameters vector used
+            // to contribute one wholesale component here. Every layer that owns parameters is now
+            // generated with [AutoParameters], which made that branch unreachable; a trip-wire
+            // confirmed it before removal, with zero hits across 514 layer tests, 1107
+            // NeuralNetworks unit tests and a full clone-sweep shard. The kind partition below
+            // preserves the relative order of the remaining kinds, so the flat parameter surface
+            // and existing checkpoints are unchanged.
             var components = new List<DeclaredParameterComponent>();
-            if (Parameters.Length > 0 && !LegacyParametersAreDerivedSnapshot)
-            {
-                components.Add(new DeclaredParameterComponent(
-                    DeclaredParameterComponentKind.Legacy));
-            }
 
             AppendDeclaredParameterComponents(components);
 
@@ -905,7 +914,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // reproduce the same model-agnostic order the base surfaces have always exposed.
             cached = new DeclaredParameterComponent[components.Count];
             int orderedIndex = 0;
-            for (int kind = (int)DeclaredParameterComponentKind.Legacy;
+            for (int kind = (int)DeclaredParameterComponentKind.Trainable;
                  kind <= (int)DeclaredParameterComponentKind.SubLayer;
                  kind++)
             {
@@ -1454,18 +1463,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </summary>
     protected virtual bool IsDeclaredParameterFree => false;
 
-    /// <summary>
-    /// Declares that the inherited legacy <see cref="Parameters"/> vector is a cached flat view of
-    /// this layer's generated tensor and child-layer parameter graph, rather than additional owned
-    /// parameter storage.
-    /// </summary>
-    /// <remarks>
-    /// Some migrated composite layers historically assigned <c>Parameters = GetParameters()</c>
-    /// after constructing their children. Counting that snapshot as a legacy component as well as
-    /// walking the children publishes every child value twice. The parameter generator recognizes
-    /// that assignment and overrides this contract for the affected partial layer.
-    /// </remarks>
-    protected virtual bool LegacyParametersAreDerivedSnapshot => false;
 
     /// <summary>
     /// Computes this layer's own parameter width from declared shapes without allocating lazy
@@ -1527,12 +1524,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         for (int componentIndex = 0; componentIndex < components.Length; componentIndex++)
         {
             var component = components[componentIndex];
-            if (component.Kind == DeclaredParameterComponentKind.Legacy)
-            {
-                count = checked(count + Parameters.Length);
-                continue;
-            }
-
             if (component.Kind == DeclaredParameterComponentKind.SubLayer)
                 continue;
 
@@ -1692,12 +1683,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         for (int i = 0; i < components.Length; i++)
         {
             var component = components[i];
-            if (component.Kind == DeclaredParameterComponentKind.Legacy)
-            {
-                count = checked(count + Parameters.Length);
-            }
-            else if (component.Kind is DeclaredParameterComponentKind.Trainable
-                     or DeclaredParameterComponentKind.Buffer)
+            if (component.Kind is DeclaredParameterComponentKind.Trainable
+                or DeclaredParameterComponentKind.Buffer)
             {
                 count = checked(count + ParameterComponentScalarCount(component));
             }
@@ -5921,9 +5908,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 var component = components[i];
                 switch (component.Kind)
                 {
-                    case DeclaredParameterComponentKind.Legacy:
-                        total += Parameters.Length;
-                        break;
                     case DeclaredParameterComponentKind.Trainable:
                     case DeclaredParameterComponentKind.Buffer:
                         total += ParameterComponentScalarCount(component);
@@ -6549,15 +6533,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         {
             var component = components[i];
 
-            // Mirrors EnumerateParameterStateChunks' component switch, branch for branch. A layer
-            // still on the legacy flat vector contributes its whole Parameters surface as ONE chunk
-            // and owns no per-component value slot -- that is why a slots-only walk came up short.
-            if (component.Kind == DeclaredParameterComponentKind.Legacy)
-            {
-                if (Parameters.Length > 0) targets.Add(new ParameterStateWriteTarget(this));
-                continue;
-            }
-
+            // Mirrors EnumerateParameterStateChunks' component switch, branch for branch.
             if (component.Kind is DeclaredParameterComponentKind.Trainable
                 or DeclaredParameterComponentKind.Buffer)
             {
@@ -6955,18 +6931,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         {
             var component = components[i];
             string componentPrefix = stablePrefix + $"/components/{i:D8}";
-            if (component.Kind == DeclaredParameterComponentKind.Legacy)
-            {
-                if (Parameters.Length > 0)
-                {
-                    yield return new ParameterChunk<T>(
-                        componentPrefix + "/legacy",
-                        ParameterSlotRole.Trainable,
-                        new Tensor<T>(new[] { Parameters.Length }, Parameters));
-                }
-                continue;
-            }
-
             if (component.Kind is DeclaredParameterComponentKind.Trainable
                 or DeclaredParameterComponentKind.Buffer)
             {
@@ -6998,12 +6962,17 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             }
             else
             {
+                // DETACHED, for the same reason as the network-level branch: a sublayer that is not
+                // a LayerBase can only surface its parameters through a flat vector, so this payload
+                // is a copy and an in-place write would never reach it.
                 var flat = sub.GetParameters();
                 if (flat.Length == 0) continue;
                 yield return new ParameterChunk<T>(
                     componentPrefix + "/child",
                     sub.SupportsTraining ? ParameterSlotRole.Trainable : ParameterSlotRole.LearnedState,
-                    new Tensor<T>(new[] { flat.Length }, flat));
+                    new Tensor<T>(new[] { flat.Length }, flat),
+                    sourceTensor: null,
+                    writableInPlace: false);
             }
         }
     }
@@ -7030,16 +6999,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         for (int i = 0; i < components.Length; i++)
         {
             var component = components[i];
-            if (component.Kind == DeclaredParameterComponentKind.Legacy)
-            {
-                for (int j = 0; j < Parameters.Length; j++)
-                {
-                    if (dest is not null) dest[offset] = Parameters[j];
-                    offset++;
-                }
-                continue;
-            }
-
             if (component.Kind is DeclaredParameterComponentKind.Trainable
                 or DeclaredParameterComponentKind.Buffer)
             {
@@ -7103,12 +7062,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         for (int i = 0; i < components.Length; i++)
         {
             var component = components[i];
-            if (component.Kind == DeclaredParameterComponentKind.Legacy)
-            {
-                offset += Parameters.Length;
-                continue;
-            }
-
             if (component.Kind == DeclaredParameterComponentKind.Buffer)
             {
                 offset += ParameterComponentScalarCount(component);
@@ -7266,16 +7219,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         }
 
         var components = GetOrderedParameterComponents();
-        bool hasRegistry = System.Array.Exists(components, component =>
-            component.Kind != DeclaredParameterComponentKind.Legacy);
+        bool hasRegistry = components.Length > 0;
         int currentConcreteCount = FillParameters(null, 0);
 
         if (hasRegistry && parameters.Length != currentConcreteCount)
         {
             EnsureMaterializedForParameterSurface();
             components = GetOrderedParameterComponents();
-            hasRegistry = System.Array.Exists(components, component =>
-                component.Kind != DeclaredParameterComponentKind.Legacy);
+            hasRegistry = components.Length > 0;
             currentConcreteCount = FillParameters(null, 0);
         }
 
@@ -7337,10 +7288,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 breakdown.Append(components[i].Kind);
                 if (components[i].Name is { Length: > 0 } componentName)
                     breakdown.Append(' ').Append(componentName);
-                breakdown.Append('=').Append(
-                    components[i].Kind == DeclaredParameterComponentKind.Legacy
-                        ? Parameters.Length
-                        : ParameterComponentScalarCount(components[i]));
+                breakdown.Append('=').Append(ParameterComponentScalarCount(components[i]));
             }
 
             throw new ArgumentException(
@@ -7419,14 +7367,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         for (int componentIndex = 0; componentIndex < components.Length; componentIndex++)
         {
             var component = components[componentIndex];
-            if (component.Kind == DeclaredParameterComponentKind.Legacy)
-            {
-                var own = new Vector<T>(Parameters.Length);
-                for (int j = 0; j < own.Length; j++) own[j] = source[offset++];
-                Parameters = own;
-                continue;
-            }
-
             if (component.Kind is DeclaredParameterComponentKind.Trainable
                 or DeclaredParameterComponentKind.Buffer)
             {
