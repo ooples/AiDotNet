@@ -99,6 +99,9 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
     private readonly int _kernelSize;
     private readonly int _stride;
     private readonly int _padding;
+    private readonly bool _separableOffsetProjection;
+    private readonly int _offsetKernelSize;
+    private readonly int _offsetPadding;
     private readonly int _groups;
     private readonly int _deformGroups;
 
@@ -252,6 +255,35 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
     /// outputChannels/kernelSize and the geometric strides are required
     /// at construction since they don't depend on input dims.
     /// </remarks>
+    /// <summary>
+    /// The constructor as it existed before the separable (DCNv3) offset projection was added.
+    /// Equivalent to passing <c>separableOffsetProjection: false</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Kept because inserting a parameter ahead of <c>engine</c> changed the CLR signature, so
+    /// already-compiled callers could no longer bind and positional source callers stopped
+    /// compiling. It is not merely a source convenience: <c>DeserializationHelper</c> locates this
+    /// type's constructor by exact reflection signature
+    /// (<c>int, int, int, int, int, int, bool, IEngine</c>), so without this overload
+    /// <c>GetConstructor</c> returned null and EVERY DeformableConvolutionalLayer deserialization
+    /// threw <c>MissingLayerCtorException</c>.
+    /// </para>
+    /// </remarks>
+    public DeformableConvolutionalLayer(
+        int outputChannels,
+        int kernelSize,
+        int stride,
+        int padding,
+        int groups,
+        int deformGroups,
+        bool useModulation,
+        IEngine? engine)
+        : this(outputChannels, kernelSize, stride, padding, groups, deformGroups, useModulation,
+               separableOffsetProjection: false, engine: engine)
+    {
+    }
+
     public DeformableConvolutionalLayer(
         int outputChannels,
         int kernelSize = 3,
@@ -260,6 +292,7 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
         int groups = 1,
         int deformGroups = 1,
         bool useModulation = true,
+        bool separableOffsetProjection = false,
         IEngine? engine = null)
         : base(
             [-1, -1, -1],
@@ -296,6 +329,45 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
         _groups = groups;
         _deformGroups = deformGroups;
         _useModulation = useModulation;
+
+        // DCNv3 (Wang et al., InternImage, CVPR 2023) predicts offsets and modulation masks with
+        // LINEAR projections, `nn.Linear(channels, group*K*2)` and `nn.Linear(channels, group*K)`.
+        // DCNv1/v2 (Dai et al., ICCV 2017 - this layer's own reference) predicts them with a dense
+        // kernelSize x kernelSize convolution over every input channel. The v1 form costs
+        // kernelSize^2 times as many parameters in those two branches, and they dominate: at
+        // InternImage-Huge's stage 4 (2560 channels, 160 deform groups) the offset branch alone is
+        // [2880, 2560, 3, 3] = 265 MB, against 29 MB for the v3 projection.
+        //
+        // Default false, so this layer keeps matching the paper it cites. Models that specify DCNv3
+        // opt in.
+        _separableOffsetProjection = separableOffsetProjection;
+        _offsetKernelSize = separableOffsetProjection ? 1 : kernelSize;
+        _offsetPadding = separableOffsetProjection ? 0 : padding;
+
+        // The offset/mask grid has to line up with the deformable convolution's own output grid.
+        // With 'same' padding, padding == (kernelSize-1)/2, the two agree for ANY stride:
+        // (H + 2p - k)/s + 1 collapses to (H-1)/s + 1, which is exactly what a 1x1 / pad-0
+        // projection produces. Off that convention they diverge, so refuse rather than silently
+        // emit a mismatched offset field.
+        // An EVEN kernel cannot satisfy the 'same' convention at all: (k-1)/2 truncates, so k=2
+        // accepts padding 0, and the main convolution then produces (H + 0 - 2)/s + 1 positions
+        // while the 1x1 offset projection produces (H - 1)/s + 1 -- one row and column apart, with
+        // offset and mask tensors that cannot be indexed against the output they are steering.
+        // The check below cannot catch it because k=2 with padding 0 satisfies it exactly.
+        if (separableOffsetProjection && kernelSize % 2 == 0)
+            throw new ArgumentException(
+                $"A separable (DCNv3) offset projection needs an odd kernel so that 'same' padding "
+                    + $"exists: with kernelSize {kernelSize} the main convolution and the 1x1 offset "
+                    + "projection produce different spatial extents, and the offsets would not line "
+                    + "up with the positions they steer.",
+                nameof(kernelSize));
+
+        if (separableOffsetProjection && padding != (kernelSize - 1) / 2)
+            throw new ArgumentException(
+                $"A separable (DCNv3) offset projection needs 'same' padding - padding == (kernelSize-1)/2 - "
+                    + $"so the 1x1 offset grid matches the deformable output grid. Got kernelSize {kernelSize} "
+                    + $"with padding {padding}; expected padding {(kernelSize - 1) / 2}.",
+                nameof(padding));
 
         // Defer all weight allocation to OnFirstForward — channel-shape
         // tensors (_weights/_offsetWeights/_maskWeights) need _inputChannels.
@@ -349,11 +421,11 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
                 _weights, _outputChannels, inChannelsPerGroup, _kernelSize, _kernelSize)
             && WeightsAlreadyAllocated(_bias, _outputChannels)
             && WeightsAlreadyAllocated(
-                _offsetWeights, offsetChannels, inChannels, _kernelSize, _kernelSize)
+                _offsetWeights, offsetChannels, inChannels, _offsetKernelSize, _offsetKernelSize)
             && WeightsAlreadyAllocated(_offsetBias, offsetChannels)
             && (!_useModulation
                 || (WeightsAlreadyAllocated(
-                        _maskWeights, maskChannels, inChannels, _kernelSize, _kernelSize)
+                        _maskWeights, maskChannels, inChannels, _offsetKernelSize, _offsetKernelSize)
                     && WeightsAlreadyAllocated(_maskBias, maskChannels)));
 
         // A checkpoint can materialize and populate every tensor before the first Forward call.
@@ -363,13 +435,13 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
         {
             _weights = InitializeWeights(_outputChannels, inChannelsPerGroup, _kernelSize, _kernelSize);
             _bias = AllocateLazyWeight([_outputChannels]);
-            _offsetWeights = InitializeWeights(offsetChannels, inChannels, _kernelSize, _kernelSize);
+            _offsetWeights = InitializeWeights(offsetChannels, inChannels, _offsetKernelSize, _offsetKernelSize);
             _offsetBias = AllocateLazyWeight([offsetChannels]);
 
             // Modulation mask weights (DCNv2/DCNv3 only).
             if (_useModulation)
             {
-                _maskWeights = InitializeWeights(maskChannels, inChannels, _kernelSize, _kernelSize);
+                _maskWeights = InitializeWeights(maskChannels, inChannels, _offsetKernelSize, _offsetKernelSize);
                 _maskBias = AllocateLazyWeight([maskChannels]);
             }
         }
@@ -520,7 +592,7 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
             _offsetWeights,
             _offsetBias,
             _stride, _stride,      // strideH, strideW
-            _padding, _padding,    // padH, padW
+            _offsetPadding, _offsetPadding, // padH, padW (1x1 projection pads 0 in DCNv3)
             1, 1,                  // dilationH, dilationW
             FusedActivationType.None);
         var offsets = offsetsGpu;
@@ -530,16 +602,25 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
         Tensor<T>? maskGpu = null;
         if (_useModulation && _maskWeights != null && _maskBias != null)
         {
-            // Use FusedConv2DGpu with Sigmoid activation for mask prediction
+            // The fused kernel can only apply a per-element activation, which covers DCNv2's
+            // sigmoid but not DCNv3's softmax across sample points. Fuse the sigmoid where that IS
+            // the answer, and otherwise take the raw logits and normalize them afterwards, so the
+            // GPU path produces the same modulation as the CPU path rather than quietly staying on
+            // DCNv2 behaviour.
+            bool fuseSigmoid =
+                ResolvedModulationNormalization == DeformableModulationNormalization.Sigmoid;
+
             maskGpu = gpuEngine.FusedConv2DGpu(
                 input4D,
                 _maskWeights,
                 _maskBias,
                 _stride, _stride,      // strideH, strideW
-                _padding, _padding,    // padH, padW
+                _offsetPadding, _offsetPadding, // padH, padW (1x1 projection pads 0 in DCNv3)
                 1, 1,                  // dilationH, dilationW
-                FusedActivationType.Sigmoid);
-            mask = maskGpu;
+                fuseSigmoid ? FusedActivationType.Sigmoid : FusedActivationType.None);
+
+            mask = fuseSigmoid ? maskGpu : NormalizeModulation(gpuEngine, maskGpu);
+            maskGpu = mask;
         }
 
         // Store for potential backward pass
@@ -592,7 +673,7 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
             input,
             _offsetWeights,
             new[] { _stride, _stride },
-            new[] { _padding, _padding },
+            new[] { _offsetPadding, _offsetPadding },
             new[] { 1, 1 });
 
         // Add bias
@@ -606,15 +687,15 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
             input,
             _maskWeights ?? throw new InvalidOperationException("_maskWeights has not been initialized."),
             new[] { _stride, _stride },
-            new[] { _padding, _padding },
+            new[] { _offsetPadding, _offsetPadding },
             new[] { 1, 1 });
 
         // Add bias
         var maskBiasVal = _maskBias ?? throw new InvalidOperationException("_maskBias has not been initialized.");
         maskOutput = AddBiasToTensor(maskOutput, maskBiasVal);
 
-        // Apply sigmoid activation for modulation weights
-        maskOutput = _engine.Sigmoid(maskOutput);
+        // DCNv2 sigmoid or DCNv3 softmax across the sample points, per the layer's configuration.
+        maskOutput = NormalizeModulation(_engine, maskOutput);
 
         return maskOutput;
     }
@@ -814,6 +895,65 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
     /// (outputChannels/padding wrong), producing a mis-shaped output tensor and breaking
     /// Clone for every DCN-using model (InternImage, BasicVSR++).
     /// </summary>
+    /// <summary>
+    /// How the modulation scalars are normalized. Defaults to <c>Auto</c>, which follows the
+    /// layer's own configuration.
+    /// </summary>
+    /// <remarks>
+    /// Exposed so a caller can pin the behaviour -- run a DCNv3-shaped layer with DCNv2 modulation
+    /// to reproduce an older result, or vice versa -- without the layer silently choosing for them.
+    /// </remarks>
+    public DeformableModulationNormalization ModulationNormalization { get; set; }
+        = DeformableModulationNormalization.Auto;
+
+    /// <summary>Auto resolved against the layer's configuration.</summary>
+    private DeformableModulationNormalization ResolvedModulationNormalization =>
+        ModulationNormalization switch
+        {
+            DeformableModulationNormalization.Sigmoid => DeformableModulationNormalization.Sigmoid,
+            DeformableModulationNormalization.Softmax => DeformableModulationNormalization.Softmax,
+            // A separable offset projection is this layer's DCNv3 marker, and DCNv3 normalizes with
+            // softmax. Anything else is DCNv2-shaped and keeps the per-point sigmoid.
+            _ => _separableOffsetProjection
+                ? DeformableModulationNormalization.Softmax
+                : DeformableModulationNormalization.Sigmoid,
+        };
+
+    /// <summary>
+    /// Applies the resolved normalization to raw modulation logits.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The softmax runs ACROSS the K = kernelSize^2 sample points within each deformable group, per
+    /// location, which is what DCNv3 specifies -- not across channels and not across space. The
+    /// mask arrives as [N, deformGroups * K, H, W] in NCHW with the group index outermost, so
+    /// reshaping to [N * deformGroups, K, H * W] is a contiguous reinterpretation and axis 1 is
+    /// exactly the sample-point axis.
+    /// </para>
+    /// <para>
+    /// Built from engine ops rather than an element loop on purpose. A scalar loop writing into a
+    /// fresh tensor would compute the right values and silently detach the mask from the tape,
+    /// leaving _maskWeights with no gradient -- the modulation would stop learning while still
+    /// looking correct in a forward pass.
+    /// </para>
+    /// </remarks>
+    private Tensor<T> NormalizeModulation(IEngine engine, Tensor<T> maskLogits)
+    {
+        if (ResolvedModulationNormalization == DeformableModulationNormalization.Sigmoid)
+            return engine.Sigmoid(maskLogits);
+
+        int batch = maskLogits.Shape[0];
+        int channels = maskLogits.Shape[1];
+        int height = maskLogits.Shape[2];
+        int width = maskLogits.Shape[3];
+        int samplePoints = _kernelSize * _kernelSize;
+
+        var grouped = engine.Reshape(maskLogits,
+            [batch * _deformGroups, samplePoints, height * width]);
+        var normalized = engine.Softmax(grouped, 1);
+        return engine.Reshape(normalized, [batch, channels, height, width]);
+    }
+
     internal override Dictionary<string, string> GetMetadata()
     {
         var metadata = base.GetMetadata();
@@ -824,6 +964,11 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
         metadata["Groups"] = _groups.ToString();
         metadata["DeformGroups"] = _deformGroups.ToString();
         metadata["UseModulation"] = _useModulation.ToString();
+        // Without this the mode is lost on reload: the layer rebuilds with a DENSE offset
+        // projection and allocates full offset and mask tensors where the saved model has 1x1
+        // ones, so the restored parameter vector no longer matches the architecture.
+        metadata["SeparableOffsetProjection"] = _separableOffsetProjection.ToString();
+        metadata["ModulationNormalization"] = ModulationNormalization.ToString();
         return metadata;
     }
 

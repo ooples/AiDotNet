@@ -257,9 +257,9 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// Gets the biases tensor of the convolutional layer.
     /// </summary>
     /// <returns>The bias values added to each output channel.</returns>
-    public override Tensor<T> GetBiases()
+    public override Tensor<T>? GetBiases()
     {
-        return _biases;
+        return UseBias ? _biases : null;
     }
 
     public override bool SupportsTraining => true;
@@ -307,9 +307,33 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// perfectly match what the kernel is looking for.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "OutputDepth")]
-
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "OutputDepth", Condition = nameof(UseBias))]
     private Tensor<T> _biases;
+
+    /// <summary>What the caller asked for; <see cref="UseBias"/> is the resolved answer.</summary>
+    private readonly BiasMode _biasMode;
+
+    /// <summary>
+    /// Whether this convolution carries its own additive bias.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Gates <c>_biases</c> through <c>TrainableParameterAttribute.Condition</c>. When false the
+    /// bias stays a zero-length placeholder and is absent from ParameterCount, GetParameters,
+    /// gradients, checkpoints and clones alike -- it is not merely frozen at zero.
+    /// </para>
+    /// <para>
+    /// <c>BiasMode.Auto</c> resolves to true here. A convolution built on its own cannot see what
+    /// consumes its output, and <c>nn.Conv2d</c> defaults to <c>bias=True</c> for the same reason.
+    /// A composite that DOES know what follows resolves Auto with <c>LayerBase.ResolveBias</c> and
+    /// passes the answer down as <c>Always</c> or <c>Never</c>.
+    /// </para>
+    /// </remarks>
+    /// <remarks>
+    /// <c>Unspecified</c> reads as "has a bias", which is what a checkpoint predating this option
+    /// contains and therefore what restoring one must reproduce.
+    /// </remarks>
+    public bool UseBias => _biasMode != BiasMode.Never;
 
     /// <summary>
     /// Reference-keyed cache of the rank-1 <c>_biases</c> reshaped to
@@ -362,6 +386,45 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// Gradient of the biases computed during backpropagation via autodiff.
     /// </summary>
     [Scratch]
+
+    /// <summary>
+    /// Input shape the fast-route verification was performed for, or <c>null</c> if never verified.
+    /// </summary>
+    /// <remarks>
+    /// Keyed by shape because the engine's algorithm choice is shape-dependent: a verdict reached
+    /// for one input size says nothing about another.
+    /// </remarks>
+    private int[]? _optimizedVerifiedForShape;
+
+    /// <summary>Whether the fast route reproduced the reference exactly at that shape.</summary>
+    private bool _optimizedMatchesReference;
+
+    private static int[] ShapeSnapshot(Tensor<T> tensor)
+    {
+        var shape = new int[tensor.Rank];
+        for (int i = 0; i < shape.Length; i++) shape[i] = tensor.Shape[i];
+        return shape;
+    }
+
+    private static bool ShapeMatches(int[] snapshot, Tensor<T> tensor)
+    {
+        if (snapshot.Length != tensor.Rank) return false;
+        for (int i = 0; i < snapshot.Length; i++)
+            if (snapshot[i] != tensor.Shape[i]) return false;
+        return true;
+    }
+
+    /// <summary>Bit-for-bit equality. A NaN anywhere reports false, which keeps the reference.</summary>
+    private static bool BitwiseEquals(Tensor<T> a, Tensor<T> b)
+    {
+        if (a.Length != b.Length) return false;
+        var comparer = EqualityComparer<T>.Default;
+        for (int i = 0; i < a.Length; i++)
+            if (!comparer.Equals(a[i], b[i])) return false;
+        return true;
+    }
+
+
     private Tensor<T>? _biasesGradient;
 
     /// <summary>
@@ -505,6 +568,20 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     public ConvolutionalLayer(
+        int outputDepth,
+        int kernelSize,
+        int stride,
+        int padding,
+        IActivationFunction<T>? activationFunction,
+        IInitializationStrategy<T>? initializationStrategy,
+        IActivationFunction<T>? nonlinearityForInit,
+        int groups)
+        : this(outputDepth, kernelSize, stride, padding, activationFunction,
+            initializationStrategy, nonlinearityForInit, groups, BiasMode.Auto)
+    {
+    }
+
+    public ConvolutionalLayer(
         [LayerState] int outputDepth,
         [LayerState] int kernelSize,
         [LayerState] int stride = 1,
@@ -512,7 +589,8 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null,
         IActivationFunction<T>? nonlinearityForInit = null,
-        [LayerState] int groups = 1)
+        [LayerState] int groups = 1,
+        [LayerState] BiasMode biasMode = BiasMode.Auto)
         // Linear by default, matching PyTorch nn.Conv2d and Keras Conv2D, both of which apply no
         // activation unless one is requested. This previously defaulted to ReLU, which is the
         // same defect this PR fixed in DenseLayer: every caller that wanted a plain convolution —
@@ -560,6 +638,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 
         // Always start fully deferred: shape, channel count, and weights resolve on first Forward.
         _kernels = new Tensor<T>([0, 0, 0, 0]);
+        _biasMode = biasMode;
         _biases = new Tensor<T>([0]);
         _lastInput = new Tensor<T>([0, 0, 0, 0]);
         _lastOutput = new Tensor<T>([0, 0, 0, 0]);
@@ -661,7 +740,16 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public ConvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding,
                               IVectorActivationFunction<T> vectorActivationFunction,
-                              IInitializationStrategy<T>? initializationStrategy = null)
+                              IInitializationStrategy<T>? initializationStrategy)
+        : this(outputDepth, kernelSize, stride, padding, vectorActivationFunction,
+            initializationStrategy, BiasMode.Auto)
+    {
+    }
+
+    public ConvolutionalLayer(int outputDepth, int kernelSize, int stride, int padding,
+                              IVectorActivationFunction<T> vectorActivationFunction,
+                              IInitializationStrategy<T>? initializationStrategy = null,
+                              BiasMode biasMode = BiasMode.Auto)
         : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 }, vectorActivationFunction)
     {
         if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth), "outputDepth must be positive.");
@@ -680,6 +768,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 
         // Always start fully deferred: shape, channel count, and weights resolve on first Forward.
         _kernels = new Tensor<T>([0, 0, 0, 0]);
+        _biasMode = biasMode;
         _biases = new Tensor<T>([0]);
         _lastInput = new Tensor<T>([0, 0, 0, 0]);
         _lastOutput = new Tensor<T>([0, 0, 0, 0]);
@@ -1002,13 +1091,16 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
                 _kernels.Shape[1] == kShape[1] &&
                 _kernels.Shape[2] == kShape[2] &&
                 _kernels.Shape[3] == kShape[3];
-            bool hasExpectedBiases =
-                _biases.Rank == 1 && _biases.Shape[0] == bShape[0];
+            // A bias-free convolution's expected bias is the zero-length placeholder it was
+            // constructed with, not an [OutputDepth] tensor that is never going to exist.
+            bool hasExpectedBiases = UseBias
+                ? _biases.Rank == 1 && _biases.Shape[0] == bShape[0]
+                : _biases.Length == 0;
 
             if (hasExpectedKernels && hasExpectedBiases)
             {
                 RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-                RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+                if (UseBias) RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
                 _isInitialized = true;
                 return;
             }
@@ -1023,14 +1115,14 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             }
 
             _kernels = AllocateLazyWeight(kShape, () => TensorAllocator.RentPinned<T>(kShape));
-            _biases = AllocateLazyWeight(bShape);
+            _biases = UseBias ? AllocateLazyWeight(bShape) : new Tensor<T>([0]);
 
             // Initialize weights (fills _kernels and _biases with He-uniform values)
             InitializeWeights();
 
             // Register trainable parameters with the engine for GPU persistence
             RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+            if (UseBias) RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
 
             _isInitialized = true;
         }
@@ -1320,98 +1412,211 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             // the tape-tracked Engine ops and the backward (DepthwiseConv2DBackward)
             // flows automatically in both eager and compiled-plan training.
             var dw = Engine.DepthwiseConv2D(input4D, _kernels, new[] { Stride, Stride }, new[] { Padding, Padding });
-            var biasReshapedDw = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
-            result = ApplyActivation(Engine.TensorAdd(dw, biasReshapedDw));
+            result = ApplyActivation(UseBias
+                ? Engine.TensorAdd(dw, Engine.Reshape(_biases, [1, OutputDepth, 1, 1]))
+                : dw);
         }
-        else if (fusedActivation != FusedActivationType.None)
-        {
-            // Pass _biases as the rank-1 [C] vector — Engine.FusedConv2D auto-reshapes
-            // to [1, C, 1, 1] internally when needed (under tape) and otherwise feeds
-            // the raw [C] array directly to its NCHW fast path. Skipping the layer-side
-            // reshape eliminates one Tensor-view allocation + AutoTracer.RecordOp per
-            // call per layer.
-            result = Engine.FusedConv2D(input4D, _kernels, _biases,
-                Stride, Stride, Padding, Padding, 1, 1, fusedActivation);
-        }
-        else if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
-                 && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed
-                 || IsTrainingMode)
-        {
-            // Tape-tracked path: zero-alloc Into/InPlace variants bypass the gradient
-            // tape, so while a tape is active we must use the non-in-place Engine ops
-            // (Conv2D + TensorAdd) so the backward pass can follow the
-            // gradient chain back to the kernel and bias tensors.
-            //
-            // The IsTrainingMode branch additionally covers the **compiled training
-            // path** — CompiledTapeTrainingStep traces the forward graph under
-            // GraphMode (which is not GradientTape.Current). Without this condition
-            // the layer would fall through to the in-place inference fast path,
-            // and `_kernels` / `_biases` would never appear as graph leaves
-            // connected to the loss output node — the fused optimizer would then
-            // see those parameters as having permanent zero gradients and never
-            // update them. (Bug isolated via testconsole/FusedPropagationMinRepro:
-            // Conv kernels/biases stayed at init values across 20 fused Adam
-            // steps before this fix; loss stayed flat at 22.81. With the fix
-            // the kernel updates and loss decreases like Dense and BatchNorm
-            // already do.)
-            //
-            // Check the tape directly rather than IsTrainingMode alone because not
-            // every caller flips IsTrainingMode before invoking the forward pass —
-            // DiffusionModelBase.Train opens a GradientTape without ever calling
-            // SetTrainingMode, which caused this branch to be silently skipped.
-            //
-            // CRITICAL: reshape the bias fresh each training step instead of reusing
-            // the _biasReshaped4D cache. The cache is typically primed during the
-            // first Predict call (under NoGradScope) and holds a reshape tensor
-            // with no GradFn pointing back to _biases. Reusing that cached handle
-            // would make the gradient walk hit a dead end at _biasReshaped4D,
-            // leaving _biases with zero gradient on every training step.
-            var conv = Engine.Conv2D(input4D, _kernels, Stride, Padding, dilation: 1);
-            var biasReshapedForTape = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
-            result = Engine.TensorAdd(conv, biasReshapedForTape);
-        }
+        // ONE COMPUTATION, WHATEVER THE MODE.
+        //
+        // These routes used to be selected by whether a gradient tape happened to be recording, and
+        // they did not compute the same function. Two defects followed.
+        //
+        // First, the tape/training route never called ApplyActivation. A convolution whose
+        // activation the fused kernel does not cover -- ELU, Mish, Softplus, SELU, anything
+        // vector-valued -- therefore TRAINED against its own pre-activation while inference applied
+        // the activation correctly. Measured on a 3x3 layer: with Softplus or Mish, 256 of 256
+        // outputs under a tape were the pre-activation, and applying the activation to them
+        // reproduced the inference output exactly.
+        //
+        // Second, Conv2D and Conv2DInto do not agree for 3x3 stride 1, where one takes a Winograd
+        // path (Lavin and Gray, CVPR 2016, which trades accuracy for speed): 1658 of 2048 outputs
+        // differed, by up to 2.3e-4 relative, and against a float64 reference the INFERENCE route
+        // was the less accurate of the two (rms 6.77e-08 against 5.13e-08).
+        //
+        // PyTorch draws the line the other way, and so do we now: recording gradients is orthogonal
+        // to what is computed -- no_grad decides whether a graph is built, never the values.
+        // Reference() below IS this layer's defined output. The faster routes are used only where
+        // they have been shown to reproduce it exactly, or where the caller has explicitly asked for
+        // speed over reproducibility via Reproducibility.
         else
         {
-            // Inference fast path: separate Conv2DInto + in-place bias + activation.
-            // Every invocation owns a distinct destination. Reusing a layer-held output buffer
-            // changes the function when one layer instance is called more than once in a graph:
-            // the later call overwrites an earlier result that is still live (shared encoders,
-            // recurrent blocks, Siamese networks, and any caller retaining multiple outputs).
-            // Explicit *Into APIs remain the opt-in zero-allocation contract for callers that can
-            // prove destination lifetime; ordinary Forward must have value semantics. TensorArena
-            // still makes these per-call rents allocation-free within a scoped inference pass.
-            var output = TensorAllocator.Rent<T>(expectedShape);
-            Engine.Conv2DInto(output, input4D, _kernels, Stride, Padding, dilation: 1);
+            bool tapeActive =
+                AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+                && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
 
-            // Reuse a cached rank-4 reshape of _biases. Cache by tensor identity
-            // and mutation version because optimizers may rebind the parameter or
-            // update its contents in place. Each cache hit saves
-            // one Tensor allocation + DifferentiableOps.RecordUnary + AutoTracer
-            // record per layer per forward. Tape-inactive guard at the branch
-            // level (entered only when neither tape nor IsTrainingMode is set)
-            // makes this safe — no GradFn needs to bind through the reshape.
-            if (!ReferenceEquals(_biasReshaped4DSource, _biases)
-                || _biasReshaped4D is null
-                || _biasReshaped4DVersion != _biases.Version)
+            // Conv2D and Conv2DInto have different platform winners in Tensors 0.129.4.
+            // Linux CI makes Conv2D the MiDaS bottleneck, while the Winograd Conv2D path is
+            // materially faster on Windows. Whichever kernel is selected must be canonical for
+            // both tape and no-tape execution: Conv2DInto does not record its own backward edge,
+            // so attach the same metadata CpuEngine.Conv2D records, including a lazy graph node.
+            Tensor<T> TrackedConv2DInto()
             {
-                // Reshape returns a VIEW over the bias's storage, and a streaming-allocated
-                // weight has none until it is paged in: the tensor carries its shape while its
-                // backing store is empty, so the view constructor throws "View exceeds storage
-                // bounds: index range [0, 7] outside storage [0, -1]". The kernel above does not hit
-                // this because Engine.Conv2D is a compute op and materializes what it reads; a view
-                // op does not. Page the bias in first.
-                if (_biases.Lifetime == WeightLifetime.Streaming)
+                const int dilation = 1;
+
+                object[] CreateBackwardState() =>
+                [
+                    new[] { Stride, Stride },
+                    new[] { Padding, Padding },
+                    new[] { dilation, dilation },
+                ];
+
+                if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
                 {
-                    WeightRegistry.Materialize(_biases);
+                    var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current!;
+                    var capturedInput = input4D;
+                    var capturedKernel = _kernels;
+                    int capturedStride = Stride;
+                    int capturedPadding = Padding;
+                    return scope.RecordBinary(
+                        AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Conv2D,
+                        "Conv2D",
+                        input4D,
+                        _kernels,
+                        expectedShape,
+                        (engine, output) => engine.Conv2DInto(
+                            output,
+                            capturedInput,
+                            capturedKernel,
+                            capturedStride,
+                            capturedPadding,
+                            dilation),
+                        AiDotNet.Tensors.Engines.Autodiff.BackwardFunctions<T>.Conv2DBackward,
+                        CreateBackwardState());
                 }
 
-                _biasReshaped4D = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
-                _biasReshaped4DSource = _biases;
-                _biasReshaped4DVersion = _biases.Version;
-            }
-            Engine.TensorBroadcastAddInPlace(output, _biasReshaped4D);
+                var output = TensorAllocator.Rent<T>(expectedShape);
+                Engine.Conv2DInto(output, input4D, _kernels, Stride, Padding, dilation);
+                if (tapeActive)
+                {
+                    AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.RecordBinary(
+                        "Conv2D",
+                        output,
+                        input4D,
+                        _kernels,
+                        AiDotNet.Tensors.Engines.Autodiff.BackwardFunctions<T>.Conv2DBackward,
+                        CreateBackwardState());
+                }
 
-            result = ApplyActivation(output);
+                return output;
+            }
+
+            bool preferConv2DInto =
+                !System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                    System.Runtime.InteropServices.OSPlatform.Windows);
+
+            Tensor<T> CanonicalConvolution()
+            {
+                // On non-Windows FusedConv2D calls the array overload, so its tape-aware reference
+                // must use that exact overload too. Tensors 0.129.4 chooses a different 3x3 algorithm
+                // for scalar Conv2D there. Windows keeps its materially faster scalar Winograd route.
+                if (preferConv2DInto && UseBias && fusedActivation != FusedActivationType.None)
+                {
+                    return Engine.Conv2D(
+                        input4D,
+                        _kernels,
+                        [Stride, Stride],
+                        [Padding, Padding],
+                        [1, 1]);
+                }
+
+                return preferConv2DInto
+                    ? TrackedConv2DInto()
+                    : Engine.Conv2D(input4D, _kernels, Stride, Padding, dilation: 1);
+            }
+
+            // The reference and optimized routes share one convolution algorithm. Only the no-tape
+            // optimized epilogue may differ, and exact mode still requires it to match bit for bit.
+            Tensor<T> Reference()
+            {
+                var conv = CanonicalConvolution();
+                var biased = UseBias
+                    ? Engine.TensorAdd(conv, Engine.Reshape(_biases, [1, OutputDepth, 1, 1]))
+                    : conv;
+                return ApplyActivation(biased);
+            }
+
+            // The fast routes use a fused kernel where one covers this activation, otherwise
+            // the platform-selected canonical convolution with an in-place bias add. Training uses
+            // Reference because the in-place bias/activation portion is intentionally not tape-tracked.
+            Tensor<T> Optimized()
+            {
+                if (UseBias && fusedActivation != FusedActivationType.None)
+                {
+                    // _biases travels as the rank-1 [C] vector; FusedConv2D reshapes internally when
+                    // it needs to and otherwise feeds the raw [C] array to its NCHW fast path.
+                    return Engine.FusedConv2D(input4D, _kernels, _biases,
+                        Stride, Stride, Padding, Padding, 1, 1, fusedActivation);
+                }
+
+                // Every invocation owns a distinct destination. Reusing a layer-held buffer would
+                // change the function when one layer instance is called more than once in a graph:
+                // the later call overwrites an earlier result that is still live (shared encoders,
+                // recurrent blocks, Siamese networks, any caller retaining multiple outputs).
+                var output = CanonicalConvolution();
+
+                if (UseBias)
+                {
+                    // Cache the rank-4 reshape by tensor identity AND mutation version, because an
+                    // optimizer may rebind the parameter or update it in place.
+                    if (!ReferenceEquals(_biasReshaped4DSource, _biases)
+                        || _biasReshaped4D is null
+                        || _biasReshaped4DVersion != _biases.Version)
+                    {
+                        // Reshape returns a VIEW over the bias's storage, and a streaming-allocated
+                        // weight has none until it is paged in: the tensor carries its shape while
+                        // its backing store is empty, and the view constructor throws. The kernel
+                        // above does not hit this because a compute op materializes what it reads;
+                        // a view op does not. Page the bias in first.
+                        if (_biases.Lifetime == WeightLifetime.Streaming)
+                        {
+                            WeightRegistry.Materialize(_biases);
+                        }
+
+                        _biasReshaped4D = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
+                        _biasReshaped4DSource = _biases;
+                        _biasReshaped4DVersion = _biases.Version;
+                    }
+
+                    if (_biasReshaped4D is not null)
+                        Engine.TensorBroadcastAddInPlace(output, _biasReshaped4D);
+                }
+
+                return ApplyActivation(output);
+            }
+
+            Tensor<T>? decided = null;
+            bool useOptimized;
+
+            if (tapeActive || IsTrainingMode)
+            {
+                // Not a numerical choice: the optimized in-place epilogue is invisible to the
+                // tape and would silently produce a leaf with no complete gradient path.
+                useOptimized = false;
+            }
+            else if (Reproducibility == NumericalReproducibility.Fast)
+            {
+                useOptimized = true;
+            }
+            else if (_optimizedVerifiedForShape is not null
+                     && ShapeMatches(_optimizedVerifiedForShape, input4D))
+            {
+                useOptimized = _optimizedMatchesReference;
+            }
+            else
+            {
+                // First inference forward at this shape: run both once and keep the fast route only
+                // when it reproduces the reference bit for bit. AiDotNet.Tensors 0.129.7 unifies
+                // the allocating and destination convolution paths, so the optimized route should
+                // now pass this guard without sacrificing deterministic serialize/replay behavior.
+                var referenceOnce = Reference();
+                var optimizedOnce = Optimized();
+                _optimizedMatchesReference = BitwiseEquals(referenceOnce, optimizedOnce);
+                _optimizedVerifiedForShape = ShapeSnapshot(input4D);
+                useOptimized = _optimizedMatchesReference;
+                decided = _optimizedMatchesReference ? optimizedOnce : referenceOnce;
+            }
+
+            result = decided ?? (useOptimized ? Optimized() : Reference());
         }
 
         // Only retain _lastOutput when no tape is active. The tape holds
@@ -1659,7 +1864,9 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        if (_kernelsGradient == null || _biasesGradient == null)
+        // A bias-free convolution legitimately has no bias gradient. Only a missing KERNEL
+        // gradient means nothing has been computed yet.
+        if (_kernelsGradient == null || (UseBias && _biasesGradient == null))
             return;
 
         if (Engine is DirectGpuTensorEngine gpuEngine)
@@ -1673,7 +1880,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
                 _kernelsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_kernelsVelocity, PersistentTensorRole.OptimizerState);
             }
-            if (_biasesVelocity == null)
+            if (UseBias && _biasesVelocity == null)
             {
                 _biasesVelocity = new Tensor<T>(_biases._shape);
                 _biasesVelocity.Fill(NumOps.Zero);
@@ -1683,15 +1890,19 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             // Perform GPU-resident SGD update
             // Momentum = 0, WeightDecay = 0 to match CPU implementation
             gpuEngine.SgdMomentumUpdateGpu(_kernels, _kernelsGradient, _kernelsVelocity, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_biases, _biasesGradient, _biasesVelocity, lr, 0.0f, 0.0f);
+            if (UseBias && _biasesGradient is not null && _biasesVelocity is not null)
+                gpuEngine.SgdMomentumUpdateGpu(_biases, _biasesGradient, _biasesVelocity, lr, 0.0f, 0.0f);
         }
         else
         {
             // CPU SGD using in-place ops to preserve tensor identity (cached references like _biasReshaped4D)
             var scaledKernelGrad = Engine.TensorMultiplyScalar(_kernelsGradient, learningRate);
             Engine.TensorSubtractInPlace(_kernels, scaledKernelGrad);
-            var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
-            Engine.TensorSubtractInPlace(_biases, scaledBiasGrad);
+            if (UseBias && _biasesGradient is not null)
+            {
+                var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
+                Engine.TensorSubtractInPlace(_biases, scaledBiasGrad);
+            }
         }
 
         // Notify engine that parameters have changed (for GPU cache invalidation if needed)
@@ -1754,13 +1965,18 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         // size from constructor-time shapes when the layer is uninitialized,
         // so there's no need to allocate/randomize the full weight tensors
         // just to return a zero vector.
-        if (_kernelsGradient == null || _biasesGradient == null)
+        if (_kernelsGradient == null || (UseBias && _biasesGradient == null))
         {
             return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         }
         EnsureInitialized();
 
         // Bulk copy from contiguous tensor storage — replaces 4-nested scalar loops
+        // The gradient surface must mirror the parameter surface exactly. With no bias there is
+        // no bias slot to fill, and appending one would shift every consumer's offsets.
+        if (!UseBias || _biasesGradient is null)
+            return Vector<T>.FromMemory(_kernelsGradient.Data);
+
         return Vector<T>.Concatenate(
             Vector<T>.FromMemory(_kernelsGradient.Data),
             Vector<T>.FromMemory(_biasesGradient.Data));
@@ -1848,6 +2064,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         metadata["Stride"] = Stride.ToString();
         metadata["Padding"] = Padding.ToString();
         metadata["Groups"] = Groups.ToString(); // #639: depthwise marker — Clone/Deserialize must restore it
+        metadata["BiasMode"] = _biasMode.ToString();
 
         // Serialize activation type so deserialization restores it correctly
         // (default is ReLU, but MobileNetV3 uses Identity)

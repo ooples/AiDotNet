@@ -734,7 +734,10 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     /// </summary>
     private Tensor<T> ConvertPointwiseKernelToNCHW(Tensor<T> kernel) =>
         // [inputDepth, 1, 1, outputDepth] -> [outputDepth, inputDepth, 1, 1]
-        kernel.Transpose([3, 0, 1, 2]);
+        // Native/SIMD Conv2D kernels require contiguous row-major storage. Contiguous() records
+        // the materialization edge in both eager tape and GraphMode, so gradients still flow to
+        // the original NHWC parameter tensor instead of stopping at this layout conversion.
+        kernel.Transpose([3, 0, 1, 2]).Contiguous();
 
     /// <summary>
     /// Converts pointwise kernel from [outputDepth, inputDepth, 1, 1] back to [inputDepth, 1, 1, outputDepth] format.

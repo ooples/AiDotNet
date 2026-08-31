@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 
 namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
@@ -166,23 +166,61 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         T vMean = NumOps.Divide(vSum, NumOps.FromDouble((double)(m * n)));
         T initScale = NumOps.Sqrt(NumOps.Divide(NumOps.Add(vMean, NumOps.FromDouble(1e-10)), NumOps.FromDouble((double)k)));
 
-        // Use multiple random restarts to escape degenerate local optima
-        // (multiplicative updates can get trapped in zero-locked states)
+        // DETERMINISTIC START (NNDSVD), THEN RANDOM RESTARTS ONLY AS A FALLBACK.
+        //
+        // Initialization was five restarts from RandomHelper.CreateSecureRandom(), which is
+        // unseeded by construction, so the factorization differed on every run and the quality of
+        // the result rode on the draw. That is what made NMF_IdentityLikeMatrix_ReconstructsWell
+        // intermittent: the same 3x3 diagonal input reconstructed within tolerance on most runs and
+        // missed on some, with nothing in the input to explain the difference.
+        //
+        // NNDSVD (Boutsidis & Gallopoulos 2008, "SVD based initialization: A head start for
+        // nonnegative matrix factorization") derives the starting point from the data's own
+        // singular vectors instead. scikit-learn made the same move for the same reason -- its NMF
+        // default init is nndsvda rather than random -- because an SVD-derived start both removes
+        // the run-to-run variance and lands closer to a good optimum, so fewer iterations are
+        // needed to reach one.
+        //
+        // The random restarts are kept as a fallback rather than deleted: if the SVD cannot be
+        // formed for this input, the previous behaviour still applies rather than failing outright.
         Matrix<T> bestW = new Matrix<T>(0, 0);
         Matrix<T> bestH = new Matrix<T>(0, 0);
         T bestError = NumOps.MaxValue;
-        int nRestarts = 5;
 
-        for (int restart = 0; restart < nRestarts; restart++)
+        if (TryInitializeNndsvd(V, m, n, k, out var seedW, out var seedH))
         {
-            var (trialW, trialH) = RunNmfTrial(V, m, n, k, maxIterations, tolerance, initScale);
-            T trialError = ComputeReconstructionError(V, trialW, trialH);
+            var (deterministicW, deterministicH) =
+                RunNmfTrialFrom(V, seedW, seedH, m, n, k, maxIterations, tolerance);
+            bestW = deterministicW;
+            bestH = deterministicH;
+        }
 
-            if (NumOps.LessThan(trialError, bestError))
+        // FALLBACK ONLY -- entered when no deterministic start could be formed at all.
+        //
+        // This gate deliberately ignores how WELL the deterministic run reconstructed. `tolerance`
+        // is the update loop's convergence tolerance: it bounds the CHANGE in reconstruction error
+        // between iterations, not the error itself. A perfectly good rank-k approximation of a
+        // higher-rank matrix converges with a residual far above it, so using it as a quality bar
+        // fired the restarts on ordinary inputs -- and a random trial that happened to score lower
+        // then replaced the deterministic result, restoring exactly the run-to-run variance NNDSVD
+        // was introduced to remove.
+        //
+        // scikit-learn draws the same line: with an SVD-based init its NMF runs the update loop
+        // once and never restarts, because the start no longer depends on a draw.
+        if (bestW.Rows == 0)
+        {
+            const int nRestarts = 5;
+            for (int restart = 0; restart < nRestarts; restart++)
             {
-                bestW = trialW;
-                bestH = trialH;
-                bestError = trialError;
+                var (trialW, trialH) = RunNmfTrial(V, m, n, k, maxIterations, tolerance, initScale);
+                T trialError = ComputeReconstructionError(V, trialW, trialH);
+
+                if (bestW.Rows == 0 || NumOps.LessThan(trialError, bestError))
+                {
+                    bestW = trialW;
+                    bestH = trialH;
+                    bestError = trialError;
+                }
             }
         }
 
@@ -190,12 +228,148 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     }
 
     /// <summary>
+    /// Builds a deterministic nonnegative starting point from the data's singular vectors (NNDSVD).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Boutsidis and Gallopoulos, "SVD based initialization: A head start for nonnegative matrix
+    /// factorization" (Pattern Recognition, 2008). The leading singular triplet is nonnegative up to
+    /// sign, so it seeds the first factor directly. Each later triplet is split into its positive
+    /// and negative parts, and whichever side carries more energy seeds that component -- which is
+    /// how a nonnegative start is derived from vectors that are not themselves nonnegative.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> instead of guessing the starting factors at random, this reads the
+    /// strongest patterns already present in the data and starts from those. The result no longer
+    /// changes from run to run, and it usually starts much closer to the answer.
+    /// </para>
+    /// </remarks>
+    /// <returns><c>false</c> when the SVD cannot be formed, leaving the caller its random fallback.</returns>
+    private bool TryInitializeNndsvd(
+        Matrix<T> V, int m, int n, int k, out Matrix<T> initialW, out Matrix<T> initialH)
+    {
+        // Named initialW/initialH rather than W/H: this type already exposes W and H as the RESULT
+        // of the factorization, and out parameters with those names shadowed them inside this
+        // method -- so a reader, or a later edit, could not tell the seed from the answer.
+        initialW = new Matrix<T>(0, 0);
+        initialH = new Matrix<T>(0, 0);
+
+        SvdDecomposition<T> svd;
+        try
+        {
+            svd = new SvdDecomposition<T>(V);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or NotSupportedException)
+        {
+            return false;
+        }
+
+        Matrix<T> u = svd.U;
+        Vector<T> singular = svd.S;
+        Matrix<T> vt = svd.Vt;
+        if (u.Rows != m || vt.Columns != n || singular.Length == 0) return false;
+
+        initialW = new Matrix<T>(m, k);
+        initialH = new Matrix<T>(k, n);
+
+        // A strictly zero start is absorbing under multiplicative updates: 0 * anything stays 0, so
+        // a component seeded with zeros can never recover. Seed those with a small positive floor.
+        T floor = NumOps.FromDouble(1e-8);
+
+        for (int component = 0; component < k; component++)
+        {
+            if (component >= singular.Length)
+            {
+                for (int i = 0; i < m; i++) initialW[i, component] = floor;
+                for (int j = 0; j < n; j++) initialH[component, j] = floor;
+                continue;
+            }
+
+            T sqrtSigma = NumOps.Sqrt(NumOps.Abs(singular[component]));
+
+            if (component == 0)
+            {
+                // The leading pair is nonnegative up to a global sign, so its magnitude is used.
+                for (int i = 0; i < m; i++)
+                    initialW[i, 0] = MaxOf(NumOps.Multiply(sqrtSigma, NumOps.Abs(u[i, 0])), floor);
+                for (int j = 0; j < n; j++)
+                    initialH[0, j] = MaxOf(NumOps.Multiply(sqrtSigma, NumOps.Abs(vt[0, j])), floor);
+                continue;
+            }
+
+            // Split both singular vectors into positive and negative parts and keep the side whose
+            // outer product carries more energy.
+            T positiveNormU = NumOps.Zero, negativeNormU = NumOps.Zero;
+            T positiveNormV = NumOps.Zero, negativeNormV = NumOps.Zero;
+            for (int i = 0; i < m; i++)
+            {
+                T value = u[i, component];
+                if (NumOps.GreaterThan(value, NumOps.Zero))
+                    positiveNormU = NumOps.Add(positiveNormU, NumOps.Multiply(value, value));
+                else
+                    negativeNormU = NumOps.Add(negativeNormU, NumOps.Multiply(value, value));
+            }
+            for (int j = 0; j < n; j++)
+            {
+                T value = vt[component, j];
+                if (NumOps.GreaterThan(value, NumOps.Zero))
+                    positiveNormV = NumOps.Add(positiveNormV, NumOps.Multiply(value, value));
+                else
+                    negativeNormV = NumOps.Add(negativeNormV, NumOps.Multiply(value, value));
+            }
+
+            bool usePositive = NumOps.GreaterThanOrEquals(
+                NumOps.Multiply(NumOps.Sqrt(positiveNormU), NumOps.Sqrt(positiveNormV)),
+                NumOps.Multiply(NumOps.Sqrt(negativeNormU), NumOps.Sqrt(negativeNormV)));
+
+            for (int i = 0; i < m; i++)
+            {
+                initialW[i, component] = ScaledPart(u[i, component], usePositive, sqrtSigma, floor);
+            }
+            for (int j = 0; j < n; j++)
+            {
+                initialH[component, j] = ScaledPart(vt[component, j], usePositive, sqrtSigma, floor);
+            }
+        }
+
+        return true;
+    }
+
+    private T MaxOf(T value, T floor) => NumOps.GreaterThan(value, floor) ? value : floor;
+
+    /// <summary>
+    /// One NNDSVD entry: take the positive or negative part of <paramref name="value"/>, scale it by
+    /// the singular value, and clamp it up to <paramref name="floor"/>.
+    /// </summary>
+    /// <remarks>
+    /// Both the W and the H loop computed this identically inline, as a nested conditional inside a
+    /// nested loop - which is what CodeQL flagged as a block with too many complex statements, and
+    /// it was also a copy of the same expression in two places. NNDSVD (Boutsidis and Gallopoulos,
+    /// 2008) initializes from either the positive or the negative part of each singular vector pair,
+    /// whichever carries more energy; the unused part contributes zero, and the floor keeps the
+    /// factor strictly non-negative so the multiplicative updates cannot divide by zero.
+    /// </remarks>
+    private T ScaledPart(T value, bool usePositive, T sqrtSigma, T floor)
+    {
+        T part = usePositive
+            ? (NumOps.GreaterThan(value, NumOps.Zero) ? value : NumOps.Zero)
+            : (NumOps.LessThan(value, NumOps.Zero) ? NumOps.Negate(value) : NumOps.Zero);
+
+        return MaxOf(NumOps.Multiply(sqrtSigma, part), floor);
+    }
+
+    /// <summary>
     /// Runs a single trial of NMF with random initialization.
     /// </summary>
     private (Matrix<T> W, Matrix<T> H) RunNmfTrial(Matrix<T> V, int m, int n, int k, int maxIterations, double tolerance, T initScale)
+        => RunNmfTrialFrom(V, InitializeRandomMatrix(m, k, initScale), InitializeRandomMatrix(k, n, initScale),
+                           m, n, k, maxIterations, tolerance);
+
+    /// <summary>Runs the multiplicative-update loop from a supplied starting pair.</summary>
+    private (Matrix<T> W, Matrix<T> H) RunNmfTrialFrom(Matrix<T> V, Matrix<T> startW, Matrix<T> startH, int m, int n, int k, int maxIterations, double tolerance)
     {
-        Matrix<T> tempW = InitializeRandomMatrix(m, k, initScale);
-        Matrix<T> tempH = InitializeRandomMatrix(k, n, initScale);
+        Matrix<T> tempW = startW;
+        Matrix<T> tempH = startH;
 
         T previousError = NumOps.MaxValue;
         T toleranceT = NumOps.FromDouble(tolerance);

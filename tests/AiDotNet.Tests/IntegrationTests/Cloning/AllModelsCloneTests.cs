@@ -4,8 +4,15 @@ using System.Linq;
 using System.Reflection;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Parameters;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.SpeechRecognition.NeMo;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.TextToSpeech.CodecBased;
+using AiDotNet.VisionLanguage.Foundational;
+using AiDotNet.VisionLanguage.Generative;
+using AiDotNet.VisionLanguage.InstructionTuned;
+using AiDotNet.VisionLanguage.Unified;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -65,6 +72,34 @@ public class AllModelsCloneTests
     /// harness and runner capacity; changing it changes the count without changing model behavior.
     /// </remarks>
     private static readonly TimeSpan PerModelProbeBudget = TimeSpan.FromSeconds(20);
+
+    /// <summary>
+    /// How long to let a single over-budget attempt finish before giving up on the sweep entirely.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="System.Threading.Tasks.Task.Wait(TimeSpan)"/> does NOT cancel. An attempt that
+    /// exceeds <see cref="PerModelProbeBudget"/> keeps running and keeps its model rooted, so
+    /// starting the next attempt on top of it stacks a second model-sized allocation, and the one
+    /// after that a third. Shard 13 hit the budget thirteen times and the pile-up, not any single
+    /// model, is what exhausted the heap: four attempts threw <c>OutOfMemoryException</c> long after
+    /// their own LIMIT line, and the test host then died outright with no report written at all.
+    /// </para>
+    /// <para>
+    /// So the budget now bounds CLASSIFICATION only, never concurrency: at most one abandoned
+    /// attempt is ever in flight, and it must finish before the next model starts. If it will not
+    /// finish even within this much larger drain window it is a genuine stall. The assertion must
+    /// fire before CI's five-minute inactivity watchdog so the failure keeps the model name.
+    /// </para>
+    /// </remarks>
+    private static readonly TimeSpan AbandonedAttemptDrainBudget = TimeSpan.FromMinutes(2);
+
+    // A timed-out Task can outlive its [InlineData] invocation and still own a materialized model.
+    // Keep that process-wide lifetime visible to later theory rows so they never stack another model
+    // on top of an attempt that this test can no longer cancel.
+    private static readonly object OutstandingAttemptSync = new();
+    private static System.Threading.Tasks.Task? OutstandingAttempt;
+    private static string OutstandingAttemptName = string.Empty;
 
     /// <summary>
     /// Models whose original never materialized under the probe, so the two sides are not comparable.
@@ -138,11 +173,13 @@ public class AllModelsCloneTests
         // Unset means run every shard, which is what a plain `dotnet test` should still do.
         var only = Environment.GetEnvironmentVariable("AIDOTNET_SWEEP_SHARD");
         if (!string.IsNullOrEmpty(only) && int.TryParse(only, out var wanted) && wanted != shard) return;
+        EnsureNoPriorAttemptIsStillRunning();
 
         // AIDOTNET_SWEEP_DIR keeps the reports off the system drive, which nine parallel runs
         // filled to zero bytes free.
         var dir = Environment.GetEnvironmentVariable("AIDOTNET_SWEEP_DIR");
         if (string.IsNullOrEmpty(dir)) dir = System.IO.Path.GetTempPath();
+        System.IO.Directory.CreateDirectory(dir);
 
         ReportPath = System.IO.Path.Combine(dir, $"aidotnet-model-clone-sweep-{shard}.txt");
 
@@ -158,11 +195,27 @@ public class AllModelsCloneTests
         // one in the same shard and leave that shard timing out while the others idle.
         var candidates = all.Where((_, i) => i % ShardCount == shard).ToList();
 
+        // Optional local/CI diagnostic selector. It is deliberately applied after sharding, so an
+        // invalid model/shard pairing runs zero candidates instead of silently testing another row.
+        var onlyModel = Environment.GetEnvironmentVariable("AIDOTNET_SWEEP_MODEL");
+        if (!string.IsNullOrWhiteSpace(onlyModel))
+            candidates = candidates.Where(t => string.Equals(t.Name, onlyModel, StringComparison.Ordinal)).ToList();
+
         // APPENDED AS IT GOES. The first run timed out at 15 minutes with nothing written, which
         // told us only that the sweep is slow -- not which model it was on. A progress file costs
         // nothing and turns a timeout into a result plus a culprit.
         System.IO.File.WriteAllText(ReportPath, string.Empty);
 
+
+        // The single over-budget attempt still running, if any, and the model it belongs to.
+        System.Threading.Tasks.Task? draining = null;
+        string drainingName = string.Empty;
+
+        // The abandoned attempt's RESULT travels with the task. Without it the drain below could
+        // only clear the task and move on, so an attempt that went over budget and then failed was
+        // recorded in budgetExceeded and nowhere else -- and budgetExceeded is not asserted on,
+        // while failed is. A slow clone failure could therefore pass this test.
+        string?[]? drainingSlot = null;
 
         foreach (var open in candidates)
         {
@@ -177,6 +230,58 @@ public class AllModelsCloneTests
                 continue;
             }
 
+            // Let any previously abandoned attempt finish BEFORE allocating another model on top of
+            // it. This is the whole pile-up fix; see AbandonedAttemptDrainBudget.
+            if (draining is not null)
+            {
+                bool drained;
+                bool faulted = false;
+                try
+                {
+                    drained = draining.Wait(AbandonedAttemptDrainBudget);
+                }
+                catch (Exception)
+                {
+                    faulted = true;
+                    // The attempt faulted after we stopped watching it. It has already been counted
+                    // as over-budget and its memory is released either way; observing the exception
+                    // here just keeps it from resurfacing as an unobserved task exception.
+                    drained = true;
+                }
+
+                if (drained)
+                {
+                    // Read the result we stopped waiting for. Every attempt is classified exactly
+                    // once, here or at the point it completed in time.
+                    if (faulted)
+                        failed.Add(
+                            $"{drainingName}: attempt faulted after exceeding its observation budget");
+                    else if (drainingSlot is not null)
+                        Classify(drainingName, drainingSlot[0]);
+                }
+                else
+                {
+                    Note($"STOP  sweep at {drainingName}: abandoned attempt would not drain");
+                    Assert.True(
+                        drained,
+                        $"{drainingName}: clone attempt was still running "
+                            + $"{AbandonedAttemptDrainBudget.TotalMinutes:0} minutes after its observation budget; "
+                            + "the process-wide guard will prevent later theory rows from materializing another model.");
+                    return;
+                }
+
+                ClearOutstandingAttempt(draining);
+                draining = null;
+                drainingName = string.Empty;
+                drainingSlot = null;
+
+                // The drained attempt's model is unreachable now; reclaim it before the next one
+                // allocates rather than letting several generations of them coexist.
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+            }
+
             // BEFORE the attempt, so a shard-level timeout still names the model it was observing.
             Note($"try   {open.Name}");
 
@@ -184,20 +289,53 @@ public class AllModelsCloneTests
             // shard, but it is only an observation budget. It cannot distinguish a true deadlock
             // from valid work that needs more time on this runner, so report it separately and do
             // not turn the budget-sensitive count into a claimed hang rate.
-            string? outcome = null;
-            var work = System.Threading.Tasks.Task.Run(() => outcome = Attempt(open, closed));
+            var slot = new string?[1];
+            var work = System.Threading.Tasks.Task.Run(() => slot[0] = Attempt(open, closed));
 
             if (!work.Wait(PerModelProbeBudget))
             {
                 budgetExceeded.Add(
                     $"{open.Name}: exceeded {PerModelProbeBudget.TotalSeconds:0}s observation budget");
                 Note($"LIMIT {open.Name}");
+                draining = work;
+                drainingName = open.Name;
+                drainingSlot = slot;
+                TrackOutstandingAttempt(work, open.Name);
                 continue;
             }
 
-            if (outcome is null) cloned.Add(open.Name);
-            else if (!ReferenceEquals(outcome, SkipMarker) && outcome != SkipMarker) failed.Add(outcome);
+            Classify(open.Name, slot[0]);
         }
+
+        // Don't leave a final abandoned attempt allocating underneath the report write-out.
+        bool finalDrainCompleted = true;
+        if (draining is not null)
+        {
+            bool finalFaulted = false;
+            try { finalDrainCompleted = draining.Wait(AbandonedAttemptDrainBudget); }
+            catch (Exception) { finalDrainCompleted = true; finalFaulted = true; }
+
+            if (finalFaulted)
+                failed.Add($"{drainingName}: attempt faulted after exceeding its observation budget");
+            else if (finalDrainCompleted && drainingSlot is not null)
+                Classify(drainingName, drainingSlot[0]);
+
+            if (finalDrainCompleted)
+                ClearOutstandingAttempt(draining);
+        }
+
+        // A STILL-RUNNING ATTEMPT IS NOT A REPORTABLE STATE.
+        //
+        // Wait returning false means the background Attempt is still going. It appends to failed,
+        // notConstructed and unresolved and writes to the report file, all of which the write-out
+        // below reads -- so the published counts would be a snapshot taken while they were still
+        // changing, and enumerating a List<string> mid-Add can throw outright. Stop here instead of
+        // reporting numbers that are not yet true. Unconditional: a completed drain passes it.
+        Assert.True(
+            finalDrainCompleted,
+            $"{drainingName}: abandoned attempt was still running "
+                + $"{AbandonedAttemptDrainBudget.TotalMinutes:0} minutes after the sweep ended; "
+                + "report withheld because its counts were still being written.");
 
         _output.WriteLine($"model types        : {candidates.Count}");
         _output.WriteLine($"cloned OK          : {cloned.Count}");
@@ -245,6 +383,62 @@ public class AllModelsCloneTests
                 + string.Join(Environment.NewLine, failed));
     }
 
+    private static void EnsureNoPriorAttemptIsStillRunning()
+    {
+        System.Threading.Tasks.Task? prior;
+        string priorName;
+        lock (OutstandingAttemptSync)
+        {
+            prior = OutstandingAttempt;
+            priorName = OutstandingAttemptName;
+        }
+
+        if (prior is null) return;
+
+        bool completed = prior.IsCompleted;
+        Assert.True(
+            completed,
+            $"{priorName}: a prior clone attempt is still running; refusing to materialize another model in this process.");
+
+        // Observe a late fault before releasing the process-wide lifetime guard. Its owning theory
+        // row already failed, so this row must not classify the same outcome a second time.
+        try { prior.GetAwaiter().GetResult(); }
+        catch (Exception) { }
+        ClearOutstandingAttempt(prior);
+    }
+
+    private static void TrackOutstandingAttempt(System.Threading.Tasks.Task attempt, string name)
+    {
+        lock (OutstandingAttemptSync)
+        {
+            bool canReplace = OutstandingAttempt is null || OutstandingAttempt.IsCompleted;
+            Assert.True(canReplace, $"{OutstandingAttemptName}: another clone attempt is already running.");
+            OutstandingAttempt = attempt;
+            OutstandingAttemptName = name;
+        }
+    }
+
+    private static void ClearOutstandingAttempt(System.Threading.Tasks.Task attempt)
+    {
+        lock (OutstandingAttemptSync)
+        {
+            if (!ReferenceEquals(OutstandingAttempt, attempt)) return;
+            OutstandingAttempt = null;
+            OutstandingAttemptName = string.Empty;
+        }
+    }
+
+    /// <summary>Records one completed attempt's result.</summary>
+    /// <remarks>
+    /// Every attempt passes through here exactly once -- whether it finished inside its observation
+    /// budget or was drained afterwards -- so that no completed attempt's result goes unread.
+    /// </remarks>
+    private void Classify(string name, string? outcome)
+    {
+        if (outcome is null) cloned.Add(name);
+        else if (!ReferenceEquals(outcome, SkipMarker) && outcome != SkipMarker) failed.Add(outcome);
+    }
+
     /// <summary>Constructs, copies and checks one model. Returns null when it cloned cleanly.</summary>
     private string? Attempt(Type open, Type closed)
     {
@@ -256,11 +450,13 @@ public class AllModelsCloneTests
             return SkipMarker;
         }
 
+        object? copiedModel = null;
         try
         {
             var probed = Resolve(model);
             var before = model.ParameterCount;
-            var copy = model.DeepCopy() as NeuralNetworkBase<float>;
+            copiedModel = model.DeepCopy();
+            var copy = copiedModel as NeuralNetworkBase<float>;
 
             if (copy is null) return Fail(open, "DeepCopy returned null");
             if (copy.GetType() != closed) return Fail(open, $"copy is {copy.GetType().Name}");
@@ -297,7 +493,15 @@ public class AllModelsCloneTests
         }
         finally
         {
-            (model as IDisposable)?.Dispose();
+            try
+            {
+                if (copiedModel is IDisposable disposableCopy && !ReferenceEquals(copiedModel, model))
+                    disposableCopy.Dispose();
+            }
+            finally
+            {
+                model.Dispose();
+            }
         }
     }
 
@@ -306,7 +510,10 @@ public class AllModelsCloneTests
     /// A model that cannot accept the standard probe is left as it is; the comparison below then
     /// still holds, because both sides are measured in the same unresolved state.
     /// </remarks>
-    /// <returns>True when the probe ran, so the model's parameter surface is materialized.</returns>
+    /// <returns>
+    /// True only when the probe leaves a materialized or legitimately parameter-free surface.
+    /// A successful Predict call can still be a no-op for an unfitted model.
+    /// </returns>
     private static bool Resolve(NeuralNetworkBase<float> model)
     {
         try
@@ -314,7 +521,10 @@ public class AllModelsCloneTests
             var input = new Tensor<float>(new[] { 1, 4 });
             model.Predict(input);
 
-            return true;
+            return model.ParameterLayout.Readiness is
+                ParameterReadiness.Materialized or
+                ParameterReadiness.ParameterFree or
+                ParameterReadiness.ConditionalAbsent;
         }
         catch (Exception)
         {
@@ -369,6 +579,8 @@ public class AllModelsCloneTests
             for (var i = 0; i < formal.Length && usable; i++)
             {
                 if (formal[i].ParameterType.IsInstanceOfType(architecture)) args[i] = architecture;
+                else if (TryCreateBoundedArgument(closed, formal[i], out var bounded)) args[i] = bounded;
+                else if (CreateBoundedOptions(formal[i].ParameterType) is { } options) args[i] = options;
                 else if (formal[i].HasDefaultValue) args[i] = formal[i].DefaultValue;
                 else usable = false;
             }
@@ -386,6 +598,177 @@ public class AllModelsCloneTests
         }
 
         return null;
+    }
+
+    private static bool TryCreateBoundedArgument(
+        Type modelType,
+        ParameterInfo parameter,
+        out object? value)
+    {
+        // DocOwl deliberately treats a small image as its public smoke-test configuration and
+        // scales the 7B-style dimensions down internally. The reflection sweep used the 448px
+        // default, bypassed that contract and started materializing the production-scale graph.
+        if (modelType.Name == "DocOwl`1" && parameter.Name == "imageSize")
+        {
+            value = 64;
+            return true;
+        }
+
+        value = null;
+        return false;
+    }
+
+    /// <summary>Creates explicit small configurations for paper-scale models in the clone sweep.</summary>
+    /// <remarks>
+    /// This sweep verifies construction-state cloning, not whether a CI runner can materialize a
+    /// published foundation model. Passing null used the paper defaults: Chameleon alone exposed
+    /// more than <see cref="int.MaxValue"/> parameters, while DeepSeek-VL2 built sixty 4096-wide
+    /// decoder layers. Those attempts cannot be cancelled and can terminate the whole test host
+    /// before any clone result is reported. Small but structurally representative options exercise
+    /// the same generated construction plan and state payload without turning the test into a
+    /// multi-billion-parameter allocation benchmark.
+    /// </remarks>
+    private static object? CreateBoundedOptions(Type optionType)
+    {
+        if (typeof(NemotronSpeechOptions).IsAssignableFrom(optionType))
+        {
+            NemotronSpeechOptions? speech;
+            try
+            {
+                speech = Activator.CreateInstance(optionType) as NemotronSpeechOptions;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+
+            if (speech is null) return null;
+
+            // Match the generated Nemotron smoke fixture: preserve the Fast-Conformer -> adapter
+            // -> decoder topology without materializing the 24+32-layer paper-scale defaults.
+            speech.SampleRate = 16000;
+            speech.MaxAudioLengthSeconds = 1;
+            speech.EncoderDim = 64;
+            speech.DecoderDim = 64;
+            speech.NumEncoderLayers = 2;
+            speech.NumDecoderLayers = 2;
+            speech.NumAttentionHeads = 4;
+            speech.NumMels = 32;
+            speech.VocabSize = 64;
+            speech.MaxTextLength = 16;
+            speech.DropoutRate = 0.0;
+            speech.Language = "en";
+            return speech;
+        }
+
+        if (typeof(CodecTtsOptions).IsAssignableFrom(optionType))
+        {
+            CodecTtsOptions? codec;
+            try
+            {
+                codec = Activator.CreateInstance(optionType) as CodecTtsOptions;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+
+            if (codec is null) return null;
+
+            // Match the generated codec-LM smoke architecture: preserve the text encoder ->
+            // transformer -> codec-logit structure without materializing paper-scale defaults.
+            codec.NumCodebooks = 1;
+            codec.CodebookSize = 16;
+            codec.CodecFrameRate = 75;
+            codec.TextEncoderDim = 32;
+            codec.LLMDim = 32;
+            codec.NumEncoderLayers = 1;
+            codec.NumLLMLayers = 1;
+            codec.NumHeads = 4;
+            codec.VocabSize = 64;
+            codec.MaxTextLength = 8;
+            codec.MaxCodecFrames = 8;
+            codec.DropoutRate = 0.0;
+            return codec;
+        }
+
+        if (typeof(FoundationalVLMOptions).IsAssignableFrom(optionType))
+        {
+            FoundationalVLMOptions? foundational;
+            try
+            {
+                foundational = Activator.CreateInstance(optionType) as FoundationalVLMOptions;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+
+            if (foundational is null) return null;
+
+            foundational.ImageSize = 16;
+            foundational.VisionDim = 16;
+            foundational.TextDim = 16;
+            foundational.FusionDim = 16;
+            foundational.NumVisionLayers = 1;
+            foundational.NumTextLayers = 1;
+            foundational.NumFusionLayers = 1;
+            foundational.NumHeads = 4;
+            foundational.MaxSequenceLength = 16;
+            foundational.VocabSize = 128;
+            return foundational;
+        }
+
+        if (!typeof(GenerativeVLMOptions).IsAssignableFrom(optionType))
+        {
+            return null;
+        }
+
+        GenerativeVLMOptions? options;
+        try
+        {
+            options = Activator.CreateInstance(optionType) as GenerativeVLMOptions;
+        }
+        catch (Exception)
+        {
+            // Let the constructor sweep fall back to the declared optional value. A specialized
+            // options type is allowed to reject parameterless construction; that is unrelated to
+            // whether its owning model can be cloned.
+            return null;
+        }
+
+        if (options is null) return null;
+
+        options.ImageSize = 16;
+        options.VisionDim = 16;
+        options.DecoderDim = 16;
+        options.NumVisionLayers = 1;
+        options.NumDecoderLayers = 2;
+        options.NumHeads = 4;
+        options.VocabSize = 128;
+        options.MaxSequenceLength = 16;
+        options.MaxGenerationLength = 4;
+
+        if (options is InstructionTunedVLMOptions instructionTuned)
+        {
+            instructionTuned.ProjectionDim = 16;
+            instructionTuned.MaxVisualTokens = 16;
+        }
+
+        if (options is UnifiedVisionOptions unified)
+        {
+            unified.NumVisualTokens = 16;
+            unified.OutputImageSize = 16;
+        }
+
+        if (options is DeepSeekVL2Options deepSeek)
+        {
+            deepSeek.NumExperts = 2;
+            deepSeek.NumActiveExperts = 1;
+            deepSeek.EnableDynamicTiling = false;
+        }
+
+        return options;
     }
 
     private static bool DerivesFromNeuralNetworkBase(Type type)

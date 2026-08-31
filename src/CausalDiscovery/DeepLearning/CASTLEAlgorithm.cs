@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
@@ -54,7 +54,13 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
     /// <inheritdoc/>
     public override bool SupportsNonlinear => true;
 
-    public CASTLEAlgorithm(CausalDiscoveryOptions? options = null) { ApplyDeepOptions(options); }
+    public CASTLEAlgorithm(CausalDiscoveryOptions? options = null)
+    {
+        // See AmortizedCDAlgorithm: this solve needs far more than the base class's 100 steps.
+        // Set BEFORE options are applied so it stays an overridable default.
+        MaxEpochs = 2000;
+        ApplyDeepOptions(options);
+    }
 
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
@@ -132,9 +138,12 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
         // problem are microseconds, so we run a robust number of them (the paper uses
         // Adam over many epochs). Reconstruction-first warmup (no L1 / acyclicity)
         // lets the true-parent weights grow before sparsity + the DAG constraint prune.
-        int steps = Math.Max(MaxEpochs, 2000);
+        // MaxEpochs is documented as a MAXIMUM, so it is honoured as one. The step count this solve
+        // needs is expressed as this algorithm's DEFAULT instead, set before options are applied so
+        // a caller who asks for fewer gets fewer -- clamping their value upward made MaxEpochs = 10
+        // silently run 2,000 steps, which is not what the option says it does.
+        int steps = MaxEpochs;
         int warmupSteps = steps / 4;
-        int dualEvery = Math.Max(1, (steps - warmupSteps) / 40);
 
         // Adam hyperparameters (CASTLE optimizes with Adam).
         double lrA = Math.Max(LearningRate, 0.01);
@@ -151,9 +160,29 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
         // the gradient of α·h + (ρ/2)·h² is (α + ρ·h)·∇h. Dual ascent on α plus
         // penalty escalation on ρ drives h→0 (a true DAG) and, with the group-L1 term,
         // prunes indirect / cyclic edges (e.g. X0→X2 in the chain X0→X1→X2).
-        T alpha = NumOps.Zero;
-        T rho = NumOps.One;
-        T hPrev = NumOps.FromDouble(double.PositiveInfinity);
+        // CASTLE HOLDS rho AND alpha FIXED AT 1.0. The reference implementation
+        // (github.com/trentkyono/CASTLE, CASTLE.py) sets rho_i = np.array([[1.0]]) and
+        // alpha_i = np.array([[1.0]]) and never updates them: the penalty is simply
+        // 0.5*rho*h*h + alpha*h with both coefficients constant for the whole run.
+        //
+        // This code had NOTEARS' augmented-Lagrangian schedule instead -- dual ascent on alpha plus
+        // a x10 escalation of rho every dual step. That belongs to a different algorithm. Over 40
+        // dual updates rho compounds to ~1e40, and because the empty graph is trivially acyclic an
+        // unbounded penalty does not merely outweigh the reconstruction term, it annihilates it:
+        // every first-layer group norm is driven below w_threshold and the algorithm returns NO
+        // edges. The diagnostic tell was that the failure got WORSE with a larger step budget --
+        // 10000 steps recovered an edge, 12000 recovered none -- which is the opposite of an
+        // under-training curve and the signature of a penalty that never stops growing.
+        // AUGMENTED-LAGRANGIAN POLICY, FIXED RATHER THAN ESCALATED.
+        // alpha is the Lagrange multiplier on the acyclicity residual and rho the quadratic penalty
+        // weight. Both are held at 1 for the whole solve. The classic schedule multiplies rho and
+        // accumulates alpha every outer iteration, which is what produced the failure recorded
+        // above: the penalty grew without bound, collapsed every edge to zero -- an empty graph is
+        // trivially acyclic -- and got WORSE with more steps.
+        const double AcyclicityMultiplier = 1.0;
+        const double AcyclicityPenaltyWeight = 1.0;
+        T alpha = NumOps.FromDouble(AcyclicityMultiplier);
+        T rho = NumOps.FromDouble(AcyclicityPenaltyWeight);
 
         // ---- Pre-allocate every per-step tensor ONCE (allocation-flat inner loop).
         // The solve runs `steps` (>= 2000) full-batch iterations over d sub-networks. Allocating
@@ -267,16 +296,8 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
                             gWh[j][i, k] = NumOps.Add(gWh[j][i, k], NumOps.Multiply(coef, Wh[j][i, k]));
                     }
 
-                // Dual ascent on the constraint (periodically — once the inner solve
-                // has had dualEvery steps to reduce the loss at the current α,ρ).
-                if ((step - warmupSteps) % dualEvery == dualEvery - 1)
-                {
-                    alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
-                    double hAbs = Math.Abs(NumOps.ToDouble(hVal));
-                    if (hAbs > 0.25 * Math.Abs(NumOps.ToDouble(hPrev)))
-                        rho = NumOps.Multiply(rho, NumOps.FromDouble(10.0));
-                    hPrev = hVal;
-                }
+                // No dual ascent and no rho escalation: see the rho/alpha initialization above.
+                // The reference keeps both fixed at 1.0 for the whole run.
             }
 
             // 3) Adam update for every network's weights. Bias-correction factors for

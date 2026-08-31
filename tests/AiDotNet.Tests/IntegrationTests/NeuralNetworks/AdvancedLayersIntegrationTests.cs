@@ -5,6 +5,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.RadialBasisFunctions;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Xunit;
 using System.Threading.Tasks;
 
@@ -2786,6 +2788,42 @@ public class AdvancedLayersIntegrationTests
         Assert.NotNull(clone);
         Assert.NotSame(original, clone);
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SeparableConvolutionalLayer_ContiguousPointwiseKernel_PreservesGradientFlow()
+    {
+        await Task.Yield();
+
+        var layer = new SeparableConvolutionalLayer<float>(
+            outputDepth: 3, kernelSize: 3, stride: 1, padding: 0,
+            (IActivationFunction<float>)new IdentityActivation<float>());
+        layer.SetTrainingMode(true);
+        var input = Tensor<float>.CreateDefault([1, 4, 4, 2], 1.0f);
+
+        // Initialize lazy parameters before opening the tape, then make the calculation deterministic.
+        _ = layer.Forward(input);
+        var parameters = layer.GetTrainableParameters();
+        Assert.Equal(3, parameters.Count);
+        foreach (var parameter in parameters)
+        {
+            for (int i = 0; i < parameter.Length; i++)
+            {
+                parameter[i] = 0.25f;
+            }
+        }
+
+        using var tape = new GradientTape<float>();
+        var output = layer.Forward(input);
+        var loss = AiDotNetEngine.Current.ReduceSum(output, [0, 1, 2, 3], keepDims: false);
+        var gradients = tape.ComputeGradients(loss, parameters);
+
+        // Registration order is depthwise kernels, pointwise kernels, then biases.
+        var pointwiseKernel = parameters[1];
+        Assert.True(
+            gradients.TryGetValue(pointwiseKernel, out var pointwiseGradient) && pointwiseGradient is not null,
+            "The contiguous NCHW materialization must retain a tape edge to the original pointwise kernel.");
+        Assert.Contains(pointwiseGradient!, value => Math.Abs(value) > 1e-6f);
     }
 
     #endregion

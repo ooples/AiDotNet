@@ -769,6 +769,15 @@ shard:
   - name: Integration C - Core
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
+    # 60, not the 50-minute default. The $heavyShards note below already describes this
+    # shard as OOM-killed "8m53s into a 60-minute budget", but the budget was never
+    # actually granted: every sibling Integration C shard sets timeout 60 and this one,
+    # which holds the heaviest content of any of them, was left on the default. Adding it
+    # to $heavyShards fixed the OOM by serializing the collections, and that trade pays for
+    # itself in wall time -- the shard gave up the 4-way collection parallelism it was the
+    # last integration shard still running with. Granting the ceiling the comment already
+    # assumes keeps that fix from simply converting an OOM-kill into a timeout.
+    timeout: 60
     filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~AiDotNet.Tests.IntegrationTests.C&FullyQualifiedName!~AiDotNet.Tests.IntegrationTests.ComputerVision'
   - name: Integration D
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
@@ -815,10 +824,24 @@ shard:
   # they run ALONE here so no sibling collection contends for CPU/memory and invalidates
   # the measurement — keeps the assertions at full strength (no bound relaxation). Tiny
   # (2 classes), so a whole shard is cheap.
+  # SPLIT DELIBERATELY. Both halves are Category=SerialPerf, but they cannot share a
+  # process: Issue1296LargeXTrainBatchingTests builds multi-gigabyte training tensors on
+  # purpose (it exists to prove batching avoids an OOM), and the CPU/wall probe below reads
+  # PROCESS-WIDE CPU against its own wall clock, so it measures whatever that left behind.
+  #
+  # Measured at 4 cores: the probe passes alone, reports ratio 0.99 against a 1.15 floor
+  # after Issue1296 in the same process, and passes again when Issue1296 is excluded from
+  # the same shard. Marking the classes non-parallel does not help -- xUnit's
+  # DisableParallelization stops CONCURRENT execution, and this is state left SEQUENTIALLY.
+  # A separate shard is a separate process, which is the only thing that isolates it.
   - name: Integration - Serial Perf
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
-    filter: 'Category=SerialPerf&Category!=GPU'
+    filter: 'Category=SerialPerf&Category!=GPU&FullyQualifiedName!~TransformerTrainPathReproIssue1227And1228Tests'
+  - name: Integration - CPU Parallelism Probe
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'Category=SerialPerf&Category!=GPU&FullyQualifiedName~TransformerTrainPathReproIssue1227And1228Tests'
   # =====================================================================
   # TOP-LEVEL TEST NAMESPACES that no shard covered (distinct from the
   # UnitTests.* and IntegrationTests.* trees).

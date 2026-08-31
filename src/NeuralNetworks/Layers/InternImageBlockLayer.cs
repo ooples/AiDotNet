@@ -55,9 +55,16 @@ public sealed partial class InternImageBlockLayer<T> : LayerBase<T>, IShapeContr
         _groups = groups;
         var identity = (IActivationFunction<T>)new IdentityActivation<T>();
         _norm1 = new LayerNormalizationLayer<T>(channels, epsilon: 1e-6);
+        // separableOffsetProjection: InternImage specifies DCNv3, whose offset and modulation
+        // branches are LINEAR projections -- nn.Linear(channels, group*K*2) and
+        // nn.Linear(channels, group*K) -- not the dense 3x3 convolutions DCNv1/v2 use. The layer
+        // defaults to the v1 form because that is the paper it cites, so the model that wants v3
+        // has to say so. Without this the two branches carry 9x their parameters, which is what
+        // put InternImage-Huge at ~10.8 GB for a single 32x32 forward pass.
         _dcn = new DeformableConvolutionalLayer<T>(
             channels, kernelSize: 3, stride: 1, padding: 1,
-            groups: groups, deformGroups: groups, useModulation: true);
+            groups: groups, deformGroups: groups, useModulation: true,
+            separableOffsetProjection: true);
         _norm2 = new LayerNormalizationLayer<T>(channels, epsilon: 1e-6);
         _expand = new ConvolutionalLayer<T>(channels * 4, 1, 1, 0, identity);
         _gelu = new ActivationLayer<T>((IActivationFunction<T>)new GELUActivation<T>());

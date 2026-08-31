@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.Helpers;
+﻿using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -100,5 +100,30 @@ internal static class LayerInitializationSeedScope
     /// behaviour.
     /// </summary>
     internal static int? NextSeedOrNull()
-        => _rng is null ? (int?)null : _rng.Next();
+    {
+        // ARM LAZILY FROM THE AMBIENT SEED.
+        //
+        // ResetForModelConstruction runs inside the model's constructor, but a layer can be built
+        // BEFORE that: an architecture carrying explicit Layers is constructed as an ARGUMENT to
+        // the model constructor, and C# evaluates arguments first. Those layers called this, found
+        // _rng still null, took no seed, and fell back to the process-shared
+        // RandomHelper.ThreadSafeRandom -- whose position depends on every draw made before it on
+        // the thread.
+        //
+        // Measured on the Dessurt fixture, whose architecture supplies FlattenLayer + DenseLayer
+        // (12,292 parameters): archSeed=1234 yet 0 of 2 layers carried a RandomSeed, and the
+        // initial parameter sum was 3.27575872 running alone against 0.739498765 with one sibling
+        // fixture ahead of it -- which carried training loss from 4.80392122 to 0.0138604036 and
+        // decided a pass/fail purely on ordering.
+        //
+        // AmbientFallbackSeed was already being set around construction for this exact purpose, but
+        // only ResetForModelConstruction consumed it, so it never reached anything built ahead of
+        // the constructor body. Arming here on first use closes that window without changing the
+        // contract: with no ambient seed and no reset, this still returns null and initialization
+        // stays exactly as it was.
+        if (_rng is null && _ambientFallbackSeed.HasValue)
+            _rng = RandomHelper.CreateSeededRandom(_ambientFallbackSeed.Value);
+
+        return _rng is null ? (int?)null : _rng.Next();
+    }
 }
