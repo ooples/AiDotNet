@@ -9,6 +9,7 @@ using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Audio;
 
+[Collection("FusedTrainingSerial")]
 public class GraFPrintPaperFidelityTests
 {
     [Fact]
@@ -161,6 +162,98 @@ public class GraFPrintPaperFidelityTests
         Assert.False(firstGraph.Cast<int>().SequenceEqual(secondGraph.Cast<int>()));
         Assert.All(secondOutput.ToArray(), value =>
             Assert.True(!double.IsNaN(value) && !double.IsInfinity(value)));
+    }
+
+    [Fact(Timeout = 60_000)]
+    public async Task CompiledTraining_RebuildsKnnForEachInput()
+    {
+        await Task.Yield();
+
+        var (model, graphBlock) = CreateSingleGraphBlockModel();
+        using var compiledModel = model;
+        var (eagerModel, _) = CreateSingleGraphBlockModel();
+        using var eagerModelLifetime = eagerModel;
+        var initialParameters = compiledModel.GetParameters();
+        eagerModel.UpdateParameters(initialParameters);
+        double[] initialValues = initialParameters.ToArray();
+        var first = BuildFourNodeInput([0.0, 1.0, 10.0, 11.0]);
+        var second = BuildFourNodeInput([0.0, 10.0, 11.0, 1.0]);
+        var target = new Tensor<double>([1, 2, 2, 2]);
+
+        bool previousCompilation = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation;
+        try
+        {
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = true;
+            AiDotNet.Training.CompiledTapeTrainingStep<double>.Invalidate();
+            AiDotNet.Training.CompiledTapeTrainingStep<double>.ResetFusedStepCount();
+
+            compiledModel.Train(first, target);
+            Assert.Equal(1, AiDotNet.Training.CompiledTapeTrainingStep<double>.GetFusedStepCount());
+            int[,,] firstGraph = (int[,,])graphBlock.LastNeighborIndices!.Clone();
+
+            compiledModel.Train(second, target);
+            Assert.Equal(2, AiDotNet.Training.CompiledTapeTrainingStep<double>.GetFusedStepCount());
+            int[,,] secondGraph = graphBlock.LastNeighborIndices!;
+
+            Assert.False(firstGraph.Cast<int>().SequenceEqual(secondGraph.Cast<int>()),
+                "Compiled replay reused the first input's k-NN topology for a different input.");
+
+            double[] compiledValues = compiledModel.GetParameters().ToArray();
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = false;
+            AiDotNet.Training.CompiledTapeTrainingStep<double>.Invalidate();
+            eagerModel.Train(first, target);
+            eagerModel.Train(second, target);
+            double[] eagerValues = eagerModel.GetParameters().ToArray();
+
+            Assert.Equal(compiledValues.Length, eagerValues.Length);
+            double maxUpdate = 0.0;
+            double maxDivergence = 0.0;
+            for (int i = 0; i < compiledValues.Length; i++)
+            {
+                maxUpdate = Math.Max(maxUpdate, Math.Abs(compiledValues[i] - initialValues[i]));
+                maxDivergence = Math.Max(
+                    maxDivergence, Math.Abs(compiledValues[i] - eagerValues[i]));
+            }
+
+            Assert.True(maxUpdate > 1e-12,
+                $"GraFPrint parameters did not update; parity would be vacuous (max update {maxUpdate:E3}).");
+            Assert.True(maxDivergence < 1e-9,
+                $"Compiled dynamic k-NN backward diverged from eager training by {maxDivergence:E3}.");
+        }
+        finally
+        {
+            AiDotNet.Training.CompiledTapeTrainingStep<double>.Invalidate();
+            AiDotNet.Training.CompiledTapeTrainingStep<double>.ResetFusedStepCount();
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = previousCompilation;
+        }
+    }
+
+    private static (GraFPrint<double> Model, GraFPrintGraphBlockLayer<double> GraphBlock)
+        CreateSingleGraphBlockModel()
+    {
+        var graphBlock = new GraFPrintGraphBlockLayer<double>(
+            channels: 2, k: 2, dilation: 1, dropPathRate: 0.0)
+        {
+            RandomSeed = 42,
+        };
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputHeight: 2,
+            inputWidth: 2,
+            inputDepth: 2,
+            outputSize: 8,
+            layers: [graphBlock])
+        {
+            RandomSeed = 42,
+        };
+        var model = new GraFPrint<double>(architecture, new GraFPrintOptions
+        {
+            EmbeddingDim = 8,
+            DropoutRate = 0.0,
+            LearningRate = 1e-4,
+        });
+        return (model, graphBlock);
     }
 
     [Fact]

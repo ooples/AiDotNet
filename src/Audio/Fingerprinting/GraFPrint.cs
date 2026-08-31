@@ -68,12 +68,6 @@ internal partial class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
     public override double MaxGradNormValue => _options?.MaxGradNorm ?? 0.0;
 
     /// <summary>
-    /// Dynamic k-NN is rebuilt from the current features on every forward. A compile-once
-    /// training plan would freeze the first batch's neighbor indices, changing the model.
-    /// </summary>
-    protected override bool SupportsFusedCompiledTraining => false;
-
-    /// <summary>
     /// Return the paper-faithful Adam + cosine-annealing optimizer instead
     /// of the default Adam that the base class falls back to. Without this
     /// override the constructor-wired <see cref="_optimizer"/> sits unused —
