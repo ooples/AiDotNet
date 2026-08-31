@@ -36,6 +36,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          # The audit below diffs from the PREVIOUS map's commit, which a shallow clone cannot
+          # resolve and which is not an ancestor of anything in particular.
+          fetch-depth: 0
 
       - name: Find the run to harvest
         id: source
@@ -112,3 +116,77 @@ jobs:
           path: shard-map.json
           if-no-files-found: error
           retention-days: 14
+
+      # ---------------------------------------------------------------------------------------
+      # Does selection actually work? Measured, not assumed.
+      #
+      # Selection rests on "a shard that executes none of the changed lines would have passed
+      # anyway". Nothing about a green PR can disprove that: the skipped shard leaves no evidence.
+      # So it is checked against the runs that DID execute everything - replay the selection that
+      # WOULD have been made, and see whether any shard it would have skipped actually failed.
+      #
+      # Audited against the PREVIOUS map, never the one just built. A map built from this very run
+      # records exactly what each shard executed in it, which makes the question circular.
+      #
+      # Runs after the upload on purpose: the map is valid regardless of what the audit finds, and
+      # a miss should turn the workflow red without also withholding the artifact.
+      # ---------------------------------------------------------------------------------------
+      - name: Download the previous map
+        id: prevmap
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Second-newest successful run: the newest is this one, still in progress.
+          prev=$(gh run list --workflow test-impact-map.yml --branch master --status success                    --limit 2 --json databaseId --jq '.[-1].databaseId' 2>/dev/null || true)
+          if [ -z "$prev" ] || [ "$prev" = "${{ github.run_id }}" ]; then
+            echo "no earlier map to audit against - this is the first build"
+            exit 0
+          fi
+          gh run download "$prev" --name shard-map --dir prevmap || echo "previous map unavailable"
+
+      - name: Audit selection against this run
+        if: always()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if (-not (Test-Path prevmap/shard-map.json)) {
+            Write-Host 'no previous map - skipping the audit'
+            exit 0
+          }
+
+          # Shard outcomes come from the run's own job list rather than its artifacts. The
+          # alternative is downloading 116 coverage or TRX artifacts to read one field out of each.
+          $jobs = gh api --paginate "repos/${{ github.repository }}/actions/runs/${{ steps.source.outputs.run_id }}/jobs" `
+                    --jq '.jobs[] | select(.name | startswith("Tests (")) | {name, conclusion}' |
+                  ConvertFrom-Json
+          $outcomes = @($jobs | ForEach-Object {
+            # "Tests (net10.0) - Unit - 01 Activation" -> "Unit - 01 Activation". Split on the
+            # FIRST " - " only; shard names contain " - " themselves.
+            $name = [string] $_.name
+            $i = $name.IndexOf(') - ')
+            if ($i -lt 0) { return }
+            [pscustomobject]@{ shard = $name.Substring($i + 4); outcome = [string] $_.conclusion }
+          })
+          if ($outcomes.Count -eq 0) {
+            Write-Host '::warning::no shard jobs found in the audited run - nothing to audit'
+            exit 0
+          }
+          $outcomes | ConvertTo-Json -Depth 3 | Set-Content outcomes.json -Encoding utf8
+          Write-Host "auditing $($outcomes.Count) shard outcome(s), $(@($outcomes | Where-Object outcome -ne 'success').Count) failed"
+
+          # HEAD must be the audited run's commit: the selector diffs from the map's commit to HEAD.
+          & git checkout --quiet '${{ steps.source.outputs.sha }}'
+
+          & ./tools/TestImpact/Measure-SelectionMiss.ps1 `
+              -MapFile prevmap/shard-map.json -OutcomesFile outcomes.json -OutFile audit.json
+          $auditExit = $LASTEXITCODE
+
+          $a = Get-Content audit.json -Raw | ConvertFrom-Json
+          $verdict = if ($a.Escalated) { 'would have escalated - nothing skipped' }
+                     elseif ($a.MissCount -gt 0) { "**$($a.MissCount) MISSED**: $($a.Missed -join ', ')" }
+                     else { 'no misses' }
+          "### Selection audit`n`n- would run $($a.WouldRun)/$($a.TotalShards), skip $($a.WouldSkip)`n- $($a.Failed) shard(s) failed`n- $verdict" |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          exit $auditExit
