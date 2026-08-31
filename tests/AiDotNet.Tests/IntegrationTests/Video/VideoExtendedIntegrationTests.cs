@@ -37,6 +37,22 @@ public class VideoExtendedIntegrationTests
             taskType: NeuralNetworkTaskType.MultiClassClassification,
             inputHeight: height, inputWidth: width, inputDepth: depth);
 
+    private static SAM2Options CreateSam2SmokeOptions() => new()
+    {
+        HieraEmbeddingDimension = 16,
+        HieraStageDepths = [1, 1, 1, 1],
+        HieraInitialHeadCount = 1,
+        HieraWindowSizes = [8, 4, 2, 1],
+        HieraGlobalAttentionBlockIndexes = [2],
+        ModelDimension = 16,
+        MemoryDimension = 8,
+        DecoderHeadCount = 4,
+        MemoryAttentionLayerCount = 4,
+        MaskDecoderDepth = 2,
+        MaskDecoderMlpDimension = 64
+    };
+
+
     #region VideoModelOptions
 
     [Fact(Timeout = 120000)]
@@ -593,16 +609,19 @@ public class VideoExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SAM2_Construction_DefaultParams()
     {
+        await Task.Yield();
         var arch = CreateArch(height: 64, width: 64);
-        var model = new SAM2<double>(arch);
+        var model = new SAM2<double>(arch, options: CreateSam2SmokeOptions());
         Assert.True(model.SupportsTraining);
     }
 
     [Fact(Timeout = 120000)]
     public async Task SAM2_Construction_CustomModelSize()
     {
+        await Task.Yield();
         var arch = CreateArch(height: 64, width: 64);
-        var model = new SAM2<double>(arch, modelSize: SAM2ModelSize.Small);
+        var model = new SAM2<double>(
+            arch, modelSize: SAM2ModelSize.Small, options: CreateSam2SmokeOptions());
         Assert.True(model.SupportsTraining);
     }
 
@@ -611,7 +630,8 @@ public class VideoExtendedIntegrationTests
     {
         await Task.Yield();
         var arch = CreateArch(height: 32, width: 32);
-        using var model = new SAM2<double>(arch, modelSize: SAM2ModelSize.Tiny);
+        using var model = new SAM2<double>(
+            arch, modelSize: SAM2ModelSize.Tiny, options: CreateSam2SmokeOptions());
         var input = new Tensor<double>([2, 3, 32, 32]);
         for (int i = 0; i < input.Length; i++)
         {

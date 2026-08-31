@@ -367,13 +367,40 @@ public class ModelParameterGenerator : IIncrementalGenerator
                         and not ParameterMemberSemanticModel.Kind.External
                         and not ParameterMemberSemanticModel.Kind.Conflicting)
                 {
-                    var kind = ComponentKindFor(memberType, elem);
+                    // An ABSTRACT interface-typed member is a declared component SLOT: the base names
+                    // the role and each subclass supplies the implementation, exactly as
+                    // LatentDiffusionModelBase does for Conditioner beside NoisePredictor and VAE.
+                    // Requiring that keeps the runtime-cast registration to genuine slots instead of
+                    // every interface-typed member a model happens to hold.
+                    var kind = ComponentKindFor(memberType, elem, isDeclaredSlot: member.IsAbstract);
                     if (kind == "one")
                     {
                         components.Add((member.Name,
                             $"new ComponentAccessorParameterSource<{elem}>(() => {member.Name})",
                             RoleExpression(classification.Kind),
                             AvailabilityExpression(member, classification.Kind)));
+                        continue;
+                    }
+                    if (kind == "adapt")
+                    {
+                        // The declared type cannot prove it carries parameters, but an
+                        // implementation may. Casting inside the accessor lets the registry hold the
+                        // slot either way: the real surface when the cast succeeds, and an ABSENT
+                        // slot when it does not.
+                        //
+                        // optional: true is what makes the absent case safe, and leaving it off was a
+                        // real regression. ComponentAccessorParameterSource's ParameterCount does
+                        // return 0 for a null component, but its LAYOUT reported ShapeDeferred with a
+                        // null count -- and ParameterManifest treats either of those as an unresolved
+                        // slot, which makes the WHOLE model's layout unresolved. Every latent
+                        // diffusion model whose conditioner is absent, or is not an IParameterSource,
+                        // then threw ParameterLayoutNotReadyException from ParameterCount: 21 CI
+                        // shards, all of them diffusion. A conditioner this model does not have is a
+                        // resolved fact, not a deferred shape.
+                        components.Add((member.Name,
+                            $"new ComponentAccessorParameterSource<{elem}>(() => {member.Name} as global::AiDotNet.Interfaces.IParameterSource<{elem}>, optional: true)",
+                            RoleExpression(classification.Kind),
+                            AvailabilityExpression(member, classification.Kind, runtimeOptional: true)));
                         continue;
                     }
                     if (kind == "many")
@@ -442,12 +469,30 @@ public class ModelParameterGenerator : IIncrementalGenerator
     /// same weights twice through two different routes.
     /// </para>
     /// </remarks>
-    private static string? ComponentKindFor(ITypeSymbol? type, string elem)
+    private static string? ComponentKindFor(ITypeSymbol? type, string elem, bool isDeclaredSlot = false)
     {
         if (type is null) return null;
         var bare = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
 
         if (IsParameterSourceOf(bare, elem) && !IsNeuralNetworkBase(bare)) return "one";
+
+        // A COMPONENT SLOT DECLARED AS AN INTERFACE THAT CANNOT PROVE IT CARRIES PARAMETERS.
+        //
+        // LatentDiffusionModelBase declares Conditioner as IConditioningModule<T>. Its siblings
+        // NoisePredictor and VAE are declared through interfaces that DO extend IParameterSource<T>,
+        // so both register and both appear in ParameterCount, GetParameters and every clone. The
+        // conditioner does not, so it appeared in none of them, and the chunk path reached it only
+        // through a hand-written runtime type test -- a second surface, which is what let
+        // ControlNet++ lose its VAE.
+        //
+        // Registering the slot behind a runtime cast closes that without touching the interface
+        // hierarchy: a conditioner with no parameters reports 0 and costs nothing, and one that
+        // does is finally counted, saved and cloned like its siblings.
+        //
+        // Deliberately narrow. Infrastructure is what a model USES rather than what it IS -- the
+        // same distinction ModelStateGenerator draws -- and registering an optimizer or a loss as
+        // parameter state would be wrong, not merely noisy.
+        if (isDeclaredSlot && IsAdaptableComponentInterface(bare)) return "adapt";
 
         ITypeSymbol? element = null;
         if (bare is IArrayTypeSymbol arr) element = arr.ElementType;
@@ -465,6 +510,30 @@ public class ModelParameterGenerator : IIncrementalGenerator
         element = element.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
         if (IsParameterSourceOf(element, elem) && !IsNeuralNetworkBase(element)) return "many";
         return null;
+    }
+
+    /// <summary>
+    /// Whether a member's declared type is an AiDotNet component interface that might, at runtime,
+    /// be a parameter source.
+    /// </summary>
+    /// <remarks>
+    /// Interfaces only: a concrete type either implements <c>IParameterSource&lt;T&gt;</c> or does
+    /// not, and there is nothing to discover at runtime. The infrastructure list mirrors
+    /// ModelStateGenerator's, for the same reason it gives: an optimizer, a loss, a scheduler or a
+    /// regularizer is machinery the model uses, not state the model owns.
+    /// </remarks>
+    private static bool IsAdaptableComponentInterface(ITypeSymbol type)
+    {
+        if (type.TypeKind != TypeKind.Interface) return false;
+
+        string name = type.Name;
+        if (name is "IOptimizer" or "IGradientBasedOptimizer" or "ILossFunction"
+            or "ILearningRateScheduler" or "IRegularization" or "IActivationFunction"
+            or "IVectorActivationFunction" or "IAudioFeatureExtractor")
+            return false;
+
+        return type.ContainingNamespace?.ToDisplayString()
+            .StartsWith("AiDotNet.", System.StringComparison.Ordinal) == true;
     }
 
     private static bool IsParameterSourceOf(ITypeSymbol type, string elem)
@@ -1731,7 +1800,8 @@ public class ModelParameterGenerator : IIncrementalGenerator
 
     private static string AvailabilityExpression(
         ISymbol member,
-        ParameterMemberSemanticModel.Kind kind)
+        ParameterMemberSemanticModel.Kind kind,
+        bool runtimeOptional = false)
     {
         foreach (var attribute in member.GetAttributes())
         {
@@ -1766,6 +1836,14 @@ public class ModelParameterGenerator : IIncrementalGenerator
         // which Construction could not have been true.
         if (kind == ParameterMemberSemanticModel.Kind.Buffer && !HasConstructionValue(member))
             return "global::AiDotNet.Models.Parameters.ParameterAvailability.Fit";
+
+        // A runtime adapter is optional by construction: the declared interface cannot promise
+        // IParameterSource<T>, and both a null member and a parameter-free implementation make the
+        // cast return null. Treating that state as construction-required turns a legitimate absent
+        // branch into ShapeDeferred and makes ParameterCount/GetParameters throw. Explicit
+        // availability annotations above still win.
+        if (runtimeOptional)
+            return "global::AiDotNet.Models.Parameters.ParameterAvailability.Conditional";
 
         return "global::AiDotNet.Models.Parameters.ParameterAvailability.Construction";
     }

@@ -240,23 +240,14 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
     {
         _options = options ?? new NeuralTuringMachineOptions();
         Options = _options;
+
         if (memorySize <= 0) throw new ArgumentOutOfRangeException(nameof(memorySize), "Memory size must be positive");
         if (memoryVectorSize <= 0) throw new ArgumentOutOfRangeException(nameof(memoryVectorSize), "Memory vector size must be positive");
         if (controllerSize <= 0) throw new ArgumentOutOfRangeException(nameof(controllerSize), "Controller size must be positive");
 
-        // Tighter gradient clip (NTM paper §3.4: τ = 10 with batch size 1
-        // for the recall task; without clipping, the through-memory
-        // gradient path develops large peaks during the first few
-        // updates and Adam's accumulated m can overshoot the stable
-        // optimum on simple fixed-input regression tasks like the
-        // MoreData_ShouldNotDegrade invariant — once the loss has hit
-        // ~1e-4, Adam keeps applying ~0.1-magnitude updates in the
-        // direction of decaying-but-non-zero gradients, walking the
-        // model away from convergence. 0.1 is conservative enough to
-        // keep that drift bounded across 200 iterations of fixed-input
-        // training on the test's tiny [128]→[1] regression task while
-        // still being loose enough for legitimate full-scale NTM
-        // training to make progress.
+        // Section 4.6 of the paper uses centered RMSProp with momentum and
+        // element-wise clipping. ConfigurePaperTrainingOptimizer and the
+        // clipping overrides below implement that training recipe directly.
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastMemoryUsageLoss = NumOps.Zero;
 
@@ -276,6 +267,7 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
         // Initialize with default memory and weights
         InitializeDefaultMemoryAndWeights();
         InitializeLayers();
+        ConfigurePaperTrainingOptimizer();
     }
 
     /// <summary>
@@ -312,6 +304,7 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
     {
         _options = options ?? new NeuralTuringMachineOptions();
         Options = _options;
+
         if (memorySize <= 0) throw new ArgumentOutOfRangeException(nameof(memorySize), "Memory size must be positive");
         if (memoryVectorSize <= 0) throw new ArgumentOutOfRangeException(nameof(memoryVectorSize), "Memory vector size must be positive");
         if (controllerSize <= 0) throw new ArgumentOutOfRangeException(nameof(controllerSize), "Controller size must be positive");
@@ -335,7 +328,35 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
         // Initialize with default memory and weights
         InitializeDefaultMemoryAndWeights();
         InitializeLayers();
+        ConfigurePaperTrainingOptimizer();
     }
+
+    /// <summary>
+    /// Configures the centered RMSProp variant and constants used by the
+    /// original NTM experiments (Graves et al., section 4.6).
+    /// </summary>
+    private void ConfigurePaperTrainingOptimizer()
+    {
+        var optimizerOptions =
+            new RootMeanSquarePropagationOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                Decay = _options.RmsPropDecay,
+                InitialMomentum = _options.RmsPropMomentum,
+                Epsilon = _options.RmsPropEpsilon,
+                Centered = true,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveMomentum = false,
+                EnableGradientClipping = false
+            };
+
+        SetBaseTrainOptimizer(
+            new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                optimizerOptions));
+    }
+
+
 
     /// <summary>
     /// Initializes default memory and attention weights.
@@ -712,6 +733,16 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
     /// TrainingError_ShouldNotExceedTestError). The eager tape is immune.
     /// </remarks>
     protected override bool SupportsFusedCompiledTraining => false;
+
+    /// <inheritdoc />
+    public override double MaxGradNormValue => _options.GradientClipValue;
+
+    /// <summary>
+    /// The NTM paper clips each gradient component to (-10, 10), rather
+    /// than rescaling the combined global norm.
+    /// </summary>
+    protected override bool UsesElementWiseGradientClipping => true;
+
 
     /// <summary>
     /// Forward path used by the training tape — routes directly through the

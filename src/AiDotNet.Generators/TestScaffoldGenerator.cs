@@ -671,6 +671,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // decrease assertion and iteration count remain unchanged.
             { "VMamba", new WarmupIterationOverride(deterministicMemorizationLoss: true) },
 
+            // DeepAR's default stack inserts DropoutLayer instances between its recurrent layers.
+            // GetLastLoss is therefore one training-mode dropout draw at each endpoint, so it can
+            // reverse even when the fixed example's evaluation loss decreases. Measure the same
+            // trained parameters in evaluation mode; the strict 1% decrease and 20 updates remain.
+            { "DeepAR", new WarmupIterationOverride(deterministicMemorizationLoss: true) },
+
             // NaturalSpeech: the same shape, over a LONGER warm-up, and on every repeated-training
             // probe rather than just one. Measured evaluation loss on a fixed pair, from untrained:
             //   0.253 | 0.267, 0.292, 0.294, 0.281, 0.294, 0.301, 0.279, 0.249, 0.207, 0.175, 0.173
@@ -4546,7 +4552,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "new AiDotNet.Audio.Fingerprinting.GraFPrintOptions { NumMels = 32, EmbeddingDim = 4, " +
                     "GnnHiddenDim = 16, NumGnnLayers = 1, NumAttentionHeads = 1, KNeighbors = 2, " +
-                    "DropoutRate = 0.0, DisableFusedOptimizerStep = true })";
+                    "EncoderEmbeddingDim = 16, ProjectionExpansion = 2, PeakFilters = 4, DropoutRate = 0.0 })";
+
             }
             else if (model.ClassName == "GPTSoVITS" && model.TypeParameterCount == 1)
             {
@@ -5100,15 +5107,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "SAM2" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Segmentation.", System.StringComparison.Ordinal))
             {
-                // The video fixture below supplies [4, 3, 32, 32], but the parameterless SAM2
-                // constructor declares 256x256. SAM2 upsamples its low-resolution mask to the
-                // architecture dimensions, so the generated fixture exercised a different output
-                // geometry than the image it supplied. Keep the production Base model-size default
-                // and align only the generated architecture with its existing 32x32 input geometry.
+                // Exercise SAM 2's complete Hiera/FPN, four-layer RoPE memory transformer,
+                // two-way decoder, mask-conditioned memory encoder, and object-pointer path at CI
+                // width. Only capacity is scaled; no stage/module or generated invariant is removed.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1))";
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), memoryBankSize: 2, " +
+                    "options: new AiDotNet.Video.Options.SAM2Options { " +
+                    "HieraEmbeddingDimension = 16, HieraStageDepths = new[] { 1, 1, 1, 1 }, " +
+                    "HieraInitialHeadCount = 1, HieraWindowSizes = new[] { 8, 4, 2, 1 }, " +
+                    "HieraGlobalAttentionBlockIndexes = new[] { 2 }, " +
+                    "ModelDimension = 16, MemoryDimension = 8, DecoderHeadCount = 4, " +
+                    "MemoryAttentionLayerCount = 4, MaskDecoderDepth = 2, MaskDecoderMlpDimension = 64 })";
             }
             else if (model.ClassName == "SAM21" && model.TypeParameterCount == 1)
             {
@@ -12146,6 +12157,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // explicit batch so FlattenLayer produces [1, 3072] and the classifier returns [1, 4].
             sb.AppendLine("    protected override int[] InputShape => new[] { 1, 3, 32, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4 };");
+            // The three-step relationship probe samples Dessurt in AdamW's recovery transient:
+            // on the deterministic fixture it scores train 4.803921 versus test 0.752702 even
+            // though the independent six-step loss-reduction invariant passes. Ten steps is the
+            // shared conformance ceiling and lets this 12K-parameter smoke model complete that
+            // recovery before comparing its trained input with an unseen input. Keep the original
+            // 3x assertion unchanged so a disconnected or exploding training path still fails.
+            sb.AppendLine("    protected override int TrainingErrorIterations => 10;");
             // The generated D-F fixture is intentionally FP32. On the exact 4-core/16-GB Linux
             // runner, its paper-default AdamW trajectory reached the same loss floor at 50 and
             // 200 steps, with the longer result only 1.1325e-4 higher and all 12,292 parameters

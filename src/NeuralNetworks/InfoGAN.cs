@@ -208,20 +208,6 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// </remarks>
     public NeuralNetworkBase<T> QNetwork { get; private set; }
 
-    /// <inheritdoc />
-    /// <remarks>
-    /// Streams parameters from <c>Generator</c>, <c>Discriminator</c>, and
-    /// <c>QNetwork</c> in sequence. Per #1237, callers walking these chunks
-    /// accumulate length into a <see cref="long"/> when the aggregate
-    /// crosses int.MaxValue.
-    /// </remarks>
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
-    {
-        foreach (var chunk in Generator.GetParameterChunks()) yield return chunk;
-        foreach (var chunk in Discriminator.GetParameterChunks()) yield return chunk;
-        foreach (var chunk in QNetwork.GetParameterChunks()) yield return chunk;
-    }
-
     private ILossFunction<T> _lossFunction;
 
     // CNN backbone for image domains (Chen et al. 2016 §4.1/§4.4),

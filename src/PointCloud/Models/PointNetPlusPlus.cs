@@ -1229,26 +1229,12 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
             return outputs[0];
         }
 
-        var combined = new T[numCentroids * _outputChannels];
-        int channelOffset = 0;
-        foreach (var branchOutput in outputs)
-        {
-            int branchChannels = branchOutput.Shape[1];
-            for (int c = 0; c < numCentroids; c++)
-            {
-                int dstBase = c * _outputChannels + channelOffset;
-                int srcBase = c * branchChannels;
-                for (int ch = 0; ch < branchChannels; ch++)
-                {
-                    combined[dstBase + ch] = branchOutput.Data.Span[srcBase + ch];
-                }
-            }
-
-            channelOffset += branchChannels;
-        }
-
-        return new Tensor<T>(combined, [numCentroids, _outputChannels]);
+        // Concatenate branch values through the engine so every scale remains connected to
+        // its MLP parameters on the autodiff tape. Scalar copies into a fresh tensor preserve
+        // forward values but make every earlier branch look constant to reverse-mode autodiff.
+        return Engine.Concat(outputs.ToArray(), 1);
     }
+
 
     public override void UpdateParameters(T learningRate)
     {
@@ -1372,7 +1358,7 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
         branch.NeighborIndices = neighborIndices;
         branch.NeighborCounts = neighborCounts;
 
-        var grouped = BuildGroupedFeatures(input, positions, centroidIndices, neighborIndices, neighborCounts, maxNeighbors);
+        var grouped = BuildGroupedFeatures(input, centroidIndices, neighborIndices, neighborCounts, maxNeighbors);
         Tensor<T> features = grouped;
         foreach (var layer in branch.MlpLayers)
         {
@@ -1380,11 +1366,25 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
         }
 
         int outChannels = branch.OutputChannels;
-        var output = new T[numCentroids * outChannels];
+        // Select max-pool winners using the same first-maximum rule as the original
+        // scalar implementation, but express the selected values as mask * features + ReduceSum.
+        // The indices are deliberately detached (the choice is discrete); the values must remain
+        // tape-connected so gradients reach every shared MLP in the abstraction hierarchy.
+        var reshaped = Engine.Reshape(features, [numCentroids, maxNeighbors, outChannels]);
+        var maxMask = new Tensor<T>([numCentroids, maxNeighbors, outChannels]);
         var maxIndices = new int[numCentroids * outChannels];
         var data = features.Data.Span;
         var numOps = NumOps;
 
+        // ARGMAX in plain loops is fine -- an index is not differentiable and never carried a
+        // gradient. Only the SELECTION has to stay on the tape, and it used to be written straight
+        // into a new T[] and wrapped in a new Tensor<T>, which produced the right numbers with no
+        // GradFn. Every branch MLP weight upstream of this pooling was therefore unreachable from
+        // the loss and got exactly zero gradient: Gradients_MatchFiniteDifference reported
+        // analytic=0.0000E+000 against a numeric gradient of -1.6212E-003 that was stable across
+        // the entire step ladder. It looked intermittent only because the check samples 12
+        // parameters at random, so whether a run happened to draw a dead slot varied while the
+        // defect did not.
         for (int c = 0; c < numCentroids; c++)
         {
             int count = neighborCounts[c];
@@ -1403,67 +1403,72 @@ public partial class SetAbstractionLayer<T> : LayerBase<T>, IShapeContract
                         maxIdx = k;
                     }
                 }
-                output[c * outChannels + ch] = maxVal;
                 maxIndices[c * outChannels + ch] = maxIdx;
+                maxMask[c, maxIdx, ch] = numOps.One;
             }
         }
 
         branch.MaxIndices = maxIndices;
-        return new Tensor<T>(output, [numCentroids, outChannels]);
+        return Engine.ReduceSum(
+            Engine.TensorMultiply(reshaped, maxMask), [1], keepDims: false);
     }
-
     private Tensor<T> BuildGroupedFeatures(
         Tensor<T> input,
-        double[] positions,
         int[] centroidIndices,
         int[,] neighborIndices,
         int[] neighborCounts,
         int maxNeighbors)
     {
         int numCentroids = centroidIndices.Length;
-        var grouped = new T[numCentroids * maxNeighbors * _inputChannels];
-        var data = input.Data.Span;
-        var numOps = NumOps;
+        int rows = numCentroids * maxNeighbors;
+        var flattenedNeighborIndices = new int[rows];
+        var flattenedCentroidIndices = new int[rows];
+        var validMask = new Tensor<T>([rows, _inputChannels]);
 
         for (int c = 0; c < numCentroids; c++)
         {
             int centroidIdx = centroidIndices[c];
-            double cx = positions[centroidIdx * 3];
-            double cy = positions[centroidIdx * 3 + 1];
-            double cz = positions[centroidIdx * 3 + 2];
             int count = neighborCounts[c];
 
             for (int k = 0; k < maxNeighbors; k++)
             {
-                int neighborIdx = neighborIndices[c, k];
-                int baseIdx = (c * maxNeighbors + k) * _inputChannels;
+                int row = c * maxNeighbors + k;
+                bool isValid = k < count;
+                flattenedNeighborIndices[row] = isValid ? neighborIndices[c, k] : centroidIdx;
+                flattenedCentroidIndices[row] = centroidIdx;
 
-                if (k < count)
-                {
-                    double nx = positions[neighborIdx * 3];
-                    double ny = positions[neighborIdx * 3 + 1];
-                    double nz = positions[neighborIdx * 3 + 2];
-                    grouped[baseIdx] = numOps.FromDouble(nx - cx);
-                    grouped[baseIdx + 1] = numOps.FromDouble(ny - cy);
-                    grouped[baseIdx + 2] = numOps.FromDouble(nz - cz);
-
-                    int featureBase = neighborIdx * _inputChannels;
-                    for (int d = 3; d < _inputChannels; d++)
-                    {
-                        grouped[baseIdx + d] = data[featureBase + d];
-                    }
-                }
-                else
+                if (isValid)
                 {
                     for (int d = 0; d < _inputChannels; d++)
                     {
-                        grouped[baseIdx + d] = numOps.Zero;
+                        validMask[row, d] = NumOps.One;
                     }
                 }
             }
         }
 
-        return new Tensor<T>(grouped, [numCentroids * maxNeighbors, _inputChannels]);
+        // Group membership and centroid selection are discrete, but TensorGather keeps the
+        // selected feature values differentiable. This is essential for stacked abstraction
+        // layers: a raw Data.Span copy here severs gradients to the preceding abstraction.
+        var neighbors = Engine.TensorGather(
+            input, new Tensor<int>(flattenedNeighborIndices, [rows]), axis: 0);
+        var centroids = Engine.TensorGather(
+            input, new Tensor<int>(flattenedCentroidIndices, [rows]), axis: 0);
+        var relativeCoordinates = Engine.TensorSubtract(
+            Engine.TensorSlice(neighbors, [0, 0], [rows, 3]),
+            Engine.TensorSlice(centroids, [0, 0], [rows, 3]));
+
+        Tensor<T> grouped = relativeCoordinates;
+        if (_inputChannels > 3)
+        {
+            var neighborFeatures = Engine.TensorSlice(
+                neighbors, [0, 3], [rows, _inputChannels - 3]);
+            grouped = Engine.Concat([relativeCoordinates, neighborFeatures], 1);
+        }
+
+        // Invalid padded neighbors were zero in the original implementation. Keep that exact
+        // forward behavior while leaving all valid gathered values on the tape.
+        return Engine.TensorMultiply(grouped, validMask);
     }
 
     private static void BuildNeighborIndices(

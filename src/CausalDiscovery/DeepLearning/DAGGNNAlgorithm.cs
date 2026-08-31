@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
@@ -132,8 +132,29 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
                     T varI = cov[i, i];
                     if (!NumOps.GreaterThan(varI, eps)) continue;
 
-                    // Data fit: encourage P[i,j] when cov[i,j] is large
-                    T corrSq = NumOps.Divide(NumOps.Multiply(cov[i, j], cov[i, j]), varI);
+                    // Data fit: encourage P[i,j] when i and j are strongly related.
+                    //
+                    // SYMMETRIC ON PURPOSE. This used to divide by varI alone, which is asymmetric
+                    // in exactly the wrong way: cov[i,j]^2 is symmetric, so dividing by the SOURCE's
+                    // variance rewarded edges leaving the LOW-variance node. In an attenuating
+                    // linear SEM the parent carries the larger variance, so every edge was pushed
+                    // child-to-parent -- and the variance ordering used for the final projection
+                    // says the opposite, so the two fought. On a fixture whose variance ordering
+                    // matches its topology the projection kept the direction this term had
+                    // suppressed, it fell under the threshold, and the graph came back empty.
+                    //
+                    // It cannot be otherwise: for linear-Gaussian data the direction of an edge is
+                    // not identifiable from second-order statistics at all -- both orientations lie
+                    // in the same Markov equivalence class -- so any covariance surrogate that
+                    // appears to orient is orienting on an artefact. Squared Pearson correlation is
+                    // the direction-neutral form, so this term now decides only the SKELETON and
+                    // leaves orientation to the acyclicity penalty and the variance ordering, which
+                    // is what the projection below already documents itself as doing.
+                    T varJ = cov[j, j];
+                    if (!NumOps.GreaterThan(varJ, eps)) continue;
+                    T corrSq = NumOps.Divide(
+                        NumOps.Multiply(cov[i, j], cov[i, j]),
+                        NumOps.Multiply(varI, varJ));
                     T dataGrad = NumOps.Negate(corrSq);
 
                     // Acyclicity gradient: (alpha + rho*h) * [exp(P∘P)^T ∘ 2P][i,j]
@@ -183,6 +204,29 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
                     dot = NumOps.Add(dot, NumOps.Multiply(Zs[i, k], Zt[j, k]));
                 double sv = NumOps.ToDouble(dot);
                 finalP[i, j] = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
+            }
+
+        // SKELETON CONFIDENCE IS SYMMETRIC; DIRECTION IS NOT LEARNED FROM IT.
+        //
+        // The acyclicity penalty treats a high P[i,j] together with a high P[j,i] as a 2-cycle and
+        // pushes one of them down, and which one it picks comes from the random embedding
+        // initialization rather than from the data -- for linear-Gaussian data it cannot come from
+        // the data, since both orientations sit in the same Markov equivalence class. Reading a
+        // direction off the survivor is therefore reading off the seed, and the projection below,
+        // which orients by variance, then keeps whichever direction the penalty had suppressed. On
+        // a fixture whose variance ordering matches its topology that left every true edge under
+        // the threshold and returned an empty graph; on one where the ordering disagreed it
+        // returned the edges reversed and the test still passed, because it only counts edges.
+        //
+        // Taking the larger of the two therefore restores what the pair actually established -- that
+        // i and j are related -- and lets the variance ordering supply the direction, which is what
+        // the projection already documents itself as doing.
+        for (int i = 0; i < d; i++)
+            for (int j = i + 1; j < d; j++)
+            {
+                double undirected = Math.Max(finalP[i, j], finalP[j, i]);
+                finalP[i, j] = undirected;
+                finalP[j, i] = undirected;
             }
 
         // Project the asymmetric learned probabilities onto a DAG, orienting by raw per-column variance

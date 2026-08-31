@@ -343,10 +343,10 @@
          #978) that stop the gradients going non-finite. All four packages stay on the published
          lockstep release.
 
-         Bumped 0.129.2 to 0.129.7 so all four move together again. The natives had drifted behind
-         AiDotNet.Tensors (0.129.4) on master; 0.129.7 is published for OpenBLAS, OneDNN, CLBlast and
+         Bumped 0.129.2 to 0.129.8 so all four move together again. The natives had drifted behind
+         AiDotNet.Tensors (0.129.4) on master; 0.129.8 is published for OpenBLAS, OneDNN, CLBlast and
          Tensors alike, so the lockstep this comment describes is actually restored rather than
-         merely asserted. AiDotNet.Tensors 0.129.7 is required for the GPU launch journal and buffer
+         merely asserted. AiDotNet.Tensors 0.129.8 is required for the GPU launch journal and buffer
          residency diagnostics that #2056 collects. -->
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.129.8" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.129.8" />
@@ -367,15 +367,15 @@
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0-preview.1.25120.3" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.0-preview.1.25120.3" />
-    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.11" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="10.0.9" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.22.0" />
     <!-- Entity Framework Core -->
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.11" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.2" />
     <PackageVersion Include="Npgsql" Version="10.0.1" />
