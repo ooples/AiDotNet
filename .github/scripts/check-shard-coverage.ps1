@@ -34,7 +34,9 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Workflow = '.github/workflows/sonarcloud.yml',
+    # The shard definitions moved to .github/test-shards.yml when the matrix became dynamic;
+    # the filters this script parses moved with them, all 177 of them.
+    [string]$Workflow = '.github/test-shards.yml',
     [string]$Project  = 'tests/AiDotNet.Tests/AiDotNetTests.csproj',
     [string]$Framework = 'net10.0',
     # THE CONFIGURATION THE SHARDS ACTUALLY RUN. Without this `dotnet test` defaults
@@ -92,6 +94,14 @@ $workflowText = Get-Content $Workflow -Raw
 $prefixes = [regex]::Matches($workflowText, 'FullyQualifiedName~Generated\.([A-Za-z0-9_]+)') |
     ForEach-Object { $_.Groups[1].Value } |
     Sort-Object -Unique -CaseSensitive
+
+# Zero prefixes means the file being parsed is not the one holding the filters - which is exactly
+# what happened when the shard list moved out of the workflow. Without this the script would report
+# every generated class as uncovered, and the true cause (wrong file) would be buried under
+# hundreds of spurious failures.
+if (@($prefixes).Count -eq 0) {
+    throw "No 'FullyQualifiedName~Generated.<prefix>' filters found in '$Workflow'. The shard definitions have probably moved; point -Workflow at the file that now holds them."
+}
 
 if (-not $prefixes -or @($prefixes).Count -eq 0) {
     throw "No FullyQualifiedName~Generated.* shard filters were found in $Workflow; the gate has nothing to check against."

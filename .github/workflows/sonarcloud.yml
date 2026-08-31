@@ -566,6 +566,10 @@ jobs:
     outputs:
       matrix: ${{ steps.select.outputs.matrix }}
       escalated: ${{ steps.select.outputs.escalated }}
+      # Slugs of the shards deliberately not run, for the regression analyzer. It treats any
+      # baseline shard with no current artifact as Incomplete and fails the policy on it - which
+      # is right for a host that died and wrong for a shard we chose to skip.
+      skipped: ${{ steps.select.outputs.skipped }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -660,8 +664,20 @@ jobs:
             exit 1
           }
 
+          # Slug exactly as the test job does, because that string is the regression analyzer's
+          # shard key - it reads it back from shard-metadata.json.
+          $running = [System.Collections.Generic.HashSet[string]]::new(
+              [string[]] @($matrixShards.name), [System.StringComparer]::Ordinal)
+          $skipped = @(
+            $all |
+              Where-Object { -not $running.Contains([string] $_.name) } |
+              ForEach-Object { $_.name -replace '[\\/:*?"<>|\s-]+', '_' }
+          )
+
           $json = ConvertTo-Json -InputObject @($matrixShards) -Depth 5 -Compress
           "matrix=$json" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "skipped=$(ConvertTo-Json -InputObject @($skipped) -Depth 3 -Compress)" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "escalated=$($escalate.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
           $summary = if ($escalate) { "Running the full matrix ($($all.Count) shards)." }
@@ -1660,6 +1676,7 @@ jobs:
       - build
       - test-net10-sharded
       - validation-source
+      - select-shards
     permissions:
       actions: read
       contents: read
@@ -1809,12 +1826,38 @@ jobs:
           TRX_DOWNLOAD_OUTCOME: ${{ steps.baseline-trx-download.outcome }}
           PROMOTED_TRX_DOWNLOAD_OUTCOME: ${{ steps.promoted-trx-download.outcome }}
         run: |
+          # A baseline shard with no current artifact is Incomplete, and enough of those fail the
+          # policy. That rule is right for a host that died mid-run and wrong for a shard that
+          # selection deliberately did not run, so the skipped ones are merged into the approved
+          # shard-change manifest as explicit removals.
+          #
+          # This does not let a skipped shard launder a failure into a fix: $fixed requires an
+          # explicit current PASS, and a test that never ran has neither a pass nor a fail, so its
+          # baseline failure lands in baselineFailuresNotObserved, which earns no policy credit.
+          $manifest = Get-Content '.github/test-shard-changes.json' -Raw | ConvertFrom-Json
+          $changes = [System.Collections.Generic.List[object]]::new()
+          foreach ($c in @($manifest.changes)) { [void] $changes.Add($c) }
+          foreach ($slug in @('${{ needs.select-shards.outputs.skipped }}' | ConvertFrom-Json)) {
+            if (-not $slug) { continue }
+            [void] $changes.Add([PSCustomObject]@{
+              baselineKey = [string] $slug
+              currentKeys = @()
+              reason      = 'not selected: no line this PR changed is executed by this shard'
+            })
+          }
+          [PSCustomObject]@{
+            schemaVersion = 1
+            description   = 'Checked-in shard changes plus the shards test-impact selection skipped for this run.'
+            changes       = @($changes)
+          } | ConvertTo-Json -Depth 6 | Set-Content merged-shard-changes.json -Encoding utf8
+          Write-Host "approved shard changes: $($changes.Count) ($(@($manifest.changes).Count) checked in, $($changes.Count - @($manifest.changes).Count) skipped by selection)"
+
           $arguments = @{
             CurrentResultsPath = 'current-test-results'
             OutputDirectory = 'test-regression-analysis'
             CurrentSha = $env:CURRENT_SHA
             RepositoryPath = '.'
-            ApprovedShardChangesPath = '.github/test-shard-changes.json'
+            ApprovedShardChangesPath = 'merged-shard-changes.json'
           }
           $ledger = Get-ChildItem baseline-ledger -Recurse -Filter ledger.json -ErrorAction SilentlyContinue |
             Select-Object -First 1
