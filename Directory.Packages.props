@@ -405,7 +405,7 @@
     <PackageVersion Include="Xunit.SkippableFact" Version="1.5.85" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
     <!-- Infrastructure -->
-    <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.5.0" />
+    <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.5.1" />
     <PackageVersion Include="Neo4j.Driver" Version="5.28.4" />
     <!-- Managed FAISS wrapper (native ANN: Flat/IVF/HNSW/PQ). Consumed only by the opt-in
          AiDotNet.Storage.Faiss metapackage; ships a net6.0 lib + win-x64 native runtime. -->
