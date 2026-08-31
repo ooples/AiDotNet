@@ -1322,6 +1322,15 @@ jobs:
           - name: Integration C - Core
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
+            # 60, not the 50-minute default. The $heavyShards note below already describes this
+            # shard as OOM-killed "8m53s into a 60-minute budget", but the budget was never
+            # actually granted: every sibling Integration C shard sets timeout 60 and this one,
+            # which holds the heaviest content of any of them, was left on the default. Adding it
+            # to $heavyShards fixed the OOM by serializing the collections, and that trade pays for
+            # itself in wall time -- the shard gave up the 4-way collection parallelism it was the
+            # last integration shard still running with. Granting the ceiling the comment already
+            # assumes keeps that fix from simply converting an OOM-kill into a timeout.
+            timeout: 60
             filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~AiDotNet.Tests.IntegrationTests.C&FullyQualifiedName!~AiDotNet.Tests.IntegrationTests.ComputerVision'
           - name: Integration D
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
@@ -1368,10 +1377,24 @@ jobs:
           # they run ALONE here so no sibling collection contends for CPU/memory and invalidates
           # the measurement — keeps the assertions at full strength (no bound relaxation). Tiny
           # (2 classes), so a whole shard is cheap.
+          # SPLIT DELIBERATELY. Both halves are Category=SerialPerf, but they cannot share a
+          # process: Issue1296LargeXTrainBatchingTests builds multi-gigabyte training tensors on
+          # purpose (it exists to prove batching avoids an OOM), and the CPU/wall probe below reads
+          # PROCESS-WIDE CPU against its own wall clock, so it measures whatever that left behind.
+          #
+          # Measured at 4 cores: the probe passes alone, reports ratio 0.99 against a 1.15 floor
+          # after Issue1296 in the same process, and passes again when Issue1296 is excluded from
+          # the same shard. Marking the classes non-parallel does not help -- xUnit's
+          # DisableParallelization stops CONCURRENT execution, and this is state left SEQUENTIALLY.
+          # A separate shard is a separate process, which is the only thing that isolates it.
           - name: Integration - Serial Perf
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category=SerialPerf&Category!=GPU'
+            filter: 'Category=SerialPerf&Category!=GPU&FullyQualifiedName!~TransformerTrainPathReproIssue1227And1228Tests'
+          - name: Integration - CPU Parallelism Probe
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category=SerialPerf&Category!=GPU&FullyQualifiedName~TransformerTrainPathReproIssue1227And1228Tests'
           # =====================================================================
           # TOP-LEVEL TEST NAMESPACES that no shard covered (distinct from the
           # UnitTests.* and IntegrationTests.* trees).
@@ -1471,6 +1494,8 @@ jobs:
           # suite is licensed with no network round-trip; the key still validates online for any job/consumer
           # that doesn't run the ModuleInitializer hardening.
           AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
+        # Keep explanatory prose outside this scalar: GitHub evaluates expression-bearing run
+        # blocks as one expression and rejects oversized values, so retain headroom for future logic.
         run: |
           # Sanitize shard name: remove/replace all characters invalid in file paths
           $shardName = "${{ matrix.shard.name }}"
@@ -1494,21 +1519,7 @@ jobs:
           Write-Host "Processors:"
           nproc
 
-          # Per-shard parallelism control. The streaming + Server GC
-          # changes earlier in this PR helped most shards stop cancelling,
-          # but the heaviest model-family shards (Diffusion letter/prefix shards,
-          # Generated Layers A-M/N-Z,
-          # Unit-03 diffusion, ModelFamily-NeuralNetworks) still trip OOM
-          # with 4 parallel BERT-class
-          # model loads in flight on a 16 GB ubuntu-latest runner. Per-iter
-          # peak memory ~= 880 MB weights + 1.76 GB Adam state per slot;
-          # 4 slots × 2.6 GB + dotnet/xUnit overhead overruns the envelope.
-          # For these specific shards we rewrite the built xunit.runner.json
-          # to serialize collection execution so heavy models load serially —
-          # every other shard stays at the JSON default (= ProcessorCount = 4)
-          # and runs full-speed. (See the rewrite block in the run step below;
-          # the old `xunit.MaxParallelThreads=1` inline arg was silently
-          # ignored by the VSTest adapter.)
+          # Serialize only the known multi-GB model shards; other shards retain default parallelism.
           $heavyShards = @(
             'ModelFamily - Diffusion A-C',
             'ModelFamily - Diffusion D-I',
@@ -1599,6 +1610,8 @@ jobs:
             'Integration C - ComputerVision Detection',
             'Integration C - ComputerVision Segmentation Models',
             'Integration C - ComputerVision Segmentation Contracts',
+            # This clone-heavy shard previously exhausted a 16 GiB runner.
+            'Integration C - Core',
             'Integration D',
             'Integration E-G',
             'Integration M',
@@ -1612,6 +1625,13 @@ jobs:
             'TopLevel - Audio/Onnx/Tokenization'
           )
           $heavyShard = $heavyShards -contains $shardName
+
+          # Coverage instrumentation distorts the CPU/wall ratios asserted by timing shards.
+          $performanceShards = @(
+            'Integration - Serial Perf',
+            'Integration - CPU Parallelism Probe'
+          )
+          $measuresTiming = $performanceShards -contains $shardName
           # EVERY heavy shard serializes. D-F used to be carved out of this on the grounds that
           # it needed "the repository's four-thread xUnit default" to fit the 45-minute budget, but
           # that default no longer exists: tests/AiDotNet.Tests/xunit.runner.json now sets
@@ -1620,7 +1640,7 @@ jobs:
           # now split into D/E/F, each serialized like every other heavy shard and each given a
           # 60-minute ceiling to pay for the lost concurrency.
           $serializeShard = $heavyShard
-          $collectCoverage = -not $heavyShard
+          $collectCoverage = -not ($heavyShard -or $measuresTiming)
           Write-Host "Running shard '$shardName' (serialized: $serializeShard; coverage: $collectCoverage)"
 
           # Build the argument list as a PowerShell array so the `--`
@@ -1633,15 +1653,7 @@ jobs:
             '-c', 'Release',
             '--framework', '${{ matrix.shard.framework }}',
             '--no-build', '--no-restore',
-            # Globally exclude Category=HeavyTimeout from the default sharded run. Those models are
-            # CORRECT but inherently too slow for the per-test / 45-min shard budget (foundation
-            # diffusion at ~100s/forward x N-step Generate, GEMM-bound ViT/VGG, etc.). They are
-            # tracked in the umbrella timeout issue and exercised by the heavy-timeout-nightly
-            # workflow with a long budget. Wrapping the per-shard filter here applies the exclusion
-            # across all matrix entries in one place; it is a no-op for any test not tagged
-            # [Trait("Category","HeavyTimeout")]. ModelPerformanceCensus is likewise an explicit,
-            # serial, artifact-producing lane; discovering it in the normal shards would add 863
-            # opt-out skips and no measurements because its output directory is intentionally unset.
+            # HeavyTimeout and ModelPerformanceCensus have dedicated long-running/artifact lanes.
             '--filter', '(${{ matrix.shard.filter }})&Category!=HeavyTimeout&Category!=ModelPerformanceCensus'
           )
           if ($collectCoverage) {
@@ -1656,7 +1668,11 @@ jobs:
             # after xUnit parallelism and Server GC were disabled, so run them
             # as correctness-only shards and collect coverage from the lighter
             # matrix entries.
-            Write-Host "Heavy shard: XPlat Code Coverage disabled to keep the runner under its memory envelope"
+            if ($heavyShard) {
+              Write-Host "Heavy shard: XPlat Code Coverage disabled to keep the runner under its memory envelope"
+            } else {
+              Write-Host "Timing shard: XPlat Code Coverage disabled because instrumentation would distort the ratio under test"
+            }
           }
           # Detailed VSTest output still prints individual tests only on completion with the current
           # xUnit adapter. The opt-in AIDOTNET_TEST_TRACE_FILE below is written by every source-generated
@@ -1670,16 +1686,7 @@ jobs:
             '--blame-hang-timeout', '5min',
             '--blame-hang-dump-type', 'none'
           )
-          # OOM root cause + fix: the heavy shards exhaust the 16 GB runner
-          # because xUnit runs many test CLASSES in parallel (default
-          # maxParallelThreads = ProcessorCount), and each big-model class
-          # holds a multi-GB model + Adam state for the whole class. The
-          # `-- xunit.MaxParallelThreads=1` VSTest inline arg we used before
-          # is SILENTLY IGNORED by the xunit.runner.visualstudio adapter — only
-          # xunit.runner.json in the build output is honored. So for heavy
-          # shards we rewrite the copied runner config to serialize collection
-          # execution (one model in flight at a time). Every other shard keeps
-          # the parallel JSON default and runs full-speed.
+          # Serialize heavy shards through xunit.runner.json; adapter CLI args are ignored.
           if ($serializeShard) {
             $projDir = Split-Path -Parent '${{ matrix.shard.project }}'
             $runnerJson = Join-Path $projDir 'bin/Release/${{ matrix.shard.framework }}/xunit.runner.json'
@@ -1723,19 +1730,8 @@ jobs:
             Write-Host "Heavy shard: Workstation GC (DOTNET_gcServer=0) + serial collections"
           }
 
-          # Background memory sampler (serialized heavy shards only). These shards OOM-kill the
-          # runner with a shutdown signal BEFORE dotnet flushes TRX/console output, so the post-test
-          # snapshot below never runs and we lose the high-water mark. Sample MemAvailable every 2 s
-          # and write it straight to the step's LIVE log — GitHub ingests stdout continuously, so the
-          # LAST sample before a runner kill survives even though the process tree is torn down. It
-          # interleaves chronologically with xUnit's streamed per-test "Passed <Model>.<Test>" lines,
-          # so the last test printed just before the memory cliff identifies the model that blew the
-          # 16 GB envelope.
-          #
-          # Implemented as a background PowerShell RUNSPACE (not Start-Process): the runspace runs in
-          # THIS pwsh process, so its [Console] writes go to the same stdout handle GitHub Actions
-          # captures (a Start-Process grandchild's stdout was NOT captured — it produced zero output).
-          # [Console]::Out is thread-safe and flushed per line, so samples stream immediately.
+          # Stream memory and active-test markers in-process so evidence survives a runner OOM;
+          # a Start-Process child does not share the captured stdout handle.
           $memSampler = $null
           if ($heavyShard) {
             $testTrace = Join-Path $results 'active-test.trace'
@@ -2488,10 +2484,26 @@ jobs:
           }
           $ledger = Get-ChildItem baseline-ledger -Recurse -Filter ledger.json -ErrorAction SilentlyContinue |
             Select-Object -First 1
+          $measuredLedgerShards = 0
+          if ($ledger) {
+            $ledgerShardInventory = Join-Path $ledger.DirectoryName 'shards.csv'
+            try {
+              $measuredLedgerShards = @(
+                Import-Csv -LiteralPath $ledgerShardInventory -ErrorAction Stop |
+                  Where-Object { $_.missingTrx -ne 'True' }
+              ).Count
+            }
+            catch {
+              Write-Warning "Downloaded baseline ledger has no readable shard inventory: $($_.Exception.Message)"
+            }
+            if ($measuredLedgerShards -eq 0) {
+              Write-Warning 'Downloaded baseline ledger contains zero measured shards and will not be used for regression enforcement.'
+            }
+          }
           $legacyTrx = @(Get-ChildItem baseline-test-results -Recurse -Filter '*.trx' -File -ErrorAction SilentlyContinue)
           $promotedTrx = @(Get-ChildItem promoted-baseline-test-results -Recurse -Filter '*.trx' -File -ErrorAction SilentlyContinue)
           $baselineReady = $env:COMPARE -eq 'true' -and $env:BASELINE_AVAILABLE -eq 'true' -and (
-            ($env:BASELINE_MODE -eq 'ledger' -and $env:LEDGER_DOWNLOAD_OUTCOME -eq 'success' -and $null -ne $ledger) -or
+            ($env:BASELINE_MODE -eq 'ledger' -and $env:LEDGER_DOWNLOAD_OUTCOME -eq 'success' -and $null -ne $ledger -and $measuredLedgerShards -gt 0) -or
             ($env:BASELINE_MODE -eq 'trx' -and $env:TRX_DOWNLOAD_OUTCOME -eq 'success' -and $legacyTrx.Count -gt 0) -or
             ($env:BASELINE_MODE -eq 'promoted' -and $env:PROMOTED_TRX_DOWNLOAD_OUTCOME -eq 'success' -and $promotedTrx.Count -gt 0))
           if ($baselineReady) {

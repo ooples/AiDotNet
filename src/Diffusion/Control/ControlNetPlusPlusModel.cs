@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
@@ -146,34 +146,6 @@ public partial class ControlNetPlusPlusModel<T> : LatentDiffusionModelBase<T>
     }
 
 
-
-    /// <inheritdoc />
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
-    {
-        // Stream this model's ACTUAL trainable sub-modules in GetParameters() order (baseUNet +
-        // controlEncoder — the VAE is intentionally excluded from this model's parameter surface).
-        // The inherited LatentDiffusionModelBase path streams NoisePredictor + VAE + Conditioner, so
-        // it would enumerate the wrong tensors here. The large base U-Net streams per-tensor
-        // (flat-free, #1624); the smaller control encoder is wrapped as a single trailing chunk.
-        // Concrete virtual calls (not the IParameterizable default-interface surface the base gates
-        // off on net471), so the read side streams on every target framework.
-        foreach (var c in _baseUNet.GetParameterChunks()) yield return c;
-        var enc = _controlEncoder.GetParameters();
-        if (enc.Length > 0) yield return new Tensor<T>(new[] { enc.Length }, enc);
-    }
-
-    /// <inheritdoc />
-    public override void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
-    {
-        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
-        // Buffer the streamed chunks into one flat vector and delegate to this model's SetParameters,
-        // which distributes to baseUNet + controlEncoder in the matching GetParameterChunks order.
-        // The inherited LatentDiffusionModelBase override routes chunks to NoisePredictor + VAE +
-        // Conditioner instead and would mis-assign this model's control-encoder parameters.
-        // EnsureOwnWeights detaches any copy-on-write-shared tensors before the in-place writes.
-        EnsureOwnWeights();
-        SetParameters(DiffusionParameterChunkHelper.BufferToFlatVector(chunks));
-    }
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()

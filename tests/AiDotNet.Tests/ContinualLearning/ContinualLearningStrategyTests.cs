@@ -733,6 +733,58 @@ public class ContinualLearningStrategyTests
         Assert.True(inputs.Shape[0] > 0);
     }
 
+    [Fact(Timeout = 60000)]
+    public async Task ExperienceReplay_ExhaustiveSample_PreservesInsertionOrder()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var strategy = new ExperienceReplay<double>(seed: 42);
+        var network = ContinualLearningTestHelper.CreateMockNetwork();
+        var taskData = ContinualLearningTestHelper.CreateTaskData();
+
+        strategy.BeforeTask(network, 0);
+        strategy.AfterTask(network, taskData, 0);
+
+        var (inputs, targets) = strategy.SampleReplayBatch();
+
+        Assert.Equal(taskData.inputs.Shape, inputs.Shape);
+        Assert.Equal(taskData.targets.Shape, targets.Shape);
+        for (int i = 0; i < inputs.Length; i++)
+            Assert.Equal(taskData.inputs[i], inputs[i]);
+        for (int i = 0; i < targets.Length; i++)
+            Assert.Equal(taskData.targets[i], targets[i]);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ExperienceReplay_ReplayObjectiveAveragesAccumulatedMemories()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var taskData = ContinualLearningTestHelper.CreateTaskData();
+        int samplesPerTask = taskData.inputs.Shape[0];
+        var strategy = new ExperienceReplay<double>(
+            maxBufferSize: checked(samplesPerTask * 20),
+            replayRatio: 1.0,
+            seed: 42);
+        var network = ContinualLearningTestHelper.CreateMockNetwork();
+
+        Assert.False(strategy.AccumulatesAcrossTasks);
+
+        strategy.BeforeTask(network, 0);
+        strategy.AfterTask(network, taskData, 0);
+        int firstBufferSize = strategy.BufferSize;
+        double oneCopyLoss = strategy.ComputeLoss(network);
+
+        strategy.BeforeTask(network, 1);
+        strategy.AfterTask(network, taskData, 1);
+        double twoCopyLoss = strategy.ComputeLoss(network);
+
+        Assert.Equal(checked(firstBufferSize * 2), strategy.BufferSize);
+        double relativeTolerance = Math.Max(1.0, Math.Abs(oneCopyLoss)) * 1e-10;
+        Assert.InRange(Math.Abs(twoCopyLoss - oneCopyLoss), 0.0, relativeTolerance);
+    }
+
+
     #endregion
 
     #region GenerativeReplay Tests

@@ -25,16 +25,16 @@ public class GraFPrintOptions : ModelOptions
     #region Audio
 
     /// <summary>Gets or sets the expected audio sample rate in Hz.</summary>
-    public int SampleRate { get; set; } = 8000;
+    public int SampleRate { get; set; } = 16000;
 
     /// <summary>Gets or sets the number of mel filterbank channels.</summary>
-    public int NumMels { get; set; } = 256;
+    public int NumMels { get; set; } = 64;
 
     /// <summary>Gets or sets the FFT window size.</summary>
     public int FftSize { get; set; } = 1024;
 
     /// <summary>Gets or sets the hop length between frames.</summary>
-    public int HopLength { get; set; } = 256;
+    public int HopLength { get; set; } = 512;
 
     /// <summary>Gets or sets the segment duration in seconds.</summary>
     public double SegmentDurationSec { get; set; } = 1.0;
@@ -50,29 +50,39 @@ public class GraFPrintOptions : ModelOptions
     public int GnnHiddenDim { get; set; } = 256;
 
     /// <summary>Gets or sets the number of GNN layers.</summary>
-    public int NumGnnLayers { get; set; } = 4;
+    public int NumGnnLayers { get; set; } = 6;
 
     /// <summary>Gets or sets the number of graph attention heads.</summary>
     public int NumAttentionHeads { get; set; } = 4;
 
     /// <summary>Gets or sets the k-nearest neighbors for graph construction.</summary>
-    public int KNeighbors { get; set; } = 8;
+    public int KNeighbors { get; set; } = 3;
 
-    /// <summary>Gets or sets the dropout rate.</summary>
+    /// <summary>Gets or sets the learned peak-extractor output channels.</summary>
+    public int PeakFilters { get; set; } = 8;
+
+    /// <summary>Gets or sets the frequency-only stride in the learned peak extractor.</summary>
+    public int PeakStride { get; set; } = 2;
+
+    /// <summary>Gets or sets the square peak-extractor convolution kernel size.</summary>
+    public int PeakKernelSize { get; set; } = 7;
+
+    /// <summary>Gets or sets the graph encoder readout width before the SimCLR projector.</summary>
+    public int EncoderEmbeddingDim { get; set; } = 1024;
+
+    /// <summary>Gets or sets the projector hidden-width multiplier relative to the fingerprint size.</summary>
+    public int ProjectionExpansion { get; set; } = 32;
+
+    /// <summary>Gets or sets the maximum stochastic-depth rate across graph blocks.</summary>
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>
-    /// Maximum global L2 norm for gradients per training step. The 53-layer
-    /// Conv→BN→LeakyReLU pyramid in this network is sensitive to first-step
-    /// gradient magnitudes when trained at small batch sizes (BN with batch=1
-    /// produces near-degenerate variance, amplifying activation scale through
-    /// the chain), so the default-on clip protects against single-step Adam
-    /// explosions. Mirrors PyTorch's <c>torch.nn.utils.clip_grad_norm_</c>
-    /// max_norm parameter; 1.0 is the value used in most published
-    /// transformer / deep-CNN training recipes including the GraFPrint
-    /// reference (Bhattacharjee 2023, §4.1). Set to 0 to disable.
+    /// Optional global L2 gradient clipping threshold. The official GraFPrint
+    /// training loop does not clip gradients, so the paper-faithful default is
+    /// zero (disabled). Set a positive value only as an explicit deployment
+    /// safeguard.
     /// </summary>
-    public double MaxGradNorm { get; set; } = 1.0;
+    public double MaxGradNorm { get; set; } = 0.0;
 
     #endregion
 
@@ -98,52 +108,32 @@ public class GraFPrintOptions : ModelOptions
     #region Training
 
     /// <summary>
-    /// AdamW learning rate. Matches the published GraFPrint training
-    /// recipe (Bhattacharjee 2023, §4.1): AdamW(lr=1e-4, weight_decay=0.01)
-    /// with batch≥128 and cosine annealing. Production callers should
-    /// pair this with the paper's batch size — <c>1e-4</c> assumes
-    /// well-conditioned BN running stats from a real batch.
+    /// Adam learning rate from the official GraFPrint configuration.
     /// </summary>
-    public double LearningRate { get; set; } = 1e-4;
+    public double LearningRate { get; set; } = 8e-5;
 
     /// <summary>
-    /// Maximum step count for the cosine annealing LR scheduler. The LR
-    /// decays from <see cref="LearningRate"/> down to 1% of LearningRate
-    /// over this many Train calls, following the cosine half-period
-    /// formula. Default 100 matches what the paper reports for the
-    /// tiny-variant training horizon (Bhattacharjee 2023, §4.1); set
-    /// higher for longer training runs.
+    /// Maximum step count for cosine annealing. The official recipe uses 400.
     /// </summary>
-    public int LRSchedulerTMax { get; set; } = 100;
+    public int LRSchedulerTMax { get; set; } = 400;
+
+    /// <summary>Gets or sets the cosine scheduler's minimum learning rate.</summary>
+    public double MinimumLearningRate { get; set; } = 7e-7;
 
     /// <summary>Gets or sets the contrastive loss temperature.</summary>
     public double Temperature { get; set; } = 0.05;
 
     /// <summary>
-    /// Disables the fused-Adam optimizer step inside the compiled training
-    /// plan, falling back to eager Adam for the parameter update only. All
-    /// other compile-mode optimizations (ConvBnFusion, dataflow fusion,
-    /// algebraic backward, forward CSE, BLAS batch, pointwise fusion)
-    /// remain engaged.
+    /// Legacy compatibility switch. GraFPrint's dynamic k-NN topology is
+    /// data-dependent, so the model always uses a fresh eager tape and does
+    /// not compile a fixed neighbor graph.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// Default is <c>false</c> — production callers run the full fused path.
-    /// </para>
-    /// <para>
-    /// The <see cref="GraFPrint{T}"/> training tests temporarily flip this
-    /// to <c>true</c> while a 30-iter convergence divergence under the fused
-    /// Adam step on the 53-layer GraFPrint BN pyramid is being traced (a
-    /// minimal testconsole harness shows loss decreasing normally on the same
-    /// architecture/seed/data, so the divergence is sensitive to something
-    /// in the xunit test execution context — static state, threading,
-    /// allocator pool warm-up order — that hasn't been pinned down yet).
-    /// Production callers who hit similar symptoms can set this to
-    /// <c>true</c> as a targeted opt-out without losing the rest of the
-    /// compile-mode acceleration.
-    /// </para>
+    /// Retained to avoid breaking serialized options written while the prior
+    /// convolutional surrogate exposed this workaround.
     /// </remarks>
-    public bool DisableFusedOptimizerStep { get; set; } = false;
+    [Obsolete("GraFPrint always re-evaluates its dynamic k-NN graph; this switch is no longer used.")]
+    public bool DisableFusedOptimizerStep { get; set; } = true;
 
     #endregion
 }

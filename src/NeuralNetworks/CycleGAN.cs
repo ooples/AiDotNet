@@ -902,22 +902,6 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
     /// </remarks>
 
 
-    /// <inheritdoc />
-    /// <remarks>
-    /// Streams parameters from each of the four sub-networks in sequence:
-    /// <c>GeneratorAtoB</c>, <c>GeneratorBtoA</c>, <c>DiscriminatorA</c>,
-    /// <c>DiscriminatorB</c>. Per #1237, callers walking these chunks
-    /// accumulate length into a <see cref="long"/> when the aggregate
-    /// crosses int.MaxValue.
-    /// </remarks>
-    public override IEnumerable<Tensor<T>> GetParameterChunks()
-    {
-        foreach (var chunk in GeneratorAtoB.GetParameterChunks()) yield return chunk;
-        foreach (var chunk in GeneratorBtoA.GetParameterChunks()) yield return chunk;
-        foreach (var chunk in DiscriminatorA.GetParameterChunks()) yield return chunk;
-        foreach (var chunk in DiscriminatorB.GetParameterChunks()) yield return chunk;
-    }
-
     // UpdateParameters split the vector four ways -- GeneratorAtoB, GeneratorBtoA, DiscriminatorA,
     // DiscriminatorB -- and GetExtraTrainableLayers yields those four in the same order, so the base
     // reproduces the split. Removed under AIDN082.

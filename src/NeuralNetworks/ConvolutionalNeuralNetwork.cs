@@ -250,6 +250,8 @@ public partial class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutB
     // size changes; weight updates need no invalidation.
     [Scratch]
     private Tensor<T>[]? _convStemBuf;
+    [Scratch]
+    private float[][]? _convStemZeroBias;
     private int _convStemBatch = -1;
 
     private bool TryFusedConvStemPredict(Tensor<T> input, out Tensor<T> output)
@@ -318,9 +320,15 @@ public partial class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutB
             // (Re)build the per-layer scratch buffers when the batch geometry changes.
             // Shapes are fully determined by batch + layer config; weights are read
             // fresh per call, so no weight-based invalidation is needed.
-            if (_convStemBuf is null || _convStemBuf.Length != flattenIdx || _convStemBatch != batch)
+            // Both scratch arrays are built together below, so testing both here states that
+            // invariant instead of assuming it - and it is what lets the zero-bias fallback read
+            // _convStemZeroBias without a null-forgiving operator, exactly as _convStemBuf is
+            // read further down.
+            if (_convStemBuf is null || _convStemZeroBias is null
+                || _convStemBuf.Length != flattenIdx || _convStemBatch != batch)
             {
                 _convStemBuf = new Tensor<T>[flattenIdx];
+                _convStemZeroBias = new float[flattenIdx][];
                 int curC = t.Shape[1], curH = t.Shape[2], curW = t.Shape[3];
                 for (int li = 0; li < flattenIdx; li++)
                 {
@@ -333,6 +341,7 @@ public partial class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutB
                         int ow = (curW + 2 * conv.Padding - kw) / conv.Stride + 1;
                         if (oh <= 0 || ow <= 0) return false;
                         sh = new[] { batch, outC, oh, ow }; curC = outC; curH = oh; curW = ow;
+                        _convStemZeroBias[li] = new float[curC];
                     }
                     else
                     {
@@ -356,15 +365,22 @@ public partial class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutB
                 var buf = _convStemBuf[li];
                 if (layers[li] is Layers.ConvolutionalLayer<T> conv)
                 {
+                    var biases = conv.GetBiases();
                     var act = Tensors.Engines.FusedActivationType.None;
                     if (conv.ScalarActivation is ActivationFunctions.Fused.IFusedActivation cf2
                         && cf2.TryGetFusedActivation(out var cft2))
                         act = cft2;
                     cpu.Conv2DInto(buf, cur, conv.GetFilters(),
                         new[] { conv.Stride, conv.Stride }, new[] { conv.Padding, conv.Padding }, new[] { 1, 1 });
-                    AiDotNet.Tensors.Helpers.CpuFusedOperations.ApplyBiasActivationNCHWInPlace(
-                        (float[])(object)buf.GetDataArray(), (float[])(object)conv.GetBiases().GetDataArray(),
-                        buf.Shape[0], buf.Shape[1], buf.Shape[2], buf.Shape[3], act);
+                    if (biases is not null || act != Tensors.Engines.FusedActivationType.None)
+                    {
+                        var biasData = biases is not null
+                            ? (float[])(object)biases.GetDataArray()
+                            : _convStemZeroBias[li];
+                        AiDotNet.Tensors.Helpers.CpuFusedOperations.ApplyBiasActivationNCHWInPlace(
+                            (float[])(object)buf.GetDataArray(), biasData,
+                            buf.Shape[0], buf.Shape[1], buf.Shape[2], buf.Shape[3], act);
+                    }
                 }
                 else
                 {

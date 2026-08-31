@@ -557,6 +557,28 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                                                       && m3.Parameters[0].Type.OriginalDefinition.ToDisplayString()
                                                           .StartsWith("AiDotNet.Tensors.LinearAlgebra.Vector<", System.StringComparison.Ordinal)
                                     => "UpdateParameters",
+
+                                // THE CHUNKED SURFACE IS THE SAME SURFACE.
+                                //
+                                // The scope above was widened once already, from two diffusion roots
+                                // to every model root, because a hand-written surface was invisible
+                                // wherever the analyzer was not looking. The member list was never
+                                // widened to match, and the chunked pair is where the remaining
+                                // hand-written surfaces sit.
+                                //
+                                // They are the more dangerous pair, not the lesser one. GetParameters
+                                // and SetParameters both fold the registry, so an override of one is
+                                // visibly a second opinion about a derived answer. The chunk methods
+                                // are written out by hand on both sides, so a model can emit a
+                                // different SET of components from the one the registry slices by,
+                                // and nothing says so until a restore runs. ControlNet++ emitted its
+                                // base U-Net and control encoder while the registry also held a VAE,
+                                // and Clone threw "Expected 28804275 parameters, got 28800532" - a
+                                // shortfall of exactly the VAE's 3,743.
+                                IMethodSymbol m4 when m4.Name == "GetParameterChunks" && m4.Parameters.Length == 0
+                                    => "GetParameterChunks",
+                                IMethodSymbol m5 when m5.Name == "SetParameterChunks" && m5.Parameters.Length == 1
+                                    => "SetParameterChunks",
                                 _ => null,
                             };
                             if (ms is null) continue;
@@ -571,9 +593,14 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                         // count AND the vector, so the two agree on a wrong answer. Only reported when
                         // the model declares NOTHING, so a model that already uses the hook or the
                         // registry is assumed to know what it owns.
+                        // GetParameterChunks is NOT evidence that a model knows what it owns.
+                        // Counting it here meant an override of the chunked surface silenced this
+                        // rule as well as escaping AIDN082 - so the one construct that can emit a
+                        // different component set from the registry's bought immunity from the check
+                        // for undeclared weights. It is a violation now, not a declaration.
                         bool declares = type.GetMembers().Any(m =>
                             m.Name is "GetExtraTrainableTensors" or "GetExtraTrainableLayers"
-                                   or "RegisterComponents" or "GetParameterChunks");
+                                   or "RegisterComponents");
 
                         // ModelParameterGenerator registers a model's weight fields for it, and this
                         // analyzer cannot see that: generated trees are not in the compilation the
@@ -608,14 +635,14 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                         // whose layers are ALREADY reachable yields nothing at all. The keyword is
                         // therefore correct whether or not the layers were orphaned -- which is why
                         // this can be demanded without ever having to decide which case it is.
-                        // NOT gated on `declares`. A class that declares the TENSORS hook can
-                        // still hold LAYER members needing automation -- LLaVANeuralNetwork does,
-                        // and the wholesale check silenced the demand for its grounding head.
-                        // Each member kind is gated on the hook that would actually cover it.
-                        bool coversFields = DeclaresAnyOf(type, "RegisterComponents",
-                                                          "GetExtraTrainableTensors",
-                                                          "GetParameterChunks");
-                        bool coversLayers = DeclaresAnyOf(type, "GetExtraTrainableLayers");
+                        // NOT gated on `declares`. A class that declares the TENSORS hook can
+                        // still hold LAYER members needing automation -- LLaVANeuralNetwork does,
+                        // and the wholesale check silenced the demand for its grounding head.
+                        // Each member kind is gated on the hook that would actually cover it.
+                        bool coversFields = DeclaresAnyOf(type, "RegisterComponents",
+                                                          "GetExtraTrainableTensors",
+                                                          "GetParameterChunks");
+                        bool coversLayers = DeclaresAnyOf(type, "GetExtraTrainableLayers");
                         if (!type.IsAbstract && !IsPartial(type)
                             && (InheritsRegistry(type) || InheritsExtraTensorsHook(type))
                             && type.GetMembers().Any(m =>
@@ -626,7 +653,7 @@ public class ParameterAutomationAnalyzer : IIncrementalGenerator
                                    && ((!coversFields && m is IFieldSymbol f
                                         && f.AssociatedSymbol is null
                                         && IsWeightCapableType(f.Type))
-                                       || (!coversLayers && LayerBearingType(m) is not null)
+                                       || (!coversLayers && LayerBearingType(m) is not null)
                                        || IsComponentBearing(m)))
                             && modelLoc is not null)
                         {

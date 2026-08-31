@@ -29,6 +29,37 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
         public ParameterAvailability Availability { get; }
     }
 
+    /// <summary>
+    /// Which components the incoming vector was expected to fill, and how many values each wanted.
+    /// </summary>
+    /// <remarks>
+    /// A bare "Expected 28804275 parameters, got 28800532" says a total disagrees without saying
+    /// which component the difference belongs to, and the two sides of that comparison are built by
+    /// different enumerations - the registry sums what is registered, while the caller's chunk
+    /// stream is assembled by hand and can conditionally omit a component. Every occurrence of this
+    /// mismatch has therefore cost a manual hunt for the missing piece. Naming the components turns
+    /// the arithmetic into a diagnosis: the entry whose count matches the shortfall is the one whose
+    /// chunk was not produced.
+    /// </remarks>
+    private static string DescribeExpectedLayout(CapturedLayout captured, int variableIndex)
+    {
+        var parts = new List<string>(captured.Entries.Count);
+        for (int i = 0; i < captured.Entries.Count; i++)
+        {
+            CapturedEntry entry = captured.Entries[i];
+            string count = entry.ParameterCount.HasValue
+                ? entry.ParameterCount.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : "not yet known";
+            parts.Add(i == variableIndex
+                ? $"{entry.Entry.StableId}={count} (variable)"
+                : $"{entry.Entry.StableId}={count}");
+        }
+
+        return parts.Count == 0
+            ? "No components are registered."
+            : "Expected by component: " + string.Join(", ", parts) + ".";
+    }
+
     private sealed class CapturedEntry
     {
         public CapturedEntry(Entry entry, IReadOnlyList<ParameterSlotDescriptor> localSlots,
@@ -70,6 +101,41 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
             for (int i = 0; i < ordered.Count; i++)
             {
                 if (ordered[i].Source is not null) result.Add(ordered[i].Source!);
+            }
+            return result;
+        }
+    }
+
+    /// <summary>
+    /// The live component objects behind generated accessors, in manifest order.
+    /// </summary>
+    /// <remarks>
+    /// Registry operations intentionally retain their accessor wrappers so an absent construction
+    /// slot can still contribute readiness metadata. Streaming callers need the opposite view: the
+    /// concrete component supplies its per-tensor chunk API, while flattening the wrapper would
+    /// collapse a foundation-scale model into one aggregate allocation. Absent conditional
+    /// accessors are omitted, and generated collections are expanded in their declared order.
+    /// </remarks>
+    internal IReadOnlyList<IParameterSource<T>> CurrentComponents
+    {
+        get
+        {
+            var ordered = OrderedEntries();
+            var result = new List<IParameterSource<T>>(ordered.Count);
+            for (int i = 0; i < ordered.Count; i++)
+            {
+                switch (ordered[i].Source)
+                {
+                    case ComponentAccessorParameterSource<T> accessor:
+                        if (accessor.Current is { } current) result.Add(current);
+                        break;
+                    case ComponentCollectionParameterSource<T> collection:
+                        result.AddRange(collection.Current);
+                        break;
+                    case { } source:
+                        result.Add(source);
+                        break;
+                }
             }
             return result;
         }
@@ -555,7 +621,11 @@ public sealed class ParameterComponentRegistry<T> : IParameterManifestProvider
         }
         if (variableIndex < 0 && parameters.Length != fixedParameterCount)
             throw new ArgumentException(
-                $"Expected {fixedParameterCount} parameters, got {parameters.Length}.",
+                $"Expected {fixedParameterCount} parameters, got {parameters.Length}"
+                + (parameters.Length < fixedParameterCount
+                    ? $" (short by {fixedParameterCount - parameters.Length}). "
+                    : $" (long by {parameters.Length - fixedParameterCount}). ")
+                + DescribeExpectedLayout(captured, variableIndex),
                 nameof(parameters));
         if (variableIndex >= 0 && parameters.Length < fixedParameterCount)
             throw new ArgumentException(

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
@@ -19,6 +19,26 @@ namespace AiDotNet.Tests.IntegrationTests.Inference;
 ///   2. Storage: INT8 weight bytes are ~4x smaller than FP32 weight bytes.
 ///   3. Surface: <c>Predict</c> runs end-to-end without exposing internal sealed types.
 /// </summary>
+// The Category=SerialPerf classes each measure throughput or CPU/wall engagement, and xUnit
+// parallelizes ACROSS collections, so a class left out of this one runs CONCURRENTLY with the
+// others and competes for the very cores they are measuring. That is what made
+// Issue1228_TransformerTrain_CpuToWallRatio intermittent:
+// it reads process-wide CPU time against its own wall clock and reported ratio 1.01 against a
+// 1.15 floor on a 4-core runner -- Train could not get worker threads because this class was
+// running beside it. The other two SerialPerf classes were already in this collection; this one
+// was the odd one out.
+//
+// TransformerTrainPathReproIssue1227And1228Tests has since been routed to its own CI shard
+// ("Integration - CPU Parallelism Probe"), so these classes no longer all share one shard. That
+// removes contention between those two workloads but is not on its own what keeps these classes
+// apart.
+//
+// Note that tests/AiDotNet.Tests/xunit.runner.json already sets parallelizeAssembly and
+// parallelizeTestCollections to false, so for THIS assembly as configured today the attribute
+// changes nothing. It is kept as defence in depth: the collection states the requirement in the
+// test itself, so a runner invoked with different settings, or a future change to that json,
+// cannot quietly start running these timing-sensitive classes beside each other again.
+[Collection("NonParallelIntegration")]
 public class Int8InferenceModelIntegrationTests
 {
     private readonly ITestOutputHelper _output;

@@ -270,6 +270,16 @@ public static class DeserializationHelper
                 TryGetDouble(additionalParams, "LocalizationMargin") ?? 0.01)
                 ?? throw new MissingLayerCtorException("Cannot construct SVTRThinPlateSplineLayer.");
         }
+        else if (genericDef == typeof(PatchGANDiscriminator<>))
+        {
+            instance = new PatchGANDiscriminator<T>(
+                numLayers: TryGetInt(additionalParams, "NumLayers") ?? 4,
+                numFilters: TryGetInt(additionalParams, "NumFilters") ?? 64,
+                kernelSize: TryGetInt(additionalParams, "KernelSize") ?? 4,
+                leakySlope: TryGetDouble(additionalParams, "LeakySlope") ?? 0.2,
+                applySigmoid: TryGetBool(additionalParams, "ApplySigmoid") ?? true,
+                biasMode: TryGetEnum<BiasMode>(additionalParams, "BiasMode") ?? BiasMode.Unspecified);
+        }
         else if (genericDef == typeof(NeuralNetworks.Layers.SVTRMixingBlockLayer<>))
         {
             instance = Activator.CreateInstance(type,
@@ -1529,6 +1539,7 @@ public static class DeserializationHelper
             int stride = TryGetInt(additionalParams, "Stride") ?? 1;
             int padding = TryGetInt(additionalParams, "Padding") ?? 0;
             int groups = TryGetInt(additionalParams, "Groups") ?? 1; // #639 depthwise marker
+            BiasMode biasMode = TryGetEnum<BiasMode>(additionalParams, "BiasMode") ?? BiasMode.Unspecified;
             // outputShape can be rank-4 [batch, depth, height, width] (NCHW) when
             // serialized after a batched forward, OR rank-3 [depth, height, width]
             // when GetOutputShape() returns the layer-only shape (no batch axis).
@@ -1548,9 +1559,10 @@ public static class DeserializationHelper
             // Conv→BN→LeakyReLU init gain). Fall back to the 6-param ctor for
             // backwards compatibility with older builds.
             // #639: prefer the 8-param ctor that carries `groups` (depthwise) when present.
+            var ctor9 = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType, activationFuncType, typeof(int), typeof(BiasMode) });
             var ctor8 = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType, activationFuncType, typeof(int) });
             var ctor7 = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType, activationFuncType });
-            var ctor = ctor8 ?? ctor7 ?? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType });
+            var ctor = ctor9 ?? ctor8 ?? ctor7 ?? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType });
             if (ctor is null)
             {
                 throw new MissingLayerCtorException($"Cannot find ConvolutionalLayer constructor.");
@@ -1561,8 +1573,10 @@ public static class DeserializationHelper
             // Pass null for nonlinearityForInit on deserialization — weights are
             // restored from the saved parameter vector, so InitializeWeights
             // never runs and the gain choice is moot for the clone path.
-            instance = ctor8 is not null
-                ? ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null, null, groups })
+            instance = ctor9 is not null
+                ? ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null, null, groups, biasMode })
+                : ctor8 is not null
+                    ? ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null, null, groups })
                 : ctor7 is not null
                     ? ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null, null })
                     : ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null });
@@ -1734,13 +1748,42 @@ public static class DeserializationHelper
             int groups = TryGetInt(additionalParams, "Groups") ?? 1;
             int deformGroups = TryGetInt(additionalParams, "DeformGroups") ?? 1;
             bool useModulation = TryGetBool(additionalParams, "UseModulation") ?? true;
+            // Absent in checkpoints written before the separable (DCNv3) projection existed, and
+            // false is what those models were built with.
+            bool separableOffsetProjection = TryGetBool(additionalParams, "SeparableOffsetProjection") ?? false;
 
             var engineType = typeof(AiDotNet.Tensors.Engines.IEngine);
+
+            // Prefer the form that carries the projection mode. Falling back to the older signature
+            // keeps this working against a build that predates it, and the older form can only ever
+            // mean a dense projection, which is what separableOffsetProjection already defaults to.
             var ctor = type.GetConstructor(new Type[]
-                { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(bool), engineType });
-            if (ctor is null)
-                throw new MissingLayerCtorException("Cannot find DeformableConvolutionalLayer constructor with expected signature.");
-            instance = ctor.Invoke(new object?[] { outputChannels, kernelSize, stride, padding, groups, deformGroups, useModulation, null });
+                { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(bool), typeof(bool), engineType });
+            if (ctor is not null)
+            {
+                instance = ctor.Invoke(new object?[]
+                    { outputChannels, kernelSize, stride, padding, groups, deformGroups, useModulation, separableOffsetProjection, null });
+            }
+            else
+            {
+                ctor = type.GetConstructor(new Type[]
+                    { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(bool), engineType });
+                if (ctor is null)
+                    throw new MissingLayerCtorException("Cannot find DeformableConvolutionalLayer constructor with expected signature.");
+                instance = ctor.Invoke(new object?[] { outputChannels, kernelSize, stride, padding, groups, deformGroups, useModulation, null });
+            }
+
+            // Modulation normalization is a settable property rather than a constructor parameter,
+            // so that adding it did not change this type's constructor signature a second time.
+            if (instance is NeuralNetworks.Layers.DeformableConvolutionalLayer<T> withModulation
+                && additionalParams is not null
+                && additionalParams.TryGetValue("ModulationNormalization", out var modulationValue)
+                && modulationValue is not null
+                && System.Enum.TryParse<AiDotNet.Enums.DeformableModulationNormalization>(
+                       modulationValue.ToString(), ignoreCase: true, out var parsedModulation))
+            {
+                withModulation.ModulationNormalization = parsedModulation;
+            }
 
             // Pre-resolve from saved inputShape so SetParameters sizes the (offset/mask/main) weights to
             // match the saved parameter vector. inputShape is rank-3 [C,H,W] (layer-only) or rank-4

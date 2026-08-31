@@ -9,6 +9,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using Xunit;
@@ -1002,6 +1003,11 @@ internal static class FinanceModelTestFactory
 
     private static int? GetInputSizeFromOptions(object? options)
     {
+        if (IsOptionsType(options, typeof(MGTSDOptions<>)))
+        {
+            return GetIntOption(options, "ContextLength");
+        }
+
         return GetIntOption(options, "NumFeatures")
             ?? GetIntOption(options, "InputDim")
             ?? GetIntOption(options, "InputSize")
@@ -1015,12 +1021,24 @@ internal static class FinanceModelTestFactory
 
     private static int? GetOutputSizeFromOptions(object? options)
     {
+        if (IsOptionsType(options, typeof(MGTSDOptions<>)))
+        {
+            return GetIntOption(options, "ForecastHorizon");
+        }
+
         return GetIntOption(options, "ActionSize")
             ?? GetIntOption(options, "NumSentimentClasses")
             ?? GetIntOption(options, "OutputSize")
             ?? GetIntOption(options, "NumClasses")
             ?? GetIntOption(options, "NumOutputs")
             ?? GetIntOption(options, "NumAssets");
+    }
+
+    private static bool IsOptionsType(object? options, Type genericTypeDefinition)
+    {
+        Type? optionsType = options?.GetType();
+        return optionsType?.IsGenericType == true
+            && optionsType.GetGenericTypeDefinition() == genericTypeDefinition;
     }
 
     private static int? GetIntOption(object? options, string name)

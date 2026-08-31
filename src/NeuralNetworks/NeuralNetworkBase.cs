@@ -480,6 +480,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     public virtual double MaxGradNormValue => NumOps.ToDouble(MaxGradNorm);
 
     /// <summary>
+    /// Gets whether this model clips each gradient component independently
+    /// instead of scaling the global L2 norm. The default remains global-norm
+    /// clipping; research models override this only when their training
+    /// procedure explicitly requires value clipping.
+    /// </summary>
+    protected virtual bool UsesElementWiseGradientClipping => false;
+
+    /// <summary>
     /// Backwards-compatible <c>T</c>-typed accessor for code that historically
     /// read the protected field directly. Routes through the public
     /// <see cref="MaxGradNormValue"/> virtual so subclasses that override
@@ -828,6 +836,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 }
 
                 var snapshot = BuildParameterLayout();
+                // Predict temporarily suppresses architecture-driven lazy-shape resolution while it
+                // switches execution modes. SetTrainingMode performs weight-streaming detection, which
+                // reads ParameterLayout inside that scope. Such a snapshot is an intentionally transient
+                // pre-forward view: publishing it would let a ShapeDeferred layout survive after Predict
+                // restores normal resolution, making ParameterCount depend on call order. Return the view
+                // to the in-scope planner, but let the first read outside the scope build the durable cache.
+                if (_deferLazyShapeResolutionToForward)
+                {
+                    return snapshot;
+                }
+
                 // Shape resolution and first-use component registration can mutate the graph while
                 // the snapshot is being captured. Publish against the versions after that work.
                 cached = new ParameterLayoutCacheEntry(
@@ -2859,7 +2878,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         var kernels = conv.GetFilters();   // live [outC, inC, kH, kW]
         var biases = conv.GetBiases();     // live [outC]
         int outC = kernels.Shape[0];
-        if (biases.Length != outC) return false;
+        if (biases is null || biases.Length != outC) return false;
 
         var gamma = bn.GetGamma();
         var beta = bn.GetBeta();
@@ -11536,6 +11555,41 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         IReadOnlyList<Tensor<T>> iterationOrder)
     {
         LastStepHadNonFiniteGradients = false;
+        if (UsesElementWiseGradientClipping)
+        {
+            // Detect non-finite values before mutating any tensor. This preserves
+            // the existing diagnostic contract: a poisoned step is left intact
+            // so the originating layer can still be identified.
+            for (int p = 0; p < iterationOrder.Count; p++)
+            {
+                if (!grads.TryGetValue(iterationOrder[p], out var g)) continue;
+                if (g is null || g.Length == 0) continue;
+                var span = g.Data.Span;
+                for (int i = 0; i < g.Length; i++)
+                {
+                    double value = NumOps.ToDouble(span[i]);
+                    if (double.IsNaN(value) || double.IsInfinity(value))
+                    {
+                        LastStepHadNonFiniteGradients = true;
+                        return;
+                    }
+                }
+            }
+
+            T lower = NumOps.FromDouble(-maxNorm);
+            T upper = NumOps.FromDouble(maxNorm);
+            for (int p = 0; p < iterationOrder.Count; p++)
+            {
+                if (!grads.TryGetValue(iterationOrder[p], out var g)) continue;
+                if (g is null || g.Length == 0) continue;
+                var span = g.Data.Span;
+                for (int i = 0; i < g.Length; i++)
+                    span[i] = MathHelper.Max(lower, MathHelper.Min(upper, span[i]));
+            }
+
+            return;
+        }
+
         // Step 1: total L2 norm across all gradient tensors, iterating in
         // the caller-supplied deterministic order (NOT dict bucket order —
         // that's process-randomized for reference-keyed dicts).
@@ -15563,6 +15617,25 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // conservative eager fallback without rejecting every valid model that owns such tensors.
         var srcStandaloneTensors = GetExtraTrainableTensors().Where(t => t is not null).ToList();
         var dstStandaloneTensors = copyBase.GetExtraTrainableTensors().Where(t => t is not null).ToList();
+        bool standaloneLayoutMatches = srcStandaloneTensors.Count == dstStandaloneTensors.Count
+            && srcStandaloneTensors.Zip(dstStandaloneTensors,
+                (source, destination) => source._shape.SequenceEqual(destination._shape)).All(matches => matches);
+        if (!standaloneLayoutMatches)
+        {
+            // A generated trainable tensor can be fitted or materialized after construction, so a
+            // fresh destination may not expose it yet (GOGGLE's learned adjacency is one example).
+            // Repair only an actual layout mismatch: calling the hook on every candidate would
+            // replace already-correct constructor tensors and add work to the normal COW path.
+            try
+            {
+                CopyGeneratedTrainableTensorsTo(copyBase);
+                dstStandaloneTensors = copyBase.GetExtraTrainableTensors().Where(t => t is not null).ToList();
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                return RejectCandidate($"generated trainable tensors could not be copied: {ex.Message}");
+            }
+        }
         if (srcStandaloneTensors.Count != dstStandaloneTensors.Count)
         {
             return RejectCandidate(

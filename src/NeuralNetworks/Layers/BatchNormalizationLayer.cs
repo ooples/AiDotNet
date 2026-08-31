@@ -382,6 +382,10 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         };
     }
 
+    /// <inheritdoc />
+    /// <remarks>Per-channel centering cancels a preceding per-channel bias exactly.</remarks>
+    public override bool MakesUpstreamBiasRedundant => true;
+
     public override bool SupportsTraining => true;
 
     /// <summary>
