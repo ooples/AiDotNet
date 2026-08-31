@@ -1220,6 +1220,25 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             yield return chunk.Tensor;
     }
 
+    /// <summary>Counts parameters that ALREADY exist, without resolving any lazy shape.</summary>
+    /// <remarks>
+    /// <see cref="ParameterCount"/> and the chunk surface both resolve lazy shapes as a side effect,
+    /// so neither can answer "what state is this model in right now" -- asking changes the answer.
+    /// This walks <see cref="Layers"/> through the layer-level counterpart, which is built on the
+    /// one accessor documented as safe on an unresolved layer, and reports 0 for anything not yet
+    /// materialized. Use it to COMPARE two models' states, never as a substitute for ParameterCount.
+    /// </remarks>
+    internal long MaterializedParameterCount()
+    {
+        long total = 0;
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            if (Layers[i] is LayerBase<T> layer) total += layer.MaterializedParameterCount();
+        }
+
+        return total;
+    }
+
     /// <summary>Writes a chunk stream back into this model without building a flat vector.</summary>
     /// <param name="chunks">
     /// One tensor per chunk <see cref="GetParameterChunks"/> yields, in that order and of that length.

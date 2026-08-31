@@ -699,6 +699,49 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     protected virtual IReadOnlyList<Tensor<T>> GetTrainableParametersUnmaterialized()
         => GetTrainableParameters();
 
+    /// <summary>Counts only parameters that are ALREADY materialized, resolving nothing.</summary>
+    /// <remarks>
+    /// <para>
+    /// Every other way of asking a model how big it is also changes it. <c>ParameterCount</c> and
+    /// the chunk surface both resolve lazy shapes, so reading them is a mutation disguised as an
+    /// observation -- measured: adding a single <c>ParameterCount</c> read before the clone sweep's
+    /// probe turned a reproducible TimeGANGenerator failure into a pass, because the read resolved
+    /// the model to its DECLARED shapes before the probe could resolve it from the input.
+    /// </para>
+    /// <para>
+    /// Built on <see cref="DeclaredParameterTensors"/>, which is explicitly safe on an unresolved
+    /// layer because it reads no dimension and computes no axis. An unresolved slot contributes 0
+    /// rather than its eventual size, which is the point: this answers "how much exists right now",
+    /// not "how much will exist once something forces the question".
+    /// </para>
+    /// </remarks>
+    internal long MaterializedParameterCount()
+    {
+        long total = 0;
+
+        var tensors = DeclaredParameterTensors();
+        if (tensors is not null)
+        {
+            for (int i = 0; i < tensors.Count; i++)
+            {
+                var tensor = tensors[i].Tensor;
+                if (tensor is null) continue;
+                total += tensor.Length;
+            }
+        }
+
+        foreach (var component in GetOrderedParameterComponents())
+        {
+            if (component.Kind != DeclaredParameterComponentKind.SubLayer) continue;
+
+            var sub = component.Layer;
+            if (sub is null || IsSubLayerParameterFrozen(sub)) continue;
+            if (sub is LayerBase<T> child) total += child.MaterializedParameterCount();
+        }
+
+        return total;
+    }
+
     /// <summary>
     /// Appends this type's declared parameter components to the inheritance-aware manifest.
     /// Source-generated overrides call <c>base</c> first, then append fields in declaration order.
@@ -2965,8 +3008,27 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// embeddings). Tiny scratch tensors don't need to route through
     /// the pool — the lookup overhead exceeds the benefit.</para>
     /// </remarks>
+    /// <summary>Shape of the weight this thread most recently TRIED to allocate.</summary>
+    /// <remarks>
+    /// Recorded BEFORE the attempt, and deliberately not inside an exception handler. A diagnostic
+    /// built after an OutOfMemoryException has to allocate its own message -- string interpolation,
+    /// string.Join -- at the one moment the heap has nothing left, so it dies re-throwing OOM and
+    /// reports nothing. Measured: an InvalidOperationException naming the shape never surfaced once
+    /// across RT2, SEEDX, SkyworkR1V and VideoChat2. Storing the caller's existing array reference
+    /// costs no allocation, so it survives the failure it is meant to describe.
+    /// </remarks>
+    [ThreadStatic]
+    internal static int[]? LastAttemptedWeightShape;
+
+    /// <summary>Name of the layer type that owns <see cref="LastAttemptedWeightShape"/>.</summary>
+    [ThreadStatic]
+    internal static string? LastAttemptedWeightOwner;
+
     protected Tensor<T> AllocateLazyWeight(int[] shape, Func<Tensor<T>>? nonStreamingAllocator = null)
     {
+        LastAttemptedWeightShape = shape;
+        LastAttemptedWeightOwner = GetType().Name;
+
         if (UseStreamingAllocator) return WeightRegistry.AllocateStreaming<T>(shape);
         return nonStreamingAllocator?.Invoke() ?? new Tensor<T>(shape);
     }
