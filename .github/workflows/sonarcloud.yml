@@ -1494,6 +1494,8 @@ jobs:
           # suite is licensed with no network round-trip; the key still validates online for any job/consumer
           # that doesn't run the ModuleInitializer hardening.
           AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
+        # Keep explanatory prose outside this scalar: GitHub evaluates expression-bearing run
+        # blocks as one expression and rejects oversized values, so retain headroom for future logic.
         run: |
           # Sanitize shard name: remove/replace all characters invalid in file paths
           $shardName = "${{ matrix.shard.name }}"
@@ -1517,21 +1519,7 @@ jobs:
           Write-Host "Processors:"
           nproc
 
-          # Per-shard parallelism control. The streaming + Server GC
-          # changes earlier in this PR helped most shards stop cancelling,
-          # but the heaviest model-family shards (Diffusion letter/prefix shards,
-          # Generated Layers A-M/N-Z,
-          # Unit-03 diffusion, ModelFamily-NeuralNetworks) still trip OOM
-          # with 4 parallel BERT-class
-          # model loads in flight on a 16 GB ubuntu-latest runner. Per-iter
-          # peak memory ~= 880 MB weights + 1.76 GB Adam state per slot;
-          # 4 slots × 2.6 GB + dotnet/xUnit overhead overruns the envelope.
-          # For these specific shards we rewrite the built xunit.runner.json
-          # to serialize collection execution so heavy models load serially —
-          # every other shard stays at the JSON default (= ProcessorCount = 4)
-          # and runs full-speed. (See the rewrite block in the run step below;
-          # the old `xunit.MaxParallelThreads=1` inline arg was silently
-          # ignored by the VSTest adapter.)
+          # Serialize only the known multi-GB model shards; other shards retain default parallelism.
           $heavyShards = @(
             'ModelFamily - Diffusion A-C',
             'ModelFamily - Diffusion D-I',
@@ -1622,15 +1610,7 @@ jobs:
             'Integration C - ComputerVision Detection',
             'Integration C - ComputerVision Segmentation Models',
             'Integration C - ComputerVision Segmentation Contracts',
-            # Core was the one Integration letter-shard missing from this list, and it holds the
-            # heaviest content of any of them: AllModelsCloneTests deep-copies 200+ models across 24
-            # InlineData shards, beside Classification, Clustering and ContinualLearning. It was
-            # therefore the only one running at the 4-way collection default AND with coverage
-            # instrumentation attached. It OOM-killed its runner 8m53s into a 60-minute budget after
-            # only 83 tests (80 Classification, 3 Clustering) - `The runner has received a shutdown
-            # signal`, which this file already documents as the OOM-kill signature. Listing it here
-            # serializes it like every sibling, drops coverage from it, and turns on the MemAvailable
-            # sampler so the next occurrence names the test instead of vanishing with the runner.
+            # This clone-heavy shard previously exhausted a 16 GiB runner.
             'Integration C - Core',
             'Integration D',
             'Integration E-G',
@@ -1646,15 +1626,7 @@ jobs:
           )
           $heavyShard = $heavyShards -contains $shardName
 
-          # SHARDS WHOSE ASSERTIONS ARE THEMSELVES TIMING MEASUREMENTS.
-          # Coverage instrumentation inflates CPU time and wall time by different amounts, which
-          # corrupts the exact quantities these shards assert on: the FP32/INT8 throughput ratio
-          # and the CPU-to-wall engagement ratio. 'Integration - Serial Perf' escaped that only
-          # because it happens to sit in $heavyShards; when the transformer probe was split into
-          # its own shard it inherited no such protection and would have run instrumented -- which
-          # is the same class of interference the split was made to remove.
-          # Kept as its own list rather than folded into $heavyShards, because that list also
-          # decides collection serialization, which is a memory concern unrelated to timing.
+          # Coverage instrumentation distorts the CPU/wall ratios asserted by timing shards.
           $performanceShards = @(
             'Integration - Serial Perf',
             'Integration - CPU Parallelism Probe'
@@ -1681,15 +1653,7 @@ jobs:
             '-c', 'Release',
             '--framework', '${{ matrix.shard.framework }}',
             '--no-build', '--no-restore',
-            # Globally exclude Category=HeavyTimeout from the default sharded run. Those models are
-            # CORRECT but inherently too slow for the per-test / 45-min shard budget (foundation
-            # diffusion at ~100s/forward x N-step Generate, GEMM-bound ViT/VGG, etc.). They are
-            # tracked in the umbrella timeout issue and exercised by the heavy-timeout-nightly
-            # workflow with a long budget. Wrapping the per-shard filter here applies the exclusion
-            # across all matrix entries in one place; it is a no-op for any test not tagged
-            # [Trait("Category","HeavyTimeout")]. ModelPerformanceCensus is likewise an explicit,
-            # serial, artifact-producing lane; discovering it in the normal shards would add 863
-            # opt-out skips and no measurements because its output directory is intentionally unset.
+            # HeavyTimeout and ModelPerformanceCensus have dedicated long-running/artifact lanes.
             '--filter', '(${{ matrix.shard.filter }})&Category!=HeavyTimeout&Category!=ModelPerformanceCensus'
           )
           if ($collectCoverage) {
@@ -1722,16 +1686,7 @@ jobs:
             '--blame-hang-timeout', '5min',
             '--blame-hang-dump-type', 'none'
           )
-          # OOM root cause + fix: the heavy shards exhaust the 16 GB runner
-          # because xUnit runs many test CLASSES in parallel (default
-          # maxParallelThreads = ProcessorCount), and each big-model class
-          # holds a multi-GB model + Adam state for the whole class. The
-          # `-- xunit.MaxParallelThreads=1` VSTest inline arg we used before
-          # is SILENTLY IGNORED by the xunit.runner.visualstudio adapter — only
-          # xunit.runner.json in the build output is honored. So for heavy
-          # shards we rewrite the copied runner config to serialize collection
-          # execution (one model in flight at a time). Every other shard keeps
-          # the parallel JSON default and runs full-speed.
+          # Serialize heavy shards through xunit.runner.json; adapter CLI args are ignored.
           if ($serializeShard) {
             $projDir = Split-Path -Parent '${{ matrix.shard.project }}'
             $runnerJson = Join-Path $projDir 'bin/Release/${{ matrix.shard.framework }}/xunit.runner.json'
@@ -1775,19 +1730,8 @@ jobs:
             Write-Host "Heavy shard: Workstation GC (DOTNET_gcServer=0) + serial collections"
           }
 
-          # Background memory sampler (serialized heavy shards only). These shards OOM-kill the
-          # runner with a shutdown signal BEFORE dotnet flushes TRX/console output, so the post-test
-          # snapshot below never runs and we lose the high-water mark. Sample MemAvailable every 2 s
-          # and write it straight to the step's LIVE log — GitHub ingests stdout continuously, so the
-          # LAST sample before a runner kill survives even though the process tree is torn down. It
-          # interleaves chronologically with xUnit's streamed per-test "Passed <Model>.<Test>" lines,
-          # so the last test printed just before the memory cliff identifies the model that blew the
-          # 16 GB envelope.
-          #
-          # Implemented as a background PowerShell RUNSPACE (not Start-Process): the runspace runs in
-          # THIS pwsh process, so its [Console] writes go to the same stdout handle GitHub Actions
-          # captures (a Start-Process grandchild's stdout was NOT captured — it produced zero output).
-          # [Console]::Out is thread-safe and flushed per line, so samples stream immediately.
+          # Stream memory and active-test markers in-process so evidence survives a runner OOM;
+          # a Start-Process child does not share the captured stdout handle.
           $memSampler = $null
           if ($heavyShard) {
             $testTrace = Join-Path $results 'active-test.trace'
