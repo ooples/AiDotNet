@@ -7437,6 +7437,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             return;
         }
 
+        // ASK THE LAYER TO REBIND BEFORE REFUSING. TryRebindForParameterCount lets a layer whose
+        // width is inferable from the parameter count re-resolve to the width the vector actually
+        // encodes, rather than insisting on one it resolved earlier. LSTMLayer has implemented it
+        // since #1589 -- and NOTHING EVER CALLED IT, so the hook sat dead and the exact scenario it
+        // was written for still threw: an LSTM resolved to input width 12, handed a width-10
+        // vector, reported "Expected 672 parameters, but got 608". That is the shape Clone produces
+        // when it carries a stale width without the matching gate weights.
+        if (!currentLayoutMatches && TryRebindForParameterCount(parameters.Length))
+        {
+            components = GetOrderedParameterComponents();
+            currentConcreteCount = FillParameters(null, 0);
+            currentLayoutMatches = parameters.Length == currentConcreteCount;
+        }
+
         if (!currentLayoutMatches)
         {
             // Name every component and its width. A bare count pair says only THAT the two
