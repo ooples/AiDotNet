@@ -596,6 +596,21 @@ jobs:
           fi
           gh run download "$run_id" --name shard-map --dir map || echo "map artifact unavailable"
 
+      # The selector's own tests, run here rather than nowhere. Two defects on this PR were caught
+      # only because these exist - reading the wrong side of a diff hunk, and a staleness check that
+      # silently pinned the feature off - and both looked healthy in the logs.
+      #
+      # continue-on-error, deliberately: a failing self-test means the selector cannot be trusted to
+      # REDUCE the matrix, and the fallback for that is already "run everything". Failing the job
+      # instead would block every PR in the repo on a tooling bug while adding no safety, since the
+      # behaviour it forces is the behaviour escalation already gives. The error annotation below is
+      # what makes it visible.
+      - name: Verify the selector
+        id: selftest
+        continue-on-error: true
+        shell: pwsh
+        run: ./tools/TestImpact/Select-Shards.ps1 -SelfTest
+
       - name: Select
         id: select
         shell: pwsh
@@ -605,12 +620,24 @@ jobs:
             Write-Host '::error::.github/test-shards.yml yielded no shards'
             exit 1
           }
+
+          # `name` is the key selection and the map both index on, and the regression analyzer keys
+          # on its slug. Duplicates already escalate through the count check further down, but with
+          # a message about missing shards that points nowhere near the real cause.
+          $dupes = @($all.name | Group-Object | Where-Object Count -gt 1 | ForEach-Object Name)
+          if ($dupes.Count -gt 0) {
+            Write-Host "::error::duplicate shard name(s) in .github/test-shards.yml: $($dupes -join ', ')"
+            exit 1
+          }
           Write-Host "shard list: $($all.Count) shard(s)"
 
           $escalate = $true
           $selected = @()
 
-          # Only pull requests get a reduced matrix.
+          # Two independent reasons to refuse to reduce, reported separately so the log says which
+          # one applied. Folding them into one flag made a self-test failure on a PR print "not a
+          # pull request", which is the kind of misleading-but-green log this feature keeps
+          # producing when a condition is collapsed.
           #
           # A master push MUST run everything, and not out of caution: the nightly map is built from
           # a master run's digests, and any shard that did not run produced no digest, so the map
@@ -618,8 +645,13 @@ jobs:
           # the map, and the feature decays a shard at a time into running everything - while
           # looking like it works. Merge-group runs are the last gate before master and are not
           # worth reducing either.
-          $isPullRequest = '${{ github.event_name }}' -eq 'pull_request'
-          if (-not $isPullRequest) {
+          $selectorTrusted = '${{ steps.selftest.outcome }}' -eq 'success'
+          $eventCanReduce  = '${{ github.event_name }}' -eq 'pull_request'
+
+          if (-not $selectorTrusted) {
+            Write-Host '::error::the shard selector failed its own self-test - running the full matrix. Fix tools/TestImpact/Select-Shards.ps1.'
+          }
+          elseif (-not $eventCanReduce) {
             Write-Host "event is '${{ github.event_name }}', not a pull request - running the full matrix"
           }
           elseif (Test-Path map/shard-map.json) {
