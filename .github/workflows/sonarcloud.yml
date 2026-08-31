@@ -586,9 +586,12 @@ jobs:
         run: |
           # The map is published by test-impact-map.yml on a schedule. Absent, stale or
           # unreadable are all handled the same way downstream: run everything.
-          run_id=$(gh run list --workflow test-impact-map.yml --branch master                      --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          # `|| true`: bash steps run with `set -e`, and gh exits non-zero when the workflow does
+          # not exist yet - which is the normal state until test-impact-map.yml reaches master.
+          # Without this the step dies before reaching the message explaining why there is no map.
+          run_id=$(gh run list --workflow test-impact-map.yml --branch master                      --status success --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)
           if [ -z "$run_id" ]; then
-            echo "no successful map build found"
+            echo "no successful map build found - selection will escalate to the full matrix"
             exit 0
           fi
           gh run download "$run_id" --name shard-map --dir map || echo "map artifact unavailable"
