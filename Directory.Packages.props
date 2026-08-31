@@ -350,7 +350,7 @@
          residency diagnostics that #2056 collects. -->
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.129.7" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.129.7" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.129.7" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.129.8" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.129.7" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
