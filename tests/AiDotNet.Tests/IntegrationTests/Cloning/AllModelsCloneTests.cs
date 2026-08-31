@@ -87,6 +87,9 @@ public class AllModelsCloneTests
 
     private readonly List<string> costs = new();
 
+    /// <summary>Per-phase allocation from the most recent Attempt, for the cost manifest.</summary>
+    private string LastPhases = string.Empty;
+
     private void RecordCost(string model, TimeSpan elapsed, long allocBefore, bool stuck)
     {
         // ALLOCATED, not GetTotalMemory. GetTotalMemory(false) reports the live heap WITHOUT
@@ -94,9 +97,9 @@ public class AllModelsCloneTests
         // can even read negative when a GC lands mid-window -- useless as a regression signal.
         // GetTotalAllocatedBytes is monotonic and counts everything this model's probe allocated,
         // which is the quantity that actually regresses. Cheap enough to call per model.
-        long allocated = GC.GetTotalAllocatedBytes(precise: false) - allocBefore;
+        long allocated = GC.GetTotalAllocatedBytes(precise: true) - allocBefore;
         costs.Add(model + Tab + elapsed.TotalSeconds.ToString("0.00") + Tab
-            + allocated.ToString() + Tab + (stuck ? "stuck" : "ok"));
+            + allocated.ToString() + Tab + (stuck ? "stuck" : "ok") + Tab + LastPhases);
     }
 
     private void WriteCostManifest(string dir, int shard)
@@ -107,7 +110,7 @@ public class AllModelsCloneTests
             var nl = Environment.NewLine;
             System.IO.File.WriteAllText(
                 path,
-                "model" + Tab + "seconds" + Tab + "bytes" + Tab + "status" + nl
+                "model" + Tab + "seconds" + Tab + "bytes" + Tab + "status" + Tab + "phases" + nl
                     // bytes = allocation volume in-process, PEAK working set when isolated.
                     + string.Join(nl, costs) + nl);
         }
@@ -403,7 +406,7 @@ public class AllModelsCloneTests
 
             string? outcome = null;
             var started = System.Diagnostics.Stopwatch.StartNew();
-            long allocBefore = GC.GetTotalAllocatedBytes(precise: false);
+            long allocBefore = GC.GetTotalAllocatedBytes(precise: true);
             var work = System.Threading.Tasks.Task.Run(() => outcome = Attempt(open, closed));
 
             if (!work.Wait(PerModelProbeBudget))
@@ -507,7 +510,19 @@ public class AllModelsCloneTests
     /// <summary>Constructs, copies and checks one model. Returns null when it cloned cleanly.</summary>
     private string? Attempt(Type open, Type closed)
     {
+        // RESET FIRST. LastPhases is a field, and Attempt returns early on SkipMarker and on every
+        // Fail path. Without this the next model's row inherits the previous model's numbers -
+        // observed as S4 and PaLI3 reporting byte-identical phases while their totals differed.
+        LastPhases = "construct=? resolve1=? copy=? resolve2=?";
+
+        // CONSTRUCTION IS INSTRUMENTED TOO. The first cut started its counter AFTER TryConstruct,
+        // which hid the cost of the biggest allocators entirely: WhisperLargeV3Turbo, KotobaWhisper
+        // and Chirp3 each reported tens of GB in total against essentially zero across all measured
+        // phases, because everything they spend is spent before the first counter was read.
+        long pc0 = GC.GetTotalAllocatedBytes(precise: true);
         var model = TryConstruct(closed);
+        long pc1 = GC.GetTotalAllocatedBytes(precise: true);
+        LastPhases = $"construct={pc1 - pc0} resolve1=? copy=? resolve2=?";
         if (model is null)
         {
             notConstructed.Add($"{open.Name}: no constructor takes a standard architecture");
@@ -517,14 +532,28 @@ public class AllModelsCloneTests
 
         try
         {
+            // PHASE SPLIT. The sweep shows models allocating tens of GB for one construct+clone -
+            // SenseVoiceLarge 46 GB - against weights that are a fraction of that. Attributing the
+            // cost to a PHASE is what turns "a model is expensive" into something fixable, and it
+            // costs four counter reads. GetTotalAllocatedBytes is monotonic, so these are volumes,
+            // not peaks: a phase can allocate 20 GB while never holding more than a GB at once,
+            // and that distinction is the whole point - churn and residency need different fixes.
+            long p0 = GC.GetTotalAllocatedBytes(precise: true);
+
             var probed = Resolve(model);
+            long p1 = GC.GetTotalAllocatedBytes(precise: true);
+
             var before = model.ParameterCount;
             var copy = model.DeepCopy() as NeuralNetworkBase<float>;
+            long p2 = GC.GetTotalAllocatedBytes(precise: true);
 
             if (copy is null) return Fail(open, "DeepCopy returned null");
             if (copy.GetType() != closed) return Fail(open, $"copy is {copy.GetType().Name}");
 
             Resolve(copy);
+            long p3 = GC.GetTotalAllocatedBytes(precise: true);
+
+            LastPhases = $"construct={pc1 - pc0} resolve1={p1 - p0} copy={p2 - p1} resolve2={p3 - p2}";
 
             if (copy.ParameterCount != before)
             {
