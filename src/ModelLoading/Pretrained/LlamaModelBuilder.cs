@@ -74,6 +74,15 @@ public static class LlamaModelBuilder<T>
         var embedding = new EmbeddingLayer<T>(vocab, hidden);
         var layers = new List<ILayer<T>> { embedding };
 
+        // RoPE convention reconciliation. AiDotNet applies interleaved (GPT-J) RoPE through its numerically
+        // stable fused kernel. Raw HuggingFace safetensors store q/k for the half-split (rotate_half) convention,
+        // so we permute their q/k projection rows into the interleaved layout at load (the same reconciliation
+        // llama.cpp performs). Permuting q and k identically leaves the q-dot-k score invariant and aligns each rotation
+        // pair with its frequency, so interleaved RoPE on the permuted weights reproduces HF outputs exactly.
+        // GGUF checkpoints are already stored pre-permuted, so they load unchanged (ShouldPermuteRope also sees
+        // through the Phi-3/DBRX fused-projection adapters to detect a GGUF source behind them).
+        bool permuteRopeQK = ShouldPermuteRope(weights);
+
         var blocks = new PreLNTransformerBlock<T>[config.NumHiddenLayers];
         for (int i = 0; i < config.NumHiddenLayers; i++)
         {
@@ -139,9 +148,9 @@ public static class LlamaModelBuilder<T>
             LoadGamma(block.Norm2, weights, p + "post_attention_layernorm.weight", hidden, opt.RmsNormAddsOne);
 
             if (opt.UseAttentionQkvBias)
-                LoadAttentionBiased((GroupedQueryAttentionLayer<T>)block.AttentionLayer, weights, p, numHeads, numKVHeads, headDim, hidden);
+                LoadAttentionBiased((GroupedQueryAttentionLayer<T>)block.AttentionLayer, weights, p, numHeads, numKVHeads, headDim, hidden, permuteRopeQK);
             else
-                LoadAttention((GroupedQueryAttentionLayer<T>)block.AttentionLayer, weights, p, numHeads, numKVHeads, headDim, hidden);
+                LoadAttention((GroupedQueryAttentionLayer<T>)block.AttentionLayer, weights, p, numHeads, numKVHeads, headDim, hidden, permuteRopeQK);
 
             // Gated SwiGLU FFN: gate/up are [intermediate, hidden] → [hidden, intermediate]; down is
             // [hidden, intermediate] → [intermediate, hidden]. Each DenseLayer stores [in, out] + zero bias.
@@ -169,16 +178,71 @@ public static class LlamaModelBuilder<T>
     // Loads a GQA layer's Q/K/V/O projections (HF [out,in] -> layer [in,out]) + zero output bias, in the
     // layer's SetParameters order (Q, K, V, O, bias). Shared by the dense and MoE decoder builders.
     internal static void LoadAttention(GroupedQueryAttentionLayer<T> attn, INamedTensorSource weights,
-        string layerPrefix, int numHeads, int numKVHeads, int headDim, int hidden)
+        string layerPrefix, int numHeads, int numKVHeads, int headDim, int hidden, bool permuteRope = false)
     {
         int kvDim = numKVHeads * headDim;
-        var qT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.q_proj.weight", outDim: numHeads * headDim, inDim: hidden);
-        var kT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.k_proj.weight", outDim: kvDim, inDim: hidden);
+        // q/k rows are permuted from HF half-split to interleaved layout when permuteRope is set (see Build);
+        // v and o carry no RoPE and are never permuted.
+        var qT = LoadRopeProjection(weights, layerPrefix + "self_attn.q_proj.weight", outDim: numHeads * headDim, inDim: hidden, ropeHeads: numHeads, headDim: headDim, permuteRope: permuteRope);
+        var kT = LoadRopeProjection(weights, layerPrefix + "self_attn.k_proj.weight", outDim: kvDim, inDim: hidden, ropeHeads: numKVHeads, headDim: headDim, permuteRope: permuteRope);
         var vT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.v_proj.weight", outDim: kvDim, inDim: hidden);
         var oT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.o_proj.weight", outDim: hidden, inDim: numHeads * headDim);
         var attnParams = Concat(qT, kT, vT, oT, new T[hidden]); // trailing zeros = output bias
         attn.SetParameters(new Vector<T>(attnParams));
     }
+
+    // Reads an HF [outDim, inDim] q/k projection, optionally reorders each head's headDim output rows from the
+    // HF half-split (rotate_half) layout into the interleaved (GPT-J) layout so that AiDotNet's interleaved RoPE
+    // reproduces HF results, then transposes to the layer's [inDim, outDim]. Reused by the biased loader.
+    internal static T[] LoadRopeProjection(INamedTensorSource weights, string name, int outDim, int inDim,
+        int ropeHeads, int headDim, bool permuteRope)
+    {
+        var src = ReadTensor(weights, name, outDim * inDim); // HF [outDim, inDim] row-major
+        if (permuteRope)
+            src = PermuteRopeRowsHalfToInterleaved(src, ropeHeads, headDim, inDim);
+        var dst = new T[inDim * outDim];
+        for (int o = 0; o < outDim; o++)
+            for (int i = 0; i < inDim; i++)
+                dst[i * outDim + o] = src[o * inDim + i];
+        return dst;
+    }
+
+    // Reorders the output rows of an HF [heads*headDim, inDim] q or k projection from the half-split
+    // convention (lane i pairs with lane i+headDim/2) into the interleaved convention (lane 2i pairs with 2i+1):
+    // newRow[2i] = oldRow[i], newRow[2i+1] = oldRow[i+headDim/2], applied within each head's headDim block.
+    internal static T[] PermuteRopeRowsHalfToInterleaved(T[] hf, int heads, int headDim, int inDim)
+    {
+        int half = headDim / 2;
+        var outp = new T[hf.Length];
+        for (int h = 0; h < heads; h++)
+        {
+            long baseRow = (long)h * headDim;
+            for (int p = 0; p < headDim; p++)
+            {
+                int srcLane = (p % 2 == 0) ? (p / 2) : (half + p / 2);
+                Array.Copy(hf, (baseRow + srcLane) * inDim, outp, (baseRow + p) * inDim, inDim);
+            }
+        }
+        return outp;
+    }
+
+    /// <summary>
+    /// Whether a decoder builder must permute its q/k projection rows from the HuggingFace half-split
+    /// (rotate_half) layout into the interleaved (GPT-J) layout that AiDotNet's RoPE kernel applies. Raw HF
+    /// safetensors need the permute; GGUF checkpoints are pre-permuted by llama.cpp and must NOT be permuted.
+    /// The Phi-3 / DBRX fused-projection and renaming adapters are unwrapped so a GGUF source behind them is
+    /// still detected. NOTE: Cohere/Command-R stores q/k in the interleaved layout natively (its HF
+    /// <c>rotate_half</c> is even/odd interleaved), so its builder must NOT call this — it never permutes.
+    /// </summary>
+    internal static bool ShouldPermuteRope(INamedTensorSource weights) => !IsGgufBacked(weights);
+
+    private static bool IsGgufBacked(INamedTensorSource weights) => weights switch
+    {
+        GgufModelSource => true,
+        FusedProjectionSource fused => IsGgufBacked(fused.Inner),
+        DbrxTensorSource dbrx => IsGgufBacked(dbrx.Inner),
+        _ => false,
+    };
 
     // Loads a DenseLayer's weights ([in, out] after transposing HF's [out, in]) and a zero bias.
     internal static void LoadDense(DenseLayer<T> dense, INamedTensorSource weights, string name, int outDim, int inDim)
@@ -219,17 +283,23 @@ public static class LlamaModelBuilder<T>
     // Loads a GQA layer's Q/K/V/O weights AND their real q/k/v/o biases (StarCoder2), in the layer's
     // biased SetParameters order (Q, K, V, O weights, then q, k, v biases, then the output bias).
     internal static void LoadAttentionBiased(GroupedQueryAttentionLayer<T> attn, INamedTensorSource weights,
-        string layerPrefix, int numHeads, int numKVHeads, int headDim, int hidden)
+        string layerPrefix, int numHeads, int numKVHeads, int headDim, int hidden, bool permuteRope = false)
     {
         int kvDim = numKVHeads * headDim, qDim = numHeads * headDim;
-        var qT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.q_proj.weight", outDim: qDim, inDim: hidden);
-        var kT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.k_proj.weight", outDim: kvDim, inDim: hidden);
+        var qT = LoadRopeProjection(weights, layerPrefix + "self_attn.q_proj.weight", outDim: qDim, inDim: hidden, ropeHeads: numHeads, headDim: headDim, permuteRope: permuteRope);
+        var kT = LoadRopeProjection(weights, layerPrefix + "self_attn.k_proj.weight", outDim: kvDim, inDim: hidden, ropeHeads: numKVHeads, headDim: headDim, permuteRope: permuteRope);
         var vT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.v_proj.weight", outDim: kvDim, inDim: hidden);
         var oT = TransposeOutInToInOut(weights, layerPrefix + "self_attn.o_proj.weight", outDim: hidden, inDim: qDim);
         // All projection biases are loaded when present and left zero otherwise (Qwen2 biases q/k/v but not o;
-        // StarCoder2 biases all four).
+        // StarCoder2 biases all four). A q/k bias is one value per output row, so it takes the SAME half-split->
+        // interleaved row permutation as its weight when permuteRope is set.
         var qB = OptionalBias(weights, layerPrefix + "self_attn.q_proj.bias", qDim);
         var kB = OptionalBias(weights, layerPrefix + "self_attn.k_proj.bias", kvDim);
+        if (permuteRope)
+        {
+            qB = PermuteRopeRowsHalfToInterleaved(qB, numHeads, headDim, inDim: 1);
+            kB = PermuteRopeRowsHalfToInterleaved(kB, numKVHeads, headDim, inDim: 1);
+        }
         var vB = OptionalBias(weights, layerPrefix + "self_attn.v_proj.bias", kvDim);
         var oB = OptionalBias(weights, layerPrefix + "self_attn.o_proj.bias", hidden);
         attn.SetParameters(new Vector<T>(Concat(qT, kT, vT, oT, qB, kB, vB, oB)));
