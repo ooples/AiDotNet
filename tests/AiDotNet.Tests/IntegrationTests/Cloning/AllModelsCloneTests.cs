@@ -554,6 +554,10 @@ public class AllModelsCloneTests
 
             var before = model.ParameterCount;
             var copy = model.DeepCopy() as NeuralNetworkBase<float>;
+            // The ORIGINAL re-read after DeepCopy. DeepCopy has to read the source's full parameter
+            // surface to copy it, which materializes the source too, so `before` (captured earlier)
+            // and the copy's count are not measured in the same state.
+            var originalAfterCopy = model.ParameterCount;
             var matAfterCopy = copy is null ? -1 : copy.MaterializedParameterCount();
             var afterCopy = copy is null ? -1 : copy.ParameterCount;
             long p2 = GC.GetTotalAllocatedBytes(precise: true);
@@ -570,10 +574,16 @@ public class AllModelsCloneTests
             // apart -- TimeGANGenerator reports 8640 against 192 with the probe having run on both.
             LastPhases = $"construct={pc1 - pc0} resolve1={p1 - p0} copy={p2 - p1} resolve2={p3 - p2}"
                 + $" mat(beforeProbe={matBeforeProbe} afterProbe={matAfterProbe} afterCopy={matAfterCopy})"
-                + $" counts(afterResolve1={before}"
+                + $" counts(afterResolve1={before} originalAfterCopy={originalAfterCopy}"
                 + $" afterCopy={afterCopy} afterResolve2={copy.ParameterCount})";
 
-            if (copy.ParameterCount != before)
+            // COMPARE THE SAME STATE. `before` is captured BEFORE DeepCopy, and DeepCopy
+            // materializes the source as a side effect of reading its parameter surface -- measured
+            // on TimeGANGenerator: 192 before, 8640 after, with the copy also at 8640 and both
+            // sides structurally identical (3 FullyConnectedLayers, 320/4160/4160). Comparing the
+            // pre-copy number against the post-copy one measured materialization, not copying, and
+            // reported a 45x "mismatch" between two models that were the same.
+            if (copy.ParameterCount != originalAfterCopy)
             {
                 // AN UNRESOLVED ORIGINAL IS NOT A FAILED COPY. Every model in this bucket reports
                 // the copy as the LARGER side -- DeepCopy materialized layers the original had left
@@ -581,12 +591,16 @@ public class AllModelsCloneTests
                 // materialization, not copying.
                 if (!probed)
                 {
-                    unresolved.Add($"{open.Name}: probe did not run ({copy.ParameterCount} against {before})");
+                    unresolved.Add(
+                        $"{open.Name}: probe did not run ({copy.ParameterCount} against {originalAfterCopy})");
                     Note($"lazy  {open.Name}");
                     return SkipMarker;
                 }
 
-                return Fail(open, $"{copy.ParameterCount} parameters against {before} || {LastPhases}");
+                return Fail(
+                    open,
+                    $"{copy.ParameterCount} parameters against {originalAfterCopy} || {LastPhases}"
+                        + $" || original {Structure(model)} || copy {Structure(copy)}");
             }
 
             // Live heap immediately before the independence check: the two resident models plus
@@ -724,6 +738,29 @@ public class AllModelsCloneTests
         Assert.Fail("no small constructible model was available to validate the independence check");
     }
 
+
+    /// <summary>Compact layer-by-layer shape of a model, for comparing an original with its copy.</summary>
+    /// <remarks>
+    /// A parameter-count mismatch has two very different causes with the same symptom: the copy
+    /// built MORE layers, or it built the SAME layers at larger shapes. Those need different central
+    /// fixes, and the totals alone cannot tell them apart. Uses the non-mutating counter so reading
+    /// this does not resolve the very lazy shapes under investigation.
+    /// </remarks>
+    private static string Structure(NeuralNetworkBase<float> model)
+    {
+        var parts = new List<string>();
+        for (var i = 0; i < model.Layers.Count && i < 24; i++)
+        {
+            var layer = model.Layers[i];
+            var name = layer.GetType().Name;
+            var materialized = layer is AiDotNet.NeuralNetworks.Layers.LayerBase<float> lb
+                ? lb.MaterializedParameterCount().ToString()
+                : "n/a";
+            parts.Add($"{name}={materialized}");
+        }
+
+        return $"[{model.Layers.Count} layers: {string.Join(" ", parts)}]";
+    }
     /// <summary>Whether writing through one model leaves the other alone.</summary>
     /// <remarks>
     /// This method, not <c>DeepCopy</c>, is where FishSpeech ran out of memory. It used to hold a
