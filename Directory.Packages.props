@@ -348,7 +348,7 @@
          Tensors alike, so the lockstep this comment describes is actually restored rather than
          merely asserted. AiDotNet.Tensors 0.129.7 is required for the GPU launch journal and buffer
          residency diagnostics that #2056 collects. -->
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.129.7" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.129.8" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.129.7" />
     <PackageVersion Include="AiDotNet.Tensors" Version="0.129.7" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.129.7" />
