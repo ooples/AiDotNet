@@ -6,6 +6,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.VisionLanguage.Foundational;
 using AiDotNet.VisionLanguage.Generative;
 using AiDotNet.VisionLanguage.InstructionTuned;
@@ -620,6 +621,37 @@ public class AllModelsCloneTests
     /// </remarks>
     private static object? CreateBoundedOptions(Type optionType)
     {
+        if (typeof(CodecTtsOptions).IsAssignableFrom(optionType))
+        {
+            CodecTtsOptions? codec;
+            try
+            {
+                codec = Activator.CreateInstance(optionType) as CodecTtsOptions;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+
+            if (codec is null) return null;
+
+            // Match the generated codec-LM smoke architecture: preserve the text encoder ->
+            // transformer -> codec-logit structure without materializing paper-scale defaults.
+            codec.NumCodebooks = 1;
+            codec.CodebookSize = 16;
+            codec.CodecFrameRate = 75;
+            codec.TextEncoderDim = 32;
+            codec.LLMDim = 32;
+            codec.NumEncoderLayers = 1;
+            codec.NumLLMLayers = 1;
+            codec.NumHeads = 4;
+            codec.VocabSize = 64;
+            codec.MaxTextLength = 8;
+            codec.MaxCodecFrames = 8;
+            codec.DropoutRate = 0.0;
+            return codec;
+        }
+
         if (typeof(FoundationalVLMOptions).IsAssignableFrom(optionType))
         {
             FoundationalVLMOptions? foundational;
