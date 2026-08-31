@@ -29,7 +29,9 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <summary>
     /// The options specific to the Adam optimizer.
     /// </summary>
-    private AdamOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private AdamOptimizerOptions<T, TInput, TOutput> _options => (AdamOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// The first moment vector (moving average of gradients).
@@ -100,7 +102,6 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         _m = Vector<T>.Empty();
         _v = Vector<T>.Empty();
         _t = 0;
-        _options = options ?? new();
         _currentBeta1 = NumOps.Zero;
         _currentBeta2 = NumOps.Zero;
 
@@ -1395,27 +1396,6 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         _tapeStep = 0;
     }
 
-    /// <summary>
-    /// Updates the optimizer's options.
-    /// </summary>
-    /// <param name="options">The new options to be set.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of type AdamOptimizerOptions.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method allows you to change the optimizer's settings mid-way.
-    /// It's like adjusting the personal trainer's approach based on new instructions.
-    /// </para>
-    /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is AdamOptimizerOptions<T, TInput, TOutput> adamOptions)
-        {
-            _options = adamOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected AdamOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current optimizer options.

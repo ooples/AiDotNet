@@ -32,7 +32,9 @@ namespace AiDotNet.Optimizers;
 [PipelineStage(PipelineStage.Training)]
 public partial class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
-    private StochasticGradientDescentOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private StochasticGradientDescentOptimizerOptions<T, TInput, TOutput> _options => (StochasticGradientDescentOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// Initializes a new instance of the StochasticGradientDescentOptimizer class.
@@ -64,7 +66,6 @@ public partial class StochasticGradientDescentOptimizer<T, TInput, TOutput> : Gr
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new();
     }
 
     /// <summary>
@@ -93,7 +94,6 @@ public partial class StochasticGradientDescentOptimizer<T, TInput, TOutput> : Gr
     private StochasticGradientDescentOptimizer(StochasticGradientDescentOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _options = options ?? new();
     }
 
     /// <inheritdoc/>
@@ -266,34 +266,6 @@ public partial class StochasticGradientDescentOptimizer<T, TInput, TOutput> : Gr
         return InterfaceGuard.Parameterizable(currentSolution).WithParameters(updatedCoefficients);
     }
 
-    /// <summary>
-    /// Updates the optimizer's options with the provided options.
-    /// </summary>
-    /// <param name="options">The options to apply to this optimizer.</param>
-    /// <exception cref="ArgumentException">Thrown when the options are not of the expected type.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method ensures that only StochasticGradientDescentOptimizerOptions can be applied to this optimizer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like giving the hiker new instructions mid-journey:
-    /// 
-    /// - You can only give instructions specific to this type of hike (SGD)
-    /// - If you try to give the wrong type of instructions, it will cause an error
-    /// 
-    /// This ensures that the optimizer always has the correct type of settings.
-    /// </para>
-    /// </remarks>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is StochasticGradientDescentOptimizerOptions<T, TInput, TOutput> sgdOptions)
-        {
-            _options = sgdOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected StochasticGradientDescentOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Gets the current options for this optimizer.

@@ -296,7 +296,7 @@ jobs:
         run: dotnet restore src/AiDotNet.csproj
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
+        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
         with:
           languages: csharp
           config-file: ./.github/codeql/codeql-config.yml
@@ -308,7 +308,7 @@ jobs:
         run: dotnet build src/AiDotNet.csproj -c Release --no-restore -f net10.0
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
+        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
         with:
           category: "/language:csharp"
           upload: always
@@ -1471,6 +1471,17 @@ jobs:
           # suite is licensed with no network round-trip; the key still validates online for any job/consumer
           # that doesn't run the ModuleInitializer hardening.
           AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
+        # Keep explanatory prose outside the PowerShell scalar. GitHub evaluates a run scalar that
+        # contains expressions as one expression and rejects it above 21,000 characters. The shard
+        # script must retain headroom for future functional changes.
+        #
+        # Integration C - Core is serialized because run 33321501718 showed it exhausting a 16 GiB
+        # runner after two cloning tests. Crash evidence cannot be uploaded when the runner itself
+        # is killed, so live sampling and serialized collections are the useful safeguards there.
+        # Test-host crashes use a mini dump plus Sequence*.xml; hang dumps stay disabled because the
+        # five-minute inactivity detector previously turned 29 otherwise-valid shards into failures.
+        # GPU diagnostics use an absolute results path because test hosts run from their output
+        # directory, not the workspace, and a relative path therefore missed the artifact glob.
         run: |
           # Sanitize shard name: remove/replace all characters invalid in file paths
           $shardName = "${{ matrix.shard.name }}"
@@ -1494,33 +1505,9 @@ jobs:
           Write-Host "Processors:"
           nproc
 
-          # Per-shard parallelism control. The streaming + Server GC
-          # changes earlier in this PR helped most shards stop cancelling,
-          # but the heaviest model-family shards (Diffusion letter/prefix shards,
-          # Generated Layers A-M/N-Z,
-          # Unit-03 diffusion, ModelFamily-NeuralNetworks) still trip OOM
-          # with 4 parallel BERT-class
-          # model loads in flight on a 16 GB ubuntu-latest runner. Per-iter
-          # peak memory ~= 880 MB weights + 1.76 GB Adam state per slot;
-          # 4 slots × 2.6 GB + dotnet/xUnit overhead overruns the envelope.
-          # For these specific shards we rewrite the built xunit.runner.json
-          # to serialize collection execution so heavy models load serially —
-          # every other shard stays at the JSON default (= ProcessorCount = 4)
-          # and runs full-speed. (See the rewrite block in the run step below;
-          # the old `xunit.MaxParallelThreads=1` inline arg was silently
-          # ignored by the VSTest adapter.)
+          # Serialize only the known multi-GB model shards; other shards retain default parallelism.
           $heavyShards = @(
-            # ADDED after this shard OOM-killed the RUNNER on run 33321501718: the log shows two
-            # Cloning tests pass, then two minutes of silence, then "The runner has received a
-            # shutdown signal". Memory was healthy at start (14 GiB of 15 GiB available), so the
-            # shard grew into the kill; the test that did it never reported and is unnamed.
-            #
-            # It was the ONE dying shard getting none of the heavy-shard treatment: no serialized
-            # collections (the parallelism this file already identifies as the memory multiplier),
-            # no live memory + test-start sampler, and no detailed verbosity -- so nothing could
-            # name the culprit. Note the crash-evidence artifact CANNOT help here either: when the
-            # runner itself is killed, no upload step ever runs, and only the streamed live log
-            # survives.
+            # This shard exhausted a 16 GiB runner on run 33321501718.
             'Integration C - Core',
             'ModelFamily - Diffusion A-C',
             'ModelFamily - Diffusion D-I',
@@ -1645,15 +1632,7 @@ jobs:
             '-c', 'Release',
             '--framework', '${{ matrix.shard.framework }}',
             '--no-build', '--no-restore',
-            # Globally exclude Category=HeavyTimeout from the default sharded run. Those models are
-            # CORRECT but inherently too slow for the per-test / 45-min shard budget (foundation
-            # diffusion at ~100s/forward x N-step Generate, GEMM-bound ViT/VGG, etc.). They are
-            # tracked in the umbrella timeout issue and exercised by the heavy-timeout-nightly
-            # workflow with a long budget. Wrapping the per-shard filter here applies the exclusion
-            # across all matrix entries in one place; it is a no-op for any test not tagged
-            # [Trait("Category","HeavyTimeout")]. ModelPerformanceCensus is likewise an explicit,
-            # serial, artifact-producing lane; discovering it in the normal shards would add 863
-            # opt-out skips and no measurements because its output directory is intentionally unset.
+            # HeavyTimeout and ModelPerformanceCensus have dedicated long-running/artifact lanes.
             '--filter', '(${{ matrix.shard.filter }})&Category!=HeavyTimeout&Category!=ModelPerformanceCensus'
           )
           if ($collectCoverage) {
@@ -1676,22 +1655,7 @@ jobs:
           # an attributable [test-start] class marker in the live log.
           $consoleVerbosity = if ($heavyShard) { 'detailed' } else { 'normal' }
 
-          # WHY THERE IS EVIDENCE AT ALL NOW. When the test host dies -- an access violation, a
-          # stack overflow, an OOM kill -- it writes no TRX and the shard reports zero failures, so
-          # the run looks like an infrastructure blip and the real cause is unobservable. A skipped
-          # artifact plus an empty log is exactly that signature. Two things change it:
-          #
-          #   --blame-crash   a Sequence file naming the test in flight, plus a dump.
-          #   MINI, not full  a full dump of a 16 GB host cannot fit a runner's free disk; a mini
-          #                   dump carries the faulting stacks, which is what actually gets read.
-          #
-          # THE HANG DUMP STAYS 'none', DELIBERATELY. Promoting it to 'mini' failed 29 shards: the
-          # 5-minute inactivity detector fires routinely here (a single long test reports nothing
-          # while it runs), the collector then tries to dump a process that has already moved on,
-          # and "Creating hang dump failed ... Process with an Id of N is not running" turns an
-          # otherwise passing run into exit 1. Observed on Other - Playground: "Passed: 3" of 3
-          # tests, step exit code 1. Crash dumps do not share this failure mode, because they are
-          # only collected when the host has actually died.
+          # Record the in-flight test and a bounded crash dump; hang dumps remain disabled.
           $dotnetArgs += @(
             '--logger', 'trx;LogFileName=test-results.trx',
             '--logger', "console;verbosity=$consoleVerbosity",
@@ -1702,35 +1666,11 @@ jobs:
             '--blame-hang-dump-type', 'none'
           )
 
-          # AiDotNet.Tensors writes its GPU launch journal and buffer residency here as the process
-          # exits. This is the cheap half of the evidence and often the decisive half: a host that
-          # dies holding gigabytes of device buffers looks, in every managed tool AND in a heap
-          # dump, like a process with a small tidy heap, because the managed wrappers are tiny and
-          # collectible while the native allocations are not visible to them. The counters are what
-          # separate "leaked device memory" from "the GC had simply not collected yet", and the
-          # journal names the last kernels to reach the device. A few kilobytes of text on a
-          # healthy run, and useful even with no GPU present, since the totals are recorded
-          # whether or not any launch happened.
-          # ABSOLUTE, deliberately. $results is workspace-relative, but the test host does not run
-          # with the workspace as its working directory -- a relative path resolves against the test
-          # binary folder instead, so the file landed somewhere the workspace-relative upload glob
-          # could never see. Verified locally: a relative path wrote to
-          # tests/.../bin/Debug/net10.0/<path>/gpu-diagnostics.txt. Before AiDotNet.Tensors learned
-          # to create the directory it produced nothing at all, silently, which is why the env var
-          # was set on every shard of a full matrix and not one file was ever produced.
+          # Use an absolute path so the test-host GPU journal reaches the workspace artifact glob.
           $diagDir = Join-Path (Get-Location).Path $results
           New-Item -ItemType Directory -Force -Path $diagDir | Out-Null
           $env:AIDOTNET_GPU_DIAGNOSTICS_DUMP = Join-Path $diagDir 'gpu-diagnostics.txt'
-          # OOM root cause + fix: the heavy shards exhaust the 16 GB runner
-          # because xUnit runs many test CLASSES in parallel (default
-          # maxParallelThreads = ProcessorCount), and each big-model class
-          # holds a multi-GB model + Adam state for the whole class. The
-          # `-- xunit.MaxParallelThreads=1` VSTest inline arg we used before
-          # is SILENTLY IGNORED by the xunit.runner.visualstudio adapter — only
-          # xunit.runner.json in the build output is honored. So for heavy
-          # shards we rewrite the copied runner config to serialize collection
-          # execution (one model in flight at a time). Every other shard keeps
-          # the parallel JSON default and runs full-speed.
+          # Serialize heavy shards through xunit.runner.json; adapter CLI args are ignored.
           if ($serializeShard) {
             $projDir = Split-Path -Parent '${{ matrix.shard.project }}'
             $runnerJson = Join-Path $projDir 'bin/Release/${{ matrix.shard.framework }}/xunit.runner.json'
@@ -1774,19 +1714,8 @@ jobs:
             Write-Host "Heavy shard: Workstation GC (DOTNET_gcServer=0) + serial collections"
           }
 
-          # Background memory sampler (serialized heavy shards only). These shards OOM-kill the
-          # runner with a shutdown signal BEFORE dotnet flushes TRX/console output, so the post-test
-          # snapshot below never runs and we lose the high-water mark. Sample MemAvailable every 2 s
-          # and write it straight to the step's LIVE log — GitHub ingests stdout continuously, so the
-          # LAST sample before a runner kill survives even though the process tree is torn down. It
-          # interleaves chronologically with xUnit's streamed per-test "Passed <Model>.<Test>" lines,
-          # so the last test printed just before the memory cliff identifies the model that blew the
-          # 16 GB envelope.
-          #
-          # Implemented as a background PowerShell RUNSPACE (not Start-Process): the runspace runs in
-          # THIS pwsh process, so its [Console] writes go to the same stdout handle GitHub Actions
-          # captures (a Start-Process grandchild's stdout was NOT captured — it produced zero output).
-          # [Console]::Out is thread-safe and flushed per line, so samples stream immediately.
+          # Stream heavy-shard memory and active-test markers from an in-process runspace so evidence
+          # survives a runner OOM; a Start-Process child does not share the captured stdout handle.
           $memSampler = $null
           if ($heavyShard) {
             $testTrace = Join-Path $results 'active-test.trace'
@@ -2632,7 +2561,7 @@ jobs:
 
     steps:
       - name: Set up JDK 17
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v4
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v4
         with:
           java-version: 17
           distribution: 'zulu'

@@ -79,7 +79,9 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// <summary>
     /// Options specific to the L-BFGS optimizer.
     /// </summary>
-    private LBFGSOptimizerOptions<T, TInput, TOutput> _options;
+    /// <summary>Read from the single instance OptimizerBase.Options holds, so there is
+    /// no second copy that could disagree with it.</summary>
+    private LBFGSOptimizerOptions<T, TInput, TOutput> _options => (LBFGSOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>
     /// List of position (solution) differences used in the L-BFGS update.
@@ -148,7 +150,6 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         IEngine? engine = null)
         : base(model, options ?? new())
     {
-        _options = options ?? new LBFGSOptimizerOptions<T, TInput, TOutput>();
         _s = new List<Vector<T>>();
         _y = new List<Vector<T>>();
         _lbfgsInverseHessianScale = NumOps.One;
@@ -181,7 +182,6 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     private LBFGSOptimizer(LBFGSOptimizerOptions<T, TInput, TOutput>? options)
         : base(null, options ?? new())
     {
-        _options = options ?? new LBFGSOptimizerOptions<T, TInput, TOutput>();
         _s = new List<Vector<T>>();
         _y = new List<Vector<T>>();
         _lbfgsInverseHessianScale = NumOps.One;
@@ -845,32 +845,6 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         return direction;
     }
 
-    /// <summary>
-    /// Updates the optimizer's options with new settings.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method updates the optimizer's configuration with new options. It ensures that only valid
-    /// LBFGSOptimizerOptions are applied to this optimizer.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// This is like changing the settings on the optimizer. It makes sure you're using the right kind of settings
-    /// for this specific type of optimizer.
-    /// </para>
-    /// </remarks>
-    /// <param name="options">The new options to apply to the optimizer.</param>
-    /// <exception cref="ArgumentException">Thrown when the provided options are not of type LBFGSOptimizerOptions.</exception>
-    protected override void UpdateOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
-    {
-        if (options is LBFGSOptimizerOptions<T, TInput, TOutput> lbfgsOptions)
-        {
-            _options = lbfgsOptions;
-        }
-        else
-        {
-            throw new ArgumentException("Invalid options type. Expected LBFGSOptimizerOptions.");
-        }
-    }
 
     /// <summary>
     /// Retrieves the current options of the optimizer.
