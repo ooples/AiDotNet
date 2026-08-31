@@ -41,6 +41,17 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# A caller that passes "A,B" or "A;B" instead of @('A','B') would otherwise store one bogus shard
+# name and silently drop the real always-run shards - under-selecting exactly the shards that cannot
+# be mapped, which is the dangerous direction. Split defensively and drop blanks.
+$AlwaysRun = @(
+    $AlwaysRun |
+        Where-Object { $_ } |
+        ForEach-Object { $_ -split '[,;]' } |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ }
+)
+
 $digestFiles = @(Get-ChildItem -LiteralPath $DigestDirectory -Filter '*.digest.json' -Recurse -File)
 if ($digestFiles.Count -eq 0) {
     throw "No *.digest.json under $DigestDirectory - refusing to write an empty map, which would select nothing."

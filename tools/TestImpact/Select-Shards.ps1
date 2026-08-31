@@ -258,7 +258,10 @@ if ($selection.Escalate) {
     foreach ($reason in $selection.Reasons) { Write-Host "  reason: $reason" }
 }
 else {
-    Write-Host "selected $($selection.Shards.Count) of $($map.knownShards.Count) shard(s)"
+    # Denominator counts every shard that COULD run - mapped plus always-run - otherwise a
+    # selection including an always-run shard reads as "2 of 1".
+    $total = @($map.knownShards).Count + @($map.alwaysRun).Count
+    Write-Host "selected $($selection.Shards.Count) of $total shard(s)"
     foreach ($shard in $selection.Shards) { Write-Host "  $shard" }
 }
 
