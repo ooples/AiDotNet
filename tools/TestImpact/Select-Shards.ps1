@@ -466,6 +466,12 @@ if ($LASTEXITCODE -ne 0) {
         -Message "the map's commit $mapSha is not present in this checkout - running the full matrix"
 }
 
+# Everything from here is wrapped, because the whole design rests on "when unsure, run everything"
+# and an uncaught throw does the opposite: $ErrorActionPreference is Stop, so the script would die
+# before writing selection.json, the caller would find no result, the job would fail, and the matrix
+# would never run. That is worse than any wrong selection, so every failure below escalates instead.
+try {
+
 if ($FileLevelFrom) {
     # Master-push mode: validate only what differs from the tree a PR run already tested.
     & git cat-file -e "$FileLevelFrom^{commit}" 2>$null
@@ -502,3 +508,9 @@ $result = [pscustomobject]@{
     shards   = $selection.Shards
 }
 if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
+
+}
+catch {
+    Exit-Escalated -Reason 'selection-failed' `
+        -Message "shard selection failed, so the full matrix will run: $($_.Exception.Message)"
+}

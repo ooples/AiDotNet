@@ -118,6 +118,18 @@ jobs:
           # scope. The repository already uses this pattern elsewhere for exactly this reason.
           INPUT_RUN_ID: ${{ github.event.inputs.run_id }}
         run: |
+          # Fullness is measured, not assumed: count a run's shard jobs against the shard list.
+          # A reduced run has digests for the shards it ran and none for the rest, and "no digest"
+          # is exactly what marks a shard always-run - so harvesting one would convert every shard
+          # it skipped into an always-run shard until the feature decayed into running everything
+          # while still looking healthy. A cancelled or partly-failed run fails the same check for
+          # the same reason: its digests cover only the shards that got that far.
+          expected=$(yq -o=json -I=0 '.shard' .github/test-shards.yml | jq 'length')
+          shard_jobs() {
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/$1/jobs"               --jq '[.jobs[] | select(.name | startswith("Tests ("))] | length' 2>/dev/null |
+              awk '{s+=$1} END {print s+0}'
+          }
+
           run_id=''
           if [ -n "${INPUT_RUN_ID:-}" ]; then
             # Digits only. A run id is numeric, so anything else is not a run id.
@@ -126,8 +138,31 @@ jobs:
                 echo "::error::run_id must be numeric; got an invalid value"
                 exit 1
                 ;;
-              *) run_id="$INPUT_RUN_ID" ;;
             esac
+
+            # A hand-supplied id gets the SAME checks as an automatically chosen one. Numeric
+            # syntax only proves it is a run id, not that it is a successful full-matrix
+            # sonarcloud.yml run on master - and a failed or reduced run still carries partial
+            # digests, which would silently mark the shards it happened to run as mapped.
+            meta=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${INPUT_RUN_ID}"                      --jq '[.name, .head_branch, .conclusion] | @tsv' 2>/dev/null || true)
+            if [ -z "$meta" ]; then
+              echo "::error::run ${INPUT_RUN_ID} does not exist or is not readable"
+              exit 1
+            fi
+            wf=$(printf '%s' "$meta" | cut -f1)
+            br=$(printf '%s' "$meta" | cut -f2)
+            cc=$(printf '%s' "$meta" | cut -f3)
+            if [ "$wf" != "Build & SonarCloud" ] || [ "$br" != "master" ] || [ "$cc" != "success" ]; then
+              echo "::error::run ${INPUT_RUN_ID} is '$wf' on '$br' with conclusion '$cc'; a successful Build & SonarCloud run on master is required"
+              exit 1
+            fi
+            n=$(shard_jobs "$INPUT_RUN_ID")
+            if [ "${n:-0}" -lt "$expected" ]; then
+              echo "::error::run ${INPUT_RUN_ID} ran only ${n:-0}/$expected shards, so its digests are partial and would mark the missing shards always-run"
+              exit 1
+            fi
+            echo "run ${INPUT_RUN_ID} ran $n/$expected shards - using it"
+            run_id="$INPUT_RUN_ID"
           fi
 
           if [ -z "$run_id" ]; then
@@ -143,10 +178,9 @@ jobs:
             # Fullness is measured, not assumed: count the run's shard jobs against the shard list.
             # A cancelled or partly-failed run fails the same check, for the same reason - its
             # digests cover only the shards that got that far.
-            expected=$(yq -o=json -I=0 '.shard' .github/test-shards.yml | jq 'length')
             candidates=$(gh run list --workflow sonarcloud.yml --branch master --status success --limit 15 --json databaseId --jq '.[].databaseId')
             for candidate in $candidates; do
-              n=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${candidate}/jobs" --jq '[.jobs[] | select(.name | startswith("Tests ("))] | length' 2>/dev/null | awk '{s+=$1} END {print s+0}')
+              n=$(shard_jobs "$candidate")
               if [ "${n:-0}" -ge "$expected" ]; then
                 run_id="$candidate"
                 echo "run $candidate ran $n/$expected shards - using it"
@@ -243,7 +277,7 @@ jobs:
           # run, which is still in progress, so .[0] IS the previous one - an earlier revision
           # took .[-1] of two, which silently audited against a map one generation too old and
           # could miss a regression introduced by the most recent map.
-          prev=$(gh run list --workflow test-impact-map.yml --branch master --status success                    --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)
+          prev=$(gh run list --workflow test-impact-map.yml --branch master --status success                    --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
           if [ -z "$prev" ] || [ "$prev" = "${{ github.run_id }}" ]; then
             echo "no earlier map to audit against - this is the first build"
             exit 0

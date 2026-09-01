@@ -614,7 +614,7 @@ jobs:
           # `|| true`: bash steps run with `set -e`, and gh exits non-zero when the workflow does
           # not exist yet - which is the normal state until test-impact-map.yml reaches master.
           # Without this the step dies before reaching the message explaining why there is no map.
-          run_id=$(gh run list --workflow test-impact-map.yml --branch master                      --status success --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)
+          run_id=$(gh run list --workflow test-impact-map.yml --branch master                      --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
           if [ -z "$run_id" ]; then
             echo "no successful map build found - selection will escalate to the full matrix"
             exit 0
@@ -664,12 +664,18 @@ jobs:
           # pull request", which is the kind of misleading-but-green log this feature keeps
           # producing when a condition is collapsed.
           #
-          # A master push MUST run everything, and not out of caution: the nightly map is built from
-          # a master run's digests, and any shard that did not run produced no digest, so the map
-          # would mark it always-run. Selecting on master therefore feeds its own gaps back into
-          # the map, and the feature decays a shard at a time into running everything - while
-          # looking like it works. Merge-group runs are the last gate before master and are not
-          # worth reducing either.
+          # What each event gets:
+          #   pull_request   line-level selection against the map
+          #   push (master)  FILE-level selection of the delta from the previously validated commit
+          #   anything else  the full matrix
+          #
+          # Master pushes were originally excluded entirely, because a reduced run produces no
+          # digests for the shards it skipped and "no digest" is what marks a shard always-run - so
+          # selecting on master fed its own gaps back into the map until the feature decayed into
+          # running everything while looking healthy. That is now closed at the source instead: the
+          # nightly map build only harvests a run whose shard-job count matches the shard list, so a
+          # reduced run can never become a map. Merge-group runs are the last gate before master and
+          # are still not reduced.
           $selectorTrusted = '${{ steps.selftest.outcome }}' -eq 'success'
           $eventCanReduce  = '${{ github.event_name }}' -eq 'pull_request'
 
@@ -691,7 +697,7 @@ jobs:
             # that is true no matter how stale the PR was.
             $prev = gh api --method GET "repos/${{ github.repository }}/actions/workflows/sonarcloud.yml/runs" `
                       -f event=push -f branch=master -f status=completed -f per_page=10 `
-                      --jq '[.workflow_runs[] | select(.head_sha != "${{ github.sha }}")][0].head_sha' 2>$null
+                      --jq '[.workflow_runs[] | select(.head_sha != "${{ github.sha }}")][0].head_sha // empty' 2>$null
             if (-not $prev) {
               Write-Host '::warning::no previously validated master commit - running the full matrix'
             }
