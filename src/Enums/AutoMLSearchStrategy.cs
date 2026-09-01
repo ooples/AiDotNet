@@ -15,6 +15,7 @@ namespace AiDotNet.Enums;
 /// <item><description><see cref="BayesianOptimization"/> tries to learn which settings work best and focus on them.</description></item>
 /// <item><description><see cref="Evolutionary"/> evolves good settings over time (useful for discrete/conditional knobs).</description></item>
 /// <item><description><see cref="MultiFidelity"/> uses short runs first and only gives more budget to promising trials.</description></item>
+/// <item><description><see cref="MapElites"/> keeps strong but behaviorally diverse model configurations.</description></item>
 /// </list>
 /// </para>
 /// </remarks>
@@ -65,6 +66,11 @@ public enum AutoMLSearchStrategy
     /// Trains a supernet supporting elastic depth, width, and kernel sizes.
     /// Best for: Multi-hardware deployment, mobile/edge devices.
     /// </summary>
-    OnceForAll
+    OnceForAll,
+
+    /// <summary>
+    /// MAP-Elites quality-diversity search over model family and configuration complexity.
+    /// </summary>
+    MapElites
 }
 
