@@ -347,60 +347,50 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, [1, _inputSize])
             : Engine.Reshape(input, [flatBatch, _inputSize]);
 
-        var outputs = new Tensor<T>([flatBatch, _reservoirSize]);
+        // EVERY STEP THROUGH THE ENGINE, ON PURPOSE. This body used to compute with NumOps scalar
+        // loops -- element-by-element copies and hand-rolled matmuls over _inputWeights and
+        // _reservoirWeights -- and finished by writing the state into the output with a raw
+        // stateSpan.CopyTo. Only Engine operations are recorded on the autodiff tape, so the layer
+        // was a tape DEAD END: nothing downstream connected to anything upstream.
+        //
+        // The symptom was a gradient that did not depend on the target at all.
+        // LiquidStateMachineTests.TrainingStep_ShouldDependOnTheTarget mirrors the target about the
+        // prediction, so the residual is exactly negated and the update must be ANTI-parallel. CI
+        // reported cosine 1.000000 with a deficit of 2.22E-16 -- machine epsilon, meaning the two
+        // gradient vectors were bitwise identical. A gradient that is bit-identical for opposite
+        // errors never saw the loss.
+        //
+        // The recurrence still runs one step at a time, since each state depends on the last, but
+        // each step is now tensor operations the tape can follow.
         T inputScale = NumOps.FromDouble(_inputScaling);
+        var scaledInput = Engine.TensorMultiplyScalar(input2D, inputScale);
+        var inputWeightsTransposed = Engine.TensorTranspose(_inputWeights);
+        var reservoirWeightsTransposed = Engine.TensorTranspose(_reservoirWeights);
 
+        // One matmul for every step's input contribution, rather than a scalar loop per step.
+        var inputContributions = Engine.TensorMatMul(scaledInput, inputWeightsTransposed);
+
+        var stepStates = new Tensor<T>[flatBatch];
         for (int i = 0; i < flatBatch; i++)
         {
-            // Extract step input manually to avoid GetSlice issues
-            var stepInput = new Tensor<T>([_inputSize]);
-            for (int j = 0; j < _inputSize; j++)
-            {
-                stepInput[j] = input2D[i, j];
-            }
-
-            // Scale input
-            for (int j = 0; j < _inputSize; j++)
-            {
-                stepInput[j] = NumOps.Multiply(stepInput[j], inputScale);
-            }
-
-            // Manual matmul for input contribution
-            var inputContribution = new Tensor<T>([_reservoirSize]);
-            for (int r = 0; r < _reservoirSize; r++)
-            {
-                T sum = NumOps.Zero;
-                for (int c = 0; c < _inputSize; c++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_inputWeights[r, c], stepInput[c]));
-                }
-                inputContribution[r] = sum;
-            }
-
-            // Manual matmul for weighted state
-            var weightedState = new Tensor<T>([_reservoirSize]);
-            for (int r = 0; r < _reservoirSize; r++)
-            {
-                T sum = NumOps.Zero;
-                for (int c = 0; c < _reservoirSize; c++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_reservoirWeights[r, c], _reservoirState[c]));
-                }
-                weightedState[r] = sum;
-            }
-
+            var inputContribution = Engine.TensorSlice(
+                inputContributions, new[] { i, 0 }, new[] { 1, _reservoirSize });
+            var stateRow = Engine.Reshape(_reservoirState, [1, _reservoirSize]);
+            var weightedState = Engine.TensorMatMul(stateRow, reservoirWeightsTransposed);
             var reservoirInput = Engine.TensorAdd(weightedState, inputContribution);
 
-            var newState = Engine.Reshape(ApplyActivation(Engine.Reshape(reservoirInput, [1, _reservoirSize])), [_reservoirSize]);
-            var oldComponent = Engine.TensorMultiplyScalar(_reservoirState, NumOps.FromDouble(1 - _leakingRate));
-            var newComponent = Engine.TensorMultiplyScalar(newState, NumOps.FromDouble(_leakingRate));
-            _reservoirState = Engine.TensorAdd(oldComponent, newComponent);
+            var activated = ApplyActivation(reservoirInput);
+            var oldComponent = Engine.TensorMultiplyScalar(stateRow, NumOps.FromDouble(1 - _leakingRate));
+            var newComponent = Engine.TensorMultiplyScalar(activated, NumOps.FromDouble(_leakingRate));
+            var nextState = Engine.TensorAdd(oldComponent, newComponent);
 
-            // Copy state to outputs row by row using Span
-            var stateSpan = _reservoirState.Data.Span;
-            var outputSpan = outputs.Data.Span;
-            stateSpan.CopyTo(outputSpan.Slice(i * _reservoirSize, _reservoirSize));
+            _reservoirState = Engine.Reshape(nextState, [_reservoirSize]);
+            stepStates[i] = nextState;
         }
+
+        var outputs = flatBatch == 1
+            ? stepStates[0]
+            : Engine.TensorConcatenate(stepStates, axis: 0);
 
         if (rank == 1)
         {
@@ -695,7 +685,16 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        _reservoirState.Fill(NumOps.Zero);
+        // REBIND, do not Fill. The forward pass hands its per-step state out as the layer's output,
+        // and those tensors share storage with _reservoirState so the autodiff tape can follow the
+        // recurrence. Zeroing in place therefore reached THROUGH the output a caller was already
+        // holding: Forward, ResetState, Forward returned 0 for the first output and a real value
+        // for the second, and the layer looked non-deterministic when it was not.
+        //
+        // Assigning a fresh zero tensor resets the layer exactly as before and leaves every tensor
+        // already handed out alone. The previous implementation was safe only because it copied the
+        // state into the output with a raw span copy, which is what severed the tape.
+        _reservoirState = new Tensor<T>([_reservoirSize]);
     }
 
     internal override Dictionary<string, string> GetMetadata()
@@ -745,9 +744,24 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
         }
 
         // Scale the reservoir weights to achieve the desired spectral radius
+        // A SPARSE RESERVOIR CAN COME OUT ALL ZERO, and then there is nothing to scale. With a low
+        // connection probability and a small reservoir -- which is exactly what the generated layer
+        // fixtures build -- every draw can miss, the largest eigenvalue is 0, and dividing the
+        // target spectral radius by it produced an infinite scale factor. The weights became
+        // infinite and the first forward returned NaN, which surfaced as
+        // ReservoirLayerTests.Serialize_Deserialize_ShouldPreserveBehavior reporting
+        // "original=NaN, deserialized=NaN" -- NaN on BOTH sides, so the round trip was faithfully
+        // preserving a value the layer had already broken.
+        //
+        // The companion normalisation below already guards its own division; this one did not.
         T maxEigenvalue = ComputeMaxEigenvalue(_reservoirWeights);
-        T scaleFactor = NumOps.FromDouble(_spectralRadius / Convert.ToDouble(maxEigenvalue));
-        _reservoirWeights = Engine.TensorMultiplyScalar(_reservoirWeights, scaleFactor);
+        double maxEigenvalueAsDouble = Convert.ToDouble(maxEigenvalue);
+        if (maxEigenvalueAsDouble != 0.0 && !double.IsNaN(maxEigenvalueAsDouble)
+            && !double.IsInfinity(maxEigenvalueAsDouble))
+        {
+            T scaleFactor = NumOps.FromDouble(_spectralRadius / maxEigenvalueAsDouble);
+            _reservoirWeights = Engine.TensorMultiplyScalar(_reservoirWeights, scaleFactor);
+        }
 
         // Initialize reservoir state to zeros
         _reservoirState.Fill(NumOps.Zero);
