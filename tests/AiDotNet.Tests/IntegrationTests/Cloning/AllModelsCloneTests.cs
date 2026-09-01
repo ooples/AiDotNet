@@ -596,6 +596,83 @@ public class AllModelsCloneTests
         Assert.Fail("no small constructible model was available to validate the independence check");
     }
 
+    /// <summary>Dumps the bounded option values for the type named by AIDOTNET_DUMP_OPTIONS.</summary>
+    /// <remarks>
+    /// Comparing what the generator produces against what a hand-written branch produced is the only
+    /// way to settle which knob differs and in which DIRECTION. Guessing from property names put
+    /// four wrong hypotheses into this file's history.
+    /// </remarks>
+    [Fact]
+    public void DumpBoundedOptions()
+    {
+        var wanted = Environment.GetEnvironmentVariable("AIDOTNET_DUMP_OPTIONS");
+        if (string.IsNullOrEmpty(wanted)) return;
+
+        var optionType = typeof(NeuralNetworkBase<>).Assembly.GetTypes()
+            .FirstOrDefault(t => string.Equals(t.Name, wanted, StringComparison.Ordinal));
+        Assert.True(optionType is not null, $"no type named {wanted}");
+
+        _output.WriteLine(
+            $"TABLE: types={AiDotNet.Testing.ModelTestScale.BoundedTypeCount} "
+                + $"knobs={AiDotNet.Testing.ModelTestScale.KnobCount} "
+                + $"asm={optionType!.Assembly.GetName().Name}");
+
+        var generated = AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(optionType!);
+        _output.WriteLine($"RESULT: generated is {(generated is null ? "NULL" : generated.GetType().Name)}");
+        var plain = Activator.CreateInstance(optionType!);
+
+        foreach (var property in optionType!.GetProperties().OrderBy(x => x.Name))
+        {
+            if (property.PropertyType != typeof(int) || !property.CanRead) continue;
+
+            var defaultValue = property.GetValue(plain);
+            var boundedValue = generated is null ? null : property.GetValue(generated);
+            var mark = Equals(defaultValue, boundedValue) ? "  " : "->";
+            _output.WriteLine($"{mark} {property.Name}: default={defaultValue} bounded={boundedValue}");
+        }
+    }
+
+    /// <summary>Probes ONE model named by AIDOTNET_PROBE_MODEL, for fast iteration.</summary>
+    /// <remarks>
+    /// A shard is 24 models and minutes long; chasing a single model's behaviour through it wastes
+    /// most of that time. No-ops when the variable is unset, so a normal run is unaffected.
+    /// </remarks>
+    [Fact]
+    public void ProbeOneModel()
+    {
+        var wanted = Environment.GetEnvironmentVariable("AIDOTNET_PROBE_MODEL");
+        if (string.IsNullOrEmpty(wanted)) return;
+
+        var open = typeof(NeuralNetworkBase<>).Assembly.GetTypes()
+            .Where(t => t.IsClass && !t.IsAbstract && !t.IsNested)
+            .Where(t => t.IsGenericTypeDefinition && t.GetGenericArguments().Length == 1)
+            .Where(DerivesFromNeuralNetworkBase)
+            .FirstOrDefault(t => string.Equals(t.Name, wanted, StringComparison.Ordinal));
+
+        Assert.True(open is not null, $"no model type named {wanted}");
+
+        Type closed;
+        try { closed = open!.MakeGenericType(typeof(float)); }
+        catch (Exception) { return; }
+
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var model = TryConstruct(closed);
+        var constructed = started.ElapsedMilliseconds;
+        Assert.True(model is not null, $"{wanted} could not be constructed");
+
+        Resolve(model!);
+        var resolved = started.ElapsedMilliseconds;
+
+        var copy = model!.DeepCopy() as NeuralNetworkBase<float>;
+        var copied = started.ElapsedMilliseconds;
+
+        _output.WriteLine(
+            $"{wanted}: construct={constructed}ms resolve={resolved - constructed}ms "
+                + $"copy={copied - resolved}ms params={model.ParameterCount}");
+
+        Assert.True(copy is not null, "DeepCopy returned null");
+    }
+
     /// <summary>Whether writing through one model leaves the other alone.</summary>
     private static bool IsIndependent(
         NeuralNetworkBase<float> original,
@@ -760,149 +837,7 @@ public class AllModelsCloneTests
     /// equivalent family by family.
     /// </remarks>
     private static object? CreateBoundedOptions(Type optionType)
-    {
-        if (typeof(NemotronSpeechOptions).IsAssignableFrom(optionType))
-        {
-            NemotronSpeechOptions? speech;
-            try
-            {
-                speech = Activator.CreateInstance(optionType) as NemotronSpeechOptions;
-            }
-            catch (Exception)
-            {
-                return null;
-            }
-
-            if (speech is null) return null;
-
-            // Match the generated Nemotron smoke fixture: preserve the Fast-Conformer -> adapter
-            // -> decoder topology without materializing the 24+32-layer paper-scale defaults.
-            speech.SampleRate = 16000;
-            speech.MaxAudioLengthSeconds = 1;
-            speech.EncoderDim = 64;
-            speech.DecoderDim = 64;
-            speech.NumEncoderLayers = 2;
-            speech.NumDecoderLayers = 2;
-            speech.NumAttentionHeads = 4;
-            speech.NumMels = 32;
-            speech.VocabSize = 64;
-            speech.MaxTextLength = 16;
-            speech.DropoutRate = 0.0;
-            speech.Language = "en";
-            return speech;
-        }
-
-        if (typeof(CodecTtsOptions).IsAssignableFrom(optionType))
-        {
-            CodecTtsOptions? codec;
-            try
-            {
-                codec = Activator.CreateInstance(optionType) as CodecTtsOptions;
-            }
-            catch (Exception)
-            {
-                return null;
-            }
-
-            if (codec is null) return null;
-
-            // Match the generated codec-LM smoke architecture: preserve the text encoder ->
-            // transformer -> codec-logit structure without materializing paper-scale defaults.
-            codec.NumCodebooks = 1;
-            codec.CodebookSize = 16;
-            codec.CodecFrameRate = 75;
-            codec.TextEncoderDim = 32;
-            codec.LLMDim = 32;
-            codec.NumEncoderLayers = 1;
-            codec.NumLLMLayers = 1;
-            codec.NumHeads = 4;
-            codec.VocabSize = 64;
-            codec.MaxTextLength = 8;
-            codec.MaxCodecFrames = 8;
-            codec.DropoutRate = 0.0;
-            return codec;
-        }
-
-        if (typeof(FoundationalVLMOptions).IsAssignableFrom(optionType))
-        {
-            FoundationalVLMOptions? foundational;
-            try
-            {
-                foundational = Activator.CreateInstance(optionType) as FoundationalVLMOptions;
-            }
-            catch (Exception)
-            {
-                return null;
-            }
-
-            if (foundational is null) return null;
-
-            foundational.ImageSize = 16;
-            foundational.VisionDim = 16;
-            foundational.TextDim = 16;
-            foundational.FusionDim = 16;
-            foundational.NumVisionLayers = 1;
-            foundational.NumTextLayers = 1;
-            foundational.NumFusionLayers = 1;
-            foundational.NumHeads = 4;
-            foundational.MaxSequenceLength = 16;
-            foundational.VocabSize = 128;
-            return foundational;
-        }
-
-        if (!typeof(GenerativeVLMOptions).IsAssignableFrom(optionType))
-        {
-            return null;
-        }
-
-        GenerativeVLMOptions? options;
-        try
-        {
-            options = Activator.CreateInstance(optionType) as GenerativeVLMOptions;
-        }
-        catch (Exception)
-        {
-            // Let the constructor sweep fall back to the declared optional value. A specialized
-            // options type is allowed to reject parameterless construction; that is unrelated to
-            // whether its owning model can be cloned.
-            // Not a family with a hand-written bound: fall through to the generated table,
-        // which covers every options type in the library (1194 types, 9285 knobs).
-        return AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(optionType);
-        }
-
-        if (options is null) return null;
-
-        options.ImageSize = 16;
-        options.VisionDim = 16;
-        options.DecoderDim = 16;
-        options.NumVisionLayers = 1;
-        options.NumDecoderLayers = 2;
-        options.NumHeads = 4;
-        options.VocabSize = 128;
-        options.MaxSequenceLength = 16;
-        options.MaxGenerationLength = 4;
-
-        if (options is InstructionTunedVLMOptions instructionTuned)
-        {
-            instructionTuned.ProjectionDim = 16;
-            instructionTuned.MaxVisualTokens = 16;
-        }
-
-        if (options is UnifiedVisionOptions unified)
-        {
-            unified.NumVisualTokens = 16;
-            unified.OutputImageSize = 16;
-        }
-
-        if (options is DeepSeekVL2Options deepSeek)
-        {
-            deepSeek.NumExperts = 2;
-            deepSeek.NumActiveExperts = 1;
-            deepSeek.EnableDynamicTiling = false;
-        }
-
-        return options;
-    }
+        => AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(optionType);
 
     private static bool DerivesFromNeuralNetworkBase(Type type)
     {
