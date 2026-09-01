@@ -15974,21 +15974,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 : src.GetTrainableParameters();
             if (sp.Count > 0)
             {
-                // SPARSE CANNOT BE SHARED. CloneShared falls through to CloneDeepCopy, which
-                // Tensors refuses for a sparse tensor ("CloneDeepCopy is not supported on sparse
-                // tensors. Use SparseTensor-specific APIs"). SparseNeuralNetwork therefore died
-                // inside the copy-on-write path instead of falling back, and the sweep reported it
-                // as a clone failure rather than a model the fast path cannot serve. Reject the
-                // candidate so DeepCopy takes the eager route, which handles sparse correctly.
-                for (int p = 0; p < sp.Count; p++)
-                {
-                    if (sp[p] is AiDotNet.Tensors.LinearAlgebra.SparseTensor<T>)
-                        return RejectCandidate("a sparse trainable tensor cannot be copy-on-write shared");
-                }
-
+                // Sparse storage shares through its OWN api. Tensor.CloneShared falls through to
+                // CloneDeepCopy, which Tensors refuses for sparse ("Use SparseTensor-specific
+                // APIs"), so SparseNeuralNetwork threw from inside this path. ShareTensor rebuilds a
+                // sparse tensor over the SAME value vector and index arrays, which is a real
+                // copy-on-write share: nothing is densified and no eager copy is taken.
                 var shared = new Tensor<T>[sp.Count];
                 for (int p = 0; p < sp.Count; p++)
-                    shared[p] = (Tensor<T>)sp[p].CloneShared();
+                    shared[p] = AiDotNet.Helpers.CopyOnWriteCloneHelper.ShareTensor(sp[p]);
                 try
                 {
                     dst.SetTrainableParameters(shared);
