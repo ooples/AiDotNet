@@ -292,6 +292,13 @@ if ($PreviousMap -and (Test-Path -LiteralPath $PreviousMap)) {
         foreach ($required in 'sha', 'knownShards', 'files') {
             if (-not $map.PSObject.Properties[$required]) { throw "no '$required' property" }
         }
+        # An unknown schema is treated as unreadable, not as best-effort: carrying is the one
+        # operation here where a misread map produces a STALE map rather than an escalation, so
+        # any doubt must land on instrument-everything.
+        if (-not $map.PSObject.Properties['schemaVersion'] -or [int] $map.schemaVersion -ne 1) {
+            throw "unsupported schemaVersion '$($map.schemaVersion)'"
+        }
+        if ($map.files -isnot [pscustomobject]) { throw 'files must be an object' }
     }
     catch {
         Write-Host "::warning::previous map unreadable ($($_.Exception.Message)) - instrumenting every shard"
@@ -322,9 +329,10 @@ $selfProducing = @($split.Carried).Count - $carriedFinal.Count
 Write-Host "instrument $($split.Instrument.Count), carry forward $($carriedFinal.Count), self-producing $selfProducing  [$($split.Reason)]"
 
 if ($CarryForwardDirectory -and $carriedFinal.Count -gt 0) {
-    if (-not (Test-Path -LiteralPath $CarryForwardDirectory)) {
-        New-Item -ItemType Directory -Path $CarryForwardDirectory -Force | Out-Null
-    }
+    # .NET call rather than New-Item: New-Item has no -LiteralPath, and its -Path is
+    # wildcard-expanded, so a directory name containing [ or ] would be created somewhere else.
+    # CreateDirectory is verbatim and idempotent.
+    [void] [System.IO.Directory]::CreateDirectory($CarryForwardDirectory)
     foreach ($shard in $carriedFinal) {
         $slug = $shard -replace '[\\/:*?"<>|\s-]+', '_'
         $n = Export-ShardDigest -Map $map -Shard $shard -Path (Join-Path $CarryForwardDirectory "$slug.digest.json")
