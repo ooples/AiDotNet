@@ -615,7 +615,8 @@ public class AllModelsCloneTests
         _output.WriteLine(
             $"TABLE: types={AiDotNet.Testing.ModelTestScale.BoundedTypeCount} "
                 + $"knobs={AiDotNet.Testing.ModelTestScale.KnobCount} "
-                + $"asm={optionType!.Assembly.GetName().Name}");
+                + $"asm={optionType!.Assembly.GetName().Name} "
+                + $"scaleAsm={typeof(AiDotNet.Testing.ModelTestScale).Assembly.Location}");
 
         var generated = AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(optionType!);
         _output.WriteLine($"RESULT: generated is {(generated is null ? "NULL" : generated.GetType().Name)}");
@@ -825,6 +826,17 @@ public class AllModelsCloneTests
     /// the same generated construction plan and state payload without turning the test into a
     /// multi-billion-parameter allocation benchmark.
     /// </remarks>
+    private static bool DerivesFromNeuralNetworkBase(Type type)
+    {
+        for (var b = type.BaseType; b is not null; b = b.BaseType)
+        {
+            if (b.IsGenericType && b.GetGenericTypeDefinition() == typeof(NeuralNetworkBase<>)) return true;
+            if (b.Name.StartsWith("NeuralNetworkBase", StringComparison.Ordinal)) return true;
+        }
+
+        return false;
+    }
+
     /// <summary>Builds a size-bounded options instance for a model the sweep is about to clone.</summary>
     /// <remarks>
     /// TestScaleOptionsGenerator emits bounds for every options type, which is how NEW models get
@@ -836,17 +848,17 @@ public class AllModelsCloneTests
     /// Do not add a branch here. Extend the generator; these shrink as generated bounds are shown
     /// equivalent family by family.
     /// </remarks>
+
+    /// <summary>Builds a size-bounded options instance for a model the sweep is about to clone.</summary>
+    /// <remarks>
+    /// Entirely generated. This method held one hand-written branch per model family, each naming a
+    /// family's option type and poking its dimensions down, and every new large model needed
+    /// another. TestScaleOptionsGenerator now emits bounds for every options type in the library, so
+    /// a new model is covered without touching this file.
+    ///
+    /// Do not add a branch here. Extend the generator's vocabulary instead and every model sharing
+    /// that property name is fixed at once.
+    /// </remarks>
     private static object? CreateBoundedOptions(Type optionType)
         => AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(optionType);
-
-    private static bool DerivesFromNeuralNetworkBase(Type type)
-    {
-        for (var b = type.BaseType; b is not null; b = b.BaseType)
-        {
-            if (b.IsGenericType && b.GetGenericTypeDefinition() == typeof(NeuralNetworkBase<>)) return true;
-            if (b.Name.StartsWith("NeuralNetworkBase", StringComparison.Ordinal)) return true;
-        }
-
-        return false;
-    }
 }
