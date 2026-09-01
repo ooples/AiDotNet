@@ -99,9 +99,15 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
     /// </remarks>
     private static readonly string[] CountMarkers =
     {
-        "NumLayers", "NumHiddenLayers", "NumEncoderLayers", "NumDecoderLayers", "NumVisionLayers",
-        "NumLLMLayers", "NumBlocks", "NumExperts", "NumCodebooks", "NumStages", "NumGroups",
-        "NumHeads", "NumAttentionHeads", "NumKeyValueHeads", "Depth", "LayerCount", "BlockCount",
+        // SUBSTRINGS, not full spellings. Enumerating names could never keep up: Florence2 calls its
+        // head count NumDecoderHeads, which matched none of NumHeads / NumAttentionHeads /
+        // NumKeyValueHeads, so it kept its default of 12 while DecoderEmbeddingDim was capped to 16.
+        // A head count must DIVIDE the embedding width, and 16/12 truncates to a head dimension of
+        // 1, giving 12 * 1 = 12 against an actual width of 16 -- MultiHeadAttentionLayer rejects
+        // exactly that. Matching any *Heads* and any *Layers* keeps counts at the count cap, and a
+        // cap of 2 divides every width bound this generator produces.
+        "Heads", "Layers", "Blocks", "Experts", "Codebooks", "Stages", "Groups",
+        "Depth", "LayerCount", "BlockCount",
     };
 
     /// <summary>Cap for a count of repeated structures.</summary>
