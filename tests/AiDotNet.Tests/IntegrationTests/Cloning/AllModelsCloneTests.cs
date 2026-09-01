@@ -612,14 +612,16 @@ public class AllModelsCloneTests
             .FirstOrDefault(t => string.Equals(t.Name, wanted, StringComparison.Ordinal));
         Assert.True(optionType is not null, $"no type named {wanted}");
 
+        // The table size and its DECLARING ASSEMBLY, both load-bearing. An empty table is what an
+        // over-attached generator produces in a compilation with no options types, and the copy in
+        // the test assembly then shadows the real one -- silently, since it still compiles and still
+        // returns an object.
         _output.WriteLine(
-            $"TABLE: types={AiDotNet.Testing.ModelTestScale.BoundedTypeCount} "
-                + $"knobs={AiDotNet.Testing.ModelTestScale.KnobCount} "
-                + $"asm={optionType!.Assembly.GetName().Name} "
-                + $"scaleAsm={typeof(AiDotNet.Testing.ModelTestScale).Assembly.Location}");
+            $"table: types={AiDotNet.Testing.ModelTestScale.BoundedTypeCount} "
+                + $"knobs={AiDotNet.Testing.ModelTestScale.KnobCount} from "
+                + $"{typeof(AiDotNet.Testing.ModelTestScale).Assembly.GetName().Name}");
 
         var generated = AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(optionType!);
-        _output.WriteLine($"RESULT: generated is {(generated is null ? "NULL" : generated.GetType().Name)}");
         var plain = Activator.CreateInstance(optionType!);
 
         foreach (var property in optionType!.GetProperties().OrderBy(x => x.Name))

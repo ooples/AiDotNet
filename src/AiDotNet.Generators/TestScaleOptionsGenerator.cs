@@ -116,6 +116,21 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
     /// </remarks>
     private const int KnobCap = 16;
 
+    /// <summary>Name markers for a SPATIAL input extent, which needs a floor rather than the cap.</summary>
+    /// <remarks>
+    /// A classifier backbone downsamples hard -- ResNet reduces by 32x through its stem and four
+    /// stages -- so a 16x16 input collapses to zero spatial extent before the classifier and the
+    /// model cannot run at all. The hand-written CreateForTesting chose 32x32 for exactly this
+    /// reason. 32 is the smallest power of two that survives a 32x reduction.
+    /// </remarks>
+    private static readonly string[] SpatialMarkers =
+    {
+        "InputHeight", "InputWidth", "InputSize", "ImageSize", "Resolution",
+    };
+
+    /// <summary>Bound for a spatial extent: small, but large enough to survive downsampling.</summary>
+    private const int SpatialCap = 32;
+
     /// <summary>Below this, a value is left alone entirely.</summary>
     /// <remarks>
     /// Counts that are already tiny (2 codebooks, 4 heads) carry structure worth preserving, and
@@ -162,7 +177,7 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
 
                 if (type.TypeKind != TypeKind.Class) continue;
                 if (!type.Name.EndsWith("Options") && !type.Name.EndsWith("Configuration")) continue;
-                if (!HasParameterlessConstructor(type)) continue;
+                if (!HasParameterlessConstructor(type) && !HasSynthesizableConstructor(type)) continue;
 
                 found.Add(type);
             }
@@ -180,6 +195,103 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         return symbol.InstanceConstructors.Any(c =>
             c.Parameters.Length == 0 && c.DeclaredAccessibility == Accessibility.Public);
     }
+
+    /// <summary>Whether a constructor-only type can be built from synthesized arguments.</summary>
+    /// <remarks>
+    /// The three vision configurations (ResNet, EfficientNet, DenseNet) are IMMUTABLE: constructor
+    /// only, zero settable properties, so the clamp-a-property mechanism cannot touch them. They are
+    /// the last hand-written test-scale logic in the library, and they all share one shape --
+    /// (SomeVariant variant, int numClasses, ...optionals). Named arguments let the generator supply
+    /// only the parameters worth bounding and leave every default alone.
+    ///
+    /// Deliberately narrow: every REQUIRED parameter must be an int or an enum. Anything else (a
+    /// path, a delegate, another options object) means the generator cannot honestly invent a value,
+    /// and the type is skipped rather than guessed at.
+    /// </remarks>
+    private static bool HasSynthesizableConstructor(INamedTypeSymbol type)
+        => PickSynthesizableConstructor(type) is not null;
+
+    private static IMethodSymbol? PickSynthesizableConstructor(INamedTypeSymbol type)
+    {
+        if (type.IsAbstract || type.IsStatic || type.IsGenericType) return null;
+        if (type.DeclaredAccessibility != Accessibility.Public) return null;
+
+        IMethodSymbol? best = null;
+        foreach (var ctor in type.InstanceConstructors)
+        {
+            if (ctor.DeclaredAccessibility != Accessibility.Public) continue;
+            if (ctor.Parameters.Length == 0) continue;
+
+            bool usable = true;
+            foreach (var parameter in ctor.Parameters)
+            {
+                if (parameter.HasExplicitDefaultValue) continue;
+                if (parameter.Type.TypeKind == TypeKind.Enum) continue;
+                if (parameter.Type.SpecialType == SpecialType.System_Int32) continue;
+                usable = false;
+                break;
+            }
+
+            if (!usable) continue;
+
+            // Fewest required parameters wins: the least invented state.
+            int required = ctor.Parameters.Count(x => !x.HasExplicitDefaultValue);
+            int bestRequired = best is null
+                ? int.MaxValue
+                : best.Parameters.Count(x => !x.HasExplicitDefaultValue);
+            if (required < bestRequired) best = ctor;
+        }
+
+        return best;
+    }
+
+    /// <summary>Renders the named arguments for a synthesized constructor call.</summary>
+    private static string? RenderSynthesizedArguments(IMethodSymbol constructor)
+    {
+        var parts = new System.Collections.Generic.List<string>();
+
+        foreach (var parameter in constructor.Parameters)
+        {
+            if (parameter.Type.TypeKind == TypeKind.Enum)
+            {
+                // FIRST declared member. Variant enums are conventionally ordered smallest-first
+                // (ResNet18, EfficientNetB0, DenseNet121), which is exactly the test-scale choice
+                // the hand-written CreateForTesting made by hand.
+                var firstMember = parameter.Type.GetMembers()
+                    .OfType<IFieldSymbol>()
+                    .FirstOrDefault(f => f.HasConstantValue);
+                if (firstMember is null)
+                {
+                    if (parameter.HasExplicitDefaultValue) continue;
+                    return null;
+                }
+
+                var enumName = parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                parts.Add($"{parameter.Name}: {enumName}.{firstMember.Name}");
+                continue;
+            }
+
+            if (parameter.Type.SpecialType != SpecialType.System_Int32) continue;
+
+            int bound = BoundFor(parameter.Name);
+            if (bound <= 0)
+            {
+                // Semantically fixed: only supply it when it is required, and then with its own
+                // declared default if it has one.
+                if (parameter.HasExplicitDefaultValue) continue;
+                parts.Add($"{parameter.Name}: {DefaultRequiredInt(parameter.Name)}");
+                continue;
+            }
+
+            parts.Add($"{parameter.Name}: {bound}");
+        }
+
+        return parts.Count == 0 ? null : string.Join(", ", parts);
+    }
+
+    /// <summary>Value for a required int the bounds vocabulary has nothing to say about.</summary>
+    /// <remarks>Ten, matching the class count the hand-written vision fixtures used.</remarks>
+    private static int DefaultRequiredInt(string parameterName) => 10;
 
     private static void Execute(SourceProductionContext context, ImmutableArray<INamedTypeSymbol?> types)
     {
@@ -207,6 +319,38 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("/// </remarks>");
         sb.AppendLine("public static class ModelTestScale");
         sb.AppendLine("{");
+        // Constructor-only types get a direct, strongly-typed branch: there is no property to clamp,
+        // so the bound has to be applied at construction.
+        var synthesized = new StringBuilder();
+        int synthesizedCount = 0;
+        foreach (var type in types)
+        {
+            if (type is null || HasParameterlessConstructor(type)) continue;
+
+            var ctor = PickSynthesizableConstructor(type);
+            if (ctor is null) continue;
+
+            var arguments = RenderSynthesizedArguments(ctor);
+            if (arguments is null) continue;
+
+            var typeName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            synthesized.AppendLine($"        if (optionsType == typeof({typeName}))");
+            synthesized.AppendLine("        {");
+            synthesized.AppendLine("            try");
+            synthesized.AppendLine("            {");
+            synthesized.AppendLine($"                return new {typeName}({arguments});");
+            synthesized.AppendLine("            }");
+            synthesized.AppendLine("            catch (global::System.Exception)");
+            synthesized.AppendLine("            {");
+            synthesized.AppendLine("                // A configuration that validates its arguments may reject a bounded");
+            synthesized.AppendLine("                // combination; that is not a failure, the caller falls back.");
+            synthesized.AppendLine("                return null;");
+            synthesized.AppendLine("            }");
+            synthesized.AppendLine("        }");
+            synthesized.AppendLine();
+            synthesizedCount++;
+        }
+
         sb.AppendLine("    private static readonly (global::System.Type Type, string Property, int Bound)[] Knobs =");
         sb.AppendLine("    {");
 
@@ -272,6 +416,10 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("    {");
         sb.AppendLine("        if (optionsType is null) return null;");
         sb.AppendLine();
+        if (synthesizedCount > 0)
+        {
+            sb.Append(synthesized.ToString());
+        }
         sb.AppendLine("        var key = optionsType.IsGenericType");
         sb.AppendLine("            ? optionsType.GetGenericTypeDefinition()");
         sb.AppendLine("            : optionsType;");
@@ -314,6 +462,9 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine($"    /// <summary>Options types carrying at least one generated bound: {typeCount}.</summary>");
         sb.AppendLine($"    public static int BoundedTypeCount => {typeCount};");
         sb.AppendLine();
+        sb.AppendLine($"    /// <summary>Constructor-only types built from synthesized arguments: {synthesizedCount}.</summary>");
+        sb.AppendLine($"    public static int SynthesizedTypeCount => {synthesizedCount};");
+        sb.AppendLine();
         sb.AppendLine($"    /// <summary>Total generated knob entries: {knobCount}.</summary>");
         sb.AppendLine($"    public static int KnobCount => {knobCount};");
         sb.AppendLine("}");
@@ -321,16 +472,28 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         context.AddSource("ModelTestScale.g.cs", sb.ToString());
     }
 
+    /// <summary>Bound for a knob name, or 0 to leave it alone.</summary>
+    /// <remarks>
+    /// Case-INSENSITIVE on purpose. This is asked about PascalCase properties and camelCase
+    /// constructor parameters alike, and an ordinal match silently skipped every synthesized
+    /// constructor argument -- inputHeight never matched InputHeight, so a spatial extent meant to
+    /// floor at 32 was capped to 16 and a 32x-downsampling backbone lost its spatial dims entirely.
+    /// </remarks>
     private static int BoundFor(string propertyName)
     {
         foreach (var fixedName in SemanticallyFixed)
         {
-            if (propertyName.IndexOf(fixedName, System.StringComparison.Ordinal) >= 0) return 0;
+            if (propertyName.IndexOf(fixedName, System.StringComparison.OrdinalIgnoreCase) >= 0) return 0;
         }
 
         foreach (var marker in CountMarkers)
         {
-            if (propertyName.IndexOf(marker, System.StringComparison.Ordinal) >= 0) return CountCap;
+            if (propertyName.IndexOf(marker, System.StringComparison.OrdinalIgnoreCase) >= 0) return CountCap;
+        }
+
+        foreach (var marker in SpatialMarkers)
+        {
+            if (propertyName.IndexOf(marker, System.StringComparison.OrdinalIgnoreCase) >= 0) return SpatialCap;
         }
 
         return KnobCap;
