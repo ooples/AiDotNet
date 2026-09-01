@@ -197,7 +197,9 @@ public class Phase1GateTests : IClassFixture<NetworkFixture<float>>
     public async Task MiniNetworks_AreMuchSmallerThanFullVariants()
     {
         // Compare mini DenseNet to full DenseNet121
-        var miniConfig = DenseNetConfiguration.CreateForTesting(10);
+        var miniConfig = (AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(typeof(DenseNetConfiguration),
+            new Dictionary<string, int> { ["numClasses"] = 10 }) as DenseNetConfiguration
+            ?? throw new InvalidOperationException("no generated bound for DenseNetConfiguration"));
         var fullConfig = new DenseNetConfiguration(DenseNetVariant.DenseNet121, 10);
 
         var miniLayers = miniConfig.GetExpectedLayerCount();

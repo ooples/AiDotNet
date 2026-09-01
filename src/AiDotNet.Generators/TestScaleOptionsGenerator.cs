@@ -284,11 +284,7 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
                 var companions = constructor.Parameters
                     .Where(x => x.Name.StartsWith("custom", System.StringComparison.OrdinalIgnoreCase))
                     .ToArray();
-                var hasCompanions = companions.Length > 0 && companions.All(x =>
-                    x.Type is INamedTypeSymbol n
-                    && n.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T
-                    && (n.TypeArguments[0].SpecialType == SpecialType.System_Int32
-                        || n.TypeArguments[0].SpecialType == SpecialType.System_Double));
+                var hasCompanions = companions.Length > 0 && companions.All(IsSupplyableCompanion);
                 var firstMember = (hasCompanions
                         ? members.FirstOrDefault(f =>
                             string.Equals(f.Name, "Custom", System.StringComparison.Ordinal))
@@ -325,6 +321,19 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
                     parts.Add($"{parameter.Name}: 1.0");
                     continue;
                 }
+            }
+
+            // An int[] companion describes a per-STAGE structure -- DenseNet's customBlockLayers
+            // is layers-per-dense-block. Four stages is the near-universal backbone convention
+            // (ResNet, DenseNet and EfficientNet all use four), and each stage takes the count cap,
+            // which reproduces the hand-written [2, 2, 2, 2] exactly.
+            if (parameter.Type is IArrayTypeSymbol array
+                && array.ElementType.SpecialType == SpecialType.System_Int32
+                && parameter.Name.StartsWith("custom", System.StringComparison.OrdinalIgnoreCase))
+            {
+                var stages = string.Join(", ", Enumerable.Repeat(CountCap.ToString(), BackboneStages));
+                parts.Add($"{parameter.Name}: new int[] {{ {stages} }}");
+                continue;
             }
 
             if (parameter.Type.SpecialType != SpecialType.System_Int32) continue;
@@ -367,6 +376,23 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
     /// <summary>Value for a required int the bounds vocabulary has nothing to say about.</summary>
     /// <remarks>Ten, matching the class count the hand-written vision fixtures used.</remarks>
     private static int DefaultRequiredInt(string parameterName) => 10;
+
+    /// <summary>Stages in a conventional convolutional backbone.</summary>
+    /// <remarks>Four, as ResNet, DenseNet and EfficientNet all use.</remarks>
+    private const int BackboneStages = 4;
+
+    /// <summary>Whether the generator can honestly invent a value for a Custom companion.</summary>
+    private static bool IsSupplyableCompanion(IParameterSymbol parameter)
+    {
+        if (parameter.Type is IArrayTypeSymbol array)
+            return array.ElementType.SpecialType == SpecialType.System_Int32;
+
+        if (parameter.Type is not INamedTypeSymbol named) return false;
+        if (named.OriginalDefinition.SpecialType != SpecialType.System_Nullable_T) return false;
+
+        var inner = named.TypeArguments[0].SpecialType;
+        return inner == SpecialType.System_Int32 || inner == SpecialType.System_Double;
+    }
 
     private static void Execute(SourceProductionContext context, ImmutableArray<INamedTypeSymbol?> types)
     {
