@@ -63,7 +63,7 @@ public sealed class FusedProjectionSource : INamedTensorSource
     }
 
     /// <summary>The wrapped source this adapter splits fused projections from (used to detect a GGUF backing).</summary>
-    public INamedTensorSource Inner => _inner;
+    internal INamedTensorSource Inner => _inner;
 
     /// <inheritdoc/>
     public IReadOnlyCollection<string> TensorNames => _names;

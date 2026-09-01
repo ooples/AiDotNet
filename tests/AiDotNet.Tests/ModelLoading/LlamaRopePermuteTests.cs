@@ -49,17 +49,20 @@ namespace AiDotNet.Tests.ModelLoading
         // Opt-in golden parity: loads the real SmolLM2-360M HF safetensors and checks the first-16-token logits
         // against the PyTorch reference. Proves the q/k permute + interleaved RoPE reproduces HF exactly. Skips
         // silently when the local fixtures are absent (CI), since the checkpoint cannot be committed.
-        [Fact]
+        [SkippableFact]
+        [Trait("Category", "Fixture")]
         public void SmolLM2_HfSafetensors_ReproducesPyTorchLogitsOracle()
         {
-            const string dir = @"C:\Users\cheat\Temp\he-m2-audit\data\smollm2-360m";
-            const string dataRoot = @"C:\Users\cheat\Temp\he-m2-audit\data";
+            string dir = FixtureDir;
+            string dataRoot = FixtureDataRoot;
             string modelPath = Path.Combine(dir, "model_f32.safetensors");
             string configPath = Path.Combine(dir, "config.json");
             string refPath = Path.Combine(dataRoot, "ref_logits_16.f32");
             string tokPath = Path.Combine(dataRoot, "wikitext2_test_tokens.i32");
-            if (!File.Exists(modelPath) || !File.Exists(configPath) || !File.Exists(refPath) || !File.Exists(tokPath))
-                return; // fixtures not present — nothing to verify (this test is local-only)
+            // Report SKIPPED (not passed) when the local-only checkpoint is absent, so CI never counts an
+            // unvalidated golden test as a success. [Category=Fixture] lets a fixture-enabled job select it.
+            Skip.IfNot(File.Exists(modelPath) && File.Exists(configPath) && File.Exists(refPath) && File.Exists(tokPath),
+                "SmolLM2 fixtures absent (local-only; set AIDOTNET_SMOLLM2_DIR / AIDOTNET_SMOLLM2_DATA to enable).");
 
             const int V = 49152;
             var config = HuggingFaceConfig.FromFile(configPath);
@@ -99,15 +102,16 @@ namespace AiDotNet.Tests.ModelLoading
         // -> LlamaModelBuilder.Build (the permute fix). Proves the fix reaches the facade. Opt-in / local-only;
         // the shared fixture dir ships a bf16 model.safetensors so this asserts HF-correct argmax (bf16-robust)
         // rather than the tight f32 logit tolerance the direct-loader test above checks.
-        [Fact]
+        [SkippableFact]
+        [Trait("Category", "Fixture")]
         public void SmolLM2_ViaPretrainedSourceFacade_ReproducesArgmax()
         {
-            const string dir = @"C:\Users\cheat\Temp\he-m2-audit\data\smollm2-360m";
-            const string dataRoot = @"C:\Users\cheat\Temp\he-m2-audit\data";
+            string dir = FixtureDir;
+            string dataRoot = FixtureDataRoot;
             string refPath = Path.Combine(dataRoot, "ref_logits_16.f32");
             string tokPath = Path.Combine(dataRoot, "wikitext2_test_tokens.i32");
-            if (!File.Exists(Path.Combine(dir, "config.json")) || !File.Exists(refPath) || !File.Exists(tokPath))
-                return; // fixtures not present
+            Skip.IfNot(File.Exists(Path.Combine(dir, "config.json")) && File.Exists(refPath) && File.Exists(tokPath),
+                "SmolLM2 fixtures absent (local-only; set AIDOTNET_SMOLLM2_DIR / AIDOTNET_SMOLLM2_DATA to enable).");
 
             const int V = 49152;
             var model = PretrainedLoader<float>.Load(PretrainedSource.Safetensors(dir));
@@ -139,16 +143,17 @@ namespace AiDotNet.Tests.ModelLoading
         // the PyTorch reference 15.372. A longer-sequence complement to the 16-token logit oracle above: it exercises
         // full-context position handling across 8x1024 tokens, which a 16-token check cannot. Skips silently without
         // the local fixtures (CI), since the checkpoint is too large to commit.
-        [Fact]
+        [SkippableFact]
+        [Trait("Category", "Fixture")]
         public void SmolLM2_HfSafetensors_Reproduces8WindowPerplexity()
         {
-            const string dir = @"C:\Users\cheat\Temp\he-m2-audit\data\smollm2-360m";
-            const string dataRoot = @"C:\Users\cheat\Temp\he-m2-audit\data";
+            string dir = FixtureDir;
+            string dataRoot = FixtureDataRoot;
             string modelPath = Path.Combine(dir, "model_f32.safetensors");
             string configPath = Path.Combine(dir, "config.json");
             string tokPath = Path.Combine(dataRoot, "wikitext2_test_tokens.i32");
-            if (!File.Exists(modelPath) || !File.Exists(configPath) || !File.Exists(tokPath))
-                return; // fixtures not present — local-only
+            Skip.IfNot(File.Exists(modelPath) && File.Exists(configPath) && File.Exists(tokPath),
+                "SmolLM2 fixtures absent (local-only; set AIDOTNET_SMOLLM2_DIR / AIDOTNET_SMOLLM2_DATA to enable).");
 
             const int V = 49152, S = 1024, windows = 8;
             var config = HuggingFaceConfig.FromFile(configPath);
@@ -184,6 +189,14 @@ namespace AiDotNet.Tests.ModelLoading
             double ppl = Math.Exp(totalCe / n);
             Assert.True(Math.Abs(ppl - 15.372) < 0.1, $"8-window perplexity {ppl:F3} differs from PyTorch 15.372 by more than 0.1");
         }
+
+        // Fixture roots for the opt-in golden tests. Overridable via env vars so the tests are portable to any
+        // machine/CI that supplies the SmolLM2-360M checkpoint; default to the local research fixture dir.
+        private static string FixtureDir =>
+            Environment.GetEnvironmentVariable("AIDOTNET_SMOLLM2_DIR") ?? @"C:\Users\cheat\Temp\he-m2-audit\data\smollm2-360m";
+
+        private static string FixtureDataRoot =>
+            Environment.GetEnvironmentVariable("AIDOTNET_SMOLLM2_DATA") ?? @"C:\Users\cheat\Temp\he-m2-audit\data";
 
         private static int[] ReadInt32(string path)
         {
