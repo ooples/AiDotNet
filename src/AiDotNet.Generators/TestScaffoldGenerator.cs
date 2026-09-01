@@ -13575,7 +13575,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             bool isLang = model.Domains.Contains(2) || model.Domains.Contains(5);
             // Language-model fixtures use legal token widths; GAN fixtures use their latent/image contracts.
             bool isCausalGanGenerator = model.ClassName == "CausalGANGenerator";
-            int dim = model.ClassName == "FastText"
+            int dim = model.ClassName == "QuantumNeuralNetwork"
+                ? 128 // Its parameterless architecture declares 128 amplitude-encoded input features.
+                : model.ClassName == "FastText"
                 ? 32 // Generated bounded fixture declares inputSize/maxTokens: 32.
                 : model.ClassName is "EagleLanguageModel" or "FinchLanguageModel"
                 ? 4 // Their bounded constructors above declare inputSize: 4.
@@ -13601,13 +13603,153 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine(model.ClassName == "HamiltonianNeuralNetwork"
                     ? $"    protected override int[] InputShape => ResolveModelDeclaredInputShape(new[] {{ {dim} }});"
                     : $"    protected override int[] InputShape => new[] {{ {dim} }};");
-                sb.AppendLine(model.ClassName == "FastText"
+                sb.AppendLine(model.ClassName == "QuantumNeuralNetwork"
+                    ? "    protected override int[] OutputShape => new[] { 1 };"
+                    : model.ClassName == "FastText"
                     ? "    protected override int[] OutputShape => new[] { 128 };"
                     : model.ClassName == "XLSTMLanguageModel"
                     ? "    protected override int[] OutputShape => new[] { 16, 64 };"
                     : isCausalGanGenerator
                         ? "    protected override int[] OutputShape => new[] { 10 };"
                         : "    protected override int[] OutputShape => new[] { 4 };");
+            }
+
+            if (model.ClassName == "QuantumNeuralNetwork")
+            {
+                // QuantumNeuralNetwork's public prediction is a Born-rule probability, while its
+                // configured loss consumes the pre-measurement amplitude. The generic harness must
+                // compare public predictions to public targets rather than squaring them twice.
+                sb.AppendLine("    protected override bool ConfiguredLossAcceptsPublicPrediction => false;");
+                sb.AppendLine();
+
+                // Amplitude encoding is deliberately invariant to uniform scalar multiplication.
+                // Give the generic input-sensitivity invariants two different directions instead of
+                // two constant vectors that normalize to the same state.
+                sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateConstantTensor(int[] shape, double value)");
+                sb.AppendLine("    {");
+                sb.AppendLine("        var tensor = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(shape);");
+                sb.AppendLine("        int len = tensor.Length;");
+                sb.AppendLine("        for (int i = 0; i < len; i++)");
+                sb.AppendLine("            tensor[i] = (float)(value + 0.5 * System.Math.Sin(i * System.Math.PI / System.Math.Max(1, len - 1)));");
+                sb.AppendLine("        return tensor;");
+                sb.AppendLine("    }");
+                sb.AppendLine();
+
+                sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
+                sb.AppendLine("    public override async System.Threading.Tasks.Task ScaledInput_ShouldChangeOutput()");
+                sb.AppendLine("    {");
+                sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
+                sb.AppendLine("        using var _arena = global::AiDotNet.Tensors.Helpers.TensorArena.Create();");
+                sb.AppendLine("        var rng = ModelTestHelpers.CreateSeededRandom();");
+                sb.AppendLine("        using var network = CreateNetwork();");
+                sb.AppendLine("        var input = CreateRandomTensor(InputShape, rng);");
+                sb.AppendLine("        var perturbedInput = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(InputShape);");
+                sb.AppendLine("        int len = input.Length;");
+                sb.AppendLine("        for (int i = 0; i < len; i++)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            double delta = 0.5 * System.Math.Sin(i * System.Math.PI / System.Math.Max(1, len - 1));");
+                sb.AppendLine("            perturbedInput[i] = (float)(input[i] + delta);");
+                sb.AppendLine("        }");
+                sb.AppendLine("        var output1 = network.Predict(input);");
+                sb.AppendLine("        var output2 = network.Predict(perturbedInput);");
+                sb.AppendLine("        bool anyDifferent = false;");
+                sb.AppendLine("        int minLen = System.Math.Min(output1.Length, output2.Length);");
+                sb.AppendLine("        for (int i = 0; i < minLen; i++)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            if (System.Math.Abs(output1[i] - output2[i]) > 1e-10)");
+                sb.AppendLine("            {");
+                sb.AppendLine("                anyDifferent = true;");
+                sb.AppendLine("                break;");
+                sb.AppendLine("            }");
+                sb.AppendLine("        }");
+                sb.AppendLine("        Xunit.Assert.True(anyDifferent,");
+                sb.AppendLine("            \"Quantum network output did not change when the input direction changed.\");");
+                sb.AppendLine("    }");
+                sb.AppendLine();
+
+                // Defect 2's real invariant. QuantumLayer.Forward returns probabilities, so their
+                // sum is exactly the squared norm after the unitary circuit. Dividing amplitudes by
+                // sum(|state|^2) instead of its square root makes this deterministic input sum to
+                // 0.5333 rather than 1; unlike the old random scalar-readout threshold, no valid
+                // dense projection or cancellation can false-fail this assertion.
+                sb.AppendLine("    [Xunit.Fact]");
+                sb.AppendLine("    public void QuantumLayer_ProbabilitiesHaveUnitSum()");
+                sb.AppendLine("    {");
+                sb.AppendLine("        using var layer = new global::AiDotNet.NeuralNetworks.Layers.QuantumLayer<double>(4, 4, 2);");
+                sb.AppendLine("        using var input = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4 });");
+                sb.AppendLine("        for (int i = 0; i < input.Length; i++) input[i] = i + 1;");
+                sb.AppendLine("        using var output = layer.Forward(input);");
+                sb.AppendLine("        double probabilitySum = 0.0;");
+                sb.AppendLine("        for (int i = 0; i < output.Length; i++)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            Xunit.Assert.True(IsFinite(output[i]) && output[i] >= 0,");
+                sb.AppendLine("                $\"Quantum probability[{i}] must be finite and non-negative, got {output[i]}.\");");
+                sb.AppendLine("            probabilitySum += output[i];");
+                sb.AppendLine("        }");
+                sb.AppendLine("        Xunit.Assert.InRange(probabilitySum, 0.9999, 1.0001);");
+                sb.AppendLine("    }");
+                sb.AppendLine();
+
+                // LayerBase assigns a distinct deterministic RandomSeed before each derived layer
+                // constructor runs. QuantumLayer used to bypass it and consume the shared RNG, so
+                // equal architecture seeds produced different circuits after unrelated random work.
+                sb.AppendLine("    [Xunit.Fact]");
+                sb.AppendLine("    public void SeededInitialization_IsIndependentOfSharedRandomConsumption()");
+                sb.AppendLine("    {");
+                sb.AppendLine("        using var first = CreateSeededQuantumNetwork(1729);");
+                sb.AppendLine("        var firstParameters = first.GetParameters();");
+                sb.AppendLine("        for (int i = 0; i < 1000; i++)");
+                sb.AppendLine("            _ = global::AiDotNet.Tensors.Helpers.RandomHelper.ThreadSafeRandom.Next();");
+                sb.AppendLine("        using var second = CreateSeededQuantumNetwork(1729);");
+                sb.AppendLine("        var secondParameters = second.GetParameters();");
+                sb.AppendLine("        Xunit.Assert.Equal(firstParameters.Length, secondParameters.Length);");
+                sb.AppendLine("        for (int i = 0; i < firstParameters.Length; i++)");
+                sb.AppendLine("            Xunit.Assert.Equal(firstParameters[i], secondParameters[i]);");
+                sb.AppendLine("    }");
+                sb.AppendLine();
+                sb.AppendLine("    private static global::AiDotNet.NeuralNetworks.QuantumNeuralNetwork<double> CreateSeededQuantumNetwork(int seed)");
+                sb.AppendLine("    {");
+                sb.AppendLine("        var architecture = new global::AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(");
+                sb.AppendLine("            inputType: global::AiDotNet.Enums.InputType.OneDimensional,");
+                sb.AppendLine("            taskType: global::AiDotNet.Enums.NeuralNetworkTaskType.Regression,");
+                sb.AppendLine("            inputSize: 128, outputSize: 1)");
+                sb.AppendLine("        { RandomSeed = seed };");
+                sb.AppendLine("        return new global::AiDotNet.NeuralNetworks.QuantumNeuralNetwork<double>(architecture, 4);");
+                sb.AppendLine("    }");
+                sb.AppendLine();
+
+                sb.AppendLine("    [Xunit.Fact]");
+                sb.AppendLine("    public void LargeFiniteInput_DoesNotCollapseTheQuantumStateToZero()");
+                sb.AppendLine("    {");
+                sb.AppendLine("        using var network = CreateNetwork();");
+                sb.AppendLine("        var input = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(InputShape);");
+                sb.AppendLine("        for (int i = 0; i < input.Length; i++)");
+                sb.AppendLine("            input[i] = (i & 1) == 0 ? float.MaxValue : -float.MaxValue;");
+                sb.AppendLine("        var output = network.Predict(input);");
+                sb.AppendLine("        bool anyPositive = false;");
+                sb.AppendLine("        for (int i = 0; i < output.Length; i++)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            Xunit.Assert.True(IsFinite(output[i]));");
+                sb.AppendLine("            anyPositive |= output[i] > 0;");
+                sb.AppendLine("        }");
+                sb.AppendLine("        Xunit.Assert.True(anyPositive);");
+                sb.AppendLine("    }");
+                sb.AppendLine();
+
+                sb.AppendLine("    [Xunit.Fact]");
+                sb.AppendLine("    public void TinyFiniteInput_PreservesItsDirection()");
+                sb.AppendLine("    {");
+                sb.AppendLine("        using var network = CreateNetwork();");
+                sb.AppendLine("        var tinyInput = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(InputShape);");
+                sb.AppendLine("        var unitInput = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(InputShape);");
+                sb.AppendLine("        tinyInput[0] = 1e-20f;");
+                sb.AppendLine("        unitInput[0] = 1.0f;");
+                sb.AppendLine("        var tinyOutput = network.Predict(tinyInput);");
+                sb.AppendLine("        var unitOutput = network.Predict(unitInput);");
+                sb.AppendLine("        Xunit.Assert.Equal(unitOutput.Length, tinyOutput.Length);");
+                sb.AppendLine("        for (int i = 0; i < unitOutput.Length; i++)");
+                sb.AppendLine("            Xunit.Assert.Equal(unitOutput[i], tinyOutput[i], 5);");
+                sb.AppendLine("    }");
             }
 
             if (model.ClassName == "XLSTMLanguageModel")

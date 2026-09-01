@@ -90,23 +90,6 @@ public class QuantumStateEncodingRegressionTests
     }
 
     [Fact]
-    public void Output_IsNotCrushedTowardZero_BySquaredNormNormalisation()
-    {
-        // Defect 2's signature. Dividing by the SQUARED norm shrinks the state by roughly the feature
-        // count at EACH of the two quantum layers; at 128 features that drove Predict to ~4.6e-4 and
-        // starved the gradients. A correctly normalised state keeps the readout on a usable scale.
-        using var model = new QuantumNeuralNetwork<float>();
-        using var input = Input(i => (float)Math.Sin(i * 0.7));
-        using var output = model.Predict(input);
-
-        double maxAbs = 0.0;
-        for (int i = 0; i < output.Length; i++) maxAbs = Math.Max(maxAbs, Math.Abs(output[i]));
-
-        Assert.True(maxAbs > 1e-3,
-            $"output collapsed to {maxAbs:G6}; the squared-norm normalisation bug produced ~4.6e-4 here");
-    }
-
-    [Fact]
     public void Training_KeepsParametersFinite()
     {
         // Integration-level: the NaN used to reach the parameters through training, which is what
