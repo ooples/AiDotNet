@@ -29,7 +29,8 @@
     two apart. A clean run of this over time is the evidence that selection is safe to rely on.
 
 .PARAMETER MapFile
-    The shard map that WOULD have been in effect - the previous map, not one built from this run.
+    The shard map that WOULD have been in effect, identified by the source run's marker rather than
+    guessed from workflow chronology. Never a map built from the run being audited.
 
 .PARAMETER OutcomesFile
     JSON array of { shard, outcome } for every shard in the audited run. `outcome` is the shard's
@@ -151,11 +152,25 @@ if ($SelfTest) {
 $outcomes = @(Get-Content -LiteralPath $OutcomesFile -Raw | ConvertFrom-Json)
 if ($outcomes.Count -eq 0) { throw "No shard outcomes in $OutcomesFile - nothing to audit." }
 
-$allShards = @($outcomes | ForEach-Object { [string] $_.shard })
+$allShards = [System.Collections.Generic.List[string]]::new()
+$seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+foreach ($outcome in $outcomes) {
+    if (-not $outcome.PSObject.Properties['shard'] -or -not $outcome.PSObject.Properties['outcome']) {
+        throw 'Every outcome must contain shard and outcome.'
+    }
+    $name = [string] $outcome.shard
+    $conclusion = [string] $outcome.outcome
+    if ([string]::IsNullOrWhiteSpace($name)) { throw 'Outcome shard names must be nonempty.' }
+    if (-not $seen.Add($name)) { throw "Duplicate outcome for shard '$name'." }
+    if ($conclusion -notin @('success', 'failure')) {
+        throw "Shard '$name' has unauditable outcome '$conclusion'."
+    }
+    [void] $allShards.Add($name)
+}
 $failed = @($outcomes | Where-Object { [string] $_.outcome -ne 'success' } | ForEach-Object { [string] $_.shard })
 
 $selectionFile = Join-Path ([System.IO.Path]::GetTempPath()) "selection-audit-$PID.json"
-& $SelectorPath -MapFile $MapFile -OutFile $selectionFile | Out-Null
+& $SelectorPath -MapFile $MapFile -ExpectedShards @($allShards) -OutFile $selectionFile | Out-Null
 $selection = Get-Content -LiteralPath $selectionFile -Raw | ConvertFrom-Json
 Remove-Item -LiteralPath $selectionFile -ErrorAction SilentlyContinue
 
@@ -173,6 +188,8 @@ if ($result.Escalated) {
 if ($result.MissCount -gt 0) {
     Write-Host "::error::selection would have SKIPPED $($result.MissCount) shard(s) that failed:"
     foreach ($m in $result.Missed) { Write-Host "  MISSED: $m" }
+} elseif ($result.Failed -eq 0) {
+    Write-Host 'audit: no failure opportunity in this full run; selection volume was measured but miss safety was not exercised'
 } else {
     Write-Host 'audit: no misses'
 }

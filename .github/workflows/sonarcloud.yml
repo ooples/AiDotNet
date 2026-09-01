@@ -37,14 +37,18 @@ on:
         required: false
         type: boolean
         default: false
+      test_impact_map_run_id:
+        description: 'Internal: exact Test impact map run whose artifact should be audited against this forced run.'
+        required: false
+        default: ''
   schedule:
     # Weekly CodeQL scan on Mondays at 8am UTC
     - cron: '0 8 * * 1'
 
 concurrency:
-  # Keep only the newest run for a PR, merge-group ref, or protected branch. A master push
-  # normally reuses its exact-tree PR artifacts, so it no longer queues another test matrix.
-  group: build-${{ github.event.pull_request.number || github.ref }}
+  # Coverage-map runs are deliberately isolated from ordinary master activity. The Monday CodeQL
+  # schedule and a master push must not cancel the full matrix that feeds the next map.
+  group: build-${{ inputs.collect_coverage_everywhere && 'coverage-map' || github.event.pull_request.number || github.ref }}
   # A synchronize event captured while a PR was still a draft can be delivered after the
   # ready_for_review run has started. Its job-level draft gates intentionally skip validation,
   # so it must never cancel the real ready run and replace it with an all-skipped check suite.
@@ -619,11 +623,13 @@ jobs:
           run_id=$(gh run list --workflow test-impact-map.yml --branch master                      --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
           if [ -z "$run_id" ]; then
             echo "no successful map build found - selection will escalate to the full matrix"
+            echo "run_id=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
           gh run download "$run_id" --name shard-map --dir map || echo "map artifact unavailable"
 
-      # The selector's own tests, run here rather than nowhere. Two defects on this PR were caught
+      # The impact tooling's own tests, run here rather than nowhere. Two defects on this PR were caught
       # only because these exist - reading the wrong side of a diff hunk, and a staleness check that
       # silently pinned the feature off - and both looked healthy in the logs.
       #
@@ -632,11 +638,15 @@ jobs:
       # instead would block every PR in the repo on a tooling bug while adding no safety, since the
       # behaviour it forces is the behaviour escalation already gives. The error annotation below is
       # what makes it visible.
-      - name: Verify the selector
+      - name: Verify the impact tooling
         id: selftest
         continue-on-error: true
         shell: pwsh
-        run: ./tools/TestImpact/Select-Shards.ps1 -SelfTest
+        run: |
+          ./tools/TestImpact/Select-Shards.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Select-Shards self-test failed' }
+          ./tools/TestImpact/New-ShardMap.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'New-ShardMap self-test failed' }
 
       - name: Select
         id: select
@@ -666,59 +676,14 @@ jobs:
           # pull request", which is the kind of misleading-but-green log this feature keeps
           # producing when a condition is collapsed.
           #
-          # What each event gets:
-          #   pull_request   line-level selection against the map
-          #   push (master)  FILE-level selection of the delta from the previously validated commit
-          #   anything else  the full matrix
-          #
-          # Master pushes were originally excluded entirely, because a reduced run produces no
-          # digests for the shards it skipped and "no digest" is what marks a shard always-run - so
-          # selecting on master fed its own gaps back into the map until the feature decayed into
-          # running everything while looking healthy. That is now closed at the source instead: the
-          # nightly map build only harvests a run whose shard-job count matches the shard list, so a
-          # reduced run can never become a map. Merge-group runs are the last gate before master and
-          # are still not reduced.
+          # Only pull requests may reduce. Pushes, merge groups, schedules and dispatches run the
+          # full matrix. Exact-tree master reuse is handled independently by validation-source;
+          # selecting a master delta here would create a second, weaker reuse mechanism.
           $selectorTrusted = '${{ steps.selftest.outcome }}' -eq 'success'
           $eventCanReduce  = '${{ github.event_name }}' -eq 'pull_request'
 
           if (-not $selectorTrusted) {
-            Write-Host '::error::the shard selector failed its own self-test - running the full matrix. Fix tools/TestImpact/Select-Shards.ps1.'
-          }
-          elseif ('${{ github.event_name }}' -eq 'push' -and (Test-Path map/shard-map.json)) {
-            # MASTER PUSH: validate the delta from the last master commit that was itself
-            # validated, rather than repeating the whole matrix.
-            #
-            # This is the waste that motivated the feature. Master's push for the #2073 merge
-            # re-ran all 116 shards to rediscover the same 3 pre-existing failures the PR had
-            # already found across 115 - because exact-tree reuse could not fire, master having
-            # moved 64 commits while the PR was open.
-            #
-            # The previous master commit is the right reference, NOT the PR's tested tree. The
-            # diff from a stale PR's tree is all of master's intervening commits, which is huge;
-            # the diff from the previous master commit is just the merged PR's own changes, and
-            # that is true no matter how stale the PR was.
-            # status=completed is NOT enough: it includes cancelled and timed_out. With
-            # cancel-in-progress on this workflow a cancelled master run is common, and taking one
-            # as the baseline would treat an UNVALIDATED commit as already tested - so everything
-            # changed between the last genuinely tested commit and that one would never be
-            # validated by anything. A silent miss.
-            #
-            # success or failure, matching the reuse logic above: a red run still executed the
-            # tests and so still tells us what that tree does. A cancelled one does not.
-            $prev = gh api --method GET "repos/${{ github.repository }}/actions/workflows/sonarcloud.yml/runs" `
-                      -f event=push -f branch=master -f status=completed -f per_page=10 `
-                      --jq '[.workflow_runs[] | select(.head_sha != "${{ github.sha }}") | select(.conclusion == "success" or .conclusion == "failure")][0].head_sha // empty' 2>$null
-            if (-not $prev) {
-              Write-Host '::warning::no previously validated master commit - running the full matrix'
-            }
-            else {
-              Write-Host "master push: validating the delta from $prev"
-              & ./tools/TestImpact/Select-Shards.ps1 `
-                  -MapFile map/shard-map.json -FileLevelFrom $prev -OutFile selection.json
-              $result = Get-Content selection.json -Raw | ConvertFrom-Json
-              $escalate = [bool] $result.escalate
-              $selected = @($result.shards)
-            }
+            Write-Host '::error::the impact tooling failed its own self-test - running the full matrix.'
           }
           elseif (-not $eventCanReduce) {
             Write-Host "event is '${{ github.event_name }}', not a pull request - running the full matrix"
@@ -727,7 +692,9 @@ jobs:
             # No base ref: the diff is taken from the map's own commit, which is the only
             # reference whose line numbers the map's ranges are expressed in.
             & ./tools/TestImpact/Select-Shards.ps1 `
-                -MapFile map/shard-map.json -OutFile selection.json
+                -MapFile map/shard-map.json `
+                -ExpectedShards @($all.name) `
+                -OutFile selection.json
             $result = Get-Content selection.json -Raw | ConvertFrom-Json
             $escalate = [bool] $result.escalate
             $selected = @($result.shards)
@@ -761,11 +728,12 @@ jobs:
             }
           }
 
-          # An empty matrix does not fail - it silently runs no tests and lets every downstream
-          # gate pass. That is the one outcome worse than running everything, so it is a hard error.
+          # Empty is uncertainty, not permission to run nothing. Preserve the fail-safe contract
+          # even if a future selector regression reaches this second line of defence.
           if ($matrixShards.Count -eq 0) {
-            Write-Host '::error::shard selection produced an empty matrix'
-            exit 1
+            Write-Host '::warning::shard selection produced an empty matrix - running the full matrix'
+            $matrixShards = $all
+            $escalate = $true
           }
 
           # Slug exactly as the test job does, because that string is the regression analyzer's
@@ -788,24 +756,51 @@ jobs:
                      else { "Selected **$($matrixShards.Count)** of $($all.Count) shards from coverage." }
           "### Shard selection`n`n$summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
+          if ('${{ inputs.collect_coverage_everywhere }}' -eq 'true') {
+            $mapRunId = '${{ inputs.test_impact_map_run_id }}'
+            if (-not $mapRunId) { $mapRunId = '${{ steps.map.outputs.run_id }}' }
+            [ordered]@{
+              schemaVersion = 1
+              forcedCoverage = $true
+              runId = '${{ github.run_id }}'
+              runAttempt = '${{ github.run_attempt }}'
+              sha = '${{ github.sha }}'
+              mapRunId = $mapRunId
+              shardNames = @($all.name)
+            } | ConvertTo-Json -Depth 5 | Set-Content coverage-source.json -Encoding utf8
+          }
+
+      - name: Upload coverage-source marker
+        if: ${{ inputs.collect_coverage_everywhere }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: test-impact-coverage-source
+          path: coverage-source.json
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
   test-net10-sharded:
     name: Tests (${{ matrix.shard.framework }}) - ${{ matrix.shard.name }}
     runs-on: ubuntu-latest
     needs: [build, validation-source, select-shards]
-    # A shard may raise its own ceiling; the default also reserves five minutes beyond the
-    # historical cap for the targeted PR-new retry performed by the regression analyzer.
-    timeout-minutes: ${{ matrix.shard.timeout || 50 }}
+    # Forced coverage materially extends both test execution and post-test digest work. The live
+    # all-shard experiment proved 50 minutes is too short: Generated Layers U passed every test at
+    # 47.9 minutes, then GitHub canceled the job before its digest step. Ordinary validation keeps
+    # each shard's existing ceiling; the isolated nightly run gets enough room to finish cleanly.
+    timeout-minutes: ${{ inputs.collect_coverage_everywhere && 90 || matrix.shard.timeout || 50 }}
     permissions:
       actions: read
       contents: read
     if: "${{ (github.event_name != 'push' || needs.validation-source.outputs.reuse != 'true') && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     strategy:
       fail-fast: false
+      max-parallel: ${{ inputs.collect_coverage_everywhere && 12 || 20 }}
       matrix:
         # The shard list lives in .github/test-shards.yml. It cannot also be a literal here: the
         # selection job filters it down to the shards a change can actually affect, and a matrix
         # is either a literal or an expression. select-shards emits the full list unchanged
-        # whenever it is not confident, so the default behaviour is the same 115-shard matrix.
+        # whenever it is not confident, so the default behaviour is the full test matrix.
         shard: ${{ fromJSON(needs.select-shards.outputs.matrix) }}
 
     steps:
@@ -1031,8 +1026,7 @@ jobs:
           $serializeShard = $heavyShard
           # Heavy and timing shards normally skip coverage - the first for memory, the second
           # because instrumentation distorts the ratios under test. That is right for PR
-          # validation, and it is also why 91 of 116 shards can never appear in the test-impact
-          # map and must always run, which caps selection at the 25 cheapest shards.
+          # validation; the dedicated map-feeding run overrides it under a lower parallelism cap.
           #
           # The memory ceiling belongs to the PR matrix, not to a nightly job, so a dispatch can
           # ask for coverage everywhere. That run feeds the map; it is not meant to gate a PR.
@@ -1357,10 +1351,8 @@ jobs:
       # XML's ~234 MB. Uploaded separately so the nightly map build downloads kilobytes per shard
       # rather than a quarter of a gigabyte; the XML stays available as a rebuild fallback.
       #
-      # Heavy and timing shards collect no coverage at all ($collectCoverage above is
-      # `-not ($heavyShard -or $measuresTiming)`), so they legitimately produce no digest. They are
-      # recorded as always-run in the map instead, which is what stops selection silently skipping
-      # exactly the shards that have OOM-killed runners.
+      # Shards without a complete successful coverage-producing test step emit no digest and are
+      # classified as always-run by the map producer.
       - name: Build test-impact digest
         # Only from a test run that COMPLETED. A shard killed part-way still writes a coverage
         # file, but one describing just the tests that ran - so the map would record it as not
@@ -1396,6 +1388,7 @@ jobs:
           name: impact-digest-${{ env.ARTIFACT_NAME }}
           path: impact-digest/*.digest.json
           if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload coverage + test results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
@@ -1409,6 +1402,9 @@ jobs:
             TestResults/shard-metadata.json
             TestResults/rerun-candidates.json
           if-no-files-found: error
+          # A forced all-shard run is several GiB. The compact digests above are the durable input;
+          # raw coverage only needs to survive long enough for immediate diagnosis.
+          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
 
       # Keep the aggregate diagnostic input small. Downloading every coverage XML merely to inspect
       # TRX results makes the final reporter needlessly slow and expensive, while this artifact also

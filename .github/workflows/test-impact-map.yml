@@ -1,26 +1,18 @@
 name: Test impact map
 
-# Rebuilds the coverage-derived map that drives shard selection in sonarcloud.yml.
-#
-# Nightly rather than per-push because the inputs only change when coverage changes, and a map a
-# few hours old costs nothing: the selector diffs FROM the map's commit, so any master churn since
-# then simply appears as extra changed files and over-selects. Over-selection is the safe direction.
-#
-# Note this workflow never runs tests. It reuses the digests the sharded test job already uploads,
-# so a rebuild is a few artifact downloads and a merge - about a minute, against the two hours a
-# full test run costs.
-
+# Each invocation first harvests and audits the previous intentional coverage-everywhere run, then
+# dispatches the next one. The expensive run never overlaps the map decision it will later audit.
 on:
   schedule:
-    # 07:00 UTC, after the nightly master activity has settled and before the working day.
+    # 07:00 UTC, after nightly master activity and before the working day.
     - cron: '0 7 * * *'
   workflow_dispatch:
     inputs:
       run_id:
-        description: 'Optional: a specific Build & SonarCloud run to harvest digests from.'
+        description: 'Optional: a specific marked coverage-everywhere Build & SonarCloud run.'
         required: false
       skip_coverage_run:
-        description: 'Harvest an existing run instead of first dispatching a coverage-everywhere run.'
+        description: 'Build/audit the map without dispatching the next coverage-everywhere run.'
         required: false
         type: boolean
         default: false
@@ -32,70 +24,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # -----------------------------------------------------------------------------------------
-  # Feed the map with the shards it cannot otherwise see.
-  #
-  # 91 of 116 shards collect no coverage during PR validation - 90 heavy ones because coverage
-  # instrumentation pushes them past the runner's memory envelope, and 2 timing ones because
-  # instrumentation distorts the ratios they assert. They can therefore never appear in the map
-  # and must always run, which caps selection at the 25 cheapest shards and leaves every slow
-  # shard running on every PR. That is most of the cost the feature exists to remove.
-  #
-  # The memory ceiling belongs to the PR matrix, not to a nightly job. So once a night, dispatch
-  # the same workflow with coverage forced on everywhere and harvest THAT.
-  #
-  # Partial success is fine and is the point: a heavy shard that still OOMs produces no digest and
-  # stays always-run, exactly as today. Every shard that survives moves from always-run to
-  # mappable. The feature improves shard by shard and can never regress - and a shard killed
-  # part-way is explicitly excluded, because its coverage would describe only the tests that ran
-  # and the map would then think it does not execute lines it does.
-  # -----------------------------------------------------------------------------------------
-  coverage-run:
-    name: Dispatch coverage-everywhere run
-    runs-on: ubuntu-latest
-    if: github.event.inputs.skip_coverage_run != 'true' && github.event.inputs.run_id == ''
-    permissions:
-      actions: write
-      contents: read
-    outputs:
-      run_id: ${{ steps.dispatch.outputs.run_id }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-
-      - name: Dispatch and wait
-        id: dispatch
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          before=$(gh run list --workflow sonarcloud.yml --branch master --event workflow_dispatch                      --limit 1 --json databaseId --jq '.[0].databaseId // 0')
-          gh workflow run sonarcloud.yml --ref master -f collect_coverage_everywhere=true
-
-          # gh prints nothing on success, and a blind retry would start a SECOND full matrix that
-          # cancels the first through the shared concurrency group. Poll for a new id instead.
-          run_id=''
-          for _ in $(seq 1 30); do
-            candidate=$(gh run list --workflow sonarcloud.yml --branch master --event workflow_dispatch                           --limit 1 --json databaseId --jq '.[0].databaseId // 0')
-            if [ "$candidate" != "$before" ] && [ "$candidate" != "0" ]; then
-              run_id="$candidate"
-              break
-            fi
-            sleep 10
-          done
-          if [ -z "$run_id" ]; then
-            echo "::error::the coverage run never registered"
-            exit 1
-          fi
-          echo "coverage run: $run_id"
-          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-
-          # It takes hours. Waiting here would burn a runner for the duration, so the map build
-          # simply harvests the newest FULL run - which this one becomes when it finishes. Today's
-          # map is therefore built from last night's coverage run, which is exactly the freshness
-          # the selector already tolerates: it diffs from the map's own commit.
-
   build-map:
-    name: Build shard map
+    name: Build and audit shard map
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -104,101 +34,150 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
-          # The audit below diffs from the PREVIOUS map's commit, which a shallow clone cannot
-          # resolve and which is not an ancestor of anything in particular.
+          # The audit diffs from the map that was in effect for the source run.
           fetch-depth: 0
 
-      - name: Find the run to harvest
+      - name: Find a complete marked coverage run
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
-          # Passed as data, never interpolated into the script. A workflow_dispatch input is
-          # attacker-controlled in the same sense as any other user input: inlined as
-          # run_id='${{ ... }}' it can close the quote and run arbitrary bash with GH_TOKEN in
-          # scope. The repository already uses this pattern elsewhere for exactly this reason.
-          INPUT_RUN_ID: ${{ github.event.inputs.run_id }}
+          # Treat workflow_dispatch input as data, never shell source.
+          INPUT_RUN_ID: ${{ inputs.run_id }}
         run: |
-          # Fullness is measured, not assumed: count a run's shard jobs against the shard list.
-          # A reduced run has digests for the shards it ran and none for the rest, and "no digest"
-          # is exactly what marks a shard always-run - so harvesting one would convert every shard
-          # it skipped into an always-run shard until the feature decayed into running everything
-          # while still looking healthy. A cancelled or partly-failed run fails the same check for
-          # the same reason: its digests cover only the shards that got that far.
-          expected=$(yq -o=json -I=0 '.shard' .github/test-shards.yml | jq 'length')
-          shard_jobs() {
-            gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/$1/jobs"               --jq '[.jobs[] | select(.name | startswith("Tests ("))] | length' 2>/dev/null |
-              awk '{s+=$1} END {print s+0}'
+          expected=$(yq -o=json -I=0 '.shard' .github/test-shards.yml | jq -c '[.[].name]')
+          expected_sorted=$(printf '%s' "$expected" | jq -c 'sort')
+          expected_count=$(printf '%s' "$expected" | jq 'length')
+          if [ "$expected_count" -eq 0 ]; then
+            echo "::error::.github/test-shards.yml yielded no shards"
+            exit 1
+          fi
+
+          valid_sha=''
+          valid_map_run_id=''
+
+          validate_candidate() {
+            candidate="$1"
+            meta=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${candidate}" 2>/dev/null) || {
+              echo "run $candidate does not exist or is not readable"
+              return 1
+            }
+
+            workflow=$(printf '%s' "$meta" | jq -r '.name')
+            branch=$(printf '%s' "$meta" | jq -r '.head_branch')
+            event=$(printf '%s' "$meta" | jq -r '.event')
+            status=$(printf '%s' "$meta" | jq -r '.status')
+            conclusion=$(printf '%s' "$meta" | jq -r '.conclusion // ""')
+            sha=$(printf '%s' "$meta" | jq -r '.head_sha')
+            if [ "$workflow" != 'Build & SonarCloud' ] || [ "$branch" != 'master' ] || \
+               [ "$event" != 'workflow_dispatch' ] || [ "$status" != 'completed' ] || \
+               { [ "$conclusion" != 'success' ] && [ "$conclusion" != 'failure' ]; }; then
+              echo "run $candidate is $workflow/$branch/$event/$status/$conclusion - not a completed coverage source"
+              return 1
+            fi
+
+            marker_dir="candidate-marker-$candidate"
+            mkdir -p "$marker_dir"
+            if ! gh run download "$candidate" --name test-impact-coverage-source --dir "$marker_dir" >/dev/null 2>&1; then
+              echo "run $candidate has no coverage-everywhere marker"
+              return 1
+            fi
+            marker="$marker_dir/coverage-source.json"
+            if [ ! -f "$marker" ] || ! jq -e \
+                 --arg id "$candidate" --arg sha "$sha" \
+                 '.schemaVersion == 1 and .forcedCoverage == true and
+                  (.runId | tostring) == $id and .sha == $sha and (.shardNames | type) == "array"' \
+                 "$marker" >/dev/null; then
+              echo "run $candidate has an invalid coverage-everywhere marker"
+              return 1
+            fi
+            marker_names=$(jq -c '.shardNames | sort' "$marker")
+            if [ "$marker_names" != "$expected_sorted" ]; then
+              echo "run $candidate used a different shard manifest - skipping stale coverage"
+              return 1
+            fi
+
+            jobs=$(gh api --paginate --slurp \
+              "repos/${GITHUB_REPOSITORY}/actions/runs/${candidate}/jobs?per_page=100" 2>/dev/null) || {
+              echo "could not read jobs for run $candidate"
+              return 1
+            }
+            shard_jobs=$(printf '%s' "$jobs" | jq -c \
+              '[.[].jobs[] | select(.name | startswith("Tests (")) |
+                {name: (.name | sub("^Tests \\([^)]*\\) - "; "")), status, conclusion}]')
+            actual_count=$(printf '%s' "$shard_jobs" | jq 'length')
+            actual_names=$(printf '%s' "$shard_jobs" | jq -c '[.[].name] | sort')
+            if [ "$actual_count" -ne "$expected_count" ] || [ "$actual_names" != "$expected_sorted" ]; then
+              echo "run $candidate has $actual_count/$expected_count shard jobs or the wrong names"
+              return 1
+            fi
+            if ! printf '%s' "$shard_jobs" | jq -e \
+                 'all(.[]; .status == "completed" and (.conclusion == "success" or .conclusion == "failure"))' \
+                 >/dev/null; then
+              echo "run $candidate contains a cancelled, skipped, neutral or incomplete shard job"
+              return 1
+            fi
+
+            map_run_id=$(jq -r '.mapRunId // ""' "$marker")
+            case "$map_run_id" in
+              ''|*[!0-9]*)
+                if [ -n "$map_run_id" ]; then
+                  echo "run $candidate marker has invalid mapRunId"
+                  return 1
+                fi
+                ;;
+            esac
+            if [ -n "$map_run_id" ]; then
+              map_meta=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${map_run_id}" 2>/dev/null) || {
+                echo "run $candidate references an unreadable map run $map_run_id"
+                return 1
+              }
+              if ! printf '%s' "$map_meta" | jq -e \
+                   '.name == "Test impact map" and .head_branch == "master" and .conclusion == "success"' \
+                   >/dev/null; then
+                echo "run $candidate references map run $map_run_id, which was not a successful master map"
+                return 1
+              fi
+            fi
+            valid_sha="$sha"
+            valid_map_run_id="$map_run_id"
+            echo "run $candidate has the exact $expected_count-shard completed matrix"
+            return 0
           }
 
           run_id=''
           if [ -n "${INPUT_RUN_ID:-}" ]; then
-            # Digits only. A run id is numeric, so anything else is not a run id.
             case "$INPUT_RUN_ID" in
-              ''|*[!0-9]*)
-                echo "::error::run_id must be numeric; got an invalid value"
+              *[!0-9]*)
+                echo "::error::run_id must be numeric"
                 exit 1
                 ;;
             esac
-
-            # A hand-supplied id gets the SAME checks as an automatically chosen one. Numeric
-            # syntax only proves it is a run id, not that it is a successful full-matrix
-            # sonarcloud.yml run on master - and a failed or reduced run still carries partial
-            # digests, which would silently mark the shards it happened to run as mapped.
-            meta=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${INPUT_RUN_ID}"                      --jq '[.name, .head_branch, .conclusion] | @tsv' 2>/dev/null || true)
-            if [ -z "$meta" ]; then
-              echo "::error::run ${INPUT_RUN_ID} does not exist or is not readable"
+            if ! validate_candidate "$INPUT_RUN_ID"; then
+              echo "::error::run $INPUT_RUN_ID is not a valid coverage source"
               exit 1
             fi
-            wf=$(printf '%s' "$meta" | cut -f1)
-            br=$(printf '%s' "$meta" | cut -f2)
-            cc=$(printf '%s' "$meta" | cut -f3)
-            if [ "$wf" != "Build & SonarCloud" ] || [ "$br" != "master" ] || [ "$cc" != "success" ]; then
-              echo "::error::run ${INPUT_RUN_ID} is '$wf' on '$br' with conclusion '$cc'; a successful Build & SonarCloud run on master is required"
-              exit 1
-            fi
-            n=$(shard_jobs "$INPUT_RUN_ID")
-            if [ "${n:-0}" -lt "$expected" ]; then
-              echo "::error::run ${INPUT_RUN_ID} ran only ${n:-0}/$expected shards, so its digests are partial and would mark the missing shards always-run"
-              exit 1
-            fi
-            echo "run ${INPUT_RUN_ID} ran $n/$expected shards - using it"
             run_id="$INPUT_RUN_ID"
-          fi
-
-          if [ -z "$run_id" ]; then
-            # The most recent master run that ran the FULL matrix.
-            #
-            # Not merely the most recent successful one. Master pushes now validate only their
-            # delta from the previously validated commit, so a reduced run has digests for the
-            # shards it ran and none for the rest - and "no digest" is exactly what marks a shard
-            # always-run. Building the map from a reduced run would convert every shard it skipped
-            # into an always-run shard, and the feature would decay into running everything while
-            # still looking healthy.
-            #
-            # Fullness is measured, not assumed: count the run's shard jobs against the shard list.
-            # A cancelled or partly-failed run fails the same check, for the same reason - its
-            # digests cover only the shards that got that far.
-            candidates=$(gh run list --workflow sonarcloud.yml --branch master --status success --limit 15 --json databaseId --jq '.[].databaseId')
+          else
+            candidates=$(gh api --method GET \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/sonarcloud.yml/runs" \
+              -f branch=master -f event=workflow_dispatch -f status=completed -f per_page=50 \
+              --jq '.workflow_runs[].id')
             for candidate in $candidates; do
-              n=$(shard_jobs "$candidate")
-              if [ "${n:-0}" -ge "$expected" ]; then
+              if validate_candidate "$candidate"; then
                 run_id="$candidate"
-                echo "run $candidate ran $n/$expected shards - using it"
                 break
               fi
-              echo "run $candidate ran only ${n:-0}/$expected shards - skipping (reduced or partial)"
             done
           fi
 
           if [ -z "$run_id" ]; then
-            echo "::error::no master run in the last 15 ran the full matrix, so no complete digest set exists. Dispatch sonarcloud.yml on master (workflow_dispatch escalates by design) before rebuilding the map."
+            echo "::error::no recent completed run has both the coverage marker and the exact current shard matrix"
             exit 1
           fi
-          sha=$(gh run view "$run_id" --json headSha --jq '.headSha')
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-          echo "sha=$sha"       >> "$GITHUB_OUTPUT"
-          echo "harvesting run $run_id at $sha"
-
+          echo "sha=$valid_sha" >> "$GITHUB_OUTPUT"
+          echo "map_run_id=$valid_map_run_id" >> "$GITHUB_OUTPUT"
+          echo "harvesting run $run_id at $valid_sha (map in effect: ${valid_map_run_id:-none})"
 
       - name: Download digests
         env:
@@ -212,37 +191,19 @@ jobs:
         shell: pwsh
         run: |
           $all = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
-          $covered = @(
-            Get-ChildItem digests -Filter '*.digest.json' -Recurse -File |
-              ForEach-Object { (Get-Content $_.FullName -Raw | ConvertFrom-Json).shard }
-          )
-
-          # Always-run is DERIVED, not declared: any shard that produced no digest cannot be
-          # selected against, whatever the reason. That covers the heavy and timing shards, which
-          # collect no coverage by design, and also any shard that failed, timed out or was
-          # cancelled in the harvested run. Re-deriving the workflow's coverage predicate here
-          # instead would be a second copy of it, free to drift, and drift in this direction means
-          # a shard silently stops running.
-          $alwaysRun = @($all.name | Where-Object { $covered -notcontains $_ })
-          Write-Host "shards: $($all.Count) total, $($covered.Count) with digests, $($alwaysRun.Count) always-run"
-          foreach ($s in $alwaysRun) { Write-Host "  always-run: $s" }
-
-          if ($covered.Count -eq 0) {
-            Write-Host '::error::no digests found - the map would select nothing and escalate every run'
-            exit 1
-          }
-
           & ./tools/TestImpact/New-ShardMap.ps1 `
               -DigestDirectory digests `
-              -AlwaysRun $alwaysRun `
+              -AllShards @($all.name) `
               -Sha '${{ steps.source.outputs.sha }}' `
               -OutFile shard-map.json
 
           $size = [Math]::Round((Get-Item shard-map.json).Length / 1MB, 2)
           $map = Get-Content shard-map.json -Raw | ConvertFrom-Json
           $files = @($map.files.PSObject.Properties).Count
+          $known = @($map.knownShards).Count
+          $always = @($map.alwaysRun).Count
           Write-Host "map: $files file(s), $size MB"
-          "### Shard map rebuilt`n`n- commit ``${{ steps.source.outputs.sha }}```n- $files files indexed`n- $($covered.Count) shards mapped, $($alwaysRun.Count) always-run`n- $size MB" |
+          "### Shard map rebuilt`n`n- source run ${{ steps.source.outputs.run_id }}`n- commit ``${{ steps.source.outputs.sha }}```n- $files files indexed`n- $known shards mapped, $always always-run`n- $size MB" |
             Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
       - name: Upload the map
@@ -253,79 +214,109 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # ---------------------------------------------------------------------------------------
-      # Does selection actually work? Measured, not assumed.
-      #
-      # Selection rests on "a shard that executes none of the changed lines would have passed
-      # anyway". Nothing about a green PR can disprove that: the skipped shard leaves no evidence.
-      # So it is checked against the runs that DID execute everything - replay the selection that
-      # WOULD have been made, and see whether any shard it would have skipped actually failed.
-      #
-      # Audited against the PREVIOUS map, never the one just built. A map built from this very run
-      # records exactly what each shard executed in it, which makes the question circular.
-      #
-      # Runs after the upload on purpose: the map is valid regardless of what the audit finds, and
-      # a miss should turn the workflow red without also withholding the artifact.
-      # ---------------------------------------------------------------------------------------
-      - name: Download the previous map
-        id: prevmap
-        continue-on-error: true
+      # Audit against the exact map run recorded by the source coverage marker. A map built from
+      # this source run would make the question circular. If the audit fails, this workflow is not
+      # successful and selectors will not discover the newly uploaded artifact.
+      - name: Download the map that was in effect
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # The immediately previous successful map. `--status success` already excludes this
-          # run, which is still in progress, so .[0] IS the previous one - an earlier revision
-          # took .[-1] of two, which silently audited against a map one generation too old and
-          # could miss a regression introduced by the most recent map.
-          prev=$(gh run list --workflow test-impact-map.yml --branch master --status success                    --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
-          if [ -z "$prev" ] || [ "$prev" = "${{ github.run_id }}" ]; then
-            echo "no earlier map to audit against - this is the first build"
+          map_run_id='${{ steps.source.outputs.map_run_id }}'
+          if [ -z "$map_run_id" ]; then
+            echo "source run had no shard map in effect - this is the bootstrap generation"
             exit 0
           fi
-          gh run download "$prev" --name shard-map --dir prevmap || echo "previous map unavailable"
+          case "$map_run_id" in
+            *[!0-9]*)
+              echo "::error::source marker mapRunId is not numeric"
+              exit 1
+              ;;
+          esac
+          gh run download "$map_run_id" --name shard-map --dir prevmap
 
-      - name: Audit selection against this run
-        if: always()
+      - name: Audit selection against the source run
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if (-not (Test-Path prevmap/shard-map.json)) {
-            Write-Host 'no previous map - skipping the audit'
+            Write-Host 'no prior map was in effect - skipping bootstrap audit'
             exit 0
           }
 
-          # Shard outcomes come from the run's own job list rather than its artifacts. The
-          # alternative is downloading 116 coverage or TRX artifacts to read one field out of each.
-          $jobs = gh api --paginate "repos/${{ github.repository }}/actions/runs/${{ steps.source.outputs.run_id }}/jobs" `
-                    --jq '.jobs[] | select(.name | startswith("Tests (")) | {name, conclusion}' |
-                  ConvertFrom-Json
+          # gh rejects --slurp combined with --jq. Parse the paginated response first, then
+          # flatten it in PowerShell so matrices beyond 100 jobs stay complete.
+          $jobPages = gh api --paginate --slurp `
+              "repos/${{ github.repository }}/actions/runs/${{ steps.source.outputs.run_id }}/jobs?per_page=100" |
+              ConvertFrom-Json
+          $jobs = @(
+            $jobPages |
+              ForEach-Object { $_.jobs } |
+              Where-Object { ([string] $_.name).StartsWith('Tests (', [StringComparison]::Ordinal) }
+          )
           $outcomes = @($jobs | ForEach-Object {
-            # "Tests (net10.0) - Unit - 01 Activation" -> "Unit - 01 Activation". Split on the
-            # FIRST " - " only; shard names contain " - " themselves.
             $name = [string] $_.name
             $i = $name.IndexOf(') - ')
-            if ($i -lt 0) { return }
+            if ($i -lt 0) { throw "Unrecognised shard job name: $name" }
             [pscustomobject]@{ shard = $name.Substring($i + 4); outcome = [string] $_.conclusion }
           })
-          if ($outcomes.Count -eq 0) {
-            Write-Host '::warning::no shard jobs found in the audited run - nothing to audit'
-            exit 0
-          }
           $outcomes | ConvertTo-Json -Depth 3 | Set-Content outcomes.json -Encoding utf8
-          Write-Host "auditing $($outcomes.Count) shard outcome(s), $(@($outcomes | Where-Object outcome -ne 'success').Count) failed"
+          $failed = @($outcomes | Where-Object outcome -ne 'success').Count
+          Write-Host "auditing $($outcomes.Count) shard outcome(s), $failed failed"
 
-          # HEAD must be the audited run's commit: the selector diffs from the map's commit to HEAD.
+          # Exercise the tooling being proposed by THIS map build, while giving git the audited
+          # tree as HEAD. Checking out first and then invoking tools/ would silently run whatever
+          # older selector happened to exist at the source commit.
+          $auditTools = Join-Path $env:RUNNER_TEMP 'test-impact-audit-tools'
+          New-Item -ItemType Directory -Path $auditTools -Force | Out-Null
+          Copy-Item tools/TestImpact/Select-Shards.ps1 (Join-Path $auditTools 'Select-Shards.ps1')
+          Copy-Item tools/TestImpact/Measure-SelectionMiss.ps1 (Join-Path $auditTools 'Measure-SelectionMiss.ps1')
+
+          # HEAD must be the audited tree; the selector diffs from the prior map commit to HEAD.
           & git checkout --quiet '${{ steps.source.outputs.sha }}'
-
-          & ./tools/TestImpact/Measure-SelectionMiss.ps1 `
+          & (Join-Path $auditTools 'Measure-SelectionMiss.ps1') `
+              -SelectorPath (Join-Path $auditTools 'Select-Shards.ps1') `
               -MapFile prevmap/shard-map.json -OutcomesFile outcomes.json -OutFile audit.json
           $auditExit = $LASTEXITCODE
 
           $a = Get-Content audit.json -Raw | ConvertFrom-Json
           $verdict = if ($a.Escalated) { 'would have escalated - nothing skipped' }
                      elseif ($a.MissCount -gt 0) { "**$($a.MissCount) MISSED**: $($a.Missed -join ', ')" }
+                     elseif ($a.Failed -eq 0) { 'no failure opportunity; miss safety was not exercised' }
                      else { 'no misses' }
-          "### Selection audit`n`n- would run $($a.WouldRun)/$($a.TotalShards), skip $($a.WouldSkip)`n- $($a.Failed) shard(s) failed`n- $verdict" |
+          "### Selection audit`n`n- map in effect: ${{ steps.source.outputs.map_run_id }}`n- would run $($a.WouldRun)/$($a.TotalShards), skip $($a.WouldSkip)`n- $($a.Failed) shard(s) failed`n- $verdict" |
             Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           exit $auditExit
+
+  coverage-run:
+    name: Dispatch next coverage-everywhere run
+    needs: build-map
+    # Bootstrap even when no source exists yet; explicit harvest-only invocations do not dispatch.
+    if: ${{ always() && !inputs.skip_coverage_run && !inputs.run_id }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch coverage run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ '${{ needs.build-map.result }}' = 'success' ]; then
+            # This workflow is not marked successful until this dispatch job exits. Pass its id
+            # explicitly so the child cannot race and record the previous successful map.
+            map_run_id='${{ github.run_id }}'
+          else
+            # A failed build/audit is deliberately not eligible for selection. The last successful
+            # artifact remains in effect, so that is the only map the next run may claim.
+            map_run_id=$(gh run list --workflow test-impact-map.yml --branch master --status success \
+              --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
+          fi
+
+          if [ -n "$map_run_id" ]; then
+            gh workflow run sonarcloud.yml --ref master \
+              -f collect_coverage_everywhere=true -f test_impact_map_run_id="$map_run_id"
+          else
+            gh workflow run sonarcloud.yml --ref master -f collect_coverage_everywhere=true
+          fi
+          echo 'Dispatched the next marked coverage-everywhere run. It will be harvested on the next map invocation.' >> "$GITHUB_STEP_SUMMARY"
