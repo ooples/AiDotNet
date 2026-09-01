@@ -102,7 +102,7 @@ public static class MoEModelBuilder<T>
 
             LlamaModelBuilder<T>.LoadGamma(block.Norm1, weights, p + "input_layernorm.weight", hidden, addOne: false);
             LlamaModelBuilder<T>.LoadGamma(block.Norm2, weights, p + "post_attention_layernorm.weight", hidden, addOne: false);
-            LlamaModelBuilder<T>.LoadAttention((GroupedQueryAttentionLayer<T>)block.AttentionLayer, weights, p, numHeads, numKVHeads, headDim, hidden);
+            LlamaModelBuilder<T>.LoadAttention((GroupedQueryAttentionLayer<T>)block.AttentionLayer, weights, p, numHeads, numKVHeads, headDim, hidden, LlamaModelBuilder<T>.ShouldPermuteRope(weights));
 
             // Router: block_sparse_moe.gate.weight is [numExperts, hidden].
             LlamaModelBuilder<T>.LoadDense(block.Moe.Router, weights, p + "block_sparse_moe.gate.weight", outDim: numExperts, inDim: hidden);

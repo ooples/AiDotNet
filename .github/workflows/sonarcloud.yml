@@ -183,18 +183,20 @@ jobs:
 
           # Merge-queue runs are candidates too, and better ones. A merge_group run validates the
           # exact commit that is about to become master, so its tree matches by construction -
-          # whereas a pull_request run only matches while master has not moved, which in a busy
-          # repo means almost never. #2073 missed reuse for exactly that reason: 64 commits landed
-          # on master during the six hours it was open, so the merged tree was a combination that
-          # nothing had ever tested, and master repeated all 116 shards to rediscover 3 known
-          # failures.
+          # whereas a pull_request run matches only while master has not moved, which in a busy
+          # repo means almost never.
           #
-          # They cannot be found by head_sha - a merge_group run's head is the queue's temporary
-          # merge commit, not the PR head - so recent ones are listed unfiltered and left to the
-          # tree comparison below. That comparison is the actual safety property; how a candidate
-          # was found cannot weaken it.
+          # They cannot be found by head_sha, because a merge_group run's head is the queue's
+          # temporary merge commit rather than the PR head. So recent ones are listed unfiltered
+          # and left to the tree comparison below. That comparison is the actual safety property;
+          # how a candidate was discovered cannot weaken it.
+          #
+          # Merge-queue runs go FIRST. Evaluating a candidate is not free - each one downloads an
+          # artifact zip and resolves a tree through the API - and a merge_group run is the one
+          # most likely to match, so checking the pull_request runs ahead of it spends those calls
+          # on the weaker candidates. Ordering changes only cost here, never the answer.
           if mq_json=$(gh api --method GET             "repos/${GITHUB_REPOSITORY}/actions/workflows/sonarcloud.yml/runs"             -f event=merge_group -f status=completed -f per_page=20 2>/dev/null); then
-            runs_json=$(jq -n --argjson a "$runs_json" --argjson b "$mq_json"               '{workflow_runs: (($a.workflow_runs // []) + ($b.workflow_runs // []))}')
+            runs_json=$(jq -n --argjson a "$runs_json" --argjson b "$mq_json"               '{workflow_runs: (($b.workflow_runs // []) + ($a.workflow_runs // []))}')
           fi
 
           # A red test ledger may still be an accepted improvement over baseline, so failure is a
@@ -695,9 +697,17 @@ jobs:
             # diff from a stale PR's tree is all of master's intervening commits, which is huge;
             # the diff from the previous master commit is just the merged PR's own changes, and
             # that is true no matter how stale the PR was.
+            # status=completed is NOT enough: it includes cancelled and timed_out. With
+            # cancel-in-progress on this workflow a cancelled master run is common, and taking one
+            # as the baseline would treat an UNVALIDATED commit as already tested - so everything
+            # changed between the last genuinely tested commit and that one would never be
+            # validated by anything. A silent miss.
+            #
+            # success or failure, matching the reuse logic above: a red run still executed the
+            # tests and so still tells us what that tree does. A cancelled one does not.
             $prev = gh api --method GET "repos/${{ github.repository }}/actions/workflows/sonarcloud.yml/runs" `
                       -f event=push -f branch=master -f status=completed -f per_page=10 `
-                      --jq '[.workflow_runs[] | select(.head_sha != "${{ github.sha }}")][0].head_sha // empty' 2>$null
+                      --jq '[.workflow_runs[] | select(.head_sha != "${{ github.sha }}") | select(.conclusion == "success" or .conclusion == "failure")][0].head_sha // empty' 2>$null
             if (-not $prev) {
               Write-Host '::warning::no previously validated master commit - running the full matrix'
             }
