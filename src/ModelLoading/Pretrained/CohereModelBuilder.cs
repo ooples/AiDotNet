@@ -87,6 +87,9 @@ public static class CohereModelBuilder<T>
             string p = $"model.layers.{i}.";
 
             WriteGamma(block.Norm, LlamaModelBuilder<T>.ReadTensor(weights, p + "input_layernorm.weight", hidden));
+            // Cohere/Command-R is the ONE decoder that must NOT permute q/k: HF modeling_cohere.py uses an
+            // interleaved rotate_half (even/odd lanes + repeat_interleave freqs) — already the GPT-J layout our
+            // kernel applies — so its safetensors q/k are stored interleaved. Do not pass ShouldPermuteRope here.
             LlamaModelBuilder<T>.LoadAttention((GroupedQueryAttentionLayer<T>)block.AttentionLayer, weights, p, numHeads, numKVHeads, headDim, hidden);
             LlamaModelBuilder<T>.LoadDense(block.FfnGate, weights, p + "mlp.gate_proj.weight", outDim: intermediate, inDim: hidden);
             LlamaModelBuilder<T>.LoadDense(block.FfnUp, weights, p + "mlp.up_proj.weight", outDim: intermediate, inDim: hidden);

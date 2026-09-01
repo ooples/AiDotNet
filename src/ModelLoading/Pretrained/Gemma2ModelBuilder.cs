@@ -105,7 +105,7 @@ public static class Gemma2ModelBuilder<T>
             LlamaModelBuilder<T>.LoadGamma(block.NormPreFfn, weights, p + "pre_feedforward_layernorm.weight", hidden, addOne: true);
             LlamaModelBuilder<T>.LoadGamma(block.NormPostFfn, weights, p + "post_feedforward_layernorm.weight", hidden, addOne: true);
 
-            LlamaModelBuilder<T>.LoadAttention((GroupedQueryAttentionLayer<T>)block.AttentionLayer, weights, p, numHeads, numKVHeads, headDim, hidden);
+            LlamaModelBuilder<T>.LoadAttention((GroupedQueryAttentionLayer<T>)block.AttentionLayer, weights, p, numHeads, numKVHeads, headDim, hidden, LlamaModelBuilder<T>.ShouldPermuteRope(weights));
 
             LlamaModelBuilder<T>.LoadDense(block.FfnGate, weights, p + "mlp.gate_proj.weight", outDim: intermediate, inDim: hidden);
             LlamaModelBuilder<T>.LoadDense(block.FfnUp, weights, p + "mlp.up_proj.weight", outDim: intermediate, inDim: hidden);
