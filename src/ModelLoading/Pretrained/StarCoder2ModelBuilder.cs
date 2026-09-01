@@ -83,7 +83,7 @@ public static class StarCoder2ModelBuilder<T>
             string p = $"model.layers.{i}.";
 
             LoadLayerNorm(block.Norm1, weights, p + "input_layernorm", hidden);
-            LlamaModelBuilder<T>.LoadAttentionBiased((GroupedQueryAttentionLayer<T>)block.AttentionLayer, weights, p, numHeads, numKVHeads, headDim, hidden);
+            LlamaModelBuilder<T>.LoadAttentionBiased((GroupedQueryAttentionLayer<T>)block.AttentionLayer, weights, p, numHeads, numKVHeads, headDim, hidden, LlamaModelBuilder<T>.ShouldPermuteRope(weights));
             LoadLayerNorm(block.Norm2, weights, p + "post_attention_layernorm", hidden);
             LlamaModelBuilder<T>.LoadDenseBiased(block.CFc, weights, p + "mlp.c_fc.weight", p + "mlp.c_fc.bias", outDim: intermediate, inDim: hidden);
             LlamaModelBuilder<T>.LoadDenseBiased(block.CProj, weights, p + "mlp.c_proj.weight", p + "mlp.c_proj.bias", outDim: hidden, inDim: intermediate);
