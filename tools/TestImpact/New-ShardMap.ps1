@@ -51,14 +51,21 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# A caller that passes "A,B" or "A;B" instead of @('A','B') would otherwise store one bogus shard
-# name and silently drop the real always-run shards - under-selecting exactly the shards that cannot
-# be mapped, which is the dangerous direction. Split defensively and drop blanks.
+# NOT split on commas. An earlier revision did, to guard against a caller passing "A,B" instead of
+# @('A','B') - and that guard corrupted real data, because shard names legitimately contain commas:
+#
+#   ModelFamily - Generated Layers P A,C,I,L,N,P        -> 6 fragments
+#   ModelFamily - Generated Layers P E,H,O,R,S,U,W,Y    -> 8 fragments
+#
+# Measured on the first real map: 91 always-run shards became 103 entries, none of the fragments
+# matching a real shard. The selector then finds a selected name absent from the shard list and
+# escalates - every run, silently, with the feature switched off and the logs looking healthy.
+#
+# The caller passes a real array; blanks are dropped and entries are trimmed, nothing more.
 $AlwaysRun = @(
     $AlwaysRun |
         Where-Object { $_ } |
-        ForEach-Object { $_ -split '[,;]' } |
-        ForEach-Object { $_.Trim() } |
+        ForEach-Object { ([string] $_).Trim() } |
         Where-Object { $_ }
 )
 
