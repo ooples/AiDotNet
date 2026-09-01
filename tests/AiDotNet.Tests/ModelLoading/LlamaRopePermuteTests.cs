@@ -42,8 +42,8 @@ namespace AiDotNet.Tests.ModelLoading
             // Sanity: the permutation is a genuine reorder (not identity for headDim>2) and loses no rows.
             var hf = Enumerable.Range(0, 8).Select(i => (double)i).ToArray();
             var once = LlamaModelBuilder<double>.PermuteRopeRowsHalfToInterleaved(hf, heads: 1, headDim: 8, inDim: 1);
-            Assert.NotEqual(hf, once);
-            Assert.Equal(hf.OrderBy(x => x), once.OrderBy(x => x));
+            Assert.False(hf.SequenceEqual(once), "permutation must reorder the rows (not identity for headDim > 2)");
+            Assert.Equal(hf.OrderBy(x => x), once.OrderBy(x => x)); // multiset preserved (no rows lost)
         }
 
         // Opt-in golden parity: loads the real SmolLM2-360M HF safetensors and checks the first-16-token logits
@@ -190,13 +190,14 @@ namespace AiDotNet.Tests.ModelLoading
             Assert.True(Math.Abs(ppl - 15.372) < 0.1, $"8-window perplexity {ppl:F3} differs from PyTorch 15.372 by more than 0.1");
         }
 
-        // Fixture roots for the opt-in golden tests. Overridable via env vars so the tests are portable to any
-        // machine/CI that supplies the SmolLM2-360M checkpoint; default to the local research fixture dir.
+        // Fixture roots come ONLY from env vars (no committed user-specific path). When unset these are empty, so
+        // the File.Exists checks fail and the golden tests Skip.IfNot themselves — anyone can opt in by pointing
+        // AIDOTNET_SMOLLM2_DIR at a SmolLM2-360M checkout and AIDOTNET_SMOLLM2_DATA at the reference-data dir.
         private static string FixtureDir =>
-            Environment.GetEnvironmentVariable("AIDOTNET_SMOLLM2_DIR") ?? @"C:\Users\cheat\Temp\he-m2-audit\data\smollm2-360m";
+            Environment.GetEnvironmentVariable("AIDOTNET_SMOLLM2_DIR") ?? string.Empty;
 
         private static string FixtureDataRoot =>
-            Environment.GetEnvironmentVariable("AIDOTNET_SMOLLM2_DATA") ?? @"C:\Users\cheat\Temp\he-m2-audit\data";
+            Environment.GetEnvironmentVariable("AIDOTNET_SMOLLM2_DATA") ?? string.Empty;
 
         private static int[] ReadInt32(string path)
         {

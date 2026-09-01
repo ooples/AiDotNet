@@ -212,6 +212,13 @@ public static class LlamaModelBuilder<T>
     // newRow[2i] = oldRow[i], newRow[2i+1] = oldRow[i+headDim/2], applied within each head's headDim block.
     internal static T[] PermuteRopeRowsHalfToInterleaved(T[] hf, int heads, int headDim, int inDim)
     {
+        if (hf is null) throw new ArgumentNullException(nameof(hf));
+        if (heads <= 0 || headDim <= 0 || inDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(headDim), $"heads/headDim/inDim must all be positive (heads={heads}, headDim={headDim}, inDim={inDim}).");
+        if ((headDim & 1) != 0)
+            throw new ArgumentException($"headDim must be even for half-split RoPE (got {headDim}).", nameof(headDim));
+        if (hf.Length != (long)heads * headDim * inDim)
+            throw new ArgumentException($"input length {hf.Length} does not match heads*headDim*inDim ({(long)heads * headDim * inDim}).", nameof(hf));
         int half = headDim / 2;
         var outp = new T[hf.Length];
         for (int h = 0; h < heads; h++)

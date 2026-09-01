@@ -62,7 +62,6 @@ public sealed class DbrxTensorSource : INamedTensorSource
         }
     }
 
-    /// <inheritdoc/>
     /// <summary>The wrapped raw DBRX source (used to detect a GGUF backing behind this adapter).</summary>
     internal INamedTensorSource Inner => _inner;
 
