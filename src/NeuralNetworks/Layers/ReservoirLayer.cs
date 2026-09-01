@@ -718,14 +718,24 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private void InitializeReservoir()
     {
+        // Honor the deterministic seed assigned by LayerInitializationSeedScope before this
+        // derived constructor runs. Falling back to the shared RNG is intentional only for an
+        // unseeded production model. Using Random directly here made an explicitly seeded
+        // reservoir depend on every unrelated draw made earlier on the same worker thread, so
+        // identical test inputs could take different optimization trajectories in the full shard
+        // and in a clean targeted retry.
+        var random = RandomSeed.HasValue
+            ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value)
+            : Random;
+
         // Initialize reservoir weights with sparse random connections
         for (int i = 0; i < _reservoirSize; i++)
         {
             for (int j = 0; j < _reservoirSize; j++)
             {
-                if (Random.NextDouble() < _connectionProbability)
+                if (random.NextDouble() < _connectionProbability)
                 {
-                    _reservoirWeights[i, j] = NumOps.FromDouble(Random.NextDouble() - 0.5);
+                    _reservoirWeights[i, j] = NumOps.FromDouble(random.NextDouble() - 0.5);
                 }
                 else
                 {
@@ -739,7 +749,7 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
         {
             for (int j = 0; j < _inputSize; j++)
             {
-                _inputWeights[i, j] = NumOps.FromDouble(Random.NextDouble() - 0.5);
+                _inputWeights[i, j] = NumOps.FromDouble(random.NextDouble() - 0.5);
             }
         }
 
@@ -754,7 +764,7 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
         // preserving a value the layer had already broken.
         //
         // The companion normalisation below already guards its own division; this one did not.
-        T maxEigenvalue = ComputeMaxEigenvalue(_reservoirWeights);
+        T maxEigenvalue = ComputeMaxEigenvalue(_reservoirWeights, random);
         double maxEigenvalueAsDouble = Convert.ToDouble(maxEigenvalue);
         if (maxEigenvalueAsDouble != 0.0 && !double.IsNaN(maxEigenvalueAsDouble)
             && !double.IsInfinity(maxEigenvalueAsDouble))
@@ -779,7 +789,7 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
     /// the reservoir. The method uses improvements like random initialization and Rayleigh quotient
     /// for better convergence.
     /// </remarks>
-    private T ComputeMaxEigenvalue(Tensor<T> matrix)
+    private T ComputeMaxEigenvalue(Tensor<T> matrix, Random random)
     {
         // Power iteration method with improvements for better convergence
         int maxIterations = 1000;
@@ -790,7 +800,7 @@ public partial class ReservoirLayer<T> : LayerBase<T>, IShapeContract
         var v = new Tensor<T>([size]);
         for (int i = 0; i < size; i++)
         {
-            v[i] = NumOps.FromDouble(Random.NextDouble() - 0.5);
+            v[i] = NumOps.FromDouble(random.NextDouble() - 0.5);
         }
 
         // Normalize the initial vector

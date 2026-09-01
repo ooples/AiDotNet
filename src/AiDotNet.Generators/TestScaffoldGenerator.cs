@@ -16039,6 +16039,45 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (layer.ProducesNonFiniteOutput)
             sb.AppendLine("    protected override bool ExpectsFiniteOutput => false;");
 
+        if (layer.ClassName == "ReservoirLayer")
+        {
+            // ReservoirLayer owns fixed random input/recurrent buffers. Those buffers are initialized
+            // inside its derived constructor, so this regression must exercise the construction-time
+            // LayerInitializationSeedScope rather than assigning RandomSeed after construction. The
+            // old implementation consumed RandomHelper.ThreadSafeRandom directly and therefore
+            // produced different fixed reservoirs for the same seed after unrelated random work.
+            sb.AppendLine();
+            sb.AppendLine("    [Fact]");
+            sb.AppendLine("    public void SeededInitialization_IsIndependentOfSharedRandomConsumption()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        using var first = CreateSeededReservoir(1729);");
+            sb.AppendLine("        for (int i = 0; i < 1000; i++)");
+            sb.AppendLine("            _ = global::AiDotNet.Tensors.Helpers.RandomHelper.ThreadSafeRandom.Next();");
+            sb.AppendLine("        using var second = CreateSeededReservoir(1729);");
+            sb.AppendLine("        using var input = new global::AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 4 });");
+            sb.AppendLine("        for (int i = 0; i < input.Length; i++) input[i] = i + 1;");
+            sb.AppendLine("        using var firstInitial = first.Forward(input);");
+            sb.AppendLine("        using var secondInitial = second.Forward(input);");
+            sb.AppendLine("        using var firstRecurrent = first.Forward(input);");
+            sb.AppendLine("        using var secondRecurrent = second.Forward(input);");
+            sb.AppendLine("        Assert.Equal(firstInitial.ToArray(), secondInitial.ToArray());");
+            sb.AppendLine("        Assert.Equal(firstRecurrent.ToArray(), secondRecurrent.ToArray());");
+            sb.AppendLine("    }");
+            sb.AppendLine();
+            sb.AppendLine("    private static global::AiDotNet.NeuralNetworks.Layers.ReservoirLayer<float> CreateSeededReservoir(int seed)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        global::AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(seed);");
+            sb.AppendLine("        try");
+            sb.AppendLine("        {");
+            sb.AppendLine("            return new global::AiDotNet.NeuralNetworks.Layers.ReservoirLayer<float>(4, 16);");
+            sb.AppendLine("        }");
+            sb.AppendLine("        finally");
+            sb.AppendLine("        {");
+            sb.AppendLine("            global::AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(null);");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+        }
+
         sb.AppendLine("}");
 
         var hintName = GeneratorHelpers.StripGenericSuffix(layer.FullyQualifiedName).Replace(".", "_") + "Tests.g.cs";
