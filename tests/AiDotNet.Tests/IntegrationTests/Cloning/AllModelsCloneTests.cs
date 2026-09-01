@@ -781,7 +781,17 @@ public class AllModelsCloneTests
                 if (formal[i].ParameterType.IsInstanceOfType(architecture)) args[i] = architecture;
                 else if (TryCreateBoundedArgument(closed, formal[i], out var bounded)) args[i] = bounded;
                 else if (CreateBoundedOptions(formal[i].ParameterType) is { } options) args[i] = options;
-                else if (formal[i].HasDefaultValue) args[i] = formal[i].DefaultValue;
+                else if (formal[i].HasDefaultValue)
+                {
+                    // A model that takes its dimensions as plain constructor ints is reached by no
+                    // options type and no name rule. MATCHA built at its full 1536-wide default and
+                    // killed the host. Scaling the DECLARED DEFAULT proportionally needs no
+                    // vocabulary and keeps ratios intact, so width % heads still divides.
+                    args[i] = formal[i].ParameterType == typeof(int)
+                        && formal[i].DefaultValue is int declaredInt
+                            ? AiDotNet.Testing.ModelTestScale.ScaleDeclaredInteger(declaredInt)
+                            : formal[i].DefaultValue;
+                }
                 else usable = false;
             }
 

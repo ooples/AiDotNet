@@ -122,6 +122,21 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
     /// </remarks>
     private const int KnobCap = 16;
 
+    /// <summary>Factor applied to any declared integer above <see cref="SmallEnough"/>.</summary>
+    /// <remarks>
+    /// 32 turns paper-scale widths into test-scale ones (1536 -> 48, 768 -> 24, 4096 -> 128) while
+    /// leaving the structure recognisable. It is a ratio rather than a target, so nothing has to
+    /// know what the number MEANS.
+    /// </remarks>
+    private const int ScaleDivisor = 32;
+
+    /// <summary>At or below this, a declared integer is left exactly as it is.</summary>
+    /// <remarks>
+    /// Small numbers are almost always structural -- head counts, channel counts, kernel sizes,
+    /// stage counts -- and shrinking them is what broke models rather than what helped.
+    /// </remarks>
+    private const int SmallEnough = 16;
+
     /// <summary>Name markers for a SPATIAL input extent, which needs a floor rather than the cap.</summary>
     /// <remarks>
     /// A classifier backbone downsamples hard -- ResNet reduces by 32x through its stem and four
@@ -539,6 +554,22 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("            ? optionsType.GetGenericTypeDefinition()");
         sb.AppendLine("            : optionsType;");
         sb.AppendLine();
+        sb.AppendLine("        // ONLY ANSWER FOR TYPES THIS TABLE KNOWS. Constructing whatever it is handed");
+        sb.AppendLine("        // made this return boxed defaults for primitives: CreateBoundedOptions(typeof(int))");
+        sb.AppendLine("        // produced 0, and the clone sweep -- which asks per CONSTRUCTOR PARAMETER type --");
+        sb.AppendLine("        // used that 0 in place of the parameter's own default. MATCHA then built a");
+        sb.AppendLine("        // PatchEmbeddingLayer with embeddingDim 0 and threw. Every model with an int");
+        sb.AppendLine("        // constructor parameter was exposed to this.");
+        sb.AppendLine("        bool known = false;");
+        sb.AppendLine("        for (int i = 0; i < Knobs.Length; i++)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (Knobs[i].Type != key) continue;");
+        sb.AppendLine("            known = true;");
+        sb.AppendLine("            break;");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        if (!known) return null;");
+        sb.AppendLine();
         sb.AppendLine("        object? instance;");
         sb.AppendLine("        try");
         sb.AppendLine("        {");
@@ -584,6 +615,24 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("        return bounded ? instance : instance;");
         sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    /// <summary>Scales any declared integer down proportionally, using no names at all.</summary>");
+        sb.AppendLine("    /// <remarks>");
+        sb.AppendLine("    /// Name-based rules kept breaking: every new family invents a spelling the lists do not");
+        sb.AppendLine("    /// have, and a model that takes its dimensions as plain constructor ints is not matched");
+        sb.AppendLine("    /// at all -- MATCHA built at its full 1536-wide default and killed the host.");
+        sb.AppendLine("    ///");
+        sb.AppendLine("    /// Dividing instead of clamping needs no vocabulary and preserves RELATIONSHIPS. An");
+        sb.AppendLine("    /// absolute cap sets width and head count independently and breaks width % heads == 0;");
+        sb.AppendLine("    /// scaling by a common factor keeps the ratio, so 1536 wide with 12 heads becomes 48");
+        sb.AppendLine("    /// wide with 12 heads and still divides. Values already small are left untouched, which");
+        sb.AppendLine("    /// is what keeps head counts, channel counts and other small structural numbers intact.");
+        sb.AppendLine("    /// </remarks>");
+        sb.AppendLine("    public static int ScaleDeclaredInteger(int declared)");
+        sb.AppendLine("        => declared <= SmallEnough ? declared : global::System.Math.Max(SmallEnough, declared / ScaleDivisor);");
+        sb.AppendLine();
+        sb.AppendLine($"    private const int ScaleDivisor = {ScaleDivisor};");
+        sb.AppendLine($"    private const int SmallEnough = {SmallEnough};");
         sb.AppendLine();
         sb.AppendLine("    private static int Override(");
         sb.AppendLine("        global::System.Collections.Generic.IReadOnlyDictionary<string, int>? overrides,");
