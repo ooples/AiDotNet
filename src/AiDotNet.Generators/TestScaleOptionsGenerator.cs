@@ -63,6 +63,9 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         // "reduced" scale. This is the one direction where a wrong guess is expensive, which is why
         // they live in the leave-alone list rather than getting a cap of their own.
         "HopSize",
+        "FftSize",      // a SMALLER analysis window yields more frames, exactly like HopSize
+        "NFft",
+        "WinLength",
         "Stride",
         "PatchSize",
         "Downsample",
