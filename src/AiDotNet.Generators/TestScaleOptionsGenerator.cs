@@ -257,9 +257,43 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
                 // FIRST declared member. Variant enums are conventionally ordered smallest-first
                 // (ResNet18, EfficientNetB0, DenseNet121), which is exactly the test-scale choice
                 // the hand-written CreateForTesting made by hand.
-                var firstMember = parameter.Type.GetMembers()
+                // PREFER A "Custom" MEMBER. A variant enum that offers Custom means "use the
+                // dimensions I pass rather than the paper preset", which is exactly what test-scale
+                // construction wants -- EfficientNet's hand-written factory chose Custom with a
+                // 32x32 input, and taking B0 instead both changed the reported variant and left the
+                // model too large for the mini-network size gate. Falling back to the first member
+                // keeps ResNet18 and DenseNet121, where first IS smallest.
+                var members = parameter.Type.GetMembers()
                     .OfType<IFieldSymbol>()
-                    .FirstOrDefault(f => f.HasConstantValue);
+                    .Where(f => f.HasConstantValue)
+                    .ToArray();
+                // A "Custom" member is TEMPTING and wrong on its own: it means "use the multipliers
+                // I pass", and supplying the variant without its companion custom* parameters
+                // produced a degenerate EfficientNet -- 35 failures against 2. Until the generator
+                // can supply the companions too, take the first member, which is smallest for the
+                // variant enums that exist (ResNet18, EfficientNetB0, DenseNet121).
+                // A "Custom" member means "use the values I pass" -- exactly test-scale intent --
+                // but ONLY if the companion custom* parameters are supplied with it. Choosing it
+                // bare produced a degenerate EfficientNet (35 failures against 2), so it is taken
+                // only when this constructor actually offers those companions.
+                // EVERY companion must be supplyable, not merely present. EfficientNet offers
+                // customInputHeight and two multipliers, all int?/double? the generator can fill.
+                // DenseNet offers customBlockLayers, an array it cannot invent -- taking Custom
+                // there produced a model that missed its size thresholds. Partial custom state is
+                // worse than the preset.
+                var companions = constructor.Parameters
+                    .Where(x => x.Name.StartsWith("custom", System.StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                var hasCompanions = companions.Length > 0 && companions.All(x =>
+                    x.Type is INamedTypeSymbol n
+                    && n.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T
+                    && (n.TypeArguments[0].SpecialType == SpecialType.System_Int32
+                        || n.TypeArguments[0].SpecialType == SpecialType.System_Double));
+                var firstMember = (hasCompanions
+                        ? members.FirstOrDefault(f =>
+                            string.Equals(f.Name, "Custom", System.StringComparison.Ordinal))
+                        : null)
+                    ?? members.FirstOrDefault();
                 if (firstMember is null)
                 {
                     if (parameter.HasExplicitDefaultValue) continue;
@@ -269,6 +303,28 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
                 var enumName = parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                 parts.Add($"{parameter.Name}: {enumName}.{firstMember.Name}");
                 continue;
+            }
+
+            // Nullable companions to a Custom variant. Without these the variant has nothing to
+            // work from; with them it is the smallest honest configuration the type can express.
+            if (parameter.Type is INamedTypeSymbol nullable
+                && nullable.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T
+                && parameter.Name.StartsWith("custom", System.StringComparison.OrdinalIgnoreCase))
+            {
+                var inner = nullable.TypeArguments[0];
+                if (inner.SpecialType == SpecialType.System_Int32)
+                {
+                    int companionBound = BoundFor(parameter.Name);
+                    parts.Add($"{parameter.Name}: {(companionBound > 0 ? companionBound : SpatialCap)}");
+                    continue;
+                }
+
+                if (inner.SpecialType == SpecialType.System_Double)
+                {
+                    // A multiplier of one keeps the variant's own proportions.
+                    parts.Add($"{parameter.Name}: 1.0");
+                    continue;
+                }
             }
 
             if (parameter.Type.SpecialType != SpecialType.System_Int32) continue;
