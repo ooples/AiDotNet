@@ -56,6 +56,18 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
     /// </remarks>
     private static readonly string[] SemanticallyFixed =
     {
+        // INVERSE KNOBS: shrinking these INCREASES work, so they must never be capped. A smaller
+        // hop or patch produces MORE frames or patches from the same input, and a smaller stride
+        // downsamples less. Capping HopSize to 16 is what made CSM stall even though every other
+        // number was smaller than the hand-written config -- the model was doing far more work at
+        // "reduced" scale. This is the one direction where a wrong guess is expensive, which is why
+        // they live in the leave-alone list rather than getting a cap of their own.
+        "HopSize",
+        "Stride",
+        "PatchSize",
+        "Downsample",
+        "PoolSize",
+        "WindowSize",
         "SampleRate",
         "Seed",
         "RandomState",
@@ -70,7 +82,30 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         "Year",
     };
 
-    /// <summary>Every int knob above this is clamped to it.</summary>
+    /// <summary>Name markers for a knob that is a COUNT of things rather than a width.</summary>
+    /// <remarks>
+    /// A single uniform cap is not enough, and CSM is the proof: capping everything at 16 bounded
+    /// its dimensions correctly but also set NumLLMLayers, NumEncoderLayers and NumDecoderLayers to
+    /// SIXTEEN, where the hand-written branch used one. Sixteen transformer layers instead of one is
+    /// far more expensive than any width, and the model stalled past the drain budget.
+    ///
+    /// Counts multiply work; widths mostly scale one matmul. So counts get a much smaller cap. The
+    /// distinction is still name-based, but the cost of misreading it is now bounded both ways: a
+    /// count mistaken for a width is 16 layers instead of 2 (slow, still correct), and a width
+    /// mistaken for a count is a 2-wide matrix (small, still correct).
+    /// </remarks>
+    private static readonly string[] CountMarkers =
+    {
+        "NumLayers", "NumHiddenLayers", "NumEncoderLayers", "NumDecoderLayers", "NumVisionLayers",
+        "NumLLMLayers", "NumBlocks", "NumExperts", "NumCodebooks", "NumStages", "NumGroups",
+        "NumHeads", "NumAttentionHeads", "NumKeyValueHeads", "Depth", "LayerCount", "BlockCount",
+    };
+
+    /// <summary>Cap for a count of repeated structures.</summary>
+    /// <remarks>Two, not one: a single layer cannot exercise inter-layer wiring.</remarks>
+    private const int CountCap = 2;
+
+    /// <summary>Every other int knob above this is clamped to it.</summary>
     /// <remarks>
     /// One number rather than a per-name table. A test-scale model needs shapes that exercise the
     /// code path, not shapes that resemble the paper: 16 is wide enough that a head count of 2 or 4
@@ -246,6 +281,11 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         foreach (var fixedName in SemanticallyFixed)
         {
             if (propertyName.IndexOf(fixedName, System.StringComparison.Ordinal) >= 0) return 0;
+        }
+
+        foreach (var marker in CountMarkers)
+        {
+            if (propertyName.IndexOf(marker, System.StringComparison.Ordinal) >= 0) return CountCap;
         }
 
         return KnobCap;
