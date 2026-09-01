@@ -730,6 +730,30 @@ jobs:
 
           # Empty is uncertainty, not permission to run nothing. Preserve the fail-safe contract
           # even if a future selector regression reaches this second line of defence.
+          # SHADOW MODE, and it is the default on purpose.
+          #
+          # The reduced path cannot be exercised before this merges: the map is published by
+          # test-impact-map.yml, which cannot run until it is on master, so every run here
+          # escalates and the first real reduction would otherwise happen in production. Shadow
+          # mode closes that gap - selection is computed and reported exactly as it would be, and
+          # then the FULL matrix runs anyway. Zero risk, and it produces the one thing missing:
+          # real data on what selection would have skipped, which Measure-SelectionMiss checks
+          # against what actually failed.
+          #
+          # Set the repository variable TEST_IMPACT_MODE to 'enforce' once that data supports it.
+          # Any other value, including unset, means shadow.
+          $mode = '${{ vars.TEST_IMPACT_MODE }}'
+          if ($mode -ne 'enforce') {
+            $wouldRun = $matrixShards.Count
+            $shadowNote = if ($escalate) { "would have escalated to all $($all.Count)" }
+                          else { "would have run $wouldRun of $($all.Count)" }
+            Write-Host "shadow mode (TEST_IMPACT_MODE='$mode'): $shadowNote - running the full matrix anyway"
+            "### Shard selection (shadow)`n`n$shadowNote. Set the repository variable ``TEST_IMPACT_MODE`` to ``enforce`` to act on this." |
+              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            $matrixShards = $all
+            $escalate = $true
+          }
+
           if ($matrixShards.Count -eq 0) {
             Write-Host '::warning::shard selection produced an empty matrix - running the full matrix'
             $matrixShards = $all

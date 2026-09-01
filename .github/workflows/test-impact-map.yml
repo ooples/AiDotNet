@@ -5,7 +5,12 @@ name: Test impact map
 on:
   schedule:
     # 07:00 UTC, after nightly master activity and before the working day.
-    - cron: '0 7 * * *'
+    # 02:00 UTC. The instrumented run is ~3450 runner-minutes, which at max-parallel 12 is about
+    # 4.8 HOURS of queue occupancy - so the start time has to clear the working day by a wide
+    # margin, not just miss it. Measured activity in this repo clusters at 13:00-16:00 and 21:00
+    # UTC; starting at 02:00 finishes around 06:50 and leaves six hours of slack. At 07:00 it
+    # finished at 11:48, which only just cleared it.
+    - cron: '0 2 * * *'
   workflow_dispatch:
     inputs:
       run_id:
