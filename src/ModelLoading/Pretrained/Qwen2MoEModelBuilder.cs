@@ -91,7 +91,7 @@ public static class Qwen2MoEModelBuilder<T>
 
             LlamaModelBuilder<T>.LoadGamma(block.Norm1, weights, p + "input_layernorm.weight", hidden, addOne: false);
             LlamaModelBuilder<T>.LoadGamma(block.Norm2, weights, p + "post_attention_layernorm.weight", hidden, addOne: false);
-            LlamaModelBuilder<T>.LoadAttentionBiased((GroupedQueryAttentionLayer<T>)block.AttentionLayer, weights, p, numHeads, numKVHeads, headDim, hidden);
+            LlamaModelBuilder<T>.LoadAttentionBiased((GroupedQueryAttentionLayer<T>)block.AttentionLayer, weights, p, numHeads, numKVHeads, headDim, hidden, LlamaModelBuilder<T>.ShouldPermuteRope(weights));
 
             var moe = block.Moe;
             LlamaModelBuilder<T>.LoadDense(moe.Router, weights, p + "mlp.gate.weight", outDim: numExperts, inDim: hidden);
