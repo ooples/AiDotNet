@@ -172,7 +172,20 @@ function ConvertTo-ChangedRanges {
     $changed = @{}
     $current = $null
     $deletedPath = $null
+    # Hunk BODY lines still pending. Headers are only recognised while this is zero, because diff
+    # body lines are raw file content behind a one-character prefix, and content can forge any
+    # header: a REMOVED line whose text begins with '-- ' is rendered '--- ...', byte-identical to
+    # an old-file header. Reproduced with real git: deleting the line '-- remove me' emitted
+    # '--- remove me', the old parser took it as a header, nulled $current, and silently dropped
+    # every later hunk of that file - under-selection with no escalation. A zero-context hunk
+    # '@@ -a,n +b,m @@' is followed by exactly n+m body lines (plus uncounted '\ No newline'
+    # markers), so counting them makes body content inert no matter what it says.
+    $pendingBody = 0
     foreach ($line in $DiffLines) {
+        if ($pendingBody -gt 0) {
+            if (-not $line.StartsWith('\')) { $pendingBody-- }
+            continue
+        }
         if ($line.StartsWith('--- ')) {
             $from = $line.Substring(4).Trim()
             $deletedPath = if ($from -eq '/dev/null') { $null } else { $from -replace '^a/', '' }
@@ -182,19 +195,23 @@ function ConvertTo-ChangedRanges {
             $to = $line.Substring(4).Trim()
             $current = if ($to -eq '/dev/null') { $deletedPath } else { $to -replace '^b/', '' }
         }
-        elseif ($current -and $line.StartsWith('@@') -and $line -match '-(\d+)(?:,(\d+))?') {
+        elseif ($line.StartsWith('@@') -and $line -match '^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@') {
             $start = [int] $Matches[1]
             $count = if ($Matches[2]) { [int] $Matches[2] } else { 1 }
-            if (-not $changed.ContainsKey($current)) {
-                $changed[$current] = [System.Collections.Generic.List[int]]::new()
-            }
-            if ($count -gt 0) {
-                [void] $changed[$current].Add($start)
-                [void] $changed[$current].Add($start + $count - 1)
-            }
-            else {
-                [void] $changed[$current].Add([Math]::Max(1, $start))
-                [void] $changed[$current].Add([Math]::Max(1, $start + 1))
+            $newCount = if ($Matches[4]) { [int] $Matches[4] } else { 1 }
+            $pendingBody = $count + $newCount
+            if ($current) {
+                if (-not $changed.ContainsKey($current)) {
+                    $changed[$current] = [System.Collections.Generic.List[int]]::new()
+                }
+                if ($count -gt 0) {
+                    [void] $changed[$current].Add($start)
+                    [void] $changed[$current].Add($start + $count - 1)
+                }
+                else {
+                    [void] $changed[$current].Add([Math]::Max(1, $start))
+                    [void] $changed[$current].Add([Math]::Max(1, $start + 1))
+                }
             }
         }
     }
@@ -348,19 +365,20 @@ if ($SelfTest) {
         Assert-True $r.Escalate "unexecuted boundary line $edge must escalate"
     }
 
-    $diff = @(
-        '--- a/src/Covered.cs', '+++ b/src/Covered.cs',
-        '@@ -1,0 +1,50 @@', '@@ -500 +550 @@'
-    )
+    # Faithful to real git: every hunk header is followed by its body lines. An earlier revision
+    # used header-only fixtures, which real git never emits - and which masked the forged-header
+    # parse bug that body-line counting exists to prevent (see check 15).
+    $diff = @('--- a/src/Covered.cs', '+++ b/src/Covered.cs', '@@ -1,0 +1,50 @@') +
+            @(1..50 | ForEach-Object { "+inserted $_" }) +
+            @('@@ -500 +550 @@', '-old text', '+new text')
     $parsed = ConvertTo-ChangedRanges -DiffLines $diff
     $ranges = @($parsed['src/Covered.cs'])
     Assert-True ($ranges -contains 500) 'the parser must report old-side line numbers'
     Assert-True (-not ($ranges -contains 550)) 'the parser must not report new-side line numbers'
 
-    $diff = @(
-        '--- a/src/Covered.cs', '+++ b/src/Covered.cs', '@@ -100 +100 @@',
-        '--- a/src/Deleted.cs', '+++ /dev/null', '@@ -1,200 +0,0 @@'
-    )
+    $diff = @('--- a/src/Covered.cs', '+++ b/src/Covered.cs', '@@ -100 +100 @@', '-x', '+y',
+              '--- a/src/Deleted.cs', '+++ /dev/null', '@@ -1,200 +0,0 @@') +
+            @(1..200 | ForEach-Object { "-gone $_" })
     $parsed = ConvertTo-ChangedRanges -DiffLines $diff
     Assert-True ($parsed.ContainsKey('src/Deleted.cs')) 'a deleted file must be reported under its own path'
     Assert-True (@($parsed['src/Covered.cs']).Count -eq 2) 'a deletion must not contaminate the prior file'
@@ -417,6 +435,41 @@ if ($SelfTest) {
         'a look-alike suffix must not match shared infrastructure'
     $r = Select-ImpactedShards -Map $map -Changed @{ '.github/workflows/anything.yml' = @(1, 2) }
     Assert-True $r.Escalate 'the .github/ directory prefix still escalates'
+
+    # 15. Hunk BODY content must be inert. A removed line whose text begins with '-- ' renders as
+    #     '--- ...', byte-identical to an old-file header; the pre-fix parser nulled $current on it
+    #     and silently dropped every later hunk of the file - under-selection with no escalation.
+    #     This diff is verbatim real-git output for: delete the line '-- remove me', edit line 81.
+    $diff = @(
+        'diff --git a/F.cs b/F.cs',
+        'index 9329992..2c35db3 100644',
+        '--- a/F.cs',
+        '+++ b/F.cs',
+        '@@ -50 +49,0 @@ line 49',
+        '--- remove me',
+        '@@ -81 +80 @@ line 80',
+        '-line 81',
+        '+line 80 EDITED'
+    )
+    $r = ConvertTo-ChangedRanges -DiffLines $diff
+    Assert-True ($r.ContainsKey('F.cs')) 'the file must be reported'
+    Assert-True (@($r['F.cs']) -contains 81) 'the hunk AFTER the forged header line must survive'
+    Assert-True (-not $r.ContainsKey('remove me')) 'body content must never become a path'
+
+    # 16. And a forged header inside an ADDED body line must not smuggle a file in.
+    $diff = @(
+        '--- a/G.cs',
+        '+++ b/G.cs',
+        '@@ -5,0 +6,2 @@',
+        '+--- a/EVIL.cs',
+        '++++ b/EVIL.cs',
+        '@@ -30 +32 @@',
+        '-x',
+        '+y'
+    )
+    $r = ConvertTo-ChangedRanges -DiffLines $diff
+    Assert-True (-not $r.ContainsKey('EVIL.cs')) 'added body content must never become a path'
+    Assert-True (@($r['G.cs']) -contains 30) 'the following real hunk still lands on the right file'
 
     if ($failures.Count -gt 0) {
         Write-Host 'Select-Shards self-test FAILED:'

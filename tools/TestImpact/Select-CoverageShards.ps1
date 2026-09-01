@@ -41,6 +41,16 @@
     A clean mapped shard NOT in this list is simply left to re-produce its own digest; it is neither
     instrumented by force nor carried. Omit to allow carrying everything (the self-contained case).
 
+.PARAMETER GlobalDirtyPrefixes
+    Path prefixes whose changes invalidate EVERY carry (default: tests/). Coverage digests contain
+    only product code - coverlet excludes the test assemblies - so a change that only touches test
+    code is invisible to the per-shard dirty check, yet a new test can create coverage edges the
+    map must learn. Reviewed and confirmed as a permanent silent-miss vector in enforce mode: a
+    heavy shard whose suite gained a test covering src lines mapped to another shard would be
+    re-carried nightly, and a PR touching those lines would skip it forever. When any changed path
+    matches, nothing is carried and the night instruments everything, which re-measures all
+    coverage edges including the new ones.
+
 .PARAMETER CarryForwardDirectory
     Where to write reconstructed digests for the shards being carried forward. A digest is inverted
     straight out of the previous map, so New-ShardMap consumes it exactly like a fresh one and needs
@@ -58,6 +68,7 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'Select')] [AllowEmptyCollection()] [string[]] $ChangedFiles,
     [Parameter(Mandatory, ParameterSetName = 'Select')] [string[]] $AllShards,
     [Parameter(ParameterSetName = 'Select')] [AllowEmptyCollection()] [string[]] $CarryOnly,
+    [Parameter(ParameterSetName = 'Select')] [string[]] $GlobalDirtyPrefixes = @('tests/'),
     [Parameter(ParameterSetName = 'Select')] [string] $CarryForwardDirectory,
     [Parameter(ParameterSetName = 'Select')] [string] $OutFile,
     [Parameter(Mandatory, ParameterSetName = 'SelfTest')] [switch] $SelfTest
@@ -250,6 +261,19 @@ if ($SelfTest) {
     Assert-True ((@($d2.files.'src/Dup.cs') -join ',') -eq '1,2,9,9') `
         'duplicate occurrences must merge ranges, not overwrite'
 
+    # 10. TEST-CODE changes must invalidate every carry. Digests hold only product code, so a
+    #     tests/** change is invisible to the per-shard dirty check - yet a new test can create
+    #     coverage edges the map must learn, and re-carrying would hide them from enforce-mode
+    #     selection permanently. The pure split cannot see this; the caller-level rule must.
+    #     (Exercised via the CLI path in the workflow; here the rule's building blocks:)
+    $r = Split-CoverageWork -Map $map -ChangedFiles @('tests/AiDotNet.Tests/NewTest.cs') -AllShards $all
+    Assert-True ($r.Carried.Count -eq 2) 'the pure split alone does NOT see test files (by design)'
+    $hit = $false
+    foreach ($p in @('tests/')) {
+        if ('tests/AiDotNet.Tests/NewTest.cs'.StartsWith($p, [StringComparison]::OrdinalIgnoreCase)) { $hit = $true }
+    }
+    Assert-True $hit 'the global-dirty prefix rule must catch the same path the split misses'
+
     if ($failures.Count -gt 0) {
         Write-Host 'Select-CoverageShards self-test FAILED:'
         foreach ($f in $failures) { Write-Host "  - $f" }
@@ -278,6 +302,17 @@ if ($PreviousMap -and (Test-Path -LiteralPath $PreviousMap)) {
 $split = Split-CoverageWork -Map $map -ChangedFiles $ChangedFiles -AllShards $AllShards
 
 $carriedFinal = @($split.Carried)
+foreach ($path in $ChangedFiles) {
+    if (-not $path) { continue }
+    foreach ($prefix in $GlobalDirtyPrefixes) {
+        if (([string] $path).StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+            Write-Host "change under '$prefix' ($path) - test code is invisible to digests, so nothing is carried tonight"
+            $carriedFinal = @()
+            break
+        }
+    }
+    if ($carriedFinal.Count -eq 0) { break }
+}
 if ($PSBoundParameters.ContainsKey('CarryOnly')) {
     $allow = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
     foreach ($s in $CarryOnly) { if ($s) { [void] $allow.Add([string] $s) } }

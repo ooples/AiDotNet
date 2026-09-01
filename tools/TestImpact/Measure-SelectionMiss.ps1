@@ -34,7 +34,7 @@
 
 .PARAMETER OutcomesFile
     JSON array of { shard, outcome } for every shard in the audited run. `outcome` is the shard's
-    test step result; anything other than 'success' counts as a failure.
+    test step result; 'success' passes, 'failure' fails; any OTHER outcome (cancelled, skipped, neutral) aborts the audit, because a shard that never finished is not evidence in either direction.
 
 .PARAMETER SelectorPath
     Select-Shards.ps1. Invoked as a subprocess so the audit exercises the SHIPPING selector rather

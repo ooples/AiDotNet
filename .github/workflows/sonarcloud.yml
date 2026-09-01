@@ -645,16 +645,34 @@ jobs:
       - name: Verify the impact tooling
         id: selftest
         continue-on-error: true
+        # A HUNG self-test would otherwise burn the job's 15-minute ceiling and kill the whole
+        # job before any matrix output is written; a step timeout converts it into outcome=failure,
+        # which the gate below turns into a full-matrix run.
+        timeout-minutes: 5
         shell: pwsh
         run: |
           ./tools/TestImpact/Select-Shards.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'Select-Shards self-test failed' }
           ./tools/TestImpact/New-ShardMap.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'New-ShardMap self-test failed' }
+          # These two authorize the carry path and the nightly audit respectively; untested
+          # tooling must not gate either.
+          ./tools/TestImpact/Select-CoverageShards.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Select-CoverageShards self-test failed' }
+          ./tools/TestImpact/Measure-SelectionMiss.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Measure-SelectionMiss self-test failed' }
 
       - name: Select
         id: select
         shell: pwsh
+        env:
+          # Both values are attacker- or typo-influenced text interpolated into code if
+          # written inline: a single quote in either would terminate the pwsh literal - a
+          # repo VARIABLE with a quote would brick every run of this job, and the dispatch
+          # input is a script-injection vector with the job token in scope (the map workflow
+          # already passes its equivalent as env for exactly this reason). Env is data.
+          TEST_IMPACT_MODE: ${{ vars.TEST_IMPACT_MODE }}
+          INPUT_MAP_RUN_ID: ${{ inputs.test_impact_map_run_id }}
         run: |
           $all = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
           if ($all.Count -eq 0) {
@@ -746,7 +764,7 @@ jobs:
           #
           # Set the repository variable TEST_IMPACT_MODE to 'enforce' once that data supports it.
           # Any other value, including unset, means shadow.
-          $mode = '${{ vars.TEST_IMPACT_MODE }}'
+          $mode = [string] $env:TEST_IMPACT_MODE
           if ($mode -ne 'enforce') {
             $wouldRun = $matrixShards.Count
             $shadowNote = if ($escalate) { "would have escalated to all $($all.Count)" }
@@ -833,7 +851,11 @@ jobs:
                 $prevSha = [string] $prevMap.sha
                 & git cat-file -e "$prevSha^{commit}" 2>$null
                 if ($LASTEXITCODE -ne 0) { throw "previous map commit $prevSha is not in this checkout" }
-                $changedFiles = @(& git diff --name-only $prevSha HEAD)
+                # --no-renames: a rename otherwise lists only the NEW path while digests key
+                # the OLD one, so the byte-identity check never sees it; as delete+add both sides
+                # dirty correctly. quotepath=false matches the selection-side diffs - an
+                # octal-escaped non-ASCII path can never equal a map key.
+                $changedFiles = @(& git -c core.quotepath=false diff --no-renames --name-only $prevSha HEAD)
                 if ($LASTEXITCODE -ne 0) { throw "git diff from $prevSha failed" }
                 ./tools/TestImpact/Select-CoverageShards.ps1 `
                     -PreviousMap map/shard-map.json `
@@ -859,7 +881,11 @@ jobs:
             "### Incremental instrumentation`n`ncarrying $($carried.Count) shard(s) forward; instrumenting the rest." |
               Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
-            $mapRunId = '${{ inputs.test_impact_map_run_id }}'
+            $mapRunId = [string] $env:INPUT_MAP_RUN_ID
+            if ($mapRunId -and $mapRunId -notmatch '^[0-9]+$') {
+              Write-Host "::warning::test_impact_map_run_id is not numeric - ignoring it"
+              $mapRunId = ''
+            }
             if (-not $mapRunId) { $mapRunId = '${{ steps.map.outputs.run_id }}' }
             [ordered]@{
               schemaVersion = 1
@@ -1487,7 +1513,9 @@ jobs:
 
       # Test-impact digest: the executed source lines for this shard, ~200 KB against the coverage
       # XML's ~234 MB. Uploaded separately so the nightly map build downloads kilobytes per shard
-      # rather than a quarter of a gigabyte; the XML stays available as a rebuild fallback.
+      # rather than a quarter of a gigabyte. The digests are the DURABLE
+      # input: on coverage-everywhere runs the raw XML artifact is kept only one day, so it is a
+      # same-day diagnostic, not a rebuild fallback.
       #
       # Shards without a complete successful coverage-producing test step emit no digest and are
       # classified as always-run by the map producer.
