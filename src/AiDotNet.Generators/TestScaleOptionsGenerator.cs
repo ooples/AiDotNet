@@ -85,42 +85,8 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         "Year",
     };
 
-    /// <summary>Name markers for a knob that is a COUNT of things rather than a width.</summary>
-    /// <remarks>
-    /// A single uniform cap is not enough, and CSM is the proof: capping everything at 16 bounded
-    /// its dimensions correctly but also set NumLLMLayers, NumEncoderLayers and NumDecoderLayers to
-    /// SIXTEEN, where the hand-written branch used one. Sixteen transformer layers instead of one is
-    /// far more expensive than any width, and the model stalled past the drain budget.
-    ///
-    /// Counts multiply work; widths mostly scale one matmul. So counts get a much smaller cap. The
-    /// distinction is still name-based, but the cost of misreading it is now bounded both ways: a
-    /// count mistaken for a width is 16 layers instead of 2 (slow, still correct), and a width
-    /// mistaken for a count is a 2-wide matrix (small, still correct).
-    /// </remarks>
-    private static readonly string[] CountMarkers =
-    {
-        // SUBSTRINGS, not full spellings. Enumerating names could never keep up: Florence2 calls its
-        // head count NumDecoderHeads, which matched none of NumHeads / NumAttentionHeads /
-        // NumKeyValueHeads, so it kept its default of 12 while DecoderEmbeddingDim was capped to 16.
-        // A head count must DIVIDE the embedding width, and 16/12 truncates to a head dimension of
-        // 1, giving 12 * 1 = 12 against an actual width of 16 -- MultiHeadAttentionLayer rejects
-        // exactly that. Matching any *Heads* and any *Layers* keeps counts at the count cap, and a
-        // cap of 2 divides every width bound this generator produces.
-        "Heads", "Layers", "Blocks", "Experts", "Codebooks", "Stages", "Groups",
-        "Depth", "LayerCount", "BlockCount",
-    };
 
-    /// <summary>Cap for a count of repeated structures.</summary>
-    /// <remarks>Two, not one: a single layer cannot exercise inter-layer wiring.</remarks>
-    private const int CountCap = 2;
 
-    /// <summary>Every other int knob above this is clamped to it.</summary>
-    /// <remarks>
-    /// One number rather than a per-name table. A test-scale model needs shapes that exercise the
-    /// code path, not shapes that resemble the paper: 16 is wide enough that a head count of 2 or 4
-    /// still divides it, and small enough that a dozen layers of it cost nothing.
-    /// </remarks>
-    private const int KnobCap = 16;
 
     /// <summary>Factor applied to any declared integer above <see cref="SmallEnough"/>.</summary>
     /// <remarks>
@@ -130,34 +96,21 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
     /// </remarks>
     private const int ScaleDivisor = 32;
 
-    /// <summary>At or below this, a declared integer is left exactly as it is.</summary>
+    /// <summary>Floor for a scaled integer, and the value at or below which nothing changes.</summary>
     /// <remarks>
-    /// Small numbers are almost always structural -- head counts, channel counts, kernel sizes,
-    /// stage counts -- and shrinking them is what broke models rather than what helped.
+    /// A pure ratio is not enough on its own. A classifier backbone downsamples by 32x, so scaling
+    /// a 224-wide input to 7 collapses the spatial extent before the classifier and 35 vision tests
+    /// fail -- the same collapse an earlier absolute "spatial" tier existed to prevent. A floor
+    /// achieves it without classifying names: 224 becomes 32, 1536 becomes 48, and anything already
+    /// at or below 32 is untouched, so nothing is ever RAISED.
     /// </remarks>
-    private const int SmallEnough = 16;
+    private const int MinimumScaled = 32;
 
-    /// <summary>Name markers for a SPATIAL input extent, which needs a floor rather than the cap.</summary>
-    /// <remarks>
-    /// A classifier backbone downsamples hard -- ResNet reduces by 32x through its stem and four
-    /// stages -- so a 16x16 input collapses to zero spatial extent before the classifier and the
-    /// model cannot run at all. The hand-written CreateForTesting chose 32x32 for exactly this
-    /// reason. 32 is the smallest power of two that survives a 32x reduction.
-    /// </remarks>
-    private static readonly string[] SpatialMarkers =
-    {
-        "InputHeight", "InputWidth", "InputSize", "ImageSize", "Resolution",
-    };
+    /// <summary>Legacy alias retained for the emitted-constant name only.</summary>
+    private const int SmallEnough = MinimumScaled;
 
-    /// <summary>Bound for a spatial extent: small, but large enough to survive downsampling.</summary>
-    private const int SpatialCap = 32;
 
-    /// <summary>Below this, a value is left alone entirely.</summary>
-    /// <remarks>
-    /// Counts that are already tiny (2 codebooks, 4 heads) carry structure worth preserving, and
-    /// rewriting them to the cap would make some models LARGER, which this must never do.
-    /// </remarks>
-    private const int LeaveAloneBelow = 17;
+
 
     /// <inheritdoc/>
     /// <remarks>
@@ -331,8 +284,13 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
                 var inner = nullable.TypeArguments[0];
                 if (inner.SpecialType == SpecialType.System_Int32)
                 {
-                    int companionBound = BoundFor(parameter.Name);
-                    parts.Add($"{parameter.Name}: {(companionBound > 0 ? companionBound : SpatialCap)}");
+                    // Scaled from the declared default, or a small concrete value when there is
+                    // none to scale. No cap tier, so no name has to be classified.
+                    var companionDefault = parameter.HasExplicitDefaultValue
+                        && parameter.ExplicitDefaultValue is int companionDeclared
+                            ? companionDeclared
+                            : 32;
+                    parts.Add($"{parameter.Name}: ScaleDeclaredInteger({companionDefault})");
                     continue;
                 }
 
@@ -352,14 +310,14 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
                 && array.ElementType.SpecialType == SpecialType.System_Int32
                 && parameter.Name.StartsWith("custom", System.StringComparison.OrdinalIgnoreCase))
             {
-                var stages = string.Join(", ", Enumerable.Repeat(CountCap.ToString(), BackboneStages));
+                var stages = string.Join(", ", Enumerable.Repeat("2", BackboneStages));
                 parts.Add($"{parameter.Name}: new int[] {{ {stages} }}");
                 continue;
             }
 
             if (parameter.Type.SpecialType != SpecialType.System_Int32) continue;
 
-            int bound = BoundFor(parameter.Name);
+            bool scalable = IsScalable(parameter.Name);
 
             // CLAMP, NEVER RAISE -- for constructor arguments too. A property is compared against
             // its live value; a constructor parameter has only its DECLARED DEFAULT, and skipping
@@ -368,15 +326,17 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
             // input that every 3-channel image then failed against: "Expected input depth 16, but
             // got 3", 41 tests. When the default is already at or below the bound, say nothing and
             // let the default stand.
-            if (bound > 0
-                && parameter.HasExplicitDefaultValue
-                && parameter.ExplicitDefaultValue is int declaredDefault
-                && declaredDefault <= bound)
+            // A declared default is scaled in place; anything not scalable keeps its own value,
+            // which for an optional parameter means saying nothing at all.
+            if (parameter.HasExplicitDefaultValue
+                && parameter.ExplicitDefaultValue is int declaredDefault)
             {
+                if (!scalable) continue;
+                parts.Add($"{parameter.Name}: ScaleDeclaredInteger({declaredDefault})");
                 continue;
             }
 
-            if (bound <= 0)
+            if (!scalable)
             {
                 // Semantically fixed: only supply it when it is required, and then with its own
                 // declared default if it has one.
@@ -388,7 +348,8 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
             }
 
             parts.Add(
-                $"{parameter.Name}: Override(overrides, \"{parameter.Name}\", {bound})");
+                $"{parameter.Name}: Override(overrides, \"{parameter.Name}\", "
+                    + $"{DefaultRequiredInt(parameter.Name)})");
         }
 
         return parts.Count == 0 ? null : string.Join(", ", parts);
@@ -509,7 +470,7 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
                     && p.SetMethod is { DeclaredAccessibility: Accessibility.Public }
                     && !p.IsStatic
                     && p.Type.SpecialType == SpecialType.System_Int32)
-                .Select(p => (Property: p.Name, Bound: BoundFor(p.Name)))
+                .Select(p => (Property: p.Name, Bound: IsScalable(p.Name) ? 1 : 0))
                 .Where(k => k.Bound > 0)
                 .ToArray();
 
@@ -593,12 +554,13 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("            if (property is null || !property.CanRead || !property.CanWrite) continue;");
         sb.AppendLine("            if (property.GetValue(instance) is not int current) continue;");
         sb.AppendLine();
-        sb.AppendLine("            // CLAMP, never raise. A value already at or below the cap keeps");
-        sb.AppendLine("            // its own number: small counts carry structure (2 codebooks, 4");
-        sb.AppendLine("            // heads) and rewriting them could make a model LARGER.");
-        sb.AppendLine("            if (current <= Knobs[i].Bound) continue;");
+        sb.AppendLine("            // SCALED, not clamped. Dividing preserves the ratios between knobs, so a");
+        sb.AppendLine("            // width and a head count shrink together and width % heads still divides.");
+        sb.AppendLine("            // An absolute cap set them independently and broke exactly that.");
+        sb.AppendLine("            var scaled = ScaleDeclaredInteger(current);");
+        sb.AppendLine("            if (scaled == current) continue;");
         sb.AppendLine();
-        sb.AppendLine("            property.SetValue(instance, Knobs[i].Bound);");
+        sb.AppendLine("            property.SetValue(instance, scaled);");
         sb.AppendLine("            bounded = true;");
         sb.AppendLine("        }");
         sb.AppendLine();
@@ -629,10 +591,12 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("    /// is what keeps head counts, channel counts and other small structural numbers intact.");
         sb.AppendLine("    /// </remarks>");
         sb.AppendLine("    public static int ScaleDeclaredInteger(int declared)");
-        sb.AppendLine("        => declared <= SmallEnough ? declared : global::System.Math.Max(SmallEnough, declared / ScaleDivisor);");
+        sb.AppendLine("        => declared <= MinimumScaled");
+        sb.AppendLine("            ? declared");
+        sb.AppendLine("            : global::System.Math.Max(MinimumScaled, declared / ScaleDivisor);");
         sb.AppendLine();
         sb.AppendLine($"    private const int ScaleDivisor = {ScaleDivisor};");
-        sb.AppendLine($"    private const int SmallEnough = {SmallEnough};");
+        sb.AppendLine($"    private const int MinimumScaled = {MinimumScaled};");
         sb.AppendLine();
         sb.AppendLine("    private static int Override(");
         sb.AppendLine("        global::System.Collections.Generic.IReadOnlyDictionary<string, int>? overrides,");
@@ -662,23 +626,26 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
     /// constructor argument -- inputHeight never matched InputHeight, so a spatial extent meant to
     /// floor at 32 was capped to 16 and a 32x-downsampling backbone lost its spatial dims entirely.
     /// </remarks>
-    private static int BoundFor(string propertyName)
+    /// <summary>Whether a knob may be scaled at all.</summary>
+    /// <remarks>
+    /// The only name knowledge left, and it is about MEANING rather than magnitude. Two kinds
+    /// survive: values whose number IS the semantics (a sample rate is 16000 because audio is
+    /// 16 kHz), and INVERSE knobs where shrinking increases work -- a smaller hop or patch cuts the
+    /// same input into more pieces, so scaling those down is the one direction that is expensive.
+    ///
+    /// The count and spatial tiers that used to live here are gone. They existed to stop absolute
+    /// caps from breaking relationships (width % heads) and from collapsing a downsampled input to
+    /// nothing, and proportional scaling does not have either problem: ratios are preserved and
+    /// anything already small is untouched.
+    /// </remarks>
+    private static bool IsScalable(string propertyName)
     {
         foreach (var fixedName in SemanticallyFixed)
         {
-            if (propertyName.IndexOf(fixedName, System.StringComparison.OrdinalIgnoreCase) >= 0) return 0;
+            if (propertyName.IndexOf(fixedName, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
         }
 
-        foreach (var marker in CountMarkers)
-        {
-            if (propertyName.IndexOf(marker, System.StringComparison.OrdinalIgnoreCase) >= 0) return CountCap;
-        }
-
-        foreach (var marker in SpatialMarkers)
-        {
-            if (propertyName.IndexOf(marker, System.StringComparison.OrdinalIgnoreCase) >= 0) return SpatialCap;
-        }
-
-        return KnobCap;
+        return true;
     }
 }
