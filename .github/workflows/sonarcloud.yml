@@ -1234,7 +1234,7 @@ jobs:
             framework: net10.0
             filter: >-
               FullyQualifiedName~ModelFamilyTests.Generated&
-              ((FullyQualifiedName~Generated.Vi|FullyQualifiedName~Generated.VI&FullyQualifiedName!~Generated.Video)|FullyQualifiedName~Generated.VM)
+              (((FullyQualifiedName~Generated.Vi|FullyQualifiedName~Generated.VI)&FullyQualifiedName!~Generated.Video)|FullyQualifiedName~Generated.VM)
           - name: ModelFamily - Generated Layers Vo-VR
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
