@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Evolution;
 using Xunit;
 

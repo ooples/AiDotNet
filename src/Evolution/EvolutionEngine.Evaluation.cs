@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.Evolution;
 
@@ -78,11 +80,10 @@ public sealed partial class EvolutionEngine<TGenome>
 
             if (_options.EnableEvaluationCache && _cache.TryGetValue(canonical.Id, out EvolutionTaskResult? cached))
             {
-                return new WorkItem
+                return new WorkItem(lineage)
                 {
                     EvaluationId = evaluationId,
                     Island = island,
-                    Lineage = lineage,
                     Candidate = candidate,
                     Result = CopyWithZeroCost(cached),
                     CacheStatus = EvolutionCacheStatus.Hit,
@@ -92,11 +93,10 @@ public sealed partial class EvolutionEngine<TGenome>
 
             if (!_seen.Add(canonical.Id))
             {
-                return new WorkItem
+                return new WorkItem(lineage)
                 {
                     EvaluationId = evaluationId,
                     Island = island,
-                    Lineage = lineage,
                     Candidate = candidate,
                     Result = new EvolutionTaskResult(EvolutionEvaluationStatus.Duplicate),
                     CacheStatus = EvolutionCacheStatus.NotChecked,
@@ -104,11 +104,10 @@ public sealed partial class EvolutionEngine<TGenome>
                 };
             }
 
-            return new WorkItem
+            return new WorkItem(lineage)
             {
                 EvaluationId = evaluationId,
                 Island = island,
-                Lineage = lineage,
                 Candidate = candidate,
                 CacheStatus = _options.EnableEvaluationCache ? EvolutionCacheStatus.Miss : EvolutionCacheStatus.NotChecked,
                 RequiresEvaluation = true,
@@ -127,11 +126,10 @@ public sealed partial class EvolutionEngine<TGenome>
 
     private WorkItem CreatePreEvaluationFailure(long evaluationId, int island, EvolutionLineage lineage, string code)
     {
-        return new WorkItem
+        return new WorkItem(lineage)
         {
             EvaluationId = evaluationId,
             Island = island,
-            Lineage = lineage,
             Result = EvolutionTaskResult.Failed(code, "Candidate preparation failed."),
             CacheStatus = EvolutionCacheStatus.NotChecked,
             CompletionOrder = Interlocked.Increment(ref _completionSequence)

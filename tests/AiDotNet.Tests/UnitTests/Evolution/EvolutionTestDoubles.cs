@@ -1,5 +1,7 @@
 using System.Globalization;
+using AiDotNet.Enums;
 using AiDotNet.Evolution;
+using AiDotNet.Interfaces;
 
 namespace AiDotNetTests.UnitTests.Evolution;
 

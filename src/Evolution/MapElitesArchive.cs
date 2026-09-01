@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.Validation;
 
 namespace AiDotNet.Evolution;
@@ -191,11 +193,9 @@ public sealed class MapElitesArchive<TGenome> : ICheckpointableEvolutionArchive<
             if (ReferenceEquals(x, y)) return 0;
             if (x is null) return 1;
             if (y is null) return -1;
-            double xQuality = x.Evaluation.Quality!.Value;
-            double yQuality = y.Evaluation.Quality!.Value;
             int quality = _direction == EvolutionOptimizationDirection.Maximize
-                ? yQuality.CompareTo(xQuality)
-                : xQuality.CompareTo(yQuality);
+                ? Nullable.Compare(y.Evaluation.Quality, x.Evaluation.Quality)
+                : Nullable.Compare(x.Evaluation.Quality, y.Evaluation.Quality);
             if (quality != 0) return quality;
             int genome = StringComparer.Ordinal.Compare(x.Evaluation.GenomeId, y.Evaluation.GenomeId);
             if (genome != 0) return genome;

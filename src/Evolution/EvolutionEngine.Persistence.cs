@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Text;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Evolution;
@@ -208,14 +210,16 @@ public sealed partial class EvolutionEngine<TGenome>
 
     private string SerializeGenome(TGenome genome)
     {
-        string payload = _codec!.Serialize(genome);
+        if (_codec is null) throw new InvalidOperationException("Checkpoint serialization requires a genome codec.");
+        string payload = _codec.Serialize(genome);
         if (payload is null) throw new InvalidOperationException("The genome codec returned null.");
         return payload;
     }
 
     private TGenome DeserializeGenome(string payload)
     {
-        TGenome genome = _codec!.Deserialize(payload);
+        if (_codec is null) throw new InvalidOperationException("Checkpoint deserialization requires a genome codec.");
+        TGenome genome = _codec.Deserialize(payload);
         if (genome is null) throw new InvalidDataException("The genome codec deserialized a null genome.");
         return genome;
     }

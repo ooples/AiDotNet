@@ -1,3 +1,4 @@
+using AiDotNet.Interfaces;
 using AiDotNet.Validation;
 
 namespace AiDotNet.Evolution;

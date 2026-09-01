@@ -303,12 +303,14 @@ public sealed class MapElitesAutoML<T, TInput, TOutput> :
     private static MapElitesAutoMLArchiveEntry ToPublicArchiveEntry(
         EvolutionArchiveEntry<MapElitesGenome> entry)
     {
+        double score = entry.Evaluation.Quality
+            ?? throw new InvalidOperationException("Archive elites always carry a completed quality value.");
         return new MapElitesAutoMLArchiveEntry(
             entry.Evaluation.EvaluationId,
             entry.Evaluation.GenomeId,
             entry.Candidate.CanonicalGenome.Genome.ModelType,
             entry.Candidate.CanonicalGenome.Genome.Parameters,
-            entry.Evaluation.Quality!.Value,
+            score,
             entry.Evaluation.Descriptors,
             entry.Cell.Bins);
     }
@@ -320,10 +322,12 @@ public sealed class MapElitesAutoML<T, TInput, TOutput> :
         TOutput validationTargets,
         CancellationToken cancellationToken)
     {
-        var trainX = (Matrix<T>)(object)inputs!;
-        var trainY = (Vector<T>)(object)targets!;
-        var validationX = (Matrix<T>)(object)validationInputs!;
-        var validationY = (Vector<T>)(object)validationTargets!;
+        if (inputs is not Matrix<T> trainX || targets is not Vector<T> trainY ||
+            validationInputs is not Matrix<T> validationX || validationTargets is not Vector<T> validationY)
+        {
+            throw new NotSupportedException(
+                "MAP-Elites AutoML currently supports Matrix<T>/Vector<T> supervised tasks.");
+        }
 
         using (SHA256 hash = SHA256.Create())
         {
@@ -332,7 +336,9 @@ public sealed class MapElitesAutoML<T, TInput, TOutput> :
             AppendMatrix(hash, "validation-inputs", validationX, cancellationToken);
             AppendVector(hash, "validation-targets", validationY, cancellationToken);
             hash.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-            return ToHex(hash.Hash!);
+            byte[] digest = hash.Hash
+                ?? throw new InvalidOperationException("The SHA-256 data hash was not finalized.");
+            return ToHex(digest);
         }
     }
 

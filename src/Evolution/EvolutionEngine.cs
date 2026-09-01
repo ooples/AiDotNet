@@ -1,5 +1,8 @@
 using System.Diagnostics;
 using System.Globalization;
+using AiDotNet.Configuration;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.Validation;
 
 namespace AiDotNet.Evolution;
@@ -334,9 +337,11 @@ public sealed partial class EvolutionEngine<TGenome>
 
     private sealed class WorkItem
     {
+        public WorkItem(EvolutionLineage lineage) => Lineage = lineage;
+
         public long EvaluationId { get; set; }
         public int Island { get; set; }
-        public EvolutionLineage Lineage { get; set; } = null!;
+        public EvolutionLineage Lineage { get; }
         public EvolutionCandidate<TGenome>? Candidate { get; set; }
         public EvolutionTaskResult? Result { get; set; }
         public EvolutionCacheStatus CacheStatus { get; set; }

@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.Validation;
 
 namespace AiDotNet.Evolution;

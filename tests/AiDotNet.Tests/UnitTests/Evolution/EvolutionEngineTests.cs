@@ -1,6 +1,9 @@
 using System.Globalization;
 using System.Runtime;
+using AiDotNet.Configuration;
+using AiDotNet.Enums;
 using AiDotNet.Evolution;
+using AiDotNet.Interfaces;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Xunit;

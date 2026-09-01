@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Interfaces;
 using AiDotNet.Validation;
 using Newtonsoft.Json;
 

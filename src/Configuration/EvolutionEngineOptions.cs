@@ -1,7 +1,9 @@
 using System.Globalization;
+using AiDotNet.Enums;
+using AiDotNet.Evolution;
 using AiDotNet.Validation;
 
-namespace AiDotNet.Evolution;
+namespace AiDotNet.Configuration;
 
 /// <summary>Configures deterministic orchestration, budgets, parallelism, islands, and persistence.</summary>
 public sealed class EvolutionEngineOptions
@@ -143,69 +145,4 @@ public sealed class EvolutionEngineOptions
             throw new ArgumentOutOfRangeException(parameterName,
                 "Durations must be positive and within the cross-target cancellation timer range.");
     }
-}
-
-/// <summary>Immutable counters for all terminal evaluation statuses.</summary>
-public sealed class EvolutionRunCounters
-{
-    private readonly IReadOnlyDictionary<EvolutionEvaluationStatus, long> _statusCounts;
-
-    /// <summary>Initializes run counters.</summary>
-    public EvolutionRunCounters(long proposals, long evaluationAttempts, long completedEvaluations,
-        IReadOnlyDictionary<EvolutionEvaluationStatus, long> statusCounts)
-    {
-        if (proposals < 0) throw new ArgumentOutOfRangeException(nameof(proposals));
-        if (evaluationAttempts < 0) throw new ArgumentOutOfRangeException(nameof(evaluationAttempts));
-        if (completedEvaluations < 0) throw new ArgumentOutOfRangeException(nameof(completedEvaluations));
-        Proposals = proposals;
-        EvaluationAttempts = evaluationAttempts;
-        CompletedEvaluations = completedEvaluations;
-        _statusCounts = new System.Collections.ObjectModel.ReadOnlyDictionary<EvolutionEvaluationStatus, long>(
-            statusCounts.ToDictionary(item => item.Key, item => item.Value));
-    }
-
-    /// <summary>Gets all proposals, including duplicates and validation failures.</summary>
-    public long Proposals { get; }
-    /// <summary>Gets actual evaluator calls, including retries.</summary>
-    public long EvaluationAttempts { get; }
-    /// <summary>Gets completed terminal evaluations, including cache hits.</summary>
-    public long CompletedEvaluations { get; }
-    /// <summary>Gets terminal counts by status.</summary>
-    public IReadOnlyDictionary<EvolutionEvaluationStatus, long> StatusCounts => _statusCounts;
-}
-
-/// <summary>The immutable result of an evolution run.</summary>
-/// <typeparam name="TGenome">The task-specific genome type.</typeparam>
-public sealed class EvolutionRunResult<TGenome>
-{
-    /// <summary>Initializes a run result.</summary>
-    public EvolutionRunResult(EvolutionStopReason stopReason, IReadOnlyList<IEvolutionArchiveView<TGenome>> islands,
-        EvolutionRunCounters counters, string stateHash)
-    {
-        StopReason = stopReason;
-        if (islands is null) throw new ArgumentNullException(nameof(islands));
-        Islands = Array.AsReadOnly(islands.Select(archive =>
-            (IEvolutionArchiveView<TGenome>)new EvolutionArchiveSnapshot<TGenome>(archive)).ToArray());
-        Counters = counters ?? throw new ArgumentNullException(nameof(counters));
-        StateHash = stateHash ?? throw new ArgumentNullException(nameof(stateHash));
-    }
-
-    /// <summary>Gets why the run stopped.</summary>
-    public EvolutionStopReason StopReason { get; }
-    /// <summary>Gets the final island archives.</summary>
-    public IReadOnlyList<IEvolutionArchiveView<TGenome>> Islands { get; }
-    /// <summary>Gets final run counters.</summary>
-    public EvolutionRunCounters Counters { get; }
-    /// <summary>Gets a deterministic hash that excludes wall-clock timing and observer behavior.</summary>
-    public string StateHash { get; }
-
-    /// <summary>Gets the globally best elite using deterministic quality and identity tie-breaking.</summary>
-    public EvolutionArchiveEntry<TGenome>? Best => Islands.Select(archive => archive.Best)
-        .Where(entry => entry is not null)
-        .OrderBy(entry => entry!.Evaluation.Quality,
-            Islands.Count == 0 || Islands[0].Direction == EvolutionOptimizationDirection.Maximize
-                ? Comparer<double?>.Create((x, y) => Nullable.Compare(y, x))
-                : Comparer<double?>.Default)
-        .ThenBy(entry => entry!.Evaluation.GenomeId, StringComparer.Ordinal)
-        .FirstOrDefault();
 }
