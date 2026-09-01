@@ -748,6 +748,17 @@ public class AllModelsCloneTests
     /// the same generated construction plan and state payload without turning the test into a
     /// multi-billion-parameter allocation benchmark.
     /// </remarks>
+    /// <summary>Builds a size-bounded options instance for a model the sweep is about to clone.</summary>
+    /// <remarks>
+    /// TestScaleOptionsGenerator emits bounds for every options type, which is how NEW models get
+    /// covered without anyone editing this file. The hand-written branches are kept ahead of it and
+    /// are not yet redundant: deleting them regressed CSM from passing to stalling past the drain
+    /// budget, because CSMOptions inherits its dimensions from CodecTtsOptions and the hand-written
+    /// branch caught the whole family through IsAssignableFrom.
+    ///
+    /// Do not add a branch here. Extend the generator; these shrink as generated bounds are shown
+    /// equivalent family by family.
+    /// </remarks>
     private static object? CreateBoundedOptions(Type optionType)
     {
         if (typeof(NemotronSpeechOptions).IsAssignableFrom(optionType))
@@ -854,7 +865,9 @@ public class AllModelsCloneTests
             // Let the constructor sweep fall back to the declared optional value. A specialized
             // options type is allowed to reject parameterless construction; that is unrelated to
             // whether its owning model can be cloned.
-            return null;
+            // Not a family with a hand-written bound: fall through to the generated table,
+        // which covers every options type in the library (1194 types, 9285 knobs).
+        return AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(optionType);
         }
 
         if (options is null) return null;
