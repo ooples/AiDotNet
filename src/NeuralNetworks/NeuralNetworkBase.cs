@@ -7550,8 +7550,29 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <c>AIDOTNET_ENABLE_AUTO_COMPILE=1</c>. Training is unaffected either way (the compiled path is
     /// inference-only). Mirrors <c>NoisePredictorBase.s_autoCompiledInferenceEnabled</c>.
     /// </remarks>
-    private static bool s_autoCompiledInferenceEnabled =
+    private static readonly bool s_autoCompiledInferenceDefault =
         string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_ENABLE_AUTO_COMPILE"), "1", StringComparison.Ordinal);
+
+    /// <summary>Per-flow override of the auto-compile opt-in, used by tests.</summary>
+    /// <remarks>
+    /// ASYNC-LOCAL, not static. As a plain static this was process-wide, and a test that turned it
+    /// on for its own duration turned it on for every model running CONCURRENTLY: xUnit runs test
+    /// classes in parallel, so while AcceleratedInferenceTests held it on, another class training a
+    /// model routed through the auto-compiled inference path and did not learn.
+    /// FTTransformerClassifierTests.Train_ReducesCrossEntropy then reported cross-entropy pinned at
+    /// 1.0986 -- ln(3), the uniform three-class prediction -- with no training having happened. It
+    /// passed alone every time and failed two to three runs in six of the full suite, and was
+    /// written off as an unexplained flake for a long time.
+    ///
+    /// Scoping the override to the calling flow is the actual fix. Serialising the test classes was
+    /// tried first and did not work; it also would have left the hazard in place for anyone else who
+    /// flipped the switch. The default remains a genuine process-wide value read once from the
+    /// environment, which is correct: that IS a process-level setting.
+    /// </remarks>
+    private static readonly System.Threading.AsyncLocal<bool?> s_autoCompiledInferenceOverride = new();
+
+    private static bool s_autoCompiledInferenceEnabled
+        => s_autoCompiledInferenceOverride.Value ?? s_autoCompiledInferenceDefault;
 
     /// <summary>
     /// Opt-in: drop the GPU activation cache at the end of EVERY tape training step. Off by default —
@@ -7574,7 +7595,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     internal static bool SetAutoCompiledInferenceEnabledForTesting(bool enabled)
     {
         var prev = s_autoCompiledInferenceEnabled;
-        s_autoCompiledInferenceEnabled = enabled;
+        s_autoCompiledInferenceOverride.Value = enabled;
         return prev;
     }
 
