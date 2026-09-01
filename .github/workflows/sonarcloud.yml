@@ -601,6 +601,10 @@ jobs:
       # baseline shard with no current artifact as Incomplete and fails the policy on it - which
       # is right for a host that died and wrong for a shard we chose to skip.
       skipped: ${{ steps.select.outputs.skipped }}
+      # Shards whose digests are carried forward from the previous map in a coverage-everywhere
+      # run. The test job does not force instrumentation on them; the carried-digest artifact
+      # below supplies their map entries instead.
+      coverage_carried: ${{ steps.select.outputs.coverage_carried }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -780,7 +784,81 @@ jobs:
                      else { "Selected **$($matrixShards.Count)** of $($all.Count) shards from coverage." }
           "### Shard selection`n`n$summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
+          $carried = @()
           if ('${{ inputs.collect_coverage_everywhere }}' -eq 'true') {
+            # INCREMENTAL INSTRUMENTATION. A shard whose covered files are byte-identical between
+            # the previous map's commit and this one has line ranges that still mean what they
+            # said, so its digest is carried forward instead of re-measured - instrumentation
+            # costs 3.21x on heavy shards, and most nights most of them are untouched.
+            #
+            # Only shards that collect no coverage naturally (heavy + timing) are carriable:
+            # every other shard produces a fresh digest in any successful run, and New-ShardMap
+            # aborts the whole map on a duplicate digest, by design. That list lives in the test
+            # job's run step in THIS file; it is parsed out of the workflow source below so there
+            # is no second copy to drift. Both drift directions are safe: a missed name simply is
+            # not carried (that shard degrades to always-run), and a stale extra name produces a
+            # duplicate digest that aborts the map build LOUDLY while the previous map stays in
+            # effect.
+            # Matched on the TRIMMED line being exactly the definition, never Contains: these
+            # marker strings also appear inside THIS parser's own source a few lines up, and a
+            # Contains match latched onto itself, then collected every quoted string for the ~450
+            # lines between here and the real arrays' closer - 220 names instead of 92. Caught
+            # only because the proof asserted the expected count. A trimmed-equality match cannot
+            # self-match, because this line trims to 'foreach (...)'.
+            $nn = [System.Collections.Generic.List[string]]::new()
+            $wfLines = Get-Content '.github/workflows/sonarcloud.yml'
+            foreach ($marker in @('$heavyShards = @(', '$performanceShards = @(')) {
+              $idx = -1
+              for ($i = 0; $i -lt $wfLines.Count; $i++) {
+                if ($wfLines[$i].Trim() -eq $marker) { $idx = $i; break }
+              }
+              if ($idx -lt 0) { continue }
+              for ($i = $idx + 1; $i -lt $wfLines.Count; $i++) {
+                if ($wfLines[$i].Trim().StartsWith(')')) { break }
+                foreach ($m in [regex]::Matches($wfLines[$i], "'([^']+)'")) {
+                  [void] $nn.Add($m.Groups[1].Value)
+                }
+              }
+            }
+            Write-Host "no-coverage shard list parsed from workflow: $($nn.Count)"
+            if ($nn.Count -lt 2 -or $nn.Count -gt 200) {
+              Write-Host "::warning::no-coverage list parse looks wrong ($($nn.Count) names) - carrying nothing"
+              $nn.Clear()
+            }
+
+            $prevMapOk = (Test-Path map/shard-map.json) -and ('${{ steps.selftest.outcome }}' -eq 'success')
+            if ($prevMapOk -and $nn.Count -ge 2) {
+              try {
+                $prevMap = Get-Content map/shard-map.json -Raw | ConvertFrom-Json
+                $prevSha = [string] $prevMap.sha
+                & git cat-file -e "$prevSha^{commit}" 2>$null
+                if ($LASTEXITCODE -ne 0) { throw "previous map commit $prevSha is not in this checkout" }
+                $changedFiles = @(& git diff --name-only $prevSha HEAD)
+                if ($LASTEXITCODE -ne 0) { throw "git diff from $prevSha failed" }
+                ./tools/TestImpact/Select-CoverageShards.ps1 `
+                    -PreviousMap map/shard-map.json `
+                    -ChangedFiles $changedFiles `
+                    -AllShards @($all.name) `
+                    -CarryOnly $nn `
+                    -CarryForwardDirectory carried-digests `
+                    -OutFile covsplit.json
+                if ($LASTEXITCODE -ne 0) { throw "Select-CoverageShards exited $LASTEXITCODE" }
+                $carried = @((Get-Content covsplit.json -Raw | ConvertFrom-Json).carried)
+              }
+              catch {
+                # Instrumenting everything is always sound - it is exactly the pre-incremental
+                # behaviour - so any doubt lands there rather than on a stale carry.
+                Write-Host "::warning::incremental carry unavailable ($($_.Exception.Message)) - instrumenting every shard"
+                $carried = @()
+                Remove-Item -Recurse -Force carried-digests -ErrorAction SilentlyContinue
+              }
+            }
+            else {
+              Write-Host 'no usable previous map or no-coverage list - instrumenting every shard'
+            }
+            "### Incremental instrumentation`n`ncarrying $($carried.Count) shard(s) forward; instrumenting the rest." |
+              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
             $mapRunId = '${{ inputs.test_impact_map_run_id }}'
             if (-not $mapRunId) { $mapRunId = '${{ steps.map.outputs.run_id }}' }
             [ordered]@{
@@ -791,8 +869,23 @@ jobs:
               sha = '${{ github.sha }}'
               mapRunId = $mapRunId
               shardNames = @($all.name)
+              carriedShardNames = @($carried)
             } | ConvertTo-Json -Depth 5 | Set-Content coverage-source.json -Encoding utf8
           }
+          "coverage_carried=$(ConvertTo-Json -InputObject @($carried) -Depth 3 -Compress)" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      # Named to match the harvest's `impact-digest-*` download pattern, so the map build picks
+      # these up exactly like per-shard digests with no change on its side.
+      - name: Upload carried digests
+        if: ${{ inputs.collect_coverage_everywhere }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: impact-digest-carried
+          path: carried-digests/*.digest.json
+          if-no-files-found: ignore
+          retention-days: 7
+          overwrite: true
 
       - name: Upload coverage-source marker
         if: ${{ inputs.collect_coverage_everywhere }}
@@ -896,6 +989,9 @@ jobs:
         # Scoped to this test step only (not job-wide) so the credential is not exposed to other steps or
         # third-party actions. Licensed key keeps save/load-heavy suites under the free-trial op limit.
         env:
+          # Via env rather than inline interpolation: the carried list is a JSON array of shard
+          # names, and names contain characters PowerShell would parse inside a quoted literal.
+          COVERAGE_CARRIED: ${{ needs.select-shards.outputs.coverage_carried }}
           # Dedicated enterprise CI license key (save-capable — lifts the persistence op cap under capability
           # gating — with effectively-unlimited activations for ephemeral runners). ModuleInitializer swaps
           # this online AIDN-* key for the deterministic synthetic OFFLINE license so the persistence-heavy
@@ -1054,10 +1150,28 @@ jobs:
           #
           # The memory ceiling belongs to the PR matrix, not to a nightly job, so a dispatch can
           # ask for coverage everywhere. That run feeds the map; it is not meant to gate a PR.
-          $forceCoverage = '${{ github.event.inputs.collect_coverage_everywhere }}' -eq 'true'
+          # A shard whose digest select-shards carried forward is not re-instrumented: its map
+          # entry comes from the carried artifact, and instrumenting it anyway would only spend
+          # the 3.21x overhead re-measuring what is byte-identical. Any parse failure of the
+          # carried list degrades to instrumenting everything, which is the pre-incremental
+          # behaviour and always sound.
+          $carriedSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+          try {
+            $rawCarried = $env:COVERAGE_CARRIED
+            if ($rawCarried) {
+              foreach ($c in @($rawCarried | ConvertFrom-Json)) { [void] $carriedSet.Add([string] $c) }
+            }
+          }
+          catch { Write-Host "::warning::carried-shard list unreadable - instrumenting this shard" }
+
+          $forceCoverage = '${{ github.event.inputs.collect_coverage_everywhere }}' -eq 'true' -and
+                           -not $carriedSet.Contains($shardName)
           $collectCoverage = $forceCoverage -or -not ($heavyShard -or $measuresTiming)
           if ($forceCoverage -and ($heavyShard -or $measuresTiming)) {
             Write-Host 'collect_coverage_everywhere: coverage forced on for this shard to feed the test-impact map'
+          }
+          elseif ($carriedSet.Contains($shardName) -and ($heavyShard -or $measuresTiming)) {
+            Write-Host 'coverage carried forward from the previous map - not instrumenting this shard'
           }
           Write-Host "Running shard '$shardName' (serialized: $serializeShard; coverage: $collectCoverage)"
 

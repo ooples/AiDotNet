@@ -34,6 +34,13 @@
 .PARAMETER AllShards
     The current shard manifest.
 
+.PARAMETER CarryOnly
+    Restrict carrying to these shards. The nightly passes the heavy and timing shards here, because
+    every OTHER shard collects coverage in any run and produces a fresh digest on success - and a
+    carried digest colliding with a fresh one makes New-ShardMap abort the whole map, by design.
+    A clean mapped shard NOT in this list is simply left to re-produce its own digest; it is neither
+    instrumented by force nor carried. Omit to allow carrying everything (the self-contained case).
+
 .PARAMETER CarryForwardDirectory
     Where to write reconstructed digests for the shards being carried forward. A digest is inverted
     straight out of the previous map, so New-ShardMap consumes it exactly like a fresh one and needs
@@ -50,6 +57,7 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'Select')] [string] $PreviousMap,
     [Parameter(Mandatory, ParameterSetName = 'Select')] [AllowEmptyCollection()] [string[]] $ChangedFiles,
     [Parameter(Mandatory, ParameterSetName = 'Select')] [string[]] $AllShards,
+    [Parameter(ParameterSetName = 'Select')] [AllowEmptyCollection()] [string[]] $CarryOnly,
     [Parameter(ParameterSetName = 'Select')] [string] $CarryForwardDirectory,
     [Parameter(ParameterSetName = 'Select')] [string] $OutFile,
     [Parameter(Mandatory, ParameterSetName = 'SelfTest')] [switch] $SelfTest
@@ -208,6 +216,18 @@ if ($SelfTest) {
     Assert-True (-not $d.files.PSObject.Properties['src/B.cs']) "another shard's file must not leak in"
     Assert-True ($d.carriedFrom -eq 'abc123') 'the carried digest records the commit it came from'
 
+    # 8. CarryOnly restricts carrying WITHOUT touching the instrument set. A shard displaced by
+    #    the filter is a natural producer: it re-creates its own digest in any run, so carrying it
+    #    would collide with the fresh one and New-ShardMap aborts the whole map on duplicates.
+    $r = Split-CoverageWork -Map $map -ChangedFiles @() -AllShards $all
+    $allow = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    [void] $allow.Add('Alpha')
+    $restricted = @($r.Carried | Where-Object { $allow.Contains([string] $_) })
+    Assert-True ($restricted.Count -eq 1 -and $restricted -contains 'Alpha') `
+        'CarryOnly must keep exactly the intersection'
+    Assert-True ($r.Instrument -contains 'Heavy' -and $r.Instrument.Count -eq 1) `
+        'CarryOnly must not move displaced shards into the instrument set'
+
     if ($failures.Count -gt 0) {
         Write-Host 'Select-CoverageShards self-test FAILED:'
         foreach ($f in $failures) { Write-Host "  - $f" }
@@ -234,21 +254,29 @@ if ($PreviousMap -and (Test-Path -LiteralPath $PreviousMap)) {
 }
 
 $split = Split-CoverageWork -Map $map -ChangedFiles $ChangedFiles -AllShards $AllShards
-Write-Host "instrument $($split.Instrument.Count), carry forward $($split.Carried.Count)  [$($split.Reason)]"
 
-if ($CarryForwardDirectory -and $split.Carried.Count -gt 0) {
+$carriedFinal = @($split.Carried)
+if ($PSBoundParameters.ContainsKey('CarryOnly')) {
+    $allow = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($s in $CarryOnly) { if ($s) { [void] $allow.Add([string] $s) } }
+    $carriedFinal = @($split.Carried | Where-Object { $allow.Contains([string] $_) })
+}
+$selfProducing = @($split.Carried).Count - $carriedFinal.Count
+Write-Host "instrument $($split.Instrument.Count), carry forward $($carriedFinal.Count), self-producing $selfProducing  [$($split.Reason)]"
+
+if ($CarryForwardDirectory -and $carriedFinal.Count -gt 0) {
     if (-not (Test-Path -LiteralPath $CarryForwardDirectory)) {
         New-Item -ItemType Directory -Path $CarryForwardDirectory -Force | Out-Null
     }
-    foreach ($shard in $split.Carried) {
+    foreach ($shard in $carriedFinal) {
         $slug = $shard -replace '[\\/:*?"<>|\s-]+', '_'
         $n = Export-ShardDigest -Map $map -Shard $shard -Path (Join-Path $CarryForwardDirectory "$slug.digest.json")
         Write-Verbose "carried $shard ($n file(s))"
     }
-    Write-Host "wrote $($split.Carried.Count) carried digest(s) to $CarryForwardDirectory"
+    Write-Host "wrote $($carriedFinal.Count) carried digest(s) to $CarryForwardDirectory"
 }
 
 if ($OutFile) {
-    [pscustomobject]@{ instrument = @($split.Instrument); carried = @($split.Carried) } |
+    [pscustomobject]@{ instrument = @($split.Instrument); carried = @($carriedFinal) } |
         ConvertTo-Json -Depth 4 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8
 }
