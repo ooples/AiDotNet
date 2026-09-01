@@ -274,16 +274,35 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
             if (parameter.Type.SpecialType != SpecialType.System_Int32) continue;
 
             int bound = BoundFor(parameter.Name);
+
+            // CLAMP, NEVER RAISE -- for constructor arguments too. A property is compared against
+            // its live value; a constructor parameter has only its DECLARED DEFAULT, and skipping
+            // that comparison is what made this raise values instead of lowering them. inputChannels
+            // defaults to 3 for RGB, and passing the cap of 16 built a stem expecting 16-channel
+            // input that every 3-channel image then failed against: "Expected input depth 16, but
+            // got 3", 41 tests. When the default is already at or below the bound, say nothing and
+            // let the default stand.
+            if (bound > 0
+                && parameter.HasExplicitDefaultValue
+                && parameter.ExplicitDefaultValue is int declaredDefault
+                && declaredDefault <= bound)
+            {
+                continue;
+            }
+
             if (bound <= 0)
             {
                 // Semantically fixed: only supply it when it is required, and then with its own
                 // declared default if it has one.
                 if (parameter.HasExplicitDefaultValue) continue;
-                parts.Add($"{parameter.Name}: {DefaultRequiredInt(parameter.Name)}");
+                parts.Add(
+                    $"{parameter.Name}: Override(overrides, \"{parameter.Name}\", "
+                        + $"{DefaultRequiredInt(parameter.Name)})");
                 continue;
             }
 
-            parts.Add($"{parameter.Name}: {bound}");
+            parts.Add(
+                $"{parameter.Name}: Override(overrides, \"{parameter.Name}\", {bound})");
         }
 
         return parts.Count == 0 ? null : string.Join(", ", parts);
@@ -412,7 +431,15 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("    /// <summary>Creates an options instance with its size knobs clamped down.</summary>");
         sb.AppendLine("    /// <param name=\"optionsType\">The options or configuration type to build.</param>");
         sb.AppendLine("    /// <returns>A bounded instance, or null when the type cannot be bounded.</returns>");
-        sb.AppendLine("    public static object? CreateBoundedOptions(global::System.Type optionsType)");
+        sb.AppendLine("    /// <param name=\"overrides\">");
+        sb.AppendLine("    /// Caller-supplied values by parameter or property name, applied INSTEAD of the");
+        sb.AppendLine("    /// generated bound. Some values are the caller's intent, not a size the generator");
+        sb.AppendLine("    /// can infer -- numClasses is the obvious one: a hand-written test factory took it");
+        sb.AppendLine("    /// as an argument, and inventing 16 where the caller meant 10 failed 42 tests.");
+        sb.AppendLine("    /// </param>");
+        sb.AppendLine("    public static object? CreateBoundedOptions(");
+        sb.AppendLine("        global::System.Type optionsType,");
+        sb.AppendLine("        global::System.Collections.Generic.IReadOnlyDictionary<string, int>? overrides = null)");
         sb.AppendLine("    {");
         sb.AppendLine("        if (optionsType is null) return null;");
         sb.AppendLine();
@@ -456,8 +483,27 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("            bounded = true;");
         sb.AppendLine("        }");
         sb.AppendLine();
+        sb.AppendLine("        if (overrides is not null)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            foreach (var pair in overrides)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                var target = optionsType.GetProperty(pair.Key);");
+        sb.AppendLine("                if (target is null || !target.CanWrite) continue;");
+        sb.AppendLine("                if (target.PropertyType != typeof(int)) continue;");
+        sb.AppendLine("                target.SetValue(instance, pair.Value);");
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
+        sb.AppendLine();
         sb.AppendLine("        return bounded ? instance : instance;");
         sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    private static int Override(");
+        sb.AppendLine("        global::System.Collections.Generic.IReadOnlyDictionary<string, int>? overrides,");
+        sb.AppendLine("        string name,");
+        sb.AppendLine("        int generated)");
+        sb.AppendLine("        => overrides is not null && overrides.TryGetValue(name, out var supplied)");
+        sb.AppendLine("            ? supplied");
+        sb.AppendLine("            : generated;");
         sb.AppendLine();
         sb.AppendLine($"    /// <summary>Options types carrying at least one generated bound: {typeCount}.</summary>");
         sb.AppendLine($"    public static int BoundedTypeCount => {typeCount};");
