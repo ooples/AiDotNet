@@ -575,7 +575,9 @@ public class ConfigurationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ResNetConfiguration_CreateForTesting_CreatesMinimalConfig()
     {
-        var config = ResNetConfiguration.CreateForTesting(10);
+        var config = (AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(typeof(ResNetConfiguration),
+            new Dictionary<string, int> { ["numClasses"] = 10 }) as ResNetConfiguration
+            ?? throw new InvalidOperationException("no generated bound for ResNetConfiguration"));
 
         Assert.Equal(ResNetVariant.ResNet18, config.Variant);
         Assert.Equal(10, config.NumClasses);
