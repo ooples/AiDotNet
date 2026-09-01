@@ -135,7 +135,11 @@ function Export-ShardDigest {
     foreach ($prop in $Map.files.PSObject.Properties) {
         foreach ($occurrence in @($prop.Value)) {
             if ([int] $occurrence.s -ne $index) { continue }
-            $files[$prop.Name] = @($occurrence.r)
+            # Merged, not overwritten. The current builder cannot emit two occurrences of one
+            # shard for one path, but this reads HISTORICAL maps, and silently dropping ranges
+            # is the one corruption a carried digest must never introduce.
+            if ($files.Contains($prop.Name)) { $files[$prop.Name] = @($files[$prop.Name]) + @($occurrence.r) }
+            else { $files[$prop.Name] = @($occurrence.r) }
         }
     }
 
@@ -227,6 +231,24 @@ if ($SelfTest) {
         'CarryOnly must keep exactly the intersection'
     Assert-True ($r.Instrument -contains 'Heavy' -and $r.Instrument.Count -eq 1) `
         'CarryOnly must not move displaced shards into the instrument set'
+
+    # 9. A historical map holding two occurrences of one shard for one path must MERGE their
+    #    ranges into the carried digest, never overwrite - dropped ranges would make the map
+    #    claim the shard does not execute lines it does, which is a silent selection miss.
+    $dupMap = @{
+        schemaVersion = 1
+        sha           = 'abc123'
+        generatedUtc  = '2026-09-01T00:00:00Z'
+        knownShards   = @('Alpha')
+        alwaysRun     = @()
+        files         = @{ 'src/Dup.cs' = @(@{ s = 0; r = @(1, 2) }, @{ s = 0; r = @(9, 9) }) }
+    } | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+    $tmp2 = Join-Path ([System.IO.Path]::GetTempPath()) "carry-dup-$PID.json"
+    [void] (Export-ShardDigest -Map $dupMap -Shard 'Alpha' -Path $tmp2)
+    $d2 = Get-Content -LiteralPath $tmp2 -Raw | ConvertFrom-Json
+    Remove-Item -LiteralPath $tmp2 -ErrorAction SilentlyContinue
+    Assert-True ((@($d2.files.'src/Dup.cs') -join ',') -eq '1,2,9,9') `
+        'duplicate occurrences must merge ranges, not overwrite'
 
     if ($failures.Count -gt 0) {
         Write-Host 'Select-CoverageShards self-test FAILED:'

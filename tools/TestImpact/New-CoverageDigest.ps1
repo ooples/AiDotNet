@@ -135,6 +135,13 @@ $digest = [ordered]@{
 
 $dir = Split-Path -Parent $OutFile
 if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-$digest | ConvertTo-Json -Depth 6 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 -NoNewline
+# Written to a temp file and moved into place. The digest step runs continue-on-error after a
+# heavy shard's tests, which is exactly where a mid-write kill is most likely - and a truncated
+# file here is uploaded anyway, then aborts the ENTIRE map build when Read-ValidatedDigest
+# rejects it. Move-Item within a directory is a rename, so the artifact glob either sees a
+# complete file or nothing.
+$tmpFile = "$OutFile.tmp"
+$digest | ConvertTo-Json -Depth 6 -Compress | Set-Content -LiteralPath $tmpFile -Encoding utf8 -NoNewline
+Move-Item -LiteralPath $tmpFile -Destination $OutFile -Force
 
 Write-Host "digest: $($files.Count) executed file(s) -> $OutFile"

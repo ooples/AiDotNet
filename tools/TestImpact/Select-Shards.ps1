@@ -36,9 +36,22 @@ $script:SharedInfrastructure = @(
 
 function Test-SharedInfrastructure {
     param([string] $Path)
-    foreach ($prefix in $script:SharedInfrastructure) {
-        if ($Path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { return $true }
-        if ($Path -ieq $prefix) { return $true }
+    # Two kinds of entry, matched differently on purpose:
+    #
+    #   trailing '/'  a directory - prefix match
+    #   otherwise     a config FILE NAME - matched by basename at ANY depth, because MSBuild and
+    #                 NuGet apply Directory.Build.props / Directory.Packages.props / nuget.config
+    #                 per-directory, so src/Directory.Build.props changes what a subtree compiles
+    #                 just as surely as the root one (and src/Directory.Build.props exists here).
+    #
+    # An earlier revision used StartsWith for everything, which missed those nested files AND
+    # escalated on unrelated look-alikes such as Directory.Packages.props.backup.
+    $name = [System.IO.Path]::GetFileName($Path)
+    foreach ($entry in $script:SharedInfrastructure) {
+        if ($entry.EndsWith('/')) {
+            if ($Path.StartsWith($entry, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+        }
+        elseif ($name -ieq $entry) { return $true }
     }
     return $false
 }
@@ -391,6 +404,19 @@ if ($SelfTest) {
     }
     $r = Select-ImpactedShards -Map $commaMap -Changed @{ 'src/Comma.cs' = @(1, 1) }
     Assert-True ($r.Shards -contains 'Comma, Shard') 'a comma-containing shard name must stay intact'
+
+    # 14. Shared-infrastructure matching. File entries match by BASENAME at any depth - MSBuild
+    #     and NuGet apply these files per-directory, and src/Directory.Build.props exists in this
+    #     repo - while look-alike names must not match, and directories stay prefix-matched.
+    $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Directory.Build.props' = @(1, 2) }
+    Assert-True $r.Escalate 'a NESTED Directory.Build.props must escalate'
+    $r = Select-ImpactedShards -Map $map -Changed @{ 'src/sub/nuget.config' = @(1, 2) }
+    Assert-True $r.Escalate 'a nested nuget.config must escalate'
+    $r = Select-ImpactedShards -Map $map -Changed @{ 'Directory.Packages.props.backup' = @(1, 2) }
+    Assert-True (-not ($r.Reasons -join ';').Contains('shared infrastructure')) `
+        'a look-alike suffix must not match shared infrastructure'
+    $r = Select-ImpactedShards -Map $map -Changed @{ '.github/workflows/anything.yml' = @(1, 2) }
+    Assert-True $r.Escalate 'the .github/ directory prefix still escalates'
 
     if ($failures.Count -gt 0) {
         Write-Host 'Select-Shards self-test FAILED:'

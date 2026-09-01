@@ -103,9 +103,6 @@ if (@($prefixes).Count -eq 0) {
     throw "No 'FullyQualifiedName~Generated.<prefix>' filters found in '$Workflow'. The shard definitions have probably moved; point -Workflow at the file that now holds them."
 }
 
-if (-not $prefixes -or @($prefixes).Count -eq 0) {
-    throw "No FullyQualifiedName~Generated.* shard filters were found in $Workflow; the gate has nothing to check against."
-}
 
 $uncovered = @()
 foreach ($class in $generated) {

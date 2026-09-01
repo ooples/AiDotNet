@@ -166,7 +166,7 @@ jobs:
           #
           # Reuse needs a COMPLETED run, but this job starts seconds after the merge, so a PR
           # merged while its validation was still running has nothing to reuse and master re-runs
-          # all ~115 shards. That is exactly what happened to #2004: merged 21:49:03Z with its run
+          # the full matrix. That is exactly what happened to #2004: merged 21:49:03Z with its run
           # still in flight. Waiting bridges the gap; a run that lands inside the window saves the
           # entire matrix.
           #
@@ -264,7 +264,7 @@ jobs:
               echo "PR #${pr_number} validation still running after ${REUSE_WAIT_MINUTES}m; full CI will run." >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
-            echo "PR #${pr_number} validation in flight; waiting so master can reuse it instead of repeating ~115 shards."
+            echo "PR #${pr_number} validation in flight; waiting so master can reuse it instead of repeating the full matrix."
             sleep 60
           done
 
