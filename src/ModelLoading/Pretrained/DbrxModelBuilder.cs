@@ -100,7 +100,9 @@ public static class DbrxModelBuilder<T>
             string p = $"model.layers.{i}.";
 
             WriteGamma(block.Norm1, LlamaModelBuilder<T>.ReadTensor(weights, p + "input_layernorm.weight", hidden));
-            LlamaModelBuilder<T>.LoadAttention((GroupedQueryAttentionLayer<T>)block.AttentionLayer, weights, p, numHeads, numKVHeads, headDim, hidden);
+            // ShouldPermuteRope unwraps this builder's FusedProjectionSource->DbrxTensorSource adapters, so a
+            // GGUF DBRX (pre-permuted) is correctly detected and NOT permuted, while safetensors DBRX is.
+            LlamaModelBuilder<T>.LoadAttention((GroupedQueryAttentionLayer<T>)block.AttentionLayer, weights, p, numHeads, numKVHeads, headDim, hidden, LlamaModelBuilder<T>.ShouldPermuteRope(weights));
             WriteGamma(block.Norm2, LlamaModelBuilder<T>.ReadTensor(weights, p + "post_attention_layernorm.weight", hidden));
 
             var moe = block.Moe;
