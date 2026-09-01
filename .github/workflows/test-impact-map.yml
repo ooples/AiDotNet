@@ -19,6 +19,11 @@ on:
       run_id:
         description: 'Optional: a specific Build & SonarCloud run to harvest digests from.'
         required: false
+      skip_coverage_run:
+        description: 'Harvest an existing run instead of first dispatching a coverage-everywhere run.'
+        required: false
+        type: boolean
+        default: false
 
 permissions: read-all
 
@@ -27,6 +32,68 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # -----------------------------------------------------------------------------------------
+  # Feed the map with the shards it cannot otherwise see.
+  #
+  # 91 of 116 shards collect no coverage during PR validation - 90 heavy ones because coverage
+  # instrumentation pushes them past the runner's memory envelope, and 2 timing ones because
+  # instrumentation distorts the ratios they assert. They can therefore never appear in the map
+  # and must always run, which caps selection at the 25 cheapest shards and leaves every slow
+  # shard running on every PR. That is most of the cost the feature exists to remove.
+  #
+  # The memory ceiling belongs to the PR matrix, not to a nightly job. So once a night, dispatch
+  # the same workflow with coverage forced on everywhere and harvest THAT.
+  #
+  # Partial success is fine and is the point: a heavy shard that still OOMs produces no digest and
+  # stays always-run, exactly as today. Every shard that survives moves from always-run to
+  # mappable. The feature improves shard by shard and can never regress - and a shard killed
+  # part-way is explicitly excluded, because its coverage would describe only the tests that ran
+  # and the map would then think it does not execute lines it does.
+  # -----------------------------------------------------------------------------------------
+  coverage-run:
+    name: Dispatch coverage-everywhere run
+    runs-on: ubuntu-latest
+    if: github.event.inputs.skip_coverage_run != 'true' && github.event.inputs.run_id == ''
+    permissions:
+      actions: write
+      contents: read
+    outputs:
+      run_id: ${{ steps.dispatch.outputs.run_id }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Dispatch and wait
+        id: dispatch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          before=$(gh run list --workflow sonarcloud.yml --branch master --event workflow_dispatch                      --limit 1 --json databaseId --jq '.[0].databaseId // 0')
+          gh workflow run sonarcloud.yml --ref master -f collect_coverage_everywhere=true
+
+          # gh prints nothing on success, and a blind retry would start a SECOND full matrix that
+          # cancels the first through the shared concurrency group. Poll for a new id instead.
+          run_id=''
+          for _ in $(seq 1 30); do
+            candidate=$(gh run list --workflow sonarcloud.yml --branch master --event workflow_dispatch                           --limit 1 --json databaseId --jq '.[0].databaseId // 0')
+            if [ "$candidate" != "$before" ] && [ "$candidate" != "0" ]; then
+              run_id="$candidate"
+              break
+            fi
+            sleep 10
+          done
+          if [ -z "$run_id" ]; then
+            echo "::error::the coverage run never registered"
+            exit 1
+          fi
+          echo "coverage run: $run_id"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
+          # It takes hours. Waiting here would burn a runner for the duration, so the map build
+          # simply harvests the newest FULL run - which this one becomes when it finishes. Today's
+          # map is therefore built from last night's coverage run, which is exactly the freshness
+          # the selector already tolerates: it diffs from the map's own commit.
+
   build-map:
     name: Build shard map
     runs-on: ubuntu-latest

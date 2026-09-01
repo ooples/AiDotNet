@@ -32,6 +32,11 @@ on:
         description: 'Optional: GitHub repo for PR decoration (e.g. owner/repo). Used only when pr_number is set.'
         required: false
         default: 'ooples/AiDotNet'
+      collect_coverage_everywhere:
+        description: 'Collect coverage on heavy and timing shards too, so the test-impact map can cover them. Slower and memory-hungry; intended for the nightly map-feeding run, not for PR validation.'
+        required: false
+        type: boolean
+        default: false
   schedule:
     # Weekly CodeQL scan on Mondays at 8am UTC
     - cron: '0 8 * * 1'
@@ -1008,7 +1013,18 @@ jobs:
           # now split into D/E/F, each serialized like every other heavy shard and each given a
           # 60-minute ceiling to pay for the lost concurrency.
           $serializeShard = $heavyShard
-          $collectCoverage = -not ($heavyShard -or $measuresTiming)
+          # Heavy and timing shards normally skip coverage - the first for memory, the second
+          # because instrumentation distorts the ratios under test. That is right for PR
+          # validation, and it is also why 91 of 116 shards can never appear in the test-impact
+          # map and must always run, which caps selection at the 25 cheapest shards.
+          #
+          # The memory ceiling belongs to the PR matrix, not to a nightly job, so a dispatch can
+          # ask for coverage everywhere. That run feeds the map; it is not meant to gate a PR.
+          $forceCoverage = '${{ github.event.inputs.collect_coverage_everywhere }}' -eq 'true'
+          $collectCoverage = $forceCoverage -or -not ($heavyShard -or $measuresTiming)
+          if ($forceCoverage -and ($heavyShard -or $measuresTiming)) {
+            Write-Host 'collect_coverage_everywhere: coverage forced on for this shard to feed the test-impact map'
+          }
           Write-Host "Running shard '$shardName' (serialized: $serializeShard; coverage: $collectCoverage)"
 
           # Build the argument list as a PowerShell array so the `--`
@@ -1330,7 +1346,13 @@ jobs:
       # recorded as always-run in the map instead, which is what stops selection silently skipping
       # exactly the shards that have OOM-killed runners.
       - name: Build test-impact digest
-        if: always()
+        # Only from a test run that COMPLETED. A shard killed part-way still writes a coverage
+        # file, but one describing just the tests that ran - so the map would record it as not
+        # executing lines it really does, and selection would skip it for a change it covers.
+        # That is a silent miss, and it is likelier here than anywhere: forcing coverage onto
+        # heavy shards is exactly what pushes them into an OOM. A shard that fails simply
+        # produces no digest and stays always-run, which is the safe direction.
+        if: steps.shard-tests.outcome == 'success'
         continue-on-error: true
         shell: pwsh
         run: |
