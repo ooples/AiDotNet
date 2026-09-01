@@ -576,6 +576,10 @@ jobs:
   select-shards:
     name: Select shards
     runs-on: ubuntu-latest
+    # The whole test matrix waits on this job through `needs`, and it makes uncapped network calls
+    # (gh run list, gh run download). Without a cap it inherits the 360-minute default, so one
+    # stalled artifact download parks all 116 shards for six hours.
+    timeout-minutes: 15
     permissions:
       actions: read
       contents: read

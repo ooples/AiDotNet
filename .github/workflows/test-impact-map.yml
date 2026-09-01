@@ -45,8 +45,24 @@ jobs:
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
+          # Passed as data, never interpolated into the script. A workflow_dispatch input is
+          # attacker-controlled in the same sense as any other user input: inlined as
+          # run_id='${{ ... }}' it can close the quote and run arbitrary bash with GH_TOKEN in
+          # scope. The repository already uses this pattern elsewhere for exactly this reason.
+          INPUT_RUN_ID: ${{ github.event.inputs.run_id }}
         run: |
-          run_id='${{ github.event.inputs.run_id }}'
+          run_id=''
+          if [ -n "${INPUT_RUN_ID:-}" ]; then
+            # Digits only. A run id is numeric, so anything else is not a run id.
+            case "$INPUT_RUN_ID" in
+              ''|*[!0-9]*)
+                echo "::error::run_id must be numeric; got an invalid value"
+                exit 1
+                ;;
+              *) run_id="$INPUT_RUN_ID" ;;
+            esac
+          fi
+
           if [ -z "$run_id" ]; then
             # The most recent master run that ran the FULL matrix.
             #
@@ -61,10 +77,9 @@ jobs:
             # A cancelled or partly-failed run fails the same check, for the same reason - its
             # digests cover only the shards that got that far.
             expected=$(yq -o=json -I=0 '.shard' .github/test-shards.yml | jq 'length')
-            run_id=''
-            for candidate in $(gh run list --workflow sonarcloud.yml --branch master                                  --status success --limit 15 --json databaseId --jq '.[].databaseId'); do
-              n=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/$candidate/jobs"                     --jq '[.jobs[] | select(.name | startswith("Tests ("))] | length' 2>/dev/null |
-                  awk '{s+=$1} END {print s+0}')
+            candidates=$(gh run list --workflow sonarcloud.yml --branch master --status success --limit 15 --json databaseId --jq '.[].databaseId')
+            for candidate in $candidates; do
+              n=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${candidate}/jobs" --jq '[.jobs[] | select(.name | startswith("Tests ("))] | length' 2>/dev/null | awk '{s+=$1} END {print s+0}')
               if [ "${n:-0}" -ge "$expected" ]; then
                 run_id="$candidate"
                 echo "run $candidate ran $n/$expected shards - using it"
@@ -73,6 +88,7 @@ jobs:
               echo "run $candidate ran only ${n:-0}/$expected shards - skipping (reduced or partial)"
             done
           fi
+
           if [ -z "$run_id" ]; then
             echo "::error::no master run in the last 15 ran the full matrix, so no complete digest set exists. Dispatch sonarcloud.yml on master (workflow_dispatch escalates by design) before rebuilding the map."
             exit 1
@@ -81,6 +97,7 @@ jobs:
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
           echo "sha=$sha"       >> "$GITHUB_OUTPUT"
           echo "harvesting run $run_id at $sha"
+
 
       - name: Download digests
         env:
@@ -155,8 +172,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Second-newest successful run: the newest is this one, still in progress.
-          prev=$(gh run list --workflow test-impact-map.yml --branch master --status success                    --limit 2 --json databaseId --jq '.[-1].databaseId' 2>/dev/null || true)
+          # The immediately previous successful map. `--status success` already excludes this
+          # run, which is still in progress, so .[0] IS the previous one - an earlier revision
+          # took .[-1] of two, which silently audited against a map one generation too old and
+          # could miss a regression introduced by the most recent map.
+          prev=$(gh run list --workflow test-impact-map.yml --branch master --status success                    --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null || true)
           if [ -z "$prev" ] || [ "$prev" = "${{ github.run_id }}" ]; then
             echo "no earlier map to audit against - this is the first build"
             exit 0

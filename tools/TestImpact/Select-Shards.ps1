@@ -74,9 +74,25 @@ function ConvertTo-ChangedRanges {
 
     $changed = @{}
     $current = $null
+    $deletedPath = $null
     foreach ($line in $DiffLines) {
-        if ($line.StartsWith('+++ b/')) {
-            $current = $line.Substring(6).Trim()
+        if ($line.StartsWith('--- ')) {
+            # Both header lines are tracked, and $current is RESET here.
+            #
+            # A deletion is `--- a/<path>` followed by `+++ /dev/null`, so matching only `+++ b/`
+            # left $current pointing at the PREVIOUS file: the deleted file's hunk was appended to
+            # that file's ranges, and the deleted path was never reported at all. Shards executing
+            # it were therefore not selected AND the unmapped-file escalation never fired - a
+            # silent miss. Measured on a real two-file diff, an edit at line 100 of A plus a
+            # deletion of B produced `src/A.cs -> 100,100,1,200` and no B.
+            $from = $line.Substring(4).Trim()
+            $deletedPath = if ($from -eq '/dev/null') { $null } else { $from -replace '^a/', '' }
+            $current = $null
+        }
+        elseif ($line.StartsWith('+++ ')) {
+            $to = $line.Substring(4).Trim()
+            # `+++ /dev/null` means the file was deleted; attribute its hunks to the path it had.
+            $current = if ($to -eq '/dev/null') { $deletedPath } else { $to -replace '^b/', '' }
         }
         elseif ($current -and $line.StartsWith('@@')) {
             # @@ -old,n +new,m @@ ; n omitted means 1, n = 0 means a pure insertion.
@@ -358,6 +374,28 @@ if ($SelfTest) {
     Assert-True (-not $r.Escalate) 'an empty delta must not escalate'
     Assert-True ($r.Shards.Count -eq 1 -and $r.Shards -contains 'HeavyNoCoverage') `
         'an empty delta selects only the always-run shards'
+
+    # 12. DELETIONS. git writes `--- a/<path>` then `+++ /dev/null`, so a parser keyed only on
+    #     `+++ b/` leaves the previous file current: the deletion's hunk lands on THAT file and the
+    #     deleted path is never reported, so shards executing it are not selected and the
+    #     unmapped-file escalation never fires. Both halves are checked.
+    $diff = @(
+        '--- a/src/Covered.cs',
+        '+++ b/src/Covered.cs',
+        '@@ -100 +100 @@',
+        '--- a/src/Deleted.cs',
+        '+++ /dev/null',
+        '@@ -1,200 +0,0 @@'
+    )
+    $r = ConvertTo-ChangedRanges -DiffLines $diff
+    Assert-True ($r.ContainsKey('src/Deleted.cs')) 'a deleted file must be reported under its own path'
+    Assert-True (@($r['src/Covered.cs']).Count -eq 2) 'a deletion must not append its ranges to the previous file'
+
+    # 13. Additions are the mirror: `--- /dev/null` then `+++ b/<path>`.
+    $diff = @('--- /dev/null', '+++ b/src/Added.cs', '@@ -0,0 +1,50 @@')
+    $r = ConvertTo-ChangedRanges -DiffLines $diff
+    Assert-True ($r.ContainsKey('src/Added.cs')) 'an added file must be reported under its new path'
+    Assert-True (-not $r.ContainsKey('/dev/null')) '/dev/null must never appear as a path'
 
     if ($failures.Count -gt 0) {
         Write-Host 'Select-Shards self-test FAILED:'

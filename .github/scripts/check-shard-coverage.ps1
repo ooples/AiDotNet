@@ -119,7 +119,7 @@ foreach ($class in $generated) {
     if (-not $covered) { $uncovered += $class }
 }
 
-Write-Host ("Generated classes discovered: " + @($generated).Count + "; shard prefixes in workflow: " + @($prefixes).Count)
+Write-Host ("Generated classes discovered: " + @($generated).Count + "; shard prefixes in ${Workflow}: " + @($prefixes).Count)
 
 if ($uncovered.Count -gt 0) {
     Write-Host "::error::Generated test classes are not covered by any shard filter: $($uncovered -join ', ')"
