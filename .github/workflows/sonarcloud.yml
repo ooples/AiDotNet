@@ -185,8 +185,13 @@ jobs:
           # temporary merge commit rather than the PR head. So recent ones are listed unfiltered
           # and left to the tree comparison below. That comparison is the actual safety property;
           # how a candidate was discovered cannot weaken it.
+          #
+          # Merge-queue runs go FIRST. Evaluating a candidate is not free - each one downloads an
+          # artifact zip and resolves a tree through the API - and a merge_group run is the one
+          # most likely to match, so checking the pull_request runs ahead of it spends those calls
+          # on the weaker candidates. Ordering changes only cost here, never the answer.
           if mq_json=$(gh api --method GET             "repos/${GITHUB_REPOSITORY}/actions/workflows/sonarcloud.yml/runs"             -f event=merge_group -f status=completed -f per_page=20 2>/dev/null); then
-            runs_json=$(jq -n --argjson a "$runs_json" --argjson b "$mq_json"               '{workflow_runs: (($a.workflow_runs // []) + ($b.workflow_runs // []))}')
+            runs_json=$(jq -n --argjson a "$runs_json" --argjson b "$mq_json"               '{workflow_runs: (($b.workflow_runs // []) + ($a.workflow_runs // []))}')
           fi
 
           # A red test ledger may still be an accepted improvement over baseline, so failure is a
