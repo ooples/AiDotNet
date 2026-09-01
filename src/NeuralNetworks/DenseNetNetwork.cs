@@ -251,7 +251,15 @@ public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// <returns>A minimal DenseNet network for testing.</returns>
     public static DenseNetNetwork<T> ForTesting(int numClasses = 10, int inputChannels = 3)
     {
-        var config = DenseNetConfiguration.CreateForTesting(numClasses);
+        // Test-scale configuration is GENERATED. ModelTestScale synthesizes it from the
+        // constructor -- Custom variant with a four-stage customBlockLayers, bounded dims,
+        // declared defaults left alone -- and numClasses is the caller's intent, passed through.
+        var config = AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(
+                typeof(DenseNetConfiguration),
+                new global::System.Collections.Generic.Dictionary<string, int> { ["numClasses"] = numClasses })
+            as DenseNetConfiguration
+            ?? throw new global::System.InvalidOperationException(
+                "DenseNetConfiguration has no generated test-scale bound.");
         var architecture = CreateArchitectureFromConfig(config);
         return new DenseNetNetwork<T>(architecture, config);
     }
