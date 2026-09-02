@@ -1,0 +1,382 @@
+name: Test impact map
+
+# Each invocation first harvests and audits the previous intentional coverage-everywhere run, then
+# dispatches the next one. The expensive run never overlaps the map decision it will later audit.
+on:
+  schedule:
+    # 02:00 UTC. The instrumented run is ~3450 runner-minutes, which at max-parallel 12 is about
+    # 4.8 HOURS of queue occupancy - so the start time has to clear the working day by a wide
+    # margin, not just miss it. Measured activity in this repo clusters at 13:00-16:00 and 21:00
+    # UTC; starting at 02:00 finishes around 06:50 and leaves six hours of slack. At 07:00 it
+    # finished at 11:48, which only just cleared it.
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Optional: a specific marked coverage-everywhere Build & SonarCloud run.'
+        required: false
+      skip_coverage_run:
+        description: 'Build/audit the map without dispatching the next coverage-everywhere run.'
+        required: false
+        type: boolean
+        default: false
+
+permissions: read-all
+
+concurrency:
+  group: test-impact-map
+  cancel-in-progress: true
+
+jobs:
+  build-map:
+    name: Build and audit shard map
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          # The audit diffs from the map that was in effect for the source run.
+          fetch-depth: 0
+
+      - name: Find a complete marked coverage run
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Treat workflow_dispatch input as data, never shell source.
+          INPUT_RUN_ID: ${{ inputs.run_id }}
+        run: |
+          expected=$(yq -o=json -I=0 '.shard' .github/test-shards.yml | jq -c '[.[].name]')
+          expected_sorted=$(printf '%s' "$expected" | jq -c 'sort')
+          expected_count=$(printf '%s' "$expected" | jq 'length')
+          if [ "$expected_count" -eq 0 ]; then
+            echo "::error::.github/test-shards.yml yielded no shards"
+            exit 1
+          fi
+
+          valid_sha=''
+          valid_map_run_id=''
+
+          validate_candidate() {
+            candidate="$1"
+            meta=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${candidate}" 2>/dev/null) || {
+              echo "run $candidate does not exist or is not readable"
+              return 1
+            }
+
+            workflow=$(printf '%s' "$meta" | jq -r '.name')
+            branch=$(printf '%s' "$meta" | jq -r '.head_branch')
+            event=$(printf '%s' "$meta" | jq -r '.event')
+            status=$(printf '%s' "$meta" | jq -r '.status')
+            conclusion=$(printf '%s' "$meta" | jq -r '.conclusion // ""')
+            sha=$(printf '%s' "$meta" | jq -r '.head_sha')
+            if [ "$workflow" != 'Build & SonarCloud' ] || [ "$branch" != 'master' ] || \
+               [ "$event" != 'workflow_dispatch' ] || [ "$status" != 'completed' ] || \
+               { [ "$conclusion" != 'success' ] && [ "$conclusion" != 'failure' ]; }; then
+              echo "run $candidate is $workflow/$branch/$event/$status/$conclusion - not a completed coverage source"
+              return 1
+            fi
+
+            marker_dir="candidate-marker-$candidate"
+            mkdir -p "$marker_dir"
+            if ! gh run download "$candidate" --name test-impact-coverage-source --dir "$marker_dir" >/dev/null 2>&1; then
+              echo "run $candidate has no coverage-everywhere marker"
+              return 1
+            fi
+            marker="$marker_dir/coverage-source.json"
+            if [ ! -f "$marker" ] || ! jq -e \
+                 --arg id "$candidate" --arg sha "$sha" \
+                 '.schemaVersion == 1 and .forcedCoverage == true and
+                  (.runId | tostring) == $id and .sha == $sha and (.shardNames | type) == "array"' \
+                 "$marker" >/dev/null; then
+              echo "run $candidate has an invalid coverage-everywhere marker"
+              return 1
+            fi
+            marker_names=$(jq -c '.shardNames | sort' "$marker")
+            if [ "$marker_names" != "$expected_sorted" ]; then
+              echo "run $candidate used a different shard manifest - skipping stale coverage"
+              return 1
+            fi
+
+            jobs=$(gh api --paginate --slurp \
+              "repos/${GITHUB_REPOSITORY}/actions/runs/${candidate}/jobs?per_page=100" 2>/dev/null) || {
+              echo "could not read jobs for run $candidate"
+              return 1
+            }
+            shard_jobs=$(printf '%s' "$jobs" | jq -c \
+              '[.[].jobs[] | select(.name | startswith("Tests (")) |
+                {name: (.name | sub("^Tests \\([^)]*\\) - "; "")), status, conclusion}]')
+            actual_count=$(printf '%s' "$shard_jobs" | jq 'length')
+            actual_names=$(printf '%s' "$shard_jobs" | jq -c '[.[].name] | sort')
+            if [ "$actual_count" -ne "$expected_count" ] || [ "$actual_names" != "$expected_sorted" ]; then
+              echo "run $candidate has $actual_count/$expected_count shard jobs or the wrong names"
+              return 1
+            fi
+            if ! printf '%s' "$shard_jobs" | jq -e \
+                 'all(.[]; .status == "completed" and (.conclusion == "success" or .conclusion == "failure"))' \
+                 >/dev/null; then
+              echo "run $candidate contains a cancelled, skipped, neutral or incomplete shard job"
+              return 1
+            fi
+
+            map_run_id=$(jq -r '.mapRunId // ""' "$marker")
+            case "$map_run_id" in
+              ''|*[!0-9]*)
+                if [ -n "$map_run_id" ]; then
+                  echo "run $candidate marker has invalid mapRunId"
+                  return 1
+                fi
+                ;;
+            esac
+            if [ -n "$map_run_id" ]; then
+              map_meta=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${map_run_id}" 2>/dev/null) || {
+                echo "run $candidate references an unreadable map run $map_run_id"
+                return 1
+              }
+              if ! printf '%s' "$map_meta" | jq -e \
+                   '.name == "Test impact map" and .head_branch == "master" and .conclusion == "success"' \
+                   >/dev/null; then
+                echo "run $candidate references map run $map_run_id, which was not a successful master map"
+                return 1
+              fi
+            fi
+            valid_sha="$sha"
+            valid_map_run_id="$map_run_id"
+            echo "run $candidate has the exact $expected_count-shard completed matrix"
+            return 0
+          }
+
+          run_id=''
+          if [ -n "${INPUT_RUN_ID:-}" ]; then
+            case "$INPUT_RUN_ID" in
+              *[!0-9]*)
+                echo "::error::run_id must be numeric"
+                exit 1
+                ;;
+            esac
+            if ! validate_candidate "$INPUT_RUN_ID"; then
+              echo "::error::run $INPUT_RUN_ID is not a valid coverage source"
+              exit 1
+            fi
+            run_id="$INPUT_RUN_ID"
+          else
+            candidates=$(gh api --method GET \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/sonarcloud.yml/runs" \
+              -f branch=master -f event=workflow_dispatch -f status=completed -f per_page=50 \
+              --jq '.workflow_runs[].id')
+            for candidate in $candidates; do
+              if validate_candidate "$candidate"; then
+                run_id="$candidate"
+                break
+              fi
+            done
+          fi
+
+          if [ -z "$run_id" ]; then
+            echo "::error::no recent completed run has both the coverage marker and the exact current shard matrix"
+            exit 1
+          fi
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "sha=$valid_sha" >> "$GITHUB_OUTPUT"
+          echo "map_run_id=$valid_map_run_id" >> "$GITHUB_OUTPUT"
+          echo "harvesting run $run_id at $valid_sha (map in effect: ${valid_map_run_id:-none})"
+
+      - name: Download digests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p digests
+          gh run download '${{ steps.source.outputs.run_id }}' --pattern 'impact-digest-*' --dir digests
+          echo "digest files: $(find digests -name '*.digest.json' | wc -l)"
+
+      # A FRESH digest is only produced when the shard's test step succeeded; a CARRIED digest is
+      # written before any test runs and would bypass that gate - a heavy shard that failed in the
+      # source run would stay in knownShards and remain skippable in enforce mode while red.
+      # Restore the gate here: drop the carried digest of any shard whose job did not succeed.
+      - name: Prune carried digests for failed shards
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $carried = @(Get-ChildItem digests -Filter '*.digest.json' -Recurse -File | Where-Object {
+            (Get-Content $_.FullName -Raw | ConvertFrom-Json).PSObject.Properties['carriedFrom']
+          })
+          if ($carried.Count -eq 0) { Write-Host 'no carried digests'; exit 0 }
+
+          $jobPages = gh api --paginate --slurp `
+              "repos/${{ github.repository }}/actions/runs/${{ steps.source.outputs.run_id }}/jobs?per_page=100" |
+              ConvertFrom-Json
+          $failedShards = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+          foreach ($j in @($jobPages | ForEach-Object { $_.jobs })) {
+            $name = [string] $j.name
+            if (-not $name.StartsWith('Tests (', [StringComparison]::Ordinal)) { continue }
+            $i = $name.IndexOf(') - ')
+            if ($i -lt 0) { continue }
+            if ([string] $j.conclusion -ne 'success') { [void] $failedShards.Add($name.Substring($i + 4)) }
+          }
+          $pruned = 0
+          foreach ($f in $carried) {
+            $shard = [string] (Get-Content $f.FullName -Raw | ConvertFrom-Json).shard
+            if ($failedShards.Contains($shard)) {
+              Write-Host "pruning carried digest for failed shard '$shard' - it becomes always-run"
+              Remove-Item -LiteralPath $f.FullName -Force
+              $pruned++
+            }
+          }
+          Write-Host "carried digests: $($carried.Count), pruned: $pruned"
+
+      - name: Build the map
+        shell: pwsh
+        run: |
+          $all = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
+          & ./tools/TestImpact/New-ShardMap.ps1 `
+              -DigestDirectory digests `
+              -AllShards @($all.name) `
+              -Sha '${{ steps.source.outputs.sha }}' `
+              -OutFile shard-map.json
+
+          $size = [Math]::Round((Get-Item shard-map.json).Length / 1MB, 2)
+          $map = Get-Content shard-map.json -Raw | ConvertFrom-Json
+          $files = @($map.files.PSObject.Properties).Count
+          $known = @($map.knownShards).Count
+          $always = @($map.alwaysRun).Count
+          Write-Host "map: $files file(s), $size MB"
+          "### Shard map rebuilt`n`n- source run ${{ steps.source.outputs.run_id }}`n- commit ``${{ steps.source.outputs.sha }}```n- $files files indexed`n- $known shards mapped, $always always-run`n- $size MB" |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Upload the map
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: shard-map
+          path: shard-map.json
+          if-no-files-found: error
+          retention-days: 14
+
+      # Audit against the exact map run recorded by the source coverage marker. A map built from
+      # this source run would make the question circular. If the audit fails, this workflow is not
+      # successful and selectors will not discover the newly uploaded artifact.
+      - name: Download the map that was in effect
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          map_run_id='${{ steps.source.outputs.map_run_id }}'
+          if [ -z "$map_run_id" ]; then
+            echo "source run had no shard map in effect - this is the bootstrap generation"
+            exit 0
+          fi
+          case "$map_run_id" in
+            *[!0-9]*)
+              echo "::error::source marker mapRunId is not numeric"
+              exit 1
+              ;;
+          esac
+          if ! gh run download "$map_run_id" --name shard-map --dir prevmap; then
+            # The referenced map run exists but its artifact is gone (14-day retention). Hard-
+            # failing here WEDGES the nightly permanently: this build fails, the dispatch keeps
+            # citing the same last-successful run, and its artifact never comes back - reviewed and
+            # confirmed as unrecoverable without this branch. Skipping the audit once lets this
+            # build succeed, and the next night audits against THIS run's fresh artifact.
+            echo "::warning::shard-map artifact of run $map_run_id is unavailable (expired?) - skipping this audit to re-seed the chain"
+            rm -rf prevmap
+          fi
+
+      - name: Audit selection against the source run
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if (-not (Test-Path prevmap/shard-map.json)) {
+            Write-Host 'no prior map was in effect - skipping bootstrap audit'
+            exit 0
+          }
+
+          # gh rejects --slurp combined with --jq. Parse the paginated response first, then
+          # flatten it in PowerShell so matrices beyond 100 jobs stay complete.
+          $jobPages = gh api --paginate --slurp `
+              "repos/${{ github.repository }}/actions/runs/${{ steps.source.outputs.run_id }}/jobs?per_page=100" |
+              ConvertFrom-Json
+          $jobs = @(
+            $jobPages |
+              ForEach-Object { $_.jobs } |
+              Where-Object { ([string] $_.name).StartsWith('Tests (', [StringComparison]::Ordinal) }
+          )
+          $outcomes = @($jobs | ForEach-Object {
+            $name = [string] $_.name
+            $i = $name.IndexOf(') - ')
+            if ($i -lt 0) { throw "Unrecognised shard job name: $name" }
+            [pscustomobject]@{ shard = $name.Substring($i + 4); outcome = [string] $_.conclusion }
+          })
+          $outcomes | ConvertTo-Json -Depth 3 | Set-Content outcomes.json -Encoding utf8
+          $failed = @($outcomes | Where-Object outcome -ne 'success').Count
+          Write-Host "auditing $($outcomes.Count) shard outcome(s), $failed failed"
+
+          # Exercise the tooling being proposed by THIS map build, while giving git the audited
+          # tree as HEAD. Checking out first and then invoking tools/ would silently run whatever
+          # older selector happened to exist at the source commit.
+          $auditTools = Join-Path $env:RUNNER_TEMP 'test-impact-audit-tools'
+          New-Item -ItemType Directory -Path $auditTools -Force | Out-Null
+          Copy-Item tools/TestImpact/Select-Shards.ps1 (Join-Path $auditTools 'Select-Shards.ps1')
+          Copy-Item tools/TestImpact/Measure-SelectionMiss.ps1 (Join-Path $auditTools 'Measure-SelectionMiss.ps1')
+
+          # HEAD must be the audited tree; the selector diffs from the prior map commit to HEAD.
+          & git checkout --quiet '${{ steps.source.outputs.sha }}'
+          if ($LASTEXITCODE -ne 0) { throw "checkout of audited commit failed - refusing to audit the wrong tree" }
+          & (Join-Path $auditTools 'Measure-SelectionMiss.ps1') `
+              -SelectorPath (Join-Path $auditTools 'Select-Shards.ps1') `
+              -MapFile prevmap/shard-map.json -OutcomesFile outcomes.json -OutFile audit.json
+          $auditExit = $LASTEXITCODE
+
+          $a = Get-Content audit.json -Raw | ConvertFrom-Json
+          $verdict = if ($a.Escalated) { 'would have escalated - nothing skipped' }
+                     elseif ($a.MissCount -gt 0) { "**$($a.MissCount) MISSED**: $($a.Missed -join ', ')" }
+                     elseif ($a.Failed -eq 0) { 'no failure opportunity; miss safety was not exercised' }
+                     else { 'no misses' }
+          "### Selection audit`n`n- map in effect: ${{ steps.source.outputs.map_run_id }}`n- would run $($a.WouldRun)/$($a.TotalShards), skip $($a.WouldSkip)`n- $($a.Failed) shard(s) failed`n- $verdict" |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          exit $auditExit
+
+  coverage-run:
+    name: Dispatch next coverage-everywhere run
+    needs: build-map
+    # Bootstrap even when no source exists yet; explicit harvest-only invocations do not dispatch.
+    if: ${{ always() && !inputs.skip_coverage_run && !inputs.run_id }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch coverage run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ '${{ needs.build-map.result }}' = 'success' ]; then
+            # This workflow is not marked successful until this dispatch job exits. Pass its id
+            # explicitly so the child cannot race and record the previous successful map.
+            map_run_id='${{ github.run_id }}'
+          else
+            # A failed build/audit is deliberately not eligible for selection. The last successful
+            # artifact remains in effect, so that is the only map the next run may claim.
+            map_run_id=$(gh run list --workflow test-impact-map.yml --branch master --status success \
+              --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
+          fi
+
+          # A dispatch while one is still running would land in the same build-coverage-map
+          # concurrency group with cancel-in-progress and DESTROY hours of instrumented work -
+          # the same double-dispatch trap that killed two verification runs during development.
+          inflight=$(gh run list --workflow sonarcloud.yml --branch master --event workflow_dispatch \
+                       --json databaseId,status --jq '[.[] | select(.status == "queued" or .status == "in_progress")] | length' 2>/dev/null || echo 0)
+          if [ "${inflight:-0}" -gt 0 ]; then
+            echo "::warning::a coverage-everywhere run is already queued or running - not dispatching another"
+            echo 'Skipped dispatch: a coverage run is already in flight.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [ -n "$map_run_id" ]; then
+            gh workflow run sonarcloud.yml --ref master \
+              -f collect_coverage_everywhere=true -f test_impact_map_run_id="$map_run_id"
+          else
+            gh workflow run sonarcloud.yml --ref master -f collect_coverage_everywhere=true
+          fi
+          echo 'Dispatched the next marked coverage-everywhere run. It will be harvested on the next map invocation.' >> "$GITHUB_STEP_SUMMARY"
