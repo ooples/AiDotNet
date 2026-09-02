@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using AiDotNet.ProgramSynthesis.Engines;
 using AiDotNet.ProgramSynthesis.Enums;
+using AiDotNet.ProgramSynthesis.Execution;
 using AiDotNet.ProgramSynthesis.Interfaces;
 using AiDotNet.ProgramSynthesis.Models;
 using AiDotNet.Tests.UnitTests.ProgramSynthesis.Fakes;
@@ -72,6 +73,28 @@ public sealed class NeuralProgramSynthesizerInductionTests
             // a different source string is treated as an improvement and passes.
             output = string.Equals(sourceCode, _initialSource, StringComparison.Ordinal) ? "wrong" : input;
             return true;
+        }
+
+        public Task<ProgramExecuteResponse> ExecuteAsync(
+            ProgramExecuteRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            bool succeeded = TryExecute(
+                request.Language,
+                request.SourceCode,
+                request.StdIn ?? string.Empty,
+                out string output,
+                out string? error,
+                cancellationToken);
+
+            return Task.FromResult(new ProgramExecuteResponse
+            {
+                Success = succeeded,
+                Language = request.Language,
+                ExitCode = succeeded ? 0 : 1,
+                StdOut = output,
+                Error = error
+            });
         }
     }
 }
