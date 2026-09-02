@@ -43,6 +43,63 @@ function Get-JobBlock {
     return $match.Value
 }
 
+function Get-StepBlock {
+    param([string] $JobBlock, [string] $Step)
+
+    $escaped = [Regex]::Escape($Step)
+    return [Regex]::Match(
+        $JobBlock,
+        "(?ms)^      - name: ${escaped}\s*\r?\n.*?(?=^      - [A-Za-z0-9_-]+:|\z)").Value
+}
+
+function Get-JobHeader {
+    param([string] $JobBlock)
+
+    $steps = [Regex]::Match($JobBlock, '(?m)^    steps:\s*$')
+    if (-not $steps.Success) { return '' }
+    return $JobBlock.Substring(0, $steps.Index)
+}
+
+function Test-JobDependency {
+    param([string] $JobHeader, [string] $Dependency)
+
+    $match = [Regex]::Match($JobHeader, '(?m)^    needs:[ \t]*(?<inline>[^\r\n]*)[ \t]*\r?$')
+    if (-not $match.Success) { return $false }
+    $inline = $match.Groups['inline'].Value.Trim()
+    if ($inline.StartsWith('[', [StringComparison]::Ordinal) -and
+        $inline.EndsWith(']', [StringComparison]::Ordinal)) {
+        $values = @($inline.Substring(1, $inline.Length - 2).Split(',') |
+            ForEach-Object { $_.Trim().Trim("'`"") })
+        return $values -ccontains $Dependency
+    }
+    if ($inline) { return $inline.Trim("'`"") -ceq $Dependency }
+
+    $list = [Regex]::Match($JobHeader, '(?ms)^    needs:[ \t]*\r?\n(?<items>(?:      - [^\r\n]+\r?\n?)+)')
+    if (-not $list.Success) { return $false }
+    $values = @([Regex]::Matches($list.Groups['items'].Value, '(?m)^      -[ \t]*(?<value>[^\r\n]+?)[ \t]*\r?$') |
+        ForEach-Object { $_.Groups['value'].Value.Trim().Trim("'`"") })
+    return $values -ccontains $Dependency
+}
+
+function Get-ContinuedShellCommand {
+    param([string] $Text, [string] $CommandPattern)
+
+    $lines = [Regex]::Split($Text, '\r?\n')
+    $commands = [System.Collections.Generic.List[string]]::new()
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -notmatch $CommandPattern) { continue }
+        $parts = [System.Collections.Generic.List[string]]::new()
+        do {
+            $line = $lines[$i]
+            [void] $parts.Add($line.Trim())
+            $continued = $line.TrimEnd().EndsWith('\', [StringComparison]::Ordinal)
+            if ($continued) { $i++ }
+        } while ($continued -and $i -lt $lines.Count)
+        [void] $commands.Add($parts -join ' ')
+    }
+    return @($commands)
+}
+
 $validation = Get-Content -LiteralPath $ValidationWorkflow -Raw
 $map = Get-Content -LiteralPath $MapWorkflow -Raw
 
@@ -66,9 +123,16 @@ $expensiveJobs = @(
 foreach ($job in $expensiveJobs) {
     $block = Get-JobBlock -WorkflowText $validation -Job $job
     if (-not $block) { continue }
-    Assert-Contract ($block -match '(?m)^\s+needs:(?:[^\r\n]*validation-source|\s*\r?\n(?:\s+-[^\r\n]*\r?\n)*\s+- validation-source\s*$)') `
+    $header = Get-JobHeader -JobBlock $block
+    Assert-Contract ([bool] $header) `
+        "expensive job '$job' has no job-level header before its steps"
+    Assert-Contract (Test-JobDependency -JobHeader $header -Dependency 'validation-source') `
         "expensive job '$job' does not explicitly depend on validation-source"
-    Assert-Contract ($block.Contains('fromJSON(needs.validation-source.outputs.execute_expensive)')) `
+    $jobIf = [Regex]::Match($header, '(?m)^    if:\s*(?<value>[^\r\n]+)\s*$')
+    Assert-Contract $jobIf.Success `
+        "expensive job '$job' has no job-level execution condition"
+    Assert-Contract ($jobIf.Success -and
+        $jobIf.Groups['value'].Value.Contains('fromJSON(needs.validation-source.outputs.execute_expensive)')) `
         "expensive job '$job' does not consume the typed execute_expensive decision"
 }
 
@@ -79,13 +143,16 @@ Assert-Contract ($resolver.Contains("echo 'execute_expensive=true'")) `
     'the resolver lacks a fail-closed full-validation default'
 Assert-Contract ($resolver.Contains("echo 'execute_expensive=false'")) `
     'the resolver never suppresses expensive work after exact-tree certification'
-Assert-Contract ($resolver.Contains('continue-on-error: true')) `
+$resolveStep = Get-StepBlock -JobBlock $resolver -Step 'Resolve exact-tree PR run'
+Assert-Contract ([bool] $resolveStep) `
+    'the exact-tree resolver step is absent'
+Assert-Contract ($resolveStep.Contains('continue-on-error: true')) `
     'an unexpected resolver failure blocks dependents instead of retaining fail-closed defaults'
 
 $selectorJob = Get-JobBlock -WorkflowText $validation -Job 'select-shards'
-$selfTestStep = [Regex]::Match(
-    $selectorJob,
-    '(?ms)^\s+- name: Verify the impact tooling\s*$.*?(?=^\s+- name: |\z)').Value
+$selfTestStep = Get-StepBlock -JobBlock $selectorJob -Step 'Verify the impact tooling'
+Assert-Contract ([bool] $selfTestStep) `
+    'select-shards no longer runs the impact tooling self-tests'
 Assert-Contract (-not $selfTestStep.Contains('continue-on-error: true')) `
     'checked-in impact tooling can fail its self-tests while CI remains green'
 
@@ -137,15 +204,40 @@ Assert-Contract ($map.Contains("candidate_ready: `${{ steps.source.outputs.found
     'map workflow does not expose whether this invocation produced a candidate'
 Assert-Contract ($map.Contains("if: steps.audit.outputs.certified == 'true'")) `
     'certified artifact upload is not gated by the audit decision'
+Assert-Contract ($map -match '(?s)if \(\$auditExit -eq 0.*?\$a\.WouldSkip -gt 0.*?\$a\.Failed -gt 0\)') `
+    'map certification does not require a real failing-shard opportunity as well as reduction'
 Assert-Contract ($map -match "if \[ '.*needs\.build-map\.result.*' = 'success' \] && \[ '.*candidate_ready.*' = 'true' \]") `
     'coverage dispatch can cite the current map run when no candidate was produced'
 
 # coverage-run has no checkout by design. Every gh command in that job must therefore identify the
 # repository explicitly instead of asking git to infer it from a nonexistent worktree.
 $coverageRun = Get-JobBlock -WorkflowText $map -Job 'coverage-run'
-$repoTargets = [Regex]::Matches($coverageRun, '--repo\s+"\$GITHUB_REPOSITORY"').Count
-Assert-Contract ($repoTargets -ge 3) `
-    "coverage-run has only $repoTargets explicit repository target(s); run lookup, in-flight lookup, and dispatch all require one"
+$runListCommands = @(Get-ContinuedShellCommand -Text $coverageRun -CommandPattern `
+    '^\s*(?:[A-Za-z_][A-Za-z0-9_]*=\$\()?gh run list\b')
+Assert-Contract ($runListCommands.Count -ge 2) `
+    'coverage-run no longer performs both source and in-flight run lookups'
+foreach ($command in $runListCommands) {
+    Assert-Contract ($command.Contains('--repo "$GITHUB_REPOSITORY"')) `
+        "coverage-run has an unscoped gh run list command: $command"
+}
+
+$workflowRunCommands = @(Get-ContinuedShellCommand -Text $coverageRun -CommandPattern `
+    '^\s*gh workflow run\b')
+Assert-Contract ($workflowRunCommands.Count -ge 2) `
+    'coverage-run no longer covers both mapped and bootstrap dispatches'
+foreach ($command in $workflowRunCommands) {
+    Assert-Contract ($command.Contains('--repo "$GITHUB_REPOSITORY"')) `
+        "coverage-run has an unscoped gh workflow run command: $command"
+}
+
+$apiCommands = @(Get-ContinuedShellCommand -Text $coverageRun -CommandPattern `
+    '^\s*(?:[A-Za-z_][A-Za-z0-9_]*=\$\()?gh api\b')
+Assert-Contract ($apiCommands.Count -ge 1) `
+    'coverage-run no longer validates candidate artifact availability'
+foreach ($command in $apiCommands) {
+    Assert-Contract ($command.Contains('repos/${GITHUB_REPOSITORY}/')) `
+        "coverage-run has a gh api command without an explicit repository endpoint: $command"
+}
 
 if ($failures.Count -gt 0) {
     Write-Host 'CI impact workflow contract FAILED:'

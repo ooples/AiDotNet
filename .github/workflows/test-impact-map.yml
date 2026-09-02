@@ -368,8 +368,10 @@ jobs:
             Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
           # Escalation is safe, but it proves only the fallback. Certification authorizes actual
-          # reduction, so require a non-escalated plan that would have skipped at least one shard.
-          if ($auditExit -eq 0 -and -not [bool] $a.Escalated -and [int] $a.WouldSkip -gt 0) {
+          # reduction, so require both a non-escalated plan that would skip work and at least one
+          # failing shard that gave the audit a real opportunity to observe a selection miss.
+          if ($auditExit -eq 0 -and -not [bool] $a.Escalated -and
+              [int] $a.WouldSkip -gt 0 -and [int] $a.Failed -gt 0) {
             $previousMap = Get-Content prevmap/shard-map.json -Raw | ConvertFrom-Json
             New-Item -ItemType Directory -Path certified-map -Force | Out-Null
             Copy-Item -LiteralPath prevmap/shard-map.json -Destination certified-map/shard-map.json
@@ -390,7 +392,7 @@ jobs:
           }
           else {
             "certified=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            Write-Host 'candidate was safe but did not exercise reduction - not certifying it'
+            Write-Host 'candidate did not exercise both failure detection and reduction - not certifying it'
           }
           exit $auditExit
 
