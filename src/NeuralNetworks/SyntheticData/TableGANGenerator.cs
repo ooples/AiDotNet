@@ -108,9 +108,9 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
     private readonly List<Tensor<T>> _discPreActivations = new();
 
     // Real data statistics for information loss
-    [Buffer]
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Vector<T>? _realMean;
-    [Buffer]
+    [Buffer(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Conditional)]
     private Vector<T>? _realVar;
 
     private int _numClasses;

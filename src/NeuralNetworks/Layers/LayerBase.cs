@@ -7776,9 +7776,37 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         WriteOrderedActivationObjects(values, vector: true);
     }
 
+    /// <summary>
+    /// Gets whether <see cref="WriteConstructionObjects"/> supplies every generated constructor
+    /// value needed to rebuild this layer without first formatting durable metadata.
+    /// </summary>
+    /// <remarks>
+    /// The layer-state generator overrides this together with the object writer. Legacy layers keep
+    /// the conservative metadata path; generated layers can avoid serializing owned child layers and
+    /// their weights merely to perform an in-memory clone.
+    /// </remarks>
+    protected virtual bool HasCompleteConstructionObjectState => false;
+
     /// <summary>Invokes the generated live-object hook for clone infrastructure.</summary>
     internal void CaptureConstructionObjects(Dictionary<string, object> values)
         => WriteConstructionObjects(values);
+
+    /// <summary>Captures the construction recipe used by in-memory clone infrastructure.</summary>
+    internal Dictionary<string, object> CaptureConstructionValuesForClone()
+    {
+        var values = new Dictionary<string, object>(StringComparer.Ordinal);
+
+        if (!HasCompleteConstructionObjectState)
+        {
+            var metadata = new Dictionary<string, string>(StringComparer.Ordinal);
+            CaptureConstructionState(metadata);
+            foreach (var pair in metadata)
+                values[pair.Key] = pair.Value;
+        }
+
+        CaptureConstructionObjects(values);
+        return values;
+    }
 
     private void WriteOrderedActivationState(Dictionary<string, string> metadata, bool vector)
     {

@@ -3402,27 +3402,18 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 || sourceLayer.GetType() != destinationLayer.GetType())
                 continue;
 
-            // Generated [LayerState] is the preferred construction recipe, but legacy composite
-            // layers also publish required constructor values through GetMetadata(). Comparing only
-            // the generated subset let a fresh, default-configured layer pass preflight when its
-            // tensor shapes happened to match the source (PointNet++ neighbour counts are the
+            // Compare the complete generated in-memory construction manifest, with the durable
+            // construction writer retained only as a fallback for legacy layers. Comparing a
+            // partial recipe let a fresh, default-configured layer pass preflight when its tensor
+            // shapes happened to match the source (PointNet++ neighbour counts are the
             // representative case). The COW adoption then preserved every weight while inference
-            // still followed a different graph. GetMetadata is the complete shared persistence
-            // contract and includes the generated construction state, so compare that full surface.
-            var sourceState = sourceLayer.GetMetadata();
-            var destinationState = destinationLayer.GetMetadata();
-            bool matches = sourceState.Count == destinationState.Count;
-            if (matches)
-            {
-                foreach (var pair in sourceState)
-                {
-                    if (destinationState.TryGetValue(pair.Key, out string? value)
-                        && string.Equals(pair.Value, value, StringComparison.Ordinal))
-                        continue;
-                    matches = false;
-                    break;
-                }
-            }
+            // still followed a different graph. The live manifest preserves that full contract
+            // without serializing constructor-owned child-layer weights merely to compare topology.
+            var sourceState = CaptureLayerConstructionValuesForClone(sourceLayer);
+            var destinationState = CaptureLayerConstructionValuesForClone(destinationLayer);
+            bool matches = AiDotNet.Serialization.LayerStateBag.AreCloneConstructionValuesEquivalent(
+                sourceState,
+                destinationState);
             // Resolved shapes are persistence state even when they are intentionally absent from
             // construction metadata. Shape-adaptive layers such as FeatureTokenizerLayer omit their
             // observed feature count from metadata because it is a runtime cache, but their first
@@ -16260,23 +16251,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
-    /// Captures both durable metadata and the live constructor components used by an in-memory clone.
+    /// Captures the complete live construction manifest used by an in-memory clone, falling back to
+    /// durable construction state only for legacy layers without a generated object manifest.
     /// </summary>
     private static Dictionary<string, object> CaptureLayerConstructionValuesForClone(
         LayerBase<T> source)
-    {
-        var values = new Dictionary<string, object>(StringComparer.Ordinal);
-        foreach (var pair in source.GetMetadata())
-            values[pair.Key] = pair.Value;
-
-        // Durable metadata can name a component type, but it cannot retain per-instance constructor
-        // state that is not encoded in that type name. The layer-state generator already exposes the
-        // live-object channel used by LayerCloning (for example LeakyReLU(0.2)); use the same contract
-        // when NeuralNetworkBase reconstructs a topology slot so clone behavior cannot fall back to a
-        // component's default configuration.
-        source.CaptureConstructionObjects(values);
-        return values;
-    }
+        => source.CaptureConstructionValuesForClone();
 
     /// <summary>
     /// Restores one mismatched child through the same layout-aware contract used by checkpoints.
@@ -16291,14 +16271,34 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             if (IsCloneRejectionTracingEnabled())
             {
-                static string DescribeMetadata(LayerBase<T> layer)
-                    => string.Join(", ", layer.GetMetadata()
+                static string DescribeValue(object? value)
+                {
+                    if (value is null) return "null";
+                    if (value is string text)
+                        return text.Length <= 256 ? text : text.Substring(0, 256) + "...";
+                    if (value is LayerBase<T> child)
+                    {
+                        return child.GetType().Name
+                            + " input=[" + string.Join(",", child.GetInputShape()) + "]"
+                            + " output=[" + string.Join(",", child.GetOutputShape()) + "]";
+                    }
+                    if (value is Array array)
+                        return value.GetType().Name + "[" + array.Length + "]";
+                    if (value is System.Collections.ICollection collection)
+                        return value.GetType().Name + "[" + collection.Count + "]";
+                    if (value.GetType().IsValueType) return value.ToString() ?? value.GetType().Name;
+                    return value.GetType().FullName ?? value.GetType().Name;
+                }
+
+                static string DescribeConstructionState(LayerBase<T> layer)
+                    => string.Join(", ", layer.CaptureConstructionValuesForClone()
                         .OrderBy(pair => pair.Key, StringComparer.Ordinal)
-                        .Select(pair => pair.Key + "=" + pair.Value));
+                        .Select(pair => pair.Key + "=" + DescribeValue(pair.Value)));
 
                 throw new InvalidOperationException(
-                    $"Cannot restore {source.GetType().Name} in place because construction metadata differs. " +
-                    $"Source: [{DescribeMetadata(source)}]. Destination: [{DescribeMetadata(destination)}].");
+                    $"Cannot restore {source.GetType().Name} in place because construction state differs. " +
+                    $"Source: [{DescribeConstructionState(source)}]. " +
+                    $"Destination: [{DescribeConstructionState(destination)}].");
             }
 
             return false;
@@ -16355,20 +16355,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         LayerBase<T> source,
         LayerBase<T> destination)
     {
-        var sourceMetadata = source.GetMetadata();
-        var destinationMetadata = destination.GetMetadata();
-        if (sourceMetadata.Count != destinationMetadata.Count) return false;
-
-        foreach (var pair in sourceMetadata)
-        {
-            if (!destinationMetadata.TryGetValue(pair.Key, out string? destinationValue)
-                || !string.Equals(pair.Value, destinationValue, StringComparison.Ordinal))
-            {
-                return false;
-            }
-        }
-
-        return true;
+        var sourceState = CaptureLayerConstructionValuesForClone(source);
+        var destinationState = CaptureLayerConstructionValuesForClone(destination);
+        return AiDotNet.Serialization.LayerStateBag.AreCloneConstructionValuesEquivalent(
+            sourceState,
+            destinationState);
     }
 
     /// <summary>
