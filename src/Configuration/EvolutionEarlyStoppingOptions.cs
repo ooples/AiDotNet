@@ -40,7 +40,22 @@ public sealed class EvolutionEarlyStoppingOptions
     public double MinimumImprovement { get; set; } = 1e-3;
 
     /// <summary>Gets or sets which progress metric the plateau is measured on.</summary>
+    /// <remarks>Ignored when <see cref="MetricName"/> names an evaluator metric instead.</remarks>
     public EvolutionEarlyStoppingMetric Metric { get; set; } = EvolutionEarlyStoppingMetric.BestQuality;
+
+    /// <summary>Gets or sets an evaluator metric to watch by name, or <c>null</c> to use <see cref="Metric"/>.</summary>
+    /// <remarks>
+    /// <para>
+    /// The three built-in choices describe the search itself. A run often plateaus on something only the evaluator
+    /// can see, such as a validation score that stops improving while overall quality still drifts, and the
+    /// reference implementation watches any metric key for exactly that reason. Naming one here watches the best
+    /// value of that metric across every island, normalised so larger is better under either optimization
+    /// direction, and a run whose evaluations never report it simply never stops early.
+    /// </para>
+    /// <para><b>For Beginners:</b> Use this when the number you actually care about is one your own scoring code
+    /// reports, rather than the archive's overall best.</para>
+    /// </remarks>
+    public string? MetricName { get; set; }
 
     /// <summary>Validates every value and returns an independent copy.</summary>
     /// <returns>A defensive copy that later mutation of this instance cannot affect.</returns>
@@ -56,12 +71,17 @@ public sealed class EvolutionEarlyStoppingOptions
                 "The minimum improvement must be finite and non-negative.");
         if (!Enum.IsDefined(typeof(EvolutionEarlyStoppingMetric), Metric))
             throw new ArgumentOutOfRangeException(nameof(Metric));
+        if (MetricName is not null && string.IsNullOrWhiteSpace(MetricName))
+            throw new ArgumentException(
+                "The watched metric name cannot be empty; leave it null to use the built-in metric.",
+                nameof(MetricName));
 
         return new EvolutionEarlyStoppingOptions
         {
             PatienceEvaluations = PatienceEvaluations,
             MinimumImprovement = MinimumImprovement,
-            Metric = Metric
+            Metric = Metric,
+            MetricName = MetricName?.Trim()
         };
     }
 
@@ -71,6 +91,7 @@ public sealed class EvolutionEarlyStoppingOptions
     {
         PatienceEvaluations.ToString(CultureInfo.InvariantCulture),
         MinimumImprovement.ToString("R", CultureInfo.InvariantCulture),
-        ((int)Metric).ToString(CultureInfo.InvariantCulture)
+        ((int)Metric).ToString(CultureInfo.InvariantCulture),
+        MetricName ?? "built-in"
     });
 }

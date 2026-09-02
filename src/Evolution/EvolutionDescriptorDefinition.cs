@@ -96,16 +96,19 @@ public sealed class EvolutionDescriptorDefinition
         bin = -1;
         if (!IsFinite(value)) return false;
 
+        // Grow reports failure here exactly as Reject does, because widening the range is the archive's decision:
+        // it owns the existing entries that a wider grid re-keys, and this method must stay a pure function of the
+        // definition it is called on.
         if (value < Minimum)
         {
-            if (OutOfRangePolicy == EvolutionOutOfRangePolicy.Reject) return false;
+            if (OutOfRangePolicy is EvolutionOutOfRangePolicy.Reject or EvolutionOutOfRangePolicy.Grow) return false;
             bin = 0;
             return true;
         }
 
         if (value > Maximum)
         {
-            if (OutOfRangePolicy == EvolutionOutOfRangePolicy.Reject) return false;
+            if (OutOfRangePolicy is EvolutionOutOfRangePolicy.Reject or EvolutionOutOfRangePolicy.Grow) return false;
             bin = EffectiveBinCount - 1;
             return true;
         }
@@ -115,6 +118,55 @@ public sealed class EvolutionDescriptorDefinition
         interior = Math.Max(0, Math.Min(BinCount - 1, interior));
         bin = OutOfRangePolicy == EvolutionOutOfRangePolicy.OverflowBins ? interior + 1 : interior;
         return true;
+    }
+
+    /// <summary>Gets the width of one interior bin.</summary>
+    public double BinWidth => (Maximum - Minimum) / BinCount;
+
+    /// <summary>Returns a definition widened to contain <paramref name="value"/>, keeping the bin width fixed.</summary>
+    /// <param name="value">The finite value the widened definition must accept.</param>
+    /// <returns>The widened definition, or this instance when the value already fits or cannot be reached.</returns>
+    /// <remarks>
+    /// <para>
+    /// Holding the bin width constant is what makes growth safe: a cell covers the same span of values before and
+    /// after, so an archive can move its existing elites onto the wider grid by rebinning them rather than
+    /// re-evaluating them. Only whole bins are added, and only as many as the value needs, which makes growth
+    /// order-independent: widening to reach one value and then a more extreme one lands on the same bounds as
+    /// widening straight to the more extreme one.
+    /// </para>
+    /// <para><b>For Beginners:</b> The archive is a grid of pigeonholes. This adds whole rows of pigeonholes at one
+    /// end, all the same size as the existing ones, so nothing already filed has to be re-measured.</para>
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is not finite.</exception>
+    public EvolutionDescriptorDefinition Widen(double value)
+    {
+        if (!IsFinite(value)) throw new ArgumentOutOfRangeException(nameof(value), "The value must be finite.");
+        if (value >= Minimum && value <= Maximum) return this;
+
+        double width = BinWidth;
+        if (!IsFinite(width) || width <= 0) return this;
+
+        double minimum = Minimum;
+        double maximum = Maximum;
+        long bins = BinCount;
+
+        if (value < minimum)
+        {
+            long needed = Math.Max(1, (long)Math.Ceiling((minimum - value) / width));
+            minimum -= needed * width;
+            bins += needed;
+        }
+        else
+        {
+            long needed = Math.Max(1, (long)Math.Ceiling((value - maximum) / width));
+            maximum += needed * width;
+            bins += needed;
+        }
+
+        if (bins > int.MaxValue / 2 || !IsFinite(minimum) || !IsFinite(maximum) || !IsFinite(maximum - minimum))
+            return this;
+
+        return new EvolutionDescriptorDefinition(Name, minimum, maximum, (int)bins, OutOfRangePolicy);
     }
 
     /// <summary>Returns a stable, culture-independent representation suitable for compatibility hashes.</summary>

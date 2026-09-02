@@ -89,6 +89,23 @@ public sealed class EvolutionEngineOptions
     public int MaxGenerations { get; set; } = 1_000;
 
     /// <summary>Gets or sets the deterministic logical batch size, independent of worker count.</summary>
+    /// <remarks>
+    /// <para>
+    /// A batch is the engine's unit of commit and of checkpointing, so the batch size fixes how much work a crash can
+    /// cost and how coarsely a run can be resumed, independently of how many evaluations run at once. It also sets a
+    /// boundary condition on resume determinism worth knowing before choosing a large value. The engine stops filling
+    /// a batch as soon as the proposals already in it would exhaust <see cref="MaxEvaluationAttempts"/>, which avoids
+    /// paying for evaluations the budget will not allow. A run stopped by a smaller budget therefore ends on a
+    /// truncated batch, and the resumed run under a larger budget starts a fresh full batch from there, so the two
+    /// legs together propose a slightly different sequence from one uninterrupted run and reach a different
+    /// <c>StateHash</c> even though both are internally deterministic and reproduce themselves exactly. That is
+    /// visible only when the first leg's budget lands mid-batch: with a batch size of 1 every stop is a batch
+    /// boundary, so a resumed run always reproduces the uninterrupted hash.
+    /// </para>
+    /// <para><b>For Beginners:</b> Larger batches mean fewer commits and less checkpoint overhead; smaller batches
+    /// mean finer-grained saving and a resume that matches an uninterrupted run exactly. Leave this alone unless you
+    /// are comparing a resumed run against an uninterrupted one, in which case use 1.</para>
+    /// </remarks>
     public int ProposalBatchSize { get; set; } = 8;
 
     /// <summary>Gets or sets the maximum number of concurrently running evaluator calls.</summary>

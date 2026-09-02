@@ -297,6 +297,33 @@ public sealed partial class EvolutionEngine<TGenome>
     private double? CurrentEarlyStoppingMetric()
     {
         bool maximize = _islands[0].Direction == EvolutionOptimizationDirection.Maximize;
+
+        // A named evaluator metric wins over the three built-in views of the search, because a run often plateaus
+        // on something only the evaluator can see. Absent from every evaluation, it yields null and the run simply
+        // never stops early, which is safer than treating "not reported" as "no progress".
+        if (_options.EarlyStopping.MetricName is { } watched)
+        {
+            double best = 0;
+            bool any = false;
+            foreach (IEvolutionArchive<TGenome> archive in _islands)
+            {
+                foreach (EvolutionArchiveEntry<TGenome> entry in archive.Entries)
+                {
+                    if (!entry.Evaluation.Metrics.TryGetValue(watched, out double value)) continue;
+                    if (!EvolutionDescriptorDefinition.IsFinite(value)) continue;
+
+                    double normalized = maximize ? value : -value;
+                    if (!any || normalized > best)
+                    {
+                        best = normalized;
+                        any = true;
+                    }
+                }
+            }
+
+            return any ? best : (double?)null;
+        }
+
         switch (_options.EarlyStopping.Metric)
         {
             case EvolutionEarlyStoppingMetric.Coverage:

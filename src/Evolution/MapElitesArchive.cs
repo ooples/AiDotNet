@@ -40,12 +40,16 @@ namespace AiDotNet.Evolution;
 /// restoration, so a checkpoint is only restored into an archive with identical semantics.
 /// </para>
 /// </remarks>
-public sealed class MapElitesArchive<TGenome> : ICheckpointableEvolutionArchive<TGenome>
+public sealed class MapElitesArchive<TGenome> : IGrowableEvolutionArchive<TGenome>
 {
     private readonly EvolutionDescriptorDefinition[] _descriptors;
+    private readonly EvolutionDescriptorDefinition[] _configuredDescriptors;
     private readonly ReadOnlyCollection<EvolutionDescriptorDefinition> _descriptorView;
     private readonly SortedDictionary<string, EvolutionArchiveEntry<TGenome>> _cells = new(StringComparer.Ordinal);
     private readonly int _capacity;
+    private readonly long _maximumGridCells;
+    private readonly bool _hasGrowAxis;
+    private readonly bool _capacityFollowsGrid;
     private IComparer<EvolutionArchiveEntry<TGenome>>? _comparer;
     private EvolutionArchiveEntry<TGenome>? _best;
     private ReadOnlyCollection<EvolutionArchiveEntry<TGenome>>? _entries;
@@ -98,6 +102,12 @@ public sealed class MapElitesArchive<TGenome> : ICheckpointableEvolutionArchive<
 
         Direction = direction;
         TotalGridCells = gridCells;
+        _maximumGridCells = maximumGridCells;
+        _hasGrowAxis = _descriptors.Any(item => item.OutOfRangePolicy == EvolutionOutOfRangePolicy.Grow);
+        // The configured bounds are kept verbatim: they anchor the definition hash and are the reference a restored
+        // checkpoint's grown bounds are validated against.
+        _configuredDescriptors = _descriptors.ToArray();
+        _capacityFollowsGrid = capacity == 0;
         _capacity = capacity == 0 ? (int)Math.Min(gridCells, int.MaxValue) : capacity;
         if (_capacity > gridCells) throw new ArgumentOutOfRangeException(nameof(capacity), "Capacity cannot exceed the descriptor grid.");
         _descriptorView = Array.AsReadOnly(_descriptors);
@@ -116,10 +126,16 @@ public sealed class MapElitesArchive<TGenome> : ICheckpointableEvolutionArchive<
     public EvolutionOptimizationDirection Direction { get; }
 
     /// <summary>Gets the full number of physical cells implied by descriptor policies.</summary>
-    public long TotalGridCells { get; }
+    /// <remarks>Grows with the grid when a descriptor uses <see cref="EvolutionOutOfRangePolicy.Grow"/>.</remarks>
+    public long TotalGridCells { get; private set; }
 
     /// <summary>Gets the maximum number of occupied cells.</summary>
-    public int Capacity => _capacity;
+    /// <remarks>
+    /// An archive constructed with a capacity of zero tracks the whole grid, so it widens along with
+    /// <see cref="TotalGridCells"/> under <see cref="EvolutionOutOfRangePolicy.Grow"/>. An explicitly requested
+    /// capacity is a fixed budget and never changes.
+    /// </remarks>
+    public int Capacity => _capacityFollowsGrid ? (int)Math.Min(TotalGridCells, int.MaxValue) : _capacity;
 
     /// <inheritdoc/>
     /// <remarks>
@@ -173,6 +189,10 @@ public sealed class MapElitesArchive<TGenome> : ICheckpointableEvolutionArchive<
             return EvolutionArchiveInsertionResult.Rejected;
         }
 
+        // A Grow axis reports a value outside its range as unbinnable, which is the archive's cue to widen rather
+        // than discard. Growth happens before keying so the candidate and every incumbent share one grid.
+        GrowToFit(evaluation.Descriptors);
+
         EvolutionCellKey? key = TryCreateKey(evaluation.Descriptors);
         if (key is null) return EvolutionArchiveInsertionResult.Rejected;
 
@@ -186,7 +206,7 @@ public sealed class MapElitesArchive<TGenome> : ICheckpointableEvolutionArchive<
             return EvolutionArchiveInsertionResult.Replaced;
         }
 
-        if (_cells.Count < _capacity)
+        if (_cells.Count < Capacity)
         {
             _cells.Add(key.StableKey, candidateEntry);
             PromoteIfBest(candidateEntry);
@@ -219,6 +239,88 @@ public sealed class MapElitesArchive<TGenome> : ICheckpointableEvolutionArchive<
         return _cells.Values.ElementAt(random.NextInt(_cells.Count));
     }
 
+    /// <summary>Widens any Grow axis that cannot bin the supplied values, then rebins existing entries.</summary>
+    /// <param name="descriptors">The named descriptor values about to be archived.</param>
+    /// <remarks>
+    /// Bin width is held constant, so a cell covers the same span of descriptor values before and after growth and no
+    /// entry has to be re-evaluated. Its cell index can still move: a wider range shifts every index when bins are
+    /// added below the minimum, and an entry sitting exactly on the old maximum moves off the last bin when bins are
+    /// added above it. Both are handled by rebinning from the stored descriptor values rather than by adjusting
+    /// indices. Growth that would breach the grid safety limit is declined, in which case the candidate is simply not
+    /// archived, exactly as Reject would have behaved.
+    /// </remarks>
+    private void GrowToFit(IReadOnlyDictionary<string, double> descriptors)
+    {
+        if (!_hasGrowAxis) return;
+        bool grew = false;
+
+        for (int axis = 0; axis < _descriptors.Length; axis++)
+        {
+            EvolutionDescriptorDefinition definition = _descriptors[axis];
+            if (definition.OutOfRangePolicy != EvolutionOutOfRangePolicy.Grow) continue;
+            if (!descriptors.TryGetValue(definition.Name, out double value)) continue;
+            if (!EvolutionDescriptorDefinition.IsFinite(value)) continue;
+            if (value >= definition.Minimum && value <= definition.Maximum) continue;
+
+            EvolutionDescriptorDefinition widened = definition.Widen(value);
+            if (ReferenceEquals(widened, definition)) continue;
+
+            long projected = 1;
+            bool safe = true;
+            for (int i = 0; i < _descriptors.Length && safe; i++)
+            {
+                long bins = i == axis ? widened.EffectiveBinCount : _descriptors[i].EffectiveBinCount;
+                if (bins != 0 && projected > _maximumGridCells / bins) safe = false;
+                else projected *= bins;
+            }
+
+            if (!safe) continue;
+
+            _descriptors[axis] = widened;
+            TotalGridCells = projected;
+            grew = true;
+            Version++;
+        }
+
+        if (grew) RebinEntries();
+    }
+
+    /// <summary>Recomputes every entry's cell against the current descriptor definitions.</summary>
+    /// <remarks>
+    /// Rebinning from each entry's own descriptor values is what keeps the archive honest after growth: an index
+    /// carried over unchanged would silently mean a different range of values. Two entries can in principle land in
+    /// one cell, which is resolved the same way an ordinary insertion would resolve it, by keeping the better of the
+    /// two under the archive's total ordering, so the outcome does not depend on iteration order.
+    /// </remarks>
+    private void RebinEntries()
+    {
+        if (_cells.Count == 0) return;
+
+        var rebinned = new List<EvolutionArchiveEntry<TGenome>>(_cells.Count);
+        foreach (EvolutionArchiveEntry<TGenome> entry in _cells.Values)
+        {
+            EvolutionCellKey? key = TryCreateKey(entry.Evaluation.Descriptors);
+            rebinned.Add(key is null
+                ? entry
+                : new EvolutionArchiveEntry<TGenome>(key, entry.Candidate, entry.Evaluation));
+        }
+
+        _cells.Clear();
+        foreach (EvolutionArchiveEntry<TGenome> entry in rebinned)
+        {
+            if (_cells.TryGetValue(entry.Cell.StableKey, out EvolutionArchiveEntry<TGenome>? incumbent) &&
+                Comparer.Compare(entry, incumbent) >= 0)
+            {
+                continue;
+            }
+            _cells[entry.Cell.StableKey] = entry;
+        }
+
+        // The retained entries are new objects, so the cached best reference has to be rebuilt rather than kept.
+        _best = null;
+        foreach (EvolutionArchiveEntry<TGenome> entry in _cells.Values) PromoteIfBest(entry);
+    }
+
     /// <summary>Computes the cell for descriptor values without modifying the archive.</summary>
     /// <param name="descriptors">The named descriptor values.</param>
     /// <returns>The cell, or <c>null</c> when a value is missing or rejected.</returns>
@@ -248,6 +350,78 @@ public sealed class MapElitesArchive<TGenome> : ICheckpointableEvolutionArchive<
         }
         if (version < Version) throw new ArgumentOutOfRangeException(nameof(version));
         Version = version;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Adopting the checkpointed ranges before any entry is replayed is what makes a resumed run identical to the run
+    /// that wrote the checkpoint: every restored elite bins against the grid it was archived on, and restoring in cell
+    /// order rather than commit order cannot change the outcome because no growth happens during the replay.
+    /// </remarks>
+    public void RestoreDescriptorBounds(IReadOnlyList<EvolutionDescriptorDefinition> descriptors)
+    {
+        Guard.NotNull(descriptors);
+        if (_cells.Count != 0 || Version != 0)
+            throw new InvalidOperationException("Only an empty archive can adopt checkpointed descriptor bounds.");
+        if (descriptors.Count != _configuredDescriptors.Length)
+            throw new InvalidDataException("The checkpoint descriptor count does not match this archive.");
+
+        var adopted = new EvolutionDescriptorDefinition[_configuredDescriptors.Length];
+        long projected = 1;
+        for (int i = 0; i < _configuredDescriptors.Length; i++)
+        {
+            EvolutionDescriptorDefinition configured = _configuredDescriptors[i];
+            EvolutionDescriptorDefinition restored = descriptors[i]
+                ?? throw new InvalidDataException("A checkpoint descriptor definition is missing.");
+            if (!IsWideningOf(configured, restored))
+                throw new InvalidDataException(
+                    $"The checkpoint descriptor '{restored.Name}' is not a widening of the configured descriptor " +
+                    $"'{configured.Name}'; the checkpoint belongs to a differently configured archive.");
+
+            adopted[i] = restored;
+            long bins = restored.EffectiveBinCount;
+            if (bins != 0 && projected > _maximumGridCells / bins)
+                throw new InvalidDataException("The checkpoint descriptor grid exceeds this archive's cell safety limit.");
+            projected *= bins;
+        }
+
+        if (projected < _capacity)
+            throw new InvalidDataException("The checkpoint descriptor grid is smaller than this archive's capacity.");
+
+        Array.Copy(adopted, _descriptors, adopted.Length);
+        TotalGridCells = projected;
+    }
+
+    /// <summary>Reports whether a restored definition is the configured one after zero or more growth steps.</summary>
+    /// <param name="configured">The definition this archive was constructed with.</param>
+    /// <param name="restored">The definition read back from a checkpoint.</param>
+    /// <returns><c>true</c> when the restored definition covers the configured one on same-width bins.</returns>
+    /// <remarks>
+    /// Growth keeps bin width fixed in exact arithmetic, but repeatedly recomputing a range from a bin count lets the
+    /// width drift in the last bits, so width and bounds are compared with a relative tolerance rather than for exact
+    /// equality. Identity beyond the bounds - name, policy, and the fact that a non-growable axis never widens - is
+    /// compared exactly.
+    /// </remarks>
+    private static bool IsWideningOf(
+        EvolutionDescriptorDefinition configured,
+        EvolutionDescriptorDefinition restored)
+    {
+        if (!string.Equals(restored.Name, configured.Name, StringComparison.Ordinal)) return false;
+        if (restored.OutOfRangePolicy != configured.OutOfRangePolicy) return false;
+        if (restored.BinCount == configured.BinCount &&
+            restored.Minimum == configured.Minimum && restored.Maximum == configured.Maximum)
+        {
+            return true;
+        }
+
+        if (configured.OutOfRangePolicy != EvolutionOutOfRangePolicy.Grow) return false;
+        if (restored.BinCount < configured.BinCount) return false;
+
+        double width = configured.BinWidth;
+        double tolerance = Math.Abs(width) * 1e-9;
+        if (restored.Minimum > configured.Minimum + tolerance) return false;
+        if (restored.Maximum < configured.Maximum - tolerance) return false;
+        return Math.Abs(restored.BinWidth - width) <= tolerance;
     }
 
     private IComparer<EvolutionArchiveEntry<TGenome>> Comparer =>

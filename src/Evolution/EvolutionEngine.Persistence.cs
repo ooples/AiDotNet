@@ -8,7 +8,8 @@ namespace AiDotNet.Evolution;
 
 public sealed partial class EvolutionEngine<TGenome>
 {
-    private const int EngineStateSchemaVersion = 4;
+    // 5 added per-island descriptor ranges so a Grow axis's widened grid survives a resume.
+    private const int EngineStateSchemaVersion = 5;
     private string? _safePayload;
     private long _safeSequence;
 
@@ -201,14 +202,27 @@ public sealed partial class EvolutionEngine<TGenome>
                 throw new InvalidOperationException("Resume requires checkpointable archive implementations.");
             ArchiveDocument archiveDocument = archiveDocuments[island];
             if (archiveDocument.Version < 0) throw new InvalidDataException("Checkpoint archive version is invalid.");
+            RestoreArchiveDescriptors(restorable, archiveDocument);
             var entries = new List<EvolutionArchiveEntry<TGenome>>();
             var islandGenomeIds = new HashSet<string>(StringComparer.Ordinal);
             foreach (ArchiveEntryDocument entryDocument in archiveDocument.Entries ?? new List<ArchiveEntryDocument>())
             {
                 EvolutionArchiveEntry<TGenome> entry = RestoreArchiveEntry(entryDocument);
-                if (entry.Evaluation.EvaluationId >= state.NextEvaluationId || !_seen.Contains(entry.Evaluation.GenomeId) ||
-                    !islandGenomeIds.Add(entry.Evaluation.GenomeId))
-                    throw new InvalidDataException("A checkpoint archive entry violates engine identity invariants.");
+                // Naming which invariant broke, and on which entry, is what turns a failed resume from a dead end into
+                // something diagnosable: the three causes need completely different fixes.
+                if (entry.Evaluation.EvaluationId >= state.NextEvaluationId)
+                    throw new InvalidDataException(
+                        $"Checkpoint archive entry '{entry.Evaluation.GenomeId}' on island {island} has evaluation id " +
+                        $"{entry.Evaluation.EvaluationId}, which the run had not yet issued " +
+                        $"({state.NextEvaluationId} were issued in total).");
+                if (!_seen.Contains(entry.Evaluation.GenomeId))
+                    throw new InvalidDataException(
+                        $"Checkpoint archive entry '{entry.Evaluation.GenomeId}' on island {island} is missing from the " +
+                        "run's set of proposed genomes.");
+                if (!islandGenomeIds.Add(entry.Evaluation.GenomeId))
+                    throw new InvalidDataException(
+                        $"Checkpoint archive entry '{entry.Evaluation.GenomeId}' occupies more than one cell on island " +
+                        $"{island}; each genome may hold at most one cell.");
                 entries.Add(entry);
             }
             restorable.Restore(entries, archiveDocument.Version);
@@ -219,6 +233,43 @@ public sealed partial class EvolutionEngine<TGenome>
         _safeSequence = checkpoint.Sequence;
         _safePayload = checkpoint.Payload;
         return new RestoredSeeds(seeds, state.SeedIndex);
+    }
+
+    /// <summary>Adopts the descriptor ranges a checkpoint recorded before any elite is replayed into the archive.</summary>
+    /// <param name="archive">The freshly built, still-empty island archive.</param>
+    /// <param name="document">The checkpointed archive state for that island.</param>
+    /// <remarks>
+    /// A descriptor with <see cref="EvolutionOutOfRangePolicy.Grow"/> widens as a run meets values outside its
+    /// configured range, so the grid the elites were binned on is part of the saved state. Adopting it first means the
+    /// replay rebins every elite onto the grid it came from, and means the replay itself never triggers growth, which
+    /// is what keeps a resumed run's archive identical to the uninterrupted one even though the replay walks cells in
+    /// key order rather than commit order. Ranges identical to the configured ones need no growable archive, so runs
+    /// with fixed descriptors are unaffected.
+    /// </remarks>
+    private void RestoreArchiveDescriptors(ICheckpointableEvolutionArchive<TGenome> archive, ArchiveDocument document)
+    {
+        if (document.Descriptors is null) return;
+
+        EvolutionDescriptorDefinition[] restored = document.Descriptors
+            .Select(descriptor => descriptor is null
+                ? throw new InvalidDataException("A checkpoint descriptor definition is missing.")
+                : descriptor.ToDefinition())
+            .ToArray();
+
+        IReadOnlyList<EvolutionDescriptorDefinition> live = archive.Descriptors;
+        bool unchanged = restored.Length == live.Count;
+        for (int i = 0; unchanged && i < restored.Length; i++)
+        {
+            unchanged = string.Equals(restored[i].ToCanonicalString(), live[i].ToCanonicalString(), StringComparison.Ordinal);
+        }
+        if (unchanged) return;
+
+        if (archive is not IGrowableEvolutionArchive<TGenome> growable)
+            throw new InvalidDataException(
+                "The checkpoint recorded widened descriptor ranges, but the archive does not support restoring them. " +
+                "Resume requires an archive implementing IGrowableEvolutionArchive when any descriptor can grow.");
+
+        growable.RestoreDescriptorBounds(restored);
     }
 
     /// <summary>
@@ -668,12 +719,49 @@ public sealed partial class EvolutionEngine<TGenome>
         public long Version { get; set; }
         public List<ArchiveEntryDocument>? Entries { get; set; }
 
+        /// <summary>The descriptor ranges in force at checkpoint time, which a Grow axis widens during a run.</summary>
+        public List<DescriptorDocument>? Descriptors { get; set; }
+
         public static ArchiveDocument From(IEvolutionArchive<TGenome> archive, Func<TGenome, string> serializeGenome) => new()
         {
             Version = archive.Version,
+            Descriptors = archive.Descriptors.Select(DescriptorDocument.From).ToList(),
             Entries = archive.Entries.OrderBy(item => item.Cell.StableKey, StringComparer.Ordinal)
                 .Select(entry => ArchiveEntryDocument.From(entry, serializeGenome)).ToList()
         };
+    }
+
+    private sealed class DescriptorDocument
+    {
+        public string Name { get; set; } = string.Empty;
+        public double Minimum { get; set; }
+        public double Maximum { get; set; }
+        public int BinCount { get; set; }
+        public EvolutionOutOfRangePolicy OutOfRangePolicy { get; set; }
+
+        public static DescriptorDocument From(EvolutionDescriptorDefinition descriptor) => new()
+        {
+            Name = descriptor.Name,
+            Minimum = descriptor.Minimum,
+            Maximum = descriptor.Maximum,
+            BinCount = descriptor.BinCount,
+            OutOfRangePolicy = descriptor.OutOfRangePolicy
+        };
+
+        public EvolutionDescriptorDefinition ToDefinition()
+        {
+            if (string.IsNullOrWhiteSpace(Name) || BinCount <= 0 ||
+                !Enum.IsDefined(typeof(EvolutionOutOfRangePolicy), OutOfRangePolicy))
+                throw new InvalidDataException("A checkpoint descriptor definition is invalid.");
+            try
+            {
+                return new EvolutionDescriptorDefinition(Name, Minimum, Maximum, BinCount, OutOfRangePolicy);
+            }
+            catch (Exception exception) when (exception is ArgumentException or ArgumentOutOfRangeException)
+            {
+                throw new InvalidDataException("A checkpoint descriptor definition is invalid.", exception);
+            }
+        }
     }
 
     private sealed class EliteRecordDocument

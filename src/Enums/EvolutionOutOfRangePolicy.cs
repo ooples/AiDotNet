@@ -29,5 +29,19 @@ public enum EvolutionOutOfRangePolicy
     /// <summary>Clamp below-range and above-range values into the first and last bins.</summary>
     Clamp = 1,
     /// <summary>Reserve explicit bins below and above the configured range.</summary>
-    OverflowBins = 2
+    OverflowBins = 2,
+    /// <summary>Extend the range in whole bins so the value becomes interior, re-keying existing entries.</summary>
+    /// <remarks>
+    /// <para>
+    /// The bin width never changes, so a cell means the same thing before and after growth and every existing
+    /// elite is re-keyed by arithmetic rather than re-evaluated. Growth is driven only by committed evaluations in
+    /// the engine's deterministic commit order, so a replayed or resumed run grows identically; the grown bounds
+    /// travel in the checkpoint, while the compatibility hash keeps the ORIGINAL bounds so a resume is not refused
+    /// by the archive having done its job.
+    /// </para>
+    /// <para><b>For Beginners:</b> Choose this when you genuinely cannot guess the range up front. The grid adds
+    /// whole rows of identically-sized pigeonholes as it discovers wider values, instead of discarding those
+    /// candidates or squashing them onto an edge shelf.</para>
+    /// </remarks>
+    Grow = 3
 }
