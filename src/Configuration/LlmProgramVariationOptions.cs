@@ -113,6 +113,19 @@ public sealed class LlmProgramVariationOptions
     /// </remarks>
     public int MaxEmptyNeighborCells { get; set; } = 3;
 
+    /// <summary>Gets or sets how many earlier attempts on the same parent are recounted in the prompt; 0 recounts none.</summary>
+    /// <remarks>
+    /// <para>
+    /// Within one proposal a rejected answer is fed straight back into the conversation. Across proposals the model
+    /// starts fresh from the same parent and will happily repeat an edit that already failed to parse or matched
+    /// nothing, which costs a call and a retry each time. Recounting the last few outcomes for that parent is what
+    /// stops the same dead end being paid for twice. Bounded by <see cref="MaxRecordedAttempts"/>, since only
+    /// recorded attempts can be recounted.
+    /// </para>
+    /// <para><b>For Beginners:</b> This reminds the model what it already tried on this program and how it went.</para>
+    /// </remarks>
+    public int MaxPreviousAttempts { get; set; } = 3;
+
     /// <summary>Creates an independent copy so a running operator is unaffected by later mutation.</summary>
     /// <returns>A new options instance carrying the same values.</returns>
     public LlmProgramVariationOptions Clone() => new()
@@ -122,6 +135,7 @@ public sealed class LlmProgramVariationOptions
         MaxInspirations = MaxInspirations,
         MaxTopPrograms = MaxTopPrograms,
         MaxEmptyNeighborCells = MaxEmptyNeighborCells,
+        MaxPreviousAttempts = MaxPreviousAttempts,
         MaxPromptProgramChars = MaxPromptProgramChars,
         SystemMessage = SystemMessage,
         Temperature = Temperature,

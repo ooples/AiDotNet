@@ -335,9 +335,47 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
             promptContext.Artifacts = artifacts;
         }
 
+        ApplyPreviousAttempts(promptContext, context.Parent.Evaluation.GenomeId);
         ApplyArchiveContext(promptContext, context);
         SplitDiagnostics(evaluation.Diagnostics, promptContext);
         return promptContext;
+    }
+
+    /// <summary>Tells the model what has already been tried on this same parent, and how it went.</summary>
+    /// <param name="promptContext">The context being built.</param>
+    /// <param name="parentGenomeId">The parent whose attempt history is relevant.</param>
+    /// <remarks>
+    /// Within a single proposal a rejected answer is already fed back into the conversation, so the model can see
+    /// its own mistake. Across proposals it cannot: the next call starts a fresh conversation from the same parent
+    /// and is free to repeat an edit that failed to parse or applied to nothing. This surfaces the recorded
+    /// attempts for that parent so the same dead end is not paid for twice.
+    /// </remarks>
+    private void ApplyPreviousAttempts(ProgramPromptContext promptContext, string parentGenomeId)
+    {
+        int limit = _variationOptions.MaxPreviousAttempts;
+        if (limit <= 0) return;
+
+        ProgramProposalAttempt[] recorded;
+        lock (_attemptLock)
+        {
+            recorded = _attempts.ToArray();
+        }
+
+        var recent = new List<ProgramPromptAttempt>();
+        for (int i = recorded.Length - 1; i >= 0 && recent.Count < limit; i--)
+        {
+            ProgramProposalAttempt attempt = recorded[i];
+            if (!string.Equals(attempt.ParentGenomeId, parentGenomeId, StringComparison.Ordinal)) continue;
+
+            recent.Add(new ProgramPromptAttempt(
+                attempt.AttemptNumber,
+                attempt.Outcome + ": " + ProgramText.Bound(attempt.Detail, 200)));
+        }
+
+        // Reversed so the oldest attempt reads first, which is the order a person would recount them in.
+        if (recent.Count == 0) return;
+        recent.Reverse();
+        promptContext.PreviousAttempts = recent;
     }
 
     /// <summary>Adds the two prompt sections that describe the frontier rather than the parent.</summary>

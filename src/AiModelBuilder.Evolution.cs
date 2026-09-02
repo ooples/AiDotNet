@@ -782,6 +782,18 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     {
         EvolutionOptions options = _evolutionOptions
             ?? EvolutionOptions.FromEngineOptions(programOptions.Engine).SnapshotAndValidate();
+
+        // Configuring novelty has to reach the engine's archive-side gate, which is the only place a near-duplicate
+        // can be refused BEFORE it costs an evaluation. The engine's threshold is off by default, so without this
+        // the option would be accepted, a distance metric would be supplied, and nothing would ever be rejected.
+        // A caller who set the engine threshold themselves is not overridden.
+        if (programOptions.Novelty is { } novelty &&
+            options.NoveltyDistanceThreshold <= 0 &&
+            novelty.StructuralNoveltyThreshold > 0)
+        {
+            options.NoveltyDistanceThreshold = novelty.StructuralNoveltyThreshold;
+        }
+
         if (options.Descriptors.Count > 0) return options;
 
         // No behaviour axes were configured. Program length is the one axis every program has without any domain
