@@ -23,6 +23,24 @@ public sealed class EvolutionOptionClassificationTests
         nameof(EvolutionEngineOptions.MaxDegreeOfParallelism)
     };
 
+    // The third category, and the only one allowed to appear in NEITHER canonical string. A derived option does not
+    // reach the compatibility hash itself because something it selects already does, so hashing it as well would
+    // wrongly refuse a resume between two runs that behave identically.
+    //
+    // SelectionPolicy only takes effect when the caller supplies no ISelectionPolicy, and the engine then folds the
+    // policy it built - Id plus VersionHash, and a ratio policy's VersionHash already carries Selection's own
+    // canonical string - into the compatibility hash. Two engines that differ only in this field but end up running
+    // the same policy are genuinely interchangeable for resume, and EvolutionEngineReachabilityTests
+    // .AnExplicitlySuppliedSelectionPolicyWinsOverTheOptions pins exactly that: an explicit Uniform policy matches a
+    // pure-uniform engine's CompatibilityHash while both differ from the options-built Ratio engine's.
+    //
+    // Membership here must be argued, never convenient: an option belongs only if changing it provably moves the
+    // engine's CompatibilityHash by another route. An unclassified option still fails, which is the point.
+    private static readonly HashSet<string> DerivedOptionNames = new(StringComparer.Ordinal)
+    {
+        nameof(EvolutionEngineOptions.SelectionPolicy)
+    };
+
     [Fact]
     public void EveryEngineOptionLandsOnExactlyOneSideOfTheSemanticBudgetSplit()
     {
@@ -42,10 +60,20 @@ public sealed class EvolutionOptionClassificationTests
             bool budgetChanged =
                 !string.Equals(budgetBefore, options.ToBudgetCanonicalString(), StringComparison.Ordinal);
 
+            if (DerivedOptionNames.Contains(property.Name))
+            {
+                Assert.False(semanticChanged || budgetChanged,
+                    $"'{property.Name}' is listed as derived, which means it must reach the compatibility hash only " +
+                    "through what it selects. It now writes a canonical field of its own, so either drop it from " +
+                    "DerivedOptionNames or stop recording it.");
+                continue;
+            }
+
             Assert.True(semanticChanged || budgetChanged,
                 $"'{property.Name}' is recorded by neither SemanticFields() nor BudgetFields(), so changing it would " +
                 "silently leave the compatibility hash untouched and let an incompatible checkpoint resume. Add it to " +
-                "one of the two lists.");
+                "one of the two lists, or to DerivedOptionNames with an argument for why another value already " +
+                "carries its effect into the hash.");
             Assert.False(semanticChanged && budgetChanged,
                 $"'{property.Name}' is recorded by both SemanticFields() and BudgetFields(); an option belongs to " +
                 "exactly one side of the split.");
@@ -62,6 +90,7 @@ public sealed class EvolutionOptionClassificationTests
         foreach (PropertyInfo property in WritableOptions())
         {
             if (BudgetOptionNames.Contains(property.Name)) continue;
+            if (DerivedOptionNames.Contains(property.Name)) continue;
             var options = new EvolutionEngineOptions();
             property.SetValue(options, AlternativeValue(property, property.GetValue(options)));
             string canonical = options.ToSemanticCanonicalString();
@@ -88,6 +117,12 @@ public sealed class EvolutionOptionClassificationTests
 
             Assert.Equal(options.ToSemanticCanonicalString(), snapshot.ToSemanticCanonicalString());
             Assert.Equal(options.ToBudgetCanonicalString(), snapshot.ToBudgetCanonicalString());
+
+            // A derived option writes no canonical field, so the two comparisons above would pass even if the
+            // defensive copy dropped it entirely and the engine silently fell back to the default policy. Compare the
+            // value itself for those.
+            if (DerivedOptionNames.Contains(property.Name))
+                Assert.Equal(property.GetValue(options), property.GetValue(snapshot));
         }
     }
 
