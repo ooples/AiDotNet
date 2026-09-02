@@ -4,6 +4,7 @@ using AiDotNet.Agentic.Pipeline;
 using AiDotNet.Evolution;
 using AiDotNet.Evolution.Programs;
 using AiDotNet.Evolution.Programs.ArtifactStore;
+using AiDotNet.Evolution.Programs.Metrics;
 using AiDotNet.Evolution.Programs.Novelty;
 using AiDotNet.Evolution.Programs.Outputs;
 using AiDotNet.Evolution.Programs.Provenance;
@@ -854,7 +855,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         return hasScript
             ? new ScriptProgramFitnessEvaluator(
-                executionEngine, programOptions.EvaluatorScript ?? string.Empty, programOptions.Script)
+                executionEngine,
+                programOptions.EvaluatorScript ?? string.Empty,
+                programOptions.Script,
+                "program-script-evaluator",
+
+                // Without this an evaluator script written for the reference implementation, which prints a flat
+                // metric dictionary and no "quality", fails outright instead of scoring.
+                new ProgramMetricAggregator(programOptions.Metrics))
             : new SandboxedProgramFitnessEvaluator(executionEngine, programOptions.TestCases);
     }
 

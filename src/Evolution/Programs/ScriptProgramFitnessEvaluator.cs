@@ -1,5 +1,6 @@
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
+using AiDotNet.Evolution.Programs.Metrics;
 using AiDotNet.Interfaces;
 using AiDotNet.ProgramSynthesis.Enums;
 using AiDotNet.ProgramSynthesis.Execution;
@@ -52,9 +53,12 @@ public sealed class ScriptProgramFitnessEvaluator : IProgramFitnessEvaluator
     private const string ArtifactsProperty = "artifacts";
     private const int MaxDiagnosticDetailLength = 200;
 
+    private const string MetricsProperty = "metrics";
+
     private readonly IProgramExecutionEngine _engine;
     private readonly string _script;
     private readonly ScriptProgramEvaluationOptions _options;
+    private readonly ProgramMetricAggregator? _metricAggregator;
 
     /// <summary>Initializes an evaluator that runs <paramref name="evaluatorScript"/> against every candidate.</summary>
     /// <param name="engine">The sandbox that runs the evaluator script; the same limits apply as to candidates.</param>
@@ -68,11 +72,16 @@ public sealed class ScriptProgramFitnessEvaluator : IProgramFitnessEvaluator
     /// is empty or white space.
     /// </exception>
     /// <exception cref="ArgumentOutOfRangeException">A value in <paramref name="options"/> is out of range.</exception>
+    /// <param name="metricAggregator">
+    /// Optional rule for reducing a metric dictionary to a quality when the script reports no <c>quality</c>
+    /// property; <c>null</c> keeps the stricter behaviour of failing such a script.
+    /// </param>
     public ScriptProgramFitnessEvaluator(
         IProgramExecutionEngine engine,
         string evaluatorScript,
         ScriptProgramEvaluationOptions? options = null,
-        string id = "program-script-evaluator")
+        string id = "program-script-evaluator",
+        ProgramMetricAggregator? metricAggregator = null)
     {
         Guard.NotNull(engine);
         Guard.NotNull(evaluatorScript);
@@ -98,9 +107,15 @@ public sealed class ScriptProgramFitnessEvaluator : IProgramFitnessEvaluator
         _engine = engine;
         _script = script;
         _options = resolved;
+        _metricAggregator = metricAggregator;
         Id = id.Trim();
         VersionHash = "program-script-" + EvolutionHash.Combine(new[]
         {
+            // The aggregation rule changes what a given script scores, so two evaluators that differ only in it
+            // must not share a version hash and pass a checkpoint-compatibility check.
+            metricAggregator is null
+                ? "no-metric-aggregation"
+                : "metric-aggregation:" + metricAggregator.GetOptions().ToString(),
             "program-script-evaluator-v1",
             ProgramText.Normalize(script),
             ((int)resolved.EvaluatorScriptLanguage).ToString(CultureInfo.InvariantCulture),
@@ -182,6 +197,82 @@ public sealed class ScriptProgramFitnessEvaluator : IProgramFitnessEvaluator
         return Parse(response.StdOut);
     }
 
+    /// <summary>Reduces the script's reported metrics to one quality using the configured rule.</summary>
+    /// <param name="payload">The parsed evaluator output.</param>
+    /// <param name="issues">Receives one diagnostic per metric that could not be combined.</param>
+    /// <param name="quality">The combined quality when the method returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when a finite quality was produced.</returns>
+    /// <remarks>
+    /// Metrics are read from a <c>metrics</c> object when the script supplies one, otherwise from the top-level
+    /// properties, which is the shape the reference implementation's evaluators print. Structural properties are
+    /// excluded so a descriptor block is never mistaken for a metric. Every value that cannot be combined is
+    /// reported as a diagnostic rather than dropped, which is the difference between a low score you can explain
+    /// and one you cannot.
+    /// </remarks>
+    private bool TryAggregateQuality(JObject payload, List<EvolutionDiagnostic> issues, out double quality)
+    {
+        quality = 0d;
+        if (_metricAggregator is null) return false;
+
+        JObject? source = payload[MetricsProperty] as JObject;
+        var metrics = new Dictionary<string, ProgramMetricValue>(StringComparer.Ordinal);
+        foreach (JProperty property in (source ?? payload).Properties())
+        {
+            if (source is null && IsStructuralProperty(property.Name)) continue;
+            if (string.IsNullOrWhiteSpace(property.Name)) continue;
+
+            switch (property.Value.Type)
+            {
+                case JTokenType.Integer:
+                case JTokenType.Float:
+                    if (TryReadFinite(property.Value, out double number))
+                    {
+                        metrics[property.Name.Trim()] = ProgramMetricValue.Number(number);
+                    }
+                    else
+                    {
+                        issues.Add(new EvolutionDiagnostic(
+                            "metric_not_finite",
+                            $"Metric '{ProgramText.Bound(property.Name, 48)}' is not a finite number."));
+                    }
+
+                    break;
+                case JTokenType.Boolean:
+                    metrics[property.Name.Trim()] = ProgramMetricValue.Flag(property.Value.Value<bool>());
+                    break;
+                case JTokenType.String:
+                    metrics[property.Name.Trim()] = ProgramMetricValue.Text(
+                        ProgramText.Bound(property.Value.Value<string>() ?? string.Empty, 200));
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        if (metrics.Count == 0) return false;
+
+        ProgramMetricAggregationResult result = _metricAggregator.Aggregate(metrics);
+        foreach (ProgramMetricIssue issue in result.Issues)
+        {
+            issues.Add(new EvolutionDiagnostic(
+                "metric_not_combined",
+                $"Metric '{ProgramText.Bound(issue.MetricName, 48)}' was not combined ({issue.Reason}): " +
+                ProgramText.Bound(issue.Description, 120)));
+        }
+
+        if (!result.HasFiniteValue) return false;
+        quality = result.Value;
+        return true;
+    }
+
+    /// <summary>Reports whether a top-level property describes the result's shape rather than a metric.</summary>
+    private static bool IsStructuralProperty(string name) =>
+        string.Equals(name, QualityProperty, StringComparison.Ordinal) ||
+        string.Equals(name, DescriptorsProperty, StringComparison.Ordinal) ||
+        string.Equals(name, ObjectivesProperty, StringComparison.Ordinal) ||
+        string.Equals(name, ArtifactsProperty, StringComparison.Ordinal) ||
+        string.Equals(name, MetricsProperty, StringComparison.Ordinal);
+
     private EvolutionTaskResult Parse(string stdOut)
     {
         JObject payload;
@@ -214,9 +305,21 @@ public sealed class ScriptProgramFitnessEvaluator : IProgramFitnessEvaluator
             return Failed("invalid_metrics", "The evaluator script printed an out-of-range number: " + exception.Message);
         }
 
+        var metricIssues = new List<EvolutionDiagnostic>();
         if (!TryReadFinite(payload[QualityProperty], out double quality))
         {
-            return Failed("invalid_metrics", $"The '{QualityProperty}' property is missing or not a finite number.");
+            // An evaluator written for the reference implementation reports a flat metric dictionary and no
+            // "quality" at all, so without a reduction rule it would fail outright here. With one configured, the
+            // same script scores by combined_score or by the mean of its numeric metrics, exactly as upstream.
+            if (_metricAggregator is null || !TryAggregateQuality(payload, metricIssues, out quality))
+            {
+                return Failed(
+                    "invalid_metrics",
+                    _metricAggregator is null
+                        ? $"The '{QualityProperty}' property is missing or not a finite number."
+                        : $"The '{QualityProperty}' property is missing and no finite metric could be combined " +
+                          "in its place.");
+            }
         }
 
         var descriptors = new Dictionary<string, double>(StringComparer.Ordinal);
@@ -262,7 +365,9 @@ public sealed class ScriptProgramFitnessEvaluator : IProgramFitnessEvaluator
             return Failed("invalid_metrics", $"The '{ObjectivesProperty}' property must be a JSON array.");
         }
 
-        var diagnostics = new List<EvolutionDiagnostic>();
+        // Metrics that could not be combined lead the diagnostics: a score derived from a partial metric set is
+        // explainable only if the caller can see which values were left out and why.
+        var diagnostics = new List<EvolutionDiagnostic>(metricIssues);
         if (payload[ArtifactsProperty] is JObject artifactObject && _options.MaxArtifactCount > 0)
         {
             foreach (JProperty property in artifactObject.Properties())
