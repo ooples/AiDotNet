@@ -33,6 +33,15 @@ public sealed class StableRandomTests
     }
 
     [Fact]
+    public void RestoreRejectsDefaultStateWithEvenIncrement()
+    {
+        ArgumentException exception = Assert.Throws<ArgumentException>(() => StableRandom.Restore(default));
+
+        Assert.Equal("state", exception.ParamName);
+        Assert.Throws<ArgumentException>(() => new StableRandomState(1, 2));
+    }
+
+    [Fact]
     public void CandidateStreamsDoNotDependOnCreationOrder()
     {
         uint first = StableRandom.CreateStream(99, 7).NextUInt32();

@@ -4,12 +4,38 @@ using AiDotNet.Validation;
 namespace AiDotNet.Evolution;
 
 /// <summary>Immutable ancestry and deterministic-stream metadata for a candidate.</summary>
+/// <remarks>
+/// <para>
+/// Lineage records how a candidate came to exist: the canonical IDs of its parent and inspiration elites, which
+/// variation operator and optional refiner produced it, the logical generation and island it was proposed for, and the
+/// <see cref="SeedStream"/> identifier from which its deterministic random streams were derived. Seed genomes carry an
+/// empty parent list and the operator ID <c>"seed"</c>. The engine attaches lineage to every evaluation and archive
+/// entry, serializes it into checkpoints, and includes it in the run state hash, so IDs are trimmed and validated on
+/// construction to keep those hashes stable.
+/// </para>
+/// <para><b>For Beginners:</b> This is a candidate's family tree written on a card: who its parents were, which
+/// operator created it, in which generation and on which island it appeared, and which random stream was used. You do
+/// not normally create one yourself; the engine attaches it to every candidate so that you can later trace how a strong
+/// solution was found, for example by following <see cref="ParentIds"/> back through the archive to the original seed.
+/// Seeds are easy to spot because their <see cref="ParentIds"/> list is empty and their operator ID is <c>"seed"</c>.
+/// It is also part of what makes a run reproducible: given the lineage and the run seed, the exact random draws that
+/// produced the candidate can be regenerated.</para>
+/// </remarks>
 public sealed class EvolutionLineage
 {
     private readonly ReadOnlyCollection<string> _parentIds;
     private readonly ReadOnlyCollection<string> _inspirationIds;
 
     /// <summary>Initializes lineage metadata.</summary>
+    /// <param name="parentIds">Canonical IDs of direct parents, or <see langword="null"/> for a seed.</param>
+    /// <param name="inspirationIds">Canonical IDs of inspiration elites, or <see langword="null"/> when none were used.</param>
+    /// <param name="variationOperatorId">The non-empty identifier of the operator that produced the candidate.</param>
+    /// <param name="refinerId">The optional refiner identifier; empty or whitespace values are stored as <see langword="null"/>.</param>
+    /// <param name="generation">The non-negative logical generation.</param>
+    /// <param name="island">The non-negative zero-based island index.</param>
+    /// <param name="seedStream">The deterministic random stream identifier.</param>
+    /// <exception cref="ArgumentException">An identity collection contains an empty value, or <paramref name="variationOperatorId"/> is empty.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="generation"/> or <paramref name="island"/> is negative.</exception>
     public EvolutionLineage(
         IEnumerable<string>? parentIds,
         IEnumerable<string>? inspirationIds,

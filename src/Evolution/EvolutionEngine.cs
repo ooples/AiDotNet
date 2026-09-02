@@ -12,6 +12,45 @@ namespace AiDotNet.Evolution;
 /// evaluation caching, failure isolation, and optional checkpoint/resume.
 /// </summary>
 /// <typeparam name="TGenome">The task-specific immutable genome type.</typeparam>
+/// <remarks>
+/// <para>
+/// The engine is task-agnostic: an <see cref="IEvolutionTask{TGenome}"/> canonicalizes and evaluates genomes, an
+/// <see cref="IVariationOperator{TGenome}"/> proposes children, an <see cref="ISelectionPolicy{TGenome}"/> chooses
+/// parents and inspirations, and one <see cref="IEvolutionArchive{TGenome}"/> per island keeps the elites. A run
+/// proceeds in logical batches of <c>ProposalBatchSize</c> proposals. Seeds are consumed first and variation proposals
+/// are drawn afterwards; each proposal is optionally refined, canonicalized, and checked against the set of already-seen
+/// canonical IDs and, when enabled, the cache of completed evaluations; the remaining candidates are evaluated with at
+/// most <c>MaxDegreeOfParallelism</c> concurrent evaluator calls, a cooperative per-attempt timeout, and bounded
+/// retries; and the whole batch is then committed to the archives as one transaction, followed by optional island
+/// migration and checkpointing. Evaluator exceptions, timeouts, and null results become diagnostics on the candidate
+/// rather than faults of the run.
+/// </para>
+/// <para>
+/// Determinism is structural. Every proposal receives a sequential evaluation ID, and every random stream used for
+/// variation, refinement, evaluation, and migration is derived from the run seed and a stable stream identifier through
+/// <see cref="StableRandom"/>, so the same inputs yield the same proposals regardless of worker count or evaluator
+/// timing. In the <c>Deterministic</c> execution mode commits are ordered by evaluation ID; the alternative mode orders
+/// them by completion, trading exact reproducibility for throughput. <see cref="CompatibilityHash"/> combines the
+/// component IDs and version hashes, the archive definition, and the options, so a checkpoint can only be resumed by an
+/// engine that would behave identically.
+/// </para>
+/// <para><b>For Beginners:</b> Evolutionary search improves solutions the way nature does: keep a population of
+/// candidates, make small random changes and combinations, score the results, and keep the good ones. This engine adds
+/// the MAP-Elites idea of keeping the best candidate for each distinct behavior cell rather than one overall winner, so
+/// the result is a whole map of strong and diverse solutions instead of a single answer. You supply how to score a
+/// candidate (the task), how to change one (the variation operator), and what the behavior grid looks like (the
+/// archive), and the engine handles budgets, parallel evaluation, retries, duplicate detection, and saving progress. For
+/// example, to search neural-network architectures you might score by validation accuracy and use parameter count and
+/// depth as the two behavior axes; the finished archive then shows the most accurate network found at every size and
+/// depth. Create one engine per run and call <see cref="RunAsync"/> exactly once.</para>
+/// <para>
+/// MAP-Elites: Mouret and Clune (2015), "Illuminating search spaces by mapping elites", arXiv:1504.04909. Island
+/// models with periodic elite migration follow the distributed genetic-algorithm pattern analyzed by Whitley, Rana, and
+/// Heckendorn (1999), "The Island Model Genetic Algorithm: On Separability, Population Size and Convergence". Per batch
+/// of B proposals the engine performs O(B) proposal work and O(B log B) ordering; duplicate and cache lookups are O(1)
+/// per candidate; archive insertion cost is delegated to the archive implementation.
+/// </para>
+/// </remarks>
 public sealed partial class EvolutionEngine<TGenome>
 {
     private readonly IEvolutionTask<TGenome> _task;
@@ -51,6 +90,11 @@ public sealed partial class EvolutionEngine<TGenome>
     /// <param name="observer">Optional structured observer.</param>
     /// <param name="checkpointStore">Optional checkpoint store.</param>
     /// <param name="genomeCodec">Required when checkpointing or resume is enabled.</param>
+    /// <exception cref="ArgumentException">
+    /// A component ID or version hash is empty; the archive factory returns <see langword="null"/>, a non-empty archive,
+    /// a shared instance, or archives with differing definitions; or checkpointing or resume is requested without the
+    /// required genome codec or checkpoint store.
+    /// </exception>
     public EvolutionEngine(
         IEvolutionTask<TGenome> task,
         IVariationOperator<TGenome> variation,
@@ -118,11 +162,29 @@ public sealed partial class EvolutionEngine<TGenome>
     }
 
     /// <summary>Gets the checkpoint compatibility hash for this exact engine configuration.</summary>
+    /// <remarks>
+    /// Two engines with equal hashes have identical component IDs and versions, archive definitions, and options, and can
+    /// therefore resume each other's checkpoints.
+    /// </remarks>
     public string CompatibilityHash => _compatibilityHash;
 
     /// <summary>Runs evolution once using a finite initial seed set.</summary>
     /// <param name="initialGenomes">Finite task-specific seed genomes.</param>
     /// <param name="cancellationToken">Cancellation propagated through proposals, refinement, and evaluation.</param>
+    /// <returns>The stop reason, the final island archives, the run counters, and a deterministic state hash.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The engine has already been run, or resume is configured with archives that do not implement
+    /// <see cref="ICheckpointableEvolutionArchive{TGenome}"/>.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="initialGenomes"/> contains <see langword="null"/> or more seeds than <c>MaxProposals</c>.
+    /// </exception>
+    /// <exception cref="System.IO.InvalidDataException">
+    /// A checkpoint was found but is incompatible with this engine or internally inconsistent.
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="cancellationToken"/> was canceled; a final checkpoint is saved before the exception propagates.
+    /// </exception>
     public async Task<EvolutionRunResult<TGenome>> RunAsync(
         IEnumerable<TGenome> initialGenomes,
         CancellationToken cancellationToken = default)

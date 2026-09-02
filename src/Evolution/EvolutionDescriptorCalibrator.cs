@@ -6,6 +6,26 @@ namespace AiDotNet.Evolution;
 /// <summary>
 /// Collects order-independent observed bounds and freezes them into a fixed descriptor definition.
 /// </summary>
+/// <remarks>
+/// <para>
+/// The calibrator keeps only the running minimum, maximum, and count of the finite values passed to
+/// <see cref="Observe"/>, so it uses O(1) memory and O(1) time per observation, and the frozen bounds depend
+/// only on the set of values, never on the order in which they arrived. <see cref="Freeze"/> widens the
+/// observed span by an optional relative padding and returns an immutable
+/// <see cref="EvolutionDescriptorDefinition"/> carrying the configured bin count and out-of-range policy. When
+/// every observation was the same value, the bounds are nudged apart by one representable double on each side
+/// (or on one side only at the extreme of the double range) so the definition still has a positive, finite
+/// span. Freezing with no observations, or with padding that pushes a bound to infinity, throws.
+/// </para>
+/// <para><b>For Beginners:</b> A MAP-Elites archive needs to know the range of each behaviour descriptor
+/// (for example the slowest and fastest inference time you expect) before it can divide that range into bins,
+/// but you often do not know those ranges in advance. This helper solves that: feed it the descriptor values
+/// from a warm-up batch of candidates, then call <see cref="Freeze"/> once to turn the observed low and high
+/// into a fixed definition the archive uses for the rest of the run. Passing a small <c>relativePadding</c>
+/// such as 0.1 leaves 10 percent of head-room on each side so later candidates slightly outside the warm-up
+/// range still land in a bin instead of being clamped or rejected. It is like measuring the shortest and
+/// tallest students in a class before deciding where to draw the height brackets on a chart.</para>
+/// </remarks>
 public sealed class EvolutionDescriptorCalibrator
 {
     private readonly string _name;
@@ -16,6 +36,9 @@ public sealed class EvolutionDescriptorCalibrator
     private long _observations;
 
     /// <summary>Initializes a descriptor calibrator.</summary>
+    /// <param name="name">The unique descriptor name; surrounding whitespace is trimmed.</param>
+    /// <param name="binCount">The positive number of bins the frozen definition uses inside its bounds.</param>
+    /// <param name="outOfRangePolicy">How the frozen definition treats values outside its bounds.</param>
     public EvolutionDescriptorCalibrator(
         string name,
         int binCount,
@@ -35,6 +58,7 @@ public sealed class EvolutionDescriptorCalibrator
 
     /// <summary>Adds one finite observation.</summary>
     /// <param name="value">The observed descriptor value.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="value"/> is NaN or infinite.</exception>
     public void Observe(double value)
     {
         if (!EvolutionDescriptorDefinition.IsFinite(value))
@@ -47,6 +71,11 @@ public sealed class EvolutionDescriptorCalibrator
 
     /// <summary>Freezes the observed range into an immutable definition.</summary>
     /// <param name="relativePadding">Optional nonnegative fractional padding around the observed span.</param>
+    /// <returns>A definition whose bounds cover every observed value plus the requested padding.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// No value has been observed, or the padded bounds cannot be represented as finite doubles.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="relativePadding"/> is negative or not finite.</exception>
     public EvolutionDescriptorDefinition Freeze(double relativePadding = 0)
     {
         if (_observations == 0) throw new InvalidOperationException("At least one observation is required before freezing bounds.");

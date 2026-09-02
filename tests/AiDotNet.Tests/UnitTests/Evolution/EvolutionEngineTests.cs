@@ -340,7 +340,9 @@ public sealed class EvolutionEngineTests
 
         Assert.Equal(uninterrupted.StateHash, resumed.StateHash);
         Assert.Equal(uninterrupted.Counters.EvaluationAttempts, resumed.Counters.EvaluationAttempts);
-        Assert.Equal(uninterrupted.Best!.Evaluation.GenomeId, resumed.Best!.Evaluation.GenomeId);
+        Assert.NotNull(uninterrupted.Best);
+        Assert.NotNull(resumed.Best);
+        Assert.Equal(uninterrupted.Best?.Evaluation.GenomeId, resumed.Best?.Evaluation.GenomeId);
     }
 
     [Fact]

@@ -4,6 +4,28 @@ using AiDotNet.Validation;
 namespace AiDotNet.Evolution;
 
 /// <summary>A thread-safe in-memory checkpoint store intended for tests and short-lived applications.</summary>
+/// <remarks>
+/// <para>
+/// The store keeps the latest <see cref="EvolutionCheckpoint"/> per run id in a dictionary guarded by a single lock.
+/// <see cref="SaveAsync"/> validates the checkpoint's schema and checksum, then enforces the same monotonic contract
+/// a durable store must honor: a run cannot change its compatibility hash, its sequence cannot move backwards, and one
+/// sequence cannot be published with two different checksums. Saving a checkpoint whose sequence and checksum equal
+/// the stored ones is an idempotent no-op, which is what makes retries after a transient failure safe. Checkpoints
+/// are cloned on the way in and on the way out, so callers never share an instance with the store.
+/// </para>
+/// <para>
+/// Nothing survives the process: use <see cref="JsonEvolutionCheckpointStore"/> when a run must be resumable after a
+/// restart. Both operations complete synchronously and cost O(1) apart from the clone, so this store adds no
+/// measurable overhead to a test run.
+/// </para>
+/// <para><b>For Beginners:</b> A checkpoint store is where the evolution engine saves its progress so that a long
+/// search can be resumed later instead of restarted from scratch. This implementation saves that progress in memory
+/// only, so it disappears when your program ends, which is exactly what you want in a unit test or a quick experiment
+/// where the checkpointing code path needs to run but durability does not matter. For example, a test can run an
+/// engine for a few generations with this store, build a second engine that points at the same store and run id, and
+/// assert that the second engine resumes from the saved state. For anything that must survive a crash or reboot,
+/// choose the JSON file-backed store instead.</para>
+/// </remarks>
 public sealed class InMemoryEvolutionCheckpointStore : IEvolutionCheckpointStore
 {
     private readonly object _gate = new();

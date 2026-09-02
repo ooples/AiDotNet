@@ -3,6 +3,27 @@ using AiDotNet.Validation;
 namespace AiDotNet.Evolution;
 
 /// <summary>A versioned, checksummed, opaque engine snapshot.</summary>
+/// <remarks>
+/// <para>
+/// A checkpoint couples an engine-owned serialized <see cref="Payload"/> with the metadata a store needs to
+/// order and validate it: the <see cref="RunId"/> it belongs to, a monotonically increasing
+/// <see cref="Sequence"/>, the <see cref="CompatibilityHash"/> of every component that affects resume
+/// semantics (such as the task and evaluator versions and the engine configuration), a
+/// <see cref="SchemaVersion"/>, and a lowercase hexadecimal SHA-256 <see cref="Checksum"/> of the payload that
+/// the public constructor computes. <see cref="Validate"/> recomputes the checksum and rejects unsupported
+/// schema versions, which lets a store detect truncated or tampered data before the engine attempts to
+/// deserialize the payload. Instances are immutable; identifier and hash strings are trimmed, while the payload
+/// is preserved exactly because its checksum depends on every character.
+/// </para>
+/// <para><b>For Beginners:</b> Think of a checkpoint as a sealed envelope containing a save file. The engine
+/// writes the save data inside (the payload) and stamps the outside with the run name, a sequence number so
+/// the newest envelope is unambiguous, a fingerprint of the configuration that produced it, and a checksum that
+/// proves the contents have not been altered or cut short. You normally never open the envelope yourself: the
+/// engine creates checkpoints, an <see cref="AiDotNet.Interfaces.IEvolutionCheckpointStore"/> files them away,
+/// and on resume the engine checks that the fingerprint matches its current configuration before trusting the
+/// contents. If the fingerprint differs, for example because you changed the evaluator or the seed, the old save
+/// is refused so you never silently continue a run under different rules.</para>
+/// </remarks>
 public sealed class EvolutionCheckpoint
 {
     /// <summary>The current public checkpoint schema.</summary>

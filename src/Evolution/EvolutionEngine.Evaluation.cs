@@ -6,8 +6,10 @@ namespace AiDotNet.Evolution;
 
 public sealed partial class EvolutionEngine<TGenome>
 {
+    /// <summary>Monotonic completion counter used to order committed work items in non-deterministic mode.</summary>
     private long _completionSequence;
 
+    /// <summary>Allocates an identity for a caller-supplied seed genome and prepares it for evaluation.</summary>
     private async Task<PreparedProposal> PrepareSeedAsync(TGenome genome, CancellationToken cancellationToken)
     {
         long evaluationId = AllocateProposalId();
@@ -16,6 +18,10 @@ public sealed partial class EvolutionEngine<TGenome>
         return new PreparedProposal(await PrepareGenomeAsync(genome, evaluationId, island, lineage, cancellationToken).ConfigureAwait(false));
     }
 
+    /// <summary>
+    /// Selects a parent and inspirations, runs the variation operator, and prepares the proposal;
+    /// returns <c>null</c> when no island holds an elite to select from.
+    /// </summary>
     private async Task<PreparedProposal?> PrepareVariationAsync(CancellationToken cancellationToken)
     {
         long evaluationId = _nextEvaluationId;
@@ -59,6 +65,10 @@ public sealed partial class EvolutionEngine<TGenome>
         return new PreparedProposal(await PrepareGenomeAsync(proposed, evaluationId, island, lineage, cancellationToken).ConfigureAwait(false));
     }
 
+    /// <summary>
+    /// Refines and canonicalizes a genome, raises the proposed event, and resolves cache hits and duplicates
+    /// before deciding whether the work item requires an evaluator call.
+    /// </summary>
     private async Task<WorkItem> PrepareGenomeAsync(TGenome genome, long evaluationId, int island,
         EvolutionLineage lineage, CancellationToken cancellationToken)
     {
@@ -124,6 +134,7 @@ public sealed partial class EvolutionEngine<TGenome>
         }
     }
 
+    /// <summary>Creates a terminal failed work item for a candidate that could not be prepared.</summary>
     private WorkItem CreatePreEvaluationFailure(long evaluationId, int island, EvolutionLineage lineage, string code)
     {
         return new WorkItem(lineage)
@@ -136,6 +147,7 @@ public sealed partial class EvolutionEngine<TGenome>
         };
     }
 
+    /// <summary>Allocates the next sequential evaluation identifier and counts the proposal.</summary>
     private long AllocateProposalId()
     {
         long id = _nextEvaluationId++;
@@ -143,6 +155,7 @@ public sealed partial class EvolutionEngine<TGenome>
         return id;
     }
 
+    /// <summary>Returns the preferred island when occupied, otherwise the next occupied island in ring order.</summary>
     private IEvolutionArchive<TGenome>? FindSelectionArchive(int preferredIsland)
     {
         if (_islands[preferredIsland].Count > 0) return _islands[preferredIsland];
@@ -154,6 +167,10 @@ public sealed partial class EvolutionEngine<TGenome>
         return null;
     }
 
+    /// <summary>
+    /// Evaluates the pending work items in bounded-parallel rounds, retrying failure-like results within the
+    /// retry and attempt budgets, and marks anything left undispatched as skipped.
+    /// </summary>
     private async Task EvaluateBatchAsync(List<WorkItem> batch, CancellationToken cancellationToken)
     {
         List<WorkItem> pending = batch.Where(item => item.RequiresEvaluation).OrderBy(item => item.EvaluationId).ToList();
@@ -198,6 +215,7 @@ public sealed partial class EvolutionEngine<TGenome>
         }
     }
 
+    /// <summary>Runs one evaluation attempt inside a parallelism slot and records its timing and result.</summary>
     private async Task EvaluateWithSlotAsync(WorkItem item, SemaphoreSlim semaphore, CancellationToken cancellationToken)
     {
         await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -217,6 +235,10 @@ public sealed partial class EvolutionEngine<TGenome>
         }
     }
 
+    /// <summary>
+    /// Invokes the task evaluator under the cooperative timeout and converts cancellation, timeout, and
+    /// evaluator exceptions into terminal results instead of propagating them.
+    /// </summary>
     private async Task<EvolutionTaskResult> EvaluateAttemptAsync(WorkItem item, CancellationToken cancellationToken)
     {
         if (item.Candidate is null) return EvolutionTaskResult.Failed("missing_candidate", "The evaluator candidate was unavailable.");
@@ -248,6 +270,10 @@ public sealed partial class EvolutionEngine<TGenome>
         }
     }
 
+    /// <summary>
+    /// Commits a batch in deterministic or completion order: updates counters, archives, cache, and seen set,
+    /// notifies observers, and returns whether a fail-fast failure was encountered.
+    /// </summary>
     private async Task<bool> CommitBatchAsync(List<WorkItem> batch, CancellationToken cancellationToken)
     {
         IEnumerable<WorkItem> ordered = _options.ExecutionMode == EvolutionExecutionMode.Deterministic
@@ -301,6 +327,7 @@ public sealed partial class EvolutionEngine<TGenome>
         return failedFast;
     }
 
+    /// <summary>Builds the immutable evaluation record for a work item from its terminal result and attempt metadata.</summary>
     private EvolutionEvaluation BuildEvaluation(WorkItem item, EvolutionTaskResult result)
     {
         string genomeId = item.Candidate?.CanonicalGenome.Id ?? $"unavailable:{item.EvaluationId}";
@@ -326,6 +353,10 @@ public sealed partial class EvolutionEngine<TGenome>
             _configurationHash);
     }
 
+    /// <summary>
+    /// Runs the migration policy when the interval is due, validates every transfer against its source island,
+    /// and applies the transfers in a stable order before notifying observers.
+    /// </summary>
     private async Task MigrateIfDueAsync(CancellationToken cancellationToken)
     {
         if (_islands.Length < 2 || _options.MigrationInterval == 0 || _batchesSinceMigration < _options.MigrationInterval)
@@ -366,19 +397,23 @@ public sealed partial class EvolutionEngine<TGenome>
             message: $"{migrations.Count} elite transfers"), cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Increments the terminal counter for a status.</summary>
     private void IncrementStatus(EvolutionEvaluationStatus status)
     {
         _statusCounts.TryGetValue(status, out long current);
         _statusCounts[status] = current + 1;
     }
 
+    /// <summary>Returns whether a result exists and has a failure-like status eligible for retry.</summary>
     private static bool IsRetryable(EvolutionTaskResult? result) => result is not null && IsFailureLike(result.Status);
 
+    /// <summary>Returns whether a status is failed, timed out, or canceled.</summary>
     private static bool IsFailureLike(EvolutionEvaluationStatus status) =>
         status == EvolutionEvaluationStatus.Failed ||
         status == EvolutionEvaluationStatus.TimedOut ||
         status == EvolutionEvaluationStatus.Canceled;
 
+    /// <summary>Adds an attempt's cost units (saturating at the finite maximum) and diagnostics to the work item.</summary>
     private static void AccumulateAttemptMetadata(WorkItem item, EvolutionTaskResult result)
     {
         if (result.CostUnits > double.MaxValue - item.AccumulatedCostUnits)
@@ -395,6 +430,7 @@ public sealed partial class EvolutionEngine<TGenome>
         foreach (EvolutionDiagnostic diagnostic in result.Diagnostics) AddAttemptDiagnostic(item, diagnostic);
     }
 
+    /// <summary>Appends a diagnostic, replacing the last slot with a truncation marker once the public bound is reached.</summary>
     private static void AddAttemptDiagnostic(WorkItem item, EvolutionDiagnostic diagnostic)
     {
         const int maximumDiagnostics = 64;
@@ -411,6 +447,7 @@ public sealed partial class EvolutionEngine<TGenome>
         }
     }
 
+    /// <summary>Copies a cached result with zero cost units so cache hits do not re-bill the original evaluation.</summary>
     private static EvolutionTaskResult CopyWithZeroCost(EvolutionTaskResult result) => new(
         result.Status, result.Quality, result.Direction, result.Descriptors, result.Objectives,
         result.ConstraintViolations, 0, result.Diagnostics);

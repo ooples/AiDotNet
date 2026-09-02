@@ -5,6 +5,24 @@ using AiDotNet.Validation;
 namespace AiDotNet.Evolution;
 
 /// <summary>A complete immutable engine evaluation suitable for archives, observers, and checkpoints.</summary>
+/// <remarks>
+/// <para>
+/// An <see cref="EvolutionTaskResult"/> holds only what the task reported. The engine wraps it into this type,
+/// adding the stable evaluation and canonical genome identities, wall-clock and attempt cost, lineage, cache
+/// status, and the task, evaluator, and configuration version hashes that make the record verifiable when a
+/// checkpoint is resumed. Construction re-validates the metrics through <see cref="EvolutionTaskResult"/>, so a
+/// <see cref="EvolutionEvaluationStatus.Completed"/> status always carries a finite quality, and every collection
+/// is stored as a defensive read-only copy with ordinal descriptor keys.
+/// </para>
+/// <para><b>For Beginners:</b> This is the full report card for one candidate. It records the score
+/// (<see cref="Quality"/>) and which way is better (<see cref="Direction"/>), the behavior descriptors that decide
+/// which archive cell it competes for, how the evaluation ended (<see cref="Status"/>), how long and how many
+/// attempts it took (<see cref="Cost"/>), which earlier candidates it descended from (<see cref="Lineage"/>), and
+/// whether the score was recomputed or reused from the cache (<see cref="CacheStatus"/>). For example, after a run
+/// you can read <c>archive.Best.Evaluation.Quality</c> for the winning score and
+/// <c>archive.Best.Evaluation.Lineage.ParentIds</c> to trace its ancestry. Because instances never change after
+/// construction, they are safe to share between threads, observers, and persisted checkpoints.</para>
+/// </remarks>
 public sealed class EvolutionEvaluation
 {
     private readonly ReadOnlyDictionary<string, double> _descriptors;
@@ -13,6 +31,30 @@ public sealed class EvolutionEvaluation
     private readonly ReadOnlyCollection<EvolutionDiagnostic> _diagnostics;
 
     /// <summary>Initializes a complete evaluation.</summary>
+    /// <param name="evaluationId">The nonnegative stable evaluation identifier.</param>
+    /// <param name="genomeId">The canonical genome identity; trimmed on construction.</param>
+    /// <param name="status">The terminal status of the evaluation.</param>
+    /// <param name="quality">The scalar quality, required and finite when <paramref name="status"/> is completed.</param>
+    /// <param name="direction">Whether larger or smaller quality is better.</param>
+    /// <param name="descriptors">Named finite behavior descriptor values.</param>
+    /// <param name="objectives">Optional finite multi-objective values.</param>
+    /// <param name="constraintViolations">Nonnegative finite constraint violation magnitudes.</param>
+    /// <param name="cost">Elapsed time, attempt count, and task cost units.</param>
+    /// <param name="lineage">Ancestry and deterministic-stream metadata for the candidate.</param>
+    /// <param name="cacheStatus">Whether the result was computed or served from the evaluation cache.</param>
+    /// <param name="diagnostics">Up to 64 diagnostics attached to the result.</param>
+    /// <param name="taskVersionHash">The task version hash in effect for this evaluation.</param>
+    /// <param name="evaluatorVersionHash">The evaluator version hash in effect for this evaluation.</param>
+    /// <param name="configurationHash">The engine configuration hash in effect for this evaluation.</param>
+    /// <exception cref="ArgumentNullException">A reference argument is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">
+    /// A string argument is empty or white space, a completed status lacks a finite quality, descriptor names
+    /// collide, or more than 64 diagnostics are supplied.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="evaluationId"/> is negative, <paramref name="cacheStatus"/> is undefined, or a metric value
+    /// is not finite.
+    /// </exception>
     public EvolutionEvaluation(
         long evaluationId,
         string genomeId,

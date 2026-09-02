@@ -9,8 +9,23 @@ namespace AiDotNet.Configuration;
 /// retaining only one globally best configuration. The archive stores specifications and scores,
 /// not trained model instances, so archive growth does not retain one live model per cell.
 /// </para>
-/// <para><b>For Beginners:</b> These settings control how broadly AutoML explores different model
-/// families and configuration-complexity levels while still returning the best model normally.</para>
+/// <para><b>For Beginners:</b> Ordinary AutoML keeps chasing the single best score, which tends to funnel
+/// every trial into one model family and one region of settings. MAP-Elites instead lays out a grid whose
+/// axes are the model family and how complex a configuration is, and it keeps the best-scoring specification
+/// found in each grid cell, so at the end you can see the strongest simple linear model, the strongest
+/// mid-complexity tree ensemble, and so on, while the overall winner is still returned normally. These
+/// settings control that exploration: how many random seed configurations to try first, how finely to slice
+/// complexity, how often to mutate or explore instead of refining known elites, and how many elites may
+/// inspire one new proposal. Attach an instance through
+/// <see cref="AutoMLOptions{T,TInput,TOutput}.MapElites"/> when <c>SearchStrategy</c> is
+/// <c>AutoMLSearchStrategy.MapElites</c>. The defaults suit most tabular problems, so start by changing only
+/// <see cref="Seed"/> for reproducibility and <see cref="ComplexityBinCount"/> for a coarser or finer archive.</para>
+/// <para>
+/// The algorithm follows Mouret and Clune, "Illuminating search spaces by mapping elites" (2015). Proposal
+/// randomness is derived from <see cref="Seed"/> through stable per-candidate streams rather than a shared
+/// global generator, so the search is reproducible whenever the underlying model training is, and duplicate
+/// specifications are rejected before training so they never consume the trial budget.
+/// </para>
 /// </remarks>
 public sealed class MapElitesAutoMLOptions
 {

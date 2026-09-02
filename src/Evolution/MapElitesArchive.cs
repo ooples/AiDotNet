@@ -9,6 +9,35 @@ namespace AiDotNet.Evolution;
 /// A deterministic scalar-best-per-cell MAP-Elites archive with explicit descriptor and capacity policies.
 /// </summary>
 /// <typeparam name="TGenome">The task-specific genome type.</typeparam>
+/// <remarks>
+/// <para>
+/// Each <see cref="EvolutionDescriptorDefinition"/> contributes one axis of a grid. A completed evaluation is
+/// mapped to a cell by binning its descriptor values, and the cell keeps only the entry with the best scalar
+/// quality for the configured <see cref="Direction"/>; ties are broken deterministically by genome identifier,
+/// cell key, and evaluation identifier, so two archives fed the same evaluations in the same order hold
+/// identical elites. When <see cref="Capacity"/> is smaller than the grid, a candidate that would open a new
+/// cell must beat the archive-wide worst elite, which is then evicted. Cells live in a sorted dictionary keyed
+/// by the ordinal cell key, so <see cref="Get"/> and the lookup half of <see cref="TryAdd"/> cost O(log n) in
+/// the number of occupied cells, <see cref="Entries"/> materializes an O(n) copy in stable key order, and
+/// <see cref="Best"/>, <see cref="Sample"/>, and eviction scan the occupied cells (at most O(n log n)).
+/// Instances are not thread-safe; the engine performs all archive mutation from its sequential commit step.
+/// </para>
+/// <para><b>For Beginners:</b> Picture a wall of pigeonholes where each hole stands for one style of
+/// solution, for example "small and fast" or "large and accurate", and each hole may hold only the single best
+/// solution of that style found so far. That wall is a MAP-Elites archive, and this class is the standard
+/// implementation the evolution engine uses. Instead of the whole population collapsing onto one lucky
+/// design, the archive keeps a spread of strong, distinct designs, which gives you more choices at the end and
+/// supplies diverse parents for the next round of mutations. You describe the axes of the wall with
+/// descriptor definitions (name, range, number of bins, and what to do with out-of-range values), choose
+/// whether higher or lower quality is better, and optionally cap how many pigeonholes may be filled at once.
+/// Most users never construct this class directly because the engine and the AutoML facade build it for them;
+/// reach for it when writing a custom evolution task or inspecting a finished run's elites.</para>
+/// <para>
+/// The algorithm follows Mouret and Clune, "Illuminating search spaces by mapping elites" (2015), restricted
+/// to one scalar quality per cell. <see cref="DefinitionHash"/> captures every policy that changes insertion or
+/// restoration, so a checkpoint is only restored into an archive with identical semantics.
+/// </para>
+/// </remarks>
 public sealed class MapElitesArchive<TGenome> : ICheckpointableEvolutionArchive<TGenome>
 {
     private readonly EvolutionDescriptorDefinition[] _descriptors;
@@ -21,6 +50,14 @@ public sealed class MapElitesArchive<TGenome> : ICheckpointableEvolutionArchive<
     /// <param name="direction">The scalar quality direction for every entry.</param>
     /// <param name="capacity">Maximum occupied cells, or zero to use the full descriptor grid.</param>
     /// <param name="maximumGridCells">Safety limit for the descriptor-grid product.</param>
+    /// <exception cref="ArgumentException">
+    /// No descriptors were supplied, a descriptor is <c>null</c>, descriptor names collide, or the grid exceeds
+    /// <paramref name="maximumGridCells"/> or overflows a 64-bit integer.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="direction"/> is undefined, <paramref name="capacity"/> is negative or exceeds the grid, or
+    /// <paramref name="maximumGridCells"/> is not positive.
+    /// </exception>
     public MapElitesArchive(
         IEnumerable<EvolutionDescriptorDefinition> descriptors,
         EvolutionOptimizationDirection direction = EvolutionOptimizationDirection.Maximize,
@@ -78,7 +115,11 @@ public sealed class MapElitesArchive<TGenome> : ICheckpointableEvolutionArchive<
     /// <summary>Gets the maximum number of occupied cells.</summary>
     public int Capacity => _capacity;
 
-    /// <summary>Gets the compatibility hash of descriptor, direction, and capacity settings.</summary>
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Combines the archive algorithm identifier, every descriptor's canonical string, the optimization
+    /// direction, and the effective capacity, so any change to those settings yields a different hash.
+    /// </remarks>
     public string DefinitionHash { get; }
 
     /// <inheritdoc/>

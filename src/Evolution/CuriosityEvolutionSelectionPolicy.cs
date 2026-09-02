@@ -9,6 +9,34 @@ namespace AiDotNet.Evolution;
 /// Samples parents according to bounded curiosity scores and rewards parents whose offspring improve an archive.
 /// </summary>
 /// <typeparam name="TGenome">The task-specific genome type.</typeparam>
+/// <remarks>
+/// <para>
+/// Every archived elite carries a curiosity score that starts at 1.0. When one of its offspring is inserted into
+/// an archive (<see cref="EvolutionArchiveInsertionResult.Inserted"/>,
+/// <see cref="EvolutionArchiveInsertionResult.Replaced"/>, or
+/// <see cref="EvolutionArchiveInsertionResult.InsertedWithEviction"/>) the score rises by 1.0; when the offspring
+/// completes without improving the archive it falls by 0.1; when the offspring fails, times out, is skipped, or is
+/// canceled it falls by 0.25. Scores are clamped to [0.05, 100], so no elite is ever starved and none can monopolise
+/// selection. <see cref="Select"/> draws the parent, and then each inspiration without replacement, with probability
+/// proportional to score using the caller's <see cref="StableRandom"/> stream, so a run remains reproducible for a
+/// given seed. The score table is capped at one million identifiers, is safe to use from concurrent workers, and is
+/// serialized in ordinal key order by <see cref="CaptureState"/> so checkpoints and state hashes are stable.
+/// </para>
+/// <para><b>For Beginners:</b> When deciding which existing solution to mutate next, picking uniformly at random
+/// wastes effort on solutions that have stopped producing anything new. This policy keeps a "curiosity" score per
+/// solution instead: a parent whose children keep discovering new or better archive cells becomes more likely to be
+/// chosen, and a parent whose children keep failing becomes less likely, though never impossible. It behaves like a
+/// teacher who spends a little more time on the students who are still improving without giving up on anyone. Pass
+/// an instance as the <c>selection</c> argument of <see cref="EvolutionEngine{TGenome}"/> in place of the default
+/// uniform policy when your archive has many cells and you want the search to concentrate on its productive
+/// frontier; because it is stateful, its scores are saved in checkpoints and restored on resume automatically.</para>
+/// <para>
+/// Background: the curiosity score is the parent-selection heuristic of Cully &amp; Demiris (2018), "Quality and
+/// Diversity Optimization: A Unifying Modular Framework", IEEE Transactions on Evolutionary Computation 22(2), here
+/// with bounded, asymmetric rewards so that checkpointed state stays finite and validatable. Each weighted draw is
+/// O(n) over the <c>n</c> entries of the archive, so one selection with <c>k</c> inspirations costs O(n(k + 1)).
+/// </para>
+/// </remarks>
 public sealed class CuriosityEvolutionSelectionPolicy<TGenome> : IOutcomeAwareEvolutionSelectionPolicy<TGenome>
 {
     private const int MaximumTrackedScores = 1_000_000;

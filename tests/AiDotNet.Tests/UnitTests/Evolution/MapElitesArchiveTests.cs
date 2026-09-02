@@ -17,8 +17,10 @@ public sealed class MapElitesArchiveTests
         Add(minimize, 1, "a", 1, 0.2);
         Add(minimize, 2, "b", 2, 0.2);
 
-        Assert.Equal("b", maximize.Best!.Evaluation.GenomeId);
-        Assert.Equal("a", minimize.Best!.Evaluation.GenomeId);
+        Assert.NotNull(maximize.Best);
+        Assert.NotNull(minimize.Best);
+        Assert.Equal("b", maximize.Best?.Evaluation.GenomeId);
+        Assert.Equal("a", minimize.Best?.Evaluation.GenomeId);
     }
 
     [Fact]
@@ -28,7 +30,8 @@ public sealed class MapElitesArchiveTests
 
         Assert.Equal(EvolutionArchiveInsertionResult.Inserted, Add(archive, 1, "z", 5, 0.2));
         Assert.Equal(EvolutionArchiveInsertionResult.Replaced, Add(archive, 2, "a", 5, 0.2));
-        Assert.Equal("a", archive.Best!.Evaluation.GenomeId);
+        Assert.NotNull(archive.Best);
+        Assert.Equal("a", archive.Best?.Evaluation.GenomeId);
     }
 
     [Fact]

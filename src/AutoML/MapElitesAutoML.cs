@@ -30,6 +30,31 @@ namespace AiDotNet.AutoML;
 /// executor owns best-model and trial-history state; proposal randomness still comes from stable,
 /// candidate-local streams.
 /// </para>
+/// <para>
+/// The search drives the generic <see cref="EvolutionEngine{TGenome}"/> over a
+/// <see cref="MapElitesArchive{TGenome}"/> whose grid has one row per candidate model family and
+/// <see cref="MapElitesAutoMLOptions.ComplexityBinCount"/> columns. Each step selects a parent elite through
+/// <see cref="CuriosityEvolutionSelectionPolicy{TGenome}"/>, which favors parents whose offspring improved the
+/// archive, then either samples a fresh family with probability
+/// <see cref="MapElitesAutoMLOptions.ExplorationProbability"/> or mutates the parent's hyperparameters, optionally
+/// borrowing individual values from an inspiring elite of the same family drawn from up to
+/// <see cref="MapElitesAutoMLOptions.InspirationCount"/> archive members. The proposal is trained and validated
+/// once and kept only if it beats the incumbent of its cell. This is MAP-Elites as described by Mouret and Clune,
+/// "Illuminating search spaces by mapping elites" (2015, arXiv:1504.04909). Seed and proposal streams are PCG
+/// generators (O'Neill, 2014) exposed through <see cref="StableRandom"/>, so a run is reproducible across
+/// processes and platforms. Wall-clock cost is dominated by the at most <c>TrialLimit</c> model fits; archive
+/// bookkeeping is at most O(n log n) in the number of occupied cells per insertion, which is negligible by
+/// comparison.
+/// </para>
+/// <para><b>For Beginners:</b> Ordinary AutoML keeps a single best model. This strategy keeps a small grid of
+/// "best in class" models instead, one slot for every model family at every level of configuration complexity,
+/// and still returns the overall winner the way any other AutoML strategy does. The extra diversity matters when
+/// the winner is not what you can deploy: if the top model is a heavy ensemble, the archive also tells you the
+/// best simple model that was found. Most users never construct this class directly; set
+/// <c>AutoMLOptions.SearchStrategy = AutoMLSearchStrategy.MapElites</c>, pass those options to
+/// <c>ConfigureAutoML</c> on the model builder, and read <see cref="Archive"/> after the run to inspect the grid.
+/// Construct it yourself only when you need custom <see cref="MapElitesAutoMLOptions"/> such as a different seed
+/// or bin count, then plug the instance in through the <c>ConfigureAutoML(IAutoMLModel)</c> overload.</para>
 /// </remarks>
 [ModelMetadataExempt]
 public sealed class MapElitesAutoML<T, TInput, TOutput> :

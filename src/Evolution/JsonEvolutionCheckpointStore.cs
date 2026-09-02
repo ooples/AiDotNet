@@ -8,6 +8,26 @@ namespace AiDotNet.Evolution;
 /// <summary>
 /// Persists one evolution run to an atomic JSON file, retaining the immediately previous valid snapshot.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Each save serializes the checkpoint with Newtonsoft.Json into a temporary file in the target directory,
+/// flushes it to disk, and then swaps it into place with <c>File.Replace</c>, which also moves the prior file to
+/// <c>&lt;path&gt;.previous</c>. A crash at any point therefore leaves either the old snapshot or the new one
+/// intact, never a torn file. Every document carries a checksum over its own fields in addition to the payload
+/// checksum inside <see cref="EvolutionCheckpoint"/>; loads verify both, reject files larger than the configured
+/// byte limit, and fall back to the previous snapshot when the primary file is corrupt. Saves also enforce that a
+/// run never changes its compatibility hash or moves its sequence backwards, and a save whose sequence and
+/// checksum match the stored snapshot is a no-op. All operations are serialized through one lock, so a single
+/// instance may be shared by concurrent callers; the asynchronous signatures complete synchronously.
+/// </para>
+/// <para><b>For Beginners:</b> A checkpoint is a save file for an evolution run: if the process stops, the run can
+/// resume from its last committed state instead of starting over. This store writes that save file as JSON on disk
+/// in a crash-safe way (write a temporary copy first, then swap it in) and keeps the previous save as a backup.
+/// Create one with a path such as <c>new JsonEvolutionCheckpointStore("runs/search-01.json")</c>, hand it to the
+/// engine, and on restart <see cref="LoadLatestAsync"/> returns the newest valid snapshot for that run ID, or
+/// <c>null</c> when the run has never been saved. Use <c>InMemoryEvolutionCheckpointStore</c> instead for tests or
+/// short runs that need no durability.</para>
+/// </remarks>
 public sealed class JsonEvolutionCheckpointStore : IEvolutionCheckpointStore
 {
     private readonly object _gate = new();
@@ -18,6 +38,9 @@ public sealed class JsonEvolutionCheckpointStore : IEvolutionCheckpointStore
     /// <summary>Initializes a file-backed store.</summary>
     /// <param name="filePath">The primary checkpoint JSON path.</param>
     /// <param name="maxCheckpointBytes">Maximum encoded JSON size accepted for one checkpoint.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="filePath"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="filePath"/> is empty or white space.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxCheckpointBytes"/> is not positive.</exception>
     public JsonEvolutionCheckpointStore(string filePath, long maxCheckpointBytes = 64L * 1024L * 1024L)
     {
         Guard.NotNullOrWhiteSpace(filePath);
@@ -155,16 +178,25 @@ public sealed class JsonEvolutionCheckpointStore : IEvolutionCheckpointStore
         }
     }
 
+    /// <summary>Serialization shape of one on-disk checkpoint, with a checksum over its own fields.</summary>
     private sealed class CheckpointDocument
     {
+        /// <summary>Gets or sets the checkpoint schema version.</summary>
         public int SchemaVersion { get; set; }
+        /// <summary>Gets or sets the run identifier.</summary>
         public string RunId { get; set; } = string.Empty;
+        /// <summary>Gets or sets the committed-state sequence.</summary>
         public long Sequence { get; set; }
+        /// <summary>Gets or sets the resume compatibility hash.</summary>
         public string CompatibilityHash { get; set; } = string.Empty;
+        /// <summary>Gets or sets the engine-owned serialized payload.</summary>
         public string Payload { get; set; } = string.Empty;
+        /// <summary>Gets or sets the payload checksum.</summary>
         public string Checksum { get; set; } = string.Empty;
+        /// <summary>Gets or sets the checksum over every other field of this document.</summary>
         public string DocumentChecksum { get; set; } = string.Empty;
 
+        /// <summary>Creates a document from a validated checkpoint and stamps its document checksum.</summary>
         public static CheckpointDocument From(EvolutionCheckpoint checkpoint)
         {
             var document = new CheckpointDocument
@@ -180,6 +212,7 @@ public sealed class JsonEvolutionCheckpointStore : IEvolutionCheckpointStore
             return document;
         }
 
+        /// <summary>Verifies the document checksum against the current field values.</summary>
         public void Validate()
         {
             if (!string.Equals(DocumentChecksum, ComputeDocumentChecksum(), StringComparison.Ordinal))
@@ -196,6 +229,7 @@ public sealed class JsonEvolutionCheckpointStore : IEvolutionCheckpointStore
             Checksum
         });
 
+        /// <summary>Rebuilds the checkpoint carried by this document without recomputing its payload checksum.</summary>
         public EvolutionCheckpoint ToCheckpoint() => new(RunId, Sequence, CompatibilityHash, Payload, Checksum, SchemaVersion);
     }
 }

@@ -6,6 +6,37 @@ using AiDotNet.Validation;
 namespace AiDotNet.Configuration;
 
 /// <summary>Configures deterministic orchestration, budgets, parallelism, islands, and persistence.</summary>
+/// <remarks>
+/// <para>
+/// <see cref="EvolutionEngine{TGenome}"/> validates and defensively copies these options in its constructor, so
+/// mutating the original object afterwards has no effect on a running engine. Every option that can change the
+/// logical search trajectory (seed, budgets, batch size, execution mode, failure policy, retries, evaluation
+/// timeout, caching, deduplication, islands, migration, inspirations, and the failure-retention bound) is folded
+/// into the engine's configuration and compatibility hashes, so a checkpoint written under one configuration
+/// refuses to resume under another. <see cref="RunId"/>, <see cref="MaxDegreeOfParallelism"/>,
+/// <see cref="TimeLimit"/>, <see cref="CheckpointInterval"/>, and <see cref="Resume"/> are deliberately excluded
+/// because they affect only speed, the identity of the stored run, and persistence, never the result of a given
+/// step.
+/// </para>
+/// <para><b>For Beginners:</b> This is the control panel for an evolutionary quality-diversity search. The budget
+/// settings say how long to search: <see cref="MaxEvaluationAttempts"/> caps how many times your evaluator is
+/// actually called, <see cref="MaxProposals"/> caps how many candidates are generated (including duplicates that
+/// are never evaluated), and <see cref="TimeLimit"/> caps wall-clock time; the run stops at whichever limit is hit
+/// first. <see cref="Seed"/> makes the run repeatable: the same seed and options always produce the same archive.
+/// <see cref="MaxDegreeOfParallelism"/> lets several candidates be scored at once on a multi-core machine without
+/// changing the answer, and <see cref="IslandCount"/> splits the population into semi-independent groups that
+/// periodically exchange their best members, which discourages everyone converging on one idea. Start with the
+/// defaults, raise the budgets once your evaluator is stable, and for long runs set <see cref="CheckpointInterval"/>
+/// together with <see cref="Resume"/> (plus a checkpoint store and genome codec on the engine) so a crash does not
+/// lose the work.</para>
+/// <para>
+/// Background: the one-archive-per-island layout follows MAP-Elites (Mouret &amp; Clune, 2015, "Illuminating search
+/// spaces by mapping elites", arXiv:1504.04909) and periodic elite exchange follows the island model of parallel
+/// genetic algorithms (Whitley, Rana &amp; Heckendorn, 1999). Candidate-local random streams are derived from
+/// <see cref="Seed"/> and the candidate's evaluation identifier with a stable generator, which is why results do not
+/// depend on <see cref="MaxDegreeOfParallelism"/> in <see cref="EvolutionExecutionMode.Deterministic"/> mode.
+/// </para>
+/// </remarks>
 public sealed class EvolutionEngineOptions
 {
     /// <summary>Gets or sets the stable run identifier used by checkpoint stores.</summary>
@@ -27,6 +58,10 @@ public sealed class EvolutionEngineOptions
     public int ProposalBatchSize { get; set; } = 8;
 
     /// <summary>Gets or sets the maximum number of concurrently running evaluator calls.</summary>
+    /// <remarks>
+    /// Excluded from the compatibility hash; in <see cref="EvolutionExecutionMode.Deterministic"/> mode the result
+    /// is independent of this value.
+    /// </remarks>
     public int MaxDegreeOfParallelism { get; set; } = 1;
 
     /// <summary>Gets or sets deterministic or opportunistic commit behavior.</summary>
@@ -45,9 +80,17 @@ public sealed class EvolutionEngineOptions
     public TimeSpan? TimeLimit { get; set; }
 
     /// <summary>Gets or sets the number of committed evaluations between checkpoints; zero disables periodic saves.</summary>
+    /// <remarks>
+    /// Periodic saves require a checkpoint store and genome codec on the engine. A final checkpoint is always written
+    /// when a run with a checkpoint store ends, regardless of this value.
+    /// </remarks>
     public int CheckpointInterval { get; set; }
 
     /// <summary>Gets or sets whether a compatible checkpoint is loaded before proposing new candidates.</summary>
+    /// <remarks>
+    /// Requires a checkpoint store and genome codec. The checkpoint must have been written by an engine with an
+    /// identical compatibility hash, and any seeds supplied to the run must match the checkpointed seed sequence.
+    /// </remarks>
     public bool Resume { get; set; }
 
     /// <summary>Gets or sets whether completed canonical evaluations are reused across islands and proposals.</summary>
