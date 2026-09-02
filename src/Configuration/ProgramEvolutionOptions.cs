@@ -379,6 +379,7 @@ public sealed class ProgramEvolutionOptions
         MigrationInterval = source.MigrationInterval,
         MigrantsPerIsland = source.MigrantsPerIsland,
         InspirationCount = source.InspirationCount,
-        MaxRetainedFailures = source.MaxRetainedFailures
+        MaxRetainedFailures = source.MaxRetainedFailures,
+        SelectionPolicy = source.SelectionPolicy
     };
 }

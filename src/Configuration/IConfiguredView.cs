@@ -53,4 +53,43 @@ internal interface IConfiguredView<T, TInput, TOutput>
 
     /// <summary>The license-key payload wired via <c>ConfigureLicenseKey</c>.</summary>
     AiDotNet.Models.AiDotNetLicenseKey? ConfiguredLicenseKey { get; }
+
+    /// <summary>The evolution run settings wired via <c>ConfigureEvolution</c>.</summary>
+    EvolutionOptions? ConfiguredEvolution { get; }
+
+    /// <summary>The program seeds wired via <c>ConfigureEvolutionSeeds(EvolutionSeedOptions)</c>.</summary>
+    EvolutionSeedOptions? ConfiguredEvolutionSeeds { get; }
+
+    /// <summary>
+    /// How many typed candidates were captured by <c>ConfigureEvolutionSeeds&lt;TGenome&gt;</c>.
+    /// </summary>
+    /// <remarks>
+    /// The seeds are held under a genome type this interface cannot name, so their presence is reported as a count
+    /// rather than exposed directly.
+    /// </remarks>
+    int ConfiguredEvolutionSeedCount { get; }
+
+    /// <summary>The program-evolution options wired via <c>ConfigureProgramEvolution</c>.</summary>
+    ProgramEvolutionOptions? ConfiguredProgramEvolution { get; }
+
+    /// <summary>The chat client wired via <c>ConfigureChatClient</c> or <c>ConfigureChatClientEnsemble</c>.</summary>
+    AiDotNet.Agentic.Models.IChatClient<T>? ConfiguredChatClient { get; }
+
+    /// <summary>The chat-client pipeline settings wired alongside the client.</summary>
+    ChatClientOptions? ConfiguredChatClientOptions { get; }
+
+    /// <summary>The sandbox settings wired via <c>ConfigureProgramSandbox</c>.</summary>
+    ProgramSandboxOptions? ConfiguredProgramSandbox { get; }
+
+    /// <summary>The execution engine wired via <c>ConfigureProgramExecutionEngine</c>.</summary>
+    AiDotNet.ProgramSynthesis.Interfaces.IProgramExecutionEngine? ConfiguredProgramExecutionEngine { get; }
+
+    /// <summary>
+    /// Whether a typed-genome run was captured by <c>ConfigureEvolution&lt;TGenome&gt;</c>.
+    /// </summary>
+    /// <remarks>
+    /// The captured run is a delegate closed over a genome type this interface cannot name, so its presence is
+    /// reported as a flag rather than exposed directly.
+    /// </remarks>
+    bool HasConfiguredEvolutionRun { get; }
 }

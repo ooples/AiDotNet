@@ -2570,4 +2570,140 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureRAG(RetrievalAugmentedGeneration.Configuration.RAGConfiguration<T> config);
 
+    /// <summary>
+    /// Configures the settings an evolution run uses: budgets, islands, the archive grid, persistence, and tracing.
+    /// </summary>
+    /// <param name="options">The run settings, validated and copied on this call.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// This is the settings-only entry point. Pair it with <see cref="ConfigureProgramEvolution"/> to evolve source
+    /// code, or use a <c>ConfigureEvolution&lt;TGenome&gt;</c> overload to evolve a candidate type of your own.
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureEvolution(EvolutionOptions options);
+
+    /// <summary>
+    /// Configures evolution of a candidate type of your own, without checkpointing.
+    /// </summary>
+    /// <typeparam name="TGenome">The immutable candidate type being evolved.</typeparam>
+    /// <param name="task">Canonicalizes and scores a candidate.</param>
+    /// <param name="variation">Proposes a child from a parent and its inspirations.</param>
+    /// <param name="options">Run settings, or <see langword="null"/> to reuse the configured ones.</param>
+    /// <param name="selection">Optional parent and inspiration policy.</param>
+    /// <param name="refiner">Optional inner optimizer applied to a proposal before it is scored.</param>
+    /// <param name="migration">Optional island migration policy.</param>
+    /// <param name="observer">Optional observer for run events.</param>
+    /// <param name="genomeDistance">
+    /// Optional structural distance between two candidates, required whenever
+    /// <see cref="AiDotNet.Configuration.EvolutionOptions.NoveltyDistanceThreshold"/> is positive.
+    /// </param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// Checkpointing needs a genome codec, so this overload rejects options that request it; use the overload that
+    /// takes an <see cref="IEvolutionGenomeCodec{TGenome}"/> instead.
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureEvolution<TGenome>(
+        IEvolutionTask<TGenome> task,
+        IVariationOperator<TGenome> variation,
+        EvolutionOptions? options = null,
+        ISelectionPolicy<TGenome>? selection = null,
+        ICandidateRefiner<TGenome>? refiner = null,
+        IMigrationPolicy<TGenome>? migration = null,
+        IEvolutionObserver<TGenome>? observer = null,
+        IGenomeDistance<TGenome>? genomeDistance = null);
+
+    /// <summary>
+    /// Configures evolution of a candidate type of your own, with checkpointing and resume available.
+    /// </summary>
+    /// <typeparam name="TGenome">The immutable candidate type being evolved.</typeparam>
+    /// <param name="task">Canonicalizes and scores a candidate.</param>
+    /// <param name="variation">Proposes a child from a parent and its inspirations.</param>
+    /// <param name="genomeCodec">Serializes a genome to text and back, which is what makes a checkpoint possible.</param>
+    /// <param name="options">Run settings, or <see langword="null"/> to reuse the configured ones.</param>
+    /// <param name="selection">Optional parent and inspiration policy.</param>
+    /// <param name="refiner">Optional inner optimizer applied to a proposal before it is scored.</param>
+    /// <param name="migration">Optional island migration policy.</param>
+    /// <param name="observer">Optional observer for run events.</param>
+    /// <param name="checkpointStore">Optional store; a JSON file store is derived when the options ask for one.</param>
+    /// <param name="genomeDistance">
+    /// Optional structural distance between two candidates, required whenever
+    /// <see cref="AiDotNet.Configuration.EvolutionOptions.NoveltyDistanceThreshold"/> is positive.
+    /// </param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureEvolution<TGenome>(
+        IEvolutionTask<TGenome> task,
+        IVariationOperator<TGenome> variation,
+        IEvolutionGenomeCodec<TGenome> genomeCodec,
+        EvolutionOptions? options = null,
+        ISelectionPolicy<TGenome>? selection = null,
+        ICandidateRefiner<TGenome>? refiner = null,
+        IMigrationPolicy<TGenome>? migration = null,
+        IEvolutionObserver<TGenome>? observer = null,
+        IEvolutionCheckpointStore? checkpointStore = null,
+        IGenomeDistance<TGenome>? genomeDistance = null);
+
+    /// <summary>
+    /// Configures the programs a program-evolution run starts from, as plain source text.
+    /// </summary>
+    /// <param name="options">The seed sources, one per starting candidate.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureEvolutionSeeds(EvolutionSeedOptions options);
+
+    /// <summary>
+    /// Configures the candidates a typed evolution run starts from.
+    /// </summary>
+    /// <typeparam name="TGenome">The candidate type; it must match the one given to <c>ConfigureEvolution</c>.</typeparam>
+    /// <param name="seeds">The starting candidates, consumed in order before any variation proposal.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureEvolutionSeeds<TGenome>(IEnumerable<TGenome> seeds);
+
+    /// <summary>
+    /// Configures evolution of source code: the OpenEvolve-equivalent entry point.
+    /// </summary>
+    /// <param name="options">Seeds, bounds, prompting, sandboxing, and how a candidate program is scored.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    /// <remarks>
+    /// The run also needs a chat client from <see cref="ConfigureChatClient"/> and a way to score a candidate —
+    /// either test cases or an evaluator script on the options.
+    /// </remarks>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureProgramEvolution(ProgramEvolutionOptions options);
+
+    /// <summary>
+    /// Configures the language model that proposes program edits.
+    /// </summary>
+    /// <param name="chatClient">The client that talks to the model.</param>
+    /// <param name="options">Optional retry policy, timeout, filters, and recording settings.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureChatClient(
+        AiDotNet.Agentic.Models.IChatClient<T> chatClient,
+        ChatClientOptions? options = null);
+
+    /// <summary>
+    /// Configures several language models as one weighted ensemble.
+    /// </summary>
+    /// <param name="clients">The member clients; each call picks one of them.</param>
+    /// <param name="weights">Optional relative weights, one per client and in the same order.</param>
+    /// <param name="ensembleOptions">Optional selection seed, fallback behaviour, and ensemble model identifier.</param>
+    /// <param name="options">Optional retry policy, timeout, filters, and recording applied around the ensemble.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureChatClientEnsemble(
+        IReadOnlyList<AiDotNet.Agentic.Models.IChatClient<T>> clients,
+        IReadOnlyList<double>? weights = null,
+        WeightedEnsembleChatClientOptions? ensembleOptions = null,
+        ChatClientOptions? options = null);
+
+    /// <summary>
+    /// Configures the execution boundary and resource limits applied to generated programs.
+    /// </summary>
+    /// <param name="options">The sandbox mode, limits, and interpreters; <see langword="null"/> uses the defaults.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureProgramSandbox(ProgramSandboxOptions? options = null);
+
+    /// <summary>
+    /// Configures the engine that runs generated programs, replacing the built-in sandbox.
+    /// </summary>
+    /// <param name="engine">The execution engine to use.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureProgramExecutionEngine(
+        AiDotNet.ProgramSynthesis.Interfaces.IProgramExecutionEngine engine);
+
 }

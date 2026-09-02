@@ -192,8 +192,9 @@ public sealed class MapElitesAutoML<T, TInput, TOutput> :
                 TimeLimit = timeLimit,
                 EnableEvaluationCache = true,
                 DeduplicateFailedCandidates = true,
-                IslandCount = 1,
-                MigrationInterval = 0,
+                IslandCount = _options.IslandCount,
+                MigrationInterval = _options.MigrationInterval,
+                MigrantsPerIsland = _options.MigrantsPerIsland,
                 InspirationCount = _options.InspirationCount
             };
 

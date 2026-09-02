@@ -16,7 +16,12 @@ namespace AiDotNet.Evolution.Programs;
 /// <para>
 /// <see cref="VersionHash"/> folds in every descriptor name and type, so adding, removing, or renaming a dimension
 /// changes the hash and a checkpoint written under the old set is refused rather than being reinterpreted against
-/// a differently shaped grid.
+/// a differently shaped grid. Name and type alone do not describe how a descriptor was configured, so a descriptor
+/// that carries configuration - a diversity descriptor and its reference programs, for instance - also implements
+/// <see cref="IVersionedProgramDescriptor"/> and contributes its own version hash here. Without that, swapping a
+/// reference set would leave this hash identical and a resumed run would silently re-bin every restored elite
+/// against coordinates it never produced. A descriptor that does not implement the interface is recorded as
+/// unversioned, which is correct only when its type and name really do determine its output.
 /// </para>
 /// <para><b>For Beginners:</b> This is simply the list of pigeonhole axes your run uses, bundled together with a
 /// safety check that no two axes share a name. Build one with, say, a length descriptor and a token-count
@@ -71,7 +76,7 @@ public sealed class ProgramDescriptorSet
     /// <summary>Gets the descriptor names, which are the archive dimension keys this set fills.</summary>
     public IReadOnlyList<string> Names => _names;
 
-    /// <summary>Gets a version hash covering every descriptor name and implementation type.</summary>
+    /// <summary>Gets a version hash covering every descriptor name, implementation type, and own configuration.</summary>
     public string VersionHash { get; }
 
     /// <summary>Gets the number of descriptors in the set.</summary>
@@ -130,12 +135,15 @@ public sealed class ProgramDescriptorSet
 
     private static string BuildVersionHash(List<IProgramDescriptor> descriptors, List<string> names)
     {
-        var components = new List<string> { "program-descriptor-set-v1" };
+        var components = new List<string> { "program-descriptor-set-v2" };
         for (int index = 0; index < descriptors.Count; index++)
         {
             components.Add(names[index]);
             Type type = descriptors[index].GetType();
             components.Add(type.FullName ?? type.Name);
+            components.Add(descriptors[index] is IVersionedProgramDescriptor versioned
+                ? versioned.VersionHash ?? string.Empty
+                : "unversioned");
         }
 
         return "program-descriptors-" + EvolutionHash.Combine(components);

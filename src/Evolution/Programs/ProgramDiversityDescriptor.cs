@@ -28,7 +28,7 @@ namespace AiDotNet.Evolution.Programs;
 /// The reference set never changes during a run, which is what makes the numbers comparable from start to
 /// finish.</para>
 /// </remarks>
-public sealed class ProgramDiversityDescriptor : IProgramDescriptor
+public sealed class ProgramDiversityDescriptor : IVersionedProgramDescriptor
 {
     /// <summary>The descriptor name used when none is supplied.</summary>
     public const string DefaultName = "diversity";
@@ -60,6 +60,10 @@ public sealed class ProgramDiversityDescriptor : IProgramDescriptor
         var ordered = new List<string>(unique);
         _references = new ReadOnlyCollection<string>(ordered);
         Name = name.Trim();
+
+        var components = new List<string>(ordered.Count + 2) { "program-diversity-descriptor-v1", Name };
+        components.AddRange(ordered);
+        VersionHash = EvolutionHash.Combine(components);
     }
 
     /// <summary>Initializes a diversity descriptor against a fixed set of reference genomes.</summary>
@@ -77,6 +81,14 @@ public sealed class ProgramDiversityDescriptor : IProgramDescriptor
 
     /// <summary>Gets the normalized, deduplicated, ordinally sorted reference programs.</summary>
     public IReadOnlyList<string> ReferenceSources => _references;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Covers the dimension name and every normalized reference program, so swapping the reference set changes the
+    /// containing <see cref="ProgramDescriptorSet.VersionHash"/> and a checkpoint binned against the old set is
+    /// refused instead of being silently re-binned against distances it never produced.
+    /// </remarks>
+    public string VersionHash { get; }
 
     /// <inheritdoc/>
     public double Compute(ProgramGenome genome)

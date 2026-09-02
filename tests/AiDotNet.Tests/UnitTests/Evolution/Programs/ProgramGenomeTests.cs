@@ -36,7 +36,7 @@ public sealed class ProgramGenomeTests
     }
 
     [Fact]
-    public void IdIsStableLowercaseHexSha256OfNormalizedSource()
+    public void IdIsStableLowercaseHexOverNormalizedSourceAndLanguage()
     {
         var genome = new ProgramGenome("print(1)\n");
         Assert.Equal(64, genome.Id.Length);
@@ -71,7 +71,7 @@ public sealed class ProgramGenomeTests
     }
 
     [Fact]
-    public void ValueEqualityCoversSourceLanguageAndDescription()
+    public void ValueEqualityCoversSourceAndLanguageButNotTheDescription()
     {
         var first = new ProgramGenome("print(1)\n", ProgramLanguage.Python, "seed");
         var second = new ProgramGenome("print(1)", ProgramLanguage.Python, "seed");
@@ -82,8 +82,33 @@ public sealed class ProgramGenomeTests
         Assert.True(first == second);
         Assert.Equal(first.GetHashCode(), second.GetHashCode());
         Assert.False(first == otherLanguage);
-        Assert.True(first != otherDescription);
+        Assert.False(first != otherDescription);
         Assert.False(first.Equals(null));
+    }
+
+    [Fact]
+    public void IdentityAgreesWithValueEqualityInBothDirections()
+    {
+        var genomes = new[]
+        {
+            new ProgramGenome("print(1)\n", ProgramLanguage.Python, "seed"),
+            new ProgramGenome("print(1)", ProgramLanguage.Python, "child"),
+            new ProgramGenome("print(1)", ProgramLanguage.Generic, "seed"),
+            new ProgramGenome("print(2)", ProgramLanguage.Python, "seed"),
+            new ProgramGenome("print(2)", ProgramLanguage.Generic, "seed")
+        };
+
+        foreach (ProgramGenome left in genomes)
+        {
+            foreach (ProgramGenome right in genomes)
+            {
+                Assert.Equal(left.Equals(right), string.Equals(left.Id, right.Id, StringComparison.Ordinal));
+            }
+        }
+
+        Assert.Equal(4, genomes.Select(genome => genome.Id).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(genomes[0].Id, ProgramGenome.ComputeId("print(1)   \r\n", ProgramLanguage.Python));
+        Assert.NotEqual(genomes[0].Id, ProgramGenome.ComputeId("print(1)"));
     }
 
     [Fact]

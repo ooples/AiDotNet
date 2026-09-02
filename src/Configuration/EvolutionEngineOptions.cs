@@ -202,6 +202,16 @@ public sealed class EvolutionEngineOptions
     /// When positive, every completed evaluation whose descriptors map to a cell is offered to the index, which keeps
     /// the best entries across all islands in <see cref="EvolutionRunResult{TGenome}.GlobalElites"/>, checkpoints
     /// them, and folds them into the run state hash.
+    /// <para>
+    /// One derived exception: when the engine builds the selection policy itself from
+    /// <see cref="SelectionPolicy"/> and that policy draws its exploitation pool from the cross-island index
+    /// (<see cref="EvolutionSelectionPolicyKind.Ratio"/> with
+    /// <see cref="EvolutionExploitationSource.GlobalTopK"/>), the engine raises the effective capacity to the
+    /// policy's <see cref="EvolutionSelectionOptions.ExploitationEliteCount"/> so that branch is not silently dead.
+    /// The derivation is a pure function of these options and of the constructed policy, both of which are in the
+    /// compatibility hash, so a resumed run derives the same capacity. A policy the caller supplies directly never
+    /// triggers it.
+    /// </para>
     /// </remarks>
     public int GlobalEliteCount { get; set; }
 
@@ -235,6 +245,24 @@ public sealed class EvolutionEngineOptions
     /// </remarks>
     public EvolutionSelectionOptions Selection { get; set; } = new();
 
+    /// <summary>Gets or sets which built-in selection policy the engine builds when the caller supplies none.</summary>
+    /// <remarks>
+    /// <para>
+    /// The default <see cref="EvolutionSelectionPolicyKind.Uniform"/> is the policy the engine has always used, so
+    /// leaving this alone preserves existing behaviour exactly. A policy passed to the
+    /// <see cref="EvolutionEngine{TGenome}"/> constructor always wins over this value, which the engine reads only
+    /// when that argument is <c>null</c>. <see cref="EvolutionSelectionPolicyKind.Ratio"/> is what makes
+    /// <see cref="Selection"/> take effect, because the ratio policy is the only built-in policy that reads it.
+    /// </para>
+    /// <para>
+    /// This value is deliberately absent from the canonical configuration string: the engine folds the constructed
+    /// policy's own identifier and version hash into its compatibility hash instead, which is strictly more precise
+    /// because it also covers a policy the caller supplied directly. Two engines that behave identically therefore
+    /// still resume each other's checkpoints, and two that do not, do not.
+    /// </para>
+    /// </remarks>
+    public EvolutionSelectionPolicyKind SelectionPolicy { get; set; } = EvolutionSelectionPolicyKind.Uniform;
+
     /// <summary>Gets or sets staged (cascade) evaluation; disabled by default.</summary>
     /// <remarks>
     /// Enabling this requires the task to implement <c>ICascadeEvolutionTask&lt;TGenome&gt;</c>; the thresholds and
@@ -247,6 +275,90 @@ public sealed class EvolutionEngineOptions
 
     /// <summary>Gets or sets plateau-based early stopping; disabled by default.</summary>
     public EvolutionEarlyStoppingOptions EarlyStopping { get; set; } = new();
+
+    /// <summary>Creates options equivalent to the shipped defaults of OpenEvolve 0.3.2.</summary>
+    /// <returns>A new instance; the property defaults of this class are unchanged.</returns>
+    /// <remarks>
+    /// <para>
+    /// The property defaults on this class are deliberately conservative, so several features OpenEvolve enables out
+    /// of the box - islands, retries, an evaluation timeout, the cross-island elite index, per-island history, and
+    /// artifact retention - are off unless a caller asks for them. Changing those defaults would silently change
+    /// every run that already exists, so this factory is the opt-in instead: one call configures a run the way
+    /// upstream would, and nobody else moves.
+    /// </para>
+    /// <para>
+    /// Every value is taken from openevolve 0.3.2 <c>config.py</c>. <see cref="Seed"/> is 42 (<c>random_seed</c>,
+    /// line 424); <see cref="MaxEvaluationAttempts"/>, <see cref="MaxProposals"/> and <see cref="MaxGenerations"/>
+    /// are 10000 (<c>max_iterations</c>, line 420); <see cref="CheckpointInterval"/> is 100
+    /// (<c>checkpoint_interval</c>, line 421); <see cref="MaxRetries"/> is 3 and <see cref="EvaluationTimeout"/> is
+    /// 300 seconds (<c>evaluator.max_retries</c> and <c>evaluator.timeout</c>, lines 376-377);
+    /// <see cref="RetryBaseDelay"/> is one second with <see cref="RetryBackoffMultiplier"/> 1.0, matching the
+    /// hard-coded <c>asyncio.sleep(1.0)</c> of evaluator.py:283-285, and <see cref="RetryOn"/> covers failures only
+    /// because upstream returns a timeout without retrying it (evaluator.py:252-265);
+    /// <see cref="IslandCount"/> is 5 (<c>database.num_islands</c>, line 323); <see cref="MigrationInterval"/> is 50
+    /// counted in island generations, matching "Migrate every N generations"
+    /// (<c>database.migration_interval</c>, line 351); <see cref="GlobalEliteCount"/> is 100
+    /// (<c>database.archive_size</c>, line 322); <see cref="HistorySize"/> is 1000
+    /// (<c>database.population_size</c>, line 321); artifacts are enabled
+    /// (<c>evaluator.enable_artifacts</c>, line 398); <see cref="MaxDegreeOfParallelism"/> is 1
+    /// (<c>evaluator.parallel_evaluations</c>, line 389) and <see cref="ProposalBatchSize"/> is 1 so each candidate
+    /// is committed before the next parent is drawn, which is how upstream's controller refills work
+    /// (process_parallel.py:588-602); <see cref="InspirationCount"/> is 5 with three top and two diverse picks
+    /// (<c>prompt.num_top_programs</c> 3 and <c>prompt.num_diverse_programs</c> 2, lines 268-269); and
+    /// <see cref="SelectionPolicy"/> is <see cref="EvolutionSelectionPolicyKind.Ratio"/> with the 0.2 / 0.7 / 0.1
+    /// mixture of <c>database.exploration_ratio</c>, <c>exploitation_ratio</c> and <c>elite_selection_ratio</c>
+    /// (lines 326-328). <see cref="EvolutionEarlyStoppingOptions.MinimumImprovement"/> already defaults to the
+    /// upstream <c>convergence_threshold</c> of 0.001 (line 442), and early stopping stays off because upstream's
+    /// <c>early_stopping_patience</c> defaults to <c>None</c> (line 441).
+    /// </para>
+    /// <para>
+    /// Three upstream defaults have no faithful counterpart here and are therefore left alone.
+    /// <c>evaluator.cascade_evaluation</c> is <c>true</c> upstream, but <see cref="Cascade"/> stays disabled because
+    /// enabling it requires a task that implements <c>ICascadeEvolutionTask&lt;TGenome&gt;</c> and the engine
+    /// rejects the combination when it is constructed; switch it on yourself once your task has stages.
+    /// <c>database.migration_rate</c> is a fraction of a population, which the whole-elite count
+    /// <see cref="MigrantsPerIsland"/> cannot express, so that keeps its own default of 2. And upstream's
+    /// <c>max_iterations</c> counts iterations rather than evaluator attempts, so a run that retries heavily
+    /// exhausts <see cref="MaxEvaluationAttempts"/> before upstream would reach its iteration limit.
+    /// </para>
+    /// <para><b>For Beginners:</b> Our defaults are cautious on purpose: a first run should be cheap, single
+    /// threaded, and free of surprises, so features such as islands and retries start switched off. OpenEvolve makes
+    /// the opposite choice and turns most of them on. If you are reproducing an OpenEvolve experiment, or you simply
+    /// want the fuller configuration without looking every number up, start from this factory and then change what
+    /// you need: <c>var options = EvolutionEngineOptions.CreateOpenEvolveDefaults(); options.RunId = "my-run";</c>.
+    /// The returned object is an ordinary options instance, so nothing is locked down.</para>
+    /// </remarks>
+    public static EvolutionEngineOptions CreateOpenEvolveDefaults() => new()
+    {
+        Seed = 42UL,
+        MaxEvaluationAttempts = 10_000,
+        MaxProposals = 10_000,
+        MaxGenerations = 10_000,
+        ProposalBatchSize = 1,
+        MaxDegreeOfParallelism = 1,
+        MaxRetries = 3,
+        RetryOn = EvolutionRetryStatuses.Failed,
+        RetryBaseDelay = TimeSpan.FromSeconds(1),
+        RetryBackoffMultiplier = 1.0,
+        EvaluationTimeout = TimeSpan.FromSeconds(300),
+        CheckpointInterval = 100,
+        IslandCount = 5,
+        MigrationInterval = 50,
+        MigrationTrigger = EvolutionMigrationTrigger.IslandGenerations,
+        GlobalEliteCount = 100,
+        HistorySize = 1_000,
+        InspirationCount = 5,
+        SelectionPolicy = EvolutionSelectionPolicyKind.Ratio,
+        Selection = new EvolutionSelectionOptions
+        {
+            ExplorationRatio = 0.2,
+            ExploitationRatio = 0.7,
+            EliteRatio = 0.1,
+            TopInspirationCount = 3,
+            DiverseInspirationCount = 2
+        },
+        Artifacts = new EvolutionArtifactOptions { Enabled = true }
+    };
 
     internal EvolutionEngineOptions SnapshotAndValidate()
     {
@@ -282,6 +394,8 @@ public sealed class EvolutionEngineOptions
             throw new ArgumentOutOfRangeException(nameof(IslandAssignment));
         if (!Enum.IsDefined(typeof(EvolutionMigrationTrigger), MigrationTrigger))
             throw new ArgumentOutOfRangeException(nameof(MigrationTrigger));
+        if (!Enum.IsDefined(typeof(EvolutionSelectionPolicyKind), SelectionPolicy))
+            throw new ArgumentOutOfRangeException(nameof(SelectionPolicy));
         if (GlobalEliteCount < 0) throw new ArgumentOutOfRangeException(nameof(GlobalEliteCount));
         if (HistorySize < 0) throw new ArgumentOutOfRangeException(nameof(HistorySize));
         if (!IsFinite(NoveltyDistanceThreshold) || NoveltyDistanceThreshold < 0)
@@ -315,6 +429,7 @@ public sealed class EvolutionEngineOptions
             NoveltyDistanceThreshold = NoveltyDistanceThreshold,
             QualityDescriptorName = QualityDescriptorName?.Trim(),
             Selection = selection,
+            SelectionPolicy = SelectionPolicy,
             RunId = RunId.Trim(),
             Seed = Seed,
             OutputDirectory = outputDirectory,

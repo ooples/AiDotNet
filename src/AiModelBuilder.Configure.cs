@@ -1588,6 +1588,19 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             return result;
         }
 
+        // EVOLUTION PATH - a typed-genome run captured by ConfigureEvolution<TGenome>, or a program-evolution run
+        // from ConfigureProgramEvolution. Evolutionary search has no training dataset and produces no fitted model,
+        // so it cannot go through any of the training paths above and must be recognised before the inference-only
+        // branches below, which would otherwise claim a builder that also configured a code model. The result
+        // carries the search on AiModelResult.EvolutionSummary / ProgramEvolution / GetEvolutionRunResult<TGenome>()
+        // and reports IsGenomeOnlyResult, so Predict fails loudly instead of returning something meaningless.
+        // Unlike the supervised AutoML path, which still passes CancellationToken.None to its inner search, this
+        // branch propagates the caller's token all the way into proposal, refinement, and evaluation.
+        if (_evolutionRunner is not null || _programEvolutionOptions is not null)
+        {
+            return await BuildEvolutionInternalAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         // PROGRAM SYNTHESIS INFERENCE PATH - allow inference-only builds when a code model is configured.
         // This supports code-task workflows that do not require a training dataset, while keeping other
         // training paths explicit via ConfigureDataLoader/ConfigureReinforcementLearning/ConfigureMetaLearning.
@@ -1615,6 +1628,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             "- ConfigureReinforcementLearning() for RL training\n" +
             "- ConfigureDataLoader() for supervised learning (row-scalar OR image-space)\n" +
             "- ConfigureMetaLearning() for meta-learning\n" +
+            "- ConfigureProgramEvolution() to evolve source code, with ConfigureChatClient() for the model that\n" +
+            "  proposes edits (test cases or an evaluator script on the options say how a candidate is scored)\n" +
+            "- ConfigureEvolution<TGenome>(task, variation, ...) to evolve a candidate type of your own\n" +
             "For supervised learning, configure a data loader via ConfigureDataLoader() and then call BuildAsync().");
     }
 

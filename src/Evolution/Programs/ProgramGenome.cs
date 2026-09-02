@@ -7,19 +7,23 @@ namespace AiDotNet.Evolution.Programs;
 /// <remarks>
 /// <para>
 /// The genome carries the exact <see cref="Source"/> text the run will hand to an execution engine plus the
-/// <see cref="Language"/> that decides comment markers, fence labels, and file extensions. <see cref="Id"/> is the
-/// lowercase hexadecimal SHA-256 of <see cref="NormalizedSource"/>, and normalization strips a byte-order mark,
-/// rewrites CRLF and CR terminators as line feeds, trims trailing white space from every line, and drops trailing
-/// blank lines. Two proposals that differ only in those incidental ways therefore share one identity, which is
-/// exactly what <c>IEvolutionTask&lt;TGenome&gt;.CanonicalizeAsync</c> needs so the engine can deduplicate them and
-/// reuse a cached evaluation instead of paying to run the same program twice.
+/// <see cref="Language"/> that decides comment markers, fence labels, and file extensions. <see cref="Id"/> is a
+/// lowercase hexadecimal SHA-256 over <see cref="NormalizedSource"/> and <see cref="Language"/>, and normalization
+/// strips a byte-order mark, rewrites CRLF and CR terminators as line feeds, trims trailing white space from every
+/// line, and drops trailing blank lines. Two proposals that differ only in those incidental ways therefore share one
+/// identity, which is exactly what <c>IEvolutionTask&lt;TGenome&gt;.CanonicalizeAsync</c> needs so the engine can
+/// deduplicate them and reuse a cached evaluation instead of paying to run the same program twice.
 /// </para>
 /// <para>
 /// Construction validates that the source is non-empty after normalization and no longer than
 /// <see cref="MaxSourceLength"/> characters, so an unbounded model response cannot become an unbounded genome.
-/// Equality is by value over <see cref="NormalizedSource"/>, <see cref="Language"/>, and <see cref="Description"/>;
-/// <see cref="Id"/> deliberately covers the normalized source alone, so a task that also wants the language or the
-/// description in its canonical identity should combine them explicitly.
+/// Identity and value equality cover exactly the same fields: <see cref="NormalizedSource"/> and
+/// <see cref="Language"/>. Language belongs in both because it selects the interpreter, so byte-identical text in
+/// two languages is two candidates that evaluate differently and must never share a cached result.
+/// <see cref="Description"/> belongs in neither: it is the model's note about what a proposal changed, it cannot
+/// alter how the program runs or scores, and putting it in equality while leaving it out of the identity is what
+/// previously let two genomes be unequal yet share an <see cref="Id"/>. A run that genuinely wants a
+/// description-carrying identity should fold it in at the task's canonicalization step instead.
 /// </para>
 /// <para><b>For Beginners:</b> This class is one candidate program in an evolutionary search: the code itself, the
 /// language it is written in, and an optional note about what changed. The important part is <see cref="Id"/>, a
@@ -70,8 +74,8 @@ public sealed class ProgramGenome : IEquatable<ProgramGenome>
         NormalizedSource = normalized;
         Language = language;
         Description = description;
-        Id = EvolutionHash.Compute(normalized);
-        _hashCode = ComputeHashCode(normalized, language, description);
+        Id = ComputeIdCore(normalized, language);
+        _hashCode = ComputeHashCode(normalized, language);
     }
 
     /// <summary>Gets the source text exactly as supplied, including its original line endings.</summary>
@@ -86,7 +90,12 @@ public sealed class ProgramGenome : IEquatable<ProgramGenome>
     /// <summary>Gets the optional bounded description of this candidate, or <c>null</c> when none was supplied.</summary>
     public string? Description { get; }
 
-    /// <summary>Gets the lowercase hexadecimal SHA-256 of <see cref="NormalizedSource"/>.</summary>
+    /// <summary>Gets the lowercase hexadecimal SHA-256 over <see cref="NormalizedSource"/> and <see cref="Language"/>.</summary>
+    /// <remarks>
+    /// Two genomes share this value exactly when <see cref="Equals(ProgramGenome)"/> reports them equal, so the
+    /// engine's duplicate set and evaluation cache can key on it safely. <see cref="Description"/> is excluded, so a
+    /// description-only edit is the same candidate and is not evaluated twice.
+    /// </remarks>
     public string Id { get; }
 
     /// <summary>Gets the number of lines in <see cref="NormalizedSource"/>.</summary>
@@ -124,9 +133,18 @@ public sealed class ProgramGenome : IEquatable<ProgramGenome>
 
     /// <summary>Computes the identity a genome built from <paramref name="source"/> would have.</summary>
     /// <param name="source">The text to fingerprint.</param>
-    /// <returns>The lowercase hexadecimal SHA-256 of the normalized text.</returns>
+    /// <param name="language">
+    /// The language the genome would carry; the default matches a genome constructed without one.
+    /// </param>
+    /// <returns>The lowercase hexadecimal SHA-256 over the normalized text and the language.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> is <c>null</c>.</exception>
-    public static string ComputeId(string source) => EvolutionHash.Compute(ProgramText.Normalize(source));
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="language"/> is not a defined value.</exception>
+    public static string ComputeId(string source, ProgramLanguage language = ProgramLanguage.Generic)
+    {
+        Guard.NotNull(source);
+        if (!Enum.IsDefined(typeof(ProgramLanguage), language)) throw new ArgumentOutOfRangeException(nameof(language));
+        return ComputeIdCore(ProgramText.Normalize(source), language);
+    }
 
     /// <inheritdoc/>
     public bool Equals(ProgramGenome? other)
@@ -134,8 +152,7 @@ public sealed class ProgramGenome : IEquatable<ProgramGenome>
         if (other is null) return false;
         if (ReferenceEquals(this, other)) return true;
         return string.Equals(NormalizedSource, other.NormalizedSource, StringComparison.Ordinal)
-            && Language == other.Language
-            && string.Equals(Description, other.Description, StringComparison.Ordinal);
+            && Language == other.Language;
     }
 
     /// <inheritdoc/>
@@ -163,14 +180,16 @@ public sealed class ProgramGenome : IEquatable<ProgramGenome>
     /// <returns><c>true</c> when the genomes are not value equal.</returns>
     public static bool operator !=(ProgramGenome? left, ProgramGenome? right) => !(left == right);
 
-    private static int ComputeHashCode(string normalizedSource, ProgramLanguage language, string? description)
+    private static string ComputeIdCore(string normalizedSource, ProgramLanguage language) =>
+        EvolutionHash.Combine(new[] { "program-genome-v1", language.ToString(), normalizedSource });
+
+    private static int ComputeHashCode(string normalizedSource, ProgramLanguage language)
     {
         unchecked
         {
             int hash = 17;
             hash = (hash * 31) + StringComparer.Ordinal.GetHashCode(normalizedSource);
             hash = (hash * 31) + (int)language;
-            hash = (hash * 31) + (description is null ? 0 : StringComparer.Ordinal.GetHashCode(description));
             return hash;
         }
     }

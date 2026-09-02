@@ -145,6 +145,26 @@ public sealed class ProgramDescriptorTests
     }
 
     [Fact]
+    public void DescriptorSetVersionHashTracksADescriptorsOwnConfiguration()
+    {
+        string first = new ProgramDescriptorSet(new ProgramDiversityDescriptor(new[] { "print(1)" })).VersionHash;
+        string same = new ProgramDescriptorSet(new ProgramDiversityDescriptor(new[] { "print(1)   \r\n" })).VersionHash;
+        string swapped = new ProgramDescriptorSet(new ProgramDiversityDescriptor(new[] { "print(2)" })).VersionHash;
+        string enlarged = new ProgramDescriptorSet(
+            new ProgramDiversityDescriptor(new[] { "print(1)", "print(2)" })).VersionHash;
+        string emptyReferences = new ProgramDescriptorSet(
+            new ProgramDiversityDescriptor(Array.Empty<string>())).VersionHash;
+
+        Assert.Equal(first, same);
+        Assert.NotEqual(first, swapped);
+        Assert.NotEqual(first, enlarged);
+        Assert.NotEqual(first, emptyReferences);
+        Assert.NotEqual(
+            new ProgramDiversityDescriptor(new[] { "print(1)" }).VersionHash,
+            new ProgramDiversityDescriptor(new[] { "print(1)" }, "other").VersionHash);
+    }
+
+    [Fact]
     public void EmptySetComputesNothing()
     {
         ProgramDescriptorSet set = ProgramDescriptorSet.Empty();

@@ -97,7 +97,11 @@ public sealed partial class EvolutionEngine<TGenome>
     /// <param name="variation">Task-specific variation.</param>
     /// <param name="archiveFactory">Creates a distinct empty archive for each island index.</param>
     /// <param name="options">Run options, defensively copied during construction.</param>
-    /// <param name="selection">Optional parent/inspiration policy.</param>
+    /// <param name="selection">
+    /// Optional parent/inspiration policy. When <see langword="null"/> the engine builds the policy named by
+    /// <c>EvolutionEngineOptions.SelectionPolicy</c>, which defaults to uniform selection; a policy supplied here
+    /// always wins over that option.
+    /// </param>
     /// <param name="refiner">Optional immutable inner optimizer.</param>
     /// <param name="migration">Optional island migration policy.</param>
     /// <param name="observer">Optional structured observer.</param>
@@ -136,7 +140,7 @@ public sealed partial class EvolutionEngine<TGenome>
         _options = options.SnapshotAndValidate();
         _task = task;
         _variation = variation;
-        _selection = selection ?? new UniformEvolutionSelectionPolicy<TGenome>();
+        _selection = selection ?? CreateSelectionPolicy(_options);
         _refiner = refiner;
         _migration = migration ?? new RingMigrationPolicy<TGenome>();
         _observer = observer;
@@ -171,7 +175,8 @@ public sealed partial class EvolutionEngine<TGenome>
         ValidateCompatibleArchives(_islands);
         if (_options.Cascade.Enabled) _options.Cascade.ValidateAgainstStages(_cascadeStageCount, _islands[0].Direction);
         _islandGenerations = new long[_islands.Length];
-        _globalElites = new EvolutionGlobalEliteIndex<TGenome>(_options.GlobalEliteCount, _islands[0].Direction);
+        _globalElites = new EvolutionGlobalEliteIndex<TGenome>(
+            EffectiveGlobalEliteCount(_options, selection is null), _islands[0].Direction);
         _histories = new EvolutionIslandHistory<TGenome>[_islands.Length];
         for (int i = 0; i < _histories.Length; i++)
             _histories[i] = new EvolutionIslandHistory<TGenome>(_options.HistorySize, _islands[0].Direction);
@@ -454,6 +459,35 @@ public sealed partial class EvolutionEngine<TGenome>
     {
         while (_failures.Count >= _options.MaxRetainedFailures) _failures.Dequeue();
         _failures.Enqueue(diagnostic);
+    }
+
+    /// <summary>Builds the selection policy named by the options; used only when the caller supplied none.</summary>
+    /// <remarks>
+    /// The constructed policy's identifier and version hash go into the compatibility hash, and a ratio policy's
+    /// version hash covers every value of <c>EvolutionEngineOptions.Selection</c>, so the choice made here is fully
+    /// visible to checkpoint compatibility without the enumeration entering the configuration hash itself.
+    /// </remarks>
+    private static ISelectionPolicy<TGenome> CreateSelectionPolicy(EvolutionEngineOptions options) =>
+        options.SelectionPolicy switch
+        {
+            EvolutionSelectionPolicyKind.Ratio => new RatioEvolutionSelectionPolicy<TGenome>(options.Selection),
+            EvolutionSelectionPolicyKind.Curiosity => new CuriosityEvolutionSelectionPolicy<TGenome>(),
+            EvolutionSelectionPolicyKind.Double => new DoubleEvolutionSelectionPolicy<TGenome>(),
+            _ => new UniformEvolutionSelectionPolicy<TGenome>()
+        };
+
+    /// <summary>Resolves the global elite index capacity, covering an engine-built policy that needs the index.</summary>
+    /// <param name="options">The validated run options.</param>
+    /// <param name="policyCameFromOptions">Whether the engine built the selection policy rather than the caller.</param>
+    /// <returns>
+    /// <c>GlobalEliteCount</c>, raised to the exploitation pool size when the engine itself built a ratio policy that
+    /// draws that pool from the cross-island index, so the branch is not silently dead at the default count of zero.
+    /// </returns>
+    private static int EffectiveGlobalEliteCount(EvolutionEngineOptions options, bool policyCameFromOptions)
+    {
+        if (!policyCameFromOptions || options.SelectionPolicy != EvolutionSelectionPolicyKind.Ratio) return options.GlobalEliteCount;
+        if (options.Selection.ExploitationSource != EvolutionExploitationSource.GlobalTopK) return options.GlobalEliteCount;
+        return Math.Max(options.GlobalEliteCount, options.Selection.ExploitationEliteCount);
     }
 
     private static void ValidateComponent(string id, string versionHash, string parameterName)
