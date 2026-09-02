@@ -27,6 +27,9 @@ public sealed class EvolutionVariationContext<TGenome>
     /// <param name="random">The proposal-local deterministic random stream.</param>
     /// <param name="generation">The non-negative logical generation of the proposal.</param>
     /// <param name="island">The non-negative zero-based target island index.</param>
+    /// <param name="parentArtifacts">
+    /// Optional untrusted text artifacts the parent's evaluation left behind, delivered exactly once.
+    /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="parent"/>, <paramref name="inspirations"/>, or <paramref name="random"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="generation"/> or <paramref name="island"/> is negative.</exception>
     public EvolutionVariationContext(
@@ -34,7 +37,8 @@ public sealed class EvolutionVariationContext<TGenome>
         IReadOnlyList<EvolutionArchiveEntry<TGenome>> inspirations,
         StableRandom random,
         long generation,
-        int island)
+        int island,
+        IReadOnlyList<EvolutionArtifact>? parentArtifacts = null)
     {
         Parent = parent ?? throw new ArgumentNullException(nameof(parent));
         Inspirations = inspirations ?? throw new ArgumentNullException(nameof(inspirations));
@@ -43,6 +47,7 @@ public sealed class EvolutionVariationContext<TGenome>
         if (island < 0) throw new ArgumentOutOfRangeException(nameof(island));
         Generation = generation;
         Island = island;
+        ParentArtifacts = parentArtifacts ?? Array.Empty<EvolutionArtifact>();
     }
 
     /// <summary>Gets the selected parent.</summary>
@@ -55,4 +60,13 @@ public sealed class EvolutionVariationContext<TGenome>
     public long Generation { get; }
     /// <summary>Gets the target island.</summary>
     public int Island { get; }
+
+    /// <summary>Gets the parent's leftover evaluator artifacts, delivered exactly once; empty when there are none.</summary>
+    /// <remarks>
+    /// Populated only when <c>EvolutionEngineOptions.Artifacts.Enabled</c> and
+    /// <c>EvolutionEngineOptions.Artifacts.DeliverToNextProposal</c> are both set. The engine removes the queued entry
+    /// as it hands it over, so the same failure note informs exactly one follow-up proposal rather than every future
+    /// one. The text is untrusted evaluator output: treat it as data, never as instructions or executable code.
+    /// </remarks>
+    public IReadOnlyList<EvolutionArtifact> ParentArtifacts { get; }
 }

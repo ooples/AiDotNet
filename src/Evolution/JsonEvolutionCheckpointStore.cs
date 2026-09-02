@@ -52,6 +52,22 @@ public sealed class JsonEvolutionCheckpointStore : IEvolutionCheckpointStore
         if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
     }
 
+    /// <summary>Creates a store at the deterministic checkpoint path an output directory implies for one run.</summary>
+    /// <param name="outputDirectory">The non-blank output directory, matching <c>EvolutionEngineOptions.OutputDirectory</c>.</param>
+    /// <param name="runId">The non-blank run identifier, matching <c>EvolutionEngineOptions.RunId</c>.</param>
+    /// <param name="maxCheckpointBytes">Maximum encoded JSON size accepted for one checkpoint.</param>
+    /// <returns>A store writing to <see cref="EvolutionOutputLayout.CheckpointPath"/> with the same atomic pattern.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">An argument is empty or white space, or the directory is not a valid path.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxCheckpointBytes"/> is not positive.</exception>
+    /// <remarks>
+    /// Two runs under one output directory get separate checkpoint files because the file name is derived from the
+    /// run identifier, and the same run resumed later finds its own file without being told the path.
+    /// </remarks>
+    public static JsonEvolutionCheckpointStore ForOutputDirectory(string outputDirectory, string runId,
+        long maxCheckpointBytes = 64L * 1024L * 1024L) =>
+        new(new EvolutionOutputLayout(outputDirectory, runId).CheckpointPath, maxCheckpointBytes);
+
     /// <inheritdoc/>
     public Task SaveAsync(EvolutionCheckpoint checkpoint, CancellationToken cancellationToken = default)
     {

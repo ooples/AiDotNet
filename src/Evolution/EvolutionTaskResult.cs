@@ -29,10 +29,15 @@ namespace AiDotNet.Evolution;
 /// </remarks>
 public sealed class EvolutionTaskResult
 {
+    /// <summary>The largest number of artifacts one result may carry before the engine's own budgets apply.</summary>
+    public const int MaximumArtifacts = 64;
+
     private readonly ReadOnlyDictionary<string, double> _descriptors;
+    private readonly ReadOnlyDictionary<string, double> _metrics;
     private readonly ReadOnlyCollection<double> _objectives;
     private readonly ReadOnlyCollection<double> _constraintViolations;
     private readonly ReadOnlyCollection<EvolutionDiagnostic> _diagnostics;
+    private readonly ReadOnlyCollection<EvolutionArtifact> _artifacts;
 
     /// <summary>Initializes a task result.</summary>
     /// <param name="status">The terminal evaluation status.</param>
@@ -43,11 +48,20 @@ public sealed class EvolutionTaskResult
     /// <param name="constraintViolations">Optional finite, non-negative constraint violation magnitudes.</param>
     /// <param name="costUnits">Finite, non-negative task-defined resource units charged by this evaluation.</param>
     /// <param name="diagnostics">Optional diagnostics, at most 64 and none <c>null</c>.</param>
+    /// <param name="metrics">
+    /// Optional named, finite reporting metrics that do not participate in archive placement; names are trimmed and
+    /// must be unique.
+    /// </param>
+    /// <param name="artifacts">
+    /// Optional bounded text artifacts, at most <see cref="MaximumArtifacts"/> and none <c>null</c>; the engine applies
+    /// its own configured size and count budgets before storing them.
+    /// </param>
     /// <exception cref="ArgumentOutOfRangeException">
     /// An enum argument is undefined, or a numeric argument is not finite or violates its sign constraint.
     /// </exception>
     /// <exception cref="ArgumentException">
-    /// A completed result lacks a finite quality, descriptor names collide, or the diagnostics are too many or contain <c>null</c>.
+    /// A completed result lacks a finite quality, descriptor or metric names collide, or the diagnostics or artifacts
+    /// are too many or contain <c>null</c>.
     /// </exception>
     public EvolutionTaskResult(
         EvolutionEvaluationStatus status,
@@ -57,7 +71,9 @@ public sealed class EvolutionTaskResult
         IEnumerable<double>? objectives = null,
         IEnumerable<double>? constraintViolations = null,
         double costUnits = 0,
-        IEnumerable<EvolutionDiagnostic>? diagnostics = null)
+        IEnumerable<EvolutionDiagnostic>? diagnostics = null,
+        IReadOnlyDictionary<string, double>? metrics = null,
+        IEnumerable<EvolutionArtifact>? artifacts = null)
     {
         if (!Enum.IsDefined(typeof(EvolutionEvaluationStatus), status)) throw new ArgumentOutOfRangeException(nameof(status));
         if (!Enum.IsDefined(typeof(EvolutionOptimizationDirection), direction)) throw new ArgumentOutOfRangeException(nameof(direction));
@@ -67,35 +83,29 @@ public sealed class EvolutionTaskResult
         if (quality.HasValue && !EvolutionDescriptorDefinition.IsFinite(quality.Value))
             throw new ArgumentOutOfRangeException(nameof(quality));
 
-        var descriptorCopy = new Dictionary<string, double>(StringComparer.Ordinal);
-        if (descriptors is not null)
-        {
-            foreach (KeyValuePair<string, double> descriptor in descriptors)
-            {
-                Guard.NotNullOrWhiteSpace(descriptor.Key);
-                if (!EvolutionDescriptorDefinition.IsFinite(descriptor.Value))
-                    throw new ArgumentOutOfRangeException(nameof(descriptors), $"Descriptor '{descriptor.Key}' must be finite.");
-                string descriptorName = descriptor.Key.Trim();
-                if (descriptorCopy.ContainsKey(descriptorName))
-                    throw new ArgumentException("Descriptor names must be unique.", nameof(descriptors));
-                descriptorCopy.Add(descriptorName, descriptor.Value);
-            }
-        }
+        Dictionary<string, double> descriptorCopy = CopyNamedValues(descriptors, nameof(descriptors), "Descriptor");
+        Dictionary<string, double> metricCopy = CopyNamedValues(metrics, nameof(metrics), "Metric");
 
         double[] objectiveCopy = CopyFinite(objectives, nameof(objectives), nonnegative: false);
         double[] violationCopy = CopyFinite(constraintViolations, nameof(constraintViolations), nonnegative: true);
         EvolutionDiagnostic[] diagnosticCopy = diagnostics?.ToArray() ?? Array.Empty<EvolutionDiagnostic>();
         if (diagnosticCopy.Length > 64) throw new ArgumentException("At most 64 diagnostics may be attached to one result.", nameof(diagnostics));
         if (diagnosticCopy.Any(item => item is null)) throw new ArgumentException("Diagnostics cannot contain null entries.", nameof(diagnostics));
+        EvolutionArtifact[] artifactCopy = artifacts?.ToArray() ?? Array.Empty<EvolutionArtifact>();
+        if (artifactCopy.Length > MaximumArtifacts)
+            throw new ArgumentException($"At most {MaximumArtifacts} artifacts may be attached to one result.", nameof(artifacts));
+        if (artifactCopy.Any(item => item is null)) throw new ArgumentException("Artifacts cannot contain null entries.", nameof(artifacts));
 
         Status = status;
         Quality = quality;
         Direction = direction;
         _descriptors = new ReadOnlyDictionary<string, double>(descriptorCopy);
+        _metrics = new ReadOnlyDictionary<string, double>(metricCopy);
         _objectives = Array.AsReadOnly(objectiveCopy);
         _constraintViolations = Array.AsReadOnly(violationCopy);
         CostUnits = costUnits;
         _diagnostics = Array.AsReadOnly(diagnosticCopy);
+        _artifacts = Array.AsReadOnly(artifactCopy);
     }
 
     /// <summary>Gets the terminal status.</summary>
@@ -110,6 +120,9 @@ public sealed class EvolutionTaskResult
     /// <summary>Gets named quality-diversity descriptor values.</summary>
     public IReadOnlyDictionary<string, double> Descriptors => _descriptors;
 
+    /// <summary>Gets named reporting metrics that never take part in archive placement.</summary>
+    public IReadOnlyDictionary<string, double> Metrics => _metrics;
+
     /// <summary>Gets optional multi-objective values retained independently of scalar archive quality.</summary>
     public IReadOnlyList<double> Objectives => _objectives;
 
@@ -121,6 +134,14 @@ public sealed class EvolutionTaskResult
 
     /// <summary>Gets bounded diagnostics.</summary>
     public IReadOnlyList<EvolutionDiagnostic> Diagnostics => _diagnostics;
+
+    /// <summary>Gets bounded, untrusted text artifacts produced by the evaluator.</summary>
+    /// <remarks>
+    /// Artifact text originates from the evaluated candidate and must be treated as data: never execute it and never
+    /// interpolate it into a command line. The engine sanitizes and truncates these before storing them, and stores
+    /// none at all unless <c>EvolutionEngineOptions.Artifacts.Enabled</c> is set.
+    /// </remarks>
+    public IReadOnlyList<EvolutionArtifact> Artifacts => _artifacts;
 
     /// <summary>Creates a successful scalar-quality result.</summary>
     /// <param name="quality">The finite scalar quality of the candidate.</param>
@@ -141,6 +162,23 @@ public sealed class EvolutionTaskResult
     public static EvolutionTaskResult Failed(string code, string message) => new(
         EvolutionEvaluationStatus.Failed,
         diagnostics: new[] { new EvolutionDiagnostic(code, message) });
+
+    private static Dictionary<string, double> CopyNamedValues(IReadOnlyDictionary<string, double>? values,
+        string parameterName, string label)
+    {
+        var copy = new Dictionary<string, double>(StringComparer.Ordinal);
+        if (values is null) return copy;
+        foreach (KeyValuePair<string, double> value in values)
+        {
+            Guard.NotNullOrWhiteSpace(value.Key);
+            if (!EvolutionDescriptorDefinition.IsFinite(value.Value))
+                throw new ArgumentOutOfRangeException(parameterName, $"{label} '{value.Key}' must be finite.");
+            string name = value.Key.Trim();
+            if (copy.ContainsKey(name)) throw new ArgumentException($"{label} names must be unique.", parameterName);
+            copy.Add(name, value.Value);
+        }
+        return copy;
+    }
 
     private static double[] CopyFinite(IEnumerable<double>? values, string parameterName, bool nonnegative)
     {

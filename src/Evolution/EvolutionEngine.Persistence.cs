@@ -8,7 +8,7 @@ namespace AiDotNet.Evolution;
 
 public sealed partial class EvolutionEngine<TGenome>
 {
-    private const int EngineStateSchemaVersion = 1;
+    private const int EngineStateSchemaVersion = 3;
     private string? _safePayload;
     private long _safeSequence;
 
@@ -29,6 +29,15 @@ public sealed partial class EvolutionEngine<TGenome>
             EventSequence = _eventSequence,
             CompletionSequence = _completionSequence,
             BatchesSinceMigration = _batchesSinceMigration,
+            LastMigrationGeneration = _lastMigrationGeneration,
+            IslandGenerations = _islandGenerations.ToList(),
+            GlobalElites = _globalElites.Entries.Select(record => new EliteRecordDocument
+            {
+                Island = record.Island,
+                Entry = ArchiveEntryDocument.From(record.Entry, SerializeGenome)
+            }).ToList(),
+            IslandHistories = _histories.Select(history => history.Entries
+                .Select(entry => ArchiveEntryDocument.From(entry, SerializeGenome)).ToList()).ToList(),
             SelectionState = (_selection as IOutcomeAwareEvolutionSelectionPolicy<TGenome>)?.CaptureState(),
             StatusCounts = _statusCounts.OrderBy(pair => pair.Key).Select(pair => new StatusCountDocument
             {
@@ -42,6 +51,16 @@ public sealed partial class EvolutionEngine<TGenome>
                 Result = TaskResultDocument.From(pair.Value)
             }).ToList(),
             Failures = _failures.Select(DiagnosticDocument.From).ToList(),
+            EarlyStoppingBest = _earlyStoppingBest,
+            EvaluationsSinceImprovement = _evaluationsSinceImprovement,
+            AbandonedEvaluations = Interlocked.Read(ref _abandonedEvaluations),
+            PendingArtifacts = _pendingArtifactOrder
+                .Where(genomeId => _pendingArtifacts.ContainsKey(genomeId))
+                .Select(genomeId => new PendingArtifactDocument
+                {
+                    GenomeId = genomeId,
+                    Artifacts = _pendingArtifacts[genomeId].Select(ArtifactDocument.From).ToList()
+                }).ToList(),
             Islands = _islands.Select(archive => ArchiveDocument.From(archive, SerializeGenome)).ToList()
         };
         _safePayload = JsonConvert.SerializeObject(document, Formatting.None);
@@ -124,6 +143,7 @@ public sealed partial class EvolutionEngine<TGenome>
         _eventSequence = state.EventSequence;
         _completionSequence = state.CompletionSequence;
         _batchesSinceMigration = state.BatchesSinceMigration;
+        RestoreIslandGenerations(state);
         if (_selection is IOutcomeAwareEvolutionSelectionPolicy<TGenome> adaptiveSelection)
         {
             if (state.SelectionState is null) throw new InvalidDataException("The checkpoint adaptive-selection state is missing.");
@@ -168,6 +188,8 @@ public sealed partial class EvolutionEngine<TGenome>
         _failures.Clear();
         foreach (DiagnosticDocument diagnostic in state.Failures ?? new List<DiagnosticDocument>())
             RetainFailure(diagnostic.ToDiagnostic());
+        RestoreTerminationState(state);
+        RestorePendingArtifacts(state);
 
         List<ArchiveDocument> archiveDocuments = state.Islands ?? throw new InvalidDataException("Checkpoint islands are missing.");
         if (archiveDocuments.Count != _islands.Length) throw new InvalidDataException("Checkpoint island count is incompatible.");
@@ -190,9 +212,101 @@ public sealed partial class EvolutionEngine<TGenome>
             restorable.Restore(entries, archiveDocument.Version);
         }
 
+        RestoreGlobalElites(state);
+        RestoreIslandHistories(state);
         _safeSequence = checkpoint.Sequence;
         _safePayload = checkpoint.Payload;
         return new RestoredSeeds(seeds, state.SeedIndex);
+    }
+
+    private void RestoreIslandGenerations(EngineStateDocument state)
+    {
+        List<long> generations = state.IslandGenerations ?? throw new InvalidDataException("Checkpoint island generations are missing.");
+        if (generations.Count != _islandGenerations.Length)
+            throw new InvalidDataException("Checkpoint island generation count is incompatible.");
+        long total = 0;
+        for (int island = 0; island < generations.Count; island++)
+        {
+            if (generations[island] < 0) throw new InvalidDataException("A checkpoint island generation counter is invalid.");
+            total = checked(total + generations[island]);
+            _islandGenerations[island] = generations[island];
+        }
+        if (total != state.Generation)
+            throw new InvalidDataException("Checkpoint island generation counters do not sum to the run generation.");
+        if (state.LastMigrationGeneration < 0 || state.LastMigrationGeneration > state.Generation)
+            throw new InvalidDataException("The checkpoint migration generation marker is invalid.");
+        _lastMigrationGeneration = state.LastMigrationGeneration;
+    }
+
+    private void RestoreTerminationState(EngineStateDocument state)
+    {
+        if (state.EvaluationsSinceImprovement < 0 || state.AbandonedEvaluations < 0)
+            throw new InvalidDataException("The checkpoint termination counters are invalid.");
+        if (state.EarlyStoppingBest.HasValue && !EvolutionDescriptorDefinition.IsFinite(state.EarlyStoppingBest.Value))
+            throw new InvalidDataException("The checkpoint early-stopping metric is not finite.");
+        _earlyStoppingBest = state.EarlyStoppingBest;
+        _evaluationsSinceImprovement = state.EvaluationsSinceImprovement;
+        Interlocked.Exchange(ref _abandonedEvaluations, state.AbandonedEvaluations);
+    }
+
+    private void RestorePendingArtifacts(EngineStateDocument state)
+    {
+        _pendingArtifacts.Clear();
+        _pendingArtifactOrder.Clear();
+        List<PendingArtifactDocument> pending = state.PendingArtifacts ?? new List<PendingArtifactDocument>();
+        if (pending.Count > _options.Artifacts.MaxPendingCandidates)
+            throw new InvalidDataException("The checkpoint pending-artifact queue exceeds its configured capacity.");
+        foreach (PendingArtifactDocument document in pending)
+        {
+            if (string.IsNullOrWhiteSpace(document.GenomeId) || _pendingArtifacts.ContainsKey(document.GenomeId))
+                throw new InvalidDataException("A checkpoint pending-artifact entry is invalid.");
+            if (!_seen.Contains(document.GenomeId))
+                throw new InvalidDataException("A checkpoint pending-artifact key is missing from the deduplication set.");
+            EvolutionArtifact[] artifacts = (document.Artifacts ?? new List<ArtifactDocument>())
+                .Select(item => item.ToArtifact()).ToArray();
+            if (artifacts.Length > _options.Artifacts.MaxArtifactsPerEvaluation)
+                throw new InvalidDataException("A checkpoint pending-artifact entry exceeds its configured artifact bound.");
+            _pendingArtifacts[document.GenomeId] = artifacts;
+            _pendingArtifactOrder.Add(document.GenomeId);
+        }
+    }
+
+    private void RestoreGlobalElites(EngineStateDocument state)
+    {
+        List<EliteRecordDocument> records = state.GlobalElites ?? new List<EliteRecordDocument>();
+        if (records.Count > _options.GlobalEliteCount)
+            throw new InvalidDataException("The checkpoint global elite index exceeds the configured capacity.");
+        var restored = new List<EvolutionEliteRecord<TGenome>>(records.Count);
+        foreach (EliteRecordDocument record in records)
+        {
+            if (record.Entry is null || record.Island < 0 || record.Island >= _islands.Length)
+                throw new InvalidDataException("A checkpoint global elite record is invalid.");
+            EvolutionArchiveEntry<TGenome> entry = RestoreArchiveEntry(record.Entry);
+            if (entry.Evaluation.EvaluationId >= state.NextEvaluationId || !_seen.Contains(entry.Evaluation.GenomeId))
+                throw new InvalidDataException("A checkpoint global elite record violates engine identity invariants.");
+            restored.Add(new EvolutionEliteRecord<TGenome>(record.Island, entry));
+        }
+        _globalElites.Restore(restored);
+    }
+
+    private void RestoreIslandHistories(EngineStateDocument state)
+    {
+        List<List<ArchiveEntryDocument>> histories = state.IslandHistories ?? new List<List<ArchiveEntryDocument>>();
+        if (histories.Count == 0 && _options.HistorySize == 0) return;
+        if (histories.Count != _histories.Length)
+            throw new InvalidDataException("Checkpoint island history count is incompatible.");
+        for (int island = 0; island < histories.Count; island++)
+        {
+            var entries = new List<EvolutionArchiveEntry<TGenome>>();
+            foreach (ArchiveEntryDocument document in histories[island] ?? new List<ArchiveEntryDocument>())
+            {
+                EvolutionArchiveEntry<TGenome> entry = RestoreArchiveEntry(document);
+                if (entry.Evaluation.EvaluationId >= state.NextEvaluationId || !_seen.Contains(entry.Evaluation.GenomeId))
+                    throw new InvalidDataException("A checkpoint island history entry violates engine identity invariants.");
+                entries.Add(entry);
+            }
+            _histories[island].Restore(entries);
+        }
     }
 
     private EvolutionArchiveEntry<TGenome> RestoreArchiveEntry(ArchiveEntryDocument document)
@@ -255,24 +369,57 @@ public sealed partial class EvolutionEngine<TGenome>
             : "stateless");
         Append(builder, "failures");
         Append(builder, _failures.Count);
-        foreach (EvolutionDiagnostic failure in _failures)
-        {
-            Append(builder, failure.Code);
-            Append(builder, failure.Message);
-            Append(builder, failure.IsRedacted ? 1 : 0);
-        }
+        foreach (EvolutionDiagnostic failure in _failures) AppendDiagnostic(builder, failure);
         Append(builder, "islands");
         Append(builder, _islands.Length);
         for (int island = 0; island < _islands.Length; island++)
         {
             Append(builder, island);
             Append(builder, _islands[island].Version);
+            Append(builder, _islandGenerations[island]);
             Append(builder, _islands[island].Entries.Count);
             foreach (EvolutionArchiveEntry<TGenome> entry in _islands[island].Entries.OrderBy(item => item.Cell.StableKey, StringComparer.Ordinal))
             {
                 Append(builder, entry.Cell.StableKey);
                 AppendEvaluation(builder, entry.Evaluation);
             }
+        }
+        Append(builder, "last-migration-generation");
+        Append(builder, _lastMigrationGeneration);
+        Append(builder, "global-elites");
+        Append(builder, _globalElites.Capacity);
+        IReadOnlyList<EvolutionEliteRecord<TGenome>> elites = _globalElites.Entries;
+        Append(builder, elites.Count);
+        foreach (EvolutionEliteRecord<TGenome> record in elites)
+        {
+            Append(builder, record.Island);
+            Append(builder, record.Entry.Cell.StableKey);
+            AppendEvaluation(builder, record.Entry.Evaluation);
+        }
+        Append(builder, "island-histories");
+        for (int island = 0; island < _histories.Length; island++)
+        {
+            Append(builder, island);
+            Append(builder, _histories[island].Capacity);
+            IReadOnlyList<EvolutionArchiveEntry<TGenome>> history = _histories[island].Entries;
+            Append(builder, history.Count);
+            foreach (EvolutionArchiveEntry<TGenome> entry in history)
+            {
+                Append(builder, entry.Cell.StableKey);
+                AppendEvaluation(builder, entry.Evaluation);
+            }
+        }
+        // Abandonment depends on wall-clock timing, so its counter is reported but deliberately never hashed.
+        Append(builder, "early-stopping");
+        Append(builder, _earlyStoppingBest?.ToString("R", CultureInfo.InvariantCulture) ?? "none");
+        Append(builder, _evaluationsSinceImprovement);
+        Append(builder, "pending-artifacts");
+        Append(builder, _pendingArtifactOrder.Count);
+        foreach (string genomeId in _pendingArtifactOrder)
+        {
+            Append(builder, genomeId);
+            if (!_pendingArtifacts.TryGetValue(genomeId, out EvolutionArtifact[]? artifacts)) continue;
+            AppendArtifacts(builder, artifacts);
         }
         return EvolutionHash.Compute(builder.ToString());
     }
@@ -291,6 +438,9 @@ public sealed partial class EvolutionEngine<TGenome>
         foreach (double violation in result.ConstraintViolations) Append(builder, violation.ToString("R", CultureInfo.InvariantCulture));
         Append(builder, result.CostUnits.ToString("R", CultureInfo.InvariantCulture));
         AppendDiagnostics(builder, result.Diagnostics);
+        Append(builder, "metrics");
+        AppendNamedValues(builder, result.Metrics);
+        AppendArtifacts(builder, result.Artifacts);
     }
 
     private static void AppendEvaluation(StringBuilder builder, EvolutionEvaluation evaluation)
@@ -309,8 +459,16 @@ public sealed partial class EvolutionEngine<TGenome>
         foreach (double violation in evaluation.ConstraintViolations) Append(builder, violation.ToString("R", CultureInfo.InvariantCulture));
         Append(builder, evaluation.Cost.AttemptCount);
         Append(builder, evaluation.Cost.CostUnits.ToString("R", CultureInfo.InvariantCulture));
+        Append(builder, "stage-costs");
+        Append(builder, evaluation.Cost.StageCostUnits.Count);
+        foreach (double stageCost in evaluation.Cost.StageCostUnits)
+            Append(builder, stageCost.ToString("R", CultureInfo.InvariantCulture));
+        Append(builder, evaluation.Cost.RejectedStage?.ToString(CultureInfo.InvariantCulture) ?? "none");
         Append(builder, (int)evaluation.CacheStatus);
         AppendDiagnostics(builder, evaluation.Diagnostics);
+        Append(builder, "metrics");
+        AppendNamedValues(builder, evaluation.Metrics);
+        AppendArtifacts(builder, evaluation.Artifacts);
         Append(builder, evaluation.Lineage.VariationOperatorId);
         Append(builder, evaluation.Lineage.RefinerId ?? "none");
         Append(builder, evaluation.Lineage.Generation);
@@ -342,11 +500,34 @@ public sealed partial class EvolutionEngine<TGenome>
     {
         Append(builder, "diagnostics");
         Append(builder, diagnostics.Count);
-        foreach (EvolutionDiagnostic diagnostic in diagnostics)
+        foreach (EvolutionDiagnostic diagnostic in diagnostics) AppendDiagnostic(builder, diagnostic);
+    }
+
+    private static void AppendDiagnostic(StringBuilder builder, EvolutionDiagnostic diagnostic)
+    {
+        Append(builder, diagnostic.Code);
+        Append(builder, diagnostic.Message);
+        Append(builder, diagnostic.IsRedacted ? 1 : 0);
+        Append(builder, "data");
+        Append(builder, diagnostic.Data.Count);
+        foreach (KeyValuePair<string, string> entry in diagnostic.Data.OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
-            Append(builder, diagnostic.Code);
-            Append(builder, diagnostic.Message);
-            Append(builder, diagnostic.IsRedacted ? 1 : 0);
+            Append(builder, entry.Key);
+            Append(builder, entry.Value);
+        }
+    }
+
+    private static void AppendArtifacts(StringBuilder builder, IReadOnlyList<EvolutionArtifact> artifacts)
+    {
+        Append(builder, "artifacts");
+        Append(builder, artifacts.Count);
+        foreach (EvolutionArtifact artifact in artifacts)
+        {
+            Append(builder, artifact.Key);
+            Append(builder, artifact.Text);
+            Append(builder, artifact.SizeBytes);
+            Append(builder, artifact.IsTruncated ? 1 : 0);
+            Append(builder, artifact.IsRedacted ? 1 : 0);
         }
     }
 
@@ -374,12 +555,52 @@ public sealed partial class EvolutionEngine<TGenome>
         public long EventSequence { get; set; }
         public long CompletionSequence { get; set; }
         public int BatchesSinceMigration { get; set; }
+        public long LastMigrationGeneration { get; set; }
+        public List<long>? IslandGenerations { get; set; }
+        public List<EliteRecordDocument>? GlobalElites { get; set; }
+        public List<List<ArchiveEntryDocument>>? IslandHistories { get; set; }
         public string? SelectionState { get; set; }
         public List<StatusCountDocument>? StatusCounts { get; set; }
         public List<string>? SeenGenomeIds { get; set; }
         public List<CacheDocument>? Cache { get; set; }
         public List<DiagnosticDocument>? Failures { get; set; }
+        public double? EarlyStoppingBest { get; set; }
+        public long EvaluationsSinceImprovement { get; set; }
+        public long AbandonedEvaluations { get; set; }
+        public List<PendingArtifactDocument>? PendingArtifacts { get; set; }
         public List<ArchiveDocument>? Islands { get; set; }
+    }
+
+    private sealed class PendingArtifactDocument
+    {
+        public string GenomeId { get; set; } = string.Empty;
+        public List<ArtifactDocument>? Artifacts { get; set; }
+    }
+
+    private sealed class ArtifactDocument
+    {
+        public string Key { get; set; } = string.Empty;
+        public string Text { get; set; } = string.Empty;
+        public bool IsTruncated { get; set; }
+        public bool IsRedacted { get; set; }
+
+        public static ArtifactDocument From(EvolutionArtifact artifact) => new()
+        {
+            Key = artifact.Key, Text = artifact.Text,
+            IsTruncated = artifact.IsTruncated, IsRedacted = artifact.IsRedacted
+        };
+
+        public EvolutionArtifact ToArtifact()
+        {
+            try
+            {
+                return new EvolutionArtifact(Key, Text, IsTruncated, IsRedacted);
+            }
+            catch (ArgumentException exception)
+            {
+                throw new InvalidDataException("A checkpoint artifact is invalid.", exception);
+            }
+        }
     }
 
     private sealed class StatusCountDocument
@@ -405,6 +626,12 @@ public sealed partial class EvolutionEngine<TGenome>
             Entries = archive.Entries.OrderBy(item => item.Cell.StableKey, StringComparer.Ordinal)
                 .Select(entry => ArchiveEntryDocument.From(entry, serializeGenome)).ToList()
         };
+    }
+
+    private sealed class EliteRecordDocument
+    {
+        public int Island { get; set; }
+        public ArchiveEntryDocument? Entry { get; set; }
     }
 
     private sealed class ArchiveEntryDocument
@@ -459,8 +686,12 @@ public sealed partial class EvolutionEngine<TGenome>
         public long ElapsedTicks { get; set; }
         public int AttemptCount { get; set; }
         public double CostUnits { get; set; }
+        public List<double>? StageCostUnits { get; set; }
+        public int? RejectedStage { get; set; }
         public EvolutionCacheStatus CacheStatus { get; set; }
         public List<DiagnosticDocument>? Diagnostics { get; set; }
+        public Dictionary<string, double>? Metrics { get; set; }
+        public List<ArtifactDocument>? Artifacts { get; set; }
         public string TaskVersionHash { get; set; } = string.Empty;
         public string EvaluatorVersionHash { get; set; } = string.Empty;
         public string ConfigurationHash { get; set; } = string.Empty;
@@ -471,8 +702,11 @@ public sealed partial class EvolutionEngine<TGenome>
             Descriptors = evaluation.Descriptors.ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal),
             Objectives = evaluation.Objectives.ToList(), ConstraintViolations = evaluation.ConstraintViolations.ToList(),
             ElapsedTicks = evaluation.Cost.Elapsed.Ticks, AttemptCount = evaluation.Cost.AttemptCount,
-            CostUnits = evaluation.Cost.CostUnits, CacheStatus = evaluation.CacheStatus,
+            CostUnits = evaluation.Cost.CostUnits, StageCostUnits = evaluation.Cost.StageCostUnits.ToList(),
+            RejectedStage = evaluation.Cost.RejectedStage, CacheStatus = evaluation.CacheStatus,
             Diagnostics = evaluation.Diagnostics.Select(DiagnosticDocument.From).ToList(),
+            Metrics = evaluation.Metrics.ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal),
+            Artifacts = evaluation.Artifacts.Select(ArtifactDocument.From).ToList(),
             TaskVersionHash = evaluation.TaskVersionHash, EvaluatorVersionHash = evaluation.EvaluatorVersionHash,
             ConfigurationHash = evaluation.ConfigurationHash
         };
@@ -480,9 +714,13 @@ public sealed partial class EvolutionEngine<TGenome>
         public EvolutionEvaluation ToEvaluation(long evaluationId, string genomeId, EvolutionLineage lineage) => new(
             evaluationId, genomeId, Status, Quality, Direction,
             Descriptors ?? new Dictionary<string, double>(), Objectives ?? new List<double>(),
-            ConstraintViolations ?? new List<double>(), new EvolutionEvaluationCost(TimeSpan.FromTicks(ElapsedTicks), AttemptCount, CostUnits),
+            ConstraintViolations ?? new List<double>(),
+            new EvolutionEvaluationCost(TimeSpan.FromTicks(ElapsedTicks), AttemptCount, CostUnits,
+                StageCostUnits ?? new List<double>(), RejectedStage),
             lineage, CacheStatus, (Diagnostics ?? new List<DiagnosticDocument>()).Select(item => item.ToDiagnostic()),
-            TaskVersionHash, EvaluatorVersionHash, ConfigurationHash);
+            TaskVersionHash, EvaluatorVersionHash, ConfigurationHash,
+            Metrics ?? new Dictionary<string, double>(),
+            (Artifacts ?? new List<ArtifactDocument>()).Select(item => item.ToArtifact()));
     }
 
     private sealed class TaskResultDocument
@@ -495,19 +733,22 @@ public sealed partial class EvolutionEngine<TGenome>
         public List<double>? ConstraintViolations { get; set; }
         public double CostUnits { get; set; }
         public List<DiagnosticDocument>? Diagnostics { get; set; }
+        public Dictionary<string, double>? Metrics { get; set; }
 
         public static TaskResultDocument From(EvolutionTaskResult result) => new()
         {
             Status = result.Status, Quality = result.Quality, Direction = result.Direction,
             Descriptors = result.Descriptors.ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal),
             Objectives = result.Objectives.ToList(), ConstraintViolations = result.ConstraintViolations.ToList(),
-            CostUnits = result.CostUnits, Diagnostics = result.Diagnostics.Select(DiagnosticDocument.From).ToList()
+            CostUnits = result.CostUnits, Diagnostics = result.Diagnostics.Select(DiagnosticDocument.From).ToList(),
+            Metrics = result.Metrics.ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal)
         };
 
         public EvolutionTaskResult ToTaskResult() => new(Status, Quality, Direction,
             Descriptors ?? new Dictionary<string, double>(), Objectives ?? new List<double>(),
             ConstraintViolations ?? new List<double>(), CostUnits,
-            (Diagnostics ?? new List<DiagnosticDocument>()).Select(item => item.ToDiagnostic()));
+            (Diagnostics ?? new List<DiagnosticDocument>()).Select(item => item.ToDiagnostic()),
+            Metrics ?? new Dictionary<string, double>());
     }
 
     private sealed class DiagnosticDocument
@@ -515,12 +756,26 @@ public sealed partial class EvolutionEngine<TGenome>
         public string Code { get; set; } = string.Empty;
         public string Message { get; set; } = string.Empty;
         public bool IsRedacted { get; set; }
+        public Dictionary<string, string>? Data { get; set; }
 
         public static DiagnosticDocument From(EvolutionDiagnostic diagnostic) => new()
         {
-            Code = diagnostic.Code, Message = diagnostic.Message, IsRedacted = diagnostic.IsRedacted
+            Code = diagnostic.Code, Message = diagnostic.Message, IsRedacted = diagnostic.IsRedacted,
+            Data = diagnostic.Data.Count == 0
+                ? null
+                : diagnostic.Data.ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal)
         };
 
-        public EvolutionDiagnostic ToDiagnostic() => new(Code, Message, IsRedacted);
+        public EvolutionDiagnostic ToDiagnostic()
+        {
+            try
+            {
+                return new EvolutionDiagnostic(Code, Message, IsRedacted, Data);
+            }
+            catch (ArgumentException exception)
+            {
+                throw new InvalidDataException("A checkpoint diagnostic is invalid.", exception);
+            }
+        }
     }
 }

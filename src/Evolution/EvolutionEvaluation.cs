@@ -26,9 +26,11 @@ namespace AiDotNet.Evolution;
 public sealed class EvolutionEvaluation
 {
     private readonly ReadOnlyDictionary<string, double> _descriptors;
+    private readonly ReadOnlyDictionary<string, double> _metrics;
     private readonly ReadOnlyCollection<double> _objectives;
     private readonly ReadOnlyCollection<double> _constraintViolations;
     private readonly ReadOnlyCollection<EvolutionDiagnostic> _diagnostics;
+    private readonly ReadOnlyCollection<EvolutionArtifact> _artifacts;
 
     /// <summary>Initializes a complete evaluation.</summary>
     /// <param name="evaluationId">The nonnegative stable evaluation identifier.</param>
@@ -46,6 +48,8 @@ public sealed class EvolutionEvaluation
     /// <param name="taskVersionHash">The task version hash in effect for this evaluation.</param>
     /// <param name="evaluatorVersionHash">The evaluator version hash in effect for this evaluation.</param>
     /// <param name="configurationHash">The engine configuration hash in effect for this evaluation.</param>
+    /// <param name="metrics">Optional named, finite reporting metrics that do not take part in archive placement.</param>
+    /// <param name="artifacts">Optional bounded, untrusted text artifacts retained by the engine.</param>
     /// <exception cref="ArgumentNullException">A reference argument is <c>null</c>.</exception>
     /// <exception cref="ArgumentException">
     /// A string argument is empty or white space, a completed status lacks a finite quality, descriptor names
@@ -70,7 +74,9 @@ public sealed class EvolutionEvaluation
         IEnumerable<EvolutionDiagnostic> diagnostics,
         string taskVersionHash,
         string evaluatorVersionHash,
-        string configurationHash)
+        string configurationHash,
+        IReadOnlyDictionary<string, double>? metrics = null,
+        IEnumerable<EvolutionArtifact>? artifacts = null)
     {
         if (evaluationId < 0) throw new ArgumentOutOfRangeException(nameof(evaluationId));
         Guard.NotNullOrWhiteSpace(genomeId);
@@ -86,7 +92,7 @@ public sealed class EvolutionEvaluation
         if (!Enum.IsDefined(typeof(EvolutionCacheStatus), cacheStatus)) throw new ArgumentOutOfRangeException(nameof(cacheStatus));
 
         EvolutionTaskResult validated = new(status, quality, direction, descriptors, objectives,
-            constraintViolations, cost.CostUnits, diagnostics);
+            constraintViolations, cost.CostUnits, diagnostics, metrics, artifacts);
         EvaluationId = evaluationId;
         GenomeId = genomeId.Trim();
         Status = validated.Status;
@@ -94,12 +100,15 @@ public sealed class EvolutionEvaluation
         Direction = validated.Direction;
         _descriptors = new ReadOnlyDictionary<string, double>(validated.Descriptors.ToDictionary(
             item => item.Key, item => item.Value, StringComparer.Ordinal));
+        _metrics = new ReadOnlyDictionary<string, double>(validated.Metrics.ToDictionary(
+            item => item.Key, item => item.Value, StringComparer.Ordinal));
         _objectives = Array.AsReadOnly(validated.Objectives.ToArray());
         _constraintViolations = Array.AsReadOnly(validated.ConstraintViolations.ToArray());
         Cost = cost;
         Lineage = lineage;
         CacheStatus = cacheStatus;
         _diagnostics = Array.AsReadOnly(validated.Diagnostics.ToArray());
+        _artifacts = Array.AsReadOnly(validated.Artifacts.ToArray());
         TaskVersionHash = taskVersionHash.Trim();
         EvaluatorVersionHash = evaluatorVersionHash.Trim();
         ConfigurationHash = configurationHash.Trim();
@@ -117,6 +126,8 @@ public sealed class EvolutionEvaluation
     public EvolutionOptimizationDirection Direction { get; }
     /// <summary>Gets named descriptor values.</summary>
     public IReadOnlyDictionary<string, double> Descriptors => _descriptors;
+    /// <summary>Gets named reporting metrics that never take part in archive placement.</summary>
+    public IReadOnlyDictionary<string, double> Metrics => _metrics;
     /// <summary>Gets optional objective values.</summary>
     public IReadOnlyList<double> Objectives => _objectives;
     /// <summary>Gets constraint violations.</summary>
@@ -129,6 +140,12 @@ public sealed class EvolutionEvaluation
     public EvolutionCacheStatus CacheStatus { get; }
     /// <summary>Gets bounded diagnostics.</summary>
     public IReadOnlyList<EvolutionDiagnostic> Diagnostics => _diagnostics;
+    /// <summary>Gets the bounded, untrusted text artifacts the engine retained for this evaluation.</summary>
+    /// <remarks>
+    /// Empty unless <c>EvolutionEngineOptions.Artifacts.Enabled</c> is set. The content comes from the evaluated
+    /// candidate, so treat it as data rather than as instructions or executable text.
+    /// </remarks>
+    public IReadOnlyList<EvolutionArtifact> Artifacts => _artifacts;
     /// <summary>Gets the task version hash.</summary>
     public string TaskVersionHash { get; }
     /// <summary>Gets the evaluator version hash.</summary>

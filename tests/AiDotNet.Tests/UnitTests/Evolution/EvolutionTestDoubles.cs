@@ -232,6 +232,312 @@ internal sealed class SaturatingCostEvolutionTask : IEvolutionTask<TestGenome>
     }
 }
 
+internal sealed class AbsoluteGenomeDistance : IGenomeDistance<TestGenome>
+{
+    public string Id => "absolute";
+    public string VersionHash => "absolute-v1";
+    public double Distance(TestGenome first, TestGenome second) => Math.Abs((double)first.Value - second.Value);
+}
+
+internal sealed class RecordingEvolutionObserver : IEvolutionObserver<TestGenome>
+{
+    private readonly List<EvolutionEventKind> _kinds = new();
+
+    public IReadOnlyList<EvolutionEventKind> Kinds
+    {
+        get { lock (_kinds) return _kinds.ToArray(); }
+    }
+
+    public int CountOf(EvolutionEventKind kind) => Kinds.Count(item => item == kind);
+
+    public ValueTask OnEventAsync(EvolutionEvent<TestGenome> evolutionEvent, CancellationToken cancellationToken = default)
+    {
+        lock (_kinds) _kinds.Add(evolutionEvent.Kind);
+        return default;
+    }
+}
+
+internal sealed class StagedEvolutionTask : ICascadeEvolutionTask<TestGenome>
+{
+    private readonly int[] _stageCalls;
+    private readonly double _stageCost;
+    private readonly EvolutionOptimizationDirection _direction;
+    private int _directCalls;
+
+    public StagedEvolutionTask(int stageCount = 2, double stageCost = 1,
+        EvolutionOptimizationDirection direction = EvolutionOptimizationDirection.Maximize)
+    {
+        StageCount = stageCount;
+        _stageCalls = new int[stageCount];
+        _stageCost = stageCost;
+        _direction = direction;
+    }
+
+    public string Id => "staged";
+    public string VersionHash => "staged-task-v1";
+    public string EvaluatorVersionHash => "staged-evaluator-v1";
+    public int StageCount { get; }
+    public int DirectCalls => Volatile.Read(ref _directCalls);
+    public int StageCalls(int stage) => Volatile.Read(ref _stageCalls[stage]);
+
+    public ValueTask<EvolutionCanonicalGenome<TestGenome>> CanonicalizeAsync(TestGenome genome,
+        CancellationToken cancellationToken = default) => new(new EvolutionCanonicalGenome<TestGenome>(
+            new TestGenome(genome.Value), genome.Value.ToString(CultureInfo.InvariantCulture)));
+
+    public ValueTask<EvolutionTaskResult> EvaluateAsync(EvolutionCandidate<TestGenome> candidate,
+        EvolutionEvaluationContext context, CancellationToken cancellationToken = default)
+    {
+        Interlocked.Increment(ref _directCalls);
+        return new ValueTask<EvolutionTaskResult>(EvolutionTaskResult.Completed(
+            candidate.CanonicalGenome.Genome.Value, Descriptors(candidate), _direction));
+    }
+
+    public ValueTask<EvolutionTaskResult> EvaluateStageAsync(int stage, EvolutionCandidate<TestGenome> candidate,
+        EvolutionEvaluationContext context, CancellationToken cancellationToken = default)
+    {
+        Interlocked.Increment(ref _stageCalls[stage]);
+        double value = candidate.CanonicalGenome.Genome.Value;
+        bool last = stage == StageCount - 1;
+        return new ValueTask<EvolutionTaskResult>(new EvolutionTaskResult(
+            EvolutionEvaluationStatus.Completed, value, _direction,
+            last ? Descriptors(candidate) : new Dictionary<string, double>(),
+            costUnits: _stageCost * (stage + 1),
+            metrics: new Dictionary<string, double>
+            {
+                ["stage" + stage.ToString(CultureInfo.InvariantCulture)] = value
+            }));
+    }
+
+    private static Dictionary<string, double> Descriptors(EvolutionCandidate<TestGenome> candidate) => new()
+    {
+        ["x"] = Math.Max(0, Math.Min(100, candidate.CanonicalGenome.Genome.Value))
+    };
+}
+
+internal sealed class PlateauEvolutionTask : IEvolutionTask<TestGenome>
+{
+    private int _calls;
+
+    public string Id => "plateau";
+    public string VersionHash => "plateau-task-v1";
+    public string EvaluatorVersionHash => "plateau-evaluator-v1";
+    public int Calls => Volatile.Read(ref _calls);
+
+    public ValueTask<EvolutionCanonicalGenome<TestGenome>> CanonicalizeAsync(TestGenome genome,
+        CancellationToken cancellationToken = default) => new(new EvolutionCanonicalGenome<TestGenome>(
+            new TestGenome(genome.Value), genome.Value.ToString(CultureInfo.InvariantCulture)));
+
+    public ValueTask<EvolutionTaskResult> EvaluateAsync(EvolutionCandidate<TestGenome> candidate,
+        EvolutionEvaluationContext context, CancellationToken cancellationToken = default)
+    {
+        Interlocked.Increment(ref _calls);
+        return new ValueTask<EvolutionTaskResult>(EvolutionTaskResult.Completed(1.0,
+            new Dictionary<string, double>
+            {
+                ["x"] = Math.Max(0, Math.Min(100, candidate.CanonicalGenome.Genome.Value * 10))
+            }));
+    }
+}
+
+internal sealed class ArtifactEvolutionTask : IEvolutionTask<TestGenome>
+{
+    private readonly string _text;
+    private readonly CancellationTokenSource? _cancelOnEvaluation;
+
+    public ArtifactEvolutionTask(string text, CancellationTokenSource? cancelOnEvaluation = null)
+    {
+        _text = text;
+        _cancelOnEvaluation = cancelOnEvaluation;
+    }
+
+    public string Id => "artifact";
+    public string VersionHash => "artifact-task-v1";
+    public string EvaluatorVersionHash => "artifact-evaluator-v1";
+
+    public ValueTask<EvolutionCanonicalGenome<TestGenome>> CanonicalizeAsync(TestGenome genome,
+        CancellationToken cancellationToken = default) => new(new EvolutionCanonicalGenome<TestGenome>(
+            new TestGenome(genome.Value), genome.Value.ToString(CultureInfo.InvariantCulture)));
+
+    public ValueTask<EvolutionTaskResult> EvaluateAsync(EvolutionCandidate<TestGenome> candidate,
+        EvolutionEvaluationContext context, CancellationToken cancellationToken = default)
+    {
+        if (_cancelOnEvaluation is not null && candidate.EvaluationId >= 4)
+        {
+            _cancelOnEvaluation.Cancel();
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+        int value = candidate.CanonicalGenome.Genome.Value;
+        return new ValueTask<EvolutionTaskResult>(new EvolutionTaskResult(
+            EvolutionEvaluationStatus.Completed, value,
+            descriptors: new Dictionary<string, double> { ["x"] = Math.Max(0, Math.Min(100, value)) },
+            artifacts: new[]
+            {
+                new EvolutionArtifact("stderr", _text),
+                new EvolutionArtifact("stdout", "value " + value.ToString(CultureInfo.InvariantCulture))
+            }));
+    }
+}
+
+internal sealed class FailingChildArtifactTask : IEvolutionTask<TestGenome>
+{
+    public string Id => "failing-child-artifact";
+    public string VersionHash => "failing-child-artifact-task-v1";
+    public string EvaluatorVersionHash => "failing-child-artifact-evaluator-v1";
+
+    public ValueTask<EvolutionCanonicalGenome<TestGenome>> CanonicalizeAsync(TestGenome genome,
+        CancellationToken cancellationToken = default) => new(new EvolutionCanonicalGenome<TestGenome>(
+            new TestGenome(genome.Value), genome.Value.ToString(CultureInfo.InvariantCulture)));
+
+    public ValueTask<EvolutionTaskResult> EvaluateAsync(EvolutionCandidate<TestGenome> candidate,
+        EvolutionEvaluationContext context, CancellationToken cancellationToken = default)
+    {
+        int value = candidate.CanonicalGenome.Genome.Value;
+        if (value == 1)
+        {
+            return new ValueTask<EvolutionTaskResult>(EvolutionTaskResult.Completed(value,
+                new Dictionary<string, double> { ["x"] = value }));
+        }
+        return new ValueTask<EvolutionTaskResult>(new EvolutionTaskResult(EvolutionEvaluationStatus.Failed,
+            diagnostics: new[] { new EvolutionDiagnostic("synthetic_failure", "child failed") },
+            artifacts: new[] { new EvolutionArtifact("stderr", "child " + value.ToString(CultureInfo.InvariantCulture) + " failed") }));
+    }
+}
+
+internal sealed class SequentialVariation : IVariationOperator<TestGenome>
+{
+    private int _next = 1;
+
+    public string Id => "sequential";
+    public string VersionHash => "sequential-v1";
+
+    public ValueTask<TestGenome> ProposeAsync(EvolutionVariationContext<TestGenome> context,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return new ValueTask<TestGenome>(new TestGenome(Interlocked.Increment(ref _next)));
+    }
+}
+
+internal sealed class ArtifactRecordingVariation : IVariationOperator<TestGenome>
+{
+    private readonly List<string> _received = new();
+
+    public string Id => "artifact-recording";
+    public string VersionHash => "artifact-recording-v1";
+
+    public IReadOnlyList<string> Received
+    {
+        get { lock (_received) return _received.ToArray(); }
+    }
+
+    public ValueTask<TestGenome> ProposeAsync(EvolutionVariationContext<TestGenome> context,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_received)
+        {
+            foreach (EvolutionArtifact artifact in context.ParentArtifacts)
+                _received.Add(artifact.Key + "=" + artifact.Text);
+        }
+        return new ValueTask<TestGenome>(new TestGenome(context.Parent.Candidate.CanonicalGenome.Genome.Value + 1));
+    }
+}
+
+internal sealed class TimeoutOnceEvolutionTask : IEvolutionTask<TestGenome>
+{
+    private int _calls;
+
+    public string Id => "timeout-once";
+    public string VersionHash => "timeout-once-task-v1";
+    public string EvaluatorVersionHash => "timeout-once-evaluator-v1";
+    public int Calls => Volatile.Read(ref _calls);
+
+    public ValueTask<EvolutionCanonicalGenome<TestGenome>> CanonicalizeAsync(TestGenome genome,
+        CancellationToken cancellationToken = default) => new(new EvolutionCanonicalGenome<TestGenome>(
+            new TestGenome(genome.Value), genome.Value.ToString(CultureInfo.InvariantCulture)));
+
+    public ValueTask<EvolutionTaskResult> EvaluateAsync(EvolutionCandidate<TestGenome> candidate,
+        EvolutionEvaluationContext context, CancellationToken cancellationToken = default)
+    {
+        int call = Interlocked.Increment(ref _calls);
+        return call == 1
+            ? new ValueTask<EvolutionTaskResult>(new EvolutionTaskResult(EvolutionEvaluationStatus.TimedOut))
+            : new ValueTask<EvolutionTaskResult>(EvolutionTaskResult.Completed(
+                candidate.CanonicalGenome.Genome.Value,
+                new Dictionary<string, double> { ["x"] = candidate.CanonicalGenome.Genome.Value }));
+    }
+}
+
+internal sealed class NonCooperativeEvolutionTask : IEvolutionTask<TestGenome>
+{
+    private readonly int _blockMilliseconds;
+    private int _calls;
+    private int _finished;
+
+    public NonCooperativeEvolutionTask(int blockMilliseconds) => _blockMilliseconds = blockMilliseconds;
+
+    public string Id => "non-cooperative";
+    public string VersionHash => "non-cooperative-task-v1";
+    public string EvaluatorVersionHash => "non-cooperative-evaluator-v1";
+    public int Calls => Volatile.Read(ref _calls);
+    public bool HasFinished => Volatile.Read(ref _finished) != 0;
+
+    public ValueTask<EvolutionCanonicalGenome<TestGenome>> CanonicalizeAsync(TestGenome genome,
+        CancellationToken cancellationToken = default) => new(new EvolutionCanonicalGenome<TestGenome>(
+            new TestGenome(genome.Value), genome.Value.ToString(CultureInfo.InvariantCulture)));
+
+    public async ValueTask<EvolutionTaskResult> EvaluateAsync(EvolutionCandidate<TestGenome> candidate,
+        EvolutionEvaluationContext context, CancellationToken cancellationToken = default)
+    {
+        Interlocked.Increment(ref _calls);
+        int block = _blockMilliseconds;
+        await Task.Run(() => Thread.Sleep(block)).ConfigureAwait(false);
+        Interlocked.Exchange(ref _finished, 1);
+        return EvolutionTaskResult.Completed(candidate.CanonicalGenome.Genome.Value,
+            new Dictionary<string, double> { ["x"] = candidate.CanonicalGenome.Genome.Value });
+    }
+}
+
+internal sealed class StopRequestingObserver : IEvolutionObserver<TestGenome>
+{
+    private readonly Action _requestStop;
+    private readonly int _afterEvaluations;
+    private int _evaluations;
+
+    public StopRequestingObserver(Action requestStop, int afterEvaluations)
+    {
+        _requestStop = requestStop;
+        _afterEvaluations = afterEvaluations;
+    }
+
+    public ValueTask OnEventAsync(EvolutionEvent<TestGenome> evolutionEvent, CancellationToken cancellationToken = default)
+    {
+        if (evolutionEvent.Kind == EvolutionEventKind.Evaluated &&
+            Interlocked.Increment(ref _evaluations) == _afterEvaluations)
+        {
+            _requestStop();
+        }
+        return default;
+    }
+}
+
+internal sealed class EvaluationRecordingObserver : IEvolutionObserver<TestGenome>
+{
+    private readonly List<EvolutionEvaluation> _evaluations = new();
+
+    public IReadOnlyList<EvolutionEvaluation> Evaluations
+    {
+        get { lock (_evaluations) return _evaluations.ToArray(); }
+    }
+
+    public ValueTask OnEventAsync(EvolutionEvent<TestGenome> evolutionEvent, CancellationToken cancellationToken = default)
+    {
+        if (evolutionEvent.Kind == EvolutionEventKind.Evaluated && evolutionEvent.Evaluation is not null)
+            lock (_evaluations) _evaluations.Add(evolutionEvent.Evaluation);
+        return default;
+    }
+}
+
 internal sealed class CooperativeBlockingEvolutionTask : IEvolutionTask<TestGenome>
 {
     private int _calls;
@@ -251,5 +557,37 @@ internal sealed class CooperativeBlockingEvolutionTask : IEvolutionTask<TestGeno
         Interlocked.Increment(ref _calls);
         await Task.Delay(Timeout.Infinite, cancellationToken);
         throw new InvalidOperationException("Unreachable.");
+    }
+}
+
+internal sealed class TraceProbeObserver : IEvolutionObserver<TestGenome>
+{
+    private readonly EvolutionTraceObserver<TestGenome> _inner;
+    private readonly string _tracePath;
+    private int _checkpoints;
+
+    public TraceProbeObserver(EvolutionTraceObserver<TestGenome> inner, string tracePath)
+    {
+        _inner = inner;
+        _tracePath = tracePath;
+    }
+
+    public int RecordsVisibleAtFirstCheckpoint { get; private set; } = -1;
+    public int EvaluationsBeforeFirstCheckpoint { get; private set; }
+    public int TotalEvaluations { get; private set; }
+
+    public async ValueTask OnEventAsync(EvolutionEvent<TestGenome> evolutionEvent,
+        CancellationToken cancellationToken = default)
+    {
+        if (evolutionEvent.Kind == EvolutionEventKind.Evaluated)
+        {
+            TotalEvaluations++;
+            if (_checkpoints == 0) EvaluationsBeforeFirstCheckpoint++;
+        }
+
+        await _inner.OnEventAsync(evolutionEvent, cancellationToken);
+
+        if (evolutionEvent.Kind == EvolutionEventKind.Checkpointed && _checkpoints++ == 0)
+            RecordsVisibleAtFirstCheckpoint = EvolutionTraceFile.Read(_tracePath).Records.Count;
     }
 }

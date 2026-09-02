@@ -61,14 +61,25 @@ public sealed partial class EvolutionEngine<TGenome>
     private readonly IEvolutionObserver<TGenome>? _observer;
     private readonly IEvolutionCheckpointStore? _checkpointStore;
     private readonly IEvolutionGenomeCodec<TGenome>? _codec;
+    private readonly IGenomeDistance<TGenome>? _distance;
+    private readonly ICascadeEvolutionTask<TGenome>? _cascadeTask;
+    private readonly int _cascadeStageCount;
     private readonly EvolutionEngineOptions _options;
     private readonly IEvolutionArchive<TGenome>[] _islands;
+    private readonly EvolutionGlobalEliteIndex<TGenome> _globalElites;
+    private readonly EvolutionIslandHistory<TGenome>[] _histories;
+    private readonly long[] _islandGenerations;
     private readonly HashSet<string> _seen = new(StringComparer.Ordinal);
     private readonly Dictionary<string, EvolutionTaskResult> _cache = new(StringComparer.Ordinal);
     private readonly Dictionary<EvolutionEvaluationStatus, long> _statusCounts = new();
     private readonly Queue<EvolutionDiagnostic> _failures = new();
+    private readonly Dictionary<string, EvolutionArtifact[]> _pendingArtifacts = new(StringComparer.Ordinal);
+    private readonly List<string> _pendingArtifactOrder = new();
     private readonly string _configurationHash;
     private readonly string _compatibilityHash;
+    private double? _earlyStoppingBest;
+    private long _evaluationsSinceImprovement;
+    private long _abandonedEvaluations;
     private long _nextEvaluationId;
     private long _proposals;
     private long _evaluationAttempts;
@@ -76,8 +87,10 @@ public sealed partial class EvolutionEngine<TGenome>
     private long _generation;
     private long _eventSequence;
     private int _batchesSinceMigration;
+    private long _lastMigrationGeneration;
     private long _commitsSinceCheckpoint;
     private int _runStarted;
+    private int _stopRequested;
 
     /// <summary>Initializes an evolution engine and its independent island archives.</summary>
     /// <param name="task">Task-specific canonicalization and evaluation.</param>
@@ -90,10 +103,14 @@ public sealed partial class EvolutionEngine<TGenome>
     /// <param name="observer">Optional structured observer.</param>
     /// <param name="checkpointStore">Optional checkpoint store.</param>
     /// <param name="genomeCodec">Required when checkpointing or resume is enabled.</param>
+    /// <param name="genomeDistance">
+    /// Required when <c>NoveltyDistanceThreshold</c> is positive; supplies the structural distance used by the
+    /// pre-evaluation novelty gate.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// A component ID or version hash is empty; the archive factory returns <see langword="null"/>, a non-empty archive,
-    /// a shared instance, or archives with differing definitions; or checkpointing or resume is requested without the
-    /// required genome codec or checkpoint store.
+    /// a shared instance, or archives with differing definitions; or checkpointing, resume, or the novelty gate is
+    /// requested without the required genome codec, checkpoint store, or distance metric.
     /// </exception>
     public EvolutionEngine(
         IEvolutionTask<TGenome> task,
@@ -105,7 +122,8 @@ public sealed partial class EvolutionEngine<TGenome>
         IMigrationPolicy<TGenome>? migration = null,
         IEvolutionObserver<TGenome>? observer = null,
         IEvolutionCheckpointStore? checkpointStore = null,
-        IEvolutionGenomeCodec<TGenome>? genomeCodec = null)
+        IEvolutionGenomeCodec<TGenome>? genomeCodec = null,
+        IGenomeDistance<TGenome>? genomeDistance = null)
     {
         Guard.NotNull(task);
         Guard.NotNull(variation);
@@ -124,14 +142,22 @@ public sealed partial class EvolutionEngine<TGenome>
         _observer = observer;
         _checkpointStore = checkpointStore;
         _codec = genomeCodec;
+        _distance = genomeDistance;
         ValidateComponent(_selection.Id, _selection.VersionHash, nameof(selection));
         ValidateComponent(_migration.Id, _migration.VersionHash, nameof(migration));
         if (_refiner is not null) ValidateComponent(_refiner.Id, _refiner.VersionHash, nameof(refiner));
         if (_codec is not null) ValidateComponent(_codec.Id, _codec.VersionHash, nameof(genomeCodec));
+        if (_distance is not null) ValidateComponent(_distance.Id, _distance.VersionHash, nameof(genomeDistance));
         if ((_checkpointStore is not null || _options.Resume) && _codec is null)
             throw new ArgumentException("A genome codec is required for checkpointing and resume.", nameof(genomeCodec));
         if (_options.Resume && _checkpointStore is null)
             throw new ArgumentException("Resume requires a checkpoint store.", nameof(checkpointStore));
+        if (_options.NoveltyDistanceThreshold > 0 && _distance is null)
+            throw new ArgumentException("A positive NoveltyDistanceThreshold requires a genome distance metric.", nameof(genomeDistance));
+        _cascadeTask = task as ICascadeEvolutionTask<TGenome>;
+        if (_options.Cascade.Enabled && _cascadeTask is null)
+            throw new ArgumentException("Cascade evaluation requires a task that implements ICascadeEvolutionTask<TGenome>.", nameof(task));
+        _cascadeStageCount = _options.Cascade.Enabled && _cascadeTask is not null ? _cascadeTask.StageCount : 0;
 
         _islands = new IEvolutionArchive<TGenome>[_options.IslandCount];
         for (int i = 0; i < _islands.Length; i++)
@@ -143,6 +169,12 @@ public sealed partial class EvolutionEngine<TGenome>
                     throw new ArgumentException("The archive factory must return independent instances.", nameof(archiveFactory));
         }
         ValidateCompatibleArchives(_islands);
+        if (_options.Cascade.Enabled) _options.Cascade.ValidateAgainstStages(_cascadeStageCount, _islands[0].Direction);
+        _islandGenerations = new long[_islands.Length];
+        _globalElites = new EvolutionGlobalEliteIndex<TGenome>(_options.GlobalEliteCount, _islands[0].Direction);
+        _histories = new EvolutionIslandHistory<TGenome>[_islands.Length];
+        for (int i = 0; i < _histories.Length; i++)
+            _histories[i] = new EvolutionIslandHistory<TGenome>(_options.HistorySize, _islands[0].Direction);
 
         string archiveDefinition = CanonicalArchiveDefinition(_islands[0]);
         _configurationHash = EvolutionHash.Compute(_options.ToCanonicalString());
@@ -156,6 +188,8 @@ public sealed partial class EvolutionEngine<TGenome>
             _refiner?.Id ?? "none", _refiner?.VersionHash ?? "none",
             _migration.Id, _migration.VersionHash,
             _codec?.Id ?? "none", _codec?.VersionHash ?? "none",
+            _distance?.Id ?? "none", _distance?.VersionHash ?? "none",
+            _cascadeStageCount.ToString(CultureInfo.InvariantCulture),
             archiveDefinition,
             _configurationHash
         });
@@ -167,6 +201,26 @@ public sealed partial class EvolutionEngine<TGenome>
     /// therefore resume each other's checkpoints.
     /// </remarks>
     public string CompatibilityHash => _compatibilityHash;
+
+    /// <summary>Asks a running or not-yet-started run to finish its current batch and return a result.</summary>
+    /// <remarks>
+    /// <para>
+    /// This is the graceful counterpart to cancelling the token passed to <see cref="RunAsync"/>. Cancellation is an
+    /// abort: the in-flight batch is rolled back, a final checkpoint is written, and
+    /// <see cref="OperationCanceledException"/> propagates, so the caller receives no archives. A stop request instead
+    /// lets the current batch commit, writes the final checkpoint, and returns a normal
+    /// <see cref="EvolutionRunResult{TGenome}"/> whose <see cref="EvolutionRunResult{TGenome}.StopReason"/> is
+    /// <see cref="EvolutionStopReason.Canceled"/> and whose archives hold everything found so far. Use it when a user
+    /// presses stop and still wants the results; use cancellation when the work must end immediately.
+    /// </para>
+    /// <para>
+    /// The request is observed only at batch boundaries, so it never interrupts a commit and never changes the outcome
+    /// of a batch that has already started. It is safe to call from any thread and is idempotent. OpenEvolve's
+    /// equivalent shutdown cancels queued futures and logs a reason, but the running ones continue and the reason never
+    /// reaches the caller's result (process_parallel.py:836-850).
+    /// </para>
+    /// </remarks>
+    public void RequestStop() => Interlocked.Exchange(ref _stopRequested, 1);
 
     /// <summary>Runs evolution once using a finite initial seed set.</summary>
     /// <param name="initialGenomes">Finite task-specific seed genomes.</param>
@@ -233,7 +287,45 @@ public sealed partial class EvolutionEngine<TGenome>
         await NotifyAsync(new EvolutionEvent<TGenome>(EvolutionEventKind.Stopped, NextEventSequence(),
             message: stopReason.ToString()),
             runCancellation.IsCancellationRequested ? CancellationToken.None : cancellationToken).ConfigureAwait(false);
-        return new EvolutionRunResult<TGenome>(stopReason, Array.AsReadOnly(_islands), CreateCounters(), stateHash);
+        return new EvolutionRunResult<TGenome>(stopReason, Array.AsReadOnly(_islands), CreateCounters(), stateHash,
+            _globalElites.Entries, CreateIslandStatuses(), _failures.ToArray(), PendingArtifactView());
+    }
+
+    /// <summary>Builds one exact status snapshot per island from the live archives and per-island counters.</summary>
+    private IReadOnlyList<EvolutionIslandStatus> CreateIslandStatuses()
+    {
+        var statuses = new EvolutionIslandStatus[_islands.Length];
+        for (int island = 0; island < _islands.Length; island++)
+        {
+            IEvolutionArchive<TGenome> archive = _islands[island];
+            long totalCells = TotalGridCells(archive);
+            double[] qualities = archive.Entries
+                .Select(entry => entry.Evaluation.Quality)
+                .OfType<double>()
+                .ToArray();
+            statuses[island] = new EvolutionIslandStatus(
+                island,
+                _islandGenerations[island],
+                archive.Count,
+                totalCells,
+                archive.Best?.Evaluation.GenomeId,
+                archive.Best?.Evaluation.Quality,
+                qualities.Length == 0 ? null : qualities.Average(),
+                _histories[island].Count);
+        }
+        return Array.AsReadOnly(statuses);
+    }
+
+    /// <summary>Computes the physical cell count implied by an archive's descriptor definitions.</summary>
+    private static long TotalGridCells(IEvolutionArchiveView<TGenome> archive)
+    {
+        long cells = 1;
+        foreach (EvolutionDescriptorDefinition descriptor in archive.Descriptors)
+        {
+            if (cells > long.MaxValue / descriptor.EffectiveBinCount) return long.MaxValue;
+            cells *= descriptor.EffectiveBinCount;
+        }
+        return Math.Max(1, cells);
     }
 
     private async Task<EvolutionStopReason> RunLoopAsync(TGenome[] seeds, int seedIndex, Stopwatch runTimer,
@@ -242,6 +334,7 @@ public sealed partial class EvolutionEngine<TGenome>
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (Volatile.Read(ref _stopRequested) != 0) return EvolutionStopReason.Canceled;
             EvolutionStopReason? limit = GetLimitStopReason(runTimer);
             if (limit.HasValue) return limit.Value;
 
@@ -299,11 +392,15 @@ public sealed partial class EvolutionEngine<TGenome>
                 _batchesSinceMigration++;
                 await MigrateIfDueAsync(CancellationToken.None).ConfigureAwait(false);
             }
+            UpdateEarlyStopping(batch.Count);
             CaptureSafeState(seeds, seedIndex);
             await SaveCheckpointAsync(force: false,
                 cancellationToken.IsCancellationRequested ? CancellationToken.None : cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             if (failedFast) return EvolutionStopReason.CandidateFailure;
+            if (IsTargetReached()) return EvolutionStopReason.TargetReached;
+            if (IsEarlyStopped()) return EvolutionStopReason.EarlyStopped;
+            if (Volatile.Read(ref _stopRequested) != 0) return EvolutionStopReason.Canceled;
         }
     }
 
@@ -331,7 +428,8 @@ public sealed partial class EvolutionEngine<TGenome>
         return result.ToArray();
     }
 
-    private EvolutionRunCounters CreateCounters() => new(_proposals, _evaluationAttempts, _completedEvaluations, _statusCounts);
+    private EvolutionRunCounters CreateCounters() => new(_proposals, _evaluationAttempts, _completedEvaluations,
+        _statusCounts, Interlocked.Read(ref _abandonedEvaluations));
 
     private long NextEventSequence() => _eventSequence++;
 
@@ -414,6 +512,8 @@ public sealed partial class EvolutionEngine<TGenome>
         public List<EvolutionDiagnostic> AttemptDiagnostics { get; } = new();
         public long CompletionOrder { get; set; }
         public bool AddedToSeen { get; set; }
+        public IReadOnlyList<double> StageCostUnits { get; set; } = Array.Empty<double>();
+        public int? CascadeRejectedStage { get; set; }
     }
 
     private sealed class BatchTransaction
@@ -424,7 +524,12 @@ public sealed partial class EvolutionEngine<TGenome>
         public long Generation { get; set; }
         public long EventSequence { get; set; }
         public long CompletionSequence { get; set; }
+        public long[] IslandGenerations { get; set; } = Array.Empty<long>();
         public EvolutionDiagnostic[] Failures { get; set; } = Array.Empty<EvolutionDiagnostic>();
+        public double? EarlyStoppingBest { get; set; }
+        public long EvaluationsSinceImprovement { get; set; }
+        public List<string> PendingArtifactOrder { get; set; } = new();
+        public Dictionary<string, EvolutionArtifact[]> PendingArtifacts { get; set; } = new(StringComparer.Ordinal);
     }
 
     private BatchTransaction CaptureBatchTransaction() => new()
@@ -435,7 +540,12 @@ public sealed partial class EvolutionEngine<TGenome>
         Generation = _generation,
         EventSequence = _eventSequence,
         CompletionSequence = _completionSequence,
-        Failures = _failures.ToArray()
+        IslandGenerations = (long[])_islandGenerations.Clone(),
+        Failures = _failures.ToArray(),
+        EarlyStoppingBest = _earlyStoppingBest,
+        EvaluationsSinceImprovement = _evaluationsSinceImprovement,
+        PendingArtifactOrder = new List<string>(_pendingArtifactOrder),
+        PendingArtifacts = new Dictionary<string, EvolutionArtifact[]>(_pendingArtifacts, StringComparer.Ordinal)
     };
 
     private void RestoreBatchTransaction(BatchTransaction transaction, IEnumerable<WorkItem> batch)
@@ -448,7 +558,15 @@ public sealed partial class EvolutionEngine<TGenome>
         _generation = transaction.Generation;
         _eventSequence = transaction.EventSequence;
         _completionSequence = transaction.CompletionSequence;
+        Array.Copy(transaction.IslandGenerations, _islandGenerations, _islandGenerations.Length);
         _failures.Clear();
         foreach (EvolutionDiagnostic failure in transaction.Failures) _failures.Enqueue(failure);
+        _earlyStoppingBest = transaction.EarlyStoppingBest;
+        _evaluationsSinceImprovement = transaction.EvaluationsSinceImprovement;
+        _pendingArtifactOrder.Clear();
+        _pendingArtifactOrder.AddRange(transaction.PendingArtifactOrder);
+        _pendingArtifacts.Clear();
+        foreach (KeyValuePair<string, EvolutionArtifact[]> entry in transaction.PendingArtifacts)
+            _pendingArtifacts[entry.Key] = entry.Value;
     }
 }

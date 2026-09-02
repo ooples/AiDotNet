@@ -29,16 +29,21 @@ public sealed class EvolutionRunCounters
     /// <param name="evaluationAttempts">The non-negative number of evaluator calls, including retries.</param>
     /// <param name="completedEvaluations">The non-negative number of completed terminal evaluations.</param>
     /// <param name="statusCounts">Terminal counts by status; copied defensively.</param>
+    /// <param name="abandonedEvaluations">
+    /// The non-negative number of evaluator calls the engine stopped waiting for after the timeout grace period.
+    /// </param>
     public EvolutionRunCounters(long proposals, long evaluationAttempts, long completedEvaluations,
-        IReadOnlyDictionary<EvolutionEvaluationStatus, long> statusCounts)
+        IReadOnlyDictionary<EvolutionEvaluationStatus, long> statusCounts, long abandonedEvaluations = 0)
     {
         if (proposals < 0) throw new ArgumentOutOfRangeException(nameof(proposals));
         if (evaluationAttempts < 0) throw new ArgumentOutOfRangeException(nameof(evaluationAttempts));
         if (completedEvaluations < 0) throw new ArgumentOutOfRangeException(nameof(completedEvaluations));
+        if (abandonedEvaluations < 0) throw new ArgumentOutOfRangeException(nameof(abandonedEvaluations));
         if (statusCounts is null) throw new ArgumentNullException(nameof(statusCounts));
         Proposals = proposals;
         EvaluationAttempts = evaluationAttempts;
         CompletedEvaluations = completedEvaluations;
+        AbandonedEvaluations = abandonedEvaluations;
         _statusCounts = new System.Collections.ObjectModel.ReadOnlyDictionary<EvolutionEvaluationStatus, long>(
             statusCounts.ToDictionary(item => item.Key, item => item.Value));
     }
@@ -51,4 +56,14 @@ public sealed class EvolutionRunCounters
     public long CompletedEvaluations { get; }
     /// <summary>Gets terminal counts by status.</summary>
     public IReadOnlyDictionary<EvolutionEvaluationStatus, long> StatusCounts => _statusCounts;
+
+    /// <summary>Gets evaluator calls the engine stopped waiting for after the timeout grace period elapsed.</summary>
+    /// <remarks>
+    /// Non-zero only when <c>EvolutionEngineOptions.EvaluationGracePeriod</c> is set. Each abandoned call was recorded
+    /// as <see cref="EvolutionEvaluationStatus.TimedOut"/> and the batch continued without it; the call itself may keep
+    /// running until it notices its cancellation token or finishes on its own. A persistently non-zero value means an
+    /// evaluator is ignoring its cancellation token, which is worth fixing because abandoned work still consumes CPU.
+    /// This counter depends on wall-clock timing and is therefore deliberately excluded from the run state hash.
+    /// </remarks>
+    public long AbandonedEvaluations { get; }
 }

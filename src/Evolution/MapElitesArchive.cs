@@ -18,8 +18,10 @@ namespace AiDotNet.Evolution;
 /// identical elites. When <see cref="Capacity"/> is smaller than the grid, a candidate that would open a new
 /// cell must beat the archive-wide worst elite, which is then evicted. Cells live in a sorted dictionary keyed
 /// by the ordinal cell key, so <see cref="Get"/> and the lookup half of <see cref="TryAdd"/> cost O(log n) in
-/// the number of occupied cells, <see cref="Entries"/> materializes an O(n) copy in stable key order, and
-/// <see cref="Best"/>, <see cref="Sample"/>, and eviction scan the occupied cells (at most O(n log n)).
+/// the number of occupied cells, <see cref="Entries"/> materializes an O(n) copy in stable key order once per archive
+/// version and then serves it from a cache,
+/// <see cref="Best"/> is maintained incrementally and reads in O(1), and <see cref="Sample"/> and eviction scan the
+/// occupied cells (at most O(n log n)).
 /// Instances are not thread-safe; the engine performs all archive mutation from its sequential commit step.
 /// </para>
 /// <para><b>For Beginners:</b> Picture a wall of pigeonholes where each hole stands for one style of
@@ -44,6 +46,10 @@ public sealed class MapElitesArchive<TGenome> : ICheckpointableEvolutionArchive<
     private readonly ReadOnlyCollection<EvolutionDescriptorDefinition> _descriptorView;
     private readonly SortedDictionary<string, EvolutionArchiveEntry<TGenome>> _cells = new(StringComparer.Ordinal);
     private readonly int _capacity;
+    private IComparer<EvolutionArchiveEntry<TGenome>>? _comparer;
+    private EvolutionArchiveEntry<TGenome>? _best;
+    private ReadOnlyCollection<EvolutionArchiveEntry<TGenome>>? _entries;
+    private long _entriesVersion = -1;
 
     /// <summary>Initializes an archive.</summary>
     /// <param name="descriptors">One or more uniquely named descriptor definitions.</param>
@@ -129,12 +135,31 @@ public sealed class MapElitesArchive<TGenome> : ICheckpointableEvolutionArchive<
     public long Version { get; private set; }
 
     /// <inheritdoc/>
-    public IReadOnlyList<EvolutionArchiveEntry<TGenome>> Entries => _cells.Values.ToArray();
+    /// <remarks>
+    /// Materialized once per archive version and cached, so repeated reads between insertions - which the engine
+    /// performs once per proposal for selection, novelty screening, and history bookkeeping - cost O(1) instead of
+    /// O(n) copies. The cached instance is read-only, so handing the same one to several callers is safe.
+    /// </remarks>
+    public IReadOnlyList<EvolutionArchiveEntry<TGenome>> Entries
+    {
+        get
+        {
+            if (_entries is null || _entriesVersion != Version)
+            {
+                _entries = Array.AsReadOnly(_cells.Values.ToArray());
+                _entriesVersion = Version;
+            }
+            return _entries;
+        }
+    }
 
     /// <inheritdoc/>
-    public EvolutionArchiveEntry<TGenome>? Best => _cells.Count == 0
-        ? null
-        : _cells.Values.OrderBy(entry => entry, Comparer).First();
+    /// <remarks>
+    /// Maintained incrementally on every accepted insertion, so reading it costs O(1). The ordering is a total
+    /// order, so a candidate that beats the incumbent best necessarily beats every other entry and becomes the new
+    /// best without a rescan.
+    /// </remarks>
+    public EvolutionArchiveEntry<TGenome>? Best => _best;
 
     /// <inheritdoc/>
     public EvolutionArchiveInsertionResult TryAdd(EvolutionCandidate<TGenome> candidate, EvolutionEvaluation evaluation)
@@ -156,6 +181,7 @@ public sealed class MapElitesArchive<TGenome> : ICheckpointableEvolutionArchive<
         {
             if (Comparer.Compare(candidateEntry, incumbent) >= 0) return EvolutionArchiveInsertionResult.NotImproved;
             _cells[key.StableKey] = candidateEntry;
+            PromoteIfBest(candidateEntry);
             Version++;
             return EvolutionArchiveInsertionResult.Replaced;
         }
@@ -163,6 +189,7 @@ public sealed class MapElitesArchive<TGenome> : ICheckpointableEvolutionArchive<
         if (_cells.Count < _capacity)
         {
             _cells.Add(key.StableKey, candidateEntry);
+            PromoteIfBest(candidateEntry);
             Version++;
             return EvolutionArchiveInsertionResult.Inserted;
         }
@@ -171,6 +198,8 @@ public sealed class MapElitesArchive<TGenome> : ICheckpointableEvolutionArchive<
         if (Comparer.Compare(candidateEntry, worst) >= 0) return EvolutionArchiveInsertionResult.NotImproved;
         _cells.Remove(worst.Cell.StableKey);
         _cells.Add(key.StableKey, candidateEntry);
+        if (ReferenceEquals(_best, worst)) _best = null;
+        PromoteIfBest(candidateEntry);
         Version++;
         return EvolutionArchiveInsertionResult.InsertedWithEviction;
     }
@@ -221,28 +250,11 @@ public sealed class MapElitesArchive<TGenome> : ICheckpointableEvolutionArchive<
         Version = version;
     }
 
-    private IComparer<EvolutionArchiveEntry<TGenome>> Comparer => new EntryComparer(Direction);
+    private IComparer<EvolutionArchiveEntry<TGenome>> Comparer =>
+        _comparer ??= EvolutionEntryOrdering.BestFirst<TGenome>(Direction);
 
-    private sealed class EntryComparer : IComparer<EvolutionArchiveEntry<TGenome>>
+    private void PromoteIfBest(EvolutionArchiveEntry<TGenome> entry)
     {
-        private readonly EvolutionOptimizationDirection _direction;
-
-        public EntryComparer(EvolutionOptimizationDirection direction) => _direction = direction;
-
-        public int Compare(EvolutionArchiveEntry<TGenome>? x, EvolutionArchiveEntry<TGenome>? y)
-        {
-            if (ReferenceEquals(x, y)) return 0;
-            if (x is null) return 1;
-            if (y is null) return -1;
-            int quality = _direction == EvolutionOptimizationDirection.Maximize
-                ? Nullable.Compare(y.Evaluation.Quality, x.Evaluation.Quality)
-                : Nullable.Compare(x.Evaluation.Quality, y.Evaluation.Quality);
-            if (quality != 0) return quality;
-            int genome = StringComparer.Ordinal.Compare(x.Evaluation.GenomeId, y.Evaluation.GenomeId);
-            if (genome != 0) return genome;
-            int cell = x.Cell.CompareTo(y.Cell);
-            if (cell != 0) return cell;
-            return x.Evaluation.EvaluationId.CompareTo(y.Evaluation.EvaluationId);
-        }
+        if (_best is null || Comparer.Compare(entry, _best) < 0) _best = entry;
     }
 }

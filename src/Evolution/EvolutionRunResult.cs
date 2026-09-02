@@ -30,11 +30,32 @@ public sealed class EvolutionRunResult<TGenome>
     /// <param name="islands">The final island archives; each is snapshotted rather than referenced.</param>
     /// <param name="counters">Final run counters.</param>
     /// <param name="stateHash">The deterministic state hash computed by the engine.</param>
+    /// <param name="globalElites">
+    /// The cross-island elite index in best-first order, or <c>null</c> when the index is disabled.
+    /// </param>
+    /// <param name="islandStatuses">
+    /// One status snapshot per island in island order, or <c>null</c> when statuses were not captured.
+    /// </param>
+    /// <param name="retainedFailures">
+    /// The bounded failure diagnostics retained by the engine, oldest first, or <c>null</c> when none were retained.
+    /// </param>
+    /// <param name="pendingArtifacts">
+    /// Evaluator artifacts still queued for delivery to a future proposal, keyed by canonical genome identifier, or
+    /// <c>null</c> when none are queued.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// <paramref name="islands"/>, <paramref name="counters"/>, or <paramref name="stateHash"/> is <c>null</c>.
     /// </exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="globalElites"/> or <paramref name="islandStatuses"/> contains a <c>null</c> element, the status
+    /// count does not match the island count, or <paramref name="pendingArtifacts"/> contains a <c>null</c> list.
+    /// </exception>
     public EvolutionRunResult(EvolutionStopReason stopReason, IReadOnlyList<IEvolutionArchiveView<TGenome>> islands,
-        EvolutionRunCounters counters, string stateHash)
+        EvolutionRunCounters counters, string stateHash,
+        IReadOnlyList<EvolutionEliteRecord<TGenome>>? globalElites = null,
+        IReadOnlyList<EvolutionIslandStatus>? islandStatuses = null,
+        IReadOnlyList<EvolutionDiagnostic>? retainedFailures = null,
+        IReadOnlyDictionary<string, IReadOnlyList<EvolutionArtifact>>? pendingArtifacts = null)
     {
         StopReason = stopReason;
         if (islands is null) throw new ArgumentNullException(nameof(islands));
@@ -42,6 +63,31 @@ public sealed class EvolutionRunResult<TGenome>
             (IEvolutionArchiveView<TGenome>)new EvolutionArchiveSnapshot<TGenome>(archive)).ToArray());
         Counters = counters ?? throw new ArgumentNullException(nameof(counters));
         StateHash = stateHash ?? throw new ArgumentNullException(nameof(stateHash));
+        EvolutionEliteRecord<TGenome>[] elites = globalElites?.ToArray() ?? Array.Empty<EvolutionEliteRecord<TGenome>>();
+        if (elites.Any(record => record is null))
+            throw new ArgumentException("The global elite index cannot contain null records.", nameof(globalElites));
+        GlobalElites = Array.AsReadOnly(elites);
+        EvolutionIslandStatus[] statuses = islandStatuses?.ToArray() ?? Array.Empty<EvolutionIslandStatus>();
+        if (statuses.Any(status => status is null))
+            throw new ArgumentException("Island statuses cannot contain null entries.", nameof(islandStatuses));
+        if (statuses.Length != 0 && statuses.Length != Islands.Count)
+            throw new ArgumentException("Island statuses must cover every island.", nameof(islandStatuses));
+        IslandStatuses = Array.AsReadOnly(statuses);
+        EvolutionDiagnostic[] failures = retainedFailures?.ToArray() ?? Array.Empty<EvolutionDiagnostic>();
+        if (failures.Any(diagnostic => diagnostic is null))
+            throw new ArgumentException("Retained failures cannot contain null diagnostics.", nameof(retainedFailures));
+        RetainedFailures = Array.AsReadOnly(failures);
+        var pending = new Dictionary<string, IReadOnlyList<EvolutionArtifact>>(StringComparer.Ordinal);
+        if (pendingArtifacts is not null)
+        {
+            foreach (KeyValuePair<string, IReadOnlyList<EvolutionArtifact>> entry in pendingArtifacts)
+            {
+                if (string.IsNullOrWhiteSpace(entry.Key) || entry.Value is null)
+                    throw new ArgumentException("Pending artifacts require a genome identifier and a list.", nameof(pendingArtifacts));
+                pending[entry.Key] = Array.AsReadOnly(entry.Value.ToArray());
+            }
+        }
+        PendingArtifacts = new System.Collections.ObjectModel.ReadOnlyDictionary<string, IReadOnlyList<EvolutionArtifact>>(pending);
     }
 
     /// <summary>Gets why the run stopped.</summary>
@@ -52,6 +98,33 @@ public sealed class EvolutionRunResult<TGenome>
     public EvolutionRunCounters Counters { get; }
     /// <summary>Gets a deterministic hash that excludes wall-clock timing and observer behavior.</summary>
     public string StateHash { get; }
+
+    /// <summary>Gets the cross-island global elites in best-first order; empty when the index is disabled.</summary>
+    /// <remarks>
+    /// Populated when <c>EvolutionEngineOptions.GlobalEliteCount</c> is positive. Unlike <see cref="Best"/>, which
+    /// reports only the single leading elite, this list spans every island and is bounded by the configured count.
+    /// </remarks>
+    public IReadOnlyList<EvolutionEliteRecord<TGenome>> GlobalElites { get; }
+
+    /// <summary>Gets one progress snapshot per island, in island order; empty when statuses were not captured.</summary>
+    public IReadOnlyList<EvolutionIslandStatus> IslandStatuses { get; }
+
+    /// <summary>Gets the retained failure diagnostics, oldest first and bounded by <c>MaxRetainedFailures</c>.</summary>
+    /// <remarks>
+    /// Includes evaluator failures and the <c>descriptor_missing:&lt;name&gt;</c> diagnostic the engine raises when a
+    /// completed evaluation omits a configured archive descriptor and would otherwise be rejected silently.
+    /// </remarks>
+    public IReadOnlyList<EvolutionDiagnostic> RetainedFailures { get; }
+
+    /// <summary>Gets evaluator artifacts still queued for a future proposal, keyed by canonical genome identifier.</summary>
+    /// <remarks>
+    /// Empty unless <c>EvolutionEngineOptions.Artifacts.Enabled</c> and
+    /// <c>EvolutionEngineOptions.Artifacts.DeliverToNextProposal</c> are both set. An entry survives only until a
+    /// proposal selects that genome as its parent, at which point the engine hands it over and removes it. Artifacts
+    /// that were retained on an evaluation remain reachable through the archive entries in <see cref="Islands"/>. This
+    /// text comes from evaluated candidates and is untrusted.
+    /// </remarks>
+    public IReadOnlyDictionary<string, IReadOnlyList<EvolutionArtifact>> PendingArtifacts { get; }
 
     /// <summary>Gets the globally best elite using deterministic quality and identity tie-breaking.</summary>
     /// <remarks>

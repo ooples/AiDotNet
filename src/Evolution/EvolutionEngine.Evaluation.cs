@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
@@ -26,15 +27,20 @@ public sealed partial class EvolutionEngine<TGenome>
     {
         long evaluationId = _nextEvaluationId;
         int island = (int)(evaluationId % _islands.Length);
-        IEvolutionArchive<TGenome>? sourceArchive = FindSelectionArchive(island);
-        if (sourceArchive is null) return null;
+        int sourceIsland = FindSelectionIsland(island);
+        if (sourceIsland < 0) return null;
+        IEvolutionArchive<TGenome> sourceArchive = _islands[sourceIsland];
+        if (_options.IslandAssignment == EvolutionIslandAssignmentStrategy.InheritParent) island = sourceIsland;
 
         StableRandom proposalRandom = StableRandom.CreateStream(_options.Seed, unchecked((ulong)evaluationId * 8UL));
+        if (_selection is IEliteIndexAwareEvolutionSelectionPolicy<TGenome> eliteAwareSelection)
+            eliteAwareSelection.UseEliteIndex(_globalElites.Entries, island);
         EvolutionSelection<TGenome>? selection = _selection.Select(sourceArchive, proposalRandom, _options.InspirationCount);
         if (selection is null) return null;
         long allocatedId = AllocateProposalId();
         if (allocatedId != evaluationId) throw new InvalidOperationException("Proposal identity allocation was not sequential.");
         long generation = ++_generation;
+        _islandGenerations[island]++;
         string[] inspirationIds = selection.Inspirations.Select(entry => entry.Evaluation.GenomeId).ToArray();
         var lineage = new EvolutionLineage(
             new[] { selection.Parent.Evaluation.GenomeId },
@@ -45,11 +51,12 @@ public sealed partial class EvolutionEngine<TGenome>
             island,
             (ulong)evaluationId);
 
+        IReadOnlyList<EvolutionArtifact> parentArtifacts = ConsumeArtifacts(selection.Parent.Evaluation.GenomeId);
         TGenome proposed;
         try
         {
             var context = new EvolutionVariationContext<TGenome>(selection.Parent, selection.Inspirations,
-                proposalRandom, generation, island);
+                proposalRandom, generation, island, parentArtifacts);
             proposed = await _variation.ProposeAsync(context, cancellationToken).ConfigureAwait(false);
             if (proposed is null) throw new InvalidOperationException("The variation operator returned null.");
         }
@@ -114,6 +121,22 @@ public sealed partial class EvolutionEngine<TGenome>
                 };
             }
 
+            if (!IsStructurallyNovel(canonical, island))
+            {
+                _seen.Remove(canonical.Id);
+                return new WorkItem(lineage)
+                {
+                    EvaluationId = evaluationId,
+                    Island = island,
+                    Candidate = candidate,
+                    Result = new EvolutionTaskResult(EvolutionEvaluationStatus.Rejected,
+                        diagnostics: new[] { new EvolutionDiagnostic("not_novel",
+                            "The candidate was within the structural novelty threshold of an existing elite.") }),
+                    CacheStatus = EvolutionCacheStatus.NotChecked,
+                    CompletionOrder = Interlocked.Increment(ref _completionSequence)
+                };
+            }
+
             return new WorkItem(lineage)
             {
                 EvaluationId = evaluationId,
@@ -147,6 +170,23 @@ public sealed partial class EvolutionEngine<TGenome>
         };
     }
 
+    /// <summary>
+    /// Returns whether a canonical genome is far enough from every elite of its target island, using at most one
+    /// distance call per occupied cell and never an evaluator, embedding, or network call.
+    /// </summary>
+    private bool IsStructurallyNovel(EvolutionCanonicalGenome<TGenome> canonical, int island)
+    {
+        if (_distance is null || _options.NoveltyDistanceThreshold <= 0) return true;
+        foreach (EvolutionArchiveEntry<TGenome> entry in _islands[island].Entries)
+        {
+            double distance = _distance.Distance(canonical.Genome, entry.Candidate.CanonicalGenome.Genome);
+            if (!EvolutionDescriptorDefinition.IsFinite(distance) || distance < 0)
+                throw new InvalidOperationException("The genome distance metric returned a value that is not finite and non-negative.");
+            if (distance < _options.NoveltyDistanceThreshold) return false;
+        }
+        return true;
+    }
+
     /// <summary>Allocates the next sequential evaluation identifier and counts the proposal.</summary>
     private long AllocateProposalId()
     {
@@ -155,22 +195,32 @@ public sealed partial class EvolutionEngine<TGenome>
         return id;
     }
 
-    /// <summary>Returns the preferred island when occupied, otherwise the next occupied island in ring order.</summary>
-    private IEvolutionArchive<TGenome>? FindSelectionArchive(int preferredIsland)
+    /// <summary>
+    /// Returns the preferred island when occupied, otherwise the next occupied island in ring order, or a negative
+    /// value when every island is empty.
+    /// </summary>
+    private int FindSelectionIsland(int preferredIsland)
     {
-        if (_islands[preferredIsland].Count > 0) return _islands[preferredIsland];
+        if (_islands[preferredIsland].Count > 0) return preferredIsland;
         for (int offset = 1; offset < _islands.Length; offset++)
         {
-            IEvolutionArchive<TGenome> archive = _islands[(preferredIsland + offset) % _islands.Length];
-            if (archive.Count > 0) return archive;
+            int island = (preferredIsland + offset) % _islands.Length;
+            if (_islands[island].Count > 0) return island;
         }
-        return null;
+        return -1;
     }
 
     /// <summary>
     /// Evaluates the pending work items in bounded-parallel rounds, retrying failure-like results within the
     /// retry and attempt budgets, and marks anything left undispatched as skipped.
     /// </summary>
+    /// <remarks>
+    /// An attempt is charged to <c>MaxEvaluationAttempts</c> before dispatch so the round can never exceed the budget,
+    /// and is refunded afterwards when a cascade stage rejected the candidate before the final stage and
+    /// <c>Cascade.ChargeRejectedStagesToBudget</c> is clear. The refund keeps the budget a measure of full evaluations
+    /// rather than of cheap screening calls, and cannot loop: a rejected candidate has a terminal
+    /// <see cref="EvolutionEvaluationStatus.Skipped"/> status and is never re-queued.
+    /// </remarks>
     private async Task EvaluateBatchAsync(List<WorkItem> batch, CancellationToken cancellationToken)
     {
         List<WorkItem> pending = batch.Where(item => item.RequiresEvaluation).OrderBy(item => item.EvaluationId).ToList();
@@ -179,11 +229,16 @@ public sealed partial class EvolutionEngine<TGenome>
             int available = (int)Math.Min(pending.Count, _options.MaxEvaluationAttempts - _evaluationAttempts);
             WorkItem[] round = pending.Take(available).ToArray();
             pending.RemoveRange(0, available);
+            int highestAttempt = 0;
             foreach (WorkItem item in round)
             {
                 item.AttemptCount++;
                 _evaluationAttempts++;
+                highestAttempt = Math.Max(highestAttempt, item.AttemptCount);
             }
+
+            TimeSpan retryDelay = RetryDelayForAttempt(highestAttempt);
+            if (retryDelay > TimeSpan.Zero) await Task.Delay(retryDelay, cancellationToken).ConfigureAwait(false);
 
             using (var semaphore = new SemaphoreSlim(_options.MaxDegreeOfParallelism, _options.MaxDegreeOfParallelism))
             {
@@ -193,6 +248,9 @@ public sealed partial class EvolutionEngine<TGenome>
 
             foreach (WorkItem item in round.OrderBy(item => item.EvaluationId))
             {
+                if (item.CascadeRejectedStage.HasValue && !_options.Cascade.ChargeRejectedStagesToBudget)
+                    _evaluationAttempts--;
+
                 if (IsRetryable(item.Result) && item.AttemptCount <= _options.MaxRetries &&
                     _evaluationAttempts + pending.Count < _options.MaxEvaluationAttempts)
                 {
@@ -236,20 +294,69 @@ public sealed partial class EvolutionEngine<TGenome>
     }
 
     /// <summary>
-    /// Invokes the task evaluator under the cooperative timeout and converts cancellation, timeout, and
-    /// evaluator exceptions into terminal results instead of propagating them.
+    /// Runs one evaluation attempt, using the staged cascade path when it is configured and the single-call evaluator
+    /// otherwise.
     /// </summary>
     private async Task<EvolutionTaskResult> EvaluateAttemptAsync(WorkItem item, CancellationToken cancellationToken)
     {
         if (item.Candidate is null) return EvolutionTaskResult.Failed("missing_candidate", "The evaluator candidate was unavailable.");
+        item.StageCostUnits = Array.Empty<double>();
+        item.CascadeRejectedStage = null;
+        if (_options.Cascade.Enabled && _cascadeTask is not null)
+            return await EvaluateCascadeAsync(item, _cascadeTask, cancellationToken).ConfigureAwait(false);
+
+        EvolutionCandidate<TGenome> candidate = item.Candidate;
+        return await InvokeEvaluatorAsync(item, stage: 0, _options.EvaluationTimeout,
+            (context, token) => _task.EvaluateAsync(candidate, context, token), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Invokes one evaluator call under its cooperative timeout, converting cancellation, timeout, and evaluator
+    /// exceptions into terminal results, and abandoning a call that ignores its token once the grace period elapses.
+    /// </summary>
+    private async Task<EvolutionTaskResult> InvokeEvaluatorAsync(WorkItem item, int stage, TimeSpan? timeout,
+        Func<EvolutionEvaluationContext, CancellationToken, ValueTask<EvolutionTaskResult>> invoke,
+        CancellationToken cancellationToken)
+    {
         using (var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
         {
-            if (_options.EvaluationTimeout.HasValue) linked.CancelAfter(_options.EvaluationTimeout.Value);
+            if (timeout.HasValue) linked.CancelAfter(timeout.Value);
+            Task<EvolutionTaskResult> work;
             try
             {
                 var context = new EvolutionEvaluationContext(item.EvaluationId, _options.Seed,
-                    unchecked((ulong)item.EvaluationId * 8UL + 2UL), item.AttemptCount);
-                EvolutionTaskResult result = await _task.EvaluateAsync(item.Candidate, context, linked.Token).ConfigureAwait(false);
+                    unchecked((ulong)item.EvaluationId * 8UL + 2UL + (ulong)stage * 0x9E3779B97F4A7C15UL),
+                    item.AttemptCount);
+                work = invoke(context, linked.Token).AsTask();
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return new EvolutionTaskResult(EvolutionEvaluationStatus.Canceled);
+            }
+            catch (Exception exception)
+            {
+                return EvaluatorException(exception, stage, item.AttemptCount);
+            }
+
+            if (timeout.HasValue && _options.EvaluationGracePeriod.HasValue)
+            {
+                using (var abandonment = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+                {
+                    Task limit = Task.Delay(timeout.Value + _options.EvaluationGracePeriod.Value, abandonment.Token);
+                    Task winner = await Task.WhenAny(work, limit).ConfigureAwait(false);
+                    if (!ReferenceEquals(winner, work))
+                    {
+                        Interlocked.Increment(ref _abandonedEvaluations);
+                        ObserveAbandoned(work);
+                        return TimedOut(stage, item.AttemptCount, timeout.Value, abandoned: true);
+                    }
+                    abandonment.Cancel();
+                }
+            }
+
+            try
+            {
+                EvolutionTaskResult result = await work.ConfigureAwait(false);
                 return result ?? EvolutionTaskResult.Failed("null_result", "The task returned a null evaluation result.");
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -258,17 +365,54 @@ public sealed partial class EvolutionEngine<TGenome>
             }
             catch (OperationCanceledException) when (linked.IsCancellationRequested)
             {
-                return new EvolutionTaskResult(EvolutionEvaluationStatus.TimedOut,
-                    diagnostics: new[] { new EvolutionDiagnostic("evaluation_timeout", "The evaluator exceeded its cooperative timeout.") });
+                return TimedOut(stage, item.AttemptCount, timeout, abandoned: false);
             }
             catch (Exception exception)
             {
-                return new EvolutionTaskResult(EvolutionEvaluationStatus.Failed,
-                    diagnostics: new[] { new EvolutionDiagnostic("evaluator_exception",
-                        $"Evaluator threw {exception.GetType().Name}.", isRedacted: true) });
+                return EvaluatorException(exception, stage, item.AttemptCount);
             }
         }
     }
+
+    /// <summary>Keeps an abandoned evaluator call from raising an unobserved task exception at finalization.</summary>
+    private static void ObserveAbandoned(Task<EvolutionTaskResult> work) =>
+        _ = work.ContinueWith(static completed => { _ = completed.Exception; }, CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+
+    /// <summary>Builds the structured timed-out result for one evaluator call.</summary>
+    private static EvolutionTaskResult TimedOut(int stage, int attempt, TimeSpan? timeout, bool abandoned)
+    {
+        var data = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["stage"] = stage.ToString(CultureInfo.InvariantCulture),
+            ["attempt"] = attempt.ToString(CultureInfo.InvariantCulture),
+            ["timeout_ticks"] = (timeout?.Ticks ?? 0).ToString(CultureInfo.InvariantCulture),
+            ["abandoned"] = abandoned ? "true" : "false"
+        };
+        return new EvolutionTaskResult(EvolutionEvaluationStatus.TimedOut,
+            diagnostics: new[]
+            {
+                new EvolutionDiagnostic("evaluation_timeout",
+                    abandoned
+                        ? "The evaluator ignored its cancellation token and was abandoned after the grace period."
+                        : "The evaluator exceeded its cooperative timeout.",
+                    isRedacted: false, data: data)
+            });
+    }
+
+    /// <summary>Builds the redacted failed result for an evaluator exception.</summary>
+    private static EvolutionTaskResult EvaluatorException(Exception exception, int stage, int attempt) =>
+        new(EvolutionEvaluationStatus.Failed,
+            diagnostics: new[]
+            {
+                new EvolutionDiagnostic("evaluator_exception", $"Evaluator threw {exception.GetType().Name}.",
+                    isRedacted: true, data: new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["stage"] = stage.ToString(CultureInfo.InvariantCulture),
+                        ["attempt"] = attempt.ToString(CultureInfo.InvariantCulture),
+                        ["exception"] = exception.GetType().Name
+                    })
+            });
 
     /// <summary>
     /// Commits a batch in deterministic or completion order: updates counters, archives, cache, and seen set,
@@ -293,7 +437,8 @@ public sealed partial class EvolutionEngine<TGenome>
                 {
                     insertion = _islands[item.Island].TryAdd(item.Candidate, evaluation);
                     if (_options.EnableEvaluationCache && item.CacheStatus != EvolutionCacheStatus.Hit)
-                        _cache[item.Candidate.CanonicalGenome.Id] = result;
+                        _cache[item.Candidate.CanonicalGenome.Id] = WithoutArtifacts(result);
+                    RecordCompletedEvaluation(item.Island, item.Candidate, evaluation);
                 }
             }
             else if (item.Candidate is not null && !_options.DeduplicateFailedCandidates &&
@@ -301,6 +446,8 @@ public sealed partial class EvolutionEngine<TGenome>
             {
                 _seen.Remove(item.Candidate.CanonicalGenome.Id);
             }
+
+            if (item.CacheStatus != EvolutionCacheStatus.Hit) QueueLineageArtifacts(item, evaluation);
 
             if (_selection is IOutcomeAwareEvolutionSelectionPolicy<TGenome> adaptiveSelection)
                 adaptiveSelection.Observe(evaluation, insertion);
@@ -327,11 +474,59 @@ public sealed partial class EvolutionEngine<TGenome>
         return failedFast;
     }
 
+    /// <summary>
+    /// Adds the completed evaluation to the island's global elite index and bounded history, and reports any
+    /// configured descriptor the task omitted so a silent archive rejection cannot go unnoticed.
+    /// </summary>
+    private void RecordCompletedEvaluation(int island, EvolutionCandidate<TGenome> candidate, EvolutionEvaluation evaluation)
+    {
+        IEvolutionArchive<TGenome> archive = _islands[island];
+        EvolutionCellKey? cell = TryCreateCellKey(archive, evaluation.Descriptors);
+        if (cell is null)
+        {
+            foreach (EvolutionDescriptorDefinition descriptor in archive.Descriptors)
+                if (!evaluation.Descriptors.ContainsKey(descriptor.Name))
+                    RetainFailure(new EvolutionDiagnostic("descriptor_missing:" + descriptor.Name,
+                        "A completed evaluation omitted a configured archive descriptor and could not be placed in a cell."));
+            return;
+        }
+
+        var entry = new EvolutionArchiveEntry<TGenome>(cell, candidate, evaluation);
+        if (_globalElites.Capacity > 0) _globalElites.Consider(new EvolutionEliteRecord<TGenome>(island, entry));
+        if (_histories[island].Capacity > 0)
+        {
+            string[] cellOwners = archive.Entries.Select(item => item.Evaluation.GenomeId).ToArray();
+            _histories[island].Add(entry, cellOwners, archive.Best?.Evaluation.GenomeId);
+        }
+    }
+
+    /// <summary>
+    /// Computes an archive cell from descriptor values using the archive's own descriptor definitions, returning
+    /// <c>null</c> when a value is missing or rejected by its out-of-range policy.
+    /// </summary>
+    private static EvolutionCellKey? TryCreateCellKey(IEvolutionArchiveView<TGenome> archive,
+        IReadOnlyDictionary<string, double> descriptors)
+    {
+        IReadOnlyList<EvolutionDescriptorDefinition> definitions = archive.Descriptors;
+        if (definitions.Count == 0) return null;
+        var bins = new int[definitions.Count];
+        for (int i = 0; i < definitions.Count; i++)
+        {
+            if (!descriptors.TryGetValue(definitions[i].Name, out double value) ||
+                !definitions[i].TryGetBin(value, out bins[i]))
+            {
+                return null;
+            }
+        }
+        return new EvolutionCellKey(bins);
+    }
+
     /// <summary>Builds the immutable evaluation record for a work item from its terminal result and attempt metadata.</summary>
     private EvolutionEvaluation BuildEvaluation(WorkItem item, EvolutionTaskResult result)
     {
         string genomeId = item.Candidate?.CanonicalGenome.Id ?? $"unavailable:{item.EvaluationId}";
-        double costUnits = item.CacheStatus == EvolutionCacheStatus.Hit ? 0 : item.AccumulatedCostUnits;
+        bool cacheHit = item.CacheStatus == EvolutionCacheStatus.Hit;
+        double costUnits = cacheHit ? 0 : item.AccumulatedCostUnits;
         IReadOnlyList<EvolutionDiagnostic> diagnostics = item.AttemptCount == 0
             ? result.Diagnostics
             : item.AttemptDiagnostics;
@@ -341,16 +536,19 @@ public sealed partial class EvolutionEngine<TGenome>
             result.Status,
             result.Quality,
             result.Direction,
-            result.Descriptors,
+            WithQualityDescriptor(result),
             result.Objectives,
             result.ConstraintViolations,
-            new EvolutionEvaluationCost(item.Elapsed, item.AttemptCount, costUnits),
+            new EvolutionEvaluationCost(item.Elapsed, item.AttemptCount, costUnits,
+                cacheHit ? Array.Empty<double>() : item.StageCostUnits, item.CascadeRejectedStage),
             item.Lineage,
             item.CacheStatus,
             diagnostics,
             _task.VersionHash,
             _task.EvaluatorVersionHash,
-            _configurationHash);
+            _configurationHash,
+            result.Metrics,
+            BoundArtifacts(result.Artifacts));
     }
 
     /// <summary>
@@ -359,9 +557,9 @@ public sealed partial class EvolutionEngine<TGenome>
     /// </summary>
     private async Task MigrateIfDueAsync(CancellationToken cancellationToken)
     {
-        if (_islands.Length < 2 || _options.MigrationInterval == 0 || _batchesSinceMigration < _options.MigrationInterval)
-            return;
+        if (_islands.Length < 2 || _options.MigrationInterval == 0 || !IsMigrationDue()) return;
         _batchesSinceMigration = 0;
+        _lastMigrationGeneration = MaximumIslandGeneration();
         StableRandom random = StableRandom.CreateStream(_options.Seed, unchecked(0x8000000000000000UL + (ulong)_generation));
         IReadOnlyList<EvolutionMigration<TGenome>> migrations = _migration.CreateMigrations(
             Array.AsReadOnly(_islands), _options.MigrantsPerIsland, random)
@@ -397,6 +595,19 @@ public sealed partial class EvolutionEngine<TGenome>
             message: $"{migrations.Count} elite transfers"), cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Returns whether the configured migration trigger has reached its interval.</summary>
+    private bool IsMigrationDue() => _options.MigrationTrigger == EvolutionMigrationTrigger.IslandGenerations
+        ? MaximumIslandGeneration() - _lastMigrationGeneration >= _options.MigrationInterval
+        : _batchesSinceMigration >= _options.MigrationInterval;
+
+    /// <summary>Returns the highest per-island generation counter.</summary>
+    private long MaximumIslandGeneration()
+    {
+        long maximum = 0;
+        foreach (long generation in _islandGenerations) maximum = Math.Max(maximum, generation);
+        return maximum;
+    }
+
     /// <summary>Increments the terminal counter for a status.</summary>
     private void IncrementStatus(EvolutionEvaluationStatus status)
     {
@@ -404,8 +615,18 @@ public sealed partial class EvolutionEngine<TGenome>
         _statusCounts[status] = current + 1;
     }
 
-    /// <summary>Returns whether a result exists and has a failure-like status eligible for retry.</summary>
-    private static bool IsRetryable(EvolutionTaskResult? result) => result is not null && IsFailureLike(result.Status);
+    /// <summary>Returns whether a result exists and has a failure-like status the configured retry set allows.</summary>
+    private bool IsRetryable(EvolutionTaskResult? result) =>
+        result is not null && IsFailureLike(result.Status) && (RetryFlag(result.Status) & _options.RetryOn) != 0;
+
+    /// <summary>Maps a failure-like status onto its retry flag.</summary>
+    private static EvolutionRetryStatuses RetryFlag(EvolutionEvaluationStatus status) => status switch
+    {
+        EvolutionEvaluationStatus.Failed => EvolutionRetryStatuses.Failed,
+        EvolutionEvaluationStatus.TimedOut => EvolutionRetryStatuses.TimedOut,
+        EvolutionEvaluationStatus.Canceled => EvolutionRetryStatuses.Canceled,
+        _ => EvolutionRetryStatuses.None
+    };
 
     /// <summary>Returns whether a status is failed, timed out, or canceled.</summary>
     private static bool IsFailureLike(EvolutionEvaluationStatus status) =>
@@ -447,8 +668,39 @@ public sealed partial class EvolutionEngine<TGenome>
         }
     }
 
+    /// <summary>
+    /// Returns the result's descriptors, adding the configured quality descriptor when the option is enabled, the
+    /// evaluation completed with a quality, and the task did not already supply that name itself.
+    /// </summary>
+    private IReadOnlyDictionary<string, double> WithQualityDescriptor(EvolutionTaskResult result)
+    {
+        string? name = _options.QualityDescriptorName;
+        if (name is null || result.Status != EvolutionEvaluationStatus.Completed || !result.Quality.HasValue ||
+            result.Descriptors.ContainsKey(name))
+        {
+            return result.Descriptors;
+        }
+
+        var merged = new Dictionary<string, double>(StringComparer.Ordinal);
+        foreach (KeyValuePair<string, double> descriptor in result.Descriptors) merged[descriptor.Key] = descriptor.Value;
+        merged[name] = result.Quality.Value;
+        return merged;
+    }
+
     /// <summary>Copies a cached result with zero cost units so cache hits do not re-bill the original evaluation.</summary>
     private static EvolutionTaskResult CopyWithZeroCost(EvolutionTaskResult result) => new(
         result.Status, result.Quality, result.Direction, result.Descriptors, result.Objectives,
-        result.ConstraintViolations, 0, result.Diagnostics);
+        result.ConstraintViolations, 0, result.Diagnostics, result.Metrics);
+
+    /// <summary>Strips artifacts from a result before it enters the evaluation cache.</summary>
+    /// <remarks>
+    /// The cache exists to avoid recomputation, and a cache hit never replays artifacts: they describe one specific
+    /// evaluation run, and handing them to an unrelated later proposal would deliver a stale failure note. Dropping
+    /// them at the point of caching also keeps the checkpoint small and keeps the cached result byte-identical across a
+    /// checkpoint round trip, which the run state hash depends on.
+    /// </remarks>
+    private static EvolutionTaskResult WithoutArtifacts(EvolutionTaskResult result) => result.Artifacts.Count == 0
+        ? result
+        : new EvolutionTaskResult(result.Status, result.Quality, result.Direction, result.Descriptors,
+            result.Objectives, result.ConstraintViolations, result.CostUnits, result.Diagnostics, result.Metrics);
 }
