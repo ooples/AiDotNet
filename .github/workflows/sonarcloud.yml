@@ -114,28 +114,40 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      run_id: ${{ steps.resolve.outputs.run_id }}
-      pr_number: ${{ steps.resolve.outputs.pr_number }}
-      tested_sha: ${{ steps.resolve.outputs.tested_sha }}
-      reuse: ${{ steps.resolve.outputs.reuse }}
+      run_id: ${{ steps.resolve.outputs.run_id || steps.defaults.outputs.run_id }}
+      pr_number: ${{ steps.resolve.outputs.pr_number || steps.defaults.outputs.pr_number }}
+      tested_sha: ${{ steps.resolve.outputs.tested_sha || steps.defaults.outputs.tested_sha }}
+      reuse: ${{ steps.resolve.outputs.reuse || steps.defaults.outputs.reuse }}
+      # JSON boolean, consumed through fromJSON at every expensive job boundary. A missing or
+      # malformed value fails the workflow instead of accidentally authorizing a skip.
+      execute_expensive: ${{ steps.resolve.outputs.execute_expensive || steps.defaults.outputs.execute_expensive }}
 
     steps:
+      - name: Initialize fail-closed validation decision
+        id: defaults
+        shell: bash
+        run: |
+          {
+            echo 'run_id='
+            echo 'pr_number='
+            echo 'tested_sha='
+            echo 'reuse=false'
+            echo 'execute_expensive=true'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Resolve exact-tree PR run
         id: resolve
-        if: github.event_name == 'push'
+        continue-on-error: true
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
 
-          # Empty output is deliberately the safe default: downstream jobs perform full CI.
-          {
-            echo 'run_id='
-            echo 'pr_number='
-            echo 'tested_sha='
-            echo 'reuse=false'
-          } >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_EVENT_NAME" != 'push' ]; then
+            echo "Event '$GITHUB_EVENT_NAME' requires normal validation." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
 
           if ! pulls_json=$(gh api \
             -H 'Accept: application/vnd.github+json' \
@@ -211,12 +223,22 @@ jobs:
               "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts?per_page=100" 2>/dev/null || true)
             [ -n "$artifacts_json" ] || continue
 
-            analysis_id=$(jq -r --arg expected "ci-test-analysis-${head_sha}" '
-              [.[] | .artifacts[]? | select(.expired == false and .name == $expected)]
+            # A pull_request run keys this artifact by the PR head; a merge_group run keys it by
+            # the queue commit. There is exactly one analysis artifact per run, and the downloaded
+            # payload plus certificate are both bound to tested_sha below, so discovery need not
+            # guess which event produced the candidate.
+            analysis_id=$(jq -r '
+              [.[] | .artifacts[]? |
+                select(.expired == false and (.name | startswith("ci-test-analysis-")))]
+              | sort_by(.created_at) | reverse | .[0].id // empty
+            ' <<< "$artifacts_json")
+            certificate_id=$(jq -r '
+              [.[] | .artifacts[]? |
+                select(.expired == false and (.name | startswith("ci-validation-certificate-")))]
               | sort_by(.created_at) | reverse | .[0].id // empty
             ' <<< "$artifacts_json")
             coverage_count=$(jq '[.[] | .artifacts[]? | select(.expired == false and (.name | startswith("coverage-")))] | length' <<< "$artifacts_json")
-            if [ -z "$analysis_id" ] || [ "$coverage_count" -eq 0 ]; then
+            if [ -z "$analysis_id" ] || [ -z "$certificate_id" ] || [ "$coverage_count" -eq 0 ]; then
               continue
             fi
 
@@ -228,6 +250,20 @@ jobs:
             [ -n "$entry" ] || continue
             tested_sha=$(unzip -p "$archive" "$entry" | jq -r '.source.commitSha // empty')
             [ -n "$tested_sha" ] || continue
+
+            certificate_archive="$RUNNER_TEMP/ci-validation-certificate-${run_id}.zip"
+            if ! gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${certificate_id}/zip" > "$certificate_archive"; then
+              continue
+            fi
+            certificate_entry=$(unzip -Z1 "$certificate_archive" | awk '/(^|\/)validation-certificate\.json$/ { print; exit }')
+            [ -n "$certificate_entry" ] || continue
+            if ! unzip -p "$certificate_archive" "$certificate_entry" | jq -e \
+                 --arg run "$run_id" --arg sha "$tested_sha" \
+                 '.schemaVersion == 1 and (.runId | tostring) == $run and .testedSha == $sha and
+                  (.event == "pull_request" or .event == "merge_group") and .ciGateConclusion == "success"' \
+                 >/dev/null; then
+              continue
+            fi
             tested_tree=$(gh api "repos/${GITHUB_REPOSITORY}/git/commits/${tested_sha}" --jq '.tree.sha' 2>/dev/null || true)
 
             if [ -n "$tested_tree" ] && [ "$tested_tree" = "$master_tree" ]; then
@@ -236,6 +272,7 @@ jobs:
                 echo "pr_number=$pr_number"
                 echo "tested_sha=$tested_sha"
                 echo 'reuse=true'
+                echo 'execute_expensive=false'
               } >> "$GITHUB_OUTPUT"
               echo "Reusing PR #${pr_number} run ${run_id}; tested tree ${tested_tree} exactly matches master." >> "$GITHUB_STEP_SUMMARY"
               return 0
@@ -268,17 +305,24 @@ jobs:
             sleep 60
           done
 
+      - name: Report resolver fallback
+        if: steps.resolve.outcome == 'failure'
+        run: |
+          echo '::warning::exact-tree resolver failed unexpectedly; fail-closed defaults authorize full validation'
+          echo 'Resolver failure: full validation remains enabled.' >> "$GITHUB_STEP_SUMMARY"
+
   # CodeQL runs on Ubuntu with net10.0 only - parallel with SonarCloud
   # Runs on PRs, merge groups, pushes to master/main, and the weekly security schedule.
   codeql:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
+    needs: validation-source
     # The traced net10 build takes about 31 minutes on generated-source-heavy PRs. The #2032
     # analysis was still running when the 60-minute ceiling cancelled it, while master's #2026
     # baseline completed in 57:48. Give extraction, SARIF generation, and upload enough margin
     # for normal hosted-runner variance without hiding a genuinely hung job.
     timeout-minutes: 75
-    if: "${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ fromJSON(needs.validation-source.outputs.execute_expensive) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     permissions:
       contents: read
       security-events: write
@@ -344,11 +388,12 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    needs: validation-source
     timeout-minutes: 45
     permissions:
       contents: read
       actions: write
-    if: "${{ (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ fromJSON(needs.validation-source.outputs.execute_expensive) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
 
     steps:
       - name: Checkout code
@@ -496,7 +541,7 @@ jobs:
       contents: read
       actions: write
     needs: validation-source
-    if: "${{ (github.event_name != 'push' || needs.validation-source.outputs.reuse != 'true') && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ fromJSON(needs.validation-source.outputs.execute_expensive) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
 
     steps:
       - name: Checkout code
@@ -587,6 +632,8 @@ jobs:
   select-shards:
     name: Select shards
     runs-on: ubuntu-latest
+    needs: validation-source
+    if: "${{ fromJSON(needs.validation-source.outputs.execute_expensive) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     # The whole test matrix waits on this job through `needs`, and it makes uncapped network calls
     # (gh run list, gh run download). Without a cap it inherits the 360-minute default, so one
     # stalled artifact download parks all 116 shards for six hours.
@@ -618,33 +665,65 @@ jobs:
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
+          INPUT_MAP_RUN_ID: ${{ inputs.test_impact_map_run_id }}
+          FORCE_COVERAGE: ${{ inputs.collect_coverage_everywhere }}
         run: |
-          # The map is published by test-impact-map.yml on a schedule. Absent, stale or
-          # unreadable are all handled the same way downstream: run everything.
-          # `|| true`: bash steps run with `set -e`, and gh exits non-zero when the workflow does
-          # not exist yet - which is the normal state until test-impact-map.yml reaches master.
-          # Without this the step dies before reaching the message explaining why there is no map.
-          run_id=$(gh run list --workflow test-impact-map.yml --branch master                      --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
+          # Normal PRs may consume only an audited/certified map. The forced full-coverage run is
+          # different: it consumes the exact candidate named by its dispatch input so that the next
+          # map invocation can audit that candidate against the complete outcome set.
+          rm -rf map map-probe
+          run_id=''
+          kind=''
+          if [ "$FORCE_COVERAGE" = 'true' ]; then
+            case "${INPUT_MAP_RUN_ID:-}" in
+              '')
+                echo 'bootstrap coverage run has no candidate map in effect'
+                ;;
+              *[!0-9]*)
+                echo '::warning::test_impact_map_run_id is not numeric - running without a candidate map'
+                ;;
+              *)
+                if gh run download "$INPUT_MAP_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+                     --name candidate-shard-map --dir map; then
+                  run_id="$INPUT_MAP_RUN_ID"
+                  kind='candidate'
+                else
+                  echo "::warning::candidate map from run $INPUT_MAP_RUN_ID is unavailable"
+                  rm -rf map
+                fi
+                ;;
+            esac
+          else
+            candidates=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow test-impact-map.yml \
+              --branch master --status success --limit 20 --json databaseId \
+              --jq '.[].databaseId' 2>/dev/null || true)
+            for candidate in $candidates; do
+              rm -rf map-probe
+              if gh run download "$candidate" --repo "$GITHUB_REPOSITORY" \
+                   --name certified-shard-map --dir map-probe >/dev/null 2>&1; then
+                mv map-probe map
+                run_id="$candidate"
+                kind='certified'
+                break
+              fi
+            done
+          fi
+
           if [ -z "$run_id" ]; then
-            echo "no successful map build found - selection will escalate to the full matrix"
-            echo "run_id=" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo 'no usable map found - selection will escalate to the full matrix'
           fi
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-          gh run download "$run_id" --name shard-map --dir map || echo "map artifact unavailable"
+          echo "kind=$kind" >> "$GITHUB_OUTPUT"
 
       # The impact tooling's own tests, run here rather than nowhere. Two defects on this PR were caught
       # only because these exist - reading the wrong side of a diff hunk, and a staleness check that
       # silently pinned the feature off - and both looked healthy in the logs.
       #
-      # continue-on-error, deliberately: a failing self-test means the selector cannot be trusted to
-      # REDUCE the matrix, and the fallback for that is already "run everything". Failing the job
-      # instead would block every PR in the repo on a tooling bug while adding no safety, since the
-      # behaviour it forces is the behaviour escalation already gives. The error annotation below is
-      # what makes it visible.
+      # These are deterministic contract tests for checked-in CI code. Runtime uncertainty (missing
+      # map, expired artifact, unmapped line) falls back to all shards, but a broken selector or
+      # workflow contract must block the change rather than merge green with the feature disabled.
       - name: Verify the impact tooling
         id: selftest
-        continue-on-error: true
         # A HUNG self-test would otherwise burn the job's 15-minute ceiling and kill the whole
         # job before any matrix output is written; a step timeout converts it into outcome=failure,
         # which the gate below turns into a full-matrix run.
@@ -661,18 +740,21 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Select-CoverageShards self-test failed' }
           ./tools/TestImpact/Measure-SelectionMiss.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'Measure-SelectionMiss self-test failed' }
+          ./tools/TestImpact/Test-CertifiedShardMap.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Test-CertifiedShardMap self-test failed' }
+          ./tools/TestImpact/Test-CiImpactWorkflow.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'CI impact workflow contract failed' }
+          ./tools/TestImpact/Test-TestImpactEndToEnd.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Test-impact end-to-end proof failed' }
+          ./tools/TestImpact/Test-CiGateModes.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'CI Gate mode proof failed' }
 
       - name: Select
         id: select
         shell: pwsh
         env:
-          # Both values are attacker- or typo-influenced text interpolated into code if
-          # written inline: a single quote in either would terminate the pwsh literal - a
-          # repo VARIABLE with a quote would brick every run of this job, and the dispatch
-          # input is a script-injection vector with the job token in scope (the map workflow
-          # already passes its equivalent as env for exactly this reason). Env is data.
-          TEST_IMPACT_MODE: ${{ vars.TEST_IMPACT_MODE }}
-          INPUT_MAP_RUN_ID: ${{ inputs.test_impact_map_run_id }}
+          MAP_KIND: ${{ steps.map.outputs.kind }}
+          MAP_RUN_ID: ${{ steps.map.outputs.run_id }}
         run: |
           $all = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
           if ($all.Count -eq 0) {
@@ -703,6 +785,22 @@ jobs:
           # selecting a master delta here would create a second, weaker reuse mechanism.
           $selectorTrusted = '${{ steps.selftest.outcome }}' -eq 'success'
           $eventCanReduce  = '${{ github.event_name }}' -eq 'pull_request'
+          $mapCertified = $false
+
+          if ($env:MAP_KIND -eq 'certified' -and (Test-Path map/shard-map.json) -and
+              (Test-Path map/certification.json)) {
+            try {
+              & ./tools/TestImpact/Test-CertifiedShardMap.ps1 `
+                  -MapFile map/shard-map.json `
+                  -CertificateFile map/certification.json `
+                  -CertificationRunId ([long] $env:MAP_RUN_ID)
+              if ($LASTEXITCODE -ne 0) { throw "certificate validator exited $LASTEXITCODE" }
+              $mapCertified = $true
+            }
+            catch {
+              Write-Host "::warning::certified map provenance is invalid ($($_.Exception.Message)) - running the full matrix"
+            }
+          }
 
           if (-not $selectorTrusted) {
             Write-Host '::error::the impact tooling failed its own self-test - running the full matrix.'
@@ -710,7 +808,7 @@ jobs:
           elseif (-not $eventCanReduce) {
             Write-Host "event is '${{ github.event_name }}', not a pull request - running the full matrix"
           }
-          elseif (Test-Path map/shard-map.json) {
+          elseif ($mapCertified) {
             # No base ref: the diff is taken from the map's own commit, which is the only
             # reference whose line numbers the map's ranges are expressed in.
             & ./tools/TestImpact/Select-Shards.ps1 `
@@ -722,7 +820,7 @@ jobs:
             $selected = @($result.shards)
           }
           else {
-            Write-Host '::warning::no shard map - running the full matrix'
+            Write-Host '::warning::no certified shard map - running the full matrix'
           }
 
           if ($escalate) {
@@ -752,30 +850,6 @@ jobs:
 
           # Empty is uncertainty, not permission to run nothing. Preserve the fail-safe contract
           # even if a future selector regression reaches this second line of defence.
-          # SHADOW MODE, and it is the default on purpose.
-          #
-          # The reduced path cannot be exercised before this merges: the map is published by
-          # test-impact-map.yml, which cannot run until it is on master, so every run here
-          # escalates and the first real reduction would otherwise happen in production. Shadow
-          # mode closes that gap - selection is computed and reported exactly as it would be, and
-          # then the FULL matrix runs anyway. Zero risk, and it produces the one thing missing:
-          # real data on what selection would have skipped, which Measure-SelectionMiss checks
-          # against what actually failed.
-          #
-          # Set the repository variable TEST_IMPACT_MODE to 'enforce' once that data supports it.
-          # Any other value, including unset, means shadow.
-          $mode = [string] $env:TEST_IMPACT_MODE
-          if ($mode -ne 'enforce') {
-            $wouldRun = $matrixShards.Count
-            $shadowNote = if ($escalate) { "would have escalated to all $($all.Count)" }
-                          else { "would have run $wouldRun of $($all.Count)" }
-            Write-Host "shadow mode (TEST_IMPACT_MODE='$mode'): $shadowNote - running the full matrix anyway"
-            "### Shard selection (shadow)`n`n$shadowNote. Set the repository variable ``TEST_IMPACT_MODE`` to ``enforce`` to act on this." |
-              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-            $matrixShards = $all
-            $escalate = $true
-          }
-
           if ($matrixShards.Count -eq 0) {
             Write-Host '::warning::shard selection produced an empty matrix - running the full matrix'
             $matrixShards = $all
@@ -881,12 +955,9 @@ jobs:
             "### Incremental instrumentation`n`ncarrying $($carried.Count) shard(s) forward; instrumenting the rest." |
               Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
-            $mapRunId = [string] $env:INPUT_MAP_RUN_ID
-            if ($mapRunId -and $mapRunId -notmatch '^[0-9]+$') {
-              Write-Host "::warning::test_impact_map_run_id is not numeric - ignoring it"
-              $mapRunId = ''
-            }
-            if (-not $mapRunId) { $mapRunId = '${{ steps.map.outputs.run_id }}' }
+            # Record only the map that was actually downloaded and validated by the preceding
+            # step. Never copy the raw dispatch input into provenance when its artifact was absent.
+            $mapRunId = [string] $env:MAP_RUN_ID
             [ordered]@{
               schemaVersion = 1
               forcedCoverage = $true
@@ -935,7 +1006,7 @@ jobs:
     permissions:
       actions: read
       contents: read
-    if: "${{ (github.event_name != 'push' || needs.validation-source.outputs.reuse != 'true') && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ fromJSON(needs.validation-source.outputs.execute_expensive) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     strategy:
       fail-fast: false
       max-parallel: ${{ inputs.collect_coverage_everywhere && 12 || 20 }}
@@ -1609,7 +1680,7 @@ jobs:
     # entirely -- on a push github.head_ref is empty, so this job ran on release
     # commits while every other job skipped, building the whole solution and
     # holding a runner for up to 60 minutes to do it.
-    if: "${{ (github.event_name != 'push' || needs.validation-source.outputs.reuse != 'true') && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ fromJSON(needs.validation-source.outputs.execute_expensive) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     # NO continue-on-error. It made the guards below decorative: the step printed
     # `::error::Sweep harness failed to START` and exited 1, and the job was marked
     # green anyway -- the loud failure those guards promise could never be heard.
@@ -1794,7 +1865,7 @@ jobs:
     # every concrete contract runs in a bounded child process and must agree with Predict. That makes
     # a window containing only honest declines valid while preserving strict failure for a mismatch,
     # crash, timeout, or unconstructable claimed contract.
-    if: "${{ (github.event_name != 'push' || needs.validation-source.outputs.reuse != 'true') && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ fromJSON(needs.validation-source.outputs.execute_expensive) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     strategy:
       fail-fast: false
       matrix:
@@ -1927,7 +1998,7 @@ jobs:
     name: Test regression analysis
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: "${{ always() && (github.event_name != 'push' || needs.validation-source.outputs.reuse != 'true') && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ always() && fromJSON(needs.validation-source.outputs.execute_expensive) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
       - build
       - test-net10-sharded
@@ -2181,12 +2252,13 @@ jobs:
     # check leaves the gate unsatisfied and every PR reads BLOCKED. That made "all 158 shards
     # green" the de facto merge bar via a `needs:` edge rather than a stated policy.
     #
-    # SonarCloud is code-quality analysis, not a test gate. It consumes coverage from either this
-    # validation or an exact-tree certified PR run, and those artifacts are uploaded whether a
-    # shard passed or failed. Test outcomes are gated explicitly by `ci-gate` below.
+    # SonarCloud is code-quality analysis, not a test gate. It consumes coverage from this
+    # validation, and those artifacts are uploaded whether a shard passed or failed. An exact-tree
+    # master push does not repeat the PR analysis; the scheduled full run refreshes default-branch
+    # analysis independently. Test outcomes are gated explicitly by `ci-gate` below.
     #
     # The build IS still required: without its artifacts the analysis would be meaningless.
-    if: "${{ always() && needs.build.result == 'success' && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ always() && fromJSON(needs.validation-source.outputs.execute_expensive) && needs.build.result == 'success' && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
       - build
       - test-net10-sharded
@@ -2240,21 +2312,9 @@ jobs:
           dotnet tool update dotnet-sonarscanner --tool-path ${{ runner.temp }}/scanner
 
       - name: Download current-run coverage artifacts
-        if: needs.validation-source.outputs.reuse != 'true'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
         with:
           pattern: coverage-${{ github.sha }}-*
-          path: TestResults
-          merge-multiple: true
-
-      - name: Download certified PR coverage artifacts
-        if: needs.validation-source.outputs.reuse == 'true'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
-        with:
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: ${{ needs.validation-source.outputs.run_id }}
-          pattern: coverage-*
           path: TestResults
           merge-multiple: true
 
@@ -2326,7 +2386,7 @@ jobs:
 
   # Artifact size analysis
   size-check:
-    if: "${{ (github.event_name != 'push' || needs.validation-source.outputs.reuse != 'true') && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ fromJSON(needs.validation-source.outputs.execute_expensive) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     name: Artifact Size Check
     runs-on: ubuntu-latest
     needs: [build, validation-source]
@@ -2392,7 +2452,7 @@ jobs:
     name: Test analysis (aggregate)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    if: "${{ always() && (github.event_name != 'push' || needs.validation-source.outputs.reuse != 'true') && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ always() && fromJSON(needs.validation-source.outputs.execute_expensive) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
       - test-net10-sharded
       - validation-source
@@ -2601,11 +2661,16 @@ jobs:
     if: "${{ always() && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
       - validation-source
+      - codeql
       - build
       - build-compat
+      - select-shards
       - test-net10-sharded
+      - parameter-enumeration-sweep
+      - model-shape-conformance-windows
       - test-regression-analysis
       - ci-test-analysis
+      - size-check
       - promote-ci-test-analysis
       - sonarcloud
 
@@ -2614,10 +2679,15 @@ jobs:
         env:
           BUILD_RESULT: ${{ needs.build.result }}
           BUILD_COMPAT_RESULT: ${{ needs.build-compat.result }}
+          CODEQL_RESULT: ${{ needs.codeql.result }}
+          SELECT_RESULT: ${{ needs.select-shards.result }}
           TESTS_RESULT: ${{ needs.test-net10-sharded.result }}
+          PARAMETER_SWEEP_RESULT: ${{ needs.parameter-enumeration-sweep.result }}
+          MODEL_SHAPE_RESULT: ${{ needs.model-shape-conformance-windows.result }}
           REGRESSION_ANALYSIS_RESULT: ${{ needs.test-regression-analysis.result }}
           VERDICT_ENFORCED: ${{ needs.test-regression-analysis.outputs.verdict_enforced }}
           AGGREGATE_ANALYSIS_RESULT: ${{ needs.ci-test-analysis.result }}
+          SIZE_CHECK_RESULT: ${{ needs.size-check.result }}
           PROMOTION_RESULT: ${{ needs.promote-ci-test-analysis.result }}
           SONAR_RESULT: ${{ needs.sonarcloud.result }}
           SOURCE_RESULT: ${{ needs.validation-source.result }}
@@ -2637,21 +2707,36 @@ jobs:
             echo "| Job | Result |"
             echo "|---|---|"
             echo "| validation-source | $SOURCE_RESULT |"
+            echo "| codeql | $CODEQL_RESULT |"
             echo "| build | $BUILD_RESULT |"
             echo "| build-compat | $BUILD_COMPAT_RESULT |"
+            echo "| select-shards | $SELECT_RESULT |"
             echo "| test-net10-sharded | $TESTS_RESULT |"
+            echo "| parameter-enumeration-sweep | $PARAMETER_SWEEP_RESULT |"
+            echo "| model-shape-conformance-windows | $MODEL_SHAPE_RESULT |"
             echo "| test-regression-analysis | $REGRESSION_ANALYSIS_RESULT |"
             echo "| regression verdict enforced | ${VERDICT_ENFORCED:-false} |"
             echo "| ci-test-analysis | $AGGREGATE_ANALYSIS_RESULT |"
+            echo "| size-check | $SIZE_CHECK_RESULT |"
             echo "| promote-ci-test-analysis | $PROMOTION_RESULT |"
             echo "| sonarcloud | $SONAR_RESULT |"
           } >> "$GITHUB_STEP_SUMMARY"
 
           failed=0
-          required=("validation-source:$SOURCE_RESULT" "build:$BUILD_RESULT" "build-compat:$BUILD_COMPAT_RESULT" "sonarcloud:$SONAR_RESULT")
+          required=("validation-source:$SOURCE_RESULT")
           if [ "$REUSED_VALIDATION" = "true" ]; then
             required+=("promote-ci-test-analysis:$PROMOTION_RESULT")
           else
+            required+=(
+              "codeql:$CODEQL_RESULT"
+              "build:$BUILD_RESULT"
+              "build-compat:$BUILD_COMPAT_RESULT"
+              "select-shards:$SELECT_RESULT"
+              "parameter-enumeration-sweep:$PARAMETER_SWEEP_RESULT"
+              "model-shape-conformance-windows:$MODEL_SHAPE_RESULT"
+              "size-check:$SIZE_CHECK_RESULT"
+              "sonarcloud:$SONAR_RESULT"
+            )
             # The exact-base regression analyzer is authoritative when it could recover the
             # baseline ledger. This lets known master failures remain informational while still
             # failing on PR-new unique failures. If the exact baseline is unavailable, require the
@@ -2681,5 +2766,48 @@ jobs:
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "**Gate PASSED** - all required jobs succeeded." >> "$GITHUB_STEP_SUMMARY"
+
+  # The aggregate analysis artifact proves that tests emitted data; it does not prove validation
+  # passed. Publish a separate, run-bound certificate only after the required CI Gate succeeds.
+  # Master exact-tree reuse requires this artifact and fails closed when it is absent or malformed.
+  certify-validation:
+    name: Publish certified validation proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: ci-gate
+    if: "${{ always() && needs.ci-gate.result == 'success' && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}"
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout tested tree
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Write validation certificate
+        shell: bash
+        run: |
+          set -euo pipefail
+          tree=$(git rev-parse 'HEAD^{tree}')
+          jq -n \
+            --arg runId "$GITHUB_RUN_ID" \
+            --arg testedSha "$GITHUB_SHA" \
+            --arg testedTree "$tree" \
+            --arg event "$GITHUB_EVENT_NAME" \
+            '{
+              schemaVersion: 1,
+              runId: $runId,
+              testedSha: $testedSha,
+              testedTree: $testedTree,
+              event: $event,
+              ciGateConclusion: "success"
+            }' > validation-certificate.json
+
+      - name: Upload validation certificate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: ci-validation-certificate-${{ github.event.pull_request.head.sha || github.sha }}
+          path: validation-certificate.json
+          if-no-files-found: error
+          retention-days: 90
 
   # NOTE: Website deployment has moved to deploy-website.yml (deploys to Vercel at aidotnet.dev)
