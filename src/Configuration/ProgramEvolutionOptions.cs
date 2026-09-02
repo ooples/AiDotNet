@@ -426,6 +426,18 @@ public sealed class ProgramEvolutionOptions
                 _artifactStore is not null ? nameof(ArtifactStore) : nameof(RunOutput));
         }
 
+        // A store with nothing to store is the trap this check exists to prevent: engine artifact capture is
+        // off by default, so configuring retention alone would create an empty directory and report success.
+        // Saying which flag to set is better than either failing silently or flipping an engine option the
+        // caller may have disabled on purpose.
+        if (_artifactStore is not null && !Engine.Artifacts.Enabled)
+        {
+            throw new ArgumentException(
+                "ArtifactStore retains the artifacts an evaluation produces, but the engine captures none " +
+                "unless Engine.Artifacts.Enabled is set. Enable it, or leave ArtifactStore null.",
+                nameof(ArtifactStore));
+        }
+
         if (_seedPrograms is not null) CreateSeedGenomes();
         if (_testCases is not null)
         {

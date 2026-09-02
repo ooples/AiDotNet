@@ -127,9 +127,14 @@ public sealed class EvolutionFacadeIntegrationTests
                 IncludeEliteSourceCount = 5,
                 Variation = { Mode = ProgramEvolutionMode.FullRewrite, MaxInspirations = 2 },
                 RunOutput = new ProgramRunOutputOptions { WriteAtRunEnd = true },
-                Novelty = new EmbeddingNoveltyOptions()
+                Novelty = new EmbeddingNoveltyOptions(),
+
+                // Every artifact goes to a file rather than staying inline, so the assertion below does not
+                // depend on how large the evaluator's captured output happens to be.
+                ArtifactStore = new ProgramArtifactStoreOptions { InlineSizeThresholdBytes = 0 }
             };
             options.Provenance.Enabled = true;
+            options.Engine.Artifacts.Enabled = true;
             options.SeedPrograms.Add(Program(0));
             options.TestCases.Add(new ProgramInputOutputExample { Input = "1", ExpectedOutput = "3" });
             options.TestCases.Add(new ProgramInputOutputExample { Input = "5", ExpectedOutput = "7" });
@@ -168,6 +173,13 @@ public sealed class EvolutionFacadeIntegrationTests
                 written, path => path.EndsWith(".jsonl", StringComparison.Ordinal) && path.Contains("provenance"));
             Assert.True(provenanceFile is not null, "no provenance record was written; files present: " + manifest);
             Assert.NotEmpty(File.ReadAllText(provenanceFile));
+
+            // The artifact store is constructed and rooted under the run. Whether it receives anything depends on
+            // the evaluator producing artifacts, and this run's fake sandbox succeeds without emitting any, so the
+            // observer's own behaviour is proven in ProgramArtifactStoreObserverTests rather than asserted here.
+            Assert.True(
+                Directory.Exists(Path.Combine(root, "artifacts")),
+                "the artifact store was not rooted under the run; files present: " + manifest);
 
             // Novelty gating is active without any embedding client, because the structural rung needs none.
             Assert.True(client.Calls > 0);

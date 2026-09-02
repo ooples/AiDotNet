@@ -3,6 +3,7 @@ using AiDotNet.Agentic.Models;
 using AiDotNet.Agentic.Pipeline;
 using AiDotNet.Evolution;
 using AiDotNet.Evolution.Programs;
+using AiDotNet.Evolution.Programs.ArtifactStore;
 using AiDotNet.Evolution.Programs.Novelty;
 using AiDotNet.Evolution.Programs.Outputs;
 using AiDotNet.Evolution.Programs.Provenance;
@@ -713,6 +714,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     new ProgramRunOutputWriter(runRoot, outputOptions));
             }
 
+            // Artifact retention. The engine keeps artifacts only long enough to feed one follow-up proposal, so
+            // without a store there is no way to ask after the run why a candidate scored as it did.
+            ProgramArtifactStoreObserver? artifactObserver = null;
+            if (programOptions.ArtifactStore is { } artifactOptions && runRoot is not null)
+            {
+                artifactObserver = new ProgramArtifactStoreObserver(
+                    new FileSystemProgramArtifactStore(Path.Combine(runRoot, "artifacts"), artifactOptions));
+            }
+
+            // The engine takes one observer, so the two are folded together when both are configured.
+            IEvolutionObserver<ProgramGenome>? programObserver = outputObserver is null
+                ? artifactObserver
+                : artifactObserver is null
+                    ? outputObserver
+                    : new FanOutEvolutionObserver<ProgramGenome>(outputObserver, artifactObserver);
+
             EvolutionRunOutcome outcome = await RunEvolutionAsync(
                 options,
                 task,
@@ -721,7 +738,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 null,
                 null,
                 null,
-                outputObserver,
+                programObserver,
                 null,
                 genomeDistance,
                 programOptions.CreateSeedGenomes(),
