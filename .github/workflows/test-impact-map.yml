@@ -31,6 +31,8 @@ jobs:
   build-map:
     name: Build and audit shard map
     runs-on: ubuntu-latest
+    outputs:
+      candidate_ready: ${{ steps.source.outputs.found }}
     permissions:
       actions: read
       contents: read
@@ -40,6 +42,18 @@ jobs:
         with:
           # The audit diffs from the map that was in effect for the source run.
           fetch-depth: 0
+
+      - name: Verify impact lifecycle contracts
+        shell: pwsh
+        run: |
+          ./tools/TestImpact/Test-CertifiedShardMap.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Test-CertifiedShardMap self-test failed' }
+          ./tools/TestImpact/Test-CiImpactWorkflow.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'CI impact workflow contract failed' }
+          ./tools/TestImpact/Test-TestImpactEndToEnd.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Test-impact end-to-end proof failed' }
+          ./tools/TestImpact/Test-CiGateModes.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'CI Gate mode proof failed' }
 
       - name: Find a complete marked coverage run
         id: source
@@ -175,15 +189,25 @@ jobs:
           fi
 
           if [ -z "$run_id" ]; then
-            echo "::error::no recent completed run has both the coverage marker and the exact current shard matrix"
-            exit 1
+            if [ -n "${INPUT_RUN_ID:-}" ]; then
+              echo "::error::run $INPUT_RUN_ID is not a valid coverage source"
+              exit 1
+            fi
+            # First-install bootstrap is an expected state, not a broken map build. The dispatch
+            # job below seeds a complete coverage run, and the next invocation harvests it.
+            echo 'found=false' >> "$GITHUB_OUTPUT"
+            echo "::notice::no complete marked coverage run exists yet - dispatching the bootstrap source"
+            echo 'Bootstrap: no source to harvest yet; the next coverage run will seed the first candidate map.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
+          echo 'found=true' >> "$GITHUB_OUTPUT"
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
           echo "sha=$valid_sha" >> "$GITHUB_OUTPUT"
           echo "map_run_id=$valid_map_run_id" >> "$GITHUB_OUTPUT"
           echo "harvesting run $run_id at $valid_sha (map in effect: ${valid_map_run_id:-none})"
 
       - name: Download digests
+        if: steps.source.outputs.found == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -196,6 +220,7 @@ jobs:
       # source run would stay in knownShards and remain skippable in enforce mode while red.
       # Restore the gate here: drop the carried digest of any shard whose job did not succeed.
       - name: Prune carried digests for failed shards
+        if: steps.source.outputs.found == 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -228,6 +253,7 @@ jobs:
           Write-Host "carried digests: $($carried.Count), pruned: $pruned"
 
       - name: Build the map
+        if: steps.source.outputs.found == 'true'
         shell: pwsh
         run: |
           $all = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
@@ -246,10 +272,11 @@ jobs:
           "### Shard map rebuilt`n`n- source run ${{ steps.source.outputs.run_id }}`n- commit ``${{ steps.source.outputs.sha }}```n- $files files indexed`n- $known shards mapped, $always always-run`n- $size MB" |
             Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
-      - name: Upload the map
+      - name: Upload candidate map
+        if: steps.source.outputs.found == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
-          name: shard-map
+          name: candidate-shard-map
           path: shard-map.json
           if-no-files-found: error
           retention-days: 14
@@ -258,6 +285,7 @@ jobs:
       # this source run would make the question circular. If the audit fails, this workflow is not
       # successful and selectors will not discover the newly uploaded artifact.
       - name: Download the map that was in effect
+        if: steps.source.outputs.found == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -272,7 +300,7 @@ jobs:
               exit 1
               ;;
           esac
-          if ! gh run download "$map_run_id" --name shard-map --dir prevmap; then
+          if ! gh run download "$map_run_id" --repo "$GITHUB_REPOSITORY" --name candidate-shard-map --dir prevmap; then
             # The referenced map run exists but its artifact is gone (14-day retention). Hard-
             # failing here WEDGES the nightly permanently: this build fails, the dispatch keeps
             # citing the same last-successful run, and its artifact never comes back - reviewed and
@@ -283,12 +311,15 @@ jobs:
           fi
 
       - name: Audit selection against the source run
+        id: audit
+        if: steps.source.outputs.found == 'true'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if (-not (Test-Path prevmap/shard-map.json)) {
             Write-Host 'no prior map was in effect - skipping bootstrap audit'
+            "certified=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
             exit 0
           }
 
@@ -335,7 +366,44 @@ jobs:
                      else { 'no misses' }
           "### Selection audit`n`n- map in effect: ${{ steps.source.outputs.map_run_id }}`n- would run $($a.WouldRun)/$($a.TotalShards), skip $($a.WouldSkip)`n- $($a.Failed) shard(s) failed`n- $verdict" |
             Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+          # Escalation is safe, but it proves only the fallback. Certification authorizes actual
+          # reduction, so require both a non-escalated plan that would skip work and at least one
+          # failing shard that gave the audit a real opportunity to observe a selection miss.
+          if ($auditExit -eq 0 -and -not [bool] $a.Escalated -and
+              [int] $a.WouldSkip -gt 0 -and [int] $a.Failed -gt 0) {
+            $previousMap = Get-Content prevmap/shard-map.json -Raw | ConvertFrom-Json
+            New-Item -ItemType Directory -Path certified-map -Force | Out-Null
+            Copy-Item -LiteralPath prevmap/shard-map.json -Destination certified-map/shard-map.json
+            [ordered]@{
+              schemaVersion = 1
+              candidateMapRunId = [long] '${{ steps.source.outputs.map_run_id }}'
+              candidateMapSha = [string] $previousMap.sha
+              auditSourceRunId = [long] '${{ steps.source.outputs.run_id }}'
+              auditSourceSha = '${{ steps.source.outputs.sha }}'
+              certificationRunId = [long] $env:GITHUB_RUN_ID
+              escalated = [bool] $a.Escalated
+              wouldRun = [int] $a.WouldRun
+              wouldSkip = [int] $a.WouldSkip
+              failedShards = [int] $a.Failed
+              missCount = [int] $a.MissCount
+            } | ConvertTo-Json -Depth 4 | Set-Content certified-map/certification.json -Encoding utf8
+            "certified=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          }
+          else {
+            "certified=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            Write-Host 'candidate did not exercise both failure detection and reduction - not certifying it'
+          }
           exit $auditExit
+
+      - name: Upload certified map
+        if: steps.audit.outputs.certified == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: certified-shard-map
+          path: certified-map/
+          if-no-files-found: error
+          retention-days: 14
 
   coverage-run:
     name: Dispatch next coverage-everywhere run
@@ -351,21 +419,33 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ '${{ needs.build-map.result }}' = 'success' ]; then
+          if [ '${{ needs.build-map.result }}' = 'success' ] && [ '${{ needs.build-map.outputs.candidate_ready }}' = 'true' ]; then
             # This workflow is not marked successful until this dispatch job exits. Pass its id
             # explicitly so the child cannot race and record the previous successful map.
             map_run_id='${{ github.run_id }}'
           else
             # A failed build/audit is deliberately not eligible for selection. The last successful
             # artifact remains in effect, so that is the only map the next run may claim.
-            map_run_id=$(gh run list --workflow test-impact-map.yml --branch master --status success \
-              --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
+            map_run_id=''
+            candidates=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow test-impact-map.yml \
+              --branch master --status success --limit 20 --json databaseId \
+              --jq '.[].databaseId' 2>/dev/null || true)
+            for candidate in $candidates; do
+              has_candidate=$(gh api \
+                "repos/${GITHUB_REPOSITORY}/actions/runs/${candidate}/artifacts?per_page=100" \
+                --jq '[.artifacts[] | select(.expired == false and .name == "candidate-shard-map")] | length' \
+                2>/dev/null || echo 0)
+              if [ "${has_candidate:-0}" -gt 0 ]; then
+                map_run_id="$candidate"
+                break
+              fi
+            done
           fi
 
           # A dispatch while one is still running would land in the same build-coverage-map
           # concurrency group with cancel-in-progress and DESTROY hours of instrumented work -
           # the same double-dispatch trap that killed two verification runs during development.
-          inflight=$(gh run list --workflow sonarcloud.yml --branch master --event workflow_dispatch \
+          inflight=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow sonarcloud.yml --branch master --event workflow_dispatch \
                        --json databaseId,status --jq '[.[] | select(.status == "queued" or .status == "in_progress")] | length' 2>/dev/null || echo 0)
           if [ "${inflight:-0}" -gt 0 ]; then
             echo "::warning::a coverage-everywhere run is already queued or running - not dispatching another"
@@ -374,9 +454,9 @@ jobs:
           fi
 
           if [ -n "$map_run_id" ]; then
-            gh workflow run sonarcloud.yml --ref master \
+            gh workflow run sonarcloud.yml --repo "$GITHUB_REPOSITORY" --ref master \
               -f collect_coverage_everywhere=true -f test_impact_map_run_id="$map_run_id"
           else
-            gh workflow run sonarcloud.yml --ref master -f collect_coverage_everywhere=true
+            gh workflow run sonarcloud.yml --repo "$GITHUB_REPOSITORY" --ref master -f collect_coverage_everywhere=true
           fi
           echo 'Dispatched the next marked coverage-everywhere run. It will be harvested on the next map invocation.' >> "$GITHUB_STEP_SUMMARY"
