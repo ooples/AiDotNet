@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Validation;
 
 namespace AiDotNet.Evolution;
@@ -35,14 +36,25 @@ public sealed class EvolutionCheckpoint
     /// <param name="compatibilityHash">Hash of every component that affects resume semantics.</param>
     /// <param name="payload">The engine-owned serialized state.</param>
     /// <param name="schemaVersion">The checkpoint schema version.</param>
+    /// <param name="quality">
+    /// The best elite quality this snapshot holds, or <see langword="null"/> when the run had produced no elite yet.
+    /// </param>
+    /// <param name="qualityDirection">The direction <paramref name="quality"/> is better in.</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="sequence"/> or <paramref name="schemaVersion"/> is out of range, <paramref name="quality"/> is
+    /// not finite, or <paramref name="qualityDirection"/> is undefined.
+    /// </exception>
     public EvolutionCheckpoint(string runId, long sequence, string compatibilityHash, string payload,
-        int schemaVersion = CurrentSchemaVersion)
-        : this(runId, sequence, compatibilityHash, payload, EvolutionHash.Compute(payload), schemaVersion)
+        int schemaVersion = CurrentSchemaVersion, double? quality = null,
+        EvolutionOptimizationDirection qualityDirection = EvolutionOptimizationDirection.Maximize)
+        : this(runId, sequence, compatibilityHash, payload, EvolutionHash.Compute(payload), schemaVersion, quality,
+            qualityDirection)
     {
     }
 
     internal EvolutionCheckpoint(string runId, long sequence, string compatibilityHash, string payload,
-        string checksum, int schemaVersion)
+        string checksum, int schemaVersion, double? quality = null,
+        EvolutionOptimizationDirection qualityDirection = EvolutionOptimizationDirection.Maximize)
     {
         Guard.NotNullOrWhiteSpace(runId);
         Guard.NotNullOrWhiteSpace(compatibilityHash);
@@ -50,12 +62,18 @@ public sealed class EvolutionCheckpoint
         Guard.NotNullOrWhiteSpace(checksum);
         if (sequence < 0) throw new ArgumentOutOfRangeException(nameof(sequence));
         if (schemaVersion <= 0) throw new ArgumentOutOfRangeException(nameof(schemaVersion));
+        if (quality.HasValue && (double.IsNaN(quality.Value) || double.IsInfinity(quality.Value)))
+            throw new ArgumentOutOfRangeException(nameof(quality), "A checkpoint quality must be finite.");
+        if (!Enum.IsDefined(typeof(EvolutionOptimizationDirection), qualityDirection))
+            throw new ArgumentOutOfRangeException(nameof(qualityDirection));
         RunId = runId.Trim();
         Sequence = sequence;
         CompatibilityHash = compatibilityHash.Trim();
         Payload = payload;
         Checksum = checksum.Trim();
         SchemaVersion = schemaVersion;
+        Quality = quality;
+        QualityDirection = qualityDirection;
     }
 
     /// <summary>Gets the schema version.</summary>
@@ -76,6 +94,17 @@ public sealed class EvolutionCheckpoint
     /// <summary>Gets the lowercase SHA-256 checksum of <see cref="Payload"/>.</summary>
     public string Checksum { get; }
 
+    /// <summary>Gets the best elite quality this snapshot holds, or <c>null</c> when it holds none.</summary>
+    /// <remarks>
+    /// This is provenance the engine stamps on the envelope so a store can rank snapshots without opening the opaque
+    /// payload. <c>DirectoryEvolutionCheckpointStore</c> uses it for its keep-best retention, and it is what lets a
+    /// listing show how good each retained snapshot was.
+    /// </remarks>
+    public double? Quality { get; }
+
+    /// <summary>Gets the direction in which a larger <see cref="Quality"/> is better.</summary>
+    public EvolutionOptimizationDirection QualityDirection { get; }
+
     /// <summary>Verifies the schema and payload checksum.</summary>
     /// <exception cref="InvalidDataException">The schema or checksum is invalid.</exception>
     public void Validate()
@@ -87,5 +116,6 @@ public sealed class EvolutionCheckpoint
             throw new InvalidDataException("Evolution checkpoint checksum validation failed.");
     }
 
-    internal EvolutionCheckpoint Clone() => new(RunId, Sequence, CompatibilityHash, Payload, Checksum, SchemaVersion);
+    internal EvolutionCheckpoint Clone() =>
+        new(RunId, Sequence, CompatibilityHash, Payload, Checksum, SchemaVersion, Quality, QualityDirection);
 }

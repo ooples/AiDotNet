@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using AiDotNet.Enums;
 using AiDotNet.Evolution;
 using AiDotNet.Validation;
@@ -9,18 +10,26 @@ namespace AiDotNet.Configuration;
 /// <remarks>
 /// <para>
 /// <see cref="EvolutionEngine{TGenome}"/> validates and defensively copies these options in its constructor, so
-/// mutating the original object afterwards has no effect on a running engine. Every option that can change the
-/// logical search trajectory (seed, budgets, batch size, execution mode, failure policy, retries, evaluation
-/// timeout, caching, deduplication, islands, migration, inspirations, the failure-retention bound, island
-/// assignment, the migration trigger, the global elite and history bounds, the novelty threshold, the derived
-/// quality descriptor, the selection ratios, the cascade, artifact, early-stopping and retry settings, the
-/// evaluation grace period, and the target quality) is folded into the engine's configuration and compatibility
-/// hashes, so a checkpoint written under one configuration refuses to resume under another. <see cref="RunId"/>, <see cref="MaxDegreeOfParallelism"/>,
-/// <see cref="TimeLimit"/>, <see cref="CheckpointInterval"/>, <see cref="Resume"/>, and <see cref="OutputDirectory"/>
-/// are deliberately excluded because they affect only speed, the identity of the stored run, persistence, and where
-/// files are written, never the result of a given step. Excluding <see cref="OutputDirectory"/> matters especially:
-/// it resolves to a machine-specific absolute path, so hashing it would make a run's configuration hash differ
-/// between machines and stop a checkpoint from moving with its output folder.
+/// mutating the original object afterwards has no effect on a running engine. The options divide into two groups.
+/// Semantic options change what the search means (seed, batch size, execution mode, failure policy, retries,
+/// evaluation timeout, caching, deduplication, islands, migration topology, rate and schedule, inspirations, the
+/// failure-retention bound, island assignment, the global elite and history bounds, the novelty threshold, the
+/// derived quality descriptor, the selection ratios, the cascade, artifact, early-stopping and retry settings, the
+/// evaluation grace period, and the target quality); they are folded into the engine's configuration and
+/// compatibility hashes, and a checkpoint written under one set refuses to resume under another, naming the option
+/// that differs.
+/// </para>
+/// <para>
+/// Budget options only bound or locate a run: <see cref="MaxEvaluationAttempts"/>, <see cref="MaxProposals"/>,
+/// <see cref="MaxGenerations"/>, <see cref="TimeLimit"/>, <see cref="CheckpointInterval"/>, <see cref="Resume"/>,
+/// <see cref="RunId"/>, <see cref="MaxDegreeOfParallelism"/>, and <see cref="OutputDirectory"/>. They are recorded in
+/// the checkpoint for provenance but never compared, so a run that stopped at its limit can be continued simply by
+/// raising that limit, which is the most common thing to want after a search ends. Lowering a limit below what the run
+/// already spent is legal too: the resumed run restores its counters and stops immediately with the matching budget
+/// stop reason. Excluding <see cref="OutputDirectory"/> matters especially: it resolves to a machine-specific absolute
+/// path, so hashing it would make a run's configuration hash differ between machines and stop a checkpoint from moving
+/// with its output folder. OpenEvolve compares nothing at all on resume and will happily continue a checkpoint under
+/// incompatible settings (<c>controller.py</c>).
 /// </para>
 /// <para><b>For Beginners:</b> This is the control panel for an evolutionary quality-diversity search. The budget
 /// settings say how long to search: <see cref="MaxEvaluationAttempts"/> caps how many times your evaluator is
@@ -172,8 +181,42 @@ public sealed class EvolutionEngineOptions
     /// <summary>Gets or sets the number of committed logical batches between migrations; zero disables migration.</summary>
     public int MigrationInterval { get; set; } = 20;
 
-    /// <summary>Gets or sets the maximum elites copied from each source during migration.</summary>
+    /// <summary>Gets or sets the maximum elites one island copies to any single destination during migration.</summary>
+    /// <remarks>
+    /// Under the default <see cref="EvolutionMigrationTopology.Ring"/> each island has one destination, so this is also
+    /// the number of elites that leave an island per round. A broadcasting topology sends this many to each of its
+    /// destinations, and the engine bounds the whole round by the ordered island pairs times this value.
+    /// </remarks>
     public int MigrantsPerIsland { get; set; } = 2;
+
+    /// <summary>Gets or sets which islands a migration round copies elites between.</summary>
+    /// <remarks>
+    /// The default <see cref="EvolutionMigrationTopology.Ring"/> reproduces the historical behaviour exactly: each
+    /// island feeds the next one only. Denser topologies emit up to <c>IslandCount - 1</c> destinations per source, so
+    /// the engine bounds a round by the ordered island pairs rather than by <see cref="MigrantsPerIsland"/> alone. This
+    /// option configures the engine's built-in policy; supplying an explicit <c>IMigrationPolicy</c> to the engine
+    /// overrides it, because that policy then decides every transfer itself.
+    /// </remarks>
+    public EvolutionMigrationTopology MigrationTopology { get; set; } = EvolutionMigrationTopology.Ring;
+
+    /// <summary>Gets or sets the fraction of a source island's elites that migrate; zero uses <see cref="MigrantsPerIsland"/>.</summary>
+    /// <remarks>
+    /// A positive rate resolves to <c>max(1, floor(eliteCount * rate))</c> capped at <see cref="MigrantsPerIsland"/>, so
+    /// the number of travellers grows with a filling island but can never exceed the bound you configured. Zero, the
+    /// default, keeps the fixed per-island count. OpenEvolve uses a rate of <c>0.1</c> with no upper bound
+    /// (<c>config.py</c> <c>migration_rate</c>).
+    /// </remarks>
+    public double MigrationRate { get; set; }
+
+    /// <summary>Gets or sets whether elites that arrived by an earlier migration are skipped as migration sources.</summary>
+    /// <remarks>
+    /// <see langword="false"/>, the default, migrates the best elites whatever their origin. Setting it reproduces
+    /// OpenEvolve's hard-coded guard against re-migrating an already-migrated program, which it added to stop
+    /// identical copies multiplying across islands (<c>database.py</c> <c>migrate_programs</c>). It is optional here
+    /// because a MAP-Elites archive already keeps one entry per cell, so the copies OpenEvolve feared are usually
+    /// rejected on arrival rather than accumulated.
+    /// </remarks>
+    public bool PreventRepeatedMigration { get; set; }
 
     /// <summary>Gets or sets the number of inspiration elites supplied to variation.</summary>
     public int InspirationCount { get; set; } = 3;
@@ -282,6 +325,11 @@ public sealed class EvolutionEngineOptions
             throw new ArgumentOutOfRangeException(nameof(IslandAssignment));
         if (!Enum.IsDefined(typeof(EvolutionMigrationTrigger), MigrationTrigger))
             throw new ArgumentOutOfRangeException(nameof(MigrationTrigger));
+        if (!Enum.IsDefined(typeof(EvolutionMigrationTopology), MigrationTopology))
+            throw new ArgumentOutOfRangeException(nameof(MigrationTopology));
+        if (!IsFinite(MigrationRate) || MigrationRate < 0 || MigrationRate > 1)
+            throw new ArgumentOutOfRangeException(nameof(MigrationRate),
+                "The migration rate must be a finite fraction between zero and one.");
         if (GlobalEliteCount < 0) throw new ArgumentOutOfRangeException(nameof(GlobalEliteCount));
         if (HistorySize < 0) throw new ArgumentOutOfRangeException(nameof(HistorySize));
         if (!IsFinite(NoveltyDistanceThreshold) || NoveltyDistanceThreshold < 0)
@@ -335,46 +383,129 @@ public sealed class EvolutionEngineOptions
             IslandCount = IslandCount,
             MigrationInterval = MigrationInterval,
             MigrantsPerIsland = MigrantsPerIsland,
+            MigrationTopology = MigrationTopology,
+            MigrationRate = MigrationRate,
+            PreventRepeatedMigration = PreventRepeatedMigration,
             InspirationCount = InspirationCount,
             MaxRetainedFailures = MaxRetainedFailures
         };
     }
 
-    internal string ToCanonicalString() => string.Join("|", new[]
+    /// <summary>Lists every option that changes what the search means, as ordered name/value pairs.</summary>
+    /// <remarks>
+    /// These are exactly the settings a checkpoint compares on resume: changing one of them would make the restored
+    /// state describe a different search, so continuing under the new value would corrupt it. Budget settings are
+    /// deliberately absent, which is what lets a finished run be resumed with a raised limit. The pairs are named so
+    /// that a rejected resume can say which option differs instead of only reporting a hash mismatch.
+    /// </remarks>
+    internal IReadOnlyList<KeyValuePair<string, string>> SemanticFields() => new[]
     {
-        StableRandom.AlgorithmId,
-        Seed.ToString(CultureInfo.InvariantCulture),
-        MaxEvaluationAttempts.ToString(CultureInfo.InvariantCulture),
-        MaxProposals.ToString(CultureInfo.InvariantCulture),
-        MaxGenerations.ToString(CultureInfo.InvariantCulture),
-        ProposalBatchSize.ToString(CultureInfo.InvariantCulture),
-        ((int)ExecutionMode).ToString(CultureInfo.InvariantCulture),
-        ((int)FailurePolicy).ToString(CultureInfo.InvariantCulture),
-        MaxRetries.ToString(CultureInfo.InvariantCulture),
-        EvaluationTimeout?.Ticks.ToString(CultureInfo.InvariantCulture) ?? "none",
-        EnableEvaluationCache ? "cache" : "no-cache",
-        DeduplicateFailedCandidates ? "dedup-failed" : "retry-failed",
-        IslandCount.ToString(CultureInfo.InvariantCulture),
-        MigrationInterval.ToString(CultureInfo.InvariantCulture),
-        MigrantsPerIsland.ToString(CultureInfo.InvariantCulture),
-        InspirationCount.ToString(CultureInfo.InvariantCulture),
-        MaxRetainedFailures.ToString(CultureInfo.InvariantCulture),
-        ((int)IslandAssignment).ToString(CultureInfo.InvariantCulture),
-        ((int)MigrationTrigger).ToString(CultureInfo.InvariantCulture),
-        GlobalEliteCount.ToString(CultureInfo.InvariantCulture),
-        HistorySize.ToString(CultureInfo.InvariantCulture),
-        NoveltyDistanceThreshold.ToString("R", CultureInfo.InvariantCulture),
-        QualityDescriptorName is null ? "no-quality-descriptor" : "quality:" + QualityDescriptorName,
-        Selection is null ? "default-selection" : Selection.ToCanonicalString(),
-        Cascade is null ? "default-cascade" : Cascade.ToCanonicalString(),
-        Artifacts is null ? "default-artifacts" : Artifacts.ToCanonicalString(),
-        EarlyStopping is null ? "default-early-stopping" : EarlyStopping.ToCanonicalString(),
-        EvaluationGracePeriod?.Ticks.ToString(CultureInfo.InvariantCulture) ?? "none",
-        ((int)RetryOn).ToString(CultureInfo.InvariantCulture),
-        RetryBaseDelay.Ticks.ToString(CultureInfo.InvariantCulture),
-        RetryBackoffMultiplier.ToString("R", CultureInfo.InvariantCulture),
-        TargetQuality?.ToString("R", CultureInfo.InvariantCulture) ?? "none"
-    });
+        Field("random-algorithm", StableRandom.AlgorithmId),
+        Field("seed", Seed.ToString(CultureInfo.InvariantCulture)),
+        Field("proposal-batch-size", ProposalBatchSize.ToString(CultureInfo.InvariantCulture)),
+        Field("execution-mode", ((int)ExecutionMode).ToString(CultureInfo.InvariantCulture)),
+        Field("failure-policy", ((int)FailurePolicy).ToString(CultureInfo.InvariantCulture)),
+        Field("max-retries", MaxRetries.ToString(CultureInfo.InvariantCulture)),
+        Field("evaluation-timeout", EvaluationTimeout?.Ticks.ToString(CultureInfo.InvariantCulture) ?? "none"),
+        Field("evaluation-cache", EnableEvaluationCache ? "cache" : "no-cache"),
+        Field("failed-candidate-dedup", DeduplicateFailedCandidates ? "dedup-failed" : "retry-failed"),
+        Field("island-count", IslandCount.ToString(CultureInfo.InvariantCulture)),
+        Field("migration-interval", MigrationInterval.ToString(CultureInfo.InvariantCulture)),
+        Field("migrants-per-island", MigrantsPerIsland.ToString(CultureInfo.InvariantCulture)),
+        Field("migration-topology", ((int)MigrationTopology).ToString(CultureInfo.InvariantCulture)),
+        Field("migration-rate", MigrationRate.ToString("R", CultureInfo.InvariantCulture)),
+        Field("prevent-repeated-migration", PreventRepeatedMigration ? "once" : "repeatable"),
+        Field("inspiration-count", InspirationCount.ToString(CultureInfo.InvariantCulture)),
+        Field("max-retained-failures", MaxRetainedFailures.ToString(CultureInfo.InvariantCulture)),
+        Field("island-assignment", ((int)IslandAssignment).ToString(CultureInfo.InvariantCulture)),
+        Field("migration-trigger", ((int)MigrationTrigger).ToString(CultureInfo.InvariantCulture)),
+        Field("global-elite-count", GlobalEliteCount.ToString(CultureInfo.InvariantCulture)),
+        Field("history-size", HistorySize.ToString(CultureInfo.InvariantCulture)),
+        Field("novelty-distance-threshold", NoveltyDistanceThreshold.ToString("R", CultureInfo.InvariantCulture)),
+        Field("quality-descriptor", QualityDescriptorName ?? "none"),
+        Field("selection", Selection is null ? "default-selection" : Selection.ToCanonicalString()),
+        Field("cascade", Cascade is null ? "default-cascade" : Cascade.ToCanonicalString()),
+        Field("artifacts", Artifacts is null ? "default-artifacts" : Artifacts.ToCanonicalString()),
+        Field("early-stopping", EarlyStopping is null ? "default-early-stopping" : EarlyStopping.ToCanonicalString()),
+        Field("evaluation-grace-period", EvaluationGracePeriod?.Ticks.ToString(CultureInfo.InvariantCulture) ?? "none"),
+        Field("retry-on", ((int)RetryOn).ToString(CultureInfo.InvariantCulture)),
+        Field("retry-base-delay", RetryBaseDelay.Ticks.ToString(CultureInfo.InvariantCulture)),
+        Field("retry-backoff-multiplier", RetryBackoffMultiplier.ToString("R", CultureInfo.InvariantCulture)),
+        Field("target-quality", TargetQuality?.ToString("R", CultureInfo.InvariantCulture) ?? "none")
+    };
+
+    /// <summary>Lists every option that only bounds or locates a run, as ordered name/value pairs.</summary>
+    /// <remarks>
+    /// A checkpoint records these for provenance and never compares them, so a completed run can be continued simply by
+    /// raising a limit. Lowering a limit below what a run already spent is legal too: the resumed run restores its
+    /// counters and stops immediately with the matching budget stop reason.
+    /// </remarks>
+    internal IReadOnlyList<KeyValuePair<string, string>> BudgetFields() => new[]
+    {
+        Field("run-id", RunId),
+        Field("max-evaluation-attempts", MaxEvaluationAttempts.ToString(CultureInfo.InvariantCulture)),
+        Field("max-proposals", MaxProposals.ToString(CultureInfo.InvariantCulture)),
+        Field("max-generations", MaxGenerations.ToString(CultureInfo.InvariantCulture)),
+        Field("time-limit", TimeLimit?.Ticks.ToString(CultureInfo.InvariantCulture) ?? "none"),
+        Field("checkpoint-interval", CheckpointInterval.ToString(CultureInfo.InvariantCulture)),
+        Field("resume", Resume ? "resume" : "fresh"),
+        Field("max-degree-of-parallelism", MaxDegreeOfParallelism.ToString(CultureInfo.InvariantCulture)),
+        Field("output-directory", OutputDirectory ?? "none")
+    };
+
+    /// <summary>Encodes the semantic options into the string the configuration hash is computed from.</summary>
+    internal string ToSemanticCanonicalString() => Encode(SemanticFields());
+
+    /// <summary>Encodes the budget options into the provenance string stored in a checkpoint.</summary>
+    internal string ToBudgetCanonicalString() => Encode(BudgetFields());
+
+    /// <summary>Names the first semantic option whose recorded value differs from the current one.</summary>
+    /// <param name="recorded">The name/value pairs read back from a checkpoint.</param>
+    /// <returns>A description naming the option, or <c>null</c> when every recorded option matches.</returns>
+    internal string? DescribeSemanticDifference(IReadOnlyList<KeyValuePair<string, string>> recorded)
+    {
+        IReadOnlyList<KeyValuePair<string, string>> current = SemanticFields();
+        var currentByName = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (KeyValuePair<string, string> field in current) currentByName[field.Key] = field.Value;
+        foreach (KeyValuePair<string, string> field in recorded)
+        {
+            if (!currentByName.TryGetValue(field.Key, out string? value))
+            {
+                return string.Format(CultureInfo.InvariantCulture,
+                    "the checkpoint records the option '{0}', which this engine no longer defines", field.Key);
+            }
+            if (!string.Equals(value, field.Value, StringComparison.Ordinal))
+            {
+                return string.Format(CultureInfo.InvariantCulture,
+                    "the option '{0}' changed from '{1}' to '{2}'", field.Key, field.Value, value);
+            }
+        }
+        var recordedNames = new HashSet<string>(recorded.Select(field => field.Key), StringComparer.Ordinal);
+        foreach (KeyValuePair<string, string> field in current)
+        {
+            if (!recordedNames.Contains(field.Key))
+            {
+                return string.Format(CultureInfo.InvariantCulture,
+                    "this engine defines the option '{0}', which the checkpoint does not record", field.Key);
+            }
+        }
+        return null;
+    }
+
+    private static KeyValuePair<string, string> Field(string name, string value) => new(name, value);
+
+    private static string Encode(IReadOnlyList<KeyValuePair<string, string>> fields)
+    {
+        var builder = new StringBuilder();
+        foreach (KeyValuePair<string, string> field in fields)
+        {
+            builder.Append(field.Key.Length.ToString(CultureInfo.InvariantCulture)).Append(':').Append(field.Key)
+                .Append('=')
+                .Append(field.Value.Length.ToString(CultureInfo.InvariantCulture)).Append(':').Append(field.Value)
+                .Append(';');
+        }
+        return builder.ToString();
+    }
 
     /// <summary>Validates <see cref="OutputDirectory"/> and resolves it to an absolute path without creating it.</summary>
     /// <returns>The resolved directory, or <c>null</c> when none is configured.</returns>

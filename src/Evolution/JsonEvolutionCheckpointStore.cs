@@ -209,6 +209,10 @@ public sealed class JsonEvolutionCheckpointStore : IEvolutionCheckpointStore
         public string Payload { get; set; } = string.Empty;
         /// <summary>Gets or sets the payload checksum.</summary>
         public string Checksum { get; set; } = string.Empty;
+        /// <summary>Gets or sets the best elite quality recorded on the envelope.</summary>
+        public double? Quality { get; set; }
+        /// <summary>Gets or sets the direction a larger <see cref="Quality"/> is better in.</summary>
+        public AiDotNet.Enums.EvolutionOptimizationDirection QualityDirection { get; set; }
         /// <summary>Gets or sets the checksum over every other field of this document.</summary>
         public string DocumentChecksum { get; set; } = string.Empty;
 
@@ -222,7 +226,9 @@ public sealed class JsonEvolutionCheckpointStore : IEvolutionCheckpointStore
                 Sequence = checkpoint.Sequence,
                 CompatibilityHash = checkpoint.CompatibilityHash,
                 Payload = checkpoint.Payload,
-                Checksum = checkpoint.Checksum
+                Checksum = checkpoint.Checksum,
+                Quality = checkpoint.Quality,
+                QualityDirection = checkpoint.QualityDirection
             };
             document.DocumentChecksum = document.ComputeDocumentChecksum();
             return document;
@@ -242,10 +248,23 @@ public sealed class JsonEvolutionCheckpointStore : IEvolutionCheckpointStore
             Sequence.ToString(System.Globalization.CultureInfo.InvariantCulture),
             CompatibilityHash,
             Payload,
-            Checksum
+            Checksum,
+            Quality?.ToString("R", System.Globalization.CultureInfo.InvariantCulture) ?? "none",
+            ((int)QualityDirection).ToString(System.Globalization.CultureInfo.InvariantCulture)
         });
 
         /// <summary>Rebuilds the checkpoint carried by this document without recomputing its payload checksum.</summary>
-        public EvolutionCheckpoint ToCheckpoint() => new(RunId, Sequence, CompatibilityHash, Payload, Checksum, SchemaVersion);
+        public EvolutionCheckpoint ToCheckpoint()
+        {
+            try
+            {
+                return new EvolutionCheckpoint(RunId, Sequence, CompatibilityHash, Payload, Checksum, SchemaVersion,
+                    Quality, QualityDirection);
+            }
+            catch (ArgumentOutOfRangeException exception)
+            {
+                throw new InvalidDataException("The evolution checkpoint envelope carries an invalid value.", exception);
+            }
+        }
     }
 }

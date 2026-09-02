@@ -552,9 +552,26 @@ public sealed partial class EvolutionEngine<TGenome>
     }
 
     /// <summary>
-    /// Runs the migration policy when the interval is due, validates every transfer against its source island,
-    /// and applies the transfers in a stable order before notifying observers.
+    /// The absolute number of transfers one migration round may ever carry, whatever the topology or island count.
     /// </summary>
+    /// <remarks>
+    /// The engine's real bound is the ordered island pairs times <c>MigrantsPerIsland</c>, which scales with the
+    /// configured topology; this constant is the backstop that keeps a buggy policy from flooding the archives on a run
+    /// configured with a very large island count.
+    /// </remarks>
+    private const int MaximumMigrationTransfers = 65_536;
+
+    /// <summary>
+    /// Runs the migration policy when the interval is due, validates every transfer against its source island and the
+    /// topology-scaled transfer bounds, and applies the marked copies in a stable order before notifying observers.
+    /// </summary>
+    /// <remarks>
+    /// A transfer is applied as a copy whose lineage records the source island, so a migrated elite stays
+    /// distinguishable from one discovered locally and the marker survives the checkpoint. Each copy is offered to the
+    /// destination archive under that archive's normal insertion rules and raises its own
+    /// <see cref="EvolutionEventKind.ArchiveChanged"/> event when it is accepted, so an observer sees exactly which
+    /// migrants changed which island rather than only a round summary.
+    /// </remarks>
     private async Task MigrateIfDueAsync(CancellationToken cancellationToken)
     {
         if (_islands.Length < 2 || _options.MigrationInterval == 0 || !IsMigrationDue()) return;
@@ -566,9 +583,7 @@ public sealed partial class EvolutionEngine<TGenome>
             ?? throw new InvalidOperationException("The migration policy returned null.");
         if (migrations.Any(item => item is null))
             throw new InvalidOperationException("The migration policy returned a null transfer.");
-        foreach (IGrouping<int, EvolutionMigration<TGenome>> sourceGroup in migrations.GroupBy(item => item.SourceIsland))
-            if (sourceGroup.Count() > _options.MigrantsPerIsland)
-                throw new InvalidOperationException("The migration policy exceeded the per-island transfer bound.");
+        ValidateMigrationBounds(migrations);
         EvolutionMigration<TGenome>[] orderedMigrations = migrations
             .OrderBy(item => item.SourceIsland)
             .ThenBy(item => item.DestinationIsland)
@@ -589,10 +604,88 @@ public sealed partial class EvolutionEngine<TGenome>
         }
         foreach (EvolutionMigration<TGenome> migration in orderedMigrations)
         {
-            _islands[migration.DestinationIsland].TryAdd(migration.Entry.Candidate, migration.Entry.Evaluation);
+            EvolutionArchiveEntry<TGenome> migrant = CreateMigrantEntry(migration);
+            EvolutionArchiveInsertionResult insertion =
+                _islands[migration.DestinationIsland].TryAdd(migrant.Candidate, migrant.Evaluation);
+            if (insertion == EvolutionArchiveInsertionResult.Inserted ||
+                insertion == EvolutionArchiveInsertionResult.Replaced ||
+                insertion == EvolutionArchiveInsertionResult.InsertedWithEviction)
+            {
+                await NotifyAsync(new EvolutionEvent<TGenome>(EvolutionEventKind.ArchiveChanged, NextEventSequence(),
+                    migrant.Candidate, migrant.Evaluation, insertion), cancellationToken).ConfigureAwait(false);
+            }
         }
         await NotifyAsync(new EvolutionEvent<TGenome>(EvolutionEventKind.Migrated, NextEventSequence(),
             message: $"{migrations.Count} elite transfers"), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Rejects a migration round that carries more transfers than the configured topology could ever justify.
+    /// </summary>
+    /// <remarks>
+    /// The bound is two-sided. No ordered island pair may carry more than <c>MigrantsPerIsland</c> transfers, so no
+    /// single destination can be swamped whatever the topology, and the round as a whole may not exceed the ordered
+    /// island pairs times that per-pair bound, capped by <see cref="MaximumMigrationTransfers"/>. This replaces the
+    /// earlier per-source-island bound, which a star or fully connected topology necessarily exceeds because one source
+    /// legitimately feeds every other island.
+    /// </remarks>
+    private void ValidateMigrationBounds(IReadOnlyList<EvolutionMigration<TGenome>> migrations)
+    {
+        long orderedPairs = (long)_islands.Length * (_islands.Length - 1);
+        long topologyBound = orderedPairs * _options.MigrantsPerIsland;
+        long allowed = Math.Min(topologyBound, MaximumMigrationTransfers);
+        if (migrations.Count > allowed)
+            throw new InvalidOperationException("The migration policy exceeded the total transfer bound for its topology.");
+        foreach (IGrouping<long, EvolutionMigration<TGenome>> pair in migrations.GroupBy(
+            item => (long)item.SourceIsland * _islands.Length + item.DestinationIsland))
+        {
+            if (pair.Count() > _options.MigrantsPerIsland)
+                throw new InvalidOperationException("The migration policy exceeded the per-destination transfer bound.");
+        }
+    }
+
+    /// <summary>Copies one elite for its destination island, marking the copy with the island it came from.</summary>
+    /// <remarks>
+    /// The genome, cell, evaluation identifier, and every recorded metric are preserved exactly so the destination
+    /// archive applies its normal insertion rules to the same evidence the source island holds. Only the lineage
+    /// changes: its island becomes the destination and <see cref="EvolutionLineage.MigrationSourceIsland"/> records the
+    /// origin. The source entry is untouched.
+    /// </remarks>
+    private static EvolutionArchiveEntry<TGenome> CreateMigrantEntry(EvolutionMigration<TGenome> migration)
+    {
+        EvolutionArchiveEntry<TGenome> source = migration.Entry;
+        EvolutionEvaluation evaluation = source.Evaluation;
+        EvolutionLineage lineage = evaluation.Lineage;
+        var migrantLineage = new EvolutionLineage(
+            lineage.ParentIds,
+            lineage.InspirationIds,
+            lineage.VariationOperatorId,
+            lineage.RefinerId,
+            lineage.Generation,
+            migration.DestinationIsland,
+            lineage.SeedStream,
+            migration.SourceIsland);
+        var candidate = new EvolutionCandidate<TGenome>(source.Candidate.EvaluationId,
+            source.Candidate.CanonicalGenome, migrantLineage);
+        var migrantEvaluation = new EvolutionEvaluation(
+            evaluation.EvaluationId,
+            evaluation.GenomeId,
+            evaluation.Status,
+            evaluation.Quality,
+            evaluation.Direction,
+            evaluation.Descriptors,
+            evaluation.Objectives,
+            evaluation.ConstraintViolations,
+            evaluation.Cost,
+            migrantLineage,
+            evaluation.CacheStatus,
+            evaluation.Diagnostics,
+            evaluation.TaskVersionHash,
+            evaluation.EvaluatorVersionHash,
+            evaluation.ConfigurationHash,
+            evaluation.Metrics,
+            evaluation.Artifacts);
+        return new EvolutionArchiveEntry<TGenome>(source.Cell, candidate, migrantEvaluation);
     }
 
     /// <summary>Returns whether the configured migration trigger has reached its interval.</summary>

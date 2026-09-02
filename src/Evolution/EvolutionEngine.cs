@@ -99,7 +99,11 @@ public sealed partial class EvolutionEngine<TGenome>
     /// <param name="options">Run options, defensively copied during construction.</param>
     /// <param name="selection">Optional parent/inspiration policy.</param>
     /// <param name="refiner">Optional immutable inner optimizer.</param>
-    /// <param name="migration">Optional island migration policy.</param>
+    /// <param name="migration">
+    /// Optional island migration policy. When omitted the engine builds a <see cref="TopologyMigrationPolicy{TGenome}"/>
+    /// from <c>MigrationTopology</c>, <c>MigrationRate</c>, and <c>PreventRepeatedMigration</c>; supplying a policy
+    /// here overrides all three because the policy then decides every transfer itself.
+    /// </param>
     /// <param name="observer">Optional structured observer.</param>
     /// <param name="checkpointStore">Optional checkpoint store.</param>
     /// <param name="genomeCodec">Required when checkpointing or resume is enabled.</param>
@@ -138,7 +142,8 @@ public sealed partial class EvolutionEngine<TGenome>
         _variation = variation;
         _selection = selection ?? new UniformEvolutionSelectionPolicy<TGenome>();
         _refiner = refiner;
-        _migration = migration ?? new RingMigrationPolicy<TGenome>();
+        _migration = migration ?? new TopologyMigrationPolicy<TGenome>(_options.MigrationTopology,
+            _options.MigrationRate, _options.PreventRepeatedMigration);
         _observer = observer;
         _checkpointStore = checkpointStore;
         _codec = genomeCodec;
@@ -177,7 +182,7 @@ public sealed partial class EvolutionEngine<TGenome>
             _histories[i] = new EvolutionIslandHistory<TGenome>(_options.HistorySize, _islands[0].Direction);
 
         string archiveDefinition = CanonicalArchiveDefinition(_islands[0]);
-        _configurationHash = EvolutionHash.Compute(_options.ToCanonicalString());
+        _configurationHash = EvolutionHash.Compute(_options.ToSemanticCanonicalString());
         _compatibilityHash = EvolutionHash.Combine(new[]
         {
             EvolutionCheckpoint.CurrentSchemaVersion.ToString(CultureInfo.InvariantCulture),
@@ -197,8 +202,11 @@ public sealed partial class EvolutionEngine<TGenome>
 
     /// <summary>Gets the checkpoint compatibility hash for this exact engine configuration.</summary>
     /// <remarks>
-    /// Two engines with equal hashes have identical component IDs and versions, archive definitions, and options, and can
-    /// therefore resume each other's checkpoints.
+    /// Two engines with equal hashes have identical component IDs and versions, archive definitions, and semantic
+    /// options, and can therefore resume each other's checkpoints. Budget options - the three run limits, the time
+    /// limit, the checkpoint interval, resume, the run identifier, the worker count, and the output directory - are
+    /// deliberately excluded, so a finished run can be continued under a raised limit while a changed seed, archive, or
+    /// selection policy is still refused.
     /// </remarks>
     public string CompatibilityHash => _compatibilityHash;
 
@@ -231,7 +239,8 @@ public sealed partial class EvolutionEngine<TGenome>
     /// <see cref="ICheckpointableEvolutionArchive{TGenome}"/>.
     /// </exception>
     /// <exception cref="ArgumentException">
-    /// <paramref name="initialGenomes"/> contains <see langword="null"/> or more seeds than <c>MaxProposals</c>.
+    /// <paramref name="initialGenomes"/> contains <see langword="null"/>, or, on a run that is not resuming, holds more
+    /// seeds than <c>MaxProposals</c>.
     /// </exception>
     /// <exception cref="System.IO.InvalidDataException">
     /// A checkpoint was found but is incompatible with this engine or internally inconsistent.
@@ -412,6 +421,16 @@ public sealed partial class EvolutionEngine<TGenome>
         return null;
     }
 
+    /// <summary>
+    /// Copies the caller's seed genomes, rejecting a null entry and, for a fresh run, a seed list the proposal budget
+    /// could never consume.
+    /// </summary>
+    /// <remarks>
+    /// The budget check is skipped when resume is configured. A resumed run's seed list is validated against the
+    /// checkpointed seed sequence instead, and lowering <c>MaxProposals</c> below what the run already spent is a
+    /// legitimate way to stop it: the run restores its counters and reports
+    /// <see cref="EvolutionStopReason.ProposalBudgetReached"/> rather than failing to start.
+    /// </remarks>
     private TGenome[] MaterializeSeeds(IEnumerable<TGenome> initialGenomes)
     {
         var result = new List<TGenome>();
@@ -419,7 +438,7 @@ public sealed partial class EvolutionEngine<TGenome>
         {
             while (enumerator.MoveNext())
             {
-                if (result.Count >= _options.MaxProposals)
+                if (!_options.Resume && result.Count >= _options.MaxProposals)
                     throw new ArgumentException("Initial seed count exceeds MaxProposals.", nameof(initialGenomes));
                 if (enumerator.Current is null) throw new ArgumentException("Initial genomes cannot contain null values.", nameof(initialGenomes));
                 result.Add(enumerator.Current);
