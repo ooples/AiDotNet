@@ -78,6 +78,9 @@ internal interface IConfiguredView<T, TInput, TOutput>
     /// <summary>The chat-client pipeline settings wired alongside the client.</summary>
     ChatClientOptions? ConfiguredChatClientOptions { get; }
 
+    /// <summary>The embedding client wired via <c>ConfigureEmbeddingClient</c>, already wrapped in its cache.</summary>
+    AiDotNet.Interfaces.IEmbeddingClient? ConfiguredEmbeddingClient { get; }
+
     /// <summary>The sandbox settings wired via <c>ConfigureProgramSandbox</c>.</summary>
     ProgramSandboxOptions? ConfiguredProgramSandbox { get; }
 

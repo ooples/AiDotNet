@@ -460,11 +460,38 @@ public sealed class EvolutionEngineOptions
         EvolutionArtifactOptions artifacts = Artifacts.SnapshotAndValidate();
         EvolutionEarlyStoppingOptions earlyStopping = EarlyStopping.SnapshotAndValidate();
 
+        EvolutionEngineOptions snapshot = Copy();
+        snapshot.Cascade = cascade;
+        snapshot.Artifacts = artifacts;
+        snapshot.EarlyStopping = earlyStopping;
+        snapshot.Selection = selection;
+        snapshot.RunId = RunId.Trim();
+        snapshot.OutputDirectory = outputDirectory;
+        snapshot.QualityDescriptorName = QualityDescriptorName?.Trim();
+        return snapshot;
+    }
+
+    /// <summary>Copies every option without validating any of them.</summary>
+    /// <returns>An independent instance carrying the same values, with each nested subsystem deep-copied.</returns>
+    /// <remarks>
+    /// This is the single place that enumerates the options, so a new one cannot be forgotten by a second
+    /// hand-maintained copy elsewhere. <see cref="SnapshotAndValidate"/> builds on it and then substitutes the
+    /// validated nested subsystems. Before this existed a separate copy in
+    /// <see cref="ProgramEvolutionOptions"/> silently dropped 19 of the 41 options, so a program-evolution run
+    /// discarded its cascade, early stopping, target quality, migration topology, selection policy and output
+    /// directory without any error.
+    /// </remarks>
+    internal EvolutionEngineOptions Copy()
+    {
         return new EvolutionEngineOptions
         {
-            Cascade = cascade,
-            Artifacts = artifacts,
-            EarlyStopping = earlyStopping,
+            Cascade = Cascade.SnapshotAndValidate(),
+            Artifacts = Artifacts.SnapshotAndValidate(),
+            EarlyStopping = EarlyStopping.SnapshotAndValidate(),
+            Selection = Selection.SnapshotAndValidate(),
+            QualityDescriptorName = QualityDescriptorName,
+            OutputDirectory = OutputDirectory,
+            RunId = RunId,
             EvaluationGracePeriod = EvaluationGracePeriod,
             RetryOn = RetryOn,
             RetryBaseDelay = RetryBaseDelay,
@@ -475,12 +502,8 @@ public sealed class EvolutionEngineOptions
             GlobalEliteCount = GlobalEliteCount,
             HistorySize = HistorySize,
             NoveltyDistanceThreshold = NoveltyDistanceThreshold,
-            QualityDescriptorName = QualityDescriptorName?.Trim(),
-            Selection = selection,
             SelectionPolicy = SelectionPolicy,
-            RunId = RunId.Trim(),
             Seed = Seed,
-            OutputDirectory = outputDirectory,
             MaxEvaluationAttempts = MaxEvaluationAttempts,
             MaxProposals = MaxProposals,
             MaxGenerations = MaxGenerations,

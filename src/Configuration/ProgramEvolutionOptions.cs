@@ -53,6 +53,10 @@ public sealed class ProgramEvolutionOptions
     private ScriptProgramEvaluationOptions? _script;
     private LlmFeedbackOptions? _llmFeedback;
     private EvolutionEngineOptions? _engine;
+    private ProgramMetricAggregationOptions? _metrics;
+    private ProposalProvenanceOptions? _provenance;
+    private ProgramArtifactStoreOptions? _artifactStore;
+    private ProgramRunOutputOptions? _runOutput;
     private IList<string>? _seedPrograms;
     private IList<ProgramInputOutputExample>? _testCases;
     private IList<IProgramDescriptor>? _descriptors;
@@ -188,6 +192,77 @@ public sealed class ProgramEvolutionOptions
         set => _llmFeedback = value;
     }
 
+    /// <summary>Gets or sets how an evaluator's metric dictionary is reduced to the single quality the archive ranks.</summary>
+    /// <remarks>
+    /// <para>
+    /// Applied only when an evaluator reports metrics without a quality of its own, so an evaluator that already
+    /// returns a quality is never second-guessed. The default reproduces the reference implementation's rule: a
+    /// metric literally named <c>combined_score</c> wins, otherwise the mean over the numeric metrics.
+    /// </para>
+    /// <para><b>For Beginners:</b> Scoring code often reports several numbers, such as accuracy and runtime, but the
+    /// archive can only rank one. This decides how that list becomes a single score, and unlike an implicit average
+    /// it tells you when a metric could not be read instead of quietly skipping it.</para>
+    /// </remarks>
+    public ProgramMetricAggregationOptions Metrics
+    {
+        get => _metrics ??= new ProgramMetricAggregationOptions();
+        set => _metrics = value;
+    }
+
+    /// <summary>Gets or sets whether each proposal's prompt, answer, and parse outcome are recorded for later audit.</summary>
+    /// <remarks>
+    /// Inert until <see cref="ProposalProvenanceOptions.Enabled"/> is set. Records are written beneath the run's
+    /// output directory, bounded and redacted; no API key is ever written.
+    /// </remarks>
+    public ProposalProvenanceOptions Provenance
+    {
+        get => _provenance ??= new ProposalProvenanceOptions();
+        set => _provenance = value;
+    }
+
+    /// <summary>Gets or sets on-disk retention of evaluation artifacts; <c>null</c> keeps artifacts in memory only.</summary>
+    /// <remarks>
+    /// <para>
+    /// Setting this promotes an artifact larger than the configured inline threshold to a file beneath the run's
+    /// output directory and makes it retrievable by genome id after the run, which an in-memory artifact is not.
+    /// It requires <see cref="EvolutionEngineOptions.OutputDirectory"/> to be set.
+    /// </para>
+    /// <para><b>For Beginners:</b> Artifacts are the notes an evaluation leaves behind, such as a compiler error.
+    /// By default they live in memory and vanish when the run ends; set this to keep the large ones on disk.</para>
+    /// </remarks>
+    public ProgramArtifactStoreOptions? ArtifactStore
+    {
+        get => _artifactStore;
+        set => _artifactStore = value;
+    }
+
+    /// <summary>Gets or sets writing of the best program to disk; <c>null</c> writes no program files.</summary>
+    /// <remarks>
+    /// <para>
+    /// Setting this writes the best program with the file extension of its language, plus an information document
+    /// carrying its metrics, descriptors, cell and lineage, at checkpoints and at run end as configured. It
+    /// requires <see cref="EvolutionEngineOptions.OutputDirectory"/> to be set.
+    /// </para>
+    /// <para><b>For Beginners:</b> Without this a finished run leaves nothing on disk to open. With it you get the
+    /// winning program as a real source file you can run.</para>
+    /// </remarks>
+    public ProgramRunOutputOptions? RunOutput
+    {
+        get => _runOutput;
+        set => _runOutput = value;
+    }
+
+    /// <summary>Gets or sets duplicate rejection by structural distance and optionally by embedding; <c>null</c> disables it.</summary>
+    /// <remarks>
+    /// <para>
+    /// The cheap structural rung needs no model and no network. An embedding rung is consulted only for candidates
+    /// the structural rung could not settle, and only when an embedding client is supplied to the run.
+    /// </para>
+    /// <para><b>For Beginners:</b> Language models often propose a program that is effectively one already tried.
+    /// This spots those before you pay to evaluate them.</para>
+    /// </remarks>
+    public EmbeddingNoveltyOptions? Novelty { get; set; }
+
     /// <summary>Gets or sets the generic search settings: budgets, islands, parallelism, and checkpointing.</summary>
     /// <remarks>
     /// This is the same options object the engine takes, held here so one instance describes an entire run. It is
@@ -275,7 +350,11 @@ public sealed class ProgramEvolutionOptions
             MaxProgramChars = MaxProgramChars,
             TaskDescription = TaskDescription,
             IncludeEliteSourceCount = IncludeEliteSourceCount,
-            MaxEliteSourceChars = MaxEliteSourceChars
+            MaxEliteSourceChars = MaxEliteSourceChars,
+
+            // EmbeddingNoveltyOptions validates in its constructor and exposes only get-only properties, so the
+            // instance is a value and sharing the reference is safe. The mutable subsystems below are deep-copied.
+            Novelty = Novelty
         };
 
         copy._diff = _diff is null ? null : _diff.Clone();
@@ -284,6 +363,10 @@ public sealed class ProgramEvolutionOptions
         copy._sandbox = _sandbox is null ? null : _sandbox.Clone();
         copy._script = _script is null ? null : _script.Clone();
         copy._llmFeedback = _llmFeedback is null ? null : _llmFeedback.Clone();
+        copy._metrics = _metrics is null ? null : _metrics.Clone();
+        copy._provenance = _provenance is null ? null : _provenance.Clone();
+        copy._artifactStore = _artifactStore is null ? null : _artifactStore.Clone();
+        copy._runOutput = _runOutput is null ? null : _runOutput.Clone();
         copy._engine = _engine is null ? null : CopyEngineOptions(_engine);
         copy._seedPrograms = _seedPrograms is null ? null : new List<string>(_seedPrograms);
         copy._descriptors = _descriptors is null ? null : new List<IProgramDescriptor>(_descriptors);
@@ -327,6 +410,21 @@ public sealed class ProgramEvolutionOptions
         _sandbox?.Validate();
         _script?.Validate();
         _llmFeedback?.Validate();
+        _metrics?.Validate();
+        _provenance?.Validate();
+        _artifactStore?.Validate();
+        _runOutput?.Validate();
+
+        // Both of these write files, so they need somewhere to write. Refuse at configuration time rather than
+        // after the first evaluation has already been paid for.
+        if ((_artifactStore is not null || _runOutput is not null) &&
+            string.IsNullOrWhiteSpace(Engine.OutputDirectory))
+        {
+            throw new ArgumentException(
+                "ArtifactStore and RunOutput write beneath the run's output directory, so " +
+                "Engine.OutputDirectory must be set when either is configured.",
+                _artifactStore is not null ? nameof(ArtifactStore) : nameof(RunOutput));
+        }
 
         if (_seedPrograms is not null) CreateSeedGenomes();
         if (_testCases is not null)
@@ -357,29 +455,9 @@ public sealed class ProgramEvolutionOptions
         return copy;
     }
 
-    private static EvolutionEngineOptions CopyEngineOptions(EvolutionEngineOptions source) => new()
-    {
-        RunId = source.RunId,
-        Seed = source.Seed,
-        MaxEvaluationAttempts = source.MaxEvaluationAttempts,
-        MaxProposals = source.MaxProposals,
-        MaxGenerations = source.MaxGenerations,
-        ProposalBatchSize = source.ProposalBatchSize,
-        MaxDegreeOfParallelism = source.MaxDegreeOfParallelism,
-        ExecutionMode = source.ExecutionMode,
-        FailurePolicy = source.FailurePolicy,
-        MaxRetries = source.MaxRetries,
-        EvaluationTimeout = source.EvaluationTimeout,
-        TimeLimit = source.TimeLimit,
-        CheckpointInterval = source.CheckpointInterval,
-        Resume = source.Resume,
-        EnableEvaluationCache = source.EnableEvaluationCache,
-        DeduplicateFailedCandidates = source.DeduplicateFailedCandidates,
-        IslandCount = source.IslandCount,
-        MigrationInterval = source.MigrationInterval,
-        MigrantsPerIsland = source.MigrantsPerIsland,
-        InspirationCount = source.InspirationCount,
-        MaxRetainedFailures = source.MaxRetainedFailures,
-        SelectionPolicy = source.SelectionPolicy
-    };
+    // The engine options are copied by EvolutionEngineOptions.Copy() rather than by a list maintained here. The
+    // hand-written copy this replaces silently dropped 19 of the 41 options, so a program-evolution run discarded
+    // its cascade, early stopping, target quality, migration topology, selection policy and output directory
+    // without reporting anything.
+    private static EvolutionEngineOptions CopyEngineOptions(EvolutionEngineOptions source) => source.Copy();
 }

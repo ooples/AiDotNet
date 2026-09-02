@@ -1,7 +1,11 @@
+using AiDotNet.Agentic.Embeddings;
 using AiDotNet.Agentic.Models;
 using AiDotNet.Agentic.Pipeline;
 using AiDotNet.Evolution;
 using AiDotNet.Evolution.Programs;
+using AiDotNet.Evolution.Programs.Novelty;
+using AiDotNet.Evolution.Programs.Outputs;
+using AiDotNet.Evolution.Programs.Provenance;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Results;
 using AiDotNet.ProgramSynthesis.Execution;
@@ -42,6 +46,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private object? _evolutionSeeds;
 
     private ProgramEvolutionOptions? _programEvolutionOptions;
+    private IEmbeddingClient? _embeddingClient;
     private IChatClient<T>? _chatClient;
     private ChatClientOptions? _chatClientOptions;
     private ProgramSandboxOptions? _programSandboxOptions;
@@ -333,6 +338,44 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Configures the embedding model used to spot candidates that are near-duplicates of ones already tried.
+    /// </summary>
+    /// <param name="embeddingClient">The client that turns program text into vectors.</param>
+    /// <param name="cacheCapacity">
+    /// How many embeddings to remember so a repeated candidate costs nothing; zero disables the cache.
+    /// </param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// <para>
+    /// Optional, and consulted only when <c>ProgramEvolutionOptions.Novelty</c> is set. Even then the cheap
+    /// structural comparison runs first and settles most candidates without a single call, so this is paid for only
+    /// where the structural rung was inconclusive. The client is wrapped in a content-keyed cache, so the same
+    /// program is never embedded twice.
+    /// </para>
+    /// <para><b>For Beginners:</b> An embedding turns code into a list of numbers so two programs can be compared
+    /// for meaning rather than for exact text. You only need this if you want duplicate detection that catches a
+    /// rewrite which does the same thing in different words.</para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="embeddingClient"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="cacheCapacity"/> is negative.</exception>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureEmbeddingClient(
+        IEmbeddingClient embeddingClient,
+        int cacheCapacity = CachingEmbeddingClient.DefaultCapacity)
+    {
+        Guard.NotNull(embeddingClient);
+        if (cacheCapacity < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(cacheCapacity), cacheCapacity, "Value cannot be negative.");
+        }
+
+        _embeddingClient = cacheCapacity == 0
+            ? embeddingClient
+            : new CachingEmbeddingClient(embeddingClient, cacheCapacity);
+        return this;
+    }
+
+    /// <summary>
     /// Configures several language models as one weighted ensemble.
     /// </summary>
     /// <param name="clients">The member clients; each call picks one of them.</param>
@@ -620,14 +663,55 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         EvolutionOptions options = ResolveProgramEvolutionOptions(programOptions);
         ProcessProgramExecutionEngine? ownedEngine = null;
+
+        // The provenance sink buffers records, so it is owned here and disposed in the finally below. Leaving that
+        // to the garbage collector loses whatever had not reached its flush threshold, which is the whole audit
+        // trail on a short run.
+        JsonLinesProposalProvenanceSink? provenanceSink = null;
         try
         {
             IProgramFitnessEvaluator evaluator = CreateProgramEvaluator(programOptions, out ownedEngine);
+
+            // Duplicate rejection. The structural rung costs no network call and no model, so it is the metric a
+            // program run gets by default; an embedding rung is added only when a client was supplied to score the
+            // candidates the structural rung could not settle.
+            IGenomeDistance<ProgramGenome>? genomeDistance = null;
+            if (programOptions.Novelty is { } noveltyOptions)
+            {
+                genomeDistance = _embeddingClient is null
+                    ? new ProgramTokenSetDistance()
+                    : new EmbeddingCosineGenomeDistance(_embeddingClient);
+                evaluator = new NoveltyGatingProgramFitnessEvaluator(
+                    evaluator,
+                    new ProgramNoveltyPolicy(noveltyOptions, new ProgramTokenSetDistance(), _embeddingClient));
+            }
+
             var task = new ProgramEvolutionTask(evaluator, programOptions.CreateDescriptorSet(), programOptions);
             IChatClient<T> client = _chatClientOptions is null
                 ? configuredClient
                 : ChatClientPipelineFactory.Create(configuredClient, _chatClientOptions);
-            var variation = new LlmProgramVariationOperator<T>(client, programOptions, programOptions.Variation);
+
+            string? runRoot = programOptions.Engine.OutputDirectory;
+
+            // Per-proposal audit trail. The sink writes beneath the run directory, bounded and redacted, and stays
+            // uncreated unless the caller turned it on.
+            if (programOptions.Provenance.Enabled && runRoot is not null)
+            {
+                provenanceSink = new JsonLinesProposalProvenanceSink(
+                    Path.Combine(runRoot, "provenance"), programOptions.Provenance);
+            }
+
+            var variation = new LlmProgramVariationOperator<T>(
+                client, programOptions, programOptions.Variation, "llm-program-variation", null,
+                provenanceSink, programOptions.Provenance);
+
+            // Best-program files. Without this a finished run leaves nothing on disk to open.
+            ProgramRunOutputObserver? outputObserver = null;
+            if (programOptions.RunOutput is { } outputOptions && runRoot is not null)
+            {
+                outputObserver = new ProgramRunOutputObserver(
+                    new ProgramRunOutputWriter(runRoot, outputOptions));
+            }
 
             EvolutionRunOutcome outcome = await RunEvolutionAsync(
                 options,
@@ -637,16 +721,28 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 null,
                 null,
                 null,
+                outputObserver,
                 null,
-                null,
-                // No structural distance for programs: the novelty gate is a typed-genome feature, and
-                // ProgramEvolutionOptions cannot carry one.
-                null,
+                genomeDistance,
                 programOptions.CreateSeedGenomes(),
                 programOptions.IncludeEliteSourceCount,
                 cancellationToken).ConfigureAwait(false);
 
             var typedRun = (EvolutionRunResult<ProgramGenome>)outcome.RunResult;
+
+            // The observer cannot see the archives during the run, because the engine owns them and its events carry
+            // candidates rather than archive views. The final result does expose them, so the run-end write happens
+            // here with the full frontier available.
+            if (outputObserver is not null && programOptions.RunOutput is { WriteAtRunEnd: true })
+            {
+                foreach (IEvolutionArchiveView<ProgramGenome> island in typedRun.Islands)
+                {
+                    outputObserver.AddArchive(island);
+                }
+
+                outputObserver.WriteNow();
+            }
+
             ProgramEvolutionResult programResult = ProgramEvolutionResult.Create(
                 typedRun, programOptions, variation.GetUsage(), outcome.Summary.CheckpointPath);
             outcome.Summary.LlmUsage = programResult.LlmUsage;
@@ -654,6 +750,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
         finally
         {
+            // Dispose flushes whatever the sink still holds, so the audit trail survives a short run and a
+            // cancelled one alike.
+            provenanceSink?.Dispose();
             ownedEngine?.Dispose();
         }
     }
@@ -907,6 +1006,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
     /// <inheritdoc/>
     ChatClientOptions? IConfiguredView<T, TInput, TOutput>.ConfiguredChatClientOptions => _chatClientOptions;
+
+    /// <inheritdoc/>
+    IEmbeddingClient? IConfiguredView<T, TInput, TOutput>.ConfiguredEmbeddingClient => _embeddingClient;
 
     /// <inheritdoc/>
     ProgramSandboxOptions? IConfiguredView<T, TInput, TOutput>.ConfiguredProgramSandbox => _programSandboxOptions;

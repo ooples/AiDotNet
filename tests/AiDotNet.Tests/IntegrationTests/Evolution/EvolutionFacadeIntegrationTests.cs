@@ -108,6 +108,78 @@ public sealed class EvolutionFacadeIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task ProgramEvolutionWritesItsBestProgramAndProvenanceToTheOutputDirectory()
+    {
+        // These three subsystems shipped as types nothing constructed. This asserts the facade now assembles them,
+        // by looking for the files they produce rather than for the objects themselves.
+        string root = Path.Combine(
+            Path.GetTempPath(), "aidotnet-program-outputs-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var client = new LadderChatClient();
+            var engine = new AdditionProgramExecutionEngine();
+
+            var options = new ProgramEvolutionOptions
+            {
+                Language = ProgramLanguage.Python,
+                TaskDescription = "Return the input plus two.",
+                IncludeEliteSourceCount = 5,
+                Variation = { Mode = ProgramEvolutionMode.FullRewrite, MaxInspirations = 2 },
+                RunOutput = new ProgramRunOutputOptions { WriteAtRunEnd = true },
+                Novelty = new EmbeddingNoveltyOptions()
+            };
+            options.Provenance.Enabled = true;
+            options.SeedPrograms.Add(Program(0));
+            options.TestCases.Add(new ProgramInputOutputExample { Input = "1", ExpectedOutput = "3" });
+            options.TestCases.Add(new ProgramInputOutputExample { Input = "5", ExpectedOutput = "7" });
+            options.Engine.RunId = "facade-program-outputs";
+            options.Engine.Seed = 4242UL;
+            options.Engine.OutputDirectory = root;
+            options.Engine.MaxEvaluationAttempts = EvaluationBudget;
+            options.Engine.MaxProposals = 40;
+            options.Engine.MaxGenerations = 40;
+            options.Engine.ProposalBatchSize = 4;
+            options.Engine.InspirationCount = 2;
+
+            AiModelResult<double, Matrix<double>, Vector<double>> result =
+                await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+                    .ConfigureChatClient(client)
+                    .ConfigureProgramExecutionEngine(engine)
+                    .ConfigureProgramEvolution(options)
+                    .BuildAsync();
+
+            ProgramEvolutionResult program = Assert.IsType<ProgramEvolutionResult>(result.ProgramEvolution);
+            Assert.True(program.HasBestProgram);
+
+            // The best program reaches disk as a real source file carrying its language's extension, which is the
+            // whole point: before this wiring a finished run left nothing to open.
+            string[] written = Directory.GetFiles(root, "*", SearchOption.AllDirectories);
+            string manifest = string.Join(
+                ", ", Array.ConvertAll(written, path => path.Substring(root.Length).TrimStart(Path.DirectorySeparatorChar)));
+            Assert.True(written.Length > 0, "the run wrote nothing beneath " + root);
+
+            string? bestProgramFile = Array.Find(written, path => path.EndsWith(".py", StringComparison.Ordinal));
+            Assert.True(bestProgramFile is not null, "no best-program .py file was written; files present: " + manifest);
+            Assert.Contains("+ 2", File.ReadAllText(bestProgramFile));
+
+            // The per-proposal audit trail is recorded, and it never carries a key.
+            string? provenanceFile = Array.Find(
+                written, path => path.EndsWith(".jsonl", StringComparison.Ordinal) && path.Contains("provenance"));
+            Assert.True(provenanceFile is not null, "no provenance record was written; files present: " + manifest);
+            Assert.NotEmpty(File.ReadAllText(provenanceFile));
+
+            // Novelty gating is active without any embedding client, because the structural rung needs none.
+            Assert.True(client.Calls > 0);
+            Assert.True(engine.Calls > 0);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task ProgramEvolutionRunsEndToEndWithAFakeModelAndAFakeSandbox()
     {
         var client = new LadderChatClient();

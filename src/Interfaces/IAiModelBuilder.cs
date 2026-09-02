@@ -2678,6 +2678,18 @@ public interface IAiModelBuilder<T, TInput, TOutput>
         ChatClientOptions? options = null);
 
     /// <summary>
+    /// Configures the embedding model used to spot candidates that are near-duplicates of ones already tried.
+    /// </summary>
+    /// <param name="embeddingClient">The client that turns program text into vectors.</param>
+    /// <param name="cacheCapacity">
+    /// How many embeddings to remember so a repeated candidate costs nothing; zero disables the cache.
+    /// </param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureEmbeddingClient(
+        IEmbeddingClient embeddingClient,
+        int cacheCapacity = AiDotNet.Agentic.Embeddings.CachingEmbeddingClient.DefaultCapacity);
+
+    /// <summary>
     /// Configures several language models as one weighted ensemble.
     /// </summary>
     /// <param name="clients">The member clients; each call picks one of them.</param>
