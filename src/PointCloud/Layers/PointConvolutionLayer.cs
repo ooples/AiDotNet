@@ -113,7 +113,14 @@ public partial class PointConvolutionLayer<T> : LayerBase<T>, IShapeContract
     private void InitializeWeights()
     {
         var numOps = NumOps;
-        var random = Random;
+        // LayerBase assigns the architecture-scoped initialization seed before
+        // this derived constructor runs. Using the process-shared RNG here
+        // discarded that contract, so identically seeded DGCNN/PointNet models
+        // still received different point-convolution weights depending on which
+        // models had initialized earlier in the process.
+        var random = RandomSeed.HasValue
+            ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value)
+            : Random;
         double stddev = Math.Sqrt(2.0 / _inputChannels);
         // Data.Span is a read-oriented projection and may materialize detached
         // storage for copy-on-write/view-backed tensors. Initialization must go

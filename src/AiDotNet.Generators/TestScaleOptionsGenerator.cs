@@ -41,6 +41,9 @@ namespace AiDotNet.Generators;
 [Generator]
 public class TestScaleOptionsGenerator : IIncrementalGenerator
 {
+    private const string DimensionDivisibilityAttributeName =
+        "AiDotNet.Attributes.DimensionDivisibilityAttribute";
+
     /// <summary>Names that must KEEP their value even though they are ints above the cap.</summary>
     /// <remarks>
     /// An allow-list of size words cannot work here and the attempt is instructive: bounding CSM by
@@ -77,7 +80,6 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         "Version",
         "Rank",         // LoRA rank is already small and load-bearing
         "Axis",
-        "Dimension",    // an axis INDEX, not a width; widths end in Dim/Size
         "Precision",
         "DeviceId",
         "Port",
@@ -184,6 +186,34 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
     /// </remarks>
     private static bool HasSynthesizableConstructor(INamedTypeSymbol type)
         => PickSynthesizableConstructor(type) is not null;
+
+    /// <summary>Gets inherited, declarative integer divisibility relationships for an options type.</summary>
+    private static System.Collections.Generic.List<(string Dimension, string Divisor)>
+        GetDivisibilityConstraints(INamedTypeSymbol type)
+    {
+        var constraints = new System.Collections.Generic.List<(string Dimension, string Divisor)>();
+        var seen = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
+
+        for (var walk = type; walk is not null && walk.SpecialType != SpecialType.System_Object; walk = walk.BaseType)
+        {
+            foreach (var attribute in walk.GetAttributes())
+            {
+                if (attribute.AttributeClass?.ToDisplayString() != DimensionDivisibilityAttributeName)
+                    continue;
+                if (attribute.ConstructorArguments.Length != 2)
+                    continue;
+                if (attribute.ConstructorArguments[0].Value is not string dimension
+                    || attribute.ConstructorArguments[1].Value is not string divisor)
+                    continue;
+                if (!seen.Add(dimension + "\0" + divisor))
+                    continue;
+
+                constraints.Add((dimension, divisor));
+            }
+        }
+
+        return constraints;
+    }
 
     private static IMethodSymbol? PickSynthesizableConstructor(INamedTypeSymbol type)
     {
@@ -492,6 +522,30 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
 
         sb.AppendLine("    };");
         sb.AppendLine();
+        sb.AppendLine("    private static readonly (global::System.Type Type, string Dimension, string Divisor)[] DivisibilityConstraints =");
+        sb.AppendLine("    {");
+
+        var constraintSeen = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
+        int constraintCount = 0;
+        foreach (var type in types)
+        {
+            if (type is null) continue;
+
+            var fullName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            if (!constraintSeen.Add(fullName)) continue;
+
+            var typeOfArgument = type.IsGenericType
+                ? type.ConstructUnboundGenericType().ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                : fullName;
+            foreach (var (dimension, divisor) in GetDivisibilityConstraints(type))
+            {
+                sb.AppendLine($"        (typeof({typeOfArgument}), \"{dimension}\", \"{divisor}\"),");
+                constraintCount++;
+            }
+        }
+
+        sb.AppendLine("    };");
+        sb.AppendLine();
         sb.AppendLine("    /// <summary>Creates an options instance with its size knobs clamped down.</summary>");
         sb.AppendLine("    /// <param name=\"optionsType\">The options or configuration type to build.</param>");
         sb.AppendLine("    /// <returns>A bounded instance, or null when the type cannot be bounded.</returns>");
@@ -527,6 +581,15 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("            if (Knobs[i].Type != key) continue;");
         sb.AppendLine("            known = true;");
         sb.AppendLine("            break;");
+        sb.AppendLine("        }");
+        sb.AppendLine("        if (!known)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            for (int i = 0; i < DivisibilityConstraints.Length; i++)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                if (DivisibilityConstraints[i].Type != key) continue;");
+        sb.AppendLine("                known = true;");
+        sb.AppendLine("                break;");
+        sb.AppendLine("            }");
         sb.AppendLine("        }");
         sb.AppendLine();
         sb.AppendLine("        if (!known) return null;");
@@ -575,7 +638,70 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("            }");
         sb.AppendLine("        }");
         sb.AppendLine();
+        sb.AppendLine("        // Restore relationships after both independent scaling and explicit overrides.");
+        sb.AppendLine("        // A dimension may cross the scaling floor while its small head count does not");
+        sb.AppendLine("        // (768 / 12 becomes 32 / 12), so ratio-preserving division alone is insufficient.");
+        sb.AppendLine("        bounded |= AlignDeclaredConstraints(optionsType, key, instance);");
+        sb.AppendLine();
         sb.AppendLine("        return bounded ? instance : instance;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    /// <summary>Checks every divisibility relationship declared for an options instance.</summary>");
+        sb.AppendLine("    public static bool SatisfiesDeclaredConstraints(object? instance, out string? failure)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        failure = null;");
+        sb.AppendLine("        if (instance is null)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            failure = \"The bounded options instance is null.\";");
+        sb.AppendLine("            return false;");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        var optionsType = instance.GetType();");
+        sb.AppendLine("        var key = optionsType.IsGenericType ? optionsType.GetGenericTypeDefinition() : optionsType;");
+        sb.AppendLine("        for (int i = 0; i < DivisibilityConstraints.Length; i++)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var constraint = DivisibilityConstraints[i];");
+        sb.AppendLine("            if (constraint.Type != key) continue;");
+        sb.AppendLine("            var dimensionProperty = optionsType.GetProperty(constraint.Dimension);");
+        sb.AppendLine("            var divisorProperty = optionsType.GetProperty(constraint.Divisor);");
+        sb.AppendLine("            if (dimensionProperty?.GetValue(instance) is not int dimension");
+        sb.AppendLine("                || divisorProperty?.GetValue(instance) is not int divisor)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                failure = $\"{optionsType.FullName} declares {constraint.Dimension} / {constraint.Divisor}, but both are not readable integer properties.\";");
+        sb.AppendLine("                return false;");
+        sb.AppendLine("            }");
+        sb.AppendLine("            if (dimension <= 0 || divisor <= 0 || dimension % divisor != 0)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                failure = $\"{optionsType.FullName}.{constraint.Dimension} ({dimension}) must be positive and divisible by {constraint.Divisor} ({divisor}).\";");
+        sb.AppendLine("                return false;");
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        return true;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    private static bool AlignDeclaredConstraints(global::System.Type optionsType, global::System.Type key, object instance)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        bool changed = false;");
+        sb.AppendLine("        for (int i = 0; i < DivisibilityConstraints.Length; i++)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var constraint = DivisibilityConstraints[i];");
+        sb.AppendLine("            if (constraint.Type != key) continue;");
+        sb.AppendLine("            var dimensionProperty = optionsType.GetProperty(constraint.Dimension);");
+        sb.AppendLine("            var divisorProperty = optionsType.GetProperty(constraint.Divisor);");
+        sb.AppendLine("            if (dimensionProperty is null || !dimensionProperty.CanRead || !dimensionProperty.CanWrite)");
+        sb.AppendLine("                continue;");
+        sb.AppendLine("            if (dimensionProperty.GetValue(instance) is not int dimension");
+        sb.AppendLine("                || divisorProperty?.GetValue(instance) is not int divisor)");
+        sb.AppendLine("                continue;");
+        sb.AppendLine("            if (dimension <= 0 || divisor <= 0 || dimension % divisor == 0) continue;");
+        sb.AppendLine();
+        sb.AppendLine("            int aligned = AlignDimensionToDivisor(dimension, divisor);");
+        sb.AppendLine("            if (aligned == dimension) continue;");
+        sb.AppendLine("            dimensionProperty.SetValue(instance, aligned);");
+        sb.AppendLine("            changed = true;");
+        sb.AppendLine("        }");
+        sb.AppendLine("        return changed;");
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    /// <summary>Scales any declared integer down proportionally, using no names at all.</summary>");
@@ -594,6 +720,14 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("        => declared <= MinimumScaled");
         sb.AppendLine("            ? declared");
         sb.AppendLine("            : global::System.Math.Max(MinimumScaled, declared / ScaleDivisor);");
+        sb.AppendLine();
+        sb.AppendLine("    /// <summary>Aligns a positive dimension upward to a positive architectural divisor.</summary>");
+        sb.AppendLine("    public static int AlignDimensionToDivisor(int dimension, int divisor)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        if (dimension <= 0 || divisor <= 0 || dimension % divisor == 0) return dimension;");
+        sb.AppendLine("        long aligned = ((long)dimension + divisor - 1L) / divisor * divisor;");
+        sb.AppendLine("        return aligned <= global::System.Int32.MaxValue ? (int)aligned : dimension;");
+        sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine($"    private const int ScaleDivisor = {ScaleDivisor};");
         sb.AppendLine($"    private const int MinimumScaled = {MinimumScaled};");
@@ -614,6 +748,9 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"    /// <summary>Total generated knob entries: {knobCount}.</summary>");
         sb.AppendLine($"    public static int KnobCount => {knobCount};");
+        sb.AppendLine();
+        sb.AppendLine($"    /// <summary>Total generated divisibility relationships: {constraintCount}.</summary>");
+        sb.AppendLine($"    public static int ConstraintCount => {constraintCount};");
         sb.AppendLine("}");
 
         context.AddSource("ModelTestScale.g.cs", sb.ToString());

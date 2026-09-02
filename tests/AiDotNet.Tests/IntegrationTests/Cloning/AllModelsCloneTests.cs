@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Parameters;
@@ -796,6 +797,7 @@ public class AllModelsCloneTests
             }
 
             if (!usable || args.All(a => a is null)) continue;
+            PreserveConstructorRelationships(formal, args);
 
             try
             {
@@ -809,6 +811,55 @@ public class AllModelsCloneTests
 
         return null;
     }
+
+    /// <summary>
+    /// Restores relationships that independent integer scaling can cross at its minimum floor.
+    /// </summary>
+    /// <remarks>
+    /// Options declare this through <see cref="DimensionDivisibilityAttribute"/>. Constructors that
+    /// expose the same architecture as scalar parameters have no options instance to carry that
+    /// metadata, so the reflection scaffold assigns typed semantic roles and aligns the dimension
+    /// after all defaults have been scaled. The role, not a model name or string operation, selects
+    /// behavior; SGPT is merely the first model that proved the floor could turn 768 / 12 into 32 / 12.
+    /// </remarks>
+    private static void PreserveConstructorRelationships(
+        IReadOnlyList<ParameterInfo> parameters,
+        object?[] arguments)
+    {
+        var headIndices = new List<int>();
+        for (int i = 0; i < parameters.Count; i++)
+        {
+            if (GetModelDimensionRole(parameters[i]) == ModelDimensionRole.AttentionHeadCount
+                && arguments[i] is int headCount
+                && headCount > 0)
+            {
+                headIndices.Add(i);
+            }
+        }
+
+        // Multiple independent attention groups need explicit declarative pairing; guessing which
+        // width belongs to which head count would be the same stringly-typed bug in another form.
+        if (headIndices.Count != 1) return;
+        int divisor = (int)arguments[headIndices[0]]!;
+
+        for (int i = 0; i < parameters.Count; i++)
+        {
+            if (GetModelDimensionRole(parameters[i]) != ModelDimensionRole.AttentionDimension
+                || arguments[i] is not int dimension
+                || dimension <= 0
+                || dimension % divisor == 0)
+            {
+                continue;
+            }
+
+            arguments[i] = AiDotNet.Testing.ModelTestScale.AlignDimensionToDivisor(
+                dimension,
+                divisor);
+        }
+    }
+
+    private static ModelDimensionRole? GetModelDimensionRole(ParameterInfo parameter)
+        => parameter.GetCustomAttribute<ModelDimensionRoleAttribute>()?.Role;
 
     private static bool TryCreateBoundedArgument(
         Type modelType,

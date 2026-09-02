@@ -1,5 +1,6 @@
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.VisionLanguage.Encoders;
 
@@ -22,6 +23,8 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </list>
 /// </para>
 /// </remarks>
+[DimensionDivisibility(nameof(VisionEmbeddingDim), nameof(NumVisionHeads))]
+[DimensionDivisibility(nameof(TextEmbeddingDim), nameof(NumTextHeads))]
 public class ContrastiveEncoderOptions : ModelOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>

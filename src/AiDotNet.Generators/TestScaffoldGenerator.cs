@@ -2817,6 +2817,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     totalCount,
                     coveragePct));
             }
+
+            // Options that belong to a model the scaffold cannot construct still need their test-
+            // scale contract checked. S4 is exactly that shape: the all-model clone census consumes
+            // ModelTestScale even though no S4 model-family fixture can be emitted. Generate the
+            // option invariant from the referenced AiDotNet symbol catalog, not a hand-maintained
+            // list of model names.
+            EmitGeneratedOptionDimensionScaleTests(context, compilation);
+            EmitGeneratedConstructorDimensionRoleTests(context, compilation);
         }
 
         EmitTestCoverageClass(context, testedModels, untestedModels);
@@ -3196,6 +3204,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
         }
 
+        var declaredOptionsType = FindDeclaredModelOptionsType(modelClass);
+        var scaledDimensionProperties = declaredOptionsType is not null
+            ? FindDeclaredDimensionProperties(declaredOptionsType)
+            : new List<string>();
+        string? scaledDimensionOptionsTypeName = declaredOptionsType is not null
+            && scaledDimensionProperties.Count > 0
+            && HasPublicParameterlessConstructor(declaredOptionsType)
+                ? RenderClosedOptionsType(declaredOptionsType)
+                : null;
+        string? constrainedOptionsTypeName = declaredOptionsType is not null
+            && HasDeclaredDimensionConstraint(declaredOptionsType)
+                ? RenderClosedOptionsType(declaredOptionsType)
+                : null;
+
         var className = modelClass.Name;
         var info = new ModelTestInfo
         {
@@ -3219,6 +3241,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             InheritsFromExcludedBase = InheritsFromAnyExcludedBase(modelClass),
             RequestsFloatScaffold = HasFloatScaffoldAttribute(modelClass),
             ArchitectureParamTypeName = architectureParamTypeName,
+            ScaledDimensionOptionsTypeName = scaledDimensionOptionsTypeName,
+            ScaledDimensionProperties = scaledDimensionProperties,
+            ConstrainedOptionsTypeName = constrainedOptionsTypeName,
             ExtendsAudioNeuralNetworkBase = extendsAudioNN,
             ExtendsDocumentNeuralNetworkBase = extendsDocumentNN,
             ExtendsVisionLanguageModelBase = extendsVisionLanguage,
@@ -4989,7 +5014,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // discrete TopK boundary while perturbing a weight. The production defaults remain
                 // ModelNet40-scale (k=20, 64/64/128/256 channels).
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.DGCNNOptions {{ " +
-                    "NumClasses = 4, InputFeatureDim = 3, KnnK = 7, " +
+                    "Seed = 1337, NumClasses = 4, InputFeatureDim = 3, KnnK = 7, " +
                     "EdgeConvChannels = new[] { 8, 8 }, ClassifierChannels = new[] { 8 }, " +
                     "UseDropout = false, DropoutRate = 0.0, LearningRate = 0.001 })";
             }
@@ -14928,6 +14953,65 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    }");
         }
 
+        if (model.ConstrainedOptionsTypeName is not null)
+        {
+            // The invariant belongs to the generated model scaffold because that is the consumer
+            // of ModelTestScale. Emitting it here keeps new constrained families covered without a
+            // hand-maintained test list or per-model fixture edit.
+            sb.AppendLine();
+            sb.AppendLine("    [Xunit.Fact]");
+            sb.AppendLine("    public void GeneratedBoundedOptions_PreserveDeclaredDimensionConstraints()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        var bounded = global::AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(typeof({model.ConstrainedOptionsTypeName}));");
+            sb.AppendLine("        Xunit.Assert.NotNull(bounded);");
+            sb.AppendLine("        Xunit.Assert.True(");
+            sb.AppendLine("            global::AiDotNet.Testing.ModelTestScale.SatisfiesDeclaredConstraints(bounded, out var failure),");
+            sb.AppendLine("            failure);");
+            sb.AppendLine("    }");
+        }
+
+        if (model.ScaledDimensionOptionsTypeName is not null)
+        {
+            // Test-scale dimensions are part of the generated scaffold contract. Emitting direct,
+            // typed property access means a rename fails compilation and a broad name exclusion
+            // cannot silently leave an entire options family at paper scale again.
+            sb.AppendLine();
+            sb.AppendLine("    [Xunit.Fact]");
+            sb.AppendLine("    public void GeneratedBoundedOptions_ScaleDeclaredDimensions()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        var defaults = new {model.ScaledDimensionOptionsTypeName}();");
+            sb.AppendLine($"        var bounded = Xunit.Assert.IsType<{model.ScaledDimensionOptionsTypeName}>(");
+            sb.AppendLine($"            global::AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(typeof({model.ScaledDimensionOptionsTypeName})));");
+            foreach (var property in model.ScaledDimensionProperties)
+            {
+                sb.AppendLine($"        var expected{property} = global::AiDotNet.Testing.ModelTestScale.ScaleDeclaredInteger(defaults.{property});");
+                sb.AppendLine($"        if (expected{property} < defaults.{property})");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            Xunit.Assert.InRange(bounded.{property}, expected{property}, defaults.{property} - 1);");
+                sb.AppendLine("        }");
+                sb.AppendLine("        else");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            Xunit.Assert.Equal(defaults.{property}, bounded.{property});");
+                sb.AppendLine("        }");
+            }
+            sb.AppendLine("    }");
+        }
+
+        if (model.ClassName == "DGCNN")
+        {
+            string scalarType = useFloat ? "float" : "double";
+            sb.AppendLine();
+            sb.AppendLine("    [Xunit.Fact]");
+            sb.AppendLine("    public void ConfiguredSeed_IsBoundToArchitectureBeforeLayerInitialization()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        using var first = Xunit.Assert.IsType<{typeName}<{scalarType}>>(CreateNetwork());");
+            sb.AppendLine($"        using var second = Xunit.Assert.IsType<{typeName}<{scalarType}>>(CreateNetwork());");
+            sb.AppendLine("        Xunit.Assert.Equal(1337, first.Architecture.RandomSeed);");
+            sb.AppendLine("        Xunit.Assert.Equal(1337, second.Architecture.RandomSeed);");
+            sb.AppendLine("        Xunit.Assert.Equal(first.GetParameters().ToArray(), second.GetParameters().ToArray());");
+            sb.AppendLine("    }");
+        }
+
         sb.AppendLine($"    protected override {returnTypeCode} {factoryMethodName}()");
         // TOTEM's vector-quantizer codebook trains cleanly from most draws but sends the parameter
         // L2 to NaN on the first step from some, which surfaced only once it ran alongside sibling
@@ -16982,6 +17066,304 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         return backtick >= 0 ? name.Substring(0, backtick) : name;
     }
 
+    /// <summary>Finds the public ModelOptions-derived parameter that configures a model.</summary>
+    private static INamedTypeSymbol? FindDeclaredModelOptionsType(INamedTypeSymbol modelType)
+    {
+        foreach (var constructor in modelType.InstanceConstructors
+                     .Where(c => c.DeclaredAccessibility == Accessibility.Public)
+                     .OrderBy(c => c.Parameters.Length))
+        {
+            foreach (var parameter in constructor.Parameters)
+            {
+                if (parameter.Type is not INamedTypeSymbol candidate) continue;
+                for (var walk = candidate; walk is not null; walk = walk.BaseType)
+                {
+                    if (walk.ToDisplayString() == "AiDotNet.Models.Options.ModelOptions")
+                        return candidate;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Whether an options type or one of its bases declares a generated relationship.</summary>
+    private static bool HasDeclaredDimensionConstraint(INamedTypeSymbol optionsType)
+    {
+        for (var walk = optionsType; walk is not null; walk = walk.BaseType)
+        {
+            foreach (var attribute in walk.GetAttributes())
+            {
+                if (attribute.AttributeClass?.ToDisplayString()
+                    == "AiDotNet.Attributes.DimensionDivisibilityAttribute")
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Gets public writable integer dimensions from an options type and its bases.</summary>
+    private static List<string> FindDeclaredDimensionProperties(INamedTypeSymbol optionsType)
+    {
+        var properties = new List<string>();
+        var seen = new HashSet<string>(System.StringComparer.Ordinal);
+        for (var walk = optionsType; walk is not null; walk = walk.BaseType)
+        {
+            foreach (var property in walk.GetMembers().OfType<IPropertySymbol>())
+            {
+                if (!seen.Add(property.Name)) continue;
+                if (!property.Name.EndsWith("Dimension", System.StringComparison.Ordinal)) continue;
+                if (property.Type.SpecialType != SpecialType.System_Int32) continue;
+                if (property.DeclaredAccessibility != Accessibility.Public) continue;
+                if (property.SetMethod?.DeclaredAccessibility != Accessibility.Public) continue;
+                properties.Add(property.Name);
+            }
+        }
+
+        properties.Sort(System.StringComparer.Ordinal);
+        return properties;
+    }
+
+    /// <summary>Whether generated code can construct the options type directly.</summary>
+    private static bool HasPublicParameterlessConstructor(INamedTypeSymbol optionsType)
+        => optionsType.InstanceConstructors.Any(constructor =>
+            constructor.DeclaredAccessibility == Accessibility.Public
+            && constructor.Parameters.Length == 0);
+
+    /// <summary>Emits typed scaling invariants for every supported options dimension.</summary>
+    private static void EmitGeneratedOptionDimensionScaleTests(
+        SourceProductionContext context,
+        Compilation compilation)
+    {
+        var modelOptions = GeneratorHelpers.ResolveSourceType(
+            compilation,
+            "AiDotNet.Models.Options.ModelOptions");
+        if (modelOptions is null) return;
+
+        var candidates = new List<INamedTypeSymbol>();
+        CollectDimensionOptionTypes(
+            modelOptions.ContainingAssembly.GlobalNamespace,
+            modelOptions,
+            candidates);
+        if (candidates.Count == 0) return;
+
+        candidates.Sort((left, right) => System.StringComparer.Ordinal.Compare(
+            left.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            right.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)));
+
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("#nullable enable");
+        sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
+        sb.AppendLine();
+        sb.AppendLine("public sealed class GeneratedOptionDimensionScaleTests");
+        sb.AppendLine("{");
+
+        foreach (var optionsType in candidates)
+        {
+            var typeName = RenderClosedOptionsType(optionsType);
+            var methodName = ToGeneratedIdentifier(
+                optionsType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
+                + "_ScalesDeclaredDimensions";
+            var properties = FindDeclaredDimensionProperties(optionsType);
+
+            sb.AppendLine("    [Xunit.Fact]");
+            sb.AppendLine($"    public void {methodName}()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        var defaults = new {typeName}();");
+            sb.AppendLine($"        var bounded = Xunit.Assert.IsType<{typeName}>(");
+            sb.AppendLine($"            global::AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(typeof({typeName})));");
+            foreach (var property in properties)
+            {
+                sb.AppendLine($"        var expected{property} = global::AiDotNet.Testing.ModelTestScale.ScaleDeclaredInteger(defaults.{property});");
+                sb.AppendLine($"        if (expected{property} < defaults.{property})");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            Xunit.Assert.InRange(bounded.{property}, expected{property}, defaults.{property} - 1);");
+                sb.AppendLine("        }");
+                sb.AppendLine("        else");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            Xunit.Assert.Equal(defaults.{property}, bounded.{property});");
+                sb.AppendLine("        }");
+            }
+            sb.AppendLine("    }");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("}");
+        context.AddSource("GeneratedOptionDimensionScaleTests.g.cs", sb.ToString());
+    }
+
+    private static void CollectDimensionOptionTypes(
+        INamespaceSymbol ns,
+        INamedTypeSymbol modelOptions,
+        List<INamedTypeSymbol> candidates)
+    {
+        foreach (var member in ns.GetMembers())
+        {
+            if (member is INamespaceSymbol childNamespace)
+            {
+                CollectDimensionOptionTypes(childNamespace, modelOptions, candidates);
+                continue;
+            }
+
+            if (member is not INamedTypeSymbol type) continue;
+            if (type.TypeKind != TypeKind.Class || type.IsAbstract) continue;
+            if (type.DeclaredAccessibility != Accessibility.Public) continue;
+            if (type.Arity > 1) continue;
+            if (!HasPublicParameterlessConstructor(type)) continue;
+            if (!DerivesFrom(type, modelOptions)) continue;
+            if (FindDeclaredDimensionProperties(type).Count == 0) continue;
+            if (type.Arity == 1 && !CanCloseOptionsWithDouble(type)) continue;
+
+            candidates.Add(type);
+        }
+    }
+
+    /// <summary>
+    /// Emits invariants for constructor parameters carrying typed architectural dimension roles.
+    /// </summary>
+    private static void EmitGeneratedConstructorDimensionRoleTests(
+        SourceProductionContext context,
+        Compilation compilation)
+    {
+        const string roleAttribute = "AiDotNet.Attributes.ModelDimensionRoleAttribute";
+        var candidates = new List<(INamedTypeSymbol Type, IMethodSymbol Constructor)>();
+        CollectConstructorDimensionRoles(
+            compilation.Assembly.GlobalNamespace,
+            roleAttribute,
+            candidates);
+
+        // The model symbols live in the referenced AiDotNet assembly when this generator runs for
+        // AiDotNet.Tests. Walk that catalog as well; source-only discovery would silently emit zero.
+        var neuralNetworkBase = GeneratorHelpers.ResolveSourceType(
+            compilation,
+            "AiDotNet.NeuralNetworks.NeuralNetworkBase`1");
+        if (neuralNetworkBase is not null)
+        {
+            CollectConstructorDimensionRoles(
+                neuralNetworkBase.ContainingAssembly.GlobalNamespace,
+                roleAttribute,
+                candidates);
+        }
+
+        candidates = candidates
+            .GroupBy(candidate => candidate.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                + "\0" + candidate.Constructor.Parameters.Length)
+            .Select(group => group.First())
+            .OrderBy(candidate => candidate.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                System.StringComparer.Ordinal)
+            .ToList();
+        if (candidates.Count == 0) return;
+
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("#nullable enable");
+        sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
+        sb.AppendLine();
+        sb.AppendLine("public sealed class GeneratedConstructorDimensionRoleTests");
+        sb.AppendLine("{");
+
+        foreach (var candidate in candidates)
+        {
+            string typeName = candidate.Type.IsGenericType
+                ? candidate.Type.ConstructUnboundGenericType()
+                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                : candidate.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            string methodName = ToGeneratedIdentifier(
+                candidate.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
+                + "_PreservesDeclaredAttentionGeometry";
+
+            sb.AppendLine("    [Xunit.Fact]");
+            sb.AppendLine($"    public void {methodName}()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        var constructors = typeof({typeName}).GetConstructors();");
+            sb.AppendLine("        var constructor = Xunit.Assert.Single(global::System.Linq.Enumerable.Where(constructors, candidate =>");
+            sb.AppendLine("            global::System.Linq.Enumerable.Count(candidate.GetParameters(), parameter =>");
+            sb.AppendLine("                global::System.Reflection.CustomAttributeExtensions.GetCustomAttribute<global::AiDotNet.Attributes.ModelDimensionRoleAttribute>(parameter) is not null) == 2));");
+            sb.AppendLine("        var parameters = constructor.GetParameters();");
+            sb.AppendLine("        var dimension = Xunit.Assert.Single(global::System.Linq.Enumerable.Where(parameters, parameter =>");
+            sb.AppendLine("            global::System.Reflection.CustomAttributeExtensions.GetCustomAttribute<global::AiDotNet.Attributes.ModelDimensionRoleAttribute>(parameter)?.Role");
+            sb.AppendLine("                == global::AiDotNet.Attributes.ModelDimensionRole.AttentionDimension));");
+            sb.AppendLine("        var heads = Xunit.Assert.Single(global::System.Linq.Enumerable.Where(parameters, parameter =>");
+            sb.AppendLine("            global::System.Reflection.CustomAttributeExtensions.GetCustomAttribute<global::AiDotNet.Attributes.ModelDimensionRoleAttribute>(parameter)?.Role");
+            sb.AppendLine("                == global::AiDotNet.Attributes.ModelDimensionRole.AttentionHeadCount));");
+            sb.AppendLine("        int scaledDimension = global::AiDotNet.Testing.ModelTestScale.ScaleDeclaredInteger(Xunit.Assert.IsType<int>(dimension.DefaultValue));");
+            sb.AppendLine("        int scaledHeads = global::AiDotNet.Testing.ModelTestScale.ScaleDeclaredInteger(Xunit.Assert.IsType<int>(heads.DefaultValue));");
+            sb.AppendLine("        int aligned = global::AiDotNet.Testing.ModelTestScale.AlignDimensionToDivisor(scaledDimension, scaledHeads);");
+            sb.AppendLine("        Xunit.Assert.True(aligned > 0 && scaledHeads > 0 && aligned % scaledHeads == 0);");
+            sb.AppendLine("    }");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("}");
+        context.AddSource("GeneratedConstructorDimensionRoleTests.g.cs", sb.ToString());
+    }
+
+    private static void CollectConstructorDimensionRoles(
+        INamespaceSymbol ns,
+        string roleAttribute,
+        List<(INamedTypeSymbol Type, IMethodSymbol Constructor)> candidates)
+    {
+        foreach (var member in ns.GetMembers())
+        {
+            if (member is INamespaceSymbol childNamespace)
+            {
+                CollectConstructorDimensionRoles(childNamespace, roleAttribute, candidates);
+                continue;
+            }
+
+            if (member is not INamedTypeSymbol type) continue;
+            foreach (var constructor in type.InstanceConstructors)
+            {
+                if (constructor.DeclaredAccessibility != Accessibility.Public) continue;
+                int roles = constructor.Parameters.Count(parameter => parameter.GetAttributes().Any(
+                    attribute => attribute.AttributeClass?.ToDisplayString() == roleAttribute));
+                if (roles == 2) candidates.Add((type, constructor));
+            }
+        }
+    }
+
+    private static bool DerivesFrom(INamedTypeSymbol type, INamedTypeSymbol expectedBase)
+    {
+        for (var walk = type.BaseType; walk is not null; walk = walk.BaseType)
+        {
+            if (SymbolEqualityComparer.Default.Equals(walk.OriginalDefinition, expectedBase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool CanCloseOptionsWithDouble(INamedTypeSymbol optionsType)
+    {
+        if (optionsType.Arity != 1) return false;
+        var parameter = optionsType.TypeParameters[0];
+        if (parameter.HasReferenceTypeConstraint) return false;
+        return parameter.ConstraintTypes.Length == 0;
+    }
+
+    private static string ToGeneratedIdentifier(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+        foreach (var character in value)
+            builder.Append(char.IsLetterOrDigit(character) ? character : '_');
+        return builder.ToString();
+    }
+
+    /// <summary>Renders a test-compilable options type, closing generic definitions over double.</summary>
+    private static string RenderClosedOptionsType(INamedTypeSymbol optionsType)
+    {
+        if (!optionsType.IsGenericType)
+            return optionsType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+        string prefix = optionsType.ContainingNamespace.IsGlobalNamespace
+            ? "global::"
+            : "global::" + optionsType.ContainingNamespace.ToDisplayString() + ".";
+        return prefix + optionsType.Name + "<"
+            + string.Join(", ", Enumerable.Repeat("double", optionsType.Arity)) + ">";
+    }
+
     private static string EscapeString(string value)
     {
         return value
@@ -17053,6 +17435,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         /// Null when the model uses the base NeuralNetworkArchitecture directly.
         /// </summary>
         public string? ArchitectureParamTypeName { get; set; }
+
+        /// <summary>Options type whose declared dimensions must be bounded by the test scaler.</summary>
+        public string? ScaledDimensionOptionsTypeName { get; set; }
+
+        /// <summary>Typed dimension members emitted into the generated bounding invariant.</summary>
+        public List<string> ScaledDimensionProperties { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Model options type carrying a declarative dimension relationship. When present, the
+        /// generated model fixture emits the bounded-options invariant instead of relying on a
+        /// hand-written test that can drift away from the scaffold generator.
+        /// </summary>
+        public string? ConstrainedOptionsTypeName { get; set; }
         /// <summary>
         /// True if the model inherits from a base class in <see cref="ExcludedBaseClasses"/>
         /// (e.g., MetaLearnerBase, ShardedModelBase). These are compositional patterns
