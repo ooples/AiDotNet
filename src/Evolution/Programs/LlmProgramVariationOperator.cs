@@ -1,8 +1,10 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using AiDotNet.Agentic.Models;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
+using AiDotNet.Evolution.Programs.Provenance;
 using AiDotNet.Evolution.Prompts;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -47,6 +49,18 @@ namespace AiDotNet.Evolution.Programs;
 /// feedback messages carry bounded control-character-sanitized excerpts, and a provider exception contributes only
 /// its type name, never its message, so credentials and endpoints cannot leak into a prompt or a log.
 /// </para>
+/// <para>
+/// Supply an <see cref="IProposalProvenanceSink"/> and every request is additionally written out as a
+/// <see cref="ProposalProvenanceRecord"/>: the parent it started from, the model that answered, a hash of the exact
+/// conversation, a bounded and redacted copy of the prompt and the answer, the reported token cost, the measured
+/// latency, and what the answer parsed into. Replaying that stream through
+/// <see cref="ProposalProvenanceReader.BuildLineages"/> rebuilds the ancestry of any program the run produced,
+/// which is the post-hoc audit and training-data story upstream gets from its per-program files. Recording is
+/// entirely opt-in, never blocks a proposal, and a sink failure is counted in
+/// <see cref="ProvenanceFailureCount"/> rather than ending the run. Only requests are recorded: the terminal
+/// <see cref="ProgramProposalOutcome.Exhausted"/> bookkeeping entry is not a request and does not appear in the
+/// stream, so every record corresponds to exactly one call.
+/// </para>
 /// <para><b>For Beginners:</b> This is the piece that actually asks an AI to improve your program. It shows the
 /// model the current program along with its score, what the tests printed, and a couple of other programs that did
 /// well, then reads the answer and hands the improved program back to the search. If the answer cannot be used — a
@@ -63,8 +77,11 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
     private readonly ProgramEvolutionOptions _programOptions;
     private readonly LlmProgramVariationOptions _variationOptions;
     private readonly ProgramPromptBuilder _promptBuilder;
+    private readonly IProposalProvenanceSink? _provenanceSink;
+    private readonly ProposalProvenanceOptions _provenanceOptions;
     private readonly object _attemptLock = new();
     private readonly Queue<ProgramProposalAttempt> _attempts = new();
+    private long _provenanceFailures;
     private long _proposals;
     private long _chatCalls;
     private long _retries;
@@ -88,6 +105,14 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
     /// <see cref="ProgramPromptEvolutionMode.AutoBySize"/> is preserved because the variation options have no
     /// equivalent for it.
     /// </param>
+    /// <param name="provenanceSink">
+    /// Where a record of every request is written, or <c>null</c> to record nothing. Recording is opt-in and adds
+    /// no dependency: the operator behaves identically with no sink attached.
+    /// </param>
+    /// <param name="provenanceOptions">
+    /// How much of each request and answer is kept; <c>null</c> uses the defaults. Ignored when
+    /// <paramref name="provenanceSink"/> is <c>null</c>.
+    /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="chatClient"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentException"><paramref name="id"/> is empty or white space, or an option is invalid.</exception>
     /// <exception cref="ArgumentOutOfRangeException">An option value is outside its permitted range.</exception>
@@ -96,7 +121,9 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
         ProgramEvolutionOptions? programOptions = null,
         LlmProgramVariationOptions? variationOptions = null,
         string id = "llm-program-variation",
-        ProgramPromptBuilder? promptBuilder = null)
+        ProgramPromptBuilder? promptBuilder = null,
+        IProposalProvenanceSink? provenanceSink = null,
+        ProposalProvenanceOptions? provenanceOptions = null)
     {
         Guard.NotNull(chatClient);
         Guard.NotNullOrWhiteSpace(id);
@@ -105,10 +132,14 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
         programCopy.Validate();
         LlmProgramVariationOptions variationCopy = (variationOptions ?? new LlmProgramVariationOptions()).Clone();
         variationCopy.Validate();
+        ProposalProvenanceOptions provenanceCopy = (provenanceOptions ?? new ProposalProvenanceOptions()).Clone();
+        provenanceCopy.Validate();
 
         _chatClient = chatClient;
         _programOptions = programCopy;
         _variationOptions = variationCopy;
+        _provenanceSink = provenanceSink;
+        _provenanceOptions = provenanceCopy;
         _promptBuilder = promptBuilder ?? new ProgramPromptBuilder(
             DerivePromptOptions(programCopy, variationCopy), programCopy);
         Id = id.Trim();
@@ -159,6 +190,14 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
         }
     }
 
+    /// <summary>Gets how many provenance writes failed since this operator was constructed.</summary>
+    /// <remarks>
+    /// A search must not stop because a note could not be filed, so a sink failure is counted here instead of
+    /// thrown. A non-zero value means the provenance stream has gaps and any lineage rebuilt from it is partial.
+    /// Stays at zero when no sink is attached.
+    /// </remarks>
+    public long ProvenanceFailureCount => Interlocked.Read(ref _provenanceFailures);
+
     /// <inheritdoc/>
     public async ValueTask<ProgramGenome> ProposeAsync(
         EvolutionVariationContext<ProgramGenome> context,
@@ -173,6 +212,10 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
         ProgramPromptResult prompt = _promptBuilder.Build(BuildPromptContext(context, parent), context.Random);
         var messages = new List<ChatMessage>(prompt.Messages);
 
+        bool recordProvenance = _provenanceSink is not null && _provenanceOptions.Enabled;
+        string proposalId = recordProvenance ? BuildProposalId(context) : string.Empty;
+        string responseModelId = _chatClient.ModelId;
+
         int attempts = _variationOptions.MaxProposalRetries + 1;
         int attemptNumber = 0;
         for (int attempt = 0; attempt < attempts; attempt++)
@@ -181,6 +224,13 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
             attemptNumber = attempt + 1;
             if (attempt > 0) Interlocked.Increment(ref _retries);
             ChatOptions chatOptions = BuildChatOptions(context.Random);
+
+            // Captured before the call: the conversation grows with feedback, so a record written afterwards must
+            // describe the messages this particular attempt actually sent.
+            string promptText = recordProvenance ? RenderConversation(messages) : string.Empty;
+            string promptHash = recordProvenance ? HashConversation(messages) : string.Empty;
+            DateTimeOffset requestedAt = DateTimeOffset.UtcNow;
+            Stopwatch? timer = recordProvenance ? Stopwatch.StartNew() : null;
 
             string responseText = string.Empty;
             int inputTokens = 0;
@@ -192,6 +242,7 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
                     .GetResponseAsync(messages, chatOptions, cancellationToken)
                     .ConfigureAwait(false);
                 responseText = response is null ? string.Empty : response.Text;
+                if (response?.ModelId is { } reported && reported.Length > 0) responseModelId = reported;
                 if (response?.Usage is { } usage)
                 {
                     inputTokens = usage.InputTokens;
@@ -211,6 +262,17 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
                 Interlocked.Increment(ref _providerErrors);
                 string typeName = exception.GetType().Name;
                 Record(parent.Id, attemptNumber, ProgramProposalOutcome.ProviderError, typeName);
+                if (recordProvenance)
+                {
+                    await RecordProvenanceAsync(
+                        BuildProvenanceRecord(
+                            context, proposalId, attemptNumber, ProgramProposalOutcome.ProviderError, typeName,
+                            responseModelId, prompt, promptText, promptHash, responseText: string.Empty,
+                            childGenomeId: string.Empty, inputTokens: 0, outputTokens: 0, requestedAt: requestedAt,
+                            latencyMilliseconds: Elapsed(timer)),
+                        cancellationToken).ConfigureAwait(false);
+                }
+
                 AppendFeedback(messages, responseText: null, "The previous request failed with " + typeName + ".");
                 continue;
             }
@@ -218,6 +280,18 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
             ProgramProposalOutcome outcome = TryBuildChild(
                 parent, responseText, prompt.Mode, out ProgramGenome child, out string feedback);
             Record(parent.Id, attemptNumber, outcome, feedback, inputTokens, outputTokens);
+            if (recordProvenance)
+            {
+                await RecordProvenanceAsync(
+                    BuildProvenanceRecord(
+                        context, proposalId, attemptNumber, outcome, feedback, responseModelId, prompt, promptText,
+                        promptHash, responseText,
+                        childGenomeId: outcome == ProgramProposalOutcome.Accepted ? child.Id : string.Empty,
+                        inputTokens: inputTokens, outputTokens: outputTokens, requestedAt: requestedAt,
+                        latencyMilliseconds: Elapsed(timer)),
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             if (outcome == ProgramProposalOutcome.Accepted) return child;
             AppendFeedback(messages, responseText, feedback);
         }
@@ -398,6 +472,150 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
             while (_attempts.Count >= capacity) _attempts.Dequeue();
             _attempts.Enqueue(attempt);
         }
+    }
+
+    private string BuildProposalId(EvolutionVariationContext<ProgramGenome> context)
+    {
+        // Derived from the proposal-local random stream's untouched starting state, so replaying a run produces
+        // the same identifiers and two concurrent proposals from the same parent never collide. Reading the state
+        // does not consume it, so prompt rendering stays byte-identical whether or not provenance is on.
+        StableRandomState state = context.Random.CaptureState();
+        return EvolutionHash.Combine(new[]
+        {
+            Id,
+            context.Parent.Candidate.EvaluationId.ToString(CultureInfo.InvariantCulture),
+            context.Generation.ToString(CultureInfo.InvariantCulture),
+            context.Island.ToString(CultureInfo.InvariantCulture),
+            state.State.ToString(CultureInfo.InvariantCulture),
+            state.Increment.ToString(CultureInfo.InvariantCulture)
+        }).Substring(0, 32);
+    }
+
+    private ProposalProvenanceRecord BuildProvenanceRecord(
+        EvolutionVariationContext<ProgramGenome> context,
+        string proposalId,
+        int attemptNumber,
+        ProgramProposalOutcome outcome,
+        string detail,
+        string modelId,
+        ProgramPromptResult prompt,
+        string promptText,
+        string promptHash,
+        string responseText,
+        string childGenomeId,
+        int inputTokens,
+        int outputTokens,
+        DateTimeOffset requestedAt,
+        double latencyMilliseconds)
+    {
+        string storedPrompt = string.Empty;
+        bool promptTruncated = false;
+        if (_provenanceOptions.IncludePromptText && promptText.Length > 0)
+        {
+            storedPrompt = PromptTextRedactor.RedactAndBound(
+                promptText, _provenanceOptions.MaxPromptBytes, string.Empty, out promptTruncated);
+        }
+
+        string storedResponse = string.Empty;
+        bool responseTruncated = false;
+        if (_provenanceOptions.IncludeResponseText && responseText.Length > 0)
+        {
+            storedResponse = PromptTextRedactor.RedactAndBound(
+                responseText, _provenanceOptions.MaxResponseBytes, string.Empty, out responseTruncated);
+        }
+
+        return new ProposalProvenanceRecord(
+            proposalId,
+            context.Parent.Candidate.EvaluationId,
+            context.Parent.Candidate.CanonicalGenome.Id,
+            attemptNumber,
+            outcome)
+        {
+            OperatorId = Id,
+            OperatorVersionHash = VersionHash,
+            ParentIds = context.Parent.Candidate.Lineage.ParentIds,
+            InspirationIds = CollectInspirationIds(context),
+            ChildGenomeId = childGenomeId,
+            Generation = context.Generation,
+            Island = context.Island,
+            ModelId = modelId,
+            PromptTemplateKey = prompt.UserTemplateKey.ToString(),
+            PromptHash = promptHash,
+            PromptText = storedPrompt,
+            PromptTruncated = promptTruncated,
+            ResponseText = storedResponse,
+            ResponseTruncated = responseTruncated,
+            InputTokens = inputTokens,
+            OutputTokens = outputTokens,
+            RequestedAtUtc = requestedAt,
+            LatencyMilliseconds = latencyMilliseconds,
+            Detail = detail
+        };
+    }
+
+    private async Task RecordProvenanceAsync(ProposalProvenanceRecord record, CancellationToken cancellationToken)
+    {
+        IProposalProvenanceSink? sink = _provenanceSink;
+        if (sink is null) return;
+        if (!_provenanceOptions.RecordFailedAttempts && record.Outcome != ProgramProposalOutcome.Accepted) return;
+
+        try
+        {
+            await sink.RecordAsync(record, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+#pragma warning disable CA1031
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            // A search must not end because a note could not be filed. The gap is counted instead, so a lineage
+            // rebuilt from an incomplete stream can be recognised as incomplete.
+            Interlocked.Increment(ref _provenanceFailures);
+        }
+    }
+
+    private static IReadOnlyList<string> CollectInspirationIds(EvolutionVariationContext<ProgramGenome> context)
+    {
+        if (context.Inspirations.Count == 0) return Array.Empty<string>();
+
+        var ids = new List<string>(context.Inspirations.Count);
+        foreach (EvolutionArchiveEntry<ProgramGenome> inspiration in context.Inspirations)
+        {
+            ids.Add(inspiration.Candidate.CanonicalGenome.Id);
+        }
+
+        return ids;
+    }
+
+    private static double Elapsed(Stopwatch? timer) => timer is null ? 0.0 : timer.Elapsed.TotalMilliseconds;
+
+    private static string RenderConversation(IReadOnlyList<ChatMessage> messages)
+    {
+        var builder = new StringBuilder();
+        foreach (ChatMessage message in messages)
+        {
+            builder.Append("### ").Append(message.Role.ToString().ToUpperInvariant()).Append('\n');
+            builder.Append(message.Text).Append('\n');
+        }
+
+        return builder.ToString();
+    }
+
+    private static string HashConversation(IReadOnlyList<ChatMessage> messages)
+    {
+        // Over the untruncated conversation, so two records whose stored prompts were both clipped can still be
+        // proven to have sent the same request.
+        var components = new List<string>(messages.Count * 2);
+        foreach (ChatMessage message in messages)
+        {
+            components.Add(message.Role.ToString());
+            components.Add(message.Text);
+        }
+
+        return EvolutionHash.Combine(components);
     }
 
     private ChatOptions BuildChatOptions(StableRandom random)
