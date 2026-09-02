@@ -118,6 +118,56 @@ public sealed class EvolutionEngineOptions
     /// <summary>Gets or sets deterministic or opportunistic commit behavior.</summary>
     public EvolutionExecutionMode ExecutionMode { get; set; } = EvolutionExecutionMode.Deterministic;
 
+    /// <summary>Gets or sets whether evaluations run in fixed batches or in a continuously refilled window.</summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="EvolutionDispatchMode.Batch"/>, the default, keeps the historical behaviour: fill a batch of
+    /// <see cref="ProposalBatchSize"/> proposals, evaluate them together, commit them as one transaction.
+    /// <see cref="EvolutionDispatchMode.Continuous"/> instead keeps <see cref="MaxInFlight"/> evaluations running,
+    /// committing each one as it finishes and dispatching a replacement immediately, which is what the reference
+    /// implementation does and what keeps workers busy when candidates differ widely in cost.
+    /// </para>
+    /// <para>
+    /// The mode changes what a run costs in wall-clock time, never what it produces: under
+    /// <see cref="EvolutionExecutionMode.Deterministic"/> both modes commit in evaluation-id order, and continuous
+    /// dispatch prepares the proposal for one evaluation only after the evaluation one window earlier has committed,
+    /// so the schedule is a function of the identifier sequence rather than of timing. Two continuous runs with the
+    /// same seed and options therefore agree on the state hash at any worker count. The two modes do not produce the
+    /// same hash as each other, because a proposal sees a different amount of the archive, which is exactly the
+    /// staleness continuous dispatch exists to reduce; the mode is part of the compatibility hash for that reason.
+    /// </para>
+    /// <para><b>For Beginners:</b> Leave this alone until worker utilisation matters. Switch to
+    /// <see cref="EvolutionDispatchMode.Continuous"/> when some candidates take far longer to score than others, or
+    /// when you raise <see cref="MaxDegreeOfParallelism"/> and want every worker fed.</para>
+    /// </remarks>
+    public EvolutionDispatchMode Dispatch { get; set; } = EvolutionDispatchMode.Batch;
+
+    /// <summary>Gets or sets how many evaluations may be in flight at once; zero follows the worker count.</summary>
+    /// <remarks>
+    /// <para>
+    /// Used only by <see cref="EvolutionDispatchMode.Continuous"/>. Zero means the window is
+    /// <see cref="MaxDegreeOfParallelism"/>, which is the natural choice: exactly enough work to keep every worker
+    /// busy and no more. A larger window absorbs bursts of quick failures without draining, at the cost of proposing
+    /// from an archive that is further behind. Because the window size decides which committed evaluation a proposal
+    /// is prepared after, it changes results and is part of the compatibility hash.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how many candidates are being scored at the same time. Leave it at zero.</para>
+    /// </remarks>
+    public int MaxInFlight { get; set; }
+
+    /// <summary>Gets or sets how many evaluations one island may have in flight; zero means no per-island limit.</summary>
+    /// <remarks>
+    /// <para>
+    /// Used only by <see cref="EvolutionDispatchMode.Continuous"/>. Without a per-island cap, one island whose
+    /// candidates happen to be slow can occupy the whole window, so the other islands stop advancing and the
+    /// separation that islands exist to provide quietly disappears. Setting this to roughly the window size divided
+    /// by <see cref="IslandCount"/> keeps every island advancing.
+    /// </para>
+    /// <para><b>For Beginners:</b> Islands are separate sub-populations that explore independently. This stops one of
+    /// them from hogging all the workers. Zero, the default, means no limit.</para>
+    /// </remarks>
+    public int MaxInFlightPerIsland { get; set; }
+
     /// <summary>Gets or sets whether recoverable candidate failures stop the run.</summary>
     public EvolutionFailurePolicy FailurePolicy { get; set; } = EvolutionFailurePolicy.Continue;
 
@@ -361,9 +411,12 @@ public sealed class EvolutionEngineOptions
     /// (<c>database.archive_size</c>, line 322); <see cref="HistorySize"/> is 1000
     /// (<c>database.population_size</c>, line 321); artifacts are enabled
     /// (<c>evaluator.enable_artifacts</c>, line 398); <see cref="MaxDegreeOfParallelism"/> is 1
-    /// (<c>evaluator.parallel_evaluations</c>, line 389) and <see cref="ProposalBatchSize"/> is 1 so each candidate
-    /// is committed before the next parent is drawn, which is how upstream's controller refills work
-    /// (process_parallel.py:588-602); <see cref="InspirationCount"/> is 5 with three top and two diverse picks
+    /// (<c>evaluator.parallel_evaluations</c>, line 389), <see cref="ProposalBatchSize"/> is 1, and
+    /// <see cref="Dispatch"/> is <see cref="EvolutionDispatchMode.Continuous"/> so each candidate is committed before
+    /// the next parent is drawn and a freed worker is refilled immediately, which is how upstream's controller works
+    /// (process_parallel.py:588-602); the window follows <see cref="MaxDegreeOfParallelism"/>, so raising the worker
+    /// count on these defaults keeps that refill behaviour instead of reverting to a barrier;
+    /// <see cref="InspirationCount"/> is 5 with three top and two diverse picks
     /// (<c>prompt.num_top_programs</c> 3 and <c>prompt.num_diverse_programs</c> 2, lines 268-269); and
     /// <see cref="SelectionPolicy"/> is <see cref="EvolutionSelectionPolicyKind.Ratio"/> with the 0.2 / 0.7 / 0.1
     /// mixture of <c>database.exploration_ratio</c>, <c>exploitation_ratio</c> and <c>elite_selection_ratio</c>
@@ -396,6 +449,7 @@ public sealed class EvolutionEngineOptions
         MaxGenerations = 10_000,
         ProposalBatchSize = 1,
         MaxDegreeOfParallelism = 1,
+        Dispatch = EvolutionDispatchMode.Continuous,
         MaxRetries = 3,
         RetryOn = EvolutionRetryStatuses.Failed,
         RetryBaseDelay = TimeSpan.FromSeconds(1),
@@ -429,6 +483,9 @@ public sealed class EvolutionEngineOptions
         Guard.Positive(ProposalBatchSize);
         Guard.Positive(MaxDegreeOfParallelism);
         if (!Enum.IsDefined(typeof(EvolutionExecutionMode), ExecutionMode)) throw new ArgumentOutOfRangeException(nameof(ExecutionMode));
+        if (!Enum.IsDefined(typeof(EvolutionDispatchMode), Dispatch)) throw new ArgumentOutOfRangeException(nameof(Dispatch));
+        if (MaxInFlight < 0) throw new ArgumentOutOfRangeException(nameof(MaxInFlight));
+        if (MaxInFlightPerIsland < 0) throw new ArgumentOutOfRangeException(nameof(MaxInFlightPerIsland));
         if (!Enum.IsDefined(typeof(EvolutionFailurePolicy), FailurePolicy)) throw new ArgumentOutOfRangeException(nameof(FailurePolicy));
         if (MaxRetries < 0) throw new ArgumentOutOfRangeException(nameof(MaxRetries));
         ValidateDuration(EvaluationTimeout, nameof(EvaluationTimeout));
@@ -527,6 +584,9 @@ public sealed class EvolutionEngineOptions
             ProposalBatchSize = ProposalBatchSize,
             MaxDegreeOfParallelism = MaxDegreeOfParallelism,
             ExecutionMode = ExecutionMode,
+            Dispatch = Dispatch,
+            MaxInFlight = MaxInFlight,
+            MaxInFlightPerIsland = MaxInFlightPerIsland,
             FailurePolicy = FailurePolicy,
             MaxRetries = MaxRetries,
             EvaluationTimeout = EvaluationTimeout,
@@ -559,6 +619,9 @@ public sealed class EvolutionEngineOptions
         Field("seed", Seed.ToString(CultureInfo.InvariantCulture)),
         Field("proposal-batch-size", ProposalBatchSize.ToString(CultureInfo.InvariantCulture)),
         Field("execution-mode", ((int)ExecutionMode).ToString(CultureInfo.InvariantCulture)),
+        Field("dispatch", ((int)Dispatch).ToString(CultureInfo.InvariantCulture)),
+        Field("max-in-flight", MaxInFlight.ToString(CultureInfo.InvariantCulture)),
+        Field("max-in-flight-per-island", MaxInFlightPerIsland.ToString(CultureInfo.InvariantCulture)),
         Field("failure-policy", ((int)FailurePolicy).ToString(CultureInfo.InvariantCulture)),
         Field("max-retries", MaxRetries.ToString(CultureInfo.InvariantCulture)),
         Field("evaluation-timeout", EvaluationTimeout?.Ticks.ToString(CultureInfo.InvariantCulture) ?? "none"),

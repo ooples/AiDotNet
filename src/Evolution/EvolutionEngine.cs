@@ -280,7 +280,9 @@ public sealed partial class EvolutionEngine<TGenome>
         {
             try
             {
-                stopReason = await RunLoopAsync(seeds, seedIndex, runTimer, runToken).ConfigureAwait(false);
+                stopReason = _options.Dispatch == EvolutionDispatchMode.Continuous
+                    ? await RunContinuousLoopAsync(seeds, seedIndex, runTimer, runToken).ConfigureAwait(false)
+                    : await RunLoopAsync(seeds, seedIndex, runTimer, runToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && runCancellation.IsCancellationRequested)
             {
@@ -565,6 +567,13 @@ public sealed partial class EvolutionEngine<TGenome>
         public List<EvolutionDiagnostic> AttemptDiagnostics { get; } = new();
         public long CompletionOrder { get; set; }
         public bool AddedToSeen { get; set; }
+
+        /// <summary>Whether this item came from the caller's seed list rather than from the variation operator.</summary>
+        /// <remarks>
+        /// Continuous dispatch commits one item at a time while later seeds are still in flight, so the seed cursor a
+        /// checkpoint records has to count committed seeds rather than consumed ones.
+        /// </remarks>
+        public bool IsSeed { get; set; }
         public IReadOnlyList<double> StageCostUnits { get; set; } = Array.Empty<double>();
         public int? CascadeRejectedStage { get; set; }
     }
