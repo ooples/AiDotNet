@@ -321,9 +321,107 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
             ApplyFeatureCoordinates(promptContext, context.Parent.Cell.Bins);
         }
 
+        // The parent's leftover evaluator output, delivered exactly once by the engine. It is what tells the model
+        // why the previous attempt scored as it did, and it is untrusted text, so the builder bounds and delimits
+        // it rather than splicing it in raw.
+        if (context.ParentArtifacts.Count > 0)
+        {
+            var artifacts = new List<ProgramPromptArtifact>(context.ParentArtifacts.Count);
+            foreach (EvolutionArtifact artifact in context.ParentArtifacts)
+            {
+                artifacts.Add(new ProgramPromptArtifact(artifact.Key, artifact.Text));
+            }
+
+            promptContext.Artifacts = artifacts;
+        }
+
+        ApplyArchiveContext(promptContext, context);
         SplitDiagnostics(evaluation.Diagnostics, promptContext);
         return promptContext;
     }
+
+    /// <summary>Adds the two prompt sections that describe the frontier rather than the parent.</summary>
+    /// <param name="promptContext">The context being built.</param>
+    /// <param name="context">The variation context, whose archive view may be absent.</param>
+    /// <remarks>
+    /// Both sections are skipped when no archive view was supplied, which is the case for any caller that builds a
+    /// variation context by hand, so an operator never depends on the engine having handed one over.
+    /// </remarks>
+    private void ApplyArchiveContext(
+        ProgramPromptContext promptContext,
+        EvolutionVariationContext<ProgramGenome> context)
+    {
+        if (context.Archive is not { } archive) return;
+
+        int topCount = _variationOptions.MaxTopPrograms;
+        if (topCount > 0)
+        {
+            bool maximize = archive.Direction == EvolutionOptimizationDirection.Maximize;
+            var ranked = new List<EvolutionArchiveEntry<ProgramGenome>>();
+            foreach (EvolutionArchiveEntry<ProgramGenome> entry in archive.Entries)
+            {
+                if (entry.Evaluation.Quality.HasValue) ranked.Add(entry);
+            }
+
+            ranked.Sort((left, right) =>
+            {
+                double a = left.Evaluation.Quality ?? 0d;
+                double b = right.Evaluation.Quality ?? 0d;
+                int byQuality = maximize ? b.CompareTo(a) : a.CompareTo(b);
+                return byQuality != 0
+                    ? byQuality
+                    : string.CompareOrdinal(left.Evaluation.GenomeId, right.Evaluation.GenomeId);
+            });
+
+            if (ranked.Count > 0)
+            {
+                var top = new List<ProgramPromptExample>();
+                for (int i = 0; i < ranked.Count && i < topCount; i++)
+                {
+                    EvolutionArchiveEntry<ProgramGenome> entry = ranked[i];
+                    top.Add(new ProgramPromptExample(
+                        entry.Candidate.CanonicalGenome.Genome,
+                        ProgramPromptExampleKind.TopProgram,
+                        entry.Evaluation.Quality,
+                        entry.Evaluation.Descriptors));
+                }
+
+                promptContext.TopPrograms = top;
+            }
+        }
+
+        int neighbourCount = _variationOptions.MaxEmptyNeighborCells;
+        if (neighbourCount <= 0) return;
+
+        // Cells one bin away from the parent along a single axis that nothing has reached yet. Naming them is what
+        // lets a model aim at a gap instead of drifting back toward the crowded middle of the archive.
+        IReadOnlyList<int> parentBins = context.Parent.Cell.Bins;
+        IReadOnlyList<EvolutionDescriptorDefinition> descriptors = archive.Descriptors;
+        if (parentBins.Count != descriptors.Count) return;
+
+        var empty = new List<string>();
+        for (int axis = 0; axis < parentBins.Count && empty.Count < neighbourCount; axis++)
+        {
+            foreach (int step in NeighbourSteps)
+            {
+                int candidate = parentBins[axis] + step;
+                if (candidate < 0 || candidate >= descriptors[axis].BinCount) continue;
+
+                var bins = new int[parentBins.Count];
+                for (int i = 0; i < bins.Length; i++) bins[i] = parentBins[i];
+                bins[axis] = candidate;
+
+                if (archive.Get(new EvolutionCellKey(bins)) is not null) continue;
+
+                empty.Add(descriptors[axis].Name + "=" + candidate.ToString(CultureInfo.InvariantCulture));
+                if (empty.Count >= neighbourCount) break;
+            }
+        }
+
+        if (empty.Count > 0) promptContext.EmptyNeighborCells = empty;
+    }
+
+    private static readonly int[] NeighbourSteps = { -1, 1 };
 
     private void ApplyFeatureCoordinates(ProgramPromptContext promptContext, IReadOnlyList<int> bins)
     {

@@ -55,8 +55,11 @@ public sealed partial class EvolutionEngine<TGenome>
         TGenome proposed;
         try
         {
+            // The archive the parent came from, handed over read-only so an operator can reason about the frontier
+            // (which cells are still empty, which elites lead) instead of only about its parent. Insertion stays
+            // the engine's alone, so the single-writer guarantee is unaffected.
             var context = new EvolutionVariationContext<TGenome>(selection.Parent, selection.Inspirations,
-                proposalRandom, generation, island, parentArtifacts);
+                proposalRandom, generation, island, parentArtifacts, sourceArchive);
             proposed = await _variation.ProposeAsync(context, cancellationToken).ConfigureAwait(false);
             if (proposed is null) throw new InvalidOperationException("The variation operator returned null.");
         }

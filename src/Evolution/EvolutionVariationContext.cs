@@ -30,6 +30,10 @@ public sealed class EvolutionVariationContext<TGenome>
     /// <param name="parentArtifacts">
     /// Optional untrusted text artifacts the parent's evaluation left behind, delivered exactly once.
     /// </param>
+    /// <param name="archive">
+    /// Optional read-only view of the island archive the proposal targets, for an operator that reasons about the
+    /// frontier as a whole rather than only about its parent.
+    /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="parent"/>, <paramref name="inspirations"/>, or <paramref name="random"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="generation"/> or <paramref name="island"/> is negative.</exception>
     public EvolutionVariationContext(
@@ -38,8 +42,10 @@ public sealed class EvolutionVariationContext<TGenome>
         StableRandom random,
         long generation,
         int island,
-        IReadOnlyList<EvolutionArtifact>? parentArtifacts = null)
+        IReadOnlyList<EvolutionArtifact>? parentArtifacts = null,
+        IEvolutionArchiveView<TGenome>? archive = null)
     {
+        Archive = archive;
         Parent = parent ?? throw new ArgumentNullException(nameof(parent));
         Inspirations = inspirations ?? throw new ArgumentNullException(nameof(inspirations));
         Random = random ?? throw new ArgumentNullException(nameof(random));
@@ -69,4 +75,18 @@ public sealed class EvolutionVariationContext<TGenome>
     /// one. The text is untrusted evaluator output: treat it as data, never as instructions or executable code.
     /// </remarks>
     public IReadOnlyList<EvolutionArtifact> ParentArtifacts { get; }
+
+    /// <summary>Gets a read-only view of the island archive this proposal targets, or <c>null</c> when none was supplied.</summary>
+    /// <remarks>
+    /// <para>
+    /// Read-only by contract: an operator may inspect the frontier but must not insert into it, because the engine
+    /// keeps a single archive writer so that a run stays deterministic regardless of worker scheduling. Use it for
+    /// questions a parent alone cannot answer, such as which neighbouring cells are still empty or which elites are
+    /// currently strongest, and prefer <see cref="Inspirations"/> when the selection policy's own choice will do.
+    /// </para>
+    /// <para><b>For Beginners:</b> The parent is one point on the map. This is the map. An operator can use it to
+    /// aim at a gap rather than wandering, for example by noticing that no candidate has yet landed in a nearby
+    /// cell.</para>
+    /// </remarks>
+    public IEvolutionArchiveView<TGenome>? Archive { get; }
 }

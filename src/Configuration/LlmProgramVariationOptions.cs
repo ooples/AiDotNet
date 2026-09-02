@@ -89,6 +89,30 @@ public sealed class LlmProgramVariationOptions
     /// <summary>The default diagnostic-code prefix treated as evaluator artifacts.</summary>
     public const string DefaultArtifactDiagnosticPrefix = "program_script_artifact";
 
+    /// <summary>Gets or sets how many of the archive's strongest programs are quoted into the prompt; 0 quotes none.</summary>
+    /// <remarks>
+    /// <para>
+    /// These are the leaders of the whole island, chosen by quality, where <see cref="MaxInspirations"/> quotes what
+    /// the selection policy picked, which is deliberately a mix of strong and distant candidates. Quoting both gives
+    /// the model something to beat as well as something to vary from. Requires the engine to have supplied an
+    /// archive view; a hand-built variation context simply omits the section.
+    /// </para>
+    /// <para><b>For Beginners:</b> This shows the model the current best answers so it can try to beat them.</para>
+    /// </remarks>
+    public int MaxTopPrograms { get; set; } = 3;
+
+    /// <summary>Gets or sets how many empty neighbouring archive cells are named in the prompt; 0 names none.</summary>
+    /// <remarks>
+    /// <para>
+    /// A neighbour is one bin away from the parent along a single behaviour axis with nothing in it yet. Naming a
+    /// few lets the model aim at an unexplored region rather than drifting back toward the crowded middle of the
+    /// archive, which is the difference between illuminating a space and hill-climbing in it.
+    /// </para>
+    /// <para><b>For Beginners:</b> This tells the model which nearby gaps on the map nobody has filled, so it can
+    /// try to reach one.</para>
+    /// </remarks>
+    public int MaxEmptyNeighborCells { get; set; } = 3;
+
     /// <summary>Creates an independent copy so a running operator is unaffected by later mutation.</summary>
     /// <returns>A new options instance carrying the same values.</returns>
     public LlmProgramVariationOptions Clone() => new()
@@ -96,6 +120,8 @@ public sealed class LlmProgramVariationOptions
         Mode = Mode,
         MaxProposalRetries = MaxProposalRetries,
         MaxInspirations = MaxInspirations,
+        MaxTopPrograms = MaxTopPrograms,
+        MaxEmptyNeighborCells = MaxEmptyNeighborCells,
         MaxPromptProgramChars = MaxPromptProgramChars,
         SystemMessage = SystemMessage,
         Temperature = Temperature,
