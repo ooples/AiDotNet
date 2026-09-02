@@ -8,7 +8,7 @@ namespace AiDotNet.Evolution;
 
 public sealed partial class EvolutionEngine<TGenome>
 {
-    private const int EngineStateSchemaVersion = 3;
+    private const int EngineStateSchemaVersion = 4;
     private string? _safePayload;
     private long _safeSequence;
 
@@ -19,6 +19,8 @@ public sealed partial class EvolutionEngine<TGenome>
         var document = new EngineStateDocument
         {
             SchemaVersion = EngineStateSchemaVersion,
+            SemanticOptions = _options.SemanticFields().Select(OptionFieldDocument.From).ToList(),
+            BudgetOptions = _options.BudgetFields().Select(OptionFieldDocument.From).ToList(),
             SeedPayloads = seeds.Select(SerializeGenome).ToList(),
             SeedIndex = seedIndex,
             NextEvaluationId = _nextEvaluationId,
@@ -71,7 +73,8 @@ public sealed partial class EvolutionEngine<TGenome>
     {
         if (_checkpointStore is null || _safePayload is null) return;
         if (!force && (_options.CheckpointInterval == 0 || _commitsSinceCheckpoint < _options.CheckpointInterval)) return;
-        var checkpoint = new EvolutionCheckpoint(_options.RunId, _safeSequence, _compatibilityHash, _safePayload);
+        var checkpoint = new EvolutionCheckpoint(_options.RunId, _safeSequence, _compatibilityHash, _safePayload,
+            EvolutionCheckpoint.CurrentSchemaVersion, BestQualityAcrossIslands(), _islands[0].Direction);
         await _checkpointStore.SaveAsync(checkpoint, cancellationToken).ConfigureAwait(false);
         _commitsSinceCheckpoint = 0;
         await NotifyAsync(new EvolutionEvent<TGenome>(EvolutionEventKind.Checkpointed, NextEventSequence(),
@@ -85,7 +88,7 @@ public sealed partial class EvolutionEngine<TGenome>
         if (checkpoint is null) return new RestoredSeeds(suppliedSeeds, 0);
         checkpoint.Validate();
         if (!string.Equals(checkpoint.CompatibilityHash, _compatibilityHash, StringComparison.Ordinal))
-            throw new InvalidDataException("The evolution checkpoint is incompatible with the current task or engine configuration.");
+            throw new InvalidDataException(DescribeIncompatibility(checkpoint));
 
         EngineStateDocument? state;
         try
@@ -124,9 +127,8 @@ public sealed partial class EvolutionEngine<TGenome>
         ValidateNonnegative(state.EventSequence, nameof(state.EventSequence));
         ValidateNonnegative(state.CompletionSequence, nameof(state.CompletionSequence));
         if (state.BatchesSinceMigration < 0) throw new InvalidDataException("The checkpoint migration counter is invalid.");
-        if (state.Proposals > _options.MaxProposals || state.EvaluationAttempts > _options.MaxEvaluationAttempts ||
-            state.Generation > _options.MaxGenerations)
-            throw new InvalidDataException("Checkpoint counters exceed the configured run budget.");
+        // Budgets are deliberately not compared: a raised limit continues the run, and a limit lowered below what the
+        // run already spent restores the counters and stops immediately with the matching budget stop reason.
         if (state.NextEvaluationId != state.Proposals || state.CompletedEvaluations > state.Proposals ||
             state.SeedIndex > state.Proposals)
             throw new InvalidDataException("Checkpoint counters violate engine identity invariants.");
@@ -217,6 +219,40 @@ public sealed partial class EvolutionEngine<TGenome>
         _safeSequence = checkpoint.Sequence;
         _safePayload = checkpoint.Payload;
         return new RestoredSeeds(seeds, state.SeedIndex);
+    }
+
+    /// <summary>
+    /// Builds the message for a refused resume, naming the semantic option that differs whenever the checkpoint
+    /// recorded one.
+    /// </summary>
+    /// <remarks>
+    /// The compatibility hash also covers the task, variation operator, selection, refiner, codec, distance metric, and
+    /// archive definition, so a mismatch that no recorded option explains falls back to the general message. The option
+    /// list is read best-effort: a payload that cannot be parsed never turns a refusal into a different failure.
+    /// </remarks>
+    private string DescribeIncompatibility(EvolutionCheckpoint checkpoint)
+    {
+        const string general =
+            "The evolution checkpoint is incompatible with the current task or engine configuration.";
+        EngineStateDocument? state;
+        try
+        {
+            state = JsonConvert.DeserializeObject<EngineStateDocument>(checkpoint.Payload);
+        }
+        catch (JsonException)
+        {
+            return general;
+        }
+        List<OptionFieldDocument>? recorded = state?.SemanticOptions;
+        if (recorded is null || recorded.Count == 0) return general;
+        var fields = new List<KeyValuePair<string, string>>(recorded.Count);
+        foreach (OptionFieldDocument field in recorded)
+        {
+            if (field is null || string.IsNullOrEmpty(field.Name)) return general;
+            fields.Add(new KeyValuePair<string, string>(field.Name, field.Value ?? string.Empty));
+        }
+        string? difference = _options.DescribeSemanticDifference(fields);
+        return difference is null ? general : "The evolution checkpoint cannot be resumed because " + difference + ".";
     }
 
     private void RestoreIslandGenerations(EngineStateDocument state)
@@ -474,6 +510,7 @@ public sealed partial class EvolutionEngine<TGenome>
         Append(builder, evaluation.Lineage.Generation);
         Append(builder, evaluation.Lineage.Island);
         Append(builder, evaluation.Lineage.SeedStream);
+        Append(builder, evaluation.Lineage.MigrationSourceIsland?.ToString(CultureInfo.InvariantCulture) ?? "local");
         Append(builder, "parents");
         Append(builder, evaluation.Lineage.ParentIds.Count);
         foreach (string parent in evaluation.Lineage.ParentIds) Append(builder, "p:" + parent);
@@ -545,6 +582,8 @@ public sealed partial class EvolutionEngine<TGenome>
     private sealed class EngineStateDocument
     {
         public int SchemaVersion { get; set; }
+        public List<OptionFieldDocument>? SemanticOptions { get; set; }
+        public List<OptionFieldDocument>? BudgetOptions { get; set; }
         public List<string>? SeedPayloads { get; set; }
         public int SeedIndex { get; set; }
         public long NextEvaluationId { get; set; }
@@ -569,6 +608,15 @@ public sealed partial class EvolutionEngine<TGenome>
         public long AbandonedEvaluations { get; set; }
         public List<PendingArtifactDocument>? PendingArtifacts { get; set; }
         public List<ArchiveDocument>? Islands { get; set; }
+    }
+
+    private sealed class OptionFieldDocument
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Value { get; set; } = string.Empty;
+
+        public static OptionFieldDocument From(KeyValuePair<string, string> field) =>
+            new() { Name = field.Key, Value = field.Value };
     }
 
     private sealed class PendingArtifactDocument
@@ -663,16 +711,28 @@ public sealed partial class EvolutionEngine<TGenome>
         public long Generation { get; set; }
         public int Island { get; set; }
         public ulong SeedStream { get; set; }
+        public int? MigrationSourceIsland { get; set; }
 
         public static LineageDocument From(EvolutionLineage lineage) => new()
         {
             ParentIds = lineage.ParentIds.ToList(), InspirationIds = lineage.InspirationIds.ToList(),
             VariationOperatorId = lineage.VariationOperatorId, RefinerId = lineage.RefinerId,
-            Generation = lineage.Generation, Island = lineage.Island, SeedStream = lineage.SeedStream
+            Generation = lineage.Generation, Island = lineage.Island, SeedStream = lineage.SeedStream,
+            MigrationSourceIsland = lineage.MigrationSourceIsland
         };
 
-        public EvolutionLineage ToLineage() => new(ParentIds, InspirationIds, VariationOperatorId, RefinerId,
-            Generation, Island, SeedStream);
+        public EvolutionLineage ToLineage()
+        {
+            try
+            {
+                return new EvolutionLineage(ParentIds, InspirationIds, VariationOperatorId, RefinerId,
+                    Generation, Island, SeedStream, MigrationSourceIsland);
+            }
+            catch (ArgumentException exception)
+            {
+                throw new InvalidDataException("A checkpoint lineage record is invalid.", exception);
+            }
+        }
     }
 
     private sealed class EvaluationDocument

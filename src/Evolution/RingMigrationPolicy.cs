@@ -1,6 +1,5 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
-using AiDotNet.Validation;
 
 namespace AiDotNet.Evolution;
 
@@ -28,10 +27,15 @@ namespace AiDotNet.Evolution;
 /// often this policy lets each room pass a copy of its best few results to the next room around a circle: room 0 to
 /// room 1, room 1 to room 2, and the last room back to room 0. With four islands and <c>migrantsPerIsland = 2</c>,
 /// one migration round produces eight transfers. Use it when you configure more than one island and want a simple,
-/// reproducible way for strong candidates to spread without one island taking over immediately.</para>
+/// reproducible way for strong candidates to spread without one island taking over immediately. Reach for
+/// <see cref="TopologyMigrationPolicy{TGenome}"/> instead when you want a denser topology or a migration rate that
+/// scales with island size.</para>
 /// </remarks>
 public sealed class RingMigrationPolicy<TGenome> : IMigrationPolicy<TGenome>
 {
+    private readonly TopologyMigrationPolicy<TGenome> _ring =
+        new(EvolutionMigrationTopology.Ring, migrationRate: 0, preventRepeatedMigration: false);
+
     /// <inheritdoc/>
     public string Id => "ring-best";
 
@@ -42,24 +46,5 @@ public sealed class RingMigrationPolicy<TGenome> : IMigrationPolicy<TGenome>
     public IReadOnlyList<EvolutionMigration<TGenome>> CreateMigrations(
         IReadOnlyList<IEvolutionArchiveView<TGenome>> islands,
         int migrantsPerIsland,
-        StableRandom random)
-    {
-        Guard.NotNull(islands);
-        Guard.Positive(migrantsPerIsland);
-        Guard.NotNull(random);
-        if (islands.Count < 2) return Array.Empty<EvolutionMigration<TGenome>>();
-
-        var migrations = new List<EvolutionMigration<TGenome>>();
-        for (int source = 0; source < islands.Count; source++)
-        {
-            IEvolutionArchiveView<TGenome> archive = islands[source];
-            IEnumerable<EvolutionArchiveEntry<TGenome>> ordered = archive.Direction == EvolutionOptimizationDirection.Maximize
-                ? archive.Entries.OrderByDescending(entry => entry.Evaluation.Quality).ThenBy(entry => entry.Evaluation.GenomeId, StringComparer.Ordinal)
-                : archive.Entries.OrderBy(entry => entry.Evaluation.Quality).ThenBy(entry => entry.Evaluation.GenomeId, StringComparer.Ordinal);
-            int destination = (source + 1) % islands.Count;
-            foreach (EvolutionArchiveEntry<TGenome> entry in ordered.Take(migrantsPerIsland))
-                migrations.Add(new EvolutionMigration<TGenome>(source, destination, entry));
-        }
-        return migrations;
-    }
+        StableRandom random) => _ring.CreateMigrations(islands, migrantsPerIsland, random);
 }

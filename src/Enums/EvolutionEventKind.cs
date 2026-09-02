@@ -11,9 +11,11 @@ namespace AiDotNet.Enums;
 /// insertion was attempted. <see cref="ArchiveChanged"/> follows an <see cref="Evaluated"/> event only when that
 /// result was <see cref="EvolutionArchiveInsertionResult.Inserted"/>,
 /// <see cref="EvolutionArchiveInsertionResult.Replaced"/>, or
-/// <see cref="EvolutionArchiveInsertionResult.InsertedWithEviction"/>. <see cref="Migrated"/>,
-/// <see cref="Checkpointed"/>, and <see cref="Stopped"/> carry no candidate; their message holds the number of
-/// elite transfers, the checkpoint sequence, and the <see cref="EvolutionStopReason"/> name respectively.
+/// <see cref="EvolutionArchiveInsertionResult.InsertedWithEviction"/>, and is raised again for each accepted migrant
+/// during a migration round, carrying the copied candidate whose lineage names the island it came from.
+/// <see cref="Migrated"/>, <see cref="Checkpointed"/>, and <see cref="Stopped"/> carry no candidate; their message
+/// holds the number of elite transfers, the checkpoint sequence, and the <see cref="EvolutionStopReason"/> name
+/// respectively.
 /// </para>
 /// <para><b>For Beginners:</b> Think of these as the headlines an evolution run can report while it works. If you
 /// only want to know when the search got better, listen for <see cref="ArchiveChanged"/>; if you want a full audit
