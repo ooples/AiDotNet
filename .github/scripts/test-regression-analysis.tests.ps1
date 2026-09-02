@@ -29,7 +29,8 @@ function Write-SyntheticShard {
         [int] $Executed = 1,
         [int] $NotExecuted = 0,
         [string] $FileName = 'test-results.trx',
-        [string] $ClassName = 'Synthetic.Fixture'
+        [string] $ClassName = 'Synthetic.Fixture',
+        [string] $RunInfoText = ''
     )
 
     $slug = $Name -replace '[\\/:*?"<>|\s-]+', '_'
@@ -47,6 +48,10 @@ function Write-SyntheticShard {
     } else { '' }
     $escapedClassName = [Security.SecurityElement]::Escape($ClassName)
     $escapedTestName = [Security.SecurityElement]::Escape($TestName)
+    $escapedRunInfoText = [Security.SecurityElement]::Escape($RunInfoText)
+    $runInfosXml = if ($RunInfoText) {
+        "<RunInfos><RunInfo outcome=`"Error`"><Text>$escapedRunInfoText</Text></RunInfo></RunInfos>"
+    } else { '' }
     $trx = @"
 <?xml version="1.0" encoding="utf-8"?>
 <TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
@@ -60,6 +65,7 @@ function Write-SyntheticShard {
   </Results>
   <ResultSummary outcome="$Outcome">
     <Counters total="$Total" executed="$Executed" passed="$($Executed - $failed)" failed="$failed" notExecuted="$NotExecuted" />
+    $runInfosXml
   </ResultSummary>
 </TestRun>
 "@
@@ -367,6 +373,40 @@ internal static class TouchedRegressionProbe
     $invalidTrx = Get-Content -LiteralPath (Join-Path $invalidTrxOutput 'comparison.json') -Raw | ConvertFrom-Json
     Assert-Equal 'Incomplete' $invalidTrx.currentIncompleteShards[0].status 'an unparseable TRX is incomplete'
     Assert-Equal $false $invalidTrx.policyPassed 'an unparseable TRX cannot pass comparison policy'
+
+    # VSTest can flush every result before its host dies. This is the failure
+    # shape that made a model shard appear to contain only its visible
+    # assertions even though the overall run was explicitly aborted.
+    $hostAbortBaselineRoot = Join-Path $testRoot 'host-abort-baseline'
+    $hostAbortCurrentRoot = Join-Path $testRoot 'host-abort-current'
+    $hostAbortOutput = Join-Path $testRoot 'host-abort-output'
+    Write-SyntheticShard $hostAbortBaselineRoot 'ha11' 'Shard Host Abort' 'StableTest' 'Passed'
+    Write-SyntheticShard $hostAbortCurrentRoot 'ha12' 'Shard Host Abort' 'VisibleFailure' 'Failed' `
+        -RunInfoText 'The active test run was aborted. Reason: Test host process crashed'
+    & $analyzer -CurrentResultsPath $hostAbortCurrentRoot -BaselineResultsPath $hostAbortBaselineRoot `
+        -OutputDirectory $hostAbortOutput -CurrentSha $repositoryHeadSha -BaselineSha $repositoryBaseSha `
+        -RepositoryPath $repository
+    $hostAbort = Get-Content -LiteralPath (Join-Path $hostAbortOutput 'comparison.json') -Raw | ConvertFrom-Json
+    Assert-Equal 'Incomplete' $hostAbort.currentIncompleteShards[0].status `
+        'a host abort is incomplete even when executed equals total'
+    Assert-Equal $true $hostAbort.currentIncompleteShards[0].hostLifecycleFailed `
+        'the ledger preserves the host lifecycle failure independently of counters'
+    Assert-Matches 'active test run was aborted' $hostAbort.currentIncompleteShards[0].runDiagnostics[0] `
+        'the ledger preserves the RunInfo diagnostic'
+    Assert-Equal $false $hostAbort.policyPassed 'a post-test host abort cannot pass comparison policy'
+
+    $reporterRoot = Join-Path $testRoot 'reporter-host-abort'
+    Write-SyntheticShard $reporterRoot 'ha13' 'Shard Reporter Host Abort' 'VisibleFailure' 'Failed' `
+        -RunInfoText 'The active test run was aborted. Reason: Test host process crashed'
+    $reporterWorkingDirectory = Join-Path $reporterRoot 'coverage-ha13-Shard_Reporter_Host_Abort'
+    $reporter = Join-Path $PSScriptRoot 'report-failed-tests.ps1'
+    $reporterOutput = & pwsh -NoLogo -NoProfile -Command `
+        "Set-Location -LiteralPath '$($reporterWorkingDirectory.Replace("'", "''"))'; & '$($reporter.Replace("'", "''"))'" 2>&1 | Out-String
+    Assert-Equal 0 $LASTEXITCODE 'the failure reporter remains non-gating for a host abort'
+    Assert-Matches 'test host terminated abnormally' $reporterOutput `
+        'the failure digest explicitly reports a lifecycle failure'
+    Assert-Matches 'VisibleFailure' $reporterOutput `
+        'the failure digest still reports every recorded assertion alongside the lifecycle failure'
 
     Write-Host 'test-regression-analysis.tests.ps1: all assertions passed.'
 }

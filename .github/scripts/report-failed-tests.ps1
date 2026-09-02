@@ -146,6 +146,8 @@ $ns = @{ t = 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010' }
 $failed = New-Object System.Collections.Generic.List[object]
 
 $unparseableTrx = New-Object System.Collections.Generic.List[string]
+$hostLifecycleDiagnostics = New-Object System.Collections.Generic.List[string]
+$hostLifecycleDiagnosticKeys = New-Object System.Collections.Generic.HashSet[string]([StringComparer]::Ordinal)
 
 foreach ($trx in $trxFiles) {
   # THE REPORTER MUST SURVIVE THE STATE IT EXISTS TO EXPLAIN. With
@@ -172,6 +174,26 @@ foreach ($trx in $trxFiles) {
       $message = ($msgNode.Node.InnerText -split "`n")[0].Trim()
     }
     $failed.Add([PSCustomObject]@{ Name = $node.testName; Message = $message })
+  }
+
+  # Counters alone cannot prove that the host completed cleanly. VSTest can
+  # write executed=total, flush every assertion result, and then append a
+  # RunInfo saying that the active run was aborted because the test host
+  # crashed. That exact shape previously looked like an ordinary short failure
+  # list. Only lifecycle-specific text is promoted here; ordinary xUnit [FAIL]
+  # RunInfo records remain represented by the failed-test digest above.
+  foreach ($runInfo in @($xml.SelectNodes('//*[local-name()="RunInfo"]'))) {
+    $textNode = $runInfo.SelectSingleNode('./*[local-name()="Text"]')
+    $runInfoText = if ($textNode) { [string] $textNode.InnerText } else { [string] $runInfo.InnerText }
+    $flatRunInfo = ($runInfoText -replace '\s+', ' ').Trim()
+    if ($flatRunInfo -match '(?i)\b(?:active\s+)?test\s+run\s+was\s+aborted\b' -or
+        $flatRunInfo -match '(?i)\btest\s+host(?:\s+process)?\b.*\b(?:crash(?:ed)?|terminat(?:ed|ion)|abort(?:ed)?|exited\s+unexpectedly)\b') {
+      $outcome = if ($runInfo.outcome) { [string] $runInfo.outcome } else { 'Error' }
+      $diagnostic = "[$outcome] $flatRunInfo"
+      if ($hostLifecycleDiagnosticKeys.Add($diagnostic)) {
+        $hostLifecycleDiagnostics.Add($diagnostic)
+      }
+    }
   }
 }
 
@@ -215,6 +237,17 @@ foreach ($trx in $trxFiles) {
 Add-Summary '## Failed test digest'
 Add-Summary ''
 
+if ($hostLifecycleDiagnostics.Count -gt 0) {
+  Add-Summary ':rotating_light: **The test host terminated abnormally. This shard is INCOMPLETE even though its TRX counters may show every discovered test as executed.**'
+  Add-Summary ''
+  foreach ($diagnostic in $hostLifecycleDiagnostics) {
+    Add-Summary ('    ' + $diagnostic)
+  }
+  Add-Summary ''
+  Add-Summary 'Treat the assertion list below as diagnostic evidence, not proof that the shard completed cleanly.'
+  Add-Summary ''
+}
+
 if ($failed.Count -eq 0) {
   # The step is only reached on job failure, so an empty failure set here means
   # the job failed for a NON-test reason (coverage upload, a post-step, the
@@ -228,6 +261,9 @@ if ($failed.Count -eq 0) {
                  'failed-test set for this shard is UNKNOWN. The digest below is incomplete; this is' +
                  ' NOT evidence that the failure lies outside the test results.')
     foreach ($e in $unparseableTrx) { Add-Summary ('    ' + $e) }
+  }
+  elseif ($hostLifecycleDiagnostics.Count -gt 0) {
+    Add-Summary 'No failed test result was recorded before the host lifecycle failure above.'
   }
   elseif ($total -gt 0 -and $executed -lt $total) {
     Add-Summary (":warning: **Only $executed of $total discovered tests executed -- $($total - $executed) never ran.** " +
