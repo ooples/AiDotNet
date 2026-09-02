@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Threading;
 using AiDotNet.ProgramSynthesis.Engines;
 using AiDotNet.ProgramSynthesis.Enums;
+using AiDotNet.ProgramSynthesis.Execution;
 using AiDotNet.ProgramSynthesis.Interfaces;
 using AiDotNet.ProgramSynthesis.Models;
 using AiDotNet.Tests.UnitTests.ProgramSynthesis.Fakes;
@@ -137,5 +138,16 @@ public sealed class NeuralProgramSynthesizerCoverageTests
             errorMessage = null;
             return true;
         }
+
+        public Task<ProgramExecuteResponse> ExecuteAsync(
+            ProgramExecuteRequest request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ProgramExecuteResponse
+            {
+                Success = true,
+                Language = request.Language,
+                ExitCode = 0,
+                StdOut = request.StdIn ?? string.Empty
+            });
     }
 }
