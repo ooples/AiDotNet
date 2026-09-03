@@ -41,9 +41,11 @@ namespace AiDotNet.Evolution.Programs.Outputs;
 public sealed class ProgramRunOutputWriter
 {
     private const int InfoSchemaVersion = 1;
+    private const int ProgramSchemaVersion = 1;
 
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
 
+    private readonly HashSet<string> _writtenPrograms = new(StringComparer.Ordinal);
     private readonly object _gate = new();
     private readonly string _outputDirectory;
     private readonly ProgramRunOutputOptions _options;
@@ -174,6 +176,125 @@ public sealed class ProgramRunOutputWriter
             programPath, infoPath, evaluation.Quality, truncated, savedAt);
     }
 
+    /// <summary>Writes one evaluated candidate as its own file, program text and all.</summary>
+    /// <param name="entry">The candidate and its evaluation.</param>
+    /// <returns>The path written, or <c>null</c> when the retention limit has already been reached.</returns>
+    /// <remarks>
+    /// <para>
+    /// The best-program files say what a run produced; these say how it got there. The archive keeps one candidate
+    /// per cell and discards the rest, so by the time a run ends most of the programs that led to the winner exist
+    /// nowhere else. One file per candidate is what makes a finished run auditable after the fact and what makes its
+    /// trajectories usable as training data, and it is the layout the reference implementation writes to
+    /// <c>programs/&lt;id&gt;.json</c>.
+    /// </para>
+    /// <para>
+    /// The file is named from the candidate's canonical identity, so re-writing the same candidate overwrites rather
+    /// than duplicates, and the name is reduced to a hash whenever the identity is not a safe file name - an identity
+    /// is a value the task chooses, and a value from outside must never decide a path. The write is atomic and the
+    /// source is bounded exactly as the best-program file is.
+    /// </para>
+    /// </remarks>
+    /// <param name="candidate">The candidate whose program is being recorded.</param>
+    /// <param name="evaluation">Its terminal evaluation.</param>
+    /// <param name="cell">
+    /// The archive cell it occupied, when that is known. It usually is not: a candidate is recorded as it commits,
+    /// and the cell is the archive's to compute. The raw <c>Descriptors</c> are always recorded, and the cell is
+    /// derived from them, so nothing is lost by leaving this <c>null</c> rather than guessing.
+    /// </param>
+    /// <exception cref="ArgumentNullException"><paramref name="candidate"/> or <paramref name="evaluation"/> is <c>null</c>.</exception>
+    /// <exception cref="IOException">The output directory could not be written.</exception>
+    public string? WriteProgram(
+        EvolutionCandidate<ProgramGenome> candidate,
+        EvolutionEvaluation evaluation,
+        EvolutionCellKey? cell = null)
+    {
+        Guard.NotNull(candidate);
+        Guard.NotNull(evaluation);
+        ProgramGenome genome = candidate.CanonicalGenome.Genome;
+        string identity = candidate.CanonicalGenome.Id;
+        string bounded = PromptTextRedactor.BoundToUtf8Bytes(genome.Source, _options.MaxSourceBytes, out bool truncated);
+
+        var document = new ProgramDocument
+        {
+            SchemaVersion = ProgramSchemaVersion,
+            RunId = _options.RunId,
+            GenomeId = identity,
+            EvaluationId = evaluation.EvaluationId,
+            Language = genome.Language.ToString(),
+            Source = bounded,
+            IsSourceTruncated = truncated,
+            SourceLength = genome.Source.Length,
+            SourceSha256 = EvolutionHash.Compute(genome.NormalizedSource),
+            Description = Bound(genome.Description),
+            Status = evaluation.Status.ToString(),
+            Quality = evaluation.Quality,
+            Direction = evaluation.Direction.ToString(),
+            CacheStatus = evaluation.CacheStatus.ToString(),
+            Cell = cell?.Bins.ToList(),
+            CellKey = cell?.StableKey,
+            Descriptors = evaluation.Descriptors
+                .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
+            Metrics = evaluation.Metrics
+                .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
+            Generation = evaluation.Lineage.Generation,
+            Island = evaluation.Lineage.Island,
+            ParentIds = evaluation.Lineage.ParentIds.ToList(),
+            InspirationIds = evaluation.Lineage.InspirationIds.ToList(),
+            VariationOperatorId = evaluation.Lineage.VariationOperatorId,
+            RefinerId = evaluation.Lineage.RefinerId,
+            SeedStream = evaluation.Lineage.SeedStream,
+            ElapsedMilliseconds = evaluation.Cost.Elapsed.TotalMilliseconds,
+            AttemptCount = evaluation.Cost.AttemptCount,
+            CostUnits = evaluation.Cost.CostUnits,
+            TaskVersionHash = evaluation.TaskVersionHash,
+            EvaluatorVersionHash = evaluation.EvaluatorVersionHash,
+            ConfigurationHash = evaluation.ConfigurationHash,
+            SavedAtUtc = DateTimeOffset.UtcNow
+        };
+
+        string directory = Path.Combine(_outputDirectory, _options.ProgramsDirectoryName);
+        string path = Path.Combine(directory, SafeFileName(identity) + ".json");
+        lock (_gate)
+        {
+            if (_options.MaxRetainedPrograms > 0 && !_writtenPrograms.Contains(path) &&
+                _writtenPrograms.Count >= _options.MaxRetainedPrograms)
+            {
+                return null;
+            }
+
+            Directory.CreateDirectory(directory);
+            WriteAtomic(path, Utf8.GetBytes(JsonConvert.SerializeObject(document, Formatting.Indented)));
+            _writtenPrograms.Add(path);
+        }
+        return path;
+    }
+
+    /// <summary>Gets how many distinct per-candidate files this writer has written.</summary>
+    public int WrittenProgramCount
+    {
+        get { lock (_gate) { return _writtenPrograms.Count; } }
+    }
+
+    /// <summary>Reduces a candidate identity to a name that is safe as a file name.</summary>
+    /// <param name="identity">The canonical genome identity.</param>
+    /// <returns>The identity when it is already safe, otherwise a hash of it.</returns>
+    /// <remarks>
+    /// A genome identity is whatever the task decided it is, which means it is a value from outside this code, and a
+    /// value from outside must never be allowed to decide a path. Anything that is not plainly safe is replaced by a
+    /// hash of itself, which stays stable and unique without being able to escape the directory.
+    /// </remarks>
+    private static string SafeFileName(string identity)
+    {
+        if (identity.Length > 0 && identity.Length <= 100 && identity != "." && identity != ".." &&
+            identity.All(character => char.IsLetterOrDigit(character) || character is '-' or '_'))
+        {
+            return identity;
+        }
+        return EvolutionHash.Compute(identity);
+    }
+
     /// <summary>Computes the directory one write would target, whether or not it exists.</summary>
     /// <param name="trigger">What would cause the write.</param>
     /// <param name="ordinal">The non-negative checkpoint ordinal; ignored for a final or manual write.</param>
@@ -221,6 +342,79 @@ public sealed class ProgramRunOutputWriter
                 catch (UnauthorizedAccessException) { }
             }
         }
+    }
+
+    /// <summary>Serialization shape of one per-candidate program document.</summary>
+    /// <remarks>
+    /// The program text is inside the document rather than beside it, because a per-candidate file is read as a
+    /// record rather than executed as a program, and one file per candidate is already one file too many to pair up.
+    /// </remarks>
+    private sealed class ProgramDocument
+    {
+        /// <summary>Gets or sets the document schema version.</summary>
+        public int SchemaVersion { get; set; }
+        /// <summary>Gets or sets the optional run identifier.</summary>
+        public string? RunId { get; set; }
+        /// <summary>Gets or sets the canonical genome identity.</summary>
+        public string GenomeId { get; set; } = string.Empty;
+        /// <summary>Gets or sets the evaluation identifier that produced the score.</summary>
+        public long EvaluationId { get; set; }
+        /// <summary>Gets or sets the program language.</summary>
+        public string Language { get; set; } = string.Empty;
+        /// <summary>Gets or sets the model-generated program source, bounded to the configured size.</summary>
+        public string Source { get; set; } = string.Empty;
+        /// <summary>Gets or sets whether the recorded source was cut to the configured limit.</summary>
+        public bool IsSourceTruncated { get; set; }
+        /// <summary>Gets or sets the source length in characters before truncation.</summary>
+        public int SourceLength { get; set; }
+        /// <summary>Gets or sets the hash of the normalized source.</summary>
+        public string SourceSha256 { get; set; } = string.Empty;
+        /// <summary>Gets or sets the genome's bounded description.</summary>
+        public string? Description { get; set; }
+        /// <summary>Gets or sets the terminal evaluation status.</summary>
+        public string Status { get; set; } = string.Empty;
+        /// <summary>Gets or sets the scalar quality.</summary>
+        public double? Quality { get; set; }
+        /// <summary>Gets or sets whether larger or smaller qualities are better.</summary>
+        public string Direction { get; set; } = string.Empty;
+        /// <summary>Gets or sets whether the score was computed or served from the cache.</summary>
+        public string CacheStatus { get; set; } = string.Empty;
+        /// <summary>Gets or sets the archive cell bin indices, or <c>null</c> when the cell was not known.</summary>
+        public List<int>? Cell { get; set; }
+        /// <summary>Gets or sets the culture-independent archive cell key, or <c>null</c> when it was not known.</summary>
+        public string? CellKey { get; set; }
+        /// <summary>Gets or sets the raw descriptor coordinates a cell is derived from.</summary>
+        public Dictionary<string, double> Descriptors { get; set; } = new(StringComparer.Ordinal);
+        /// <summary>Gets or sets every metric the evaluation reported.</summary>
+        public Dictionary<string, double> Metrics { get; set; } = new(StringComparer.Ordinal);
+        /// <summary>Gets or sets the generation the candidate was proposed in.</summary>
+        public long Generation { get; set; }
+        /// <summary>Gets or sets the island the candidate belonged to.</summary>
+        public int Island { get; set; }
+        /// <summary>Gets or sets the parents the candidate was derived from.</summary>
+        public List<string> ParentIds { get; set; } = new();
+        /// <summary>Gets or sets the inspirations shown to the operator.</summary>
+        public List<string> InspirationIds { get; set; } = new();
+        /// <summary>Gets or sets the variation operator that proposed the candidate.</summary>
+        public string VariationOperatorId { get; set; } = string.Empty;
+        /// <summary>Gets or sets the refiner applied before evaluation, when there was one.</summary>
+        public string? RefinerId { get; set; }
+        /// <summary>Gets or sets the deterministic random stream the proposal used.</summary>
+        public ulong SeedStream { get; set; }
+        /// <summary>Gets or sets how long the evaluation took.</summary>
+        public double ElapsedMilliseconds { get; set; }
+        /// <summary>Gets or sets how many attempts the evaluation needed.</summary>
+        public int AttemptCount { get; set; }
+        /// <summary>Gets or sets the cost units the evaluation reported.</summary>
+        public double CostUnits { get; set; }
+        /// <summary>Gets or sets the hash of the task that produced the score.</summary>
+        public string TaskVersionHash { get; set; } = string.Empty;
+        /// <summary>Gets or sets the hash of the evaluator that produced the score.</summary>
+        public string EvaluatorVersionHash { get; set; } = string.Empty;
+        /// <summary>Gets or sets the hash of the configuration the run used.</summary>
+        public string ConfigurationHash { get; set; } = string.Empty;
+        /// <summary>Gets or sets when the document was written.</summary>
+        public DateTimeOffset SavedAtUtc { get; set; }
     }
 
     /// <summary>Serialization shape of one best-program info document.</summary>

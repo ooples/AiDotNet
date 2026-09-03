@@ -37,6 +37,8 @@ public sealed class ProgramRunOutputObserver : IEvolutionObserver<ProgramGenome>
 {
     private const int MaxNoteLength = 256;
 
+    private long _programsWritten;
+
     private readonly object _gate = new();
     private readonly List<IEvolutionArchiveView<ProgramGenome>> _archives = new();
     private readonly List<ProgramRunOutputRecord> _records = new();
@@ -79,6 +81,9 @@ public sealed class ProgramRunOutputObserver : IEvolutionObserver<ProgramGenome>
     /// <summary>Gets a bounded description of the most recent failed write, or <c>null</c> when none has failed.</summary>
     public string? LastError { get; private set; }
 
+    /// <summary>Gets how many per-candidate program files this observer has written.</summary>
+    public long ProgramsWritten => Interlocked.Read(ref _programsWritten);
+
     /// <summary>Registers one archive the observer reads the best program from.</summary>
     /// <param name="archive">The archive view, typically captured inside the engine's archive factory.</param>
     /// <exception cref="ArgumentNullException"><paramref name="archive"/> is <c>null</c>.</exception>
@@ -94,6 +99,11 @@ public sealed class ProgramRunOutputObserver : IEvolutionObserver<ProgramGenome>
     {
         Guard.NotNull(evolutionEvent);
         cancellationToken.ThrowIfCancellationRequested();
+        if (evolutionEvent.Kind == EvolutionEventKind.Evaluated && _options.WriteEveryProgram)
+        {
+            TryWriteProgram(evolutionEvent);
+        }
+
         if (evolutionEvent.Kind == EvolutionEventKind.Checkpointed && _options.WriteAtCheckpoints)
         {
             long ordinal;
@@ -137,6 +147,35 @@ public sealed class ProgramRunOutputObserver : IEvolutionObserver<ProgramGenome>
                 : Comparer<double?>.Default)
             .ThenBy(entry => entry.Evaluation.GenomeId, StringComparer.Ordinal)
             .FirstOrDefault();
+    }
+
+    /// <summary>Writes one completed candidate to its own file, if the run asked for that.</summary>
+    /// <remarks>
+    /// Written from the commit event rather than at the end of the run, because by then the archive has discarded
+    /// every candidate that lost its cell, which is most of them. A failure to write is recorded and swallowed: a
+    /// full disk should cost an audit trail, not a search that was otherwise going fine.
+    /// </remarks>
+    private void TryWriteProgram(EvolutionEvent<ProgramGenome> evolutionEvent)
+    {
+        EvolutionCandidate<ProgramGenome>? candidate = evolutionEvent.Candidate;
+        EvolutionEvaluation? evaluation = evolutionEvent.Evaluation;
+        if (candidate is null || evaluation is null || evaluation.Status != EvolutionEvaluationStatus.Completed) return;
+
+        // The cell is left out rather than guessed: the archives belong to the engine and are not visible until the
+        // run ends, and the raw descriptors a cell is derived from are recorded either way.
+        try
+        {
+            string? path = _writer.WriteProgram(candidate, evaluation);
+            if (path is not null) Interlocked.Increment(ref _programsWritten);
+        }
+        catch (IOException exception)
+        {
+            LastError = Bound(exception.Message);
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            LastError = Bound(exception.Message);
+        }
     }
 
     private void TryWrite(ProgramRunOutputTrigger trigger, long ordinal, string? note)

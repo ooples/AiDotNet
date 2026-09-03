@@ -55,6 +55,36 @@ public sealed class ProgramRunOutputOptions
     /// <summary>Gets or sets an optional run identifier recorded in the info document. Defaults to <c>null</c>.</summary>
     public string? RunId { get; set; }
 
+    /// <summary>Gets or sets the directory holding one file per evaluated program. Defaults to <c>programs</c>.</summary>
+    public string ProgramsDirectoryName { get; set; } = "programs";
+
+    /// <summary>Gets or sets whether every completed candidate is written, not only the best. Defaults to <c>false</c>.</summary>
+    /// <remarks>
+    /// <para>
+    /// The best-program files answer "what did this run produce". They cannot answer "why does this program exist",
+    /// because the archive keeps one candidate per cell and discards the rest, so by the time a run ends most of the
+    /// programs that led to the winner are gone. Turning this on writes each completed candidate as it commits, which
+    /// is what makes a finished run auditable after the fact and what makes its successful and failed trajectories
+    /// usable as training data. It is the reference implementation's <c>programs/&lt;id&gt;.json</c> layout.
+    /// </para>
+    /// <para>
+    /// It is off by default because it is not free: one small file per evaluation, so a hundred-thousand-evaluation
+    /// run leaves a hundred thousand files. <see cref="MaxRetainedPrograms"/> bounds that.
+    /// </para>
+    /// <para><b>For Beginners:</b> Turn this on when you want to study the search afterwards rather than only its
+    /// answer. Each candidate the run scored is saved as its own small JSON file holding the program and how it
+    /// did.</para>
+    /// </remarks>
+    public bool WriteEveryProgram { get; set; }
+
+    /// <summary>Gets or sets how many per-program files may be written; zero, the default, means no limit.</summary>
+    /// <remarks>
+    /// A bound is a safety valve rather than a sampling policy: writing stops once the limit is reached, so the files
+    /// on disk are the first N candidates rather than a representative selection. Prefer a limit high enough that a
+    /// normal run never reaches it.
+    /// </remarks>
+    public long MaxRetainedPrograms { get; set; }
+
     /// <summary>Creates an independent copy so a running writer is unaffected by later mutation.</summary>
     /// <returns>A new instance carrying the same settings.</returns>
     public ProgramRunOutputOptions Clone() => new()
@@ -67,7 +97,10 @@ public sealed class ProgramRunOutputOptions
         WriteAtCheckpoints = WriteAtCheckpoints,
         WriteAtRunEnd = WriteAtRunEnd,
         MaxSourceBytes = MaxSourceBytes,
-        RunId = RunId
+        RunId = RunId,
+        ProgramsDirectoryName = ProgramsDirectoryName,
+        WriteEveryProgram = WriteEveryProgram,
+        MaxRetainedPrograms = MaxRetainedPrograms
     };
 
     /// <summary>Rejects names that are not usable file-system names and sizes that cannot be enforced.</summary>
@@ -80,6 +113,12 @@ public sealed class ProgramRunOutputOptions
         RequireName(CheckpointDirectoryPrefix, nameof(CheckpointDirectoryPrefix));
         RequireName(ProgramFileNameStem, nameof(ProgramFileNameStem));
         RequireName(InfoFileName, nameof(InfoFileName));
+        RequireName(ProgramsDirectoryName, nameof(ProgramsDirectoryName));
+        if (MaxRetainedPrograms < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(MaxRetainedPrograms), MaxRetainedPrograms,
+                "Value cannot be negative; zero means no limit.");
+        }
         if (MaxSourceBytes <= 0 || MaxSourceBytes > MaxAllowedSourceBytes)
         {
             throw new ArgumentOutOfRangeException(nameof(MaxSourceBytes), MaxSourceBytes,

@@ -396,6 +396,111 @@ public sealed partial class EvolutionEngine<TGenome>
         }
     }
 
+    /// <summary>Reads the candidates a checkpoint holds, without starting or resuming a run.</summary>
+    /// <param name="checkpoint">The checkpoint to read.</param>
+    /// <param name="genomeCodec">The codec that wrote the checkpoint's genomes.</param>
+    /// <returns>Every recovered candidate, with the island and the part of the checkpoint it came from.</returns>
+    /// <remarks>
+    /// <para>
+    /// A checkpoint is written so a run can continue, but it is also the complete record of what that run held:
+    /// every elite, every retained runner-up, each genome in full, and the lineage that produced it. Reading it back
+    /// is how a finished run is audited, how a lineage is reconstructed after the fact, and how successful
+    /// trajectories are harvested as training data - the post-hoc story the reference implementation gets from its
+    /// per-program files and its checkpoint trace extractors.
+    /// </para>
+    /// <para>
+    /// This is deliberately a reader on the same type that writes the checkpoint. The document schema is private,
+    /// and a parallel reader that duplicated it would keep compiling while silently drifting the first time a field
+    /// was renamed.
+    /// </para>
+    /// <para><b>For Beginners:</b> Point this at a saved run to see what it found, without running anything:
+    /// <code>
+    /// var checkpoint = await store.LoadLatestAsync("my-run");
+    /// var contents = EvolutionEngine&lt;MyGenome&gt;.ReadCheckpoint(checkpoint, new MyGenomeCodec());
+    /// foreach (var entry in contents.DistinctCandidates) Console.WriteLine(entry.Entry.Evaluation.Quality);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="checkpoint"/> or <paramref name="genomeCodec"/> is <c>null</c>.</exception>
+    /// <exception cref="InvalidDataException">The checkpoint payload is not a readable engine state.</exception>
+    public static EvolutionCheckpointContents<TGenome> ReadCheckpoint(
+        EvolutionCheckpoint checkpoint, IEvolutionGenomeCodec<TGenome> genomeCodec)
+    {
+        Guard.NotNull(checkpoint);
+        Guard.NotNull(genomeCodec);
+        checkpoint.Validate();
+
+        EngineStateDocument? state;
+        try
+        {
+            state = JsonConvert.DeserializeObject<EngineStateDocument>(checkpoint.Payload);
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException("The evolution engine state payload is invalid.", exception);
+        }
+
+        if (state is null) throw new InvalidDataException("The evolution engine state payload is empty.");
+
+        var entries = new List<EvolutionCheckpointEntry<TGenome>>();
+        List<ArchiveDocument> islands = state.Islands ?? new List<ArchiveDocument>();
+        for (int island = 0; island < islands.Count; island++)
+        {
+            foreach (ArchiveEntryDocument document in islands[island].Entries ?? new List<ArchiveEntryDocument>())
+            {
+                entries.Add(new EvolutionCheckpointEntry<TGenome>(island,
+                    EvolutionCheckpointEntrySource.IslandArchive, ReadArchiveEntry(document, genomeCodec)));
+            }
+        }
+
+        foreach (EliteRecordDocument record in state.GlobalElites ?? new List<EliteRecordDocument>())
+        {
+            if (record.Entry is null) throw new InvalidDataException("A checkpoint global elite record is invalid.");
+            entries.Add(new EvolutionCheckpointEntry<TGenome>(Math.Max(0, record.Island),
+                EvolutionCheckpointEntrySource.GlobalElite, ReadArchiveEntry(record.Entry, genomeCodec)));
+        }
+
+        List<List<ArchiveEntryDocument>> histories = state.IslandHistories ?? new List<List<ArchiveEntryDocument>>();
+        for (int island = 0; island < histories.Count; island++)
+        {
+            foreach (ArchiveEntryDocument document in histories[island] ?? new List<ArchiveEntryDocument>())
+            {
+                entries.Add(new EvolutionCheckpointEntry<TGenome>(island,
+                    EvolutionCheckpointEntrySource.IslandHistory, ReadArchiveEntry(document, genomeCodec)));
+            }
+        }
+
+        return new EvolutionCheckpointContents<TGenome>(
+            checkpoint.RunId, checkpoint.Sequence, checkpoint.CompatibilityHash, entries);
+    }
+
+    /// <summary>Rebuilds one archive entry from its document using a caller-supplied codec.</summary>
+    private static EvolutionArchiveEntry<TGenome> ReadArchiveEntry(
+        ArchiveEntryDocument document, IEvolutionGenomeCodec<TGenome> genomeCodec)
+    {
+        if (document.GenomePayload is null || string.IsNullOrWhiteSpace(document.GenomeId) || document.Lineage is null ||
+            document.Evaluation is null || document.CellBins is null)
+            throw new InvalidDataException("An archive entry is incomplete.");
+
+        TGenome genome;
+        try
+        {
+            genome = genomeCodec.Deserialize(document.GenomePayload);
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException and not StackOverflowException)
+        {
+            throw new InvalidDataException(
+                $"The genome codec could not read the payload of '{document.GenomeId}'.", exception);
+        }
+
+        if (genome is null) throw new InvalidDataException("The genome codec returned null.");
+        var canonical = new EvolutionCanonicalGenome<TGenome>(genome, document.GenomeId);
+        EvolutionLineage lineage = document.Lineage.ToLineage();
+        var candidate = new EvolutionCandidate<TGenome>(document.EvaluationId, canonical, lineage);
+        EvolutionEvaluation evaluation = document.Evaluation.ToEvaluation(document.EvaluationId, document.GenomeId, lineage);
+        return new EvolutionArchiveEntry<TGenome>(new EvolutionCellKey(document.CellBins), candidate, evaluation);
+    }
+
     private EvolutionArchiveEntry<TGenome> RestoreArchiveEntry(ArchiveEntryDocument document)
     {
         if (document.GenomePayload is null || string.IsNullOrWhiteSpace(document.GenomeId) || document.Lineage is null ||
