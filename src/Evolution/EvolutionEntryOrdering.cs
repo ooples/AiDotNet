@@ -30,6 +30,31 @@ internal static class EvolutionEntryOrdering
         return x.Evaluation.EvaluationId.CompareTo(y.Evaluation.EvaluationId);
     }
 
+    /// <summary>
+    /// Compares two entries best first by a named metric rather than by quality, breaking ties on exactly the same
+    /// chain so a metric query and <see cref="Compare{TGenome}"/> can never disagree about which of two equally good
+    /// entries comes first.
+    /// </summary>
+    /// <remarks>
+    /// Both entries are assumed to report the metric as a finite number; callers filter first, because an entry that
+    /// never reported the metric is absent from the answer rather than ranked last.
+    /// </remarks>
+    internal static int CompareByMetric<TGenome>(EvolutionOptimizationDirection direction, string metric,
+        EvolutionArchiveEntry<TGenome> x, EvolutionArchiveEntry<TGenome> y)
+    {
+        double left = x.Evaluation.Metrics[metric];
+        double right = y.Evaluation.Metrics[metric];
+        int value = direction == EvolutionOptimizationDirection.Maximize
+            ? right.CompareTo(left)
+            : left.CompareTo(right);
+        if (value != 0) return value;
+        int genome = StringComparer.Ordinal.Compare(x.Evaluation.GenomeId, y.Evaluation.GenomeId);
+        if (genome != 0) return genome;
+        int cell = x.Cell.CompareTo(y.Cell);
+        if (cell != 0) return cell;
+        return x.Evaluation.EvaluationId.CompareTo(y.Evaluation.EvaluationId);
+    }
+
     private sealed class EntryComparer<TGenome> : IComparer<EvolutionArchiveEntry<TGenome>>
     {
         private readonly EvolutionOptimizationDirection _direction;

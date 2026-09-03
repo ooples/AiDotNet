@@ -158,6 +158,113 @@ public sealed class ProgramEvolutionResult
     /// <summary>Gets whether the run archived at least one program.</summary>
     public bool HasBestProgram => BestProgram is not null;
 
+    /// <summary>Returns the retained elite that scored best on a named metric.</summary>
+    /// <param name="metric">The metric name, matched exactly.</param>
+    /// <param name="direction">Which way the metric reads; defaults to <see cref="Direction"/>.</param>
+    /// <returns>The best retained elite reporting the metric, or <c>null</c> when none does.</returns>
+    /// <exception cref="ArgumentException"><paramref name="metric"/> is empty or whitespace.</exception>
+    /// <remarks>
+    /// <para>
+    /// The search optimised one number, and <see cref="BestProgram"/> is the winner by that number. An evaluator
+    /// usually reports several, so this ranks the retained elites by any one of them: the most accurate program
+    /// rather than the highest blended score, or the fastest of the ones that were accurate enough.
+    /// </para>
+    /// <para>
+    /// An elite that never reported the metric is left out rather than treated as having scored zero, which would
+    /// otherwise hand a minimising query to whichever program simply failed to measure. Direction defaults to the
+    /// run's own; pass it explicitly for a metric that reads the other way, such as a runtime inside a maximising
+    /// run. Only <see cref="Elites"/> is searched, so the answer is drawn from the elites the run was configured to
+    /// retain rather than from the whole archive.
+    /// </para>
+    /// <para><b>For Beginners:</b> <c>result.BestBy("accuracy")</c> gives the most accurate program kept, and
+    /// <c>result.MetricNames()</c> lists what you can ask for.</para>
+    /// </remarks>
+    public ProgramEvolutionElite? BestBy(string metric, EvolutionOptimizationDirection? direction = null)
+    {
+        Guard.NotNullOrWhiteSpace(metric);
+
+        EvolutionOptimizationDirection resolved = direction ?? Direction;
+        ProgramEvolutionElite? best = null;
+        foreach (ProgramEvolutionElite elite in _elites)
+        {
+            if (!Reports(elite, metric)) continue;
+            if (best is null || CompareByMetric(resolved, metric, elite, best) < 0) best = elite;
+        }
+
+        return best;
+    }
+
+    /// <summary>Returns the retained elites that scored best on a named metric, best first.</summary>
+    /// <param name="metric">The metric name, matched exactly.</param>
+    /// <param name="count">How many to return at most.</param>
+    /// <param name="direction">Which way the metric reads; defaults to <see cref="Direction"/>.</param>
+    /// <returns>Up to <paramref name="count"/> retained elites, best first, shorter when fewer reported the metric.</returns>
+    /// <exception cref="ArgumentException"><paramref name="metric"/> is empty or whitespace.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
+    public IReadOnlyList<ProgramEvolutionElite> TopBy(string metric, int count,
+        EvolutionOptimizationDirection? direction = null)
+    {
+        Guard.NotNullOrWhiteSpace(metric);
+        if (count < 0) throw new ArgumentOutOfRangeException(nameof(count), count, "Value cannot be negative.");
+        if (count == 0) return Array.Empty<ProgramEvolutionElite>();
+
+        EvolutionOptimizationDirection resolved = direction ?? Direction;
+        var reporting = new List<ProgramEvolutionElite>();
+        foreach (ProgramEvolutionElite elite in _elites)
+        {
+            if (Reports(elite, metric)) reporting.Add(elite);
+        }
+
+        reporting.Sort((left, right) => CompareByMetric(resolved, metric, left, right));
+        if (reporting.Count > count) reporting.RemoveRange(count, reporting.Count - count);
+        return reporting;
+    }
+
+    /// <summary>Returns every metric name any retained elite reported, ordered for stable display.</summary>
+    /// <returns>The ordinal-sorted union of reported metric names; empty when nothing was retained.</returns>
+    /// <remarks>
+    /// Names originate in an evaluated program and are untrusted: display them rather than acting on them. Not every
+    /// elite necessarily reported every name.
+    /// </remarks>
+    public IReadOnlyList<string> MetricNames()
+    {
+        var names = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (ProgramEvolutionElite elite in _elites)
+        {
+            foreach (KeyValuePair<string, double> metric in elite.Metrics)
+            {
+                if (IsRankable(metric.Value)) names.Add(metric.Key);
+            }
+        }
+
+        return new List<string>(names);
+    }
+
+    /// <summary>Reports whether an elite carries a usable value for a metric.</summary>
+    private static bool Reports(ProgramEvolutionElite elite, string metric) =>
+        elite.Metrics.TryGetValue(metric, out double value) && IsRankable(value);
+
+    /// <summary>Reports whether a metric value can take part in an ordering at all.</summary>
+    private static bool IsRankable(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
+    /// <summary>
+    /// Orders two elites best first by a named metric, breaking ties on the same chain the archive uses so a query
+    /// against this result and one against the live archive cannot disagree.
+    /// </summary>
+    private static int CompareByMetric(EvolutionOptimizationDirection direction, string metric,
+        ProgramEvolutionElite left, ProgramEvolutionElite right)
+    {
+        double leftValue = left.Metrics[metric];
+        double rightValue = right.Metrics[metric];
+        int value = direction == EvolutionOptimizationDirection.Maximize
+            ? rightValue.CompareTo(leftValue)
+            : leftValue.CompareTo(rightValue);
+        if (value != 0) return value;
+        int genome = StringComparer.Ordinal.Compare(left.GenomeId, right.GenomeId);
+        if (genome != 0) return genome;
+        return left.EvaluationId.CompareTo(right.EvaluationId);
+    }
+
     /// <summary>Summarizes a finished engine run, bounding the retained program text.</summary>
     /// <param name="runResult">The engine's own run result.</param>
     /// <param name="llmUsage">The language-model totals, or <c>null</c> when none were used.</param>
@@ -220,7 +327,8 @@ public sealed class ProgramEvolutionResult
                 candidate.Entry.Evaluation.Descriptors,
                 candidate.Entry.Cell.Bins,
                 candidate.Island,
-                candidate.Entry.Evaluation.EvaluationId));
+                candidate.Entry.Evaluation.EvaluationId,
+                candidate.Entry.Evaluation.Metrics));
         }
 
         EvolutionArchiveEntry<ProgramGenome>? best = runResult.Best;

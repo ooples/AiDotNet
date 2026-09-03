@@ -26,11 +26,12 @@ namespace AiDotNet.Evolution.Programs;
 /// </remarks>
 public sealed class ProgramEvolutionElite
 {
-    private static readonly ReadOnlyDictionary<string, double> NoDescriptors =
+    private static readonly ReadOnlyDictionary<string, double> NoNumbers =
         new(new Dictionary<string, double>(StringComparer.Ordinal));
 
     private readonly ReadOnlyCollection<int> _cell;
     private readonly ReadOnlyDictionary<string, double> _descriptors;
+    private readonly ReadOnlyDictionary<string, double> _metrics;
 
     /// <summary>Initializes an elite summary.</summary>
     /// <param name="genomeId">The program's canonical identity.</param>
@@ -42,8 +43,11 @@ public sealed class ProgramEvolutionElite
     /// <param name="cell">The bin indices that placed it in the grid, or <c>null</c> for none.</param>
     /// <param name="island">The zero-based island the program was archived on.</param>
     /// <param name="evaluationId">The evaluation that produced the score.</param>
+    /// <param name="metrics">Every number the evaluation reported, or <c>null</c> for none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="source"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="genomeId"/> is empty, or a descriptor value is not finite.</exception>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="genomeId"/> is empty, or a descriptor or metric value is not finite.
+    /// </exception>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="quality"/> is not finite, <paramref name="island"/> or <paramref name="evaluationId"/> is
     /// negative, or a cell index is negative.
@@ -57,7 +61,8 @@ public sealed class ProgramEvolutionElite
         IReadOnlyDictionary<string, double>? descriptors,
         IReadOnlyList<int>? cell,
         int island,
-        long evaluationId)
+        long evaluationId,
+        IReadOnlyDictionary<string, double>? metrics = null)
     {
         Guard.NotNullOrWhiteSpace(genomeId);
         Guard.NotNull(source);
@@ -86,7 +91,8 @@ public sealed class ProgramEvolutionElite
         Island = island;
         EvaluationId = evaluationId;
         _cell = new ReadOnlyCollection<int>(cellCopy);
-        _descriptors = descriptors is null ? NoDescriptors : CopyDescriptors(descriptors);
+        _descriptors = descriptors is null ? NoNumbers : CopyDescriptors(descriptors);
+        _metrics = metrics is null ? NoNumbers : CopyMetrics(metrics);
     }
 
     /// <summary>Gets the program's canonical identity, the hash of its normalized source.</summary>
@@ -107,6 +113,14 @@ public sealed class ProgramEvolutionElite
     /// <summary>Gets the raw archive coordinates behind <see cref="Cell"/>; empty when none were recorded.</summary>
     public IReadOnlyDictionary<string, double> Descriptors => _descriptors;
 
+    /// <summary>Gets every number the evaluation reported, keyed by metric name; empty when none were recorded.</summary>
+    /// <remarks>
+    /// <see cref="Quality"/> is the single number the search optimised; this is everything measured alongside it, so
+    /// a finished run can be ranked by accuracy, cost, or anything else the evaluator reported. Names originate in an
+    /// evaluated program and are untrusted: display them rather than acting on them.
+    /// </remarks>
+    public IReadOnlyDictionary<string, double> Metrics => _metrics;
+
     /// <summary>Gets the bin indices that placed this program in the grid; empty when none were recorded.</summary>
     public IReadOnlyList<int> Cell => _cell;
 
@@ -123,15 +137,22 @@ public sealed class ProgramEvolutionElite
         ", quality=" + (Quality.HasValue ? Quality.Value.ToString("R", CultureInfo.InvariantCulture) : "none") +
         ", cell=[" + string.Join(",", _cell.Select(bin => bin.ToString(CultureInfo.InvariantCulture))) + "])";
 
-    private static ReadOnlyDictionary<string, double> CopyDescriptors(IReadOnlyDictionary<string, double> source)
+    private static ReadOnlyDictionary<string, double> CopyDescriptors(IReadOnlyDictionary<string, double> source) =>
+        CopyNumbers(source, "Descriptor", "descriptors");
+
+    private static ReadOnlyDictionary<string, double> CopyMetrics(IReadOnlyDictionary<string, double> source) =>
+        CopyNumbers(source, "Metric", "metrics");
+
+    private static ReadOnlyDictionary<string, double> CopyNumbers(
+        IReadOnlyDictionary<string, double> source, string label, string parameterName)
     {
         var copy = new Dictionary<string, double>(StringComparer.Ordinal);
         foreach (KeyValuePair<string, double> pair in source)
         {
-            if (pair.Key is null) throw new ArgumentException("A descriptor name cannot be null.", nameof(source));
+            if (pair.Key is null) throw new ArgumentException($"A {label.ToLowerInvariant()} name cannot be null.", parameterName);
             if (double.IsNaN(pair.Value) || double.IsInfinity(pair.Value))
             {
-                throw new ArgumentException($"Descriptor '{pair.Key}' must be a finite number.", nameof(source));
+                throw new ArgumentException($"{label} '{pair.Key}' must be a finite number.", parameterName);
             }
 
             copy[pair.Key] = pair.Value;

@@ -19,6 +19,7 @@ namespace AiDotNet.Models.Results;
 public sealed class EvolutionEliteSummary
 {
     private IDictionary<string, double>? _descriptors;
+    private IDictionary<string, double>? _metrics;
     private IList<int>? _cell;
 
     /// <summary>Gets or sets the canonical identifier of the archived candidate.</summary>
@@ -38,6 +39,23 @@ public sealed class EvolutionEliteSummary
     {
         get => _descriptors ??= new Dictionary<string, double>(StringComparer.Ordinal);
         set => _descriptors = value;
+    }
+
+    /// <summary>Gets or sets every number the evaluation reported, keyed by metric name.</summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="Quality"/> is the single number the search optimised; this is everything the task measured
+    /// alongside it, so a saved summary can still answer "which candidate was the most accurate" or "which was the
+    /// cheapest" after the typed run result is gone. Names are supplied by the task and, for program evolution,
+    /// originate in an evaluated candidate: display them rather than acting on them.
+    /// </para>
+    /// <para><b>For Beginners:</b> The score the search chased is in <see cref="Quality"/>. Everything else the
+    /// evaluation measured is here by name.</para>
+    /// </remarks>
+    public IDictionary<string, double> Metrics
+    {
+        get => _metrics ??= new Dictionary<string, double>(StringComparer.Ordinal);
+        set => _metrics = value;
     }
 
     /// <summary>Gets or sets the archive cell coordinates, one bin index per descriptor, in descriptor order.</summary>

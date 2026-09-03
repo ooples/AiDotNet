@@ -3,6 +3,7 @@ using System.Globalization;
 using AiDotNet.Enums;
 using AiDotNet.Evolution;
 using AiDotNet.Evolution.Programs;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Models.Results;
 
@@ -132,6 +133,90 @@ public sealed class EvolutionRunSummary
     /// <summary>Gets whether the run archived at least one candidate.</summary>
     public bool HasBest => BestGenomeId is not null;
 
+    /// <summary>Returns the retained elite that scored best on a named metric.</summary>
+    /// <param name="metric">The metric name, matched exactly.</param>
+    /// <param name="direction">Which way the metric reads; defaults to <see cref="Direction"/>.</param>
+    /// <returns>The best retained elite reporting the metric, or <see langword="null"/> when none does.</returns>
+    /// <exception cref="ArgumentException"><paramref name="metric"/> is empty or whitespace.</exception>
+    /// <remarks>
+    /// <para>
+    /// The run optimised one number; an evaluation usually reports several. This ranks the retained elites by any
+    /// one of them, so a finished search can still answer "which candidate was the most accurate" or "which was the
+    /// cheapest" — and it works on a summary read back from disk, because the numbers travel with it.
+    /// </para>
+    /// <para>
+    /// An elite that never reported the metric is left out rather than treated as having scored zero, which would
+    /// otherwise hand a minimising query to whichever candidate simply failed to measure. Direction defaults to the
+    /// run's own, because most secondary metrics point the same way as the objective; pass it explicitly for one
+    /// that does not, such as a cost inside a maximising run. Only the retained elites are searched — the run kept
+    /// as many as the configured elite count allowed, best-quality first.
+    /// </para>
+    /// <para><b>For Beginners:</b> <c>summary.BestBy("accuracy")</c> gives the most accurate candidate the run
+    /// kept. Use <see cref="MetricNames"/> to see what you can ask for.</para>
+    /// </remarks>
+    public EvolutionEliteSummary? BestBy(string metric, EvolutionOptimizationDirection? direction = null)
+    {
+        Guard.NotNullOrWhiteSpace(metric);
+
+        EvolutionOptimizationDirection resolved = direction ?? Direction;
+        EvolutionEliteSummary? best = null;
+        foreach (EvolutionEliteSummary elite in Elites)
+        {
+            if (!Reports(elite, metric)) continue;
+            if (best is null || CompareByMetric(resolved, metric, elite, best) < 0) best = elite;
+        }
+
+        return best;
+    }
+
+    /// <summary>Returns the retained elites that scored best on a named metric, best first.</summary>
+    /// <param name="metric">The metric name, matched exactly.</param>
+    /// <param name="count">How many to return at most.</param>
+    /// <param name="direction">Which way the metric reads; defaults to <see cref="Direction"/>.</param>
+    /// <returns>
+    /// Up to <paramref name="count"/> retained elites, best first, shorter when fewer reported the metric.
+    /// </returns>
+    /// <exception cref="ArgumentException"><paramref name="metric"/> is empty or whitespace.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
+    public IReadOnlyList<EvolutionEliteSummary> TopBy(string metric, int count,
+        EvolutionOptimizationDirection? direction = null)
+    {
+        Guard.NotNullOrWhiteSpace(metric);
+        if (count < 0) throw new ArgumentOutOfRangeException(nameof(count), count, "Value cannot be negative.");
+        if (count == 0) return Array.Empty<EvolutionEliteSummary>();
+
+        EvolutionOptimizationDirection resolved = direction ?? Direction;
+        var reporting = new List<EvolutionEliteSummary>();
+        foreach (EvolutionEliteSummary elite in Elites)
+        {
+            if (Reports(elite, metric)) reporting.Add(elite);
+        }
+
+        reporting.Sort((left, right) => CompareByMetric(resolved, metric, left, right));
+        if (reporting.Count > count) reporting.RemoveRange(count, reporting.Count - count);
+        return reporting;
+    }
+
+    /// <summary>Returns every metric name any retained elite reported, ordered for stable display.</summary>
+    /// <returns>The ordinal-sorted union of reported metric names; empty when nothing was retained.</returns>
+    /// <remarks>
+    /// Names are supplied by the task and, for program evolution, originate in an evaluated candidate: display them
+    /// rather than acting on them. Not every elite necessarily reported every name.
+    /// </remarks>
+    public IReadOnlyList<string> MetricNames()
+    {
+        var names = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (EvolutionEliteSummary elite in Elites)
+        {
+            foreach (KeyValuePair<string, double> metric in elite.Metrics)
+            {
+                if (IsRankable(metric.Value)) names.Add(metric.Key);
+            }
+        }
+
+        return new List<string>(names);
+    }
+
     /// <summary>Returns a short description that never echoes candidate content.</summary>
     /// <returns>The stop reason, the best quality, and the archive coverage.</returns>
     public override string ToString() => string.Format(
@@ -239,6 +324,13 @@ public sealed class EvolutionRunSummary
                 elite.Descriptors[pair.Key] = pair.Value;
             }
 
+            // Carried for the same reason as the descriptors: they are numbers the task reported, not genome
+            // content, and without them a saved summary cannot answer any question but the one the run optimised.
+            foreach (KeyValuePair<string, double> pair in candidate.Entry.Evaluation.Metrics)
+            {
+                elite.Metrics[pair.Key] = pair.Value;
+            }
+
             foreach (int bin in candidate.Entry.Cell.Bins) elite.Cell.Add(bin);
             summary.Elites.Add(elite);
         }
@@ -247,6 +339,35 @@ public sealed class EvolutionRunSummary
         summary.BestQuality = best?.Evaluation.Quality;
         summary.BestGenomeId = best?.Evaluation.GenomeId;
         return summary;
+    }
+
+    /// <summary>Reports whether an elite carries a usable value for a metric.</summary>
+    /// <remarks>
+    /// A missing name and a name whose value is not a finite number are the same answer: this elite cannot be ranked
+    /// by that metric, so it is left out rather than ranked as if it had scored something.
+    /// </remarks>
+    private static bool Reports(EvolutionEliteSummary elite, string metric) =>
+        elite.Metrics.TryGetValue(metric, out double value) && IsRankable(value);
+
+    /// <summary>Reports whether a metric value can take part in an ordering at all.</summary>
+    private static bool IsRankable(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
+    /// <summary>
+    /// Orders two elites best first by a named metric, breaking ties on the same chain the archive itself uses so a
+    /// query against the summary and one against the live archive cannot disagree.
+    /// </summary>
+    private static int CompareByMetric(EvolutionOptimizationDirection direction, string metric,
+        EvolutionEliteSummary left, EvolutionEliteSummary right)
+    {
+        double leftValue = left.Metrics[metric];
+        double rightValue = right.Metrics[metric];
+        int value = direction == EvolutionOptimizationDirection.Maximize
+            ? rightValue.CompareTo(leftValue)
+            : leftValue.CompareTo(rightValue);
+        if (value != 0) return value;
+        int genome = StringComparer.Ordinal.Compare(left.GenomeId, right.GenomeId);
+        if (genome != 0) return genome;
+        return left.EvaluationId.CompareTo(right.EvaluationId);
     }
 
     private static int Compare<TGenome>(
