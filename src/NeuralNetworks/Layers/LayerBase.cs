@@ -3040,6 +3040,22 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         return scratch;
     }
 
+    /// <summary>Shape of the weight this thread most recently TRIED to allocate.</summary>
+    /// <remarks>
+    /// Recorded BEFORE the attempt, and deliberately not inside an exception handler. A diagnostic
+    /// built after an OutOfMemoryException has to allocate its own message -- string interpolation,
+    /// string.Join -- at the one moment the heap has nothing left, so it dies re-throwing OOM and
+    /// reports nothing. Measured: an InvalidOperationException naming the shape never surfaced once
+    /// across RT2, SEEDX, SkyworkR1V and VideoChat2. Storing the caller's existing array reference
+    /// costs no allocation, so it survives the failure it is meant to describe.
+    /// </remarks>
+    [ThreadStatic]
+    internal static int[]? LastAttemptedWeightShape;
+
+    /// <summary>Name of the layer type that owns <see cref="LastAttemptedWeightShape"/>.</summary>
+    [ThreadStatic]
+    internal static string? LastAttemptedWeightOwner;
+
     /// <summary>
     /// Allocates a lazy-init weight tensor of the given shape, routing
     /// through <see cref="WeightRegistry.AllocateStreaming{T}"/> when
@@ -3060,22 +3076,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// embeddings). Tiny scratch tensors don't need to route through
     /// the pool — the lookup overhead exceeds the benefit.</para>
     /// </remarks>
-    /// <summary>Shape of the weight this thread most recently TRIED to allocate.</summary>
-    /// <remarks>
-    /// Recorded BEFORE the attempt, and deliberately not inside an exception handler. A diagnostic
-    /// built after an OutOfMemoryException has to allocate its own message -- string interpolation,
-    /// string.Join -- at the one moment the heap has nothing left, so it dies re-throwing OOM and
-    /// reports nothing. Measured: an InvalidOperationException naming the shape never surfaced once
-    /// across RT2, SEEDX, SkyworkR1V and VideoChat2. Storing the caller's existing array reference
-    /// costs no allocation, so it survives the failure it is meant to describe.
-    /// </remarks>
-    [ThreadStatic]
-    internal static int[]? LastAttemptedWeightShape;
-
-    /// <summary>Name of the layer type that owns <see cref="LastAttemptedWeightShape"/>.</summary>
-    [ThreadStatic]
-    internal static string? LastAttemptedWeightOwner;
-
     protected Tensor<T> AllocateLazyWeight(int[] shape, Func<Tensor<T>>? nonStreamingAllocator = null)
     {
         LastAttemptedWeightShape = shape;

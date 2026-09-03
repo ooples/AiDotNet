@@ -2,7 +2,6 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace AiDotNet.Generators;
 
@@ -464,7 +463,7 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
             synthesizedCount++;
         }
 
-        sb.AppendLine("    private static readonly (global::System.Type Type, string Property, int Bound)[] Knobs =");
+        sb.AppendLine("    private static readonly (global::System.Type Type, string Property)[] Knobs =");
         sb.AppendLine("    {");
 
         var seen = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
@@ -500,8 +499,8 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
                     && p.SetMethod is { DeclaredAccessibility: Accessibility.Public }
                     && !p.IsStatic
                     && p.Type.SpecialType == SpecialType.System_Int32)
-                .Select(p => (Property: p.Name, Bound: IsScalable(p.Name) ? 1 : 0))
-                .Where(k => k.Bound > 0)
+                .Select(p => p.Name)
+                .Where(IsScalable)
                 .ToArray();
 
             if (knobs.Length == 0) continue;
@@ -511,9 +510,9 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
                 ? type.ConstructUnboundGenericType().ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
                 : fullName;
 
-            foreach (var (property, bound) in knobs)
+            foreach (var property in knobs)
             {
-                sb.AppendLine($"        (typeof({typeOfArgument}), \"{property}\", {bound}),");
+                sb.AppendLine($"        (typeof({typeOfArgument}), \"{property}\"),");
                 knobCount++;
             }
 
@@ -544,6 +543,13 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
             }
         }
 
+        // Do not emit a local ModelTestScale that has no way to bound any discovered type. Source
+        // generators run in every referencing compilation; an empty generated type in the test
+        // assembly shadows the useful implementation from AiDotNet and makes every request fall
+        // back to paper-scale defaults. A constraint-only type is useful even when its current
+        // values already satisfy the relationship, so constraints count as supported behavior.
+        if (knobCount == 0 && synthesizedCount == 0 && constraintCount == 0) return;
+
         sb.AppendLine("    };");
         sb.AppendLine();
         sb.AppendLine("    /// <summary>Creates an options instance with its size knobs clamped down.</summary>");
@@ -563,7 +569,7 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine();
         if (synthesizedCount > 0)
         {
-            sb.Append(synthesized.ToString());
+            sb.Append(synthesized);
         }
         sb.AppendLine("        var key = optionsType.IsGenericType");
         sb.AppendLine("            ? optionsType.GetGenericTypeDefinition()");
@@ -608,7 +614,6 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("        if (instance is null) return null;");
         sb.AppendLine();
-        sb.AppendLine("        bool bounded = false;");
         sb.AppendLine("        for (int i = 0; i < Knobs.Length; i++)");
         sb.AppendLine("        {");
         sb.AppendLine("            if (Knobs[i].Type != key) continue;");
@@ -624,14 +629,17 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("            if (scaled == current) continue;");
         sb.AppendLine();
         sb.AppendLine("            property.SetValue(instance, scaled);");
-        sb.AppendLine("            bounded = true;");
         sb.AppendLine("        }");
         sb.AppendLine();
         sb.AppendLine("        if (overrides is not null)");
         sb.AppendLine("        {");
         sb.AppendLine("            foreach (var pair in overrides)");
         sb.AppendLine("            {");
-        sb.AppendLine("                var target = optionsType.GetProperty(pair.Key);");
+        sb.AppendLine("                var target = optionsType.GetProperty(");
+        sb.AppendLine("                    pair.Key,");
+        sb.AppendLine("                    global::System.Reflection.BindingFlags.Instance");
+        sb.AppendLine("                        | global::System.Reflection.BindingFlags.Public");
+        sb.AppendLine("                        | global::System.Reflection.BindingFlags.IgnoreCase);");
         sb.AppendLine("                if (target is null || !target.CanWrite) continue;");
         sb.AppendLine("                if (target.PropertyType != typeof(int)) continue;");
         sb.AppendLine("                target.SetValue(instance, pair.Value);");
@@ -641,9 +649,9 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("        // Restore relationships after both independent scaling and explicit overrides.");
         sb.AppendLine("        // A dimension may cross the scaling floor while its small head count does not");
         sb.AppendLine("        // (768 / 12 becomes 32 / 12), so ratio-preserving division alone is insufficient.");
-        sb.AppendLine("        bounded |= AlignDeclaredConstraints(optionsType, key, instance);");
+        sb.AppendLine("        AlignDeclaredConstraints(optionsType, key, instance);");
         sb.AppendLine();
-        sb.AppendLine("        return bounded ? instance : instance;");
+        sb.AppendLine("        return instance;");
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    /// <summary>Checks every divisibility relationship declared for an options instance.</summary>");
@@ -680,9 +688,8 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("        return true;");
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine("    private static bool AlignDeclaredConstraints(global::System.Type optionsType, global::System.Type key, object instance)");
+        sb.AppendLine("    private static void AlignDeclaredConstraints(global::System.Type optionsType, global::System.Type key, object instance)");
         sb.AppendLine("    {");
-        sb.AppendLine("        bool changed = false;");
         sb.AppendLine("        for (int i = 0; i < DivisibilityConstraints.Length; i++)");
         sb.AppendLine("        {");
         sb.AppendLine("            var constraint = DivisibilityConstraints[i];");
@@ -699,9 +706,7 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("            int aligned = AlignDimensionToDivisor(dimension, divisor);");
         sb.AppendLine("            if (aligned == dimension) continue;");
         sb.AppendLine("            dimensionProperty.SetValue(instance, aligned);");
-        sb.AppendLine("            changed = true;");
         sb.AppendLine("        }");
-        sb.AppendLine("        return changed;");
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    /// <summary>Scales any declared integer down proportionally, using no names at all.</summary>");
@@ -756,15 +761,13 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         context.AddSource("ModelTestScale.g.cs", sb.ToString());
     }
 
-    /// <summary>Bound for a knob name, or 0 to leave it alone.</summary>
+    /// <summary>Whether a knob may be scaled at all.</summary>
     /// <remarks>
     /// Case-INSENSITIVE on purpose. This is asked about PascalCase properties and camelCase
     /// constructor parameters alike, and an ordinal match silently skipped every synthesized
     /// constructor argument -- inputHeight never matched InputHeight, so a spatial extent meant to
     /// floor at 32 was capped to 16 and a 32x-downsampling backbone lost its spatial dims entirely.
-    /// </remarks>
-    /// <summary>Whether a knob may be scaled at all.</summary>
-    /// <remarks>
+    ///
     /// The only name knowledge left, and it is about MEANING rather than magnitude. Two kinds
     /// survive: values whose number IS the semantics (a sample rate is 16000 because audio is
     /// 16 kHz), and INVERSE knobs where shrinking increases work -- a smaller hop or patch cuts the

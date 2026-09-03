@@ -933,10 +933,10 @@ public abstract class LayerTestBase<T>
             // convention (NumPy's allclose does the same, matching infinities exactly and gating NaN
             // behind equal_nan), and it is what the trainable-tensor loop above already does with
             // EqualityComparer<T>.Default.Equals. This only ADDS the exact-equality escape; any
-            // genuine drift between two finite values still fails on the same 1e-12 tolerance.
+            // genuine drift between two finite values still fails on the fixture's type-aware tolerance.
             if (originalValue.Equals(replayValue)) continue;
 
-            Assert.True(Math.Abs(originalValue - replayValue) < 1e-12,
+            Assert.True(Math.Abs(originalValue - replayValue) < Tolerance,
                 $"Serializing the layer changed its own output at [{i}]: " +
                 $"before={originalValue:G17}, after={replayValue:G17}");
         }
@@ -1037,50 +1037,34 @@ public abstract class LayerTestBase<T>
         layer.SetTrainingMode(false);
         var input = CreateConformingInput(layer, InputShape);
 
-        using var tape = new GradientTape<T>();
-        var output = layer.Forward(input);
+        GradientProbeResult result = ProbeTapeGradient(layer, input);
+        if (result == GradientProbeResult.NoTrainableParameters) return;
 
-        // Use the production recursive collector, not only this layer's own tensor list. Composite
-        // layers often own no tensors directly—their parameters live entirely in registered child
-        // layers—so a local-only lookup made their generated gradient tests pass vacuously.
-        // Collect AFTER Forward because lazy layers may replace zero-length placeholders.
-        var trainableParams = AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(
-            new[] { layer }, structureVersion: -1);
-        if (trainableParams.Count == 0) return;
-
-        // Tape-tracked random-projection loss: L = Σᵢ (output[i] · r[i]).
-        // Engine.TensorMultiply + Engine.TensorSum are both standard tape-
-        // tracked ops, so dL/doutput = r everywhere with no zero entries
-        // (the RNG produces a [-1, 1] dense vector). Any trainable parameter
-        // that's actually wired into the forward graph must therefore see
-        // a non-zero gradient back-propagated to it.
-        var projection = CreateRandomTensor(output.Shape.ToArray(), seed: 12345);
-        var elementwise = AiDotNetEngine.Current.TensorMultiply(output, projection);
-        // ReduceSum over all axes returns a tape-tracked scalar-rank-0 tensor;
-        // Engine.TensorSum unwraps to a raw double which the tape can't consume.
-        var allAxes = new int[elementwise.Shape.Length];
-        for (int i = 0; i < allAxes.Length; i++) allAxes[i] = i;
-        var lossTensor = AiDotNetEngine.Current.ReduceSum(elementwise, allAxes, keepDims: false);
-
-        var grads = tape.ComputeGradients(lossTensor, trainableParams);
-
-        bool foundNonZeroGrad = false;
-        foreach (var kvp in grads)
+        if (result == GradientProbeResult.AllZero)
         {
-            var grad = kvp.Value;
-            if (grad is null) continue;
-            for (int i = 0; i < grad.Length; i++)
-            {
-                if (Math.Abs(ToD(grad[i])) > Tolerance)
-                {
-                    foundNonZeroGrad = true;
-                    break;
-                }
-            }
-            if (foundNonZeroGrad) break;
+            // A connected ReLU-style graph can have a legitimately flat derivative at one random
+            // point. First retry only the input in a deterministic positive activation region.
+            // This belongs to the common invariant: requiring each piecewise-linear layer to carry
+            // test-only metadata merely moves the flake into every future generated fixture.
+            input.Fill(ToT(0.25));
+            layer.ResetState();
+            result = ProbeTapeGradient(layer, input);
         }
 
-        Assert.True(foundNonZeroGrad,
+        if (result == GradientProbeResult.AllZero)
+        {
+            // If the initialized parameters themselves keep every activation in a flat region,
+            // make one final deterministic probe with positive trainable values. This is test-only
+            // state on the freshly created layer; production initialization and GPU execution are
+            // untouched.
+            var parameters = layer.GetParameters();
+            parameters.Fill(ToT(0.25));
+            layer.SetParameters(parameters);
+            layer.ResetState();
+            result = ProbeTapeGradient(layer, input);
+        }
+
+        Assert.True(result == GradientProbeResult.NonZero,
             "After Forward + tape-based ComputeGradients on a random-projection " +
             "loss, every trainable parameter received a zero gradient. The layer's " +
             "Forward composition is using Engine ops that don't propagate gradients " +
@@ -1090,6 +1074,49 @@ public abstract class LayerTestBase<T>
             "FlashAttention<T>.Forward (allocates output then fills via scalar " +
             "indexing — invisible to the tape), or `new Tensor<T>(...)` followed " +
             "by manual data fills inside a Forward override.");
+    }
+
+    private enum GradientProbeResult
+    {
+        NoTrainableParameters,
+        AllZero,
+        NonZero,
+    }
+
+    private GradientProbeResult ProbeTapeGradient(ILayer<T> layer, Tensor<T> input)
+    {
+        using var tape = new GradientTape<T>();
+        var output = layer.Forward(input);
+
+        // Use the production recursive collector, not only this layer's own tensor list. Composite
+        // layers often own no tensors directly—their parameters live entirely in registered child
+        // layers—so a local-only lookup made their generated gradient tests pass vacuously.
+        // Collect AFTER Forward because lazy layers may replace zero-length placeholders.
+        var trainableParams = AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(
+            new[] { layer }, structureVersion: -1);
+        if (trainableParams.Count == 0) return GradientProbeResult.NoTrainableParameters;
+
+        // Tape-tracked random-projection loss: L = Σᵢ (output[i] · r[i]).
+        // Engine.TensorMultiply + Engine.TensorSum are both standard tape-tracked ops, so
+        // dL/doutput = r everywhere with no zero entries.
+        var projection = CreateRandomTensor(output.Shape.ToArray(), seed: 12345);
+        var elementwise = AiDotNetEngine.Current.TensorMultiply(output, projection);
+        var allAxes = new int[elementwise.Shape.Length];
+        for (int i = 0; i < allAxes.Length; i++) allAxes[i] = i;
+        var lossTensor = AiDotNetEngine.Current.ReduceSum(elementwise, allAxes, keepDims: false);
+        var grads = tape.ComputeGradients(lossTensor, trainableParams);
+
+        foreach (var gradient in grads.Values)
+        {
+            if (gradient is null) continue;
+            for (int i = 0; i < gradient.Length; i++)
+            {
+                if (Math.Abs(ToD(gradient[i])) > Tolerance)
+                    return GradientProbeResult.NonZero;
+            }
+        }
+
+        return GradientProbeResult.AllZero;
     }
 
     // =========================================================================

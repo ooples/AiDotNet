@@ -7580,12 +7580,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <summary>
     /// Test/diagnostic hook: overrides the process-wide compiled-inference opt-in
     /// (<see cref="s_autoCompiledInferenceEnabled"/>) in-process, since the env var is read once at type
-    /// load. Returns the previous value so a test can restore it in teardown. Lets the verify-then-trust
+    /// load. Returns the previous nullable override so a test can restore the exact prior state in
+    /// teardown, including <c>null</c> (use the environment-derived default). Lets the verify-then-trust
     /// gate's parity invariants stay covered without depending on the process environment.
     /// </summary>
-    internal static bool SetAutoCompiledInferenceEnabledForTesting(bool enabled)
+    internal static bool? SetAutoCompiledInferenceEnabledForTesting(bool? enabled)
     {
-        var prev = s_autoCompiledInferenceEnabled;
+        var prev = s_autoCompiledInferenceOverride.Value;
         s_autoCompiledInferenceOverride.Value = enabled;
         return prev;
     }

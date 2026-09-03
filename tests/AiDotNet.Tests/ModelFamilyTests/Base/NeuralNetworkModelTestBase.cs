@@ -2203,6 +2203,79 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             Assert.True(Math.Abs(a - b) <= atol + rtol * Math.Abs(a),
                 $"Clone output[{i}] differs beyond {(isFloat ? "float" : "double")} tolerance: original={original[i]}, cloned={clonedOutput[i]}");
         }
+
+        AssertCloneOwnsIndependentParameterStorage(network, cloned);
+    }
+
+    /// <summary>
+    /// Proves that an otherwise-identical clone owns an independent writable parameter surface.
+    /// </summary>
+    /// <remarks>
+    /// Output equality alone cannot detect a clone that aliases the original: both models naturally
+    /// predict the same value until one is updated. Mutate one live trainable chunk on the clone and
+    /// require the original scalar to remain unchanged. This exercises the chunk-level write path
+    /// used by copy-on-write tensors without flattening foundation-scale models into another
+    /// multi-gigabyte vector. Generated model fixtures inherit this invariant, so clone coverage
+    /// follows the scaffold generator's typed construction path instead of maintaining a second
+    /// reflection-based constructor system.
+    /// </remarks>
+    private static void AssertCloneOwnsIndependentParameterStorage(
+        IFullModel<T, Tensor<T>, Tensor<T>> original,
+        IFullModel<T, Tensor<T>, Tensor<T>> clone)
+    {
+        if (original is not NeuralNetworkBase<T> originalBase
+            || clone is not NeuralNetworkBase<T> cloneBase)
+        {
+            return;
+        }
+
+        var originalChunks = originalBase.GetParameterStateChunks().ToArray();
+        var cloneChunks = cloneBase.GetParameterStateChunks().ToArray();
+        Assert.Equal(originalChunks.Length, cloneChunks.Length);
+
+        int writableIndex = -1;
+        for (int i = 0; i < originalChunks.Length; i++)
+        {
+            Assert.Equal(originalChunks[i].StableId, cloneChunks[i].StableId);
+            Assert.Equal(originalChunks[i].Role, cloneChunks[i].Role);
+            Assert.Equal(originalChunks[i].Tensor.Length, cloneChunks[i].Tensor.Length);
+
+            if (writableIndex < 0
+                && cloneChunks[i].Role == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable
+                && cloneChunks[i].IsWritableInPlace
+                && cloneChunks[i].Tensor.Length > 0)
+            {
+                writableIndex = i;
+            }
+        }
+
+        // Parameter-free and snapshot-only models have no live chunk that can be mutated without
+        // allocating a flat aggregate. Their clone fidelity is still checked above; writable neural
+        // models take the stronger storage-independence path.
+        if (writableIndex < 0) return;
+
+        var originalTensor = originalChunks[writableIndex].Tensor;
+        var cloneTensor = cloneChunks[writableIndex].Tensor;
+        T originalValue = originalTensor[0];
+        T cloneValue = cloneTensor[0];
+        Assert.Equal(originalValue, cloneValue);
+
+        double value = Convert.ToDouble(cloneValue, System.Globalization.CultureInfo.InvariantCulture);
+        double candidate = double.IsNaN(value) || double.IsInfinity(value)
+            ? 0.0
+            : value == 0.0 ? 1.0 : -value;
+        T mutated = NumOps.FromDouble(candidate);
+        if (EqualityComparer<T>.Default.Equals(mutated, cloneValue))
+        {
+            mutated = NumOps.FromDouble(value + 1.0);
+        }
+
+        Assert.NotEqual(cloneValue, mutated);
+
+        cloneTensor[0] = mutated;
+
+        Assert.Equal(originalValue, originalTensor[0]);
+        Assert.Equal(mutated, cloneTensor[0]);
     }
 
     // =====================================================

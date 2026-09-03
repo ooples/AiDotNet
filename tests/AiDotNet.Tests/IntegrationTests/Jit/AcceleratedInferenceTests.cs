@@ -26,7 +26,7 @@ namespace AiDotNet.Tests.IntegrationTests.Jit;
 public class AcceleratedInferenceTests : IDisposable
 {
     private readonly TensorCodecOptions _originalOptions;
-    private readonly bool _originalAutoCompileOptIn;
+    private readonly bool? _originalAutoCompileOptIn;
 
     public AcceleratedInferenceTests()
     {
