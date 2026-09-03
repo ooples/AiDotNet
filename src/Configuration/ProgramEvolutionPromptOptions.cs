@@ -63,6 +63,22 @@ public sealed class ProgramEvolutionPromptOptions
     /// </remarks>
     public bool ProgramsAsChangesDescription { get; set; }
 
+    /// <summary>Gets or sets the description given to a program that has none yet; <c>null</c> means none.</summary>
+    /// <remarks>
+    /// <para>
+    /// A seed program has no history, so in changes-description mode the first prompt would otherwise show the model
+    /// an empty summary and ask it to edit that, which is both confusing and impossible to write a SEARCH block
+    /// against. Supplying a line of starting text gives the first generation something real to replace.
+    /// </para>
+    /// <para>
+    /// It is used only where a description is missing, so it never overwrites one a run has already built up, and
+    /// only in changes-description mode, so it costs nothing elsewhere.
+    /// </para>
+    /// <para><b>For Beginners:</b> Something like <c>"Initial version."</c>. It gives the very first prompt a
+    /// sensible starting note for the model to rewrite.</para>
+    /// </remarks>
+    public string? InitialChangesDescription { get; set; }
+
     /// <summary>Gets or sets the parent length below which <see cref="ProgramPromptEvolutionMode.AutoBySize"/> asks for a rewrite.</summary>
     public int AutoFullRewriteBelowChars { get; set; } = 2_000;
 
@@ -201,6 +217,7 @@ public sealed class ProgramEvolutionPromptOptions
             TaskDescription = TaskDescription,
             EvolutionMode = EvolutionMode,
             ProgramsAsChangesDescription = ProgramsAsChangesDescription,
+            InitialChangesDescription = InitialChangesDescription,
             AutoFullRewriteBelowChars = AutoFullRewriteBelowChars,
             NumTopPrograms = NumTopPrograms,
             NumDiversePrograms = NumDiversePrograms,

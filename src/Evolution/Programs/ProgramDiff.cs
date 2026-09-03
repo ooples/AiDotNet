@@ -288,6 +288,90 @@ public static class ProgramDiff
             isSuccess: false);
     }
 
+    /// <summary>Routes edit blocks to the program or to the changes description by where their SEARCH text occurs.</summary>
+    /// <param name="blocks">The blocks parsed from one reply, in order.</param>
+    /// <param name="source">The program the reply may edit.</param>
+    /// <param name="changesDescription">The changes description the reply may edit.</param>
+    /// <param name="options">Diff behaviour; <c>null</c> uses the defaults. Fuzzy whitespace applies to both targets.</param>
+    /// <returns>The blocks belonging to each target, and a failure for every block whose target was unclear.</returns>
+    /// <remarks>
+    /// <para>
+    /// A run that maintains a changes description shows the model two documents and asks it to edit both, but a
+    /// SEARCH/REPLACE reply says only what text to find, never where. A block whose SEARCH text occurs in exactly one
+    /// document belongs to that document. A block that occurs in both is refused with
+    /// <see cref="ProgramDiffFailureReason.AmbiguousTarget"/> rather than guessed, because applying it to the wrong
+    /// document is an edit nobody asked for that still looks like success.
+    /// </para>
+    /// <para>
+    /// A block that matches neither is routed to the program, so the ordinary "SEARCH text not found" failure is
+    /// reported by <see cref="Apply"/> against the document the model was most likely editing, with the excerpt and
+    /// the block number it already reports. Splitting that message across two targets would say less, not more.
+    /// </para>
+    /// <para><b>For Beginners:</b> The model is editing a program and a short note describing its own changes. This
+    /// works out which of the two each edit meant, and refuses an edit that could plausibly mean either.</para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">An argument other than <paramref name="options"/> is <c>null</c>.</exception>
+    public static ProgramDiffTargetSplit SplitByTarget(
+        IReadOnlyList<ProgramDiffBlock> blocks,
+        string source,
+        string changesDescription,
+        ProgramEvolutionOptions? options = null)
+    {
+        if (blocks is null) throw new ArgumentNullException(nameof(blocks));
+        if (source is null) throw new ArgumentNullException(nameof(source));
+        if (changesDescription is null) throw new ArgumentNullException(nameof(changesDescription));
+        ProgramEvolutionOptions effective = options ?? new ProgramEvolutionOptions();
+        bool fuzzy = effective.Diff.FuzzyWhitespace;
+
+        List<string> sourceLines = ProgramText.SplitLines(source);
+        List<string> descriptionLines = ProgramText.SplitLines(changesDescription);
+
+        var programBlocks = new List<ProgramDiffBlock>();
+        var descriptionBlocks = new List<ProgramDiffBlock>();
+        var failures = new List<ProgramDiffFailure>();
+
+        foreach (ProgramDiffBlock block in blocks)
+        {
+            if (block is null) throw new ArgumentNullException(nameof(blocks), "Edit blocks cannot be null.");
+            List<string> searchLines = ProgramText.SplitLines(block.SearchText);
+            if (block.SearchText.Length == 0 || searchLines.Count == 0)
+            {
+                // An empty SEARCH matches anywhere, so it has no target. Apply reports it precisely; routing it to
+                // the program keeps that one message rather than adding a second, vaguer one here.
+                programBlocks.Add(block);
+                continue;
+            }
+
+            bool inSource = Matches(sourceLines, searchLines, fuzzy);
+            bool inDescription = Matches(descriptionLines, searchLines, fuzzy);
+
+            if (inSource && inDescription)
+            {
+                failures.Add(new ProgramDiffFailure(
+                    ProgramDiffFailureReason.AmbiguousTarget,
+                    "Block " + Line(block.Ordinal) + " has SEARCH text that occurs both in the program and in the " +
+                    "changes description, so which one it edits is unclear. Extend the SEARCH text until it appears " +
+                    "in only one of them.",
+                    block.Ordinal,
+                    Excerpt(block.SearchText, effective.Diff.MaxFailureExcerptLength)));
+                continue;
+            }
+
+            if (inDescription) descriptionBlocks.Add(block);
+            else programBlocks.Add(block);
+        }
+
+        return new ProgramDiffTargetSplit(programBlocks, descriptionBlocks, failures);
+    }
+
+    /// <summary>Reports whether a search window occurs in a document.</summary>
+    private static bool Matches(List<string> lines, List<string> search, bool fuzzy)
+    {
+        if (search.Count == 0 || lines.Count < search.Count) return false;
+        if (FindWindow(lines, search, fuzzy: false) >= 0) return true;
+        return fuzzy && FindWindow(lines, search, fuzzy: true) >= 0;
+    }
+
     /// <summary>Renders a human-readable summary of a set of edit blocks.</summary>
     /// <param name="blocks">The blocks to summarize.</param>
     /// <param name="maxLineLength">The longest line rendered before it is truncated with an ellipsis.</param>

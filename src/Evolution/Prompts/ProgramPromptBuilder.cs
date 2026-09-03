@@ -285,7 +285,7 @@ public sealed class ProgramPromptBuilder
                 : string.Empty,
             ["current_program"] = BoundProgram(
                 _promptOptions.ProgramsAsChangesDescription
-                    ? context.ChangesDescription ?? context.Parent.Source
+                    ? ResolveChangesDescription(context) ?? context.Parent.Source
                     : context.Parent.Source),
             ["language"] = _promptOptions.ProgramsAsChangesDescription ? "text" : _fenceLabel,
             ["artifacts"] = includeArtifacts && _promptOptions.IncludeArtifacts
@@ -308,11 +308,26 @@ public sealed class ProgramPromptBuilder
         var wrapperValues = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["user_message"] = user,
-            ["changes_description"] = (context.ChangesDescription ?? string.Empty).TrimEnd()
+            ["changes_description"] = (ResolveChangesDescription(context) ?? string.Empty).TrimEnd()
         };
         AddCustomVariables(wrapperValues);
         return RenderWithDefaults(
             _templates.GetTemplate(ProgramPromptTemplateKey.UserMessageWithChangesDescription), wrapperValues);
+    }
+
+    /// <summary>Returns the parent's changes description, or the configured starting text when it has none.</summary>
+    /// <remarks>
+    /// A seed program has no history, so its description is missing on the first generation. Showing the model an
+    /// empty summary and asking it to edit that gives it nothing to write a SEARCH block against; the configured
+    /// starting text gives it something real to replace, and is used only where a description is genuinely absent.
+    /// </remarks>
+    private string? ResolveChangesDescription(ProgramPromptContext context)
+    {
+        string? description = context.ChangesDescription;
+        if (!string.IsNullOrWhiteSpace(description)) return description;
+        return string.IsNullOrWhiteSpace(_promptOptions.InitialChangesDescription)
+            ? description
+            : _promptOptions.InitialChangesDescription;
     }
 
     private Dictionary<string, string> DrawVariations(StableRandom random)

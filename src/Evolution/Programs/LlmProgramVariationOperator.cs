@@ -541,6 +541,10 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
         }
 
         string candidateSource;
+        string? candidateDescription = null;
+        bool maintainsChangesDescription =
+            _programOptions.Prompt.ProgramsAsChangesDescription && mode != ProgramPromptEvolutionMode.FullRewrite;
+
         if (mode == ProgramPromptEvolutionMode.FullRewrite)
         {
             FencedCodeExtractionResult extraction = FencedCodeExtractor.Extract(
@@ -553,7 +557,7 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
 
             candidateSource = extraction.Code;
         }
-        else
+        else if (!maintainsChangesDescription)
         {
             ProgramDiffApplyResult applied = ProgramDiff.ApplyResponse(parent.Source, responseText, _programOptions);
             if (!applied.IsSuccess)
@@ -563,6 +567,59 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
             }
 
             candidateSource = applied.ModifiedSource;
+        }
+        else
+        {
+            // Two documents are on the table, so each block has to be routed before any of them is applied; applying
+            // a description edit to the program would be a change nobody asked for that still reports success.
+            ProgramDiffParseResult parsed = ProgramDiff.Parse(responseText, _programOptions.Diff);
+            if (!parsed.IsSuccess)
+            {
+                feedback = DescribeFailures(parsed.Failures);
+                return ProgramProposalOutcome.ParseFailed;
+            }
+
+            string parentDescription = parent.Description ?? _programOptions.Prompt.InitialChangesDescription ?? string.Empty;
+            ProgramDiffTargetSplit split = ProgramDiff.SplitByTarget(
+                parsed.Blocks, parent.Source, parentDescription, _programOptions);
+            if (!split.IsSuccess)
+            {
+                feedback = DescribeFailures(split.Failures);
+                return ProgramProposalOutcome.ParseFailed;
+            }
+
+            ProgramDiffApplyResult appliedSource = ProgramDiff.Apply(parent.Source, split.ProgramBlocks, _programOptions);
+            if (!appliedSource.IsSuccess)
+            {
+                feedback = DescribeFailures(appliedSource.Failures);
+                return ProgramProposalOutcome.ParseFailed;
+            }
+
+            // The description is prose rather than code, so evolve-block enforcement, which exists to fence off the
+            // parts of a program that must not change, has nothing to fence here and would reject every edit.
+            ProgramEvolutionOptions descriptionOptions = _programOptions.WithoutEvolveBlockEnforcement();
+            ProgramDiffApplyResult appliedDescription = split.DescriptionBlocks.Count == 0
+                ? ProgramDiff.Apply(parentDescription, Array.Empty<ProgramDiffBlock>(), descriptionOptions)
+                : ProgramDiff.Apply(parentDescription, split.DescriptionBlocks, descriptionOptions);
+            if (split.DescriptionBlocks.Count > 0 && !appliedDescription.IsSuccess)
+            {
+                feedback = DescribeFailures(appliedDescription.Failures);
+                return ProgramProposalOutcome.ParseFailed;
+            }
+
+            candidateSource = appliedSource.ModifiedSource;
+            candidateDescription = split.DescriptionBlocks.Count == 0
+                ? parentDescription
+                : appliedDescription.ModifiedSource;
+
+            // Upstream discards a child whose changes description was not updated, and so does this: the description
+            // is the record of what the edit did, and one carried over unchanged describes the previous edit.
+            if (string.Equals(candidateDescription.Trim(), parentDescription.Trim(), StringComparison.Ordinal))
+            {
+                feedback = "The changes description was not updated. Edit it as well, so it describes this change " +
+                           "rather than the previous one.";
+                return ProgramProposalOutcome.Unchanged;
+            }
         }
 
         string normalized = ProgramGenome.Normalize(candidateSource);
@@ -586,7 +643,7 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
             return ProgramProposalOutcome.Unchanged;
         }
 
-        child = new ProgramGenome(candidateSource, parent.Language);
+        child = new ProgramGenome(candidateSource, parent.Language, candidateDescription);
         feedback = string.Empty;
         return ProgramProposalOutcome.Accepted;
     }

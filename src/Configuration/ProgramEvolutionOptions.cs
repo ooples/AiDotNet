@@ -330,6 +330,21 @@ public sealed class ProgramEvolutionOptions
         return new EvolveBlockMarkers(start, end);
     }
 
+    /// <summary>Returns a copy with evolve-block enforcement cleared, for applying edits to text that is not code.</summary>
+    /// <returns>A copy when enforcement is on, otherwise this instance.</returns>
+    /// <remarks>
+    /// Evolve-block markers fence off the parts of a program that must not change. A changes description is prose
+    /// about a program rather than a program, so it has no markers to fence, and enforcing them there would reject
+    /// every edit for being outside a block that does not exist.
+    /// </remarks>
+    internal ProgramEvolutionOptions WithoutEvolveBlockEnforcement()
+    {
+        if (!EnforceEvolveBlocks) return this;
+        ProgramEvolutionOptions relaxed = Clone();
+        relaxed.EnforceEvolveBlocks = false;
+        return relaxed;
+    }
+
     /// <summary>Creates an independent copy so a running component is unaffected by later mutation.</summary>
     /// <returns>
     /// A new options instance carrying the same values, with every nested subsystem deep-copied. Nested options

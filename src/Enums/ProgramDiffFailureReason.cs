@@ -40,5 +40,13 @@ public enum ProgramDiffFailureReason
     ResultUnchanged = 6,
 
     /// <summary>The response contained a carriage return while strict line-feed-only parsing was requested.</summary>
-    CarriageReturnRejected = 7
+    CarriageReturnRejected = 7,
+
+    /// <summary>The SEARCH text occurs in both the program and the changes description, so its target is unclear.</summary>
+    /// <remarks>
+    /// Only possible when a run maintains a changes description alongside the program, because only then does a reply
+    /// have two places to edit. Applying such a block to a guess would silently edit the wrong one, so it is refused
+    /// and the model is told to make the SEARCH text unique to whichever it meant.
+    /// </remarks>
+    AmbiguousTarget = 8
 }
