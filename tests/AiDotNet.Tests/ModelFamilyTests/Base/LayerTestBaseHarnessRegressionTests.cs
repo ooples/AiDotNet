@@ -48,7 +48,8 @@ public class LayerTestBaseHarnessRegressionTests
     }
 
     private static float OneFloatUlpAboveOne
-        => BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(1.0f) + 1);
+        => AiDotNet.MixedPrecision.BitConverterHelper.Int32BitsToSingle(
+            AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(1.0f) + 1);
 
     private sealed class ReplayDriftLayerFixture : LayerTestBase<float>
     {

@@ -392,7 +392,6 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
-      actions: write
     if: "${{ fromJSON(needs.validation-source.outputs.execute_expensive) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
 
     steps:
@@ -514,20 +513,6 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/check-shard-coverage.ps1
 
-
-  # Sharded test execution for fast, parallel feedback and coverage generation (net10.0).
-  # Coverage artifacts are consumed by the SonarCloud analysis job below.
-
-      # A build failure makes every downstream shard meaningless. GitHub skips jobs whose
-      # `needs` failed, but build-compat runs CONCURRENTLY with the shards by design, so
-      # its failure would otherwise leave ~116 of them running against a tree that does not
-      # compile. Cancelling the run stops the queued ones and the in-flight ones together.
-      - name: Cancel the run if this build failed
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh run cancel ${{ github.run_id }} --repo ${{ github.repository }}
-
   # Everything the shards do NOT need, built concurrently with them instead of ahead of
   # them: the net471 compatibility compile, net8.0, and the pack that requires all three.
   # Compiling net471 is a real check -- it catches breakage a net10.0 build cannot see --
@@ -539,7 +524,6 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
-      actions: write
     needs: validation-source
     if: "${{ fromJSON(needs.validation-source.outputs.execute_expensive) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
 
@@ -610,12 +594,35 @@ jobs:
           path: ./artifacts/*.nupkg
           retention-days: 1
 
-      # A build failure makes every downstream shard meaningless. GitHub skips jobs whose
-      # `needs` failed, but build-compat runs CONCURRENTLY with the shards by design, so
-      # its failure would otherwise leave ~116 of them running against a tree that does not
-      # compile. Cancelling the run stops the queued ones and the in-flight ones together.
-      - name: Cancel the run if this build failed
-        if: failure()
+  # The cancellation must happen in a DIFFERENT job from the build that failed. Cancelling a
+  # workflow from inside the failing build changes that originating job's conclusion to
+  # `cancelled`, hiding the compiler error that triggered fail-fast. These watchers cannot start
+  # until GitHub has finalized the corresponding build as `failure`; they then stop the remaining
+  # expensive matrix while preserving the useful red build check in the PR UI.
+  cancel-after-build-failure:
+    name: Cancel remaining work after Build failure
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    needs: build
+    if: ${{ always() && needs.build.result == 'failure' }}
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel remaining jobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run cancel ${{ github.run_id }} --repo ${{ github.repository }}
+
+  cancel-after-compat-build-failure:
+    name: Cancel remaining work after compatibility-build failure
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    needs: build-compat
+    if: ${{ always() && needs.build-compat.result == 'failure' }}
+    permissions:
+      actions: write
+    steps:
+      - name: Cancel remaining jobs
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh run cancel ${{ github.run_id }} --repo ${{ github.repository }}
