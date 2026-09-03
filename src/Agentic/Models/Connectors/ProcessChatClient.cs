@@ -56,6 +56,28 @@ public sealed class ProcessChatClient<T> : IChatClient<T>
         _arguments = effective.BuildArguments();
     }
 
+    /// <summary>Initializes a client over a command named directly, with everything else left at its default.</summary>
+    /// <param name="fileName">The executable to run.</param>
+    /// <param name="options">The remaining settings; <c>null</c> uses the defaults with this executable.</param>
+    /// <exception cref="ArgumentException"><paramref name="fileName"/> is blank, or a setting is invalid.</exception>
+    /// <remarks>
+    /// The executable is the one thing this client cannot do without, so it is a parameter rather than a field of an
+    /// options object. That is also what makes the client nameable from a configuration file: a file supplies simple
+    /// values by parameter name, and a nested options object is not one.
+    /// </remarks>
+    public ProcessChatClient(string fileName, ProcessChatClientOptions? options = null)
+        : this(WithFileName(fileName, options))
+    {
+    }
+
+    private static ProcessChatClientOptions WithFileName(string fileName, ProcessChatClientOptions? options)
+    {
+        Guard.NotNullOrWhiteSpace(fileName);
+        ProcessChatClientOptions effective = options is null ? new ProcessChatClientOptions() : options.Clone();
+        effective.FileName = fileName;
+        return effective;
+    }
+
     /// <inheritdoc/>
     public string ModelId => _options.ModelId;
 
