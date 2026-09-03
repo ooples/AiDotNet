@@ -32,6 +32,59 @@ internal sealed class IncrementVariation : IVariationOperator<TestGenome>
     }
 }
 
+/// <summary>An operator whose memory of the run changes what it proposes next.</summary>
+internal sealed class StatefulVariation : ICheckpointableVariationOperator<TestGenome>
+{
+    private int _proposals;
+
+    public string Id => "stateful";
+    public string VersionHash => "stateful-v1";
+
+    /// <summary>Gets how many proposals this operator has made, restored included.</summary>
+    public int Proposals => Volatile.Read(ref _proposals);
+
+    public ValueTask<TestGenome> ProposeAsync(EvolutionVariationContext<TestGenome> context,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        int ordinal = Interlocked.Increment(ref _proposals);
+        return new ValueTask<TestGenome>(
+            new TestGenome(context.Parent.Candidate.CanonicalGenome.Genome.Value + ordinal));
+    }
+
+    public string CaptureState() => Proposals.ToString(CultureInfo.InvariantCulture);
+
+    public void RestoreState(string state)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (!int.TryParse(state, NumberStyles.Integer, CultureInfo.InvariantCulture, out int proposals) ||
+            proposals < 0)
+        {
+            throw new InvalidDataException("Stateful variation state is invalid.");
+        }
+
+        Volatile.Write(ref _proposals, proposals);
+    }
+}
+
+/// <summary>
+/// The same operator identity as <see cref="StatefulVariation"/> without the state contract, modelling a build in
+/// which the operator does not carry its memory through a checkpoint. The version hash matches deliberately: the
+/// point is to reach the state check, which the identity check would otherwise short-circuit.
+/// </summary>
+internal sealed class StatelessTwinVariation : IVariationOperator<TestGenome>
+{
+    public string Id => "stateful";
+    public string VersionHash => "stateful-v1";
+
+    public ValueTask<TestGenome> ProposeAsync(EvolutionVariationContext<TestGenome> context,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return new ValueTask<TestGenome>(new TestGenome(context.Parent.Candidate.CanonicalGenome.Genome.Value + 1));
+    }
+}
+
 internal sealed class SyntheticEvolutionTask : IEvolutionTask<TestGenome>
 {
     private readonly int _delayScale;

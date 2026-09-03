@@ -8,6 +8,7 @@ using AiDotNet.Evolution.Programs.Provenance;
 using AiDotNet.Evolution.Prompts;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
+using Newtonsoft.Json;
 
 // AiDotNet.PromptEngineering.Templates is imported project-wide and also declares a ChatMessage type.
 using ChatMessage = AiDotNet.Agentic.Models.ChatMessage;
@@ -68,8 +69,12 @@ namespace AiDotNet.Evolution.Programs;
 /// and asks again instead of wasting the round. You supply the chat client, so no model is contacted unless you
 /// configure one.</para>
 /// </remarks>
-public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramGenome>
+public sealed class LlmProgramVariationOperator<T> : ICheckpointableVariationOperator<ProgramGenome>
 {
+    // Bumped whenever the checkpointed attempt shape changes, so an older checkpoint is refused rather than
+    // silently misread into a different prompt.
+    private const int AttemptStateSchemaVersion = 1;
+
     private const int MaxFeedbackFailures = 5;
     private const int MaxFeedbackChars = 1_200;
 
@@ -715,6 +720,84 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
         }
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The recorded attempts are the operator's only state, and they change the next prompt: a rejected parse is
+    /// shown back to the model so it does not repeat it. Leaving them out of the checkpoint made a resumed run
+    /// render different prompts than an uninterrupted one, which quietly broke the engine's determinism guarantee
+    /// for program runs while every other part of it still held.
+    /// </remarks>
+    public string CaptureState()
+    {
+        ProgramProposalAttempt[] recorded;
+        lock (_attemptLock) { recorded = _attempts.ToArray(); }
+
+        var document = new AttemptStateDocument
+        {
+            SchemaVersion = AttemptStateSchemaVersion,
+            Attempts = recorded.Select(attempt => new AttemptDocument
+            {
+                ParentGenomeId = attempt.ParentGenomeId,
+                AttemptNumber = attempt.AttemptNumber,
+                Outcome = (int)attempt.Outcome,
+                Detail = attempt.Detail,
+                InputTokens = attempt.InputTokens,
+                OutputTokens = attempt.OutputTokens
+            }).ToList()
+        };
+
+        // Ordered exactly as the queue holds them and written without indentation, so identical operator state
+        // yields byte-identical text on any machine.
+        return JsonConvert.SerializeObject(document, Formatting.None);
+    }
+
+    /// <inheritdoc/>
+    public void RestoreState(string state)
+    {
+        Guard.NotNull(state);
+
+        AttemptStateDocument? document;
+        try
+        {
+            document = JsonConvert.DeserializeObject<AttemptStateDocument>(state);
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException("The variation-operator state is not readable.", exception);
+        }
+
+        if (document is null || document.SchemaVersion != AttemptStateSchemaVersion)
+            throw new InvalidDataException("The variation-operator state schema is invalid.");
+
+        List<AttemptDocument> attempts = document.Attempts ?? new List<AttemptDocument>();
+        if (attempts.Count > _variationOptions.MaxRecordedAttempts)
+            throw new InvalidDataException("The variation-operator state holds more attempts than the configured bound.");
+
+        var restored = new List<ProgramProposalAttempt>(attempts.Count);
+        foreach (AttemptDocument attempt in attempts)
+        {
+            if (attempt is null) throw new InvalidDataException("A recorded attempt is missing.");
+            if (!Enum.IsDefined(typeof(ProgramProposalOutcome), attempt.Outcome))
+                throw new InvalidDataException("A recorded attempt has an unknown outcome.");
+            try
+            {
+                restored.Add(new ProgramProposalAttempt(
+                    attempt.ParentGenomeId, attempt.AttemptNumber, (ProgramProposalOutcome)attempt.Outcome,
+                    attempt.Detail ?? string.Empty, attempt.InputTokens, attempt.OutputTokens));
+            }
+            catch (ArgumentException exception)
+            {
+                throw new InvalidDataException("A recorded attempt violates its own invariants.", exception);
+            }
+        }
+
+        lock (_attemptLock)
+        {
+            _attempts.Clear();
+            foreach (ProgramProposalAttempt attempt in restored) _attempts.Enqueue(attempt);
+        }
+    }
+
     private string BuildProposalId(EvolutionVariationContext<ProgramGenome> context)
     {
         // Derived from the proposal-local random stream's untouched starting state, so replaying a run produces
@@ -973,5 +1056,29 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
         };
 
         return "llm-program-variation-" + EvolutionHash.Combine(components);
+    }
+
+    /// <summary>The checkpointed form of the recorded-attempt window.</summary>
+    private sealed class AttemptStateDocument
+    {
+        public int SchemaVersion { get; set; }
+
+        public List<AttemptDocument>? Attempts { get; set; }
+    }
+
+    /// <summary>One recorded proposal attempt, in the order the queue holds it.</summary>
+    private sealed class AttemptDocument
+    {
+        public string ParentGenomeId { get; set; } = string.Empty;
+
+        public int AttemptNumber { get; set; }
+
+        public int Outcome { get; set; }
+
+        public string Detail { get; set; } = string.Empty;
+
+        public int InputTokens { get; set; }
+
+        public int OutputTokens { get; set; }
     }
 }
