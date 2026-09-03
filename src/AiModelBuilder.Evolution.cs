@@ -803,15 +803,55 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         if (programOptions.Descriptors.Count == 0)
         {
             programOptions.Descriptors.Add(new ProgramLengthDescriptor());
+            options.Descriptors.Add(new EvolutionDescriptorDefinition(
+                ProgramLengthDescriptor.DefaultName,
+                0,
+                ResolveDefaultLengthAxisMaximum(programOptions),
+                DefaultProgramLengthBins,
+                EvolutionOutOfRangePolicy.Clamp));
+            return options;
         }
 
-        options.Descriptors.Add(new EvolutionDescriptorDefinition(
-            programOptions.Descriptors[0].Name,
-            0,
-            ResolveDefaultLengthAxisMaximum(programOptions),
-            DefaultProgramLengthBins,
-            EvolutionOutOfRangePolicy.Clamp));
+        // The caller named the behaviours they care about but not the range each one takes, which is the ordinary
+        // case: you know you want to map branching factor, not that it runs from 0.1 to 0.6 on this problem. A
+        // program descriptor is a pure function of the program text, so the seeds can be measured here, for free and
+        // before anything runs, and the grid derived from what they actually produced.
+        foreach (EvolutionDescriptorDefinition definition in CalibrateProgramDescriptors(programOptions))
+        {
+            options.Descriptors.Add(definition);
+        }
+
         return options;
+    }
+
+    /// <summary>Derives one archive axis per configured program descriptor by measuring the seed programs.</summary>
+    /// <param name="programOptions">The validated program options, whose descriptors and seeds set the scale.</param>
+    /// <returns>One definition per configured descriptor, in the order they were configured.</returns>
+    /// <remarks>
+    /// <para>
+    /// Previously only the first configured descriptor became an axis, and it was given the program-length range
+    /// whatever it measured, so a descriptor reporting a ratio between zero and one was mapped onto an axis spanning
+    /// thousands of characters and every candidate landed in the first bin. The archive then held one overall winner
+    /// and the search lost the diversity pressure it exists for, silently and with no error.
+    /// </para>
+    /// <para>
+    /// Measuring the seeds is free because descriptors read only the genome, and it is deterministic because the
+    /// seeds are a fixed, ordered list the caller already supplied. Axes grow in whole bins if the search reaches
+    /// past the seeded span, so a narrow seed population costs a little growth rather than a wrong grid.
+    /// </para>
+    /// </remarks>
+    internal static IReadOnlyList<EvolutionDescriptorDefinition> CalibrateProgramDescriptors(
+        ProgramEvolutionOptions programOptions)
+    {
+        ProgramDescriptorSet set = programOptions.CreateDescriptorSet();
+        var observations = new List<IReadOnlyDictionary<string, double>>(programOptions.SeedPrograms.Count);
+        foreach (string source in programOptions.SeedPrograms)
+        {
+            observations.Add(set.Compute(new ProgramGenome(source, programOptions.Language)));
+        }
+
+        var calibration = new EvolutionDescriptorCalibrationOptions { BinCount = DefaultProgramLengthBins };
+        return EvolutionDescriptorCalibration.FromObservations(observations, set.Names, calibration);
     }
 
     /// <summary>Chooses the upper bound of the default program-length behaviour axis.</summary>
