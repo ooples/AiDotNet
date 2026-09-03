@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace AiDotNet.Configuration;
 
 /// <summary>Declares how a metrics dictionary is collapsed into the single quality an archive ranks on.</summary>
@@ -44,15 +46,23 @@ public sealed class ProgramMetricAggregationOptions
     /// Matches the <c>feature_dimensions</c> argument of the reference implementation. When excluding every metric
     /// would leave nothing to average, the aggregation falls back to averaging all metrics, as upstream does.
     /// </remarks>
-    public ICollection<string> ExcludedFeatureDimensions { get; } = new HashSet<string>(StringComparer.Ordinal);
+    /// <remarks>
+    /// Settable, not get-only, because a configuration file has to be able to write it: a YAML mapper can fill a
+    /// property but cannot add to a collection it has no way to assign, and a get-only collection is therefore
+    /// silently dropped rather than refused. That is how two of the four aggregation strategies became impossible
+    /// to select from a file - the strategy was set, its weights vanished, and validation rejected the result.
+    /// </remarks>
+    public ICollection<string> ExcludedFeatureDimensions { get; set; } = new HashSet<string>(StringComparer.Ordinal);
 
     /// <summary>Gets the per-metric weights used by <see cref="ProgramMetricAggregationStrategy.Weighted"/> and <see cref="ProgramMetricAggregationStrategy.Tchebycheff"/>.</summary>
     /// <remarks>Every weight must be finite and non-negative, and at least one must be positive.</remarks>
-    public IDictionary<string, double> Weights { get; } = new Dictionary<string, double>(StringComparer.Ordinal);
+    /// <remarks>Settable for the same reason as <see cref="ExcludedFeatureDimensions"/>.</remarks>
+    public IDictionary<string, double> Weights { get; set; } = new Dictionary<string, double>(StringComparer.Ordinal);
 
     /// <summary>Gets the per-metric target values used by <see cref="ProgramMetricAggregationStrategy.Tchebycheff"/>.</summary>
     /// <remarks>Every weighted metric must have a finite reference value; the shortfall is measured against it.</remarks>
-    public IDictionary<string, double> ReferencePoint { get; } = new Dictionary<string, double>(StringComparer.Ordinal);
+    /// <remarks>Settable for the same reason as <see cref="ExcludedFeatureDimensions"/>.</remarks>
+    public IDictionary<string, double> ReferencePoint { get; set; } = new Dictionary<string, double>(StringComparer.Ordinal);
 
     /// <summary>Gets or sets the augmentation coefficient of the Chebyshev scalarization. Defaults to 0.</summary>
     /// <remarks>
@@ -159,6 +169,36 @@ public sealed class ProgramMetricAggregationOptions
             }
         }
     }
+
+    /// <summary>Returns a stable, culture-independent representation of every value that changes a score.</summary>
+    /// <returns>The canonical text form.</returns>
+    /// <remarks>
+    /// <para>
+    /// The aggregation rule decides what a set of metrics scores, so two evaluators that differ only in it must not
+    /// share a version hash: a checkpoint written under one rule and resumed under another would compare restored
+    /// elites against candidates scored a different way. The default object representation cannot tell those two
+    /// configurations apart, so this spells them out.
+    /// </para>
+    /// <para>
+    /// Both dictionaries are emitted in ordinal key order and every number with the invariant culture, so the same
+    /// configuration produces the same text on every machine and in any insertion order.
+    /// </para>
+    /// </remarks>
+    public override string ToString() => string.Join("|", new[]
+    {
+        "strategy:" + ((int)Strategy).ToString(CultureInfo.InvariantCulture),
+        "combined-key:" + CombinedScoreKey,
+        "excluded:" + string.Join(",", ExcludedFeatureDimensions.OrderBy(name => name, StringComparer.Ordinal)),
+        "weights:" + Describe(Weights),
+        "reference:" + Describe(ReferencePoint),
+        "augmentation:" + AugmentationCoefficient.ToString("R", CultureInfo.InvariantCulture),
+        "require-all:" + (RequireAllWeightedMetrics ? "yes" : "no"),
+        "text-conversion:" + (AllowTextMetricConversion ? "yes" : "no")
+    });
+
+    private static string Describe(IDictionary<string, double> values) => string.Join(",", values
+        .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+        .Select(pair => pair.Key + "=" + pair.Value.ToString("R", CultureInfo.InvariantCulture)));
 
     private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 }

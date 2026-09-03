@@ -113,6 +113,95 @@ public sealed class EvolutionContinuousDispatchTests
         Assert.Equal(continuous, Engine(new ConcurrencyProbeTask(gateAt: 0), moreWorkers).CompatibilityHash);
     }
 
+    [Fact]
+    public async Task TheFinalCheckpointHoldsTheRunsRealStateEvenWithPeriodicCheckpointingOff()
+    {
+        // The earlier version of this mode only refreshed the checkpoint payload on a periodic drain, so with
+        // periodic checkpointing off the final checkpoint held the state the run started from: zero proposals and
+        // empty archives, published under a header that looked healthy.
+        var store = new InMemoryEvolutionCheckpointStore();
+        EvolutionRunResult<TestGenome> run = await Engine(new ConcurrencyProbeTask(gateAt: 0),
+            Options(EvolutionDispatchMode.Continuous), store).RunAsync(Seeds(4));
+
+        EvolutionCheckpoint checkpoint = Assert.IsType<EvolutionCheckpoint>(await store.LoadLatestAsync("dispatch-run"));
+        EvolutionCheckpointContents<TestGenome> contents =
+            EvolutionEngine<TestGenome>.ReadCheckpoint(checkpoint, new TestGenomeCodec());
+
+        Assert.NotEmpty(contents.Entries);
+        Assert.Equal(
+            run.Islands.SelectMany(island => island.Entries).Select(entry => entry.Evaluation.GenomeId)
+                .OrderBy(id => id, StringComparer.Ordinal),
+            contents.Entries.Where(entry => entry.Source == EvolutionCheckpointEntrySource.IslandArchive)
+                .Select(entry => entry.GenomeId).OrderBy(id => id, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task AStopRequestEndsAContinuousRunInsteadOfBeingIgnored()
+    {
+        // The stop flag was read only where the window was already empty, which in steady state it never is, so a
+        // request to stop was quietly dropped and the run refilled forever.
+        EvolutionEngineOptions options = Options(EvolutionDispatchMode.Continuous, 1000);
+        options.MaxProposals = 2000;
+        options.MaxGenerations = 2000;
+
+        // The stop is requested from inside an evaluation, so it lands while the window is full rather than racing
+        // a run that may already have finished.
+        var probe = new ConcurrencyProbeTask(gateAt: 0);
+        var engine = Engine(probe, options);
+        probe.OnEvaluation = count =>
+        {
+            if (count == 8) engine.RequestStop();
+        };
+
+        using var guard = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        EvolutionRunResult<TestGenome> result = await engine.RunAsync(Seeds(4), guard.Token);
+
+        Assert.Equal(EvolutionStopReason.Canceled, result.StopReason);
+        Assert.True(result.Counters.EvaluationAttempts < 1000,
+            "the run should have stopped on request, not on its budget of 1000");
+    }
+
+    [Fact]
+    public void AWindowThatFollowsTheWorkerCountMakesTheWorkerCountPartOfTheSearch()
+    {
+        // The window decides which committed evaluation a proposal is prepared after. Leaving it at zero defers it
+        // to the worker count, which a resume may otherwise change freely, so the resolved window is what the
+        // compatibility hash has to record.
+        EvolutionEngineOptions narrow = Options(EvolutionDispatchMode.Continuous);
+        narrow.MaxInFlight = 0;
+        narrow.MaxDegreeOfParallelism = 2;
+
+        EvolutionEngineOptions wide = Options(EvolutionDispatchMode.Continuous);
+        wide.MaxInFlight = 0;
+        wide.MaxDegreeOfParallelism = 8;
+
+        Assert.NotEqual(
+            Engine(new ConcurrencyProbeTask(gateAt: 0), narrow).CompatibilityHash,
+            Engine(new ConcurrencyProbeTask(gateAt: 0), wide).CompatibilityHash);
+
+        // An explicit window pins it, so the worker count goes back to being a budget setting a resume may change.
+        EvolutionEngineOptions pinnedNarrow = Options(EvolutionDispatchMode.Continuous);
+        pinnedNarrow.MaxInFlight = 4;
+        pinnedNarrow.MaxDegreeOfParallelism = 2;
+        EvolutionEngineOptions pinnedWide = Options(EvolutionDispatchMode.Continuous);
+        pinnedWide.MaxInFlight = 4;
+        pinnedWide.MaxDegreeOfParallelism = 8;
+        Assert.Equal(
+            Engine(new ConcurrencyProbeTask(gateAt: 0), pinnedNarrow).CompatibilityHash,
+            Engine(new ConcurrencyProbeTask(gateAt: 0), pinnedWide).CompatibilityHash);
+
+        // Batch dispatch reads neither setting, so neither may refuse a resume there.
+        EvolutionEngineOptions batchNarrow = Options(EvolutionDispatchMode.Batch);
+        batchNarrow.MaxInFlight = 0;
+        batchNarrow.MaxDegreeOfParallelism = 2;
+        EvolutionEngineOptions batchWide = Options(EvolutionDispatchMode.Batch);
+        batchWide.MaxInFlight = 16;
+        batchWide.MaxDegreeOfParallelism = 8;
+        Assert.Equal(
+            Engine(new ConcurrencyProbeTask(gateAt: 0), batchNarrow).CompatibilityHash,
+            Engine(new ConcurrencyProbeTask(gateAt: 0), batchWide).CompatibilityHash);
+    }
+
     private static TestGenome[] Seeds(int count) =>
         Enumerable.Range(1, count).Select(value => new TestGenome(value)).ToArray();
 
@@ -166,6 +255,7 @@ public sealed class EvolutionContinuousDispatchTests
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _concurrency;
         private int _maxConcurrency;
+        private long _evaluations;
 
         public ConcurrencyProbeTask(int gateAt) => _gateAt = gateAt;
 
@@ -173,6 +263,9 @@ public sealed class EvolutionContinuousDispatchTests
         public string VersionHash => "concurrency-probe-v1";
         public string EvaluatorVersionHash => "concurrency-probe-evaluator-v1";
         public int MaxConcurrency => Volatile.Read(ref _maxConcurrency);
+
+        /// <summary>Called with the running evaluation count, so a test can act from inside the run.</summary>
+        public Action<int>? OnEvaluation { get; set; }
 
         public ValueTask<EvolutionCanonicalGenome<TestGenome>> CanonicalizeAsync(TestGenome genome,
             CancellationToken cancellationToken = default) =>
@@ -184,6 +277,7 @@ public sealed class EvolutionContinuousDispatchTests
         {
             int current = Interlocked.Increment(ref _concurrency);
             RecordMaximum(current);
+            OnEvaluation?.Invoke((int)Interlocked.Increment(ref _evaluations));
             try
             {
                 if (_gateAt > 0)

@@ -283,11 +283,12 @@ public sealed class ProgramPromptBuilder
             ["evolution_history"] = includeHistory
                 ? DescribeHistory(context, diverse, includeInspirations)
                 : string.Empty,
-            ["current_program"] = BoundProgram(
-                _promptOptions.ProgramsAsChangesDescription
-                    ? ResolveChangesDescription(context) ?? context.Parent.Source
-                    : context.Parent.Source),
-            ["language"] = _promptOptions.ProgramsAsChangesDescription ? "text" : _fenceLabel,
+            // The program is always the program, even in changes-description mode. Substituting the description for
+            // it would leave the model editing source it was never shown, while the diff is still applied to that
+            // source; the description belongs in the wrapper section below, which is where the reference
+            // implementation puts it too.
+            ["current_program"] = BoundProgram(context.Parent.Source),
+            ["language"] = _fenceLabel,
             ["artifacts"] = includeArtifacts && _promptOptions.IncludeArtifacts
                 ? DescribeArtifacts(context)
                 : string.Empty,

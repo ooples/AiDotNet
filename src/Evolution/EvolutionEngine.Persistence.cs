@@ -440,7 +440,12 @@ public sealed partial class EvolutionEngine<TGenome>
             throw new InvalidDataException("The evolution engine state payload is invalid.", exception);
         }
 
-        if (state is null) throw new InvalidDataException("The evolution engine state payload is empty.");
+        // The outer checkpoint version and the engine-state version are different things, and only the latter says
+        // whether the fields this reader expects are present. Without this check a payload from an older engine
+        // deserializes into an all-default document and reads back as a complete record of a run that found nothing.
+        if (state is null || state.SchemaVersion != EngineStateSchemaVersion)
+            throw new InvalidDataException(
+                "The evolution engine state schema is invalid; the checkpoint was written by a different engine version.");
 
         var entries = new List<EvolutionCheckpointEntry<TGenome>>();
         List<ArchiveDocument> islands = state.Islands ?? new List<ArchiveDocument>();
@@ -455,8 +460,11 @@ public sealed partial class EvolutionEngine<TGenome>
 
         foreach (EliteRecordDocument record in state.GlobalElites ?? new List<EliteRecordDocument>())
         {
-            if (record.Entry is null) throw new InvalidDataException("A checkpoint global elite record is invalid.");
-            entries.Add(new EvolutionCheckpointEntry<TGenome>(Math.Max(0, record.Island),
+            // A negative island is corrupt data, and relabelling it as island 0 would hand the reader a record that
+            // looks fine. Resume rejects the same value, and so does this.
+            if (record.Entry is null || record.Island < 0)
+                throw new InvalidDataException("A checkpoint global elite record is invalid.");
+            entries.Add(new EvolutionCheckpointEntry<TGenome>(record.Island,
                 EvolutionCheckpointEntrySource.GlobalElite, ReadArchiveEntry(record.Entry, genomeCodec)));
         }
 

@@ -39,8 +39,17 @@ internal static class EvolveCommandLine
 
         try
         {
-            Arguments rest = Arguments.Parse(args.Skip(1).ToArray());
-            return args[0].ToLowerInvariant() switch
+            string command = args[0].ToLowerInvariant();
+            string[] known = command switch
+            {
+                "run" => new[] { "config", "run-id", "seed", "max-evaluations", "output", "resume", "json", "show-best" },
+                "validate" => new[] { "config", "run-id", "seed", "max-evaluations", "output", "resume" },
+                "schema" or "docs" => new[] { "out" },
+                _ => Array.Empty<string>()
+            };
+
+            Arguments rest = Arguments.Parse(args.Skip(1).ToArray(), known);
+            return command switch
             {
                 "run" => await RunAsync(rest, output, error, cancellationToken).ConfigureAwait(false),
                 "validate" => Validate(rest, output, error),
@@ -54,12 +63,27 @@ internal static class EvolveCommandLine
             error.WriteLine("Cancelled.");
             return ExitCancelled;
         }
+        catch (RunFailedException failure)
+        {
+            // A run that started and then failed is a different thing from a file that was never usable, and a
+            // script that cannot tell them apart cannot decide whether to retry or to fix the configuration.
+            error.WriteLine(Flatten(failure.InnerException ?? failure));
+            return ExitRunFailed;
+        }
         catch (Exception exception)
         {
             // The message is the product here: a configuration mistake should read as one line a person can act on,
             // not as a stack trace. Causes are appended because YAML reports the reason on the inner exception.
             error.WriteLine(Flatten(exception));
             return ExitUsage;
+        }
+    }
+
+    /// <summary>Marks an exception as having come from the run rather than from the configuration.</summary>
+    private sealed class RunFailedException : Exception
+    {
+        public RunFailedException(Exception inner) : base(inner.Message, inner)
+        {
         }
     }
 
@@ -83,8 +107,20 @@ internal static class EvolveCommandLine
         ApplyOverrides(options, arguments);
         var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>(configPath);
         builder.ConfigureEvolution(options);
-        AiModelResult<double, Matrix<double>, Vector<double>> result =
-            await builder.BuildAsync(cancellationToken).ConfigureAwait(false);
+
+        AiModelResult<double, Matrix<double>, Vector<double>> result;
+        try
+        {
+            result = await builder.BuildAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            throw new RunFailedException(exception);
+        }
 
         EvolutionRunSummary? summary = result.EvolutionSummary;
         if (summary is null)
@@ -251,8 +287,25 @@ internal static class EvolveCommandLine
     {
         private readonly Dictionary<string, string?> _values = new(StringComparer.OrdinalIgnoreCase);
 
-        public static Arguments Parse(string[] args)
+        private static readonly HashSet<string> Flags =
+            new(new[] { "resume", "json", "show-best" }, StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Parses the options of one command, refusing anything the command does not accept.</summary>
+        /// <param name="args">The tokens after the command name.</param>
+        /// <param name="known">Every option name the command accepts.</param>
+        /// <returns>The parsed options.</returns>
+        /// <exception cref="ArgumentException">
+        /// A token is not an option, an option is not one this command accepts, or an option that takes a value was
+        /// given none.
+        /// </exception>
+        /// <remarks>
+        /// Both refusals matter. A misspelled option that is silently ignored means a run proceeds under settings the
+        /// caller believes they changed, and an option whose value was swallowed by the next option means the same
+        /// thing with no typo to notice.
+        /// </remarks>
+        public static Arguments Parse(string[] args, IReadOnlyCollection<string> known)
         {
+            var accepted = new HashSet<string>(known, StringComparer.OrdinalIgnoreCase);
             var parsed = new Arguments();
             for (int index = 0; index < args.Length; index++)
             {
@@ -261,7 +314,17 @@ internal static class EvolveCommandLine
                     throw new ArgumentException($"Unexpected argument '{token}'. Options are written as --name value.");
 
                 string name = token.Substring(2);
+                if (accepted.Count > 0 && !accepted.Contains(name))
+                {
+                    throw new ArgumentException(
+                        $"'--{name}' is not an option of this command. Accepted: " +
+                        string.Join(", ", known.Select(option => "--" + option)) + ".");
+                }
+
                 bool hasValue = index + 1 < args.Length && !args[index + 1].StartsWith("--", StringComparison.Ordinal);
+                if (!hasValue && !Flags.Contains(name))
+                    throw new ArgumentException($"'--{name}' expects a value.");
+
                 parsed._values[name] = hasValue ? args[++index] : null;
             }
             return parsed;

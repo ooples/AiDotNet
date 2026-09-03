@@ -123,6 +123,26 @@ public sealed class EvolutionDescriptorDefinition
     /// <summary>Gets the width of one interior bin.</summary>
     public double BinWidth => (Maximum - Minimum) / BinCount;
 
+    /// <summary>Bins a value as if the range contained it, whatever the out-of-range policy says.</summary>
+    /// <param name="value">The value to bin.</param>
+    /// <param name="bin">The resulting zero-based bin when the value is inside the range.</param>
+    /// <returns><c>true</c> when the value is finite and inside the range.</returns>
+    /// <remarks>
+    /// Used by a growing archive to check that a widened definition really accepts the value it was widened for,
+    /// before adopting it. <see cref="TryGetBin"/> cannot answer that question, because under
+    /// <see cref="EvolutionOutOfRangePolicy.Grow"/> it deliberately reports every out-of-range value as unbinnable.
+    /// </remarks>
+    internal bool TryGetBinIgnoringPolicy(double value, out int bin)
+    {
+        bin = -1;
+        if (!IsFinite(value) || value < Minimum || value > Maximum) return false;
+
+        double normalized = (value - Minimum) / (Maximum - Minimum);
+        int interior = value == Maximum ? BinCount - 1 : (int)(normalized * BinCount);
+        bin = Math.Max(0, Math.Min(BinCount - 1, interior));
+        return true;
+    }
+
     /// <summary>Returns a definition widened to contain <paramref name="value"/>, keeping the bin width fixed.</summary>
     /// <param name="value">The finite value the widened definition must accept.</param>
     /// <returns>The widened definition, or this instance when the value already fits or cannot be reached.</returns>

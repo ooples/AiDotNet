@@ -159,7 +159,11 @@ public sealed class ProgramRunOutputObserver : IEvolutionObserver<ProgramGenome>
     {
         EvolutionCandidate<ProgramGenome>? candidate = evolutionEvent.Candidate;
         EvolutionEvaluation? evaluation = evolutionEvent.Evaluation;
-        if (candidate is null || evaluation is null || evaluation.Status != EvolutionEvaluationStatus.Completed) return;
+
+        // Every terminal outcome is recorded, not only the successes. A candidate that failed, timed out or was
+        // rejected is the more informative row for auditing a run and for training on it, and the document already
+        // carries the status and the diagnostics that say which it was.
+        if (candidate is null || evaluation is null) return;
 
         // The cell is left out rather than guessed: the archives belong to the engine and are not visible until the
         // run ends, and the raw descriptors a cell is derived from are recorded either way.
@@ -167,6 +171,11 @@ public sealed class ProgramRunOutputObserver : IEvolutionObserver<ProgramGenome>
         {
             string? path = _writer.WriteProgram(candidate, evaluation);
             if (path is not null) Interlocked.Increment(ref _programsWritten);
+            else if (LastError is null)
+            {
+                // Silence would leave a truncated corpus indistinguishable from a complete one.
+                LastError = "The per-program retention limit was reached; later candidates were not written.";
+            }
         }
         catch (IOException exception)
         {

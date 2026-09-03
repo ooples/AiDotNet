@@ -173,6 +173,13 @@ public sealed class ProgramEvolutionOptions
         set => _sandbox = value;
     }
 
+    /// <summary>Gets whether a caller set <see cref="Sandbox"/>, as opposed to only reading its default.</summary>
+    /// <remarks>
+    /// Reading the property creates the default instance, so "is it non-null" cannot answer this. The builder needs
+    /// the real answer to tell a caller that configured the sandbox twice from one that configured it nowhere.
+    /// </remarks>
+    internal bool HasExplicitSandbox => _sandbox is not null;
+
     /// <summary>Gets or sets how a caller-supplied evaluator script is run and how its metrics are read.</summary>
     public ScriptProgramEvaluationOptions Script
     {
@@ -451,6 +458,29 @@ public sealed class ProgramEvolutionOptions
                 "ArtifactStore retains the artifacts an evaluation produces, but the engine captures none " +
                 "unless Engine.Artifacts.Enabled is set. Enable it, or leave ArtifactStore null.",
                 nameof(ArtifactStore));
+        }
+
+        // Cascade evaluation needs a task that implements ICascadeEvolutionTask, and the task a program run builds
+        // is not one. Enabling it here would validate, run, and never stage anything - and it is on by default in a
+        // configuration ported straight from the reference implementation, so it is worth naming rather than ignoring.
+        if (Engine.Cascade.Enabled)
+        {
+            throw new ArgumentException(
+                "Cascade evaluation needs an evolution task that implements ICascadeEvolutionTask, and program " +
+                "evolution builds a task that does not. Clear Engine.Cascade.Enabled, or evolve a genome type of " +
+                "your own with a cascade-aware task.",
+                nameof(Engine));
+        }
+
+        // Maintaining a changes description means editing it, and a full rewrite produces no edits to route. The two
+        // settings are in different sections, so nothing else would catch the combination until every proposal
+        // failed for a reason that reads like the model ignoring its instructions.
+        if (Prompt.ProgramsAsChangesDescription && Variation.Mode == ProgramEvolutionMode.FullRewrite)
+        {
+            throw new ArgumentException(
+                "Prompt.ProgramsAsChangesDescription maintains the description through edit blocks, which a full " +
+                "rewrite does not produce. Use the diff variation mode, or clear ProgramsAsChangesDescription.",
+                nameof(Prompt));
         }
 
         if (_seedPrograms is not null) CreateSeedGenomes();

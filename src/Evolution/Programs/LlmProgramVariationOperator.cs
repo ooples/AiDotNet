@@ -229,8 +229,11 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
 
             cancellationToken.ThrowIfCancellationRequested();
             attemptNumber = attempt + 1;
-            if (round > 0) Interlocked.Increment(ref _retries);
-            ChatOptions chatOptions = BuildChatOptions(context.Random);
+
+            // Only a new prompt is a retry. A further sample of the same prompt is not one, and counting it as such
+            // would report eight retries for a proposal that retried twice.
+            if (round > 0 && round % samples == 0) Interlocked.Increment(ref _retries);
+            ChatOptions chatOptions = BuildChatOptions(context.Random, round % samples);
 
             // Captured before the call: the conversation grows with feedback, so a record written afterwards must
             // describe the messages this particular attempt actually sent.
@@ -310,6 +313,21 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
         return parent;
     }
 
+    /// <summary>Returns the changes description a prompt shows and a reply's edits are applied to.</summary>
+    /// <param name="parent">The parent program.</param>
+    /// <returns>The parent's description, the configured starting text when it has none, or <c>null</c>.</returns>
+    /// <remarks>
+    /// One method for both uses on purpose. The prompt and the edit target have to be the same string: showing the
+    /// model one description and routing its edits against another makes every description edit fail to match, and
+    /// the mode looks broken for a reason nothing reports.
+    /// </remarks>
+    private string? ResolveChangesDescription(ProgramGenome parent)
+    {
+        if (!string.IsNullOrWhiteSpace(parent.Description)) return parent.Description;
+        string? initial = _programOptions.Prompt.InitialChangesDescription;
+        return string.IsNullOrWhiteSpace(initial) ? null : initial;
+    }
+
     private ProgramPromptContext BuildPromptContext(
         EvolutionVariationContext<ProgramGenome> context,
         ProgramGenome parent)
@@ -318,13 +336,21 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
         var promptContext = new ProgramPromptContext(parent)
         {
             Direction = evaluation.Direction,
-            Inspirations = BuildInspirations(context, parent)
+            Inspirations = BuildInspirations(context, parent),
+
+            // The prompt must show the same description the reply's edits are applied to. Showing one string and
+            // routing against another makes every description edit miss, which is the whole mode failing silently.
+            ChangesDescription = ResolveChangesDescription(parent)
         };
 
         if (_variationOptions.IncludeParentMetrics)
         {
             promptContext.ParentQuality = evaluation.Quality;
-            promptContext.ParentMetrics = evaluation.Descriptors;
+
+            // Measurements are what the evaluator reported; descriptors are where the archive filed the candidate.
+            // They are different things, and printing the descriptors under both headings tells the model nothing
+            // twice while hiding the numbers it could actually act on.
+            promptContext.ParentMetrics = evaluation.Metrics.Count > 0 ? evaluation.Metrics : evaluation.Descriptors;
             promptContext.ParentDescriptors = evaluation.Descriptors;
             ApplyFeatureCoordinates(promptContext, context.Parent.Cell.Bins);
         }
@@ -587,7 +613,7 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
                 return ProgramProposalOutcome.ParseFailed;
             }
 
-            string parentDescription = parent.Description ?? _programOptions.Prompt.InitialChangesDescription ?? string.Empty;
+            string parentDescription = ResolveChangesDescription(parent) ?? string.Empty;
             ProgramDiffTargetSplit split = ProgramDiff.SplitByTarget(
                 parsed.Blocks, parent.Source, parentDescription, _programOptions);
             if (!split.IsSuccess)
@@ -596,32 +622,46 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
                 return ProgramProposalOutcome.ParseFailed;
             }
 
-            ProgramDiffApplyResult appliedSource = ProgramDiff.Apply(parent.Source, split.ProgramBlocks, _programOptions);
-            if (!appliedSource.IsSuccess)
+            // A reply that edits only the description has supplied blocks, they were simply all routed elsewhere.
+            // Applying an empty list to the program would refuse it with "no edit blocks were supplied", which the
+            // model can see is false about its own answer and which says nothing about why it was rejected.
+            candidateSource = parent.Source;
+            if (split.ProgramBlocks.Count > 0)
             {
-                feedback = DescribeFailures(appliedSource.Failures);
-                return ProgramProposalOutcome.ParseFailed;
+                ProgramDiffApplyResult appliedSource =
+                    ProgramDiff.Apply(parent.Source, split.ProgramBlocks, _programOptions);
+                if (!appliedSource.IsSuccess)
+                {
+                    feedback = DescribeFailures(appliedSource.Failures);
+                    return ProgramProposalOutcome.ParseFailed;
+                }
+                candidateSource = appliedSource.ModifiedSource;
             }
 
-            // The description is prose rather than code, so evolve-block enforcement, which exists to fence off the
-            // parts of a program that must not change, has nothing to fence here and would reject every edit.
-            ProgramEvolutionOptions descriptionOptions = _programOptions.WithoutEvolveBlockEnforcement();
-            ProgramDiffApplyResult appliedDescription = split.DescriptionBlocks.Count == 0
-                ? ProgramDiff.Apply(parentDescription, Array.Empty<ProgramDiffBlock>(), descriptionOptions)
-                : ProgramDiff.Apply(parentDescription, split.DescriptionBlocks, descriptionOptions);
-            if (split.DescriptionBlocks.Count > 0 && !appliedDescription.IsSuccess)
+            candidateDescription = parentDescription;
+            if (split.DescriptionBlocks.Count > 0)
             {
-                feedback = DescribeFailures(appliedDescription.Failures);
-                return ProgramProposalOutcome.ParseFailed;
+                // The description is prose rather than code, so evolve-block enforcement, which exists to fence off
+                // the parts of a program that must not change, has nothing to fence here and would reject every edit.
+                ProgramDiffApplyResult appliedDescription = ProgramDiff.Apply(
+                    parentDescription, split.DescriptionBlocks, _programOptions.WithoutEvolveBlockEnforcement());
+                if (!appliedDescription.IsSuccess)
+                {
+                    feedback = DescribeFailures(appliedDescription.Failures);
+                    return ProgramProposalOutcome.ParseFailed;
+                }
+                candidateDescription = appliedDescription.ModifiedSource;
             }
 
-            candidateSource = appliedSource.ModifiedSource;
-            candidateDescription = split.DescriptionBlocks.Count == 0
-                ? parentDescription
-                : appliedDescription.ModifiedSource;
+            // A child whose description was not updated is discarded, because the description is the record of what
+            // the edit did and one carried over unchanged describes the previous edit. A description edited down to
+            // nothing is discarded for the same reason: it records nothing at all.
+            if (candidateDescription.Trim().Length == 0)
+            {
+                feedback = "The changes description was emptied. Replace it with a sentence describing this change.";
+                return ProgramProposalOutcome.Unchanged;
+            }
 
-            // Upstream discards a child whose changes description was not updated, and so does this: the description
-            // is the record of what the edit did, and one carried over unchanged describes the previous edit.
             if (string.Equals(candidateDescription.Trim(), parentDescription.Trim(), StringComparison.Ordinal))
             {
                 feedback = "The changes description was not updated. Edit it as well, so it describes this change " +
@@ -819,9 +859,20 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
         return EvolutionHash.Combine(components);
     }
 
-    private ChatOptions BuildChatOptions(StableRandom random)
+    /// <summary>Builds the per-call settings, offsetting the seed so repeated samples are not identical requests.</summary>
+    /// <param name="random">The proposal's deterministic stream.</param>
+    /// <param name="sample">Which sample of the current prompt this is, counting from zero.</param>
+    /// <returns>The settings for one call.</returns>
+    /// <remarks>
+    /// Within one attempt the conversation does not change, so with a pinned seed every sample would be a
+    /// byte-identical request and drawing several of them would buy nothing but tokens. Offsetting by the sample
+    /// index keeps the run reproducible while making each draw a different one, which is the whole point of drawing
+    /// more than one.
+    /// </remarks>
+    private ChatOptions BuildChatOptions(StableRandom random, int sample = 0)
     {
-        int seed = _variationOptions.Seed ?? unchecked((int)(random.NextUInt32() & 0x7FFFFFFF));
+        int baseSeed = _variationOptions.Seed ?? unchecked((int)(random.NextUInt32() & 0x7FFFFFFF));
+        int seed = unchecked((baseSeed + sample) & 0x7FFFFFFF);
         return new ChatOptions
         {
             Temperature = _variationOptions.Temperature,

@@ -54,6 +54,13 @@ public sealed class ProgramEvolutionPromptOptions
     public string? TaskDescription { get; set; }
 
     /// <summary>Gets or sets whether the model is asked for edits, a rewrite, or either depending on program size.</summary>
+    /// <remarks>
+    /// <c>LlmProgramVariationOptions.Mode</c> wins over this, because the operator that parses the answer is the one
+    /// that has to agree with the prompt that asked for it. The single exception is
+    /// <see cref="ProgramPromptEvolutionMode.AutoBySize"/>, which the operator leaves alone so the choice can be made
+    /// per candidate. Set the variation mode when you want to choose, and set this one only to select automatic
+    /// sizing.
+    /// </remarks>
     public ProgramPromptEvolutionMode EvolutionMode { get; set; } = ProgramPromptEvolutionMode.Diff;
 
     /// <summary>Gets or sets whether programs are represented in prompts by their change descriptions.</summary>
@@ -98,6 +105,12 @@ public sealed class ProgramEvolutionPromptOptions
     public bool IncludePreviousAttempts { get; set; } = true;
 
     /// <summary>Gets or sets whether execution output from the parent's evaluation is quoted.</summary>
+    /// <remarks>
+    /// This is permission rather than a demand: it lets the prompt carry artifacts, and the engine decides whether
+    /// there are any to carry. Artifact capture is off by default (<c>EvolutionEngineOptions.Artifacts.Enabled</c>),
+    /// so leaving this on costs nothing and changes nothing until capture is enabled as well. If a prompt has no
+    /// artifact section when you expected one, that engine option is the setting to check.
+    /// </remarks>
     public bool IncludeArtifacts { get; set; } = true;
 
     /// <summary>Gets or sets the maximum UTF-8 bytes of a single artifact that are quoted.</summary>

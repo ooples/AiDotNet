@@ -57,6 +57,18 @@ public sealed class EvolutionEarlyStoppingOptions
     /// </remarks>
     public string? MetricName { get; set; }
 
+    /// <summary>Gets or sets whether a smaller value of <see cref="MetricName"/> is the better one.</summary>
+    /// <remarks>
+    /// <para>
+    /// An evaluator metric has its own direction, and it is not the archive's. A run minimising a loss can perfectly
+    /// well watch a validation accuracy, where larger is better; a run maximising a score can watch a latency, where
+    /// smaller is. Nothing about the archive says which, so it is said here, and the default is the common case of
+    /// larger being better.
+    /// </para>
+    /// <para>Ignored unless <see cref="MetricName"/> is set.</para>
+    /// </remarks>
+    public bool MetricIsLowerBetter { get; set; }
+
     /// <summary>Validates every value and returns an independent copy.</summary>
     /// <returns>A defensive copy that later mutation of this instance cannot affect.</returns>
     /// <exception cref="ArgumentOutOfRangeException">
@@ -81,7 +93,8 @@ public sealed class EvolutionEarlyStoppingOptions
             PatienceEvaluations = PatienceEvaluations,
             MinimumImprovement = MinimumImprovement,
             Metric = Metric,
-            MetricName = MetricName?.Trim()
+            MetricName = MetricName?.Trim(),
+            MetricIsLowerBetter = MetricIsLowerBetter
         };
     }
 
@@ -92,6 +105,7 @@ public sealed class EvolutionEarlyStoppingOptions
         PatienceEvaluations.ToString(CultureInfo.InvariantCulture),
         MinimumImprovement.ToString("R", CultureInfo.InvariantCulture),
         ((int)Metric).ToString(CultureInfo.InvariantCulture),
-        MetricName ?? "built-in"
+        MetricName ?? "built-in",
+        MetricIsLowerBetter ? "lower-better" : "higher-better"
     });
 }

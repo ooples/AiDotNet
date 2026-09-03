@@ -34,30 +34,32 @@ public sealed partial class EvolutionEngine<TGenome>
     private async Task<EvolutionStopReason> RunContinuousLoopAsync(TGenome[] seeds, int seedIndex, Stopwatch runTimer,
         CancellationToken cancellationToken)
     {
-        var state = new ContinuousState(seeds, seedIndex,
-            Math.Max(1, _options.MaxInFlight > 0 ? _options.MaxInFlight : _options.MaxDegreeOfParallelism));
+        var state = new ContinuousState(seeds, seedIndex, _options.ResolveInFlightWindow());
 
-        using var semaphore = new SemaphoreSlim(_options.MaxDegreeOfParallelism, _options.MaxDegreeOfParallelism);
-        BatchTransaction transaction = CaptureBatchTransaction();
+        var semaphore = new SemaphoreSlim(_options.MaxDegreeOfParallelism, _options.MaxDegreeOfParallelism);
         try
         {
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (Volatile.Read(ref _stopRequested) != 0 && state.InFlight.Count == 0) return EvolutionStopReason.Canceled;
 
                 await FillWindowAsync(state, semaphore, runTimer, cancellationToken).ConfigureAwait(false);
 
                 if (state.InFlight.Count == 0)
                 {
+                    // The window is drained, which is the only point at which the run's counters describe exactly
+                    // what has been committed. Capturing here is what makes the final checkpoint the run's real
+                    // final state instead of whatever was last captured, which with checkpointing switched off was
+                    // the empty state the run started from.
+                    CaptureSafeState(state.Seeds, state.CommittedSeeds);
                     if (state.DrainingForCheckpoint)
                     {
                         state.DrainingForCheckpoint = false;
-                        CaptureSafeState(state.Seeds, state.CommittedSeeds);
                         await SaveCheckpointAsync(force: false, cancellationToken).ConfigureAwait(false);
-                        transaction = CaptureBatchTransaction();
-                        if (state.Stop is null) continue;
+                        if (state.Stop is null && Volatile.Read(ref _stopRequested) == 0) continue;
                     }
+
+                    if (Volatile.Read(ref _stopRequested) != 0) return EvolutionStopReason.Canceled;
                     return state.Stop ?? StopReasonWithNothingInFlight();
                 }
 
@@ -79,7 +81,6 @@ public sealed partial class EvolutionEngine<TGenome>
                         .ConfigureAwait(false);
                     UpdateEarlyStopping(1);
                     await MigrateIfBatchBoundaryAsync(ready.EvaluationId).ConfigureAwait(false);
-                    transaction = CaptureBatchTransaction();
 
                     if (failedFast) state.Stop ??= EvolutionStopReason.CandidateFailure;
                     else if (IsTargetReached()) state.Stop ??= EvolutionStopReason.TargetReached;
@@ -100,9 +101,62 @@ public sealed partial class EvolutionEngine<TGenome>
         }
         catch (OperationCanceledException)
         {
-            RestoreBatchTransaction(transaction, state.InFlight);
+            RollbackInFlight(state);
             throw;
         }
+        finally
+        {
+            // Evaluations already inside the worker pool release their slot as they unwind, so disposing the
+            // semaphore while any of them is still running would fault a task nobody is waiting on. Every run that
+            // reaches its time limit takes this path, so it is not an exotic one.
+            await DrainRunningAsync(state).ConfigureAwait(false);
+            semaphore.Dispose();
+        }
+    }
+
+    /// <summary>Waits for every dispatched evaluation to unwind, ignoring how each one ended.</summary>
+    private static async Task DrainRunningAsync(ContinuousState state)
+    {
+        if (state.Running.Count == 0) return;
+        try
+        {
+            await Task.WhenAll(state.Running.Values).ConfigureAwait(false);
+        }
+#pragma warning disable CA1031
+        catch (Exception)
+#pragma warning restore CA1031
+        {
+            // Whatever these tasks were doing, the run is already ending and their outcomes are discarded by the
+            // rollback. Waiting is only about not disposing the pool from under them.
+        }
+        finally
+        {
+            state.Running.Clear();
+        }
+    }
+
+    /// <summary>Undoes exactly the proposals that were prepared but never committed.</summary>
+    /// <remarks>
+    /// A snapshot taken after the last commit cannot do this job, because by then the window already holds prepared
+    /// proposals whose identifiers and counters are inside the snapshot: restoring it would leave the run counting
+    /// proposals whose deduplication entries had just been removed. Undoing each in-flight item by what it actually
+    /// consumed is exact, and needs no snapshot at all.
+    /// </remarks>
+    private void RollbackInFlight(ContinuousState state)
+    {
+        foreach (WorkItem item in state.InFlight)
+        {
+            if (item.AddedToSeen && item.Candidate is not null) _seen.Remove(item.Candidate.CanonicalGenome.Id);
+            _evaluationAttempts -= item.ChargedAttempts;
+            _proposals--;
+            _nextEvaluationId--;
+            if (item.IsSeed) continue;
+
+            _generation--;
+            if (item.Island >= 0 && item.Island < _islandGenerations.Length) _islandGenerations[item.Island]--;
+        }
+
+        state.InFlight.Clear();
     }
 
     /// <summary>Reports why a continuous run has nothing left to do.</summary>
@@ -131,10 +185,24 @@ public sealed partial class EvolutionEngine<TGenome>
     {
         if (state.Stop is not null || state.DrainingForCheckpoint || state.InFlight.Count >= state.Window) return false;
         cancellationToken.ThrowIfCancellationRequested();
+
+        // A stop request has to reach the proposing side, not only the loop head. Checking it only where the window
+        // is already empty means a steady-state run refills forever and never sees the request at all.
+        if (Volatile.Read(ref _stopRequested) != 0) return false;
+
         EvolutionStopReason? limit = GetLimitStopReason(runTimer);
         if (limit.HasValue)
         {
             state.Stop = limit.Value;
+            return false;
+        }
+
+        // Admitted work that has not been charged yet still consumes the budget, so counting it here keeps admission
+        // a function of the window's contents rather than of how far the evaluator happens to have got.
+        int uncharged = state.InFlight.Count(item => item.RequiresEvaluation && item.ChargedAttempts == 0);
+        if (_evaluationAttempts + uncharged >= _options.MaxEvaluationAttempts)
+        {
+            state.Stop = EvolutionStopReason.EvaluationBudgetReached;
             return false;
         }
 
@@ -201,6 +269,7 @@ public sealed partial class EvolutionEngine<TGenome>
             if (!isOldest && quota > 0 && perIsland[item.Island] >= quota) continue;
 
             item.AttemptCount++;
+            item.ChargedAttempts++;
             _evaluationAttempts++;
             perIsland[item.Island]++;
             state.Running[item.EvaluationId] = EvaluateAfterDelayAsync(item, RetryDelayForAttempt(item.AttemptCount),
@@ -230,7 +299,10 @@ public sealed partial class EvolutionEngine<TGenome>
 
             WorkItem item = state.InFlight.Single(candidate => candidate.EvaluationId == id);
             if (item.CascadeRejectedStage.HasValue && !_options.Cascade.ChargeRejectedStagesToBudget)
+            {
                 _evaluationAttempts--;
+                item.ChargedAttempts--;
+            }
 
             bool retry = IsRetryable(item.Result) && item.AttemptCount <= _options.MaxRetries &&
                          _evaluationAttempts < _options.MaxEvaluationAttempts;

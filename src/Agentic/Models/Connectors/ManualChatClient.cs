@@ -85,7 +85,9 @@ public sealed class ManualChatClient<T> : IChatClient<T>
         string taskPath = Path.Combine(QueueDirectory, id + TaskExtension);
         string answerPath = Path.Combine(QueueDirectory, id + AnswerExtension);
 
-        File.WriteAllText(taskPath, JsonConvert.SerializeObject(new TaskDocument
+        // Written through a temporary file and moved into place, so whoever is watching the directory never opens a
+        // half-written question. It is the same hazard this client guards against on the answer side.
+        WriteAtomic(taskPath, JsonConvert.SerializeObject(new TaskDocument
         {
             Id = id,
             ModelId = ModelId,
@@ -93,6 +95,7 @@ public sealed class ManualChatClient<T> : IChatClient<T>
             AnswerFileName = Path.GetFileName(answerPath),
             Temperature = options?.Temperature,
             MaxOutputTokens = options?.MaxOutputTokens,
+            Seed = options?.Seed,
             Messages = messages.Select(message => new MessageDocument
             {
                 Role = message.Role.ToString(),
@@ -157,10 +160,15 @@ public sealed class ManualChatClient<T> : IChatClient<T>
             cancellationToken.ThrowIfCancellationRequested();
             if (File.Exists(answerPath))
             {
+                // A writer that is still flushing leaves a file that exists but reads as empty, as unreadable, or as
+                // half a JSON document. All three mean "not ready yet" and none of them mean "the answer is this".
+                // Returning a truncated document as the reply is the failure this loop exists to prevent.
                 string? content = TryReadAll(answerPath);
-                // A writer that is still flushing leaves a file that exists but reads as empty or as half a
-                // document, so an unreadable read is treated as "not ready yet" rather than as an empty answer.
-                if (content is not null && content.Trim().Length > 0) return ReadAnswer(content);
+                if (content is not null && content.Trim().Length > 0 &&
+                    TryReadAnswer(content, out string answer))
+                {
+                    return answer;
+                }
             }
 
             if (DateTimeOffset.UtcNow >= deadline)
@@ -174,25 +182,42 @@ public sealed class ManualChatClient<T> : IChatClient<T>
         }
     }
 
-    /// <summary>Extracts the reply text from an answer file's contents.</summary>
-    private static string ReadAnswer(string content)
+    /// <summary>Extracts the reply text from an answer file's contents, if the file is complete.</summary>
+    /// <param name="content">The file's contents.</param>
+    /// <param name="answer">The reply text when the file is complete.</param>
+    /// <returns><c>false</c> when the file looks like a JSON document that is not finished being written.</returns>
+    /// <remarks>
+    /// Content that starts with a brace is a JSON answer, and one that fails to parse is a file still being written,
+    /// not a person's reply. Returning it verbatim would hand a truncated document to the caller as the model's
+    /// answer, which then fails to parse as a diff for a reason nothing explains. Content that does not start with a
+    /// brace is plain text and is taken as written, because somebody answering by hand should not need JSON.
+    /// </remarks>
+    private static bool TryReadAnswer(string content, out string answer)
     {
+        answer = content;
         string trimmed = content.TrimStart();
-        if (trimmed.Length > 0 && trimmed[0] == '{')
-        {
-            try
-            {
-                AnswerDocument? document = JsonConvert.DeserializeObject<AnswerDocument>(content);
-                if (document?.Text is { } text) return text;
-            }
-            catch (JsonException)
-            {
-                // Falls through to the plain-text reading below: a person writing an answer by hand should not have
-                // their reply rejected for a missing brace.
-            }
-        }
+        if (trimmed.Length == 0 || trimmed[0] != '{') return true;
 
-        return content;
+        try
+        {
+            AnswerDocument? document = JsonConvert.DeserializeObject<AnswerDocument>(content);
+            if (document is null) return false;
+            answer = document.Text ?? string.Empty;
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Writes a file by creating a temporary one beside it and moving it into place.</summary>
+    private static void WriteAtomic(string path, string content)
+    {
+        string temporary = path + ".tmp";
+        File.WriteAllText(temporary, content);
+        if (File.Exists(path)) File.Delete(path);
+        File.Move(temporary, path);
     }
 
     private static string? TryReadAll(string path)
@@ -238,6 +263,7 @@ public sealed class ManualChatClient<T> : IChatClient<T>
         public string AnswerFileName { get; set; } = string.Empty;
         public double? Temperature { get; set; }
         public int? MaxOutputTokens { get; set; }
+        public long? Seed { get; set; }
         public List<MessageDocument> Messages { get; set; } = new();
     }
 

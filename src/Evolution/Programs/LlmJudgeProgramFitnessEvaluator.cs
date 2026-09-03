@@ -157,7 +157,10 @@ public sealed class LlmJudgeProgramFitnessEvaluator<T> : IProgramFitnessEvaluato
             candidate, _criteria, _options.ResponseSchema);
         StableRandom random = context.CreateRandom();
 
-        if (_options.JudgeWithEveryEnsembleMember && _chatClient is WeightedEnsembleChatClient<T> panel)
+        // The ensemble is usually wrapped: the standard way to build a production client adds retry and telemetry
+        // middleware around it, and a plain type test on the outermost object would then quietly fall back to
+        // single-member judging with nothing to say why.
+        if (_options.JudgeWithEveryEnsembleMember && FindPanel(_chatClient) is { } panel)
         {
             return await JudgeWithPanelAsync(panel, messages, random, cancellationToken).ConfigureAwait(false);
         }
@@ -206,6 +209,24 @@ public sealed class LlmJudgeProgramFitnessEvaluator<T> : IProgramFitnessEvaluato
                 (lastProblem ?? "no reason was recorded") + ".",
                 MaxDiagnosticLength),
             isRedacted: true));
+    }
+
+    /// <summary>Finds the weighted ensemble a client is, or wraps, so panel judging survives the usual middleware.</summary>
+    /// <param name="client">The configured chat client.</param>
+    /// <returns>The ensemble, or <c>null</c> when there is none to find.</returns>
+    /// <remarks>
+    /// Unwrapping is bounded rather than recursive without limit, so a pipeline that somehow refers to itself cannot
+    /// spin here.
+    /// </remarks>
+    private static WeightedEnsembleChatClient<T>? FindPanel(IChatClient<T> client)
+    {
+        IChatClient<T>? current = client;
+        for (int depth = 0; current is not null && depth < 8; depth++)
+        {
+            if (current is WeightedEnsembleChatClient<T> panel) return panel;
+            current = (current as IChatClientDecorator<T>)?.Inner;
+        }
+        return null;
     }
 
     /// <summary>Scores a candidate with every ensemble member and averages each criterion by member weight.</summary>

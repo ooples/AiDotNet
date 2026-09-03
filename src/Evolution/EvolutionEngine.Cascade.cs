@@ -303,6 +303,10 @@ public sealed partial class EvolutionEngine<TGenome>
         // never stops early, which is safer than treating "not reported" as "no progress".
         if (_options.EarlyStopping.MetricName is { } watched)
         {
+            // A named evaluator metric has its own direction, which has nothing to do with the archive's. Taking the
+            // sign from the archive would negate a validation accuracy in a loss-minimising run, so a metric climbing
+            // steadily would read as one falling steadily and stop the run exactly when it was working.
+            bool metricIsLowerBetter = _options.EarlyStopping.MetricIsLowerBetter;
             double best = 0;
             bool any = false;
             foreach (IEvolutionArchive<TGenome> archive in _islands)
@@ -312,7 +316,7 @@ public sealed partial class EvolutionEngine<TGenome>
                     if (!entry.Evaluation.Metrics.TryGetValue(watched, out double value)) continue;
                     if (!EvolutionDescriptorDefinition.IsFinite(value)) continue;
 
-                    double normalized = maximize ? value : -value;
+                    double normalized = metricIsLowerBetter ? -value : value;
                     if (!any || normalized > best)
                     {
                         best = normalized;

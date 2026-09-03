@@ -155,6 +155,17 @@ public sealed class EvolutionEngineOptions
     /// </remarks>
     public int MaxInFlight { get; set; }
 
+    /// <summary>Returns the window continuous dispatch actually uses, resolving zero to the worker count.</summary>
+    /// <returns>The number of evaluations that may be in flight at once.</returns>
+    /// <remarks>
+    /// The resolved value, not the raw setting, is what the compatibility hash records. Leaving this at zero makes
+    /// the window follow <see cref="MaxDegreeOfParallelism"/>, which is otherwise a budget setting a resume may
+    /// change freely; hashing the raw zero would let that change the window, and with it the results, without the
+    /// resume noticing.
+    /// </remarks>
+    internal int ResolveInFlightWindow() =>
+        Math.Max(1, MaxInFlight > 0 ? MaxInFlight : MaxDegreeOfParallelism);
+
     /// <summary>Gets or sets how many evaluations one island may have in flight; zero means no per-island limit.</summary>
     /// <remarks>
     /// <para>
@@ -620,8 +631,16 @@ public sealed class EvolutionEngineOptions
         Field("proposal-batch-size", ProposalBatchSize.ToString(CultureInfo.InvariantCulture)),
         Field("execution-mode", ((int)ExecutionMode).ToString(CultureInfo.InvariantCulture)),
         Field("dispatch", ((int)Dispatch).ToString(CultureInfo.InvariantCulture)),
-        Field("max-in-flight", MaxInFlight.ToString(CultureInfo.InvariantCulture)),
-        Field("max-in-flight-per-island", MaxInFlightPerIsland.ToString(CultureInfo.InvariantCulture)),
+        // The RESOLVED window, not the raw setting. A window of zero defers to the worker count, which is a budget
+        // field and is never compared, so hashing the raw zero would let a resume quietly change the window - and the
+        // window decides which committed evaluation a proposal is prepared after. Batch dispatch reads neither
+        // setting, so both collapse to a constant there rather than refusing a resume over a value nothing uses.
+        Field("in-flight-window", Dispatch == EvolutionDispatchMode.Continuous
+            ? ResolveInFlightWindow().ToString(CultureInfo.InvariantCulture)
+            : "batch"),
+        Field("max-in-flight-per-island", Dispatch == EvolutionDispatchMode.Continuous
+            ? MaxInFlightPerIsland.ToString(CultureInfo.InvariantCulture)
+            : "batch"),
         Field("failure-policy", ((int)FailurePolicy).ToString(CultureInfo.InvariantCulture)),
         Field("max-retries", MaxRetries.ToString(CultureInfo.InvariantCulture)),
         Field("evaluation-timeout", EvaluationTimeout?.Ticks.ToString(CultureInfo.InvariantCulture) ?? "none"),

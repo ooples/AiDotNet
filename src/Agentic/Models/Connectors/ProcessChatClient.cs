@@ -36,6 +36,9 @@ public sealed class ProcessChatClient<T> : IChatClient<T>
 {
     private const int MaxErrorExcerpt = 2_000;
 
+    /// <summary>UTF-8 without a byte-order mark, used for both directions of the command's pipes.</summary>
+    private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
+
     private readonly ProcessChatClientOptions _options;
     private readonly IReadOnlyList<string> _arguments;
     private long _calls;
@@ -82,8 +85,16 @@ public sealed class ProcessChatClient<T> : IChatClient<T>
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+
+            // Program text is not ASCII in general, and the console code page would mangle it in both directions.
+            // A code-evolution tool that silently corrupts non-ASCII source is worse than one that cannot run.
+            StandardOutputEncoding = Utf8,
+            StandardErrorEncoding = Utf8
         };
+#if NET5_0_OR_GREATER
+        startInfo.StandardInputEncoding = Utf8;
+#endif
 #if NET5_0_OR_GREATER
         foreach (string argument in _arguments) startInfo.ArgumentList.Add(argument);
 #else
@@ -112,8 +123,7 @@ public sealed class ProcessChatClient<T> : IChatClient<T>
 
         try
         {
-            await process.StandardInput.WriteAsync(RenderConversation(messages)).ConfigureAwait(false);
-            process.StandardInput.Close();
+            await SendPromptAsync(process, RenderConversation(messages), timeout.Token).ConfigureAwait(false);
             await WaitForExitAsync(process, timeout.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -126,12 +136,6 @@ public sealed class ProcessChatClient<T> : IChatClient<T>
         {
             KillTree(process);
             throw;
-        }
-        catch (IOException)
-        {
-            // The program closed its input before reading the whole prompt, which is legitimate for a command that
-            // only needs the first part. Its exit code and output still decide the outcome.
-            await WaitForExitAsync(process, timeout.Token).ConfigureAwait(false);
         }
 
         string text = Bound(await output.ConfigureAwait(false));
@@ -185,6 +189,62 @@ public sealed class ProcessChatClient<T> : IChatClient<T>
         string trimmed = value.Trim();
         if (trimmed.Length == 0) return "no error output";
         return trimmed.Length <= MaxErrorExcerpt ? trimmed : trimmed.Substring(0, MaxErrorExcerpt) + "...";
+    }
+
+    /// <summary>Writes the prompt to the command's input, under the same deadline as everything else.</summary>
+    /// <remarks>
+    /// <para>
+    /// The write has to be cancellable, because it is the step most likely to block: a redirected input pipe holds
+    /// only a few kilobytes, and an evolution prompt is far larger, so a command that never reads its input stops the
+    /// write partway. Left unguarded that is an unbounded wait with the process still running, past the very timeout
+    /// this class promises, and no kill.
+    /// </para>
+    /// <para>
+    /// A command that closes its input early is not an error - it read as much as it needed - so that case falls
+    /// through to the exit code and the output, which are what actually decide the outcome.
+    /// </para>
+    /// </remarks>
+    private static async Task SendPromptAsync(Process process, string prompt, CancellationToken cancellationToken)
+    {
+        try
+        {
+            Task write = process.StandardInput.WriteAsync(prompt);
+            var cancelled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using (cancellationToken.Register(() => cancelled.TrySetResult(true)))
+            {
+                if (await Task.WhenAny(write, cancelled.Task).ConfigureAwait(false) != write)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+            }
+
+            await write.ConfigureAwait(false);
+            process.StandardInput.Close();
+        }
+        catch (IOException)
+        {
+            TryCloseInput(process);
+        }
+        catch (ObjectDisposedException)
+        {
+            TryCloseInput(process);
+        }
+    }
+
+    private static void TryCloseInput(Process process)
+    {
+        try
+        {
+            process.StandardInput.Close();
+        }
+        catch (IOException)
+        {
+            // The pipe is already gone, which is the state this was trying to reach.
+        }
+        catch (ObjectDisposedException)
+        {
+            // As above.
+        }
     }
 
     /// <summary>Waits for the command to exit, throwing when the token fires first.</summary>

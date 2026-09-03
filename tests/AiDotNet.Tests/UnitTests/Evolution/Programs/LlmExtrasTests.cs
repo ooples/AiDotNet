@@ -2,6 +2,7 @@ using AiDotNet.Agentic.Models;
 using AiDotNet.Agentic.Models.Connectors;
 using AiDotNet.Agentic.Pipeline;
 using AiDotNet.Configuration;
+using AiDotNet.Interfaces;
 using Newtonsoft.Json;
 using Xunit;
 
@@ -221,6 +222,49 @@ public sealed class LlmExtrasTests
         // 0.75 * 1.0 + 0.25 * 0.2, normalised by the weights that answered.
         Assert.Equal(0.8, result.Descriptors["llm_average"], 10);
         Assert.Equal(0.8, result.Descriptors["llm_correctness"], 10);
+    }
+
+    [Fact]
+    public async Task PanelJudgingSurvivesTheMiddlewareAProductionClientIsWrappedIn()
+    {
+        // A plain type test on the outermost object found no ensemble behind the retry and telemetry wrappers the
+        // standard pipeline adds, so the flag degraded to single-member judging with nothing to say why.
+        var panel = new WeightedEnsembleChatClient<double>(new[]
+        {
+            new ChatClientEnsembleMember<double>(new FakeChatClient(JudgeAnswer(1.0)), 0.75, name: "generous"),
+            new ChatClientEnsembleMember<double>(new FakeChatClient(JudgeAnswer(0.2)), 0.25, name: "harsh")
+        });
+        var wrapped = new MiddlewareChatClient<double>(panel, Array.Empty<IChatMiddleware>());
+
+        var judge = new AiDotNet.Evolution.Programs.LlmJudgeProgramFitnessEvaluator<double>(
+            wrapped, Measured(0.5), null, new LlmFeedbackOptions { JudgeWithEveryEnsembleMember = true });
+
+        AiDotNet.Evolution.EvolutionTaskResult result = await judge.EvaluateAsync(Candidate(), JudgeContext());
+
+        Assert.Equal(0.8, result.Descriptors["llm_average"], 10);
+    }
+
+    [Fact]
+    public async Task AnAnswerFileStillBeingWrittenIsWaitedFor_NotReturnedAsTheReply()
+    {
+        // A torn read of a JSON answer used to be returned verbatim, so a truncated document became the model's
+        // reply, failed to parse as a diff, and burned a retry for a reason nothing reported.
+        using var directory = new TemporaryDirectory();
+        var client = new ManualChatClient<double>(directory.Path,
+            new ManualChatClientOptions { PollInterval = TimeSpan.FromMilliseconds(20) });
+
+        Task<ChatResponse> pending = client.GetResponseAsync(new[] { new ChatMessage(ChatRole.User, "hello") });
+        string task = await WaitForFileAsync(directory.Path, ManualChatClient<double>.TaskExtension);
+        string answerPath = AnswerPathFor(task);
+
+        File.WriteAllText(answerPath, "{\"text\": \"half a docum");
+        Assert.False(pending.IsCompleted);
+        await Task.Delay(120);
+        Assert.False(pending.IsCompleted);
+
+        File.WriteAllText(answerPath, "{\"text\": \"the whole document\"}");
+        ChatResponse response = await pending;
+        Assert.Equal("the whole document", response.Text);
     }
 
     [Fact]

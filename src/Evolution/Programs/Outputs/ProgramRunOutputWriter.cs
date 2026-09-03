@@ -47,6 +47,7 @@ public sealed class ProgramRunOutputWriter
 
     private readonly HashSet<string> _writtenPrograms = new(StringComparer.Ordinal);
     private readonly object _gate = new();
+    private int _writtenProgramCount;
     private readonly string _outputDirectory;
     private readonly ProgramRunOutputOptions _options;
 
@@ -226,10 +227,13 @@ public sealed class ProgramRunOutputWriter
             SourceLength = genome.Source.Length,
             SourceSha256 = EvolutionHash.Compute(genome.NormalizedSource),
             Description = Bound(genome.Description),
+            IsDescriptionTruncated = genome.Description is { } full && full.Length > MaxDescriptionLength,
             Status = evaluation.Status.ToString(),
             Quality = evaluation.Quality,
             Direction = evaluation.Direction.ToString(),
             CacheStatus = evaluation.CacheStatus.ToString(),
+            Diagnostics = evaluation.Diagnostics
+                .Select(diagnostic => diagnostic.Code + ": " + diagnostic.Message).ToList(),
             Cell = cell?.Bins.ToList(),
             CellKey = cell?.StableKey,
             Descriptors = evaluation.Descriptors
@@ -258,23 +262,26 @@ public sealed class ProgramRunOutputWriter
         string path = Path.Combine(directory, SafeFileName(identity) + ".json");
         lock (_gate)
         {
-            if (_options.MaxRetainedPrograms > 0 && !_writtenPrograms.Contains(path) &&
-                _writtenPrograms.Count >= _options.MaxRetainedPrograms)
+            // The set of written paths exists only to enforce a limit, so it is kept only when there is one. Without
+            // this a long unbounded run accumulates one path string per evaluation for no purpose at all.
+            if (_options.MaxRetainedPrograms > 0)
             {
-                return null;
+                if (!_writtenPrograms.Contains(path) && _writtenPrograms.Count >= _options.MaxRetainedPrograms)
+                    return null;
+                _writtenPrograms.Add(path);
             }
 
+            _writtenProgramCount++;
             Directory.CreateDirectory(directory);
             WriteAtomic(path, Utf8.GetBytes(JsonConvert.SerializeObject(document, Formatting.Indented)));
-            _writtenPrograms.Add(path);
         }
         return path;
     }
 
-    /// <summary>Gets how many distinct per-candidate files this writer has written.</summary>
+    /// <summary>Gets how many per-candidate files this writer has written, rewrites included.</summary>
     public int WrittenProgramCount
     {
-        get { lock (_gate) { return _writtenPrograms.Count; } }
+        get { lock (_gate) { return _writtenProgramCount; } }
     }
 
     /// <summary>Reduces a candidate identity to a name that is safe as a file name.</summary>
@@ -311,11 +318,13 @@ public sealed class ProgramRunOutputWriter
 
     private static string GetExtension(ProgramLanguage language) => ProgramLanguageDetector.GetFileExtension(language);
 
+    /// <summary>The longest description recorded verbatim; longer ones are cut and the cut is flagged.</summary>
+    private const int MaxDescriptionLength = 512;
+
     private static string? Bound(string? value)
     {
         if (value is null) return null;
-        const int Limit = 512;
-        return value.Length > Limit ? value.Substring(0, Limit) : value;
+        return value.Length > MaxDescriptionLength ? value.Substring(0, MaxDescriptionLength) : value;
     }
 
     private static void WriteAtomic(string path, byte[] payload)
@@ -371,14 +380,18 @@ public sealed class ProgramRunOutputWriter
         public string SourceSha256 { get; set; } = string.Empty;
         /// <summary>Gets or sets the genome's bounded description.</summary>
         public string? Description { get; set; }
+        /// <summary>Gets or sets whether the recorded description was cut to the limit.</summary>
+        public bool IsDescriptionTruncated { get; set; }
         /// <summary>Gets or sets the terminal evaluation status.</summary>
         public string Status { get; set; } = string.Empty;
-        /// <summary>Gets or sets the scalar quality.</summary>
+        /// <summary>Gets or sets the scalar quality, absent when the candidate did not complete.</summary>
         public double? Quality { get; set; }
         /// <summary>Gets or sets whether larger or smaller qualities are better.</summary>
         public string Direction { get; set; } = string.Empty;
         /// <summary>Gets or sets whether the score was computed or served from the cache.</summary>
         public string CacheStatus { get; set; } = string.Empty;
+        /// <summary>Gets or sets the diagnostics the evaluation reported, which say why a failure failed.</summary>
+        public List<string> Diagnostics { get; set; } = new();
         /// <summary>Gets or sets the archive cell bin indices, or <c>null</c> when the cell was not known.</summary>
         public List<int>? Cell { get; set; }
         /// <summary>Gets or sets the culture-independent archive cell key, or <c>null</c> when it was not known.</summary>

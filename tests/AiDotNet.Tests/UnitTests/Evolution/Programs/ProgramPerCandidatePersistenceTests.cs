@@ -58,7 +58,7 @@ public sealed class ProgramPerCandidatePersistenceTests
     }
 
     [Fact]
-    public void OnlyCompletedCandidatesAreRecorded()
+    public void EveryTerminalOutcomeIsRecorded_NotOnlyTheSuccesses()
     {
         using var directory = new TemporaryDirectory();
         var observer = Observer(directory.Path, new ProgramRunOutputOptions { WriteEveryProgram = true });
@@ -66,7 +66,15 @@ public sealed class ProgramPerCandidatePersistenceTests
         observer.OnEventAsync(Evaluated("value = 1\n", null, 4, EvolutionEvaluationStatus.Failed)).GetAwaiter().GetResult();
         observer.OnEventAsync(Evaluated("value = 2\n", null, 5, EvolutionEvaluationStatus.Duplicate)).GetAwaiter().GetResult();
 
-        Assert.Equal(0, observer.ProgramsWritten);
+        // A candidate that failed is the more informative row for auditing a run and for training on it, and the
+        // document carries the status and the diagnostics that say which outcome it was.
+        Assert.Equal(2, observer.ProgramsWritten);
+
+        string[] files = Directory.GetFiles(Path.Combine(directory.Path, "programs"), "*.json");
+        string[] statuses = files.Select(file => (string?)JObject.Parse(File.ReadAllText(file))["Status"] ?? "")
+            .OrderBy(status => status, StringComparer.Ordinal).ToArray();
+        Assert.Equal(new[] { "Duplicate", "Failed" }, statuses);
+        Assert.All(files, file => Assert.Equal(JTokenType.Null, JObject.Parse(File.ReadAllText(file))["Quality"]?.Type));
     }
 
     [Fact]
@@ -81,7 +89,9 @@ public sealed class ProgramPerCandidatePersistenceTests
 
         Assert.Equal(first, second);
         Assert.Single(Directory.GetFiles(Path.Combine(directory.Path, "programs"), "*.json"));
-        Assert.Equal(1, writer.WrittenProgramCount);
+
+        // One file, two writes: the count records what the writer did, and the directory records what survives.
+        Assert.Equal(2, writer.WrittenProgramCount);
     }
 
     [Fact]

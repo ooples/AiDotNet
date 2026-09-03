@@ -252,6 +252,17 @@ public sealed class MapElitesArchive<TGenome> : IGrowableEvolutionArchive<TGenom
     private void GrowToFit(IReadOnlyDictionary<string, double> descriptors)
     {
         if (!_hasGrowAxis) return;
+
+        // Nothing is widened for a candidate that cannot be archived anyway. Growing first and discovering a second
+        // axis rejects it would leave the grid permanently larger for a candidate that never entered it, which
+        // quietly lowers coverage and, with a capacity that follows the grid, changes what the archive holds.
+        foreach (EvolutionDescriptorDefinition definition in _descriptors)
+        {
+            if (definition.OutOfRangePolicy == EvolutionOutOfRangePolicy.Grow) continue;
+            if (!descriptors.TryGetValue(definition.Name, out double other) || !definition.TryGetBin(other, out _))
+                return;
+        }
+
         bool grew = false;
 
         for (int axis = 0; axis < _descriptors.Length; axis++)
@@ -264,6 +275,12 @@ public sealed class MapElitesArchive<TGenome> : IGrowableEvolutionArchive<TGenom
 
             EvolutionDescriptorDefinition widened = definition.Widen(value);
             if (ReferenceEquals(widened, definition)) continue;
+
+            // A bound computed as minimum minus a multiple of the bin width can land a fraction of a unit on the
+            // wrong side of the value it was widened for. Widening the archive and then still rejecting the
+            // candidate that caused it would leave an empty extra bin and no record of why, so the new definition
+            // has to be able to bin the value before it is adopted.
+            if (!widened.TryGetBinIgnoringPolicy(value, out _)) continue;
 
             long projected = 1;
             bool safe = true;
@@ -344,9 +361,14 @@ public sealed class MapElitesArchive<TGenome> : IGrowableEvolutionArchive<TGenom
         if (_cells.Count != 0 || Version != 0) throw new InvalidOperationException("Only an empty archive can be restored.");
         foreach (EvolutionArchiveEntry<TGenome> entry in entries.OrderBy(item => item.Cell.StableKey, StringComparer.Ordinal))
         {
+            // Only a plain insertion is legal during a restore. An eviction would mean the checkpoint holds more
+            // elites than this archive's capacity allows, and silently dropping one of them would resume a run that
+            // is quietly missing part of what it had found.
             EvolutionArchiveInsertionResult result = TryAdd(entry.Candidate, entry.Evaluation);
-            if (result != EvolutionArchiveInsertionResult.Inserted && result != EvolutionArchiveInsertionResult.InsertedWithEviction)
-                throw new InvalidDataException("The archive checkpoint contains an invalid or conflicting elite.");
+            if (result != EvolutionArchiveInsertionResult.Inserted)
+                throw new InvalidDataException(
+                    "The archive checkpoint contains an invalid or conflicting elite, or more elites than the " +
+                    "configured capacity holds.");
         }
         if (version < Version) throw new ArgumentOutOfRangeException(nameof(version));
         Version = version;

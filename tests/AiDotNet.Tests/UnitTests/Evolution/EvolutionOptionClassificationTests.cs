@@ -38,7 +38,14 @@ public sealed class EvolutionOptionClassificationTests
     // engine's CompatibilityHash by another route. An unclassified option still fails, which is the point.
     private static readonly HashSet<string> DerivedOptionNames = new(StringComparer.Ordinal)
     {
-        nameof(EvolutionEngineOptions.SelectionPolicy)
+        nameof(EvolutionEngineOptions.SelectionPolicy),
+
+        // Both reach the hash only through continuous dispatch, which the default options do not use: the window is
+        // recorded resolved rather than raw, because a window of zero defers to the worker count, and the per-island
+        // quota is recorded only where something reads it. Under batch dispatch neither changes anything, which is
+        // exactly what the derived branch of this test asserts.
+        nameof(EvolutionEngineOptions.MaxInFlight),
+        nameof(EvolutionEngineOptions.MaxInFlightPerIsland)
     };
 
     [Fact]

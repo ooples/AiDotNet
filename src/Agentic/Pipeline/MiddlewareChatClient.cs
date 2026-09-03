@@ -25,10 +25,17 @@ namespace AiDotNet.Agentic.Pipeline;
 /// behavior that should apply everywhere.
 /// </para>
 /// </remarks>
-public sealed class MiddlewareChatClient<T> : IChatClient<T>
+public sealed class MiddlewareChatClient<T> : IChatClientDecorator<T>
 {
     private readonly IChatClient<T> _inner;
     private readonly IReadOnlyList<IChatMiddleware> _middlewares;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Exposed so a caller that needs a capability of the wrapped client rather than of the pipeline can find it.
+    /// Sending messages still goes through the pipeline; this is for asking what the pipeline is wrapped around.
+    /// </remarks>
+    public IChatClient<T> Inner => _inner;
 
     /// <summary>
     /// Initializes a new middleware client.

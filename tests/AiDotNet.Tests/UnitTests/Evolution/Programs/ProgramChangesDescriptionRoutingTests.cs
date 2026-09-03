@@ -179,6 +179,61 @@ public sealed class ProgramChangesDescriptionRoutingTests
         Assert.Contains("only one of them", retry[retry.Count - 1].Text, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task ThePromptShowsTheSameDescriptionTheEditsAreAppliedTo()
+    {
+        // The prompt used to render one description while the edits were routed against another, so from the second
+        // generation on every description edit missed and the mode failed for a reason nothing reported. It also
+        // substituted the description for the program, leaving the model editing source it was never shown.
+        var parent = new ProgramGenome("def solve(x):\n    return x\n", ProgramLanguage.Python,
+            "Second generation: returns the input unchanged.\n");
+        var client = new FakeChatClient(
+            Diff("    return x", "    return x * 2") +
+            Diff("Second generation: returns the input unchanged.", "Third generation: doubles the input."));
+
+        ProgramGenome child = await Operator(client).ProposeAsync(Context(parent));
+
+        Assert.Equal("def solve(x):\n    return x * 2\n", child.Source);
+        Assert.Equal("Third generation: doubles the input.\n", child.Description);
+
+        string prompt = string.Join("\n", client.Conversations[0].Select(message => message.Text));
+        Assert.Contains("Second generation: returns the input unchanged.", prompt, StringComparison.Ordinal);
+        Assert.Contains("def solve(x):", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AReplyThatEditsOnlyTheDescriptionIsToldTheProgramDidNotChange()
+    {
+        // A description-only edit is still no new candidate, so it is rejected - but for the true reason. Applying
+        // an empty program-block list used to refuse it with "no edit blocks were supplied", which the model could
+        // see was false about its own answer and which said nothing about the routing that rejected it.
+        var client = new FakeChatClient(
+            Diff("Returns the input.", "Returns the input, documented."),
+            Diff("    return x", "    return x + 1") + Diff("Returns the input.", "Adds one."));
+
+        ProgramGenome child = await Operator(client).ProposeAsync(Context());
+
+        Assert.Equal(2, client.Calls);
+        Assert.Equal("def solve(x):\n    return x + 1\n", child.Source);
+
+        string retry = client.Conversations[1][^1].Text;
+        Assert.Contains("identical to the current one", retry, StringComparison.Ordinal);
+        Assert.DoesNotContain("No edit blocks were supplied", retry, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MaintainingADescriptionThroughAFullRewriteIsRefused()
+    {
+        // A full rewrite produces no edit blocks to route, so the combination could only fail once per proposal in a
+        // way that reads like the model ignoring its instructions.
+        var options = new ProgramEvolutionOptions();
+        options.Prompt.ProgramsAsChangesDescription = true;
+        options.Variation.Mode = ProgramEvolutionMode.FullRewrite;
+
+        ArgumentException failure = Assert.Throws<ArgumentException>(() => options.Validate());
+        Assert.Contains("full rewrite does not produce", failure.Message, StringComparison.Ordinal);
+    }
+
     private static LlmProgramVariationOperator<double> Operator(FakeChatClient client)
     {
         var options = new ProgramEvolutionOptions();

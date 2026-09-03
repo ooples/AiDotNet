@@ -574,6 +574,13 @@ public sealed partial class EvolutionEngine<TGenome>
         /// checkpoint records has to count committed seeds rather than consumed ones.
         /// </remarks>
         public bool IsSeed { get; set; }
+
+        /// <summary>How many evaluation attempts this item currently owes the run's budget.</summary>
+        /// <remarks>
+        /// Not the same as <see cref="AttemptCount"/>: a cascade stage that screens a candidate out refunds its
+        /// attempt without unmaking it. Continuous dispatch needs the net figure to undo an abandoned item exactly.
+        /// </remarks>
+        public int ChargedAttempts { get; set; }
         public IReadOnlyList<double> StageCostUnits { get; set; } = Array.Empty<double>();
         public int? CascadeRejectedStage { get; set; }
     }
