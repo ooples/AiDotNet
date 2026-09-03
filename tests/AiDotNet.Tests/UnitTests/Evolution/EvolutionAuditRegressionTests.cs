@@ -120,8 +120,10 @@ programEvolution:
         await ReadableEngine(store).RunAsync(new[] { new TestGenome(1), new TestGenome(2) });
         EvolutionCheckpoint written = Assert.IsType<EvolutionCheckpoint>(await store.LoadLatestAsync("audit-run"));
 
+        // The two-argument Replace is ordinal on every target framework; the comparison overload does not exist on
+        // the oldest one, and the suite has to compile there.
         var older = new EvolutionCheckpoint(written.RunId, written.Sequence, written.CompatibilityHash,
-            written.Payload.Replace("\"SchemaVersion\":5", "\"SchemaVersion\":4", StringComparison.Ordinal));
+            written.Payload.Replace("\"SchemaVersion\":5", "\"SchemaVersion\":4"));
 
         Assert.Throws<InvalidDataException>(() =>
             EvolutionEngine<TestGenome>.ReadCheckpoint(older, new TestGenomeCodec()));
