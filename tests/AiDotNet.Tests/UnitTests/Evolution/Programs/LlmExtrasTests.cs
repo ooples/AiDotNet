@@ -32,8 +32,7 @@ public sealed class LlmExtrasTests
         Assert.Contains("User", document, StringComparison.Ordinal);
 
         File.WriteAllText(
-            task.Replace(ManualChatClient<double>.TaskExtension, ManualChatClient<double>.AnswerExtension,
-                StringComparison.Ordinal),
+            AnswerPathFor(task),
             JsonConvert.SerializeObject(new { text = "here is the improved program" }));
 
         ChatResponse response = await pending;
@@ -55,8 +54,7 @@ public sealed class LlmExtrasTests
         Task<ChatResponse> pending = client.GetResponseAsync(new[] { new ChatMessage(ChatRole.User, "hello") });
         string task = await WaitForFileAsync(directory.Path, ManualChatClient<double>.TaskExtension);
         File.WriteAllText(
-            task.Replace(ManualChatClient<double>.TaskExtension, ManualChatClient<double>.AnswerExtension,
-                StringComparison.Ordinal),
+            AnswerPathFor(task),
             "just some text\n");
 
         ChatResponse response = await pending;
@@ -351,6 +349,12 @@ public sealed class LlmExtrasTests
         return "{\"correctness\": " + value + ", \"efficiency\": " + value + ", \"readability\": " + value +
                ", \"reasoning\": \"looks fine\"}";
     }
+
+    /// <summary>Names the answer file that goes with a task file.</summary>
+    /// <remarks>Written without the culture-aware Replace overload, which the oldest target framework lacks.</remarks>
+    private static string AnswerPathFor(string taskPath) =>
+        taskPath.Substring(0, taskPath.Length - ManualChatClient<double>.TaskExtension.Length) +
+        ManualChatClient<double>.AnswerExtension;
 
     private static async Task<string> WaitForFileAsync(string directory, string extension)
     {

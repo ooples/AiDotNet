@@ -89,7 +89,9 @@ public sealed class RetryChatMiddlewareTests
 
     [Theory]
     [InlineData(HttpStatusCode.RequestTimeout, true)]
-    [InlineData(HttpStatusCode.TooManyRequests, true)]
+    // 429 by number rather than by name: HttpStatusCode.TooManyRequests does not exist on the oldest target
+    // framework, and this file has to compile on all three for the suite to run there at all.
+    [InlineData((HttpStatusCode)429, true)]
     [InlineData(HttpStatusCode.InternalServerError, true)]
     [InlineData(HttpStatusCode.BadGateway, true)]
     [InlineData(HttpStatusCode.BadRequest, false)]

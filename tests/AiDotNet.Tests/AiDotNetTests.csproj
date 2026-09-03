@@ -99,6 +99,12 @@
     <ProjectReference Include="..\..\src\AiDotNet.Storage.Elasticsearch\AiDotNet.Storage.Elasticsearch.csproj" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0'">
+    <!-- The command-line tool is a net10.0 executable, so its tests cannot compile against the compatibility
+         frameworks. Everything the tool depends on is in the library and is covered on all three. -->
+    <Compile Remove="IntegrationTests\Configuration\EvolveCommandLineTests.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="IntegrationTests\Clustering\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
