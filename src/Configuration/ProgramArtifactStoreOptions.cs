@@ -35,6 +35,9 @@ public sealed class ProgramArtifactStoreOptions
     /// <summary>The largest inline threshold accepted by <see cref="Validate"/>, in bytes.</summary>
     public const int MaxInlineSizeThresholdBytes = 4 * 1024 * 1024;
 
+    /// <summary>How many stored evaluations pass between retention sweeps unless another cadence is configured.</summary>
+    public const int DefaultPurgeEveryStores = 256;
+
     /// <summary>Gets or sets the size at or below which an artifact is stored inline. Defaults to 32 KB.</summary>
     /// <remarks>Matches the reference implementation, which stores content at or below the threshold in the record.</remarks>
     public int InlineSizeThresholdBytes { get; set; } = DefaultInlineSizeThresholdBytes;
@@ -58,6 +61,24 @@ public sealed class ProgramArtifactStoreOptions
     /// <summary>Gets or sets how many genomes keep artifacts, oldest evicted first. Defaults to 0 for unlimited.</summary>
     public int MaxRetainedGenomes { get; set; }
 
+    /// <summary>Gets or sets how many stored evaluations pass between retention sweeps. Defaults to 256.</summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="RetentionPeriod"/> and <see cref="MaxRetainedGenomes"/> describe what should be kept, but the
+    /// sweep that enforces them has to be run by somebody. This is the cadence at which
+    /// <c>ProgramArtifactStoreObserver</c> runs it, so a long search bounds its own artifact directory instead of
+    /// growing until a caller happens to sweep by hand. A sweep also runs once when the search stops, whatever the
+    /// cadence, so a short run still leaves a bounded directory behind.
+    /// </para>
+    /// <para>
+    /// Sweeping costs one directory listing, so a small number is not free on a large store. Set it to zero to
+    /// sweep only at the end of the run, and set both retention bounds to their disabled values to sweep never.
+    /// </para>
+    /// <para><b>For Beginners:</b> Leave this alone. It is how often the run throws out artifacts older than the
+    /// retention period so the folder does not grow forever.</para>
+    /// </remarks>
+    public int PurgeEveryStores { get; set; } = DefaultPurgeEveryStores;
+
     /// <summary>Creates an independent copy so a running store is unaffected by later mutation.</summary>
     /// <returns>A new instance carrying the same limits.</returns>
     public ProgramArtifactStoreOptions Clone() => new()
@@ -67,7 +88,8 @@ public sealed class ProgramArtifactStoreOptions
         MaxArtifactsPerGenome = MaxArtifactsPerGenome,
         MaxTotalBytesPerGenome = MaxTotalBytesPerGenome,
         RetentionPeriod = RetentionPeriod,
-        MaxRetainedGenomes = MaxRetainedGenomes
+        MaxRetainedGenomes = MaxRetainedGenomes,
+        PurgeEveryStores = PurgeEveryStores
     };
 
     /// <summary>Rejects limits that cannot be enforced or that describe an unusable store.</summary>
@@ -90,5 +112,7 @@ public sealed class ProgramArtifactStoreOptions
             throw new ArgumentOutOfRangeException(nameof(RetentionPeriod), RetentionPeriod, "Value cannot be negative.");
         if (MaxRetainedGenomes < 0)
             throw new ArgumentOutOfRangeException(nameof(MaxRetainedGenomes), MaxRetainedGenomes, "Value cannot be negative.");
+        if (PurgeEveryStores < 0)
+            throw new ArgumentOutOfRangeException(nameof(PurgeEveryStores), PurgeEveryStores, "Value cannot be negative.");
     }
 }

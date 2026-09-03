@@ -720,8 +720,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ProgramArtifactStoreObserver? artifactObserver = null;
             if (programOptions.ArtifactStore is { } artifactOptions && runRoot is not null)
             {
+                // The cadence is passed through so the retention the caller configured is actually applied during
+                // the run. Without it the store knows what to keep and nothing ever asks it to.
                 artifactObserver = new ProgramArtifactStoreObserver(
-                    new FileSystemProgramArtifactStore(Path.Combine(runRoot, "artifacts"), artifactOptions));
+                    new FileSystemProgramArtifactStore(Path.Combine(runRoot, "artifacts"), artifactOptions),
+                    artifactOptions.PurgeEveryStores);
             }
 
             // The engine takes one observer, so the two are folded together when both are configured.
