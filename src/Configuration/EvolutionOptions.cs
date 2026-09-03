@@ -93,6 +93,25 @@ public sealed class EvolutionOptions
     /// <summary>Gets or sets whether commits are ordered deterministically or by completion.</summary>
     public EvolutionExecutionMode ExecutionMode { get; set; } = EvolutionExecutionMode.Deterministic;
 
+    /// <summary>Gets or sets whether evaluations run in fixed batches or in a continuously refilled window.</summary>
+    /// <remarks>
+    /// <see cref="EvolutionDispatchMode.Continuous"/> commits each evaluation as it finishes and dispatches a
+    /// replacement immediately, so a slow candidate no longer holds the other workers idle. See
+    /// <see cref="EvolutionEngineOptions.Dispatch"/> for the behaviour and the determinism it preserves.
+    /// </remarks>
+    public EvolutionDispatchMode Dispatch { get; set; } = EvolutionDispatchMode.Batch;
+
+    /// <summary>Gets or sets how many evaluations may be in flight at once; zero follows the worker count.</summary>
+    /// <remarks>Used only by <see cref="EvolutionDispatchMode.Continuous"/>.</remarks>
+    public int MaxInFlight { get; set; }
+
+    /// <summary>Gets or sets how many evaluations one island may have in flight; zero means no per-island limit.</summary>
+    /// <remarks>
+    /// Used only by <see cref="EvolutionDispatchMode.Continuous"/>. It stops one island's slow candidates from
+    /// occupying the whole window while every other island stops advancing.
+    /// </remarks>
+    public int MaxInFlightPerIsland { get; set; }
+
     /// <summary>Gets or sets whether a recoverable candidate failure stops the whole run.</summary>
     public EvolutionFailurePolicy FailurePolicy { get; set; } = EvolutionFailurePolicy.Continue;
 
@@ -147,6 +166,30 @@ public sealed class EvolutionOptions
 
     /// <summary>Gets or sets how many elites each island contributes to a migration round.</summary>
     public int MigrantsPerIsland { get; set; } = 2;
+
+    /// <summary>Gets or sets the island graph migrations follow when the engine builds the migration policy.</summary>
+    /// <remarks>
+    /// <para>
+    /// A ring passes elites to the next island only, which keeps islands genuinely separate for longer; a fully
+    /// connected graph spreads a winner everywhere in a single migration, which converges faster and explores less.
+    /// Ignored when a migration policy is passed to <c>ConfigureEvolution</c> directly.
+    /// </para>
+    /// <para><b>For Beginners:</b> Islands are separate sub-populations searching in parallel. This says who copies
+    /// good solutions to whom when they exchange. Leave it on the ring unless the search converges too slowly.</para>
+    /// </remarks>
+    public EvolutionMigrationTopology MigrationTopology { get; set; } = EvolutionMigrationTopology.Ring;
+
+    /// <summary>Gets or sets the fraction of a destination island's cells one migration may overwrite; zero means no cap.</summary>
+    /// <remarks>
+    /// A migration that overwrites most of a destination erases what that island found on its own, which is the
+    /// diversity islands exist to protect. Capping the fraction keeps a migration an infusion rather than a
+    /// replacement. Ignored when a migration policy is supplied directly.
+    /// </remarks>
+    public double MigrationRate { get; set; }
+
+    /// <summary>Gets or sets whether a genome may migrate only once; by default it may migrate repeatedly.</summary>
+    /// <remarks>Ignored when a migration policy is supplied directly.</remarks>
+    public bool PreventRepeatedMigration { get; set; }
 
     /// <summary>Gets or sets which unit <see cref="MigrationInterval"/> counts.</summary>
     public EvolutionMigrationTrigger MigrationTrigger { get; set; } = EvolutionMigrationTrigger.CommittedBatches;
@@ -259,32 +302,9 @@ public sealed class EvolutionOptions
     /// </remarks>
     public static EvolutionOptions CreateOpenEvolveDefaults()
     {
-        EvolutionEngineOptions engine = EvolutionEngineOptions.CreateOpenEvolveDefaults();
-        return new EvolutionOptions
-        {
-            Seed = engine.Seed,
-            MaxEvaluationAttempts = engine.MaxEvaluationAttempts,
-            MaxProposals = engine.MaxProposals,
-            MaxGenerations = engine.MaxGenerations,
-            ProposalBatchSize = engine.ProposalBatchSize,
-            MaxDegreeOfParallelism = engine.MaxDegreeOfParallelism,
-            MaxRetries = engine.MaxRetries,
-            RetryOn = engine.RetryOn,
-            RetryBaseDelay = engine.RetryBaseDelay,
-            RetryBackoffMultiplier = engine.RetryBackoffMultiplier,
-            EvaluationTimeout = engine.EvaluationTimeout,
-            CheckpointInterval = engine.CheckpointInterval,
-            IslandCount = engine.IslandCount,
-            MigrationInterval = engine.MigrationInterval,
-            MigrationTrigger = engine.MigrationTrigger,
-            MigrantsPerIsland = engine.MigrantsPerIsland,
-            GlobalEliteCount = engine.GlobalEliteCount,
-            HistorySize = engine.HistorySize,
-            InspirationCount = engine.InspirationCount,
-            SelectionPolicy = engine.SelectionPolicy,
-            Selection = engine.Selection,
-            Artifacts = engine.Artifacts
-        };
+        // Copying wholesale is what keeps the two factories from drifting: a value added to the engine's upstream
+        // defaults reaches this one without anybody remembering to restate it here.
+        return FromEngineOptions(EvolutionEngineOptions.CreateOpenEvolveDefaults());
     }
 
     /// <summary>Validates every value and returns an independent copy that later mutation cannot reach.</summary>
@@ -316,54 +336,17 @@ public sealed class EvolutionOptions
         EvolutionEngineOptions engine = ToEngineOptions().SnapshotAndValidate();
         EvolutionTraceOptions trace = SnapshotTrace();
 
-        return new EvolutionOptions
-        {
-            RunId = engine.RunId,
-            Seed = engine.Seed,
-            OutputDirectory = engine.OutputDirectory,
-            CheckpointDirectory = ResolveDirectory(CheckpointDirectory, nameof(CheckpointDirectory)),
-            RetainOutput = RetainOutput,
-            MaxEvaluationAttempts = engine.MaxEvaluationAttempts,
-            MaxProposals = engine.MaxProposals,
-            MaxGenerations = engine.MaxGenerations,
-            ProposalBatchSize = engine.ProposalBatchSize,
-            MaxDegreeOfParallelism = engine.MaxDegreeOfParallelism,
-            ExecutionMode = engine.ExecutionMode,
-            FailurePolicy = engine.FailurePolicy,
-            MaxRetries = engine.MaxRetries,
-            RetryOn = engine.RetryOn,
-            RetryBaseDelay = engine.RetryBaseDelay,
-            RetryBackoffMultiplier = engine.RetryBackoffMultiplier,
-            EvaluationTimeout = engine.EvaluationTimeout,
-            EvaluationGracePeriod = engine.EvaluationGracePeriod,
-            TimeLimit = engine.TimeLimit,
-            TargetQuality = engine.TargetQuality,
-            CheckpointInterval = engine.CheckpointInterval,
-            Resume = engine.Resume,
-            EnableEvaluationCache = engine.EnableEvaluationCache,
-            DeduplicateFailedCandidates = engine.DeduplicateFailedCandidates,
-            IslandCount = engine.IslandCount,
-            MigrationInterval = engine.MigrationInterval,
-            MigrantsPerIsland = engine.MigrantsPerIsland,
-            MigrationTrigger = engine.MigrationTrigger,
-            IslandAssignment = engine.IslandAssignment,
-            InspirationCount = engine.InspirationCount,
-            MaxRetainedFailures = engine.MaxRetainedFailures,
-            GlobalEliteCount = engine.GlobalEliteCount,
-            HistorySize = engine.HistorySize,
-            NoveltyDistanceThreshold = engine.NoveltyDistanceThreshold,
-            QualityDescriptorName = engine.QualityDescriptorName,
-            SelectionPolicy = engine.SelectionPolicy,
-            Selection = engine.Selection,
-            Cascade = engine.Cascade,
-            Artifacts = engine.Artifacts,
-            EarlyStopping = engine.EarlyStopping,
-            Trace = trace,
-            ArchiveDirection = ArchiveDirection,
-            ArchiveCapacity = ArchiveCapacity,
-            MaximumArchiveGridCells = MaximumArchiveGridCells,
-            Descriptors = descriptors
-        };
+        // Every engine-shared setting is copied by FromEngineOptions, so this method only adds what the facade owns.
+        // Listing the shared ones a second time here is how one of them silently stops being carried across.
+        EvolutionOptions snapshot = FromEngineOptions(engine);
+        snapshot.CheckpointDirectory = ResolveDirectory(CheckpointDirectory, nameof(CheckpointDirectory));
+        snapshot.RetainOutput = RetainOutput;
+        snapshot.Trace = trace;
+        snapshot.ArchiveDirection = ArchiveDirection;
+        snapshot.ArchiveCapacity = ArchiveCapacity;
+        snapshot.MaximumArchiveGridCells = MaximumArchiveGridCells;
+        snapshot.Descriptors = descriptors;
+        return snapshot;
     }
 
     /// <summary>Projects the shared knobs onto the options type the engine takes.</summary>
@@ -383,6 +366,9 @@ public sealed class EvolutionOptions
         ProposalBatchSize = ProposalBatchSize,
         MaxDegreeOfParallelism = MaxDegreeOfParallelism,
         ExecutionMode = ExecutionMode,
+        Dispatch = Dispatch,
+        MaxInFlight = MaxInFlight,
+        MaxInFlightPerIsland = MaxInFlightPerIsland,
         FailurePolicy = FailurePolicy,
         MaxRetries = MaxRetries,
         RetryOn = RetryOn,
@@ -400,6 +386,9 @@ public sealed class EvolutionOptions
         MigrationInterval = MigrationInterval,
         MigrantsPerIsland = MigrantsPerIsland,
         MigrationTrigger = MigrationTrigger,
+        MigrationTopology = MigrationTopology,
+        MigrationRate = MigrationRate,
+        PreventRepeatedMigration = PreventRepeatedMigration,
         IslandAssignment = IslandAssignment,
         InspirationCount = InspirationCount,
         MaxRetainedFailures = MaxRetainedFailures,
@@ -448,6 +437,9 @@ public sealed class EvolutionOptions
             ProposalBatchSize = engine.ProposalBatchSize,
             MaxDegreeOfParallelism = engine.MaxDegreeOfParallelism,
             ExecutionMode = engine.ExecutionMode,
+            Dispatch = engine.Dispatch,
+            MaxInFlight = engine.MaxInFlight,
+            MaxInFlightPerIsland = engine.MaxInFlightPerIsland,
             FailurePolicy = engine.FailurePolicy,
             MaxRetries = engine.MaxRetries,
             RetryOn = engine.RetryOn,
@@ -465,6 +457,9 @@ public sealed class EvolutionOptions
             MigrationInterval = engine.MigrationInterval,
             MigrantsPerIsland = engine.MigrantsPerIsland,
             MigrationTrigger = engine.MigrationTrigger,
+            MigrationTopology = engine.MigrationTopology,
+            MigrationRate = engine.MigrationRate,
+            PreventRepeatedMigration = engine.PreventRepeatedMigration,
             IslandAssignment = engine.IslandAssignment,
             InspirationCount = engine.InspirationCount,
             MaxRetainedFailures = engine.MaxRetainedFailures,

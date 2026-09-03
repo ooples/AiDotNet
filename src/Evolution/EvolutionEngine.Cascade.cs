@@ -92,7 +92,7 @@ public sealed partial class EvolutionEngine<TGenome>
     /// <summary>Returns the configured timeout for one stage, falling back to the per-attempt evaluation timeout.</summary>
     private TimeSpan? StageTimeout(int stage)
     {
-        IReadOnlyList<TimeSpan> timeouts = _options.Cascade.StageTimeouts;
+        IList<TimeSpan> timeouts = _options.Cascade.StageTimeouts;
         return timeouts.Count == 0 ? _options.EvaluationTimeout : timeouts[stage];
     }
 

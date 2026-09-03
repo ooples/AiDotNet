@@ -42,10 +42,16 @@ public sealed class EvolutionCascadeOptions
     public bool Enabled { get; set; }
 
     /// <summary>Gets or sets the per-stage gates, one fewer than the task's stage count.</summary>
-    public IReadOnlyList<double> Thresholds { get; set; } = NoThresholds;
+    /// <remarks>
+    /// Declared as a mutable list rather than a read-only one so a configuration file can supply it: a YAML mapper
+    /// has no way to construct a read-only collection. <c>SnapshotAndValidate</c> copies it, so nothing a caller does
+    /// to the list afterwards can reach a running search.
+    /// </remarks>
+    public IList<double> Thresholds { get; set; } = NoThresholds;
 
     /// <summary>Gets or sets one cooperative timeout per stage; empty applies <c>EvaluationTimeout</c> to each stage.</summary>
-    public IReadOnlyList<TimeSpan> StageTimeouts { get; set; } = NoStageTimeouts;
+    /// <remarks>Mutable for the same reason as <see cref="Thresholds"/>, and copied for the same reason.</remarks>
+    public IList<TimeSpan> StageTimeouts { get; set; } = NoStageTimeouts;
 
     /// <summary>Gets or sets whether a stage rejection consumes one of the run's evaluation attempts.</summary>
     public bool ChargeRejectedStagesToBudget { get; set; }
