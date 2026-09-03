@@ -32,6 +32,24 @@ public sealed class LlmProgramVariationOptions
     /// <summary>Gets or sets how many times an unusable response is retried with feedback describing the problem.</summary>
     public int MaxProposalRetries { get; set; } = 2;
 
+    /// <summary>Gets or sets how many answers are drawn from one prompt before the prompt changes. Defaults to 1.</summary>
+    /// <remarks>
+    /// <para>
+    /// An attempt is a prompt; a sample is one answer to it. With more than one sample, an unusable answer is
+    /// followed by another draw from the same prompt rather than by a rewritten prompt carrying feedback about the
+    /// failure. That is usually the better trade: a model that answered unusably once often answers usably on the
+    /// next draw, and feedback about the first answer costs tokens on every later call and biases what comes back.
+    /// Feedback is still added once every sample of an attempt has failed.
+    /// </para>
+    /// <para>
+    /// The total number of calls a proposal may make is this multiplied by <see cref="MaxProposalRetries"/> plus one,
+    /// so raising both multiplies the cost rather than adding to it.
+    /// </para>
+    /// <para><b>For Beginners:</b> Leave this at 1 unless the model frequently answers in a form the parser rejects.
+    /// Raising it to 2 or 3 asks the same question again before explaining what went wrong.</para>
+    /// </remarks>
+    public int SamplesPerAttempt { get; set; } = 1;
+
     /// <summary>Gets or sets the maximum number of inspiration programs quoted into the prompt.</summary>
     public int MaxInspirations { get; set; } = 3;
 
@@ -132,6 +150,7 @@ public sealed class LlmProgramVariationOptions
     {
         Mode = Mode,
         MaxProposalRetries = MaxProposalRetries,
+        SamplesPerAttempt = SamplesPerAttempt,
         MaxInspirations = MaxInspirations,
         MaxTopPrograms = MaxTopPrograms,
         MaxEmptyNeighborCells = MaxEmptyNeighborCells,
@@ -160,6 +179,9 @@ public sealed class LlmProgramVariationOptions
         if (MaxProposalRetries < 0 || MaxProposalRetries > 16)
             throw new ArgumentOutOfRangeException(nameof(MaxProposalRetries), MaxProposalRetries,
                 "Value must be between 0 and 16.");
+        if (SamplesPerAttempt < 1 || SamplesPerAttempt > 16)
+            throw new ArgumentOutOfRangeException(nameof(SamplesPerAttempt), SamplesPerAttempt,
+                "Value must be between 1 and 16.");
         if (MaxInspirations < 0 || MaxInspirations > 32)
             throw new ArgumentOutOfRangeException(nameof(MaxInspirations), MaxInspirations,
                 "Value must be between 0 and 32.");

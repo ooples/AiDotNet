@@ -217,12 +217,19 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
         string responseModelId = _chatClient.ModelId;
 
         int attempts = _variationOptions.MaxProposalRetries + 1;
+        int samples = Math.Max(1, _variationOptions.SamplesPerAttempt);
         int attemptNumber = 0;
-        for (int attempt = 0; attempt < attempts; attempt++)
+        for (int round = 0; round < attempts * samples; round++)
         {
+            // An attempt is a prompt; a sample is one answer to it. Several samples of the same prompt are drawn
+            // before the prompt is changed, because a model that answered unusably once often answers usably on the
+            // next draw, and feeding it feedback about that first answer costs tokens and biases the next one.
+            int attempt = round / samples;
+            bool lastSampleOfAttempt = round % samples == samples - 1;
+
             cancellationToken.ThrowIfCancellationRequested();
             attemptNumber = attempt + 1;
-            if (attempt > 0) Interlocked.Increment(ref _retries);
+            if (round > 0) Interlocked.Increment(ref _retries);
             ChatOptions chatOptions = BuildChatOptions(context.Random);
 
             // Captured before the call: the conversation grows with feedback, so a record written afterwards must
@@ -273,7 +280,8 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
                         cancellationToken).ConfigureAwait(false);
                 }
 
-                AppendFeedback(messages, responseText: null, "The previous request failed with " + typeName + ".");
+                if (lastSampleOfAttempt)
+                    AppendFeedback(messages, responseText: null, "The previous request failed with " + typeName + ".");
                 continue;
             }
 
@@ -293,7 +301,7 @@ public sealed class LlmProgramVariationOperator<T> : IVariationOperator<ProgramG
             }
 
             if (outcome == ProgramProposalOutcome.Accepted) return child;
-            AppendFeedback(messages, responseText, feedback);
+            if (lastSampleOfAttempt) AppendFeedback(messages, responseText, feedback);
         }
 
         Interlocked.Increment(ref _abandoned);

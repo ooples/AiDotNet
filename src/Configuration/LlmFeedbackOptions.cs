@@ -87,6 +87,25 @@ public sealed class LlmFeedbackOptions
     /// <summary>Gets or sets how many times an unparseable judge answer is requested again.</summary>
     public int MaxJudgeRetries { get; set; } = 1;
 
+    /// <summary>Gets or sets whether every ensemble member judges and their scores are averaged by weight.</summary>
+    /// <remarks>
+    /// <para>
+    /// A weighted ensemble normally picks one member per call, which is right for generating a candidate: you want
+    /// one answer, and the weights decide whose. Judging is the opposite case. A score is an opinion, and one model's
+    /// opinion of a program is noisier than several combined, which is why the reference implementation asks every
+    /// evaluator model and weights each one's metrics by its ensemble weight. Setting this does the same: each member
+    /// scores the candidate, and each criterion becomes the weighted mean of the members that answered.
+    /// </para>
+    /// <para>
+    /// A member that fails or answers unusably is left out of the mean rather than counted as zero, so one
+    /// unavailable provider costs precision instead of corrupting the score. It applies only when the judge is given
+    /// a weighted ensemble; with a single client there is nothing to average and the setting has no effect.
+    /// </para>
+    /// <para><b>For Beginners:</b> Turn this on when you have several models available and want a panel of judges
+    /// rather than one. It costs one call per model for every candidate judged.</para>
+    /// </remarks>
+    public bool JudgeWithEveryEnsembleMember { get; set; }
+
     /// <summary>Gets or sets the sampling temperature for judge requests, or <c>null</c> for the client's default.</summary>
     public double? Temperature { get; set; }
 
@@ -107,6 +126,7 @@ public sealed class LlmFeedbackOptions
         ResponseSchema = ResponseSchema,
         RequestJsonResponseFormat = RequestJsonResponseFormat,
         MaxJudgeRetries = MaxJudgeRetries,
+        JudgeWithEveryEnsembleMember = JudgeWithEveryEnsembleMember,
         Temperature = Temperature,
         MaxOutputTokens = MaxOutputTokens
     };

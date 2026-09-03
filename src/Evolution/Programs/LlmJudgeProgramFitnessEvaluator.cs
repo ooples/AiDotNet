@@ -157,6 +157,11 @@ public sealed class LlmJudgeProgramFitnessEvaluator<T> : IProgramFitnessEvaluato
             candidate, _criteria, _options.ResponseSchema);
         StableRandom random = context.CreateRandom();
 
+        if (_options.JudgeWithEveryEnsembleMember && _chatClient is WeightedEnsembleChatClient<T> panel)
+        {
+            return await JudgeWithPanelAsync(panel, messages, random, cancellationToken).ConfigureAwait(false);
+        }
+
         string? lastProblem = null;
         int attempts = _options.MaxJudgeRetries + 1;
         for (int attempt = 0; attempt < attempts; attempt++)
@@ -201,6 +206,91 @@ public sealed class LlmJudgeProgramFitnessEvaluator<T> : IProgramFitnessEvaluato
                 (lastProblem ?? "no reason was recorded") + ".",
                 MaxDiagnosticLength),
             isRedacted: true));
+    }
+
+    /// <summary>Scores a candidate with every ensemble member and averages each criterion by member weight.</summary>
+    /// <remarks>
+    /// One model's opinion of a program is noisier than several combined, and a panel is what the reference
+    /// implementation uses for exactly that reason. A member that fails or answers unusably is left out of the mean
+    /// rather than counted as zero, so an unavailable provider costs precision instead of corrupting the score, and
+    /// a panel where nobody answered is reported as unusable rather than as a score of zero.
+    /// </remarks>
+    private async Task<JudgeOutcome> JudgeWithPanelAsync(
+        WeightedEnsembleChatClient<T> panel,
+        IReadOnlyList<ChatMessage> messages,
+        StableRandom random,
+        CancellationToken cancellationToken)
+    {
+        Interlocked.Add(ref _judgeCalls, panel.Members.Count);
+        IReadOnlyList<ChatResponse?> responses;
+        try
+        {
+            responses = await panel
+                .GetAllResponsesAsync(messages, BuildChatOptions(random), cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+#pragma warning disable CA1031
+        catch (Exception exception)
+#pragma warning restore CA1031
+        {
+            // Only the exception type reaches a diagnostic; a provider message can carry a key or an endpoint.
+            return JudgeOutcome.Unusable(new EvolutionDiagnostic(
+                "llm_judge_unusable",
+                "The judge panel failed with " + exception.GetType().Name + ".",
+                isRedacted: true));
+        }
+
+        var totals = new double[_fieldNames.Length];
+        var weights = new double[_fieldNames.Length];
+        int answered = 0;
+        string? lastProblem = null;
+
+        for (int index = 0; index < responses.Count && index < panel.Members.Count; index++)
+        {
+            ChatResponse? response = responses[index];
+            if (response is null)
+            {
+                lastProblem = "a member returned no answer";
+                continue;
+            }
+
+            if (!TryReadScores(response.Text, out double[] scores, out string problem))
+            {
+                lastProblem = problem;
+                continue;
+            }
+
+            double weight = panel.Members[index].Weight;
+            if (weight <= 0 || double.IsNaN(weight) || double.IsInfinity(weight)) continue;
+
+            answered++;
+            for (int field = 0; field < totals.Length && field < scores.Length; field++)
+            {
+                totals[field] += scores[field] * weight;
+                weights[field] += weight;
+            }
+        }
+
+        if (answered == 0)
+        {
+            return JudgeOutcome.Unusable(new EvolutionDiagnostic(
+                "llm_judge_unusable",
+                ProgramText.Bound(
+                    "No member of the judge panel produced usable scores: " +
+                    (lastProblem ?? "no reason was recorded") + ".",
+                    MaxDiagnosticLength),
+                isRedacted: true));
+        }
+
+        var averaged = new double[totals.Length];
+        for (int field = 0; field < totals.Length; field++)
+            averaged[field] = weights[field] > 0 ? totals[field] / weights[field] : 0;
+
+        return JudgeOutcome.FromScores(_fieldNames, averaged, _options.Weight);
     }
 
     private bool TryReadScores(string answer, out double[] scores, out string problem)
