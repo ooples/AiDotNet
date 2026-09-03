@@ -190,7 +190,9 @@ public sealed class ProgramPromptBuilder
             schemaBuilder.Append("  \"").Append(ToJsonName(trimmed)).Append("\": <number between 0.0 and 1.0>,\n");
         }
 
-        schemaBuilder.Append("  \"reasoning\": <one short sentence>\n}");
+        // Asked for as criticism rather than as commentary, because it is carried forward to whoever proposes this
+        // program's successor: "the loop rescans the list each pass" is worth a prompt line, "looks reasonable" is not.
+        schemaBuilder.Append("  \"reasoning\": <one or two sentences naming the single most useful change>\n}");
 
         var values = new Dictionary<string, string>(StringComparer.Ordinal)
         {

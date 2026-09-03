@@ -1,3 +1,6 @@
+using System.Globalization;
+using AiDotNet.Evolution;
+
 namespace AiDotNet.Configuration;
 
 /// <summary>Configures how a language model's opinion of a program is blended into that program's fitness.</summary>
@@ -34,6 +37,16 @@ public sealed class LlmFeedbackOptions
 
     /// <summary>The metric name holding the mean of the individual judge scores.</summary>
     public const string AverageMetricSuffix = "average";
+
+    /// <summary>The JSON field the judge's written criticism is read from unless another is configured.</summary>
+    /// <remarks>
+    /// This is the field the derived response schema has always asked for, so a judge following it already returns
+    /// the text; before it was carried forward the answer was parsed for the scores and the prose was discarded.
+    /// </remarks>
+    public const string DefaultCritiqueField = "reasoning";
+
+    /// <summary>The artifact key the carried-forward critique is attached under.</summary>
+    public const string CritiqueArtifactKey = "llm_judge_critique";
 
     private IList<string>? _criteria;
 
@@ -106,6 +119,37 @@ public sealed class LlmFeedbackOptions
     /// </remarks>
     public bool JudgeWithEveryEnsembleMember { get; set; }
 
+    /// <summary>Gets or sets whether the judge's written criticism is carried forward to the next proposal.</summary>
+    /// <remarks>
+    /// <para>
+    /// A judge that scores 0.4 for readability has a reason, and that reason is worth more to the next proposal than
+    /// the number is. When this is on, the evaluator reads <see cref="CritiqueField"/> out of the judge's answer and
+    /// attaches it to the candidate as an artifact, which the engine then shows to the model that proposes the
+    /// candidate's successor. The search stops rediscovering the same criticism and starts answering it.
+    /// </para>
+    /// <para>
+    /// The text is written by a language model about a program that was itself generated: it is untrusted, it is
+    /// bounded by <see cref="MaxCritiqueChars"/>, and it reaches the next prompt through the same redacted artifact
+    /// path as any other evaluator output. It never affects the score — only the scores in
+    /// <see cref="Criteria"/> do that — so a judge that writes nothing useful costs a little prompt space and
+    /// nothing else.
+    /// </para>
+    /// <para><b>For Beginners:</b> Leave this on to let the next attempt see what the judge disliked about the last
+    /// one. Turn it off to keep prompts shorter, or if you would rather the search not read the judge's prose.</para>
+    /// </remarks>
+    public bool CarryCritiqueForward { get; set; } = true;
+
+    /// <summary>Gets or sets the JSON field the judge's written criticism is read from.</summary>
+    /// <remarks>
+    /// The derived response schema asks for this field alongside the criteria, so a judge following the schema fills
+    /// it in. A missing or blank field is not an error: the scores are still used and nothing is carried forward.
+    /// </remarks>
+    public string CritiqueField { get; set; } = DefaultCritiqueField;
+
+    /// <summary>Gets or sets the largest critique carried forward, in characters.</summary>
+    /// <remarks>Longer text is cut and marked as truncated rather than dropped.</remarks>
+    public int MaxCritiqueChars { get; set; } = 1_200;
+
     /// <summary>Gets or sets the sampling temperature for judge requests, or <c>null</c> for the client's default.</summary>
     public double? Temperature { get; set; }
 
@@ -127,6 +171,9 @@ public sealed class LlmFeedbackOptions
         RequestJsonResponseFormat = RequestJsonResponseFormat,
         MaxJudgeRetries = MaxJudgeRetries,
         JudgeWithEveryEnsembleMember = JudgeWithEveryEnsembleMember,
+        CarryCritiqueForward = CarryCritiqueForward,
+        CritiqueField = CritiqueField,
+        MaxCritiqueChars = MaxCritiqueChars,
         Temperature = Temperature,
         MaxOutputTokens = MaxOutputTokens
     };
@@ -161,6 +208,18 @@ public sealed class LlmFeedbackOptions
             throw new ArgumentOutOfRangeException(nameof(MaxJudgeRetries), MaxJudgeRetries, "Value must be between 0 and 8.");
         if (MaxOutputTokens.HasValue && MaxOutputTokens.Value <= 0)
             throw new ArgumentOutOfRangeException(nameof(MaxOutputTokens), MaxOutputTokens.Value, "Value must be positive.");
+        if (CritiqueField is not { } critiqueField || critiqueField.Trim().Length == 0)
+            throw new ArgumentException("CritiqueField cannot be empty or white space.", nameof(CritiqueField));
+
+        // A critique field colliding with a criterion would make the same key mean both a score and prose, and the
+        // judge would have to pick one. Rejecting it here beats an unparseable answer per candidate at run time.
+        if (seen.Contains(CritiqueField.Trim()))
+            throw new ArgumentException("CritiqueField cannot name one of the judging criteria.", nameof(CritiqueField));
+        if (MaxCritiqueChars < 1 || MaxCritiqueChars > EvolutionArtifact.MaximumTextLength)
+        {
+            throw new ArgumentOutOfRangeException(nameof(MaxCritiqueChars), MaxCritiqueChars,
+                "Value must be between 1 and " + EvolutionArtifact.MaximumTextLength.ToString(CultureInfo.InvariantCulture) + ".");
+        }
         if (Temperature.HasValue
             && (double.IsNaN(Temperature.Value) || double.IsInfinity(Temperature.Value)
                 || Temperature.Value < 0 || Temperature.Value > 2))

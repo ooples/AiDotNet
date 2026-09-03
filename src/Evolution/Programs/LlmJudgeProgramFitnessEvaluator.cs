@@ -193,9 +193,9 @@ public sealed class LlmJudgeProgramFitnessEvaluator<T> : IProgramFitnessEvaluato
                 continue;
             }
 
-            if (TryReadScores(answer, out double[] scores, out string problem))
+            if (TryReadScores(answer, out double[] scores, out string? critique, out string problem))
             {
-                return JudgeOutcome.FromScores(_fieldNames, scores, _options.Weight);
+                return JudgeOutcome.FromScores(_fieldNames, scores, _options.Weight, critique);
             }
 
             lastProblem = problem;
@@ -269,6 +269,7 @@ public sealed class LlmJudgeProgramFitnessEvaluator<T> : IProgramFitnessEvaluato
         var weights = new double[_fieldNames.Length];
         int answered = 0;
         string? lastProblem = null;
+        var critiques = new List<string>();
 
         for (int index = 0; index < responses.Count && index < panel.Members.Count; index++)
         {
@@ -279,7 +280,7 @@ public sealed class LlmJudgeProgramFitnessEvaluator<T> : IProgramFitnessEvaluato
                 continue;
             }
 
-            if (!TryReadScores(response.Text, out double[] scores, out string problem))
+            if (!TryReadScores(response.Text, out double[] scores, out string? memberCritique, out string problem))
             {
                 lastProblem = problem;
                 continue;
@@ -287,6 +288,13 @@ public sealed class LlmJudgeProgramFitnessEvaluator<T> : IProgramFitnessEvaluato
 
             double weight = panel.Members[index].Weight;
             if (weight <= 0 || double.IsNaN(weight) || double.IsInfinity(weight)) continue;
+
+            // Numbered rather than named: a member's model identifier is configuration, and the next prompt has no
+            // use for it beyond telling two opinions apart.
+            if (memberCritique is not null)
+            {
+                critiques.Add("Judge " + (critiques.Count + 1).ToString(CultureInfo.InvariantCulture) + ": " + memberCritique);
+            }
 
             answered++;
             for (int field = 0; field < totals.Length && field < scores.Length; field++)
@@ -311,12 +319,19 @@ public sealed class LlmJudgeProgramFitnessEvaluator<T> : IProgramFitnessEvaluato
         for (int field = 0; field < totals.Length; field++)
             averaged[field] = weights[field] > 0 ? totals[field] / weights[field] : 0;
 
-        return JudgeOutcome.FromScores(_fieldNames, averaged, _options.Weight);
+        // One combined critique rather than one artifact per member: the bound is on the whole text either way, and
+        // a single ordered block is what a proposing model can actually read.
+        string? panelCritique = critiques.Count == 0
+            ? null
+            : ProgramText.Bound(string.Join("\n\n", critiques), _options.MaxCritiqueChars);
+
+        return JudgeOutcome.FromScores(_fieldNames, averaged, _options.Weight, panelCritique);
     }
 
-    private bool TryReadScores(string answer, out double[] scores, out string problem)
+    private bool TryReadScores(string answer, out double[] scores, out string? critique, out string problem)
     {
         scores = Array.Empty<double>();
+        critique = null;
         if (string.IsNullOrWhiteSpace(answer))
         {
             problem = "the answer was empty";
@@ -344,8 +359,34 @@ public sealed class LlmJudgeProgramFitnessEvaluator<T> : IProgramFitnessEvaluato
         }
 
         scores = values;
+        critique = ReadCritique(json);
         problem = string.Empty;
         return true;
+    }
+
+    /// <summary>Reads the judge's written criticism out of an answer that already parsed.</summary>
+    /// <param name="json">The judge's answer.</param>
+    /// <returns>The bounded, sanitized criticism, or <c>null</c> when there is none worth carrying.</returns>
+    /// <remarks>
+    /// A missing or blank field is not a failure. The scores are the contract; the prose is a bonus, and refusing an
+    /// otherwise-good answer because the judge stayed quiet would spend a call to learn nothing.
+    /// </remarks>
+    private string? ReadCritique(JObject json)
+    {
+        if (!_options.CarryCritiqueForward) return null;
+
+        JToken? token = json[_options.CritiqueField.Trim()];
+        if (token is null || token.Type == JTokenType.Null) return null;
+
+        // Read as a scalar string: a judge that answers with an object or an array here has not followed the schema,
+        // and serializing whatever it did send would put unbounded JSON into the next prompt.
+        // Written as an explicit null test rather than IsNullOrWhiteSpace, which net471 does not annotate for flow
+        // analysis, so the shorter form fails the nullable build on that target alone.
+        if (token.Type != JTokenType.String || token.Value<string>() is not { } text || text.Trim().Length == 0)
+            return null;
+
+        string sanitized = ProgramText.Sanitize(text).Trim();
+        return sanitized.Length == 0 ? null : ProgramText.Bound(sanitized, _options.MaxCritiqueChars);
     }
 
     private ChatOptions BuildChatOptions(StableRandom random)
@@ -385,6 +426,21 @@ public sealed class LlmJudgeProgramFitnessEvaluator<T> : IProgramFitnessEvaluato
         var diagnostics = new List<EvolutionDiagnostic>(measured.Diagnostics);
         if (diagnostic is not null && diagnostics.Count < 64) diagnostics.Add(diagnostic);
 
+        // The judge's written criticism travels as an artifact, which is the channel the engine already shows to
+        // whoever proposes this candidate's successor. Attaching it here is what turns one judge's opinion into
+        // something the search can answer rather than rediscover.
+        var artifacts = new List<EvolutionArtifact>(measured.Artifacts);
+        if (outcome?.Critique is { } critique && artifacts.Count < EvolutionTaskResult.MaximumArtifacts)
+        {
+            artifacts.Add(new EvolutionArtifact(
+                LlmFeedbackOptions.CritiqueArtifactKey,
+                critique,
+                isTruncated: critique.Length >= _options.MaxCritiqueChars,
+                isRedacted: true));
+        }
+
+        // Metrics and artifacts the measured evaluator reported are carried rather than replaced: the judge is a
+        // wrapper, and a wrapper that silently drops what it wraps makes every metric query wrong for judged runs.
         return new EvolutionTaskResult(
             measured.Status,
             quality,
@@ -393,7 +449,9 @@ public sealed class LlmJudgeProgramFitnessEvaluator<T> : IProgramFitnessEvaluato
             objectives,
             measured.ConstraintViolations,
             measured.CostUnits,
-            diagnostics);
+            diagnostics,
+            measured.Metrics,
+            artifacts);
     }
 
     private static string BuildVersionHash(
@@ -417,7 +475,10 @@ public sealed class LlmJudgeProgramFitnessEvaluator<T> : IProgramFitnessEvaluato
             options.RecordObjectives ? "objectives" : "descriptors-only",
             options.MaxJudgeRetries.ToString(CultureInfo.InvariantCulture),
             options.ResponseSchema ?? string.Empty,
-            options.RequestJsonResponseFormat ? "json" : "free"
+            options.RequestJsonResponseFormat ? "json" : "free",
+            // The critique changes the next prompt, so two runs that carry it differently are not the same run.
+            options.CarryCritiqueForward ? "critique:" + options.CritiqueField.Trim() : "no-critique",
+            options.MaxCritiqueChars.ToString(CultureInfo.InvariantCulture)
         };
 
         return "llm-judge-" + EvolutionHash.Combine(components);
@@ -429,12 +490,14 @@ public sealed class LlmJudgeProgramFitnessEvaluator<T> : IProgramFitnessEvaluato
             IReadOnlyList<string> names,
             IReadOnlyList<double> scores,
             double average,
-            EvolutionDiagnostic? diagnostic)
+            EvolutionDiagnostic? diagnostic,
+            string? critique = null)
         {
             Names = names;
             Scores = scores;
             Average = average;
             Diagnostic = diagnostic;
+            Critique = critique;
         }
 
         public IReadOnlyList<string> Names { get; }
@@ -445,12 +508,16 @@ public sealed class LlmJudgeProgramFitnessEvaluator<T> : IProgramFitnessEvaluato
 
         public EvolutionDiagnostic? Diagnostic { get; }
 
+        /// <summary>Gets the judge's written criticism, or <c>null</c> when it wrote none or it was not asked for.</summary>
+        public string? Critique { get; }
+
         public bool HasScores => Scores.Count > 0;
 
         public static JudgeOutcome FromScores(
             IReadOnlyList<string> fieldNames,
             IReadOnlyList<double> scores,
-            double weight)
+            double weight,
+            string? critique = null)
         {
             double total = 0;
             var weighted = new double[scores.Count];
@@ -460,7 +527,7 @@ public sealed class LlmJudgeProgramFitnessEvaluator<T> : IProgramFitnessEvaluato
                 total += weighted[index];
             }
 
-            return new JudgeOutcome(fieldNames, weighted, scores.Count == 0 ? 0 : total / scores.Count, null);
+            return new JudgeOutcome(fieldNames, weighted, scores.Count == 0 ? 0 : total / scores.Count, null, critique);
         }
 
         public static JudgeOutcome Unusable(EvolutionDiagnostic diagnostic) =>
