@@ -1507,6 +1507,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 if (_state != PlanState.PermanentlyDisabled)
                 {
                     _state = PlanState.Verified;
+                    _tracedValues = null;
                 }
             }
         }
@@ -1521,6 +1522,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 }
 
                 _state = PlanState.PermanentlyDisabled;
+                _tracedValues = null;
                 return true;
             }
         }
