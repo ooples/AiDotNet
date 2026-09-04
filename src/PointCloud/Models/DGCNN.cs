@@ -143,7 +143,7 @@ public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPoin
         // emits raw logits, so the loss must be the logits form; pairing raw logits with the
         // probability-input loss made the per-class gradient ill-posed and drove the logits to grow
         // without bound (training loss climbed instead of falling).
-        : base(CreateArchitecture(options.NumClasses, options.InputFeatureDim), lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
+        : base(CreateArchitecture(options), lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         if (options == null)
         {
@@ -248,16 +248,26 @@ public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPoin
     {
     }
 
-    private static NeuralNetworkArchitecture<T> CreateArchitecture(int numClasses, int inputFeatureDim = 3)
+    private static NeuralNetworkArchitecture<T> CreateArchitecture(DGCNNOptions options)
     {
+        if (options is null)
+            throw new ArgumentNullException(nameof(options));
+
         return new NeuralNetworkArchitecture<T>(
             inputType: InputType.ThreeDimensional,
             taskType: NeuralNetworkTaskType.MultiClassClassification,
             complexity: NetworkComplexity.Medium,
             inputHeight: 1,
             inputWidth: 1,
-            inputDepth: inputFeatureDim,
-            outputSize: numClasses);
+            inputDepth: options.InputFeatureDim,
+            outputSize: options.NumClasses)
+        {
+            // Bind the caller's reproducibility contract before NeuralNetworkBase starts
+            // the per-layer initialization sequence. Reading Seed later in the derived
+            // constructor is too late: EdgeConv/classifier weights are initialized from
+            // the architecture-scoped stream established by the base constructor.
+            RandomSeed = options.Seed
+        };
     }
 
     protected override void InitializeLayers()

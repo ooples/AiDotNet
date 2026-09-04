@@ -1188,12 +1188,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             {
                 var flat = layer.GetParameters();
                 if (flat.Length == 0) continue;
+                // DETACHED. A layer that is not a LayerBase can only surface its parameters through
+                // a flat vector, so this payload is a copy: writing into it updates nothing.
                 yield return new AiDotNet.Models.Parameters.ParameterChunk<T>(
                     $"layers/{i:D8}",
                     layer.SupportsTraining
                         ? AiDotNet.Models.Parameters.ParameterSlotRole.Trainable
                         : AiDotNet.Models.Parameters.ParameterSlotRole.LearnedState,
-                    new Tensor<T>(new[] { flat.Length }, flat));
+                    new Tensor<T>(new[] { flat.Length }, flat),
+                    sourceTensor: null,
+                    writableInPlace: false);
             }
         }
 
@@ -1233,6 +1237,119 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
         foreach (var chunk in GetParameterStateChunks())
             yield return chunk.Tensor;
+    }
+
+    /// <summary>Counts parameters that ALREADY exist, without resolving any lazy shape.</summary>
+    /// <remarks>
+    /// <see cref="ParameterCount"/> and the chunk surface both resolve lazy shapes as a side effect,
+    /// so neither can answer "what state is this model in right now" -- asking changes the answer.
+    /// This walks <see cref="Layers"/> through the layer-level counterpart, which is built on the
+    /// one accessor documented as safe on an unresolved layer, and reports 0 for anything not yet
+    /// materialized. Use it to COMPARE two models' states, never as a substitute for ParameterCount.
+    /// </remarks>
+    internal long MaterializedParameterCount()
+    {
+        long total = 0;
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            if (Layers[i] is LayerBase<T> layer) total += layer.MaterializedParameterCount();
+        }
+
+        return total;
+    }
+
+    /// <summary>Writes a chunk stream back into this model without building a flat vector.</summary>
+    /// <param name="chunks">
+    /// One tensor per chunk <see cref="GetParameterChunks"/> yields, in that order and of that length.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// The write half of <see cref="GetParameterChunks"/>, which had none. Every caller wanting to
+    /// update parameters had to materialize the ENTIRE surface as one contiguous
+    /// <see cref="Vector{T}"/> for <see cref="SetParameters"/>. For a paper-scale model that is a
+    /// multi-gigabyte large-object allocation which can fail while the process still has headroom:
+    /// PaLI3 needs 2,438 MB contiguous and SenseVoiceLarge 2,554 MB, on top of the model itself.
+    /// </para>
+    /// <para>
+    /// Destinations come from the READ enumeration itself rather than a second walk of the layer
+    /// graph. That is deliberate: the two walks would have to stay aligned forever, and a silent
+    /// drift between them would write correct-looking values into the wrong tensors, which no count
+    /// or length check would catch.
+    /// </para>
+    /// <para>
+    /// Falls back to the flat path when any chunk is not writable in place. A layer that is not a
+    /// <c>LayerBase</c> exposes its parameters only through a flat vector, and an fp16-resident or
+    /// sparse component hands out a transient snapshot -- writing those would update nothing at all
+    /// rather than fail. <c>ParameterChunk.IsWritableInPlace</c> is what distinguishes them.
+    /// </para>
+    /// </remarks>
+    public virtual void SetParameterChunks(IEnumerable<Tensor<T>> chunks)
+    {
+        if (chunks is null) throw new ArgumentNullException(nameof(chunks));
+
+        var destinations = new List<Tensor<T>>();
+        bool streamable = true;
+        foreach (var chunk in GetParameterStateChunks())
+        {
+            if (!chunk.IsWritableInPlace)
+            {
+                streamable = false;
+                break;
+            }
+
+            destinations.Add(chunk.Tensor);
+        }
+
+        if (!streamable)
+        {
+            SetParameters(AiDotNet.Diffusion.DiffusionParameterChunkHelper.BufferToFlatVector(chunks));
+            return;
+        }
+
+        // Validate the WHOLE stream before touching any weights. The pair list holds tensor
+        // references only -- no flat aggregate and no per-tensor data copy -- so a mis-framed stream
+        // fails atomically instead of leaving the model holding a mix of old and new values.
+        var pairs = new List<(Tensor<T> Source, Tensor<T> Destination)>(destinations.Count);
+        using (var incoming = chunks.GetEnumerator())
+        {
+            for (int i = 0; i < destinations.Count; i++)
+            {
+                if (!incoming.MoveNext())
+                {
+                    throw new ArgumentException(
+                        $"SetParameterChunks received fewer chunks than the model has parameter "
+                            + $"tensors (missing chunk {i} of {destinations.Count}).",
+                        nameof(chunks));
+                }
+
+                var source = incoming.Current;
+                if (source is null)
+                {
+                    throw new ArgumentException(
+                        $"Chunk sequence contains a null tensor at index {i}.", nameof(chunks));
+                }
+
+                if (source.Length != destinations[i].Length)
+                {
+                    throw new ArgumentException(
+                        $"SetParameterChunks chunk {i} length {source.Length} does not match "
+                            + $"parameter length {destinations[i].Length}.",
+                        nameof(chunks));
+                }
+
+                pairs.Add((source, destinations[i]));
+            }
+
+            if (incoming.MoveNext())
+            {
+                throw new ArgumentException(
+                    "SetParameterChunks received more chunks than the model has parameter tensors.",
+                    nameof(chunks));
+            }
+        }
+
+        foreach (var (source, destination) in pairs)
+            source.AsSpan().CopyTo(destination.AsWritableSpan());
     }
 
     #region GPU Training Methods
@@ -3285,27 +3402,18 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 || sourceLayer.GetType() != destinationLayer.GetType())
                 continue;
 
-            // Generated [LayerState] is the preferred construction recipe, but legacy composite
-            // layers also publish required constructor values through GetMetadata(). Comparing only
-            // the generated subset let a fresh, default-configured layer pass preflight when its
-            // tensor shapes happened to match the source (PointNet++ neighbour counts are the
+            // Compare the complete generated in-memory construction manifest, with the durable
+            // construction writer retained only as a fallback for legacy layers. Comparing a
+            // partial recipe let a fresh, default-configured layer pass preflight when its tensor
+            // shapes happened to match the source (PointNet++ neighbour counts are the
             // representative case). The COW adoption then preserved every weight while inference
-            // still followed a different graph. GetMetadata is the complete shared persistence
-            // contract and includes the generated construction state, so compare that full surface.
-            var sourceState = sourceLayer.GetMetadata();
-            var destinationState = destinationLayer.GetMetadata();
-            bool matches = sourceState.Count == destinationState.Count;
-            if (matches)
-            {
-                foreach (var pair in sourceState)
-                {
-                    if (destinationState.TryGetValue(pair.Key, out string? value)
-                        && string.Equals(pair.Value, value, StringComparison.Ordinal))
-                        continue;
-                    matches = false;
-                    break;
-                }
-            }
+            // still followed a different graph. The live manifest preserves that full contract
+            // without serializing constructor-owned child-layer weights merely to compare topology.
+            var sourceState = CaptureLayerConstructionValuesForClone(sourceLayer);
+            var destinationState = CaptureLayerConstructionValuesForClone(destinationLayer);
+            bool matches = AiDotNet.Serialization.LayerStateBag.AreCloneConstructionValuesEquivalent(
+                sourceState,
+                destinationState);
             // Resolved shapes are persistence state even when they are intentionally absent from
             // construction metadata. Shape-adaptive layers such as FeatureTokenizerLayer omit their
             // observed feature count from metadata because it is a runtime cache, but their first
@@ -7433,8 +7541,29 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <c>AIDOTNET_ENABLE_AUTO_COMPILE=1</c>. Training is unaffected either way (the compiled path is
     /// inference-only). Mirrors <c>NoisePredictorBase.s_autoCompiledInferenceEnabled</c>.
     /// </remarks>
-    private static bool s_autoCompiledInferenceEnabled =
+    private static readonly bool s_autoCompiledInferenceDefault =
         string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_ENABLE_AUTO_COMPILE"), "1", StringComparison.Ordinal);
+
+    /// <summary>Per-flow override of the auto-compile opt-in, used by tests.</summary>
+    /// <remarks>
+    /// ASYNC-LOCAL, not static. As a plain static this was process-wide, and a test that turned it
+    /// on for its own duration turned it on for every model running CONCURRENTLY: xUnit runs test
+    /// classes in parallel, so while AcceleratedInferenceTests held it on, another class training a
+    /// model routed through the auto-compiled inference path and did not learn.
+    /// FTTransformerClassifierTests.Train_ReducesCrossEntropy then reported cross-entropy pinned at
+    /// 1.0986 -- ln(3), the uniform three-class prediction -- with no training having happened. It
+    /// passed alone every time and failed two to three runs in six of the full suite, and was
+    /// written off as an unexplained flake for a long time.
+    ///
+    /// Scoping the override to the calling flow is the actual fix. Serialising the test classes was
+    /// tried first and did not work; it also would have left the hazard in place for anyone else who
+    /// flipped the switch. The default remains a genuine process-wide value read once from the
+    /// environment, which is correct: that IS a process-level setting.
+    /// </remarks>
+    private static readonly System.Threading.AsyncLocal<bool?> s_autoCompiledInferenceOverride = new();
+
+    private static bool s_autoCompiledInferenceEnabled
+        => s_autoCompiledInferenceOverride.Value ?? s_autoCompiledInferenceDefault;
 
     /// <summary>
     /// Opt-in: drop the GPU activation cache at the end of EVERY tape training step. Off by default —
@@ -7451,13 +7580,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <summary>
     /// Test/diagnostic hook: overrides the process-wide compiled-inference opt-in
     /// (<see cref="s_autoCompiledInferenceEnabled"/>) in-process, since the env var is read once at type
-    /// load. Returns the previous value so a test can restore it in teardown. Lets the verify-then-trust
+    /// load. Returns the previous nullable override so a test can restore the exact prior state in
+    /// teardown, including <c>null</c> (use the environment-derived default). Lets the verify-then-trust
     /// gate's parity invariants stay covered without depending on the process environment.
     /// </summary>
-    internal static bool SetAutoCompiledInferenceEnabledForTesting(bool enabled)
+    internal static bool? SetAutoCompiledInferenceEnabledForTesting(bool? enabled)
     {
-        var prev = s_autoCompiledInferenceEnabled;
-        s_autoCompiledInferenceEnabled = enabled;
+        var prev = s_autoCompiledInferenceOverride.Value;
+        s_autoCompiledInferenceOverride.Value = enabled;
         return prev;
     }
 
@@ -15130,23 +15260,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Determines whether every layer in the executable graph can safely consume shared parameter
     /// storage during its forward pass.
     /// </summary>
-    private bool SupportsCopyOnWriteLayerGraph()
-    {
-        foreach (var layer in AiDotNet.Helpers.CopyOnWriteCloneHelper.CollectTrainableLayers<T>(this))
-        {
-            // Batch-normalization inference keeps gamma and beta on the active autodiff tape by using
-            // engine tensor operations. CpuEngine's optimized TensorDivide kernel currently obtains its
-            // input arrays through the mutable DataVector surface, which copy-on-write tensors correctly
-            // reject because an escaped array could mutate every alias without detaching. The eager clone
-            // path remains fully faithful and preserves both inference values and eval-mode gradients.
-            // Remove this guard only after every TensorDivide backend reads its operands through a
-            // read-only span (and writes only through the destination's writable surface).
-            if (layer is AiDotNet.NeuralNetworks.Layers.BatchNormalizationLayer<T>)
-                return false;
-        }
-
-        return true;
-    }
 
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
@@ -15154,8 +15267,19 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // G6 COW fast path: share weight-tensor storage instead of materializing a second full copy.
         // Falls back to the eager paths below for any model it cannot share safely (layer-count or
         // parameter-count mismatch, a layer whose SetTrainableParameters can't re-sync its fields).
+        // SupportsCopyOnWriteLayerGraph() used to sit here and refused copy-on-write for ANY model
+        // containing a BatchNormalizationLayer, on the grounds that CpuEngine's TensorDivide read
+        // its operands through the mutable DataVector surface that copy-on-write tensors reject.
+        // Its own comment said to remove it once that was no longer true, and nothing ever checked.
+        // BatchNormModel_ClonePredictsIdentically_AndStaysIndependent now does: with the guard gone
+        // a batch-norm model takes the shared path, predicts bit-identically to its original, and
+        // stays independent when written through -- verified with AIDOTNET_TRACE_CLONE_REJECTION=1
+        // to confirm the copy-on-write path was actually taken rather than quietly falling back.
+        //
+        // The guard was expensive: it walked every nested layer and sent whole models down the eager
+        // serialize roundtrip. Chirp3 was blocked by a BatchNormalizationLayer it does not mention
+        // anywhere in its own source.
         if (UseCopyOnWriteDeepCopy && SupportsCopyOnWriteDeepCopy
-            && SupportsCopyOnWriteLayerGraph()
             && TryDeepCopyCopyOnWrite(out var cowCopy))
             return cowCopy;
 
@@ -15842,9 +15966,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 : src.GetTrainableParameters();
             if (sp.Count > 0)
             {
+                // Sparse storage shares through its OWN api. Tensor.CloneShared falls through to
+                // CloneDeepCopy, which Tensors refuses for sparse ("Use SparseTensor-specific
+                // APIs"), so SparseNeuralNetwork threw from inside this path. ShareTensor rebuilds a
+                // sparse tensor over the SAME value vector and index arrays, which is a real
+                // copy-on-write share: nothing is densified and no eager copy is taken.
                 var shared = new Tensor<T>[sp.Count];
                 for (int p = 0; p < sp.Count; p++)
-                    shared[p] = (Tensor<T>)sp[p].CloneShared();
+                    shared[p] = AiDotNet.Helpers.CopyOnWriteCloneHelper.ShareTensor(sp[p]);
                 try
                 {
                     dst.SetTrainableParameters(shared);
@@ -16123,23 +16252,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
-    /// Captures both durable metadata and the live constructor components used by an in-memory clone.
+    /// Captures the complete live construction manifest used by an in-memory clone, falling back to
+    /// durable construction state only for legacy layers without a generated object manifest.
     /// </summary>
     private static Dictionary<string, object> CaptureLayerConstructionValuesForClone(
         LayerBase<T> source)
-    {
-        var values = new Dictionary<string, object>(StringComparer.Ordinal);
-        foreach (var pair in source.GetMetadata())
-            values[pair.Key] = pair.Value;
-
-        // Durable metadata can name a component type, but it cannot retain per-instance constructor
-        // state that is not encoded in that type name. The layer-state generator already exposes the
-        // live-object channel used by LayerCloning (for example LeakyReLU(0.2)); use the same contract
-        // when NeuralNetworkBase reconstructs a topology slot so clone behavior cannot fall back to a
-        // component's default configuration.
-        source.CaptureConstructionObjects(values);
-        return values;
-    }
+        => source.CaptureConstructionValuesForClone();
 
     /// <summary>
     /// Restores one mismatched child through the same layout-aware contract used by checkpoints.
@@ -16154,14 +16272,34 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             if (IsCloneRejectionTracingEnabled())
             {
-                static string DescribeMetadata(LayerBase<T> layer)
-                    => string.Join(", ", layer.GetMetadata()
+                static string DescribeValue(object? value)
+                {
+                    if (value is null) return "null";
+                    if (value is string text)
+                        return text.Length <= 256 ? text : text.Substring(0, 256) + "...";
+                    if (value is LayerBase<T> child)
+                    {
+                        return child.GetType().Name
+                            + " input=[" + string.Join(",", child.GetInputShape()) + "]"
+                            + " output=[" + string.Join(",", child.GetOutputShape()) + "]";
+                    }
+                    if (value is Array array)
+                        return value.GetType().Name + "[" + array.Length + "]";
+                    if (value is System.Collections.ICollection collection)
+                        return value.GetType().Name + "[" + collection.Count + "]";
+                    if (value.GetType().IsValueType) return value.ToString() ?? value.GetType().Name;
+                    return value.GetType().FullName ?? value.GetType().Name;
+                }
+
+                static string DescribeConstructionState(LayerBase<T> layer)
+                    => string.Join(", ", layer.CaptureConstructionValuesForClone()
                         .OrderBy(pair => pair.Key, StringComparer.Ordinal)
-                        .Select(pair => pair.Key + "=" + pair.Value));
+                        .Select(pair => pair.Key + "=" + DescribeValue(pair.Value)));
 
                 throw new InvalidOperationException(
-                    $"Cannot restore {source.GetType().Name} in place because construction metadata differs. " +
-                    $"Source: [{DescribeMetadata(source)}]. Destination: [{DescribeMetadata(destination)}].");
+                    $"Cannot restore {source.GetType().Name} in place because construction state differs. " +
+                    $"Source: [{DescribeConstructionState(source)}]. " +
+                    $"Destination: [{DescribeConstructionState(destination)}].");
             }
 
             return false;
@@ -16218,20 +16356,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         LayerBase<T> source,
         LayerBase<T> destination)
     {
-        var sourceMetadata = source.GetMetadata();
-        var destinationMetadata = destination.GetMetadata();
-        if (sourceMetadata.Count != destinationMetadata.Count) return false;
-
-        foreach (var pair in sourceMetadata)
-        {
-            if (!destinationMetadata.TryGetValue(pair.Key, out string? destinationValue)
-                || !string.Equals(pair.Value, destinationValue, StringComparison.Ordinal))
-            {
-                return false;
-            }
-        }
-
-        return true;
+        var sourceState = CaptureLayerConstructionValuesForClone(source);
+        var destinationState = CaptureLayerConstructionValuesForClone(destination);
+        return AiDotNet.Serialization.LayerStateBag.AreCloneConstructionValuesEquivalent(
+            sourceState,
+            destinationState);
     }
 
     /// <summary>

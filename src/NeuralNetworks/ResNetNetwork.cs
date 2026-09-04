@@ -213,7 +213,16 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// <returns>A minimal ResNet network for testing.</returns>
     public static ResNetNetwork<T> ForTesting(int numClasses = 10, int inputChannels = 3)
     {
-        var config = ResNetConfiguration.CreateForTesting(numClasses);
+        // Test-scale configuration is GENERATED. ModelTestScale synthesizes it from the
+        // constructor -- smallest variant, bounded dims, declared defaults left alone --
+        // and numClasses is passed through because it is the caller's intent, not a size
+        // the generator can infer.
+        var config = AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(
+                typeof(ResNetConfiguration),
+                new global::System.Collections.Generic.Dictionary<string, int> { ["numClasses"] = numClasses })
+            as ResNetConfiguration
+            ?? throw new global::System.InvalidOperationException(
+                "ResNetConfiguration has no generated test-scale bound.");
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.ThreeDimensional,
             taskType: NeuralNetworkTaskType.MultiClassClassification,

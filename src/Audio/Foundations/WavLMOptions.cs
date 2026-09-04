@@ -1,5 +1,6 @@
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.Audio.Foundations;
 
@@ -19,6 +20,7 @@ namespace AiDotNet.Audio.Foundations;
 /// conditions.
 /// </para>
 /// </remarks>
+[DimensionDivisibility(nameof(HiddenDim), nameof(NumAttentionHeads))]
 public class WavLMOptions : ModelOptions
 {
     #region Audio

@@ -18,13 +18,14 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// saving and loading — and cloning follows.
 /// </para>
 /// <para>
-/// This deliberately reuses <c>WriteConstructionState</c> and <c>GeneratedLayerFactories.TryCreate</c>
-/// rather than introducing a second reconstruction mechanism. Those already call the layer's real
-/// constructor with the values it was originally given, and the build already fails for a layer
-/// whose required state cannot be sourced. A separate clone-only path would be a second thing to
-/// keep correct, and the two would be free to disagree — which is the entire failure this work
-/// exists to remove. Sharing one path means a layer that saves and loads correctly also clones
-/// correctly, by construction.
+/// This deliberately reuses the generated construction manifest and
+/// <c>GeneratedLayerFactories.TryCreate</c> rather than introducing a second reconstruction
+/// mechanism. Durable persistence and the in-memory object channel are emitted from the same
+/// <c>[LayerState]</c> model; the live channel avoids formatting constructor-owned child-layer
+/// weights during a clone. Both call the layer's real constructor with the values it was originally
+/// given, and the build already fails for a layer whose required state cannot be sourced. Sharing
+/// the generated model means saving, loading, and cloning cannot silently drift into independent
+/// constructor recipes.
 /// </para>
 /// <para>
 /// The learned parameters travel separately, through <c>GetParameters</c> and
@@ -571,12 +572,7 @@ public static class LayerCloning
     /// <exception cref="NotSupportedException">Thrown when the type has no generated factory.</exception>
     private static LayerBase<T> Reconstruct<T>(LayerBase<T> source, int? constructionSeed)
     {
-        var metadata = new Dictionary<string, string>(StringComparer.Ordinal);
-        source.CaptureConstructionState(metadata);
-
-        var values = new Dictionary<string, object>(StringComparer.Ordinal);
-        foreach (var pair in metadata) values[pair.Key] = pair.Value;
-        source.CaptureConstructionObjects(values);
+        var values = source.CaptureConstructionValuesForClone();
         if (constructionSeed.HasValue) values[CloneRandomSeedKey] = constructionSeed.Value;
 
         var type = source.GetType();

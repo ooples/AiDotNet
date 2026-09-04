@@ -17,15 +17,36 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 public class ParameterGradientPublicationTests
 {
     [Fact]
-    public void FusedCapability_IncludesEagerOnlyExtraTrainableLayer()
+    public void ExtraTrainableLayer_ParametersArePublished_WhenItIsAnSsmLayer()
     {
+        // REPLACES FusedCapability_IncludesEagerOnlyExtraTrainableLayer, which asserted that a
+        // private LayersSupportFusedCompiledTraining() existed and returned false for a network
+        // carrying an RG-LRU extra layer. Commit 816384a6a2 ("fix(training): record RG-LRU in
+        // compiled plans") made RG-LRU record as ordinary graph operations and deliberately deleted
+        // that whole capability check, updating FusedOptimizerIntegrationTests and
+        // RecurrentGemmaTrainingRegressionTests but not this file. The old assertion could only
+        // fail: it reflected for a method that no longer exists, and its premise -- that an RG-LRU
+        // layer forces the network eager-only -- is no longer true. 13 tests now cover the new
+        // contract directly.
+        //
+        // What is still worth asserting here, and belongs in THIS file, is that such a layer's
+        // parameters actually reach the publication surface rather than being silently dropped.
         using var network = new PublicationNetwork(useEagerOnlyExtra: true);
-        var capabilityCheck = typeof(NeuralNetworkBase<float>).GetMethod(
-            "LayersSupportFusedCompiledTraining",
-            BindingFlags.Instance | BindingFlags.NonPublic);
 
-        Assert.NotNull(capabilityCheck);
-        Assert.False((bool)capabilityCheck.Invoke(network, null)!);
+        var parameters = network.TrainableTensors;
+        Assert.NotEmpty(parameters);
+
+        var gradients = new Dictionary<Tensor<float>, Tensor<float>>();
+        int expectedLength = 0;
+        for (int i = 0; i < parameters.Count; i++)
+        {
+            gradients[parameters[i]] = FilledLike(parameters[i], i + 1);
+            expectedLength += parameters[i].Length;
+        }
+
+        network.Publish(gradients);
+
+        Assert.Equal(expectedLength, network.GetParameterGradients().Length);
     }
 
     [Fact]

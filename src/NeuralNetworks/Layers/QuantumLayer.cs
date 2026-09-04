@@ -643,10 +643,17 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
             }
         }
 
+        // Honor the per-layer seed assigned by LayerInitializationSeedScope before this derived
+        // constructor runs. Falling through to the shared RNG is intentional only for unseeded
+        // production models; a seeded architecture must not depend on unrelated prior draws.
+        var random = RandomSeed.HasValue
+            ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value)
+            : Random;
+
         // Initialize rotation angles randomly
         for (int i = 0; i < _numQubits; i++)
         {
-            _rotationAngles[i] = NumOps.FromDouble(Random.NextDouble() * 2 * Math.PI);
+            _rotationAngles[i] = NumOps.FromDouble(random.NextDouble() * 2 * Math.PI);
             ApplyRotation(i, _rotationAngles[i]);
         }
 
@@ -683,7 +690,6 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
         // Create complex values for the rotation
         var cosComplex = new Complex<T>(cos, NumOps.Zero);
         var sinComplex = new Complex<T>(sin, NumOps.Zero);
-        var imaginary = new Complex<T>(NumOps.Zero, NumOps.One);
         var negativeImaginary = new Complex<T>(NumOps.Zero, NumOps.Negate(NumOps.One));
 
         // Create a temporary copy of the circuit for the transformation
@@ -705,7 +711,10 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
                     );
 
                     _quantumCircuit[k, j] = _complexOps.Add(
-                        _complexOps.Multiply(imaginary, _complexOps.Multiply(sinComplex, temp)),
+                        // Rx has -i*sin(theta/2) in BOTH off-diagonal entries. Using +i here
+                        // makes the two columns non-orthogonal and lets a "quantum" gate change
+                        // the state norm, so its measured probabilities no longer sum to one.
+                        _complexOps.Multiply(negativeImaginary, _complexOps.Multiply(sinComplex, temp)),
                         _complexOps.Multiply(cosComplex, tempCircuit[k, j])
                     );
                 }

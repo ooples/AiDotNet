@@ -328,7 +328,9 @@ public class ConfigurationDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task CreateForTesting_UsesMinimalConfig()
     {
-        var config = ResNetConfiguration.CreateForTesting(10);
+        var config = (AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(typeof(ResNetConfiguration),
+            new Dictionary<string, int> { ["numClasses"] = 10 }) as ResNetConfiguration
+            ?? throw new InvalidOperationException("no generated bound for ResNetConfiguration"));
 
         Assert.Equal(ResNetVariant.ResNet18, config.Variant);
         Assert.Equal(32, config.InputHeight);
@@ -545,7 +547,9 @@ public class ConfigurationDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task EfficientNet_CreateForTesting_UsesCustom32x32()
     {
-        var config = EfficientNetConfiguration.CreateForTesting(10);
+        var config = (AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(typeof(EfficientNetConfiguration),
+            new Dictionary<string, int> { ["numClasses"] = 10 }) as EfficientNetConfiguration
+            ?? throw new InvalidOperationException("no generated bound for EfficientNetConfiguration"));
 
         Assert.Equal(EfficientNetVariant.Custom, config.Variant);
         Assert.Equal(32, config.GetInputHeight());

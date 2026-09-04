@@ -10,7 +10,7 @@ export default {
     'footer-max-line-length': [1, 'always', 200],
     // Add 'deps' as valid type for dependabot commits
     'type-enum': [2, 'always', [
-      'feat', 'fix', 'docs', 'refactor', 'perf', 'test', 'chore', 'ci', 'build', 'style', 'revert',
+      'feat', 'fix', 'docs', 'refactor', 'perf', 'test', 'chore', 'ci', 'build', 'style', 'revert', 'merge',
       'deps'  // For dependency updates (dependabot)
     ]],
   },
@@ -36,6 +36,6 @@ export default {
     // auto-fixing non-compliant PR titles and commit messages.
     // All new commits MUST follow conventional commits format:
     //   type(scope)?: description
-    // Valid types: feat, fix, docs, refactor, perf, test, chore, ci, build, style, revert, deps
+    // Valid types: feat, fix, docs, refactor, perf, test, chore, ci, build, style, revert, merge, deps
   ]
 };

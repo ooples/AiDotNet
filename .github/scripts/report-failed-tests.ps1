@@ -44,25 +44,46 @@ $script:SummaryWriteFailed = $false
 $reportBody = {
 
 # --blame-hang kills the whole test host when any single test exceeds the hang timeout, and
-# --blame writes a Sequence_*.xml naming the test that was executing when it died. Everything
+# --blame writes a Sequence file naming the test that was executing when it died. Everything
 # queued behind that test never runs and never appears in the TRX, so a shard truncated this way
 # reports a handful of failures and looks like it merely has a handful of failures.
 #
 # That is the single most misleading state this pipeline can produce: it makes a shard look nearly
 # green when most of its suite never executed, and it is why fixing the visible failures kept
 # revealing new ones. Detect it and say so, loudly, before anything else.
-$sequenceFiles = Get-ChildItem -Path 'TestResults' -Recurse -Filter 'Sequence_*.xml' -ErrorAction SilentlyContinue
+# Sequence*.xml, not Sequence_*.xml: vstest writes Sequence.xml for a HANG and
+# Sequence_<guid>.xml for a CRASH. The old filter matched only the crash spelling, and the element
+# name below was wrong for both, so this reporter never identified a victim at all.
+$sequenceFiles = Get-ChildItem -Path 'TestResults' -Recurse -Filter 'Sequence*.xml' -ErrorAction SilentlyContinue
 $hangVictim = $null
+$seqKind = 'hang'
 if ($sequenceFiles) {
   foreach ($seq in $sequenceFiles) {
     try {
       [xml]$seqXml = Get-Content $seq.FullName
-      # The last <UnitTestElement> is the test that was still running when the host was killed.
-      $elements = $seqXml.SelectNodes('//UnitTestElement')
+      # Real vstest output, captured from a forced FailFast under --blame-crash:
+      #
+      #   <TestSequence>
+      #     <Test Name="..." DisplayName="..." Source="....dll" Completed="True"  />
+      #     <Test Name="..." DisplayName="..." Source="....dll" Completed="False" />
+      #   </TestSequence>
+      #
+      # The element is <Test>, never <UnitTestElement>. Prefer the entry explicitly marked
+      # Completed="False" -- that IS the test that never finished -- and fall back to the last
+      # entry only if no such marker is present.
+      # The FILENAME distinguishes the two deaths: vstest writes Sequence.xml for a hang and
+      # Sequence_<guid>.xml for a crash. They need different wording downstream -- calling a crash
+      # a hang sends the reader looking for a deadlock that does not exist.
+      if ($seq.Name -match '^Sequence_.+\.xml$') { $seqKind = 'crash' } else { $seqKind = 'hang' }
+      $elements = $seqXml.SelectNodes('//Test')
       if ($elements -and $elements.Count -gt 0) {
-        $last = $elements[$elements.Count - 1]
-        $hangVictim = "$($last.source)::$($last.FullyQualifiedName)".TrimStart(':')
-        if (-not $last.FullyQualifiedName) { $hangVictim = $last.InnerText }
+        $victim = $null
+        foreach ($el in $elements) {
+          if ($el.Completed -and $el.Completed -eq 'False') { $victim = $el }
+        }
+        if (-not $victim) { $victim = $elements[$elements.Count - 1] }
+        $name = if ($victim.Name) { $victim.Name } elseif ($victim.DisplayName) { $victim.DisplayName } else { $victim.InnerText }
+        $hangVictim = "$($victim.Source)::$name".TrimStart(':')
       }
     } catch {
       # A PARSE FAILURE IS NOT A HANG. Assigning a placeholder here left a truthy
@@ -91,7 +112,11 @@ if ($seqParseError) {
 if ($hangVictim) {
   Add-Summary '## :rotating_light: THIS SHARD WAS TRUNCATED -- the failure list below is INCOMPLETE'
   Add-Summary ''
-  Add-Summary "The test host was killed by ``--blame-hang`` while executing:"
+  if ($seqKind -eq 'crash') {
+    Add-Summary 'The test host CRASHED (``--blame-crash``) while executing:'
+  } else {
+    Add-Summary 'The test host was killed by ``--blame-hang`` (no progress for the timeout) while executing:'
+  }
   Add-Summary ''
   Add-Summary ('    ' + $hangVictim)
   Add-Summary ''
@@ -112,7 +137,7 @@ if (-not $trxFiles -or $trxFiles.Count -eq 0) {
   Add-Summary '_No TRX file was produced._ The test host most likely terminated'
   Add-Summary 'abnormally (out-of-memory kill, StackOverflow, or access violation)'
   Add-Summary 'before results were written, so the failing test cannot be named from'
-  Add-Summary 'results alone. Check the tail of the run log and any `Sequence_*.xml`'
+  Add-Summary 'results alone. Check the tail of the run log and any `Sequence*.xml`'
   Add-Summary 'blame file for the last test that started.'
   return
 }
@@ -121,6 +146,8 @@ $ns = @{ t = 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010' }
 $failed = New-Object System.Collections.Generic.List[object]
 
 $unparseableTrx = New-Object System.Collections.Generic.List[string]
+$hostLifecycleDiagnostics = New-Object System.Collections.Generic.List[string]
+$hostLifecycleDiagnosticKeys = New-Object System.Collections.Generic.HashSet[string]([StringComparer]::Ordinal)
 
 foreach ($trx in $trxFiles) {
   # THE REPORTER MUST SURVIVE THE STATE IT EXISTS TO EXPLAIN. With
@@ -147,6 +174,26 @@ foreach ($trx in $trxFiles) {
       $message = ($msgNode.Node.InnerText -split "`n")[0].Trim()
     }
     $failed.Add([PSCustomObject]@{ Name = $node.testName; Message = $message })
+  }
+
+  # Counters alone cannot prove that the host completed cleanly. VSTest can
+  # write executed=total, flush every assertion result, and then append a
+  # RunInfo saying that the active run was aborted because the test host
+  # crashed. That exact shape previously looked like an ordinary short failure
+  # list. Only lifecycle-specific text is promoted here; ordinary xUnit [FAIL]
+  # RunInfo records remain represented by the failed-test digest above.
+  foreach ($runInfo in @($xml.SelectNodes('//*[local-name()="RunInfo"]'))) {
+    $textNode = $runInfo.SelectSingleNode('./*[local-name()="Text"]')
+    $runInfoText = if ($textNode) { [string] $textNode.InnerText } else { [string] $runInfo.InnerText }
+    $flatRunInfo = ($runInfoText -replace '\s+', ' ').Trim()
+    if ($flatRunInfo -match '(?i)\b(?:active\s+)?test\s+run\s+was\s+aborted\b' -or
+        $flatRunInfo -match '(?i)\btest\s+host(?:\s+process)?\b.*\b(?:crash(?:ed)?|terminat(?:ed|ion)|abort(?:ed)?|exited\s+unexpectedly)\b') {
+      $outcome = if ($runInfo.outcome) { [string] $runInfo.outcome } else { 'Error' }
+      $diagnostic = "[$outcome] $flatRunInfo"
+      if ($hostLifecycleDiagnosticKeys.Add($diagnostic)) {
+        $hostLifecycleDiagnostics.Add($diagnostic)
+      }
+    }
   }
 }
 
@@ -190,6 +237,17 @@ foreach ($trx in $trxFiles) {
 Add-Summary '## Failed test digest'
 Add-Summary ''
 
+if ($hostLifecycleDiagnostics.Count -gt 0) {
+  Add-Summary ':rotating_light: **The test host terminated abnormally. This shard is INCOMPLETE even though its TRX counters may show every discovered test as executed.**'
+  Add-Summary ''
+  foreach ($diagnostic in $hostLifecycleDiagnostics) {
+    Add-Summary ('    ' + $diagnostic)
+  }
+  Add-Summary ''
+  Add-Summary 'Treat the assertion list below as diagnostic evidence, not proof that the shard completed cleanly.'
+  Add-Summary ''
+}
+
 if ($failed.Count -eq 0) {
   # The step is only reached on job failure, so an empty failure set here means
   # the job failed for a NON-test reason (coverage upload, a post-step, the
@@ -203,6 +261,9 @@ if ($failed.Count -eq 0) {
                  'failed-test set for this shard is UNKNOWN. The digest below is incomplete; this is' +
                  ' NOT evidence that the failure lies outside the test results.')
     foreach ($e in $unparseableTrx) { Add-Summary ('    ' + $e) }
+  }
+  elseif ($hostLifecycleDiagnostics.Count -gt 0) {
+    Add-Summary 'No failed test result was recorded before the host lifecycle failure above.'
   }
   elseif ($total -gt 0 -and $executed -lt $total) {
     Add-Summary (":warning: **Only $executed of $total discovered tests executed -- $($total - $executed) never ran.** " +
