@@ -133,6 +133,61 @@ public sealed class ProgramDescriptorSet
         return values;
     }
 
+    /// <summary>Gets whether any descriptor in the set measures against other programs.</summary>
+    /// <remarks>
+    /// A set of purely absolute descriptors means the same thing on the first candidate and the ten-thousandth, so
+    /// there is nothing to rebase and nothing to re-measure. Checking this first is how a caller avoids paying for
+    /// a whole-archive re-measurement that would change nothing.
+    /// </remarks>
+    public bool HasRebasableDescriptors
+    {
+        get
+        {
+            foreach (IProgramDescriptor descriptor in _descriptors)
+            {
+                if (descriptor is IRebasableProgramDescriptor) return true;
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>Returns an equivalent set whose relative descriptors measure against new references.</summary>
+    /// <param name="references">The programs relative descriptors should compare candidates with from now on.</param>
+    /// <returns>
+    /// A new set in the same order, with every rebasable descriptor pointed at <paramref name="references"/> and
+    /// every absolute one carried through unchanged. Returns this set when nothing in it is rebasable.
+    /// </returns>
+    /// <exception cref="ArgumentNullException"><paramref name="references"/> is <c>null</c>, or an entry is <c>null</c>.</exception>
+    /// <remarks>
+    /// <para>
+    /// The whole set moves together, so every relative descriptor reads against the same references and the axes
+    /// stay comparable with one another. The new set has a different <see cref="VersionHash"/>, which is the point:
+    /// the hash identifies the reading, and this is a different reading of the same candidates.
+    /// </para>
+    /// <para>
+    /// Rebasing describes new measurements only. Everything already archived still carries coordinates taken
+    /// against the old references, and until those are re-measured the archive holds readings from two different
+    /// rulers — which looks like a working map and is not one. Pair this with
+    /// <c>MapElitesArchive.Remeasure</c> using the returned set.
+    /// </para>
+    /// </remarks>
+    public ProgramDescriptorSet Rebase(IReadOnlyList<ProgramGenome> references)
+    {
+        Guard.NotNull(references);
+        if (!HasRebasableDescriptors) return this;
+
+        var rebased = new List<IProgramDescriptor>(_descriptors.Count);
+        foreach (IProgramDescriptor descriptor in _descriptors)
+        {
+            rebased.Add(descriptor is IRebasableProgramDescriptor rebasable
+                ? rebasable.Rebase(references)
+                : descriptor);
+        }
+
+        return new ProgramDescriptorSet(rebased);
+    }
+
     private static string BuildVersionHash(List<IProgramDescriptor> descriptors, List<string> names)
     {
         var components = new List<string> { "program-descriptor-set-v2" };

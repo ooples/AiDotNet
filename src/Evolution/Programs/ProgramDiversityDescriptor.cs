@@ -28,7 +28,7 @@ namespace AiDotNet.Evolution.Programs;
 /// The reference set never changes during a run, which is what makes the numbers comparable from start to
 /// finish.</para>
 /// </remarks>
-public sealed class ProgramDiversityDescriptor : IVersionedProgramDescriptor
+public sealed class ProgramDiversityDescriptor : IRebasableProgramDescriptor
 {
     /// <summary>The descriptor name used when none is supplied.</summary>
     public const string DefaultName = "diversity";
@@ -89,6 +89,19 @@ public sealed class ProgramDiversityDescriptor : IVersionedProgramDescriptor
     /// refused instead of being silently re-binned against distances it never produced.
     /// </remarks>
     public string VersionHash { get; }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The result is a new descriptor, not a changed one: the old reading may still be in use while this is being
+    /// prepared, and <see cref="VersionHash"/> is supposed to identify one exact reading. Rebasing alone leaves the
+    /// archive holding coordinates taken against the old references, so pair it with a re-measurement of what is
+    /// already archived — otherwise the map mixes readings from two different rulers.
+    /// </remarks>
+    public IRebasableProgramDescriptor Rebase(IReadOnlyList<ProgramGenome> references)
+    {
+        Guard.NotNull(references);
+        return new ProgramDiversityDescriptor(references, Name);
+    }
 
     /// <inheritdoc/>
     public double Compute(ProgramGenome genome)

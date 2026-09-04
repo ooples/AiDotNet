@@ -338,6 +338,88 @@ public sealed class MapElitesArchive<TGenome> : IGrowableEvolutionArchive<TGenom
         foreach (EvolutionArchiveEntry<TGenome> entry in _cells.Values) PromoteIfBest(entry);
     }
 
+    /// <summary>Re-measures every elite against a new reading of the descriptors and re-files them.</summary>
+    /// <param name="measure">
+    /// Produces the descriptor values for one elite's genome under the new reading; returning <c>null</c> leaves
+    /// that elite's existing values alone.
+    /// </param>
+    /// <returns>How many elites the archive holds afterwards.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="measure"/> is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// <para>
+    /// A descriptor measured against other candidates — how unlike the rest of the population a candidate is, say —
+    /// gives a different answer as the population moves, without the candidate changing at all. Left alone, an
+    /// archive fills with coordinates taken against references that no longer exist: an elite filed early sits
+    /// beside one filed late, each measured against a different population, and the two cells cannot meaningfully be
+    /// compared. The map looks fine and means nothing.
+    /// </para>
+    /// <para>
+    /// Re-measuring fixes that by putting every elite back on one ruler. It is deliberately a whole-archive
+    /// operation for exactly that reason: re-measuring some entries and not others would produce the very
+    /// inconsistency it exists to remove. Two elites can land in one cell afterwards, which is resolved the way an
+    /// ordinary insertion resolves it, by keeping the better under the archive's total ordering, so the outcome does
+    /// not depend on iteration order. An elite whose new values cannot be binned keeps the cell it had rather than
+    /// being dropped, because losing an elite to a re-measurement would lose search progress that was really made.
+    /// </para>
+    /// <para>
+    /// The caller owns when this happens. Calling it at a deterministic, id-ordered boundary keeps the run
+    /// replayable; calling it at an arbitrary moment does not, and the archive cannot tell the difference.
+    /// </para>
+    /// <para><b>For Beginners:</b> If your pigeonhole labels are "how different is this from everything else", the
+    /// labels stop being true as the collection changes. This re-reads every item's label against the current
+    /// reference and re-files it, so the whole cabinet agrees on what the labels mean.</para>
+    /// </remarks>
+    public int Remeasure(Func<TGenome, IReadOnlyDictionary<string, double>?> measure)
+    {
+        Guard.NotNull(measure);
+        if (_cells.Count == 0) return 0;
+
+        var remeasured = new List<EvolutionArchiveEntry<TGenome>>(_cells.Count);
+
+        // Ordered by cell so the traversal, and therefore any collision the new reading creates, is reproducible
+        // rather than dependent on the dictionary's internal layout.
+        foreach (EvolutionArchiveEntry<TGenome> entry in _cells.Values
+            .OrderBy(item => item.Cell.StableKey, StringComparer.Ordinal))
+        {
+            IReadOnlyDictionary<string, double>? values = measure(entry.Candidate.CanonicalGenome.Genome);
+            if (values is null)
+            {
+                remeasured.Add(entry);
+                continue;
+            }
+
+            GrowToFit(values);
+            EvolutionCellKey? key = TryCreateKey(values);
+            remeasured.Add(key is null
+                ? entry
+                : new EvolutionArchiveEntry<TGenome>(key, entry.Candidate, entry.Evaluation.WithDescriptors(values)));
+        }
+
+        // Growth above may have widened an axis, which moves entries that were not re-measured as well, so every
+        // surviving entry is re-keyed against the final grid before anything is filed.
+        _cells.Clear();
+        foreach (EvolutionArchiveEntry<TGenome> entry in remeasured)
+        {
+            EvolutionCellKey? key = TryCreateKey(entry.Evaluation.Descriptors);
+            EvolutionArchiveEntry<TGenome> placed = key is null
+                ? entry
+                : new EvolutionArchiveEntry<TGenome>(key, entry.Candidate, entry.Evaluation);
+
+            if (_cells.TryGetValue(placed.Cell.StableKey, out EvolutionArchiveEntry<TGenome>? incumbent) &&
+                Comparer.Compare(placed, incumbent) >= 0)
+            {
+                continue;
+            }
+
+            _cells[placed.Cell.StableKey] = placed;
+        }
+
+        _best = null;
+        foreach (EvolutionArchiveEntry<TGenome> entry in _cells.Values) PromoteIfBest(entry);
+        Version++;
+        return _cells.Count;
+    }
+
     /// <summary>Computes the cell for descriptor values without modifying the archive.</summary>
     /// <param name="descriptors">The named descriptor values.</param>
     /// <returns>The cell, or <c>null</c> when a value is missing or rejected.</returns>
