@@ -1258,8 +1258,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         //   - if they disagree the model is marked unstable, the discrepancy is traced, and the eager
         //     path is used permanently.
         //
-        // Warm-up therefore costs two eager forwards and one plan execution, once per model.
-        var stability = new JitValueStability<T>();
+        // Warm-up therefore costs two eager forwards and one plan execution, once per model/shape.
+        // CompiledModelCache creates a distinct plan for each concrete input shape, so value
+        // stability and deterministic capture rejection must be tracked at the same granularity.
+        // A plan that is valid (or unsupported) for one shape says nothing about a different plan
+        // traced through shape-dependent model code. TensorShape is immutable and structurally
+        // equatable, so this remains type-safe without allocating string keys.
+        var stabilityByShape = new System.Collections.Concurrent.ConcurrentDictionary<
+            TensorShape,
+            JitValueStability<T>>();
 
         return (inputs) =>
         {
@@ -1271,6 +1278,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
 
             var input = inputs[0];
+            var stability = stabilityByShape.GetOrAdd(
+                input.Shape,
+                static _ => new JitValueStability<T>());
 
             // Each call applies the JIT config to this thread's TensorCodecOptions
             // -- request-pool workers don't inherit the thread-static state set on
@@ -1321,7 +1331,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     }
                 };
 
-                if (stability.IsKnownUnstable)
+                if (stability.IsPermanentlyDisabled)
                 {
                     return new[] { EagerPredict(nnModel, input) };
                 }
@@ -1351,16 +1361,35 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     return new[] { replayed };
                 }
 
-                stability.MarkUnstable();
-                System.Diagnostics.Trace.TraceWarning(
-                    $"JIT disabled for {nnModel.GetType().FullName}: the compiled plan is not " +
-                    $"value-stable. Replaying it on an input that differs from the traced one at " +
-                    $"shape [{string.Join(", ", input.Shape)}] disagreed with the eager forward by " +
-                    $"{discrepancy:E3}, which means the trace captured input values as constants " +
-                    "rather than as graph inputs. Falling back to eager inference permanently for " +
-                    "this model; predictions stay correct and the compilation speed-up is lost.");
+                if (stability.TryMarkPermanentlyDisabled())
+                {
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"JIT disabled for {nnModel.GetType().FullName}: the compiled plan is not " +
+                        $"value-stable. Replaying it on an input that differs from the traced one at " +
+                        $"shape [{string.Join(", ", input.Shape)}] disagreed with the eager forward by " +
+                        $"{discrepancy:E3}, which means the trace captured input values as constants " +
+                        "rather than as graph inputs. Falling back to eager inference permanently for " +
+                        "this input shape; predictions stay correct and the compilation speed-up is lost.");
+                }
 
                 return new[] { eager };
+            }
+            catch (AiDotNet.Tensors.Engines.Compilation.GraphCaptureNotSupportedException ex)
+                when (!throwOnFailure)
+            {
+                // A typed capture limitation is deterministic for this model/graph shape. Retrying
+                // it on every prediction only repeats the same trace work and warning. Permanently
+                // select the correct eager path, just as the value-stability rejection above does.
+                if (stability.TryMarkPermanentlyDisabled())
+                {
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"JIT disabled for {nnModel.GetType().FullName}: graph capture is not supported " +
+                        $"for input shape [{string.Join(", ", input.Shape)}] ({ex.Limitation}). " +
+                        $"{ex.Message} Falling back to eager inference permanently for this input " +
+                        "shape; predictions stay correct and the compilation speed-up is lost.");
+                }
+
+                return new[] { EagerPredict(nnModel, input) };
             }
             catch (Exception ex) when (!throwOnFailure)
             {
@@ -1417,22 +1446,29 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Tracks whether one model's compiled plan has been shown to respond to its input.
+    /// Tracks whether one model/shape compiled plan has been shown to respond to its input.
     /// </summary>
     /// <remarks>
-    /// Held per compiled function rather than globally: value-stability is a property of the traced
-    /// graph, so two models built by the same process can legitimately differ.
+    /// Held per concrete input shape within one compiled function rather than globally:
+    /// value-stability is a property of the traced graph, so two shapes or models built by the same
+    /// process can legitimately differ.
     /// </remarks>
     private sealed class JitValueStability<TValue>
     {
+        private enum PlanState : byte
+        {
+            Unverified,
+            Verified,
+            PermanentlyDisabled
+        }
+
         private readonly object _gate = new object();
         private TValue[]? _tracedValues;
-        private volatile bool _verified;
-        private volatile bool _unstable;
+        private volatile PlanState _state;
 
-        public bool IsVerified => _verified;
+        public bool IsVerified => _state == PlanState.Verified;
 
-        public bool IsKnownUnstable => _unstable;
+        public bool IsPermanentlyDisabled => _state == PlanState.PermanentlyDisabled;
 
         /// <summary>
         /// Remembers the first input seen, and reports whether this one differs from it.
@@ -1461,9 +1497,33 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
         }
 
-        public void MarkVerified() => _verified = true;
+        public void MarkVerified()
+        {
+            lock (_gate)
+            {
+                // Permanent disablement is terminal. A concurrent prediction may finish an
+                // earlier stability check after another prediction has already rejected the
+                // plan; that late success must not re-enable the compiled path.
+                if (_state != PlanState.PermanentlyDisabled)
+                {
+                    _state = PlanState.Verified;
+                }
+            }
+        }
 
-        public void MarkUnstable() => _unstable = true;
+        public bool TryMarkPermanentlyDisabled()
+        {
+            lock (_gate)
+            {
+                if (_state == PlanState.PermanentlyDisabled)
+                {
+                    return false;
+                }
+
+                _state = PlanState.PermanentlyDisabled;
+                return true;
+            }
+        }
     }
 
     public async Task<AiModelResult<T, TInput, TOutput>> BuildAsync(CancellationToken cancellationToken)

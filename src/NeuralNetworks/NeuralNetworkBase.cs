@@ -6583,7 +6583,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         // Opt-in, default-off (see InferenceArenaSettings). When off this is exactly the
         // pre-#1661 behavior with zero added overhead — one boolean check then PredictCore.
-        if (!InferenceArenaSettings.Enabled)
+        // A graph trace owns symbolic output buffers until the compiled plan takes over. Detaching
+        // the result through ToArray() here would eagerly materialize that symbolic tensor and wrap
+        // its values in a new host tensor, severing the output from the captured graph. Skip only
+        // the per-call arena while capture is active; normal eager inference and compiled-plan
+        // execution still use the default-on arena and retain its allocation savings.
+        if (!InferenceArenaSettings.Enabled
+            || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
             return PredictCore(input);
 
         // Run the forward inside a per-call arena. The arena recycles intermediate Rent-backed

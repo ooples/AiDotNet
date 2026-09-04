@@ -236,7 +236,14 @@ public partial class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutB
     /// </summary>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        if (typeof(T) == typeof(float) && TryFusedConvStemPredict(input, out var fused))
+        // The fused stem writes into reusable buffers and applies its epilogue through raw arrays,
+        // so it cannot participate in an enclosing GraphMode trace. Capture falls through to the
+        // traceable layer walk, while every ordinary inference call keeps this zero-allocation path
+        // even when graph compilation is disabled globally -- this fused CPU kernel is not a
+        // compiled graph and should not pay that unrelated opt-out's performance cost.
+        if (typeof(T) == typeof(float)
+            && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+            && TryFusedConvStemPredict(input, out var fused))
             return fused;
         return base.PredictCore(input);
     }

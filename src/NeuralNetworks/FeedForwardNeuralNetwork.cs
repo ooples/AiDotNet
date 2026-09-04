@@ -274,7 +274,15 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
             // At the kernel level CompiledMlp.Run beats torch.compile (~0.11 ms vs
             // ~0.22 ms at bs1 on the AIsEval MLP); MlpForward's per-call Tensor/dispatch
             // overhead is what loses. Falls through to MlpForward when ineligible.
+            // EnableCompilation is the central caller opt-out, while GraphMode.IsActive directly
+            // identifies an enclosing capture. CompiledMlp consumes raw arrays, so running it in
+            // either case would execute outside the graph and make the enclosing trace look like a
+            // constant zero-operation forward. Fall through to the GraphMode-aware MlpForward
+            // primitive in that case. The normal inference hot path retains the allocation-free
+            // CompiledMlp plan.
             if (typeof(T) == typeof(float)
+                && Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation
+                && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
                 && TryCompiledMlpPredict(input, weights, biases, hiddenActivation, outputActivation, out output))
             {
                 return true;
