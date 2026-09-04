@@ -358,8 +358,10 @@ public sealed class MapElitesArchive<TGenome> : IGrowableEvolutionArchive<TGenom
     /// operation for exactly that reason: re-measuring some entries and not others would produce the very
     /// inconsistency it exists to remove. Two elites can land in one cell afterwards, which is resolved the way an
     /// ordinary insertion resolves it, by keeping the better under the archive's total ordering, so the outcome does
-    /// not depend on iteration order. An elite whose new values cannot be binned keeps the cell it had rather than
-    /// being dropped, because losing an elite to a re-measurement would lose search progress that was really made.
+    /// not depend on iteration order. An elite whose new values cannot be binned keeps its existing descriptor
+    /// values rather than being dropped, because losing an elite to a re-measurement would lose search progress that
+    /// was really made; it is still re-keyed against the final grid along with everything else, so its cell index
+    /// can change if another elite's new value widened an axis.
     /// </para>
     /// <para>
     /// The caller owns when this happens. Calling it at a deterministic, id-ordered boundary keeps the run

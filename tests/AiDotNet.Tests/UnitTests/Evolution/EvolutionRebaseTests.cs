@@ -119,6 +119,30 @@ public sealed class EvolutionRebaseTests
     }
 
     [Fact]
+    public void AnUnplaceableEliteIsStillReKeyedWhenAnotherElitesValueWidensTheGrid()
+    {
+        // It keeps its own values, but the grid underneath it moved, so holding its old index would silently mean a
+        // different range of values than it did before.
+        MapElitesArchive<TestGenome> archive = Archive(
+            Entry(1, quality: 10, descriptor: 10),
+            Entry(2, quality: 20, descriptor: 30));
+
+        string keptBefore = archive.Entries.Single(entry => entry.Evaluation.GenomeId == "genome-1").Cell.StableKey;
+
+        // Only the second elite is re-measured, and its new value pushes the axis minimum down. Growth downwards is
+        // what actually shifts every index: widening upwards leaves the minimum and the bin width alone, so the
+        // entries below it keep the indices they had.
+        archive.Remeasure(genome => genome.Value == 2
+            ? new Dictionary<string, double>(StringComparer.Ordinal) { ["x"] = -500 }
+            : null);
+
+        EvolutionArchiveEntry<TestGenome> kept = archive.Entries.Single(entry => entry.Evaluation.GenomeId == "genome-1");
+        Assert.Equal(10, kept.Evaluation.Descriptors["x"], 10);
+        Assert.NotEqual(keptBefore, kept.Cell.StableKey);
+        Assert.Equal(archive.TryCreateKey(kept.Evaluation.Descriptors)!.StableKey, kept.Cell.StableKey);
+    }
+
+    [Fact]
     public void RemeasuringIsIndependentOfTheOrderTheArchiveWasFilledIn()
     {
         // Two runs that reached the same archive by different routes must re-measure to the same archive, or the
