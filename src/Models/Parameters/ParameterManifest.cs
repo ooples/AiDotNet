@@ -194,6 +194,29 @@ public sealed class ParameterChunk<T>
         Role = role;
         Tensor = tensor ?? throw new ArgumentNullException(nameof(tensor));
         SourceTensor = sourceTensor ?? Tensor;
+
+        // A chunk whose payload is a PROJECTION of other storage -- a sparse component presented as
+        // a dense run of its non-zeros -- cannot be written through: the write would land on the
+        // projection and never reach the registered tensor. Payload-is-its-own-storage is exactly
+        // the condition under which an in-place write is safe, so derive it rather than ask callers
+        // to remember. Sites that hand over a DETACHED COPY look identical here and must say so
+        // explicitly via the overload below.
+        IsWritableInPlace = ReferenceEquals(SourceTensor, Tensor);
+    }
+
+    /// <summary>Creates one chunk whose payload may be a detached copy rather than live storage.</summary>
+    /// <param name="writableInPlace">
+    /// False when writing into <paramref name="tensor"/> would not reach the model's own storage.
+    /// </param>
+    internal ParameterChunk(
+        string stableId,
+        ParameterSlotRole role,
+        Tensor<T> tensor,
+        Tensor<T>? sourceTensor,
+        bool writableInPlace)
+        : this(stableId, role, tensor, sourceTensor)
+    {
+        IsWritableInPlace = writableInPlace;
     }
 
     /// <summary>The durable path of this chunk in the owning model manifest.</summary>
@@ -216,6 +239,15 @@ public sealed class ParameterChunk<T>
     /// dictionary, for instance -- must use this, or a sparse weight silently reads as absent.
     /// </remarks>
     internal Tensor<T> SourceTensor { get; }
+
+    /// <summary>Whether writing into <see cref="Tensor"/> reaches the model's own storage.</summary>
+    /// <remarks>
+    /// False for a projection (a sparse component's dense run) and for a detached copy (a layer that
+    /// can only surface its parameters through a flat vector). A streaming writer MUST consult this
+    /// before copying in place; ignoring it does not fail, it writes into a throwaway tensor and
+    /// leaves the model silently unchanged.
+    /// </remarks>
+    internal bool IsWritableInPlace { get; }
 }
 
 /// <summary>

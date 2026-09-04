@@ -185,24 +185,4 @@ public class EfficientNetConfiguration
         return new EfficientNetConfiguration(EfficientNetVariant.B0, numClasses);
     }
 
-    /// <summary>
-    /// Creates a minimal EfficientNet configuration optimized for fast test execution.
-    /// </summary>
-    /// <remarks>
-    /// Uses 32x32 input resolution with 1.0 width/depth multipliers,
-    /// resulting in a minimal network suitable for fast unit tests.
-    /// Construction time is typically under 50ms.
-    /// </remarks>
-    /// <param name="numClasses">The number of output classes.</param>
-    /// <returns>A minimal EfficientNet configuration for testing.</returns>
-    public static EfficientNetConfiguration CreateForTesting(int numClasses)
-    {
-        return new EfficientNetConfiguration(
-            variant: EfficientNetVariant.Custom,
-            numClasses: numClasses,
-            inputChannels: 3,
-            customInputHeight: 32,
-            customWidthMultiplier: 1.0,
-            customDepthMultiplier: 1.0);
-    }
 }

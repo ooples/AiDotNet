@@ -848,7 +848,7 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
             return gpuResult;
 
         // Get the best genome (the one with highest fitness)
-        var bestGenome = GetBestGenome();
+        var bestGenome = RequireBestGenome();
 
         // Treat ANY rank-2 input as batched, even when the batch size is 1.
         // Returning rank-1 for single-sample input was a real bug —
@@ -944,8 +944,33 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
     /// has evolved to best solve the problem you're working on.
     /// </para>
     /// </remarks>
-    private Genome<T> GetBestGenome()
+    /// <summary>The best genome, for paths that cannot proceed without one.</summary>
+    /// <remarks>
+    /// <see cref="GetBestGenome"/> returns null for an unevolved population, which is correct for
+    /// the parameter-count probe that only wants a size. Predicting or reporting metadata genuinely
+    /// needs a genome, and saying so beats an ArgumentOutOfRangeException from an indexer three
+    /// frames deeper.
+    /// </remarks>
+    private Genome<T> RequireBestGenome()
+        => GetBestGenome()
+            ?? throw new InvalidOperationException(
+                "NEAT has no genomes yet. Evolve a population (Train) before predicting or "
+                    + "reading genome metadata.");
+
+    private Genome<T>? GetBestGenome()
     {
+        // AN UNEVOLVED POPULATION IS EMPTY, AND THAT IS NOT AN ERROR. This is reached during
+        // ordinary parameter enumeration: RegisterComponents publishes a DelegatingParameterSource
+        // whose count is GetBestGenome()?.Connections?.Count ?? 0, so the registry calls it while
+        // capturing a layout. On a freshly constructed model no generation has run, _population is
+        // empty, and indexing [0] below threw ArgumentOutOfRangeException out of what looks like a
+        // plain "how many parameters do you have" question -- the clone sweep saw it the moment
+        // generated test-scale bounds made NEAT constructible at all.
+        //
+        // The call sites already treat a missing genome as legitimate (?. and ?? 0). This makes the
+        // signature honest about that rather than throwing where they expect null.
+        if (_population.Count == 0) return null;
+
         // Check if any genomes have fitness set
         bool anyFitnessSet = _population.Any(g => !NumOps.Equals(g.Fitness, NumOps.Zero));
 
@@ -1454,7 +1479,7 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
         // producing the misleading "step 1=0.000000, step N=0.000000"
         // failure on LossStrictlyDecreasesOnMemorizationTask). Recompute
         // here so the public Train contract surfaces a real per-call loss.
-        var postBest = GetBestGenome();
+        var postBest = RequireBestGenome();
         if (postBest.Connections.Count > 0 && trainingData.Count > 0)
         {
             T totalErr = NumOps.Zero;
@@ -1560,7 +1585,7 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
     public override ModelMetadata<T> GetModelMetadata()
     {
         // Get the best genome
-        var bestGenome = GetBestGenome();
+        var bestGenome = RequireBestGenome();
 
         // Count average number of connections and nodes in the population
         double avgConnections = _population.Average(g => g.Connections.Count);
@@ -1602,7 +1627,7 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
     /// </summary>
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
     {
-        var bestGenome = GetBestGenome();
+        var bestGenome = RequireBestGenome();
         var inputVector = input.ToVector();
         var activations = ActivateGenome(bestGenome, inputVector);
 

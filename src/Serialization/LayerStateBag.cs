@@ -428,6 +428,134 @@ public readonly struct LayerStateBag
         return LayerObjectPrefix + Convert.ToBase64String(stream.ToArray());
     }
 
+    /// <summary>
+    /// Compares two generated in-memory construction manifests without serializing owned layers.
+    /// </summary>
+    /// <remarks>
+    /// Constructor-owned layer collections contain weights, so routing them through
+    /// <see cref="FormatCloneObject"/> just to compare topology defeats copy-on-write and can exceed
+    /// the CLR stream limit. This comparison walks generated constructor state, shapes, and component
+    /// configuration only; learned tensors are intentionally excluded because the COW adoption pass
+    /// compares and transfers those separately.
+    /// </remarks>
+    internal static bool AreCloneConstructionValuesEquivalent(
+        IReadOnlyDictionary<string, object> left,
+        IReadOnlyDictionary<string, object> right)
+    {
+        if (left.Count != right.Count) return false;
+
+        var visited = new HashSet<(object Left, object Right)>(ConstructionPairComparer.Instance);
+        foreach (var pair in left)
+        {
+            if (!right.TryGetValue(pair.Key, out object? other)
+                || !AreCloneConstructionValuesEquivalent(pair.Value, other, visited))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool AreCloneConstructionValuesEquivalent(
+        object? left,
+        object? right,
+        HashSet<(object Left, object Right)> visited)
+    {
+        if (ReferenceEquals(left, right)) return true;
+        if (left is null || right is null || left.GetType() != right.GetType()) return false;
+
+        Type type = left.GetType();
+        if (type.IsValueType || left is string) return left.Equals(right);
+        if (!visited.Add((left, right))) return true;
+
+        Type? layerBase = FindGenericBase(type, "AiDotNet.NeuralNetworks.Layers.LayerBase`1");
+        if (layerBase is not null)
+        {
+            int[] leftInput = (int[]?)type.GetMethod("GetInputShape", Type.EmptyTypes)?.Invoke(left, null)
+                ?? Array.Empty<int>();
+            int[] rightInput = (int[]?)type.GetMethod("GetInputShape", Type.EmptyTypes)?.Invoke(right, null)
+                ?? Array.Empty<int>();
+            int[] leftOutput = (int[]?)type.GetMethod("GetOutputShape", Type.EmptyTypes)?.Invoke(left, null)
+                ?? Array.Empty<int>();
+            int[] rightOutput = (int[]?)type.GetMethod("GetOutputShape", Type.EmptyTypes)?.Invoke(right, null)
+                ?? Array.Empty<int>();
+            if (!leftInput.SequenceEqual(rightInput) || !leftOutput.SequenceEqual(rightOutput))
+                return false;
+
+            MethodInfo? capture = layerBase.GetMethod(
+                "CaptureConstructionValuesForClone",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            if (capture?.Invoke(left, null) is not IReadOnlyDictionary<string, object> leftState
+                || capture.Invoke(right, null) is not IReadOnlyDictionary<string, object> rightState)
+            {
+                return false;
+            }
+
+            if (leftState.Count != rightState.Count) return false;
+            foreach (var pair in leftState)
+            {
+                if (!rightState.TryGetValue(pair.Key, out object? other)
+                    || !AreCloneConstructionValuesEquivalent(pair.Value, other, visited))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if (TryGetLayerCollection(left, out var leftLayers)
+            && TryGetLayerCollection(right, out var rightLayers))
+        {
+            if (leftLayers.Count != rightLayers.Count) return false;
+            for (int i = 0; i < leftLayers.Count; i++)
+            {
+                if (!AreCloneConstructionValuesEquivalent(leftLayers[i], rightLayers[i], visited))
+                    return false;
+            }
+            return true;
+        }
+
+        if (left is Array leftArray && right is Array rightArray)
+        {
+            if (leftArray.Rank != rightArray.Rank || leftArray.Length != rightArray.Length)
+                return false;
+            for (int dimension = 0; dimension < leftArray.Rank; dimension++)
+            {
+                if (leftArray.GetLength(dimension) != rightArray.GetLength(dimension))
+                    return false;
+            }
+
+            var leftItems = leftArray.Cast<object?>().GetEnumerator();
+            var rightItems = rightArray.Cast<object?>().GetEnumerator();
+            while (leftItems.MoveNext() && rightItems.MoveNext())
+            {
+                if (!AreCloneConstructionValuesEquivalent(leftItems.Current, rightItems.Current, visited))
+                    return false;
+            }
+            return true;
+        }
+
+        // Components are construction configuration rather than learned state. FormatType captures
+        // their constructor-backed public properties (for example LeakyReLU's slope) without walking
+        // arbitrary object fields or parameter tensors.
+        return string.Equals(FormatType(left), FormatType(right), StringComparison.Ordinal);
+    }
+
+    private sealed class ConstructionPairComparer : IEqualityComparer<(object Left, object Right)>
+    {
+        internal static ConstructionPairComparer Instance { get; } = new();
+
+        public bool Equals((object Left, object Right) x, (object Left, object Right) y)
+            => ReferenceEquals(x.Left, y.Left) && ReferenceEquals(x.Right, y.Right);
+
+        public int GetHashCode((object Left, object Right) pair)
+            => HashCode.Combine(
+                System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(pair.Left),
+                System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(pair.Right));
+    }
+
     private static bool TryGetLayerCollection(object value, out List<object> layers)
     {
         layers = new List<object>();
