@@ -1258,8 +1258,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         //   - if they disagree the model is marked unstable, the discrepancy is traced, and the eager
         //     path is used permanently.
         //
-        // Warm-up therefore costs two eager forwards and one plan execution, once per model.
-        var stability = new JitValueStability<T>();
+        // Warm-up therefore costs two eager forwards and one plan execution, once per model/shape.
+        // CompiledModelCache creates a distinct plan for each concrete input shape, so value
+        // stability and deterministic capture rejection must be tracked at the same granularity.
+        // A plan that is valid (or unsupported) for one shape says nothing about a different plan
+        // traced through shape-dependent model code. TensorShape is immutable and structurally
+        // equatable, so this remains type-safe without allocating string keys.
+        var stabilityByShape = new System.Collections.Concurrent.ConcurrentDictionary<
+            TensorShape,
+            JitValueStability<T>>();
 
         return (inputs) =>
         {
@@ -1271,6 +1278,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
 
             var input = inputs[0];
+            var stability = stabilityByShape.GetOrAdd(
+                input.Shape,
+                static _ => new JitValueStability<T>());
 
             // Each call applies the JIT config to this thread's TensorCodecOptions
             // -- request-pool workers don't inherit the thread-static state set on
@@ -1279,49 +1289,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
             try
             {
-                Func<Tensor<T>> traceForward = () =>
-                {
-                    // Guard against nested-GraphMode. When the trace lambda invokes
-                    // nnModel.Predict, any subclass still using the base default
-                    // would re-enter PredictCompiled which opens a second GraphMode
-                    // scope -- the inner compile would drop the outer trace's ops.
-                    // Forcing EnableCompilation=false here makes PredictCompiled
-                    // fall through to PredictEager, recording the ops into our
-                    // outer trace instead.
-                    var savedOptions = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
-                    var traceOptions = new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions
-                    {
-                        EnableCompilation = false,
-                        EnableDataflowFusion = savedOptions.EnableDataflowFusion,
-                        EnableAlgebraicBackward = savedOptions.EnableAlgebraicBackward,
-                        EnableSpectralDecomposition = savedOptions.EnableSpectralDecomposition,
-                        SpectralErrorTolerance = savedOptions.SpectralErrorTolerance,
-                        DataflowFusionMaxHidden = savedOptions.DataflowFusionMaxHidden,
-                        EnableConvBnFusion = savedOptions.EnableConvBnFusion,
-                        EnableAttentionFusion = savedOptions.EnableAttentionFusion,
-                        EnablePointwiseFusion = savedOptions.EnablePointwiseFusion,
-                        EnableConstantFolding = savedOptions.EnableConstantFolding,
-                        EnableForwardCSE = savedOptions.EnableForwardCSE,
-                        EnableBlasBatch = savedOptions.EnableBlasBatch,
-                        EnableMixedPrecision = savedOptions.EnableMixedPrecision
-                    };
-                    AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(traceOptions);
-                    try
-                    {
-                        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-                        // Tensors 0.50.1 changed GetOrCompileInference from Action to
-                        // Func<Tensor<T>> -- the tracer now binds the plan output to
-                        // whatever the lambda returns, rather than inferring it from
-                        // the last recorded op. Return the Predict result explicitly.
-                        return nnModel.Predict(input);
-                    }
-                    finally
-                    {
-                        AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(savedOptions);
-                    }
-                };
+                // Tensors 0.50.1 changed GetOrCompileInference from Action to Func<Tensor<T>> --
+                // the tracer now binds the plan output to whatever the lambda returns. Use the same
+                // capture-compatible forward here and for value validation below so the comparison
+                // cannot mistake platform-specific differences between separate optimized kernels
+                // for a stale graph input.
+                Func<Tensor<T>> traceForward = () => CaptureCompatiblePredict(nnModel, input);
 
-                if (stability.IsKnownUnstable)
+                if (stability.IsPermanentlyDisabled)
                 {
                     return new[] { EagerPredict(nnModel, input) };
                 }
@@ -1333,17 +1308,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     return new[] { plan.Execute() };
                 }
 
-                var eager = EagerPredict(nnModel, input);
+                var reference = CaptureCompatiblePredict(nnModel, input);
 
                 // Nothing to compare against until an input that actually differs shows up: at the
                 // traced input a broken plan and a correct one agree by construction.
                 if (!stability.RecordAndCheckDiffers(input))
                 {
-                    return new[] { eager };
+                    return new[] { reference };
                 }
 
                 var replayed = plan.Execute();
-                double discrepancy = MaxAbsoluteDifference(replayed, eager);
+                double discrepancy = MaxAbsoluteDifference(replayed, reference);
 
                 if (discrepancy <= JitValueStabilityTolerance)
                 {
@@ -1351,16 +1326,35 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     return new[] { replayed };
                 }
 
-                stability.MarkUnstable();
-                System.Diagnostics.Trace.TraceWarning(
-                    $"JIT disabled for {nnModel.GetType().FullName}: the compiled plan is not " +
-                    $"value-stable. Replaying it on an input that differs from the traced one at " +
-                    $"shape [{string.Join(", ", input.Shape)}] disagreed with the eager forward by " +
-                    $"{discrepancy:E3}, which means the trace captured input values as constants " +
-                    "rather than as graph inputs. Falling back to eager inference permanently for " +
-                    "this model; predictions stay correct and the compilation speed-up is lost.");
+                if (stability.TryMarkPermanentlyDisabled())
+                {
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"JIT disabled for {nnModel.GetType().FullName}: the compiled plan is not " +
+                        $"value-stable. Replaying it on an input that differs from the traced one at " +
+                        $"shape [{string.Join(", ", input.Shape)}] disagreed with the eager forward by " +
+                        $"{discrepancy:E3}, which means the trace captured input values as constants " +
+                        "rather than as graph inputs. Falling back to eager inference permanently for " +
+                        "this input shape; predictions stay correct and the compilation speed-up is lost.");
+                }
 
-                return new[] { eager };
+                return new[] { reference };
+            }
+            catch (AiDotNet.Tensors.Engines.Compilation.GraphCaptureNotSupportedException ex)
+                when (!throwOnFailure)
+            {
+                // A typed capture limitation is deterministic for this model/graph shape. Retrying
+                // it on every prediction only repeats the same trace work and warning. Permanently
+                // select the correct eager path, just as the value-stability rejection above does.
+                if (stability.TryMarkPermanentlyDisabled())
+                {
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"JIT disabled for {nnModel.GetType().FullName}: graph capture is not supported " +
+                        $"for input shape [{string.Join(", ", input.Shape)}] ({ex.Limitation}). " +
+                        $"{ex.Message} Falling back to eager inference permanently for this input " +
+                        "shape; predictions stay correct and the compilation speed-up is lost.");
+                }
+
+                return new[] { EagerPredict(nnModel, input) };
             }
             catch (Exception ex) when (!throwOnFailure)
             {
@@ -1399,6 +1393,33 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return model.Predict(input);
     }
 
+    /// <summary>
+    /// Executes the canonical forward used for both graph capture and its value-stability check.
+    /// </summary>
+    private static Tensor<T> CaptureCompatiblePredict(
+        NeuralNetworks.NeuralNetworkBase<T> model,
+        Tensor<T> input)
+    {
+        // Guard against nested GraphMode: a model's own compiled path would open a second scope and
+        // drop the outer trace's operations. The explicit compatibility scope also selects the same
+        // graph-safe model fast paths when this method runs outside GraphMode for validation.
+        var savedOptions = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
+        var captureOptions = NeuralNetworks.GraphCaptureCompatibility
+            .CreateOptionsWithoutCompilation(savedOptions);
+
+        AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(captureOptions);
+        try
+        {
+            using var compatibility = NeuralNetworks.GraphCaptureCompatibility.Enter();
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            return model.Predict(input);
+        }
+        finally
+        {
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(savedOptions);
+        }
+    }
+
     private static double MaxAbsoluteDifference(Tensor<T> left, Tensor<T> right)
     {
         if (left.Length != right.Length) return double.PositiveInfinity;
@@ -1417,22 +1438,29 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Tracks whether one model's compiled plan has been shown to respond to its input.
+    /// Tracks whether one model/shape compiled plan has been shown to respond to its input.
     /// </summary>
     /// <remarks>
-    /// Held per compiled function rather than globally: value-stability is a property of the traced
-    /// graph, so two models built by the same process can legitimately differ.
+    /// Held per concrete input shape within one compiled function rather than globally:
+    /// value-stability is a property of the traced graph, so two shapes or models built by the same
+    /// process can legitimately differ.
     /// </remarks>
     private sealed class JitValueStability<TValue>
     {
+        private enum PlanState : byte
+        {
+            Unverified,
+            Verified,
+            PermanentlyDisabled
+        }
+
         private readonly object _gate = new object();
         private TValue[]? _tracedValues;
-        private volatile bool _verified;
-        private volatile bool _unstable;
+        private volatile PlanState _state;
 
-        public bool IsVerified => _verified;
+        public bool IsVerified => _state == PlanState.Verified;
 
-        public bool IsKnownUnstable => _unstable;
+        public bool IsPermanentlyDisabled => _state == PlanState.PermanentlyDisabled;
 
         /// <summary>
         /// Remembers the first input seen, and reports whether this one differs from it.
@@ -1441,6 +1469,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         {
             lock (_gate)
             {
+                // A caller can observe Unverified just before another request reaches a terminal
+                // state. Do not let that stale observation recreate the traced copy after the
+                // terminal transition released it.
+                if (_state != PlanState.Unverified)
+                {
+                    return false;
+                }
+
                 if (_tracedValues is null)
                 {
                     _tracedValues = new TValue[input.Length];
@@ -1461,9 +1497,35 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
         }
 
-        public void MarkVerified() => _verified = true;
+        public void MarkVerified()
+        {
+            lock (_gate)
+            {
+                // Permanent disablement is terminal. A concurrent prediction may finish an
+                // earlier stability check after another prediction has already rejected the
+                // plan; that late success must not re-enable the compiled path.
+                if (_state != PlanState.PermanentlyDisabled)
+                {
+                    _state = PlanState.Verified;
+                    _tracedValues = null;
+                }
+            }
+        }
 
-        public void MarkUnstable() => _unstable = true;
+        public bool TryMarkPermanentlyDisabled()
+        {
+            lock (_gate)
+            {
+                if (_state == PlanState.PermanentlyDisabled)
+                {
+                    return false;
+                }
+
+                _state = PlanState.PermanentlyDisabled;
+                _tracedValues = null;
+                return true;
+            }
+        }
     }
 
     public async Task<AiModelResult<T, TInput, TOutput>> BuildAsync(CancellationToken cancellationToken)

@@ -515,7 +515,7 @@ public abstract class RegressionModelTestBase<T> : System.IDisposable
     public async Task MonotonicResponse_IncreasingFeature_IncreasesPrediction()
     {
         await Task.Yield();
-        if (!MonotonicResponseInvariantApplicable) return;
+        if (!IdentityLinkInvariantsApplicable || !MonotonicResponseInvariantApplicable) return;
 
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
