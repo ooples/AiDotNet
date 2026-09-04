@@ -351,11 +351,14 @@
 
          Bumped 0.129.8 to 0.130.0 so AiDotNet consumes the graph-capture, copy-on-write,
          deterministic CPU execution, and compiled-lifetime fixes from AiDotNet.Tensors #1005 and
-         #1006. Keep the managed and native packages on the same release. -->
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.130.0" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.130.0" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.130.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.130.0" />
+         #1006. Bumped 0.130.0 to 0.130.2 for dynamic compiled-mask rebinding (#1007) and typed
+         empty-graph capture limitations (#1009), which let the builder distinguish deterministic
+         unsupported graphs from retryable failures. Keep the managed and native packages on the
+         same release. -->
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.130.2" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.130.2" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.130.2" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.130.2" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.11" />
