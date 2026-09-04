@@ -130,18 +130,22 @@ public sealed class ProgramArtifactRetentionTests : IDisposable
     public async Task AnAgedArtifactIsActuallyRemovedFromDiskByTheSweep()
     {
         // End to end against the real store: written, aged past the retention period, swept away by the run.
-        var now = new DateTimeOffset(2026, 9, 3, 12, 0, 0, TimeSpan.Zero);
+        //
+        // The sweep time is derived from the REAL clock rather than a fixed date, because the store stamps
+        // StoredAtUtc itself and the observer's injected clock does not reach it. Comparing a real write time
+        // against a fixed fake sweep time made this test depend on the hour it ran: it passed one day and failed
+        // the next, when the gap between the two happened to fall under the retention period.
         var store = new FileSystemProgramArtifactStore(_root, new ProgramArtifactStoreOptions
         {
             InlineSizeThresholdBytes = 0,
             RetentionPeriod = TimeSpan.FromDays(1)
         });
 
-        var writer = new ProgramArtifactStoreObserver(store, purgeEveryStores: 0, clock: () => now);
+        var writer = new ProgramArtifactStoreObserver(store, purgeEveryStores: 0);
         await Store(writer, "old-genome");
         Assert.NotEmpty(await store.GetAsync("old-genome"));
 
-        DateTimeOffset later = now.AddDays(2);
+        DateTimeOffset later = DateTimeOffset.UtcNow.AddDays(2);
         var sweeper = new ProgramArtifactStoreObserver(store, purgeEveryStores: 0, clock: () => later);
         await sweeper.OnEventAsync(new EvolutionEvent<ProgramGenome>(
             EvolutionEventKind.Stopped, 1, message: "stopped"));
