@@ -1477,6 +1477,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         {
             lock (_gate)
             {
+                // A caller can observe Unverified just before another request reaches a terminal
+                // state. Do not let that stale observation recreate the traced copy after the
+                // terminal transition released it.
+                if (_state != PlanState.Unverified)
+                {
+                    return false;
+                }
+
                 if (_tracedValues is null)
                 {
                     _tracedValues = new TValue[input.Length];
