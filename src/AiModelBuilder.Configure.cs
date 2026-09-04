@@ -1289,47 +1289,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
             try
             {
-                Func<Tensor<T>> traceForward = () =>
-                {
-                    // Guard against nested-GraphMode. When the trace lambda invokes
-                    // nnModel.Predict, any subclass still using the base default
-                    // would re-enter PredictCompiled which opens a second GraphMode
-                    // scope -- the inner compile would drop the outer trace's ops.
-                    // Forcing EnableCompilation=false here makes PredictCompiled
-                    // fall through to PredictEager, recording the ops into our
-                    // outer trace instead.
-                    var savedOptions = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
-                    var traceOptions = new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions
-                    {
-                        EnableCompilation = false,
-                        EnableDataflowFusion = savedOptions.EnableDataflowFusion,
-                        EnableAlgebraicBackward = savedOptions.EnableAlgebraicBackward,
-                        EnableSpectralDecomposition = savedOptions.EnableSpectralDecomposition,
-                        SpectralErrorTolerance = savedOptions.SpectralErrorTolerance,
-                        DataflowFusionMaxHidden = savedOptions.DataflowFusionMaxHidden,
-                        EnableConvBnFusion = savedOptions.EnableConvBnFusion,
-                        EnableAttentionFusion = savedOptions.EnableAttentionFusion,
-                        EnablePointwiseFusion = savedOptions.EnablePointwiseFusion,
-                        EnableConstantFolding = savedOptions.EnableConstantFolding,
-                        EnableForwardCSE = savedOptions.EnableForwardCSE,
-                        EnableBlasBatch = savedOptions.EnableBlasBatch,
-                        EnableMixedPrecision = savedOptions.EnableMixedPrecision
-                    };
-                    AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(traceOptions);
-                    try
-                    {
-                        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-                        // Tensors 0.50.1 changed GetOrCompileInference from Action to
-                        // Func<Tensor<T>> -- the tracer now binds the plan output to
-                        // whatever the lambda returns, rather than inferring it from
-                        // the last recorded op. Return the Predict result explicitly.
-                        return nnModel.Predict(input);
-                    }
-                    finally
-                    {
-                        AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(savedOptions);
-                    }
-                };
+                // Tensors 0.50.1 changed GetOrCompileInference from Action to Func<Tensor<T>> --
+                // the tracer now binds the plan output to whatever the lambda returns. Use the same
+                // capture-compatible forward here and for value validation below so the comparison
+                // cannot mistake platform-specific differences between separate optimized kernels
+                // for a stale graph input.
+                Func<Tensor<T>> traceForward = () => CaptureCompatiblePredict(nnModel, input);
 
                 if (stability.IsPermanentlyDisabled)
                 {
@@ -1343,17 +1308,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     return new[] { plan.Execute() };
                 }
 
-                var eager = EagerPredict(nnModel, input);
+                var reference = CaptureCompatiblePredict(nnModel, input);
 
                 // Nothing to compare against until an input that actually differs shows up: at the
                 // traced input a broken plan and a correct one agree by construction.
                 if (!stability.RecordAndCheckDiffers(input))
                 {
-                    return new[] { eager };
+                    return new[] { reference };
                 }
 
                 var replayed = plan.Execute();
-                double discrepancy = MaxAbsoluteDifference(replayed, eager);
+                double discrepancy = MaxAbsoluteDifference(replayed, reference);
 
                 if (discrepancy <= JitValueStabilityTolerance)
                 {
@@ -1372,7 +1337,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                         "this input shape; predictions stay correct and the compilation speed-up is lost.");
                 }
 
-                return new[] { eager };
+                return new[] { reference };
             }
             catch (AiDotNet.Tensors.Engines.Compilation.GraphCaptureNotSupportedException ex)
                 when (!throwOnFailure)
@@ -1426,6 +1391,33 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
 
         return model.Predict(input);
+    }
+
+    /// <summary>
+    /// Executes the canonical forward used for both graph capture and its value-stability check.
+    /// </summary>
+    private static Tensor<T> CaptureCompatiblePredict(
+        NeuralNetworks.NeuralNetworkBase<T> model,
+        Tensor<T> input)
+    {
+        // Guard against nested GraphMode: a model's own compiled path would open a second scope and
+        // drop the outer trace's operations. The explicit compatibility scope also selects the same
+        // graph-safe model fast paths when this method runs outside GraphMode for validation.
+        var savedOptions = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
+        var captureOptions = NeuralNetworks.GraphCaptureCompatibility
+            .CreateOptionsWithoutCompilation(savedOptions);
+
+        AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(captureOptions);
+        try
+        {
+            using var compatibility = NeuralNetworks.GraphCaptureCompatibility.Enter();
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            return model.Predict(input);
+        }
+        finally
+        {
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(savedOptions);
+        }
     }
 
     private static double MaxAbsoluteDifference(Tensor<T> left, Tensor<T> right)

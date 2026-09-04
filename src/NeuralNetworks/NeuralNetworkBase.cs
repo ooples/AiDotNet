@@ -6585,11 +6585,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // pre-#1661 behavior with zero added overhead — one boolean check then PredictCore.
         // A graph trace owns symbolic output buffers until the compiled plan takes over. Detaching
         // the result through ToArray() here would eagerly materialize that symbolic tensor and wrap
-        // its values in a new host tensor, severing the output from the captured graph. Skip only
-        // the per-call arena while capture is active; normal eager inference and compiled-plan
-        // execution still use the default-on arena and retain its allocation savings.
+        // its values in a new host tensor, severing the output from the captured graph. Skip the
+        // per-call arena for both capture and its matching reference forward so validation compares
+        // the same execution path. Normal eager inference and compiled-plan execution still use the
+        // default-on arena and retain its allocation savings.
         if (!InferenceArenaSettings.Enabled
-            || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            || GraphCaptureCompatibility.IsActive)
             return PredictCore(input);
 
         // Run the forward inside a per-call arena. The arena recycles intermediate Rent-backed
