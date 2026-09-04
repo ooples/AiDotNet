@@ -37,6 +37,46 @@ internal enum CopyOnWriteShareStatus
 /// </remarks>
 internal static class CopyOnWriteCloneHelper
 {
+
+    /// <summary>Clone of a trainable tensor for the fast copy path, including sparse storage.</summary>
+    /// <remarks>
+    /// <para>
+    /// <c>Tensor.CloneShared()</c> falls through to <c>CloneDeepCopy</c>, which Tensors refuses for
+    /// sparse storage ("CloneDeepCopy is not supported on sparse tensors. Use SparseTensor-specific
+    /// APIs"). SparseNeuralNetwork therefore threw from inside the copy-on-write path.
+    /// </para>
+    /// <para>
+    /// A sparse tensor shares exactly as well as a dense one once it is built through its own API:
+    /// the constructor taking a <c>Vector&lt;T&gt;</c> keeps the SAME value storage, and the index
+    /// arrays describe structure that copy-on-write does not mutate. The clone therefore shares
+    /// values with its source, which is the point of the fast path. This is support, not a fallback:
+    /// nothing is densified and no eager copy is taken.
+    /// </para>
+    /// </remarks>
+    internal static Tensor<T> ShareTensor<T>(Tensor<T> source)
+    {
+        if (source is SparseTensor<T> sparse)
+        {
+            // COPIED, not aliased. Handing the clone the SAME DataVector looked like a
+            // copy-on-write share and is not one: a dense CloneShared returns storage that detaches
+            // on write, and a SparseTensor built over the same vector has no such semantics, so a
+            // write through the clone would silently reach the original. The clone sweep caught it
+            // immediately -- "copy is not independent of the original" -- which is the same test
+            // reporting a real aliasing bug rather than the earlier throw.
+            //
+            // Copying the non-zero values and the index arrays keeps this sparse-native: nothing is
+            // densified, and the cost is the non-zero count rather than rows * columns.
+            return new SparseTensor<T>(
+                sparse.Rows,
+                sparse.Columns,
+                (int[])sparse.RowIndices.Clone(),
+                (int[])sparse.ColumnIndices.Clone(),
+                sparse.DataVector.ToArray());
+        }
+
+        return (Tensor<T>)source.CloneShared();
+    }
+
     /// <summary>
     /// Re-binds every trainable parameter and registered persistent buffer of <paramref name="dest"/>
     /// to the corresponding state of <paramref name="source"/>. Walks both object graphs in parallel by

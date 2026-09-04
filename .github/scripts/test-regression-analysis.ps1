@@ -108,6 +108,9 @@ function Read-TestLedger {
         $notExecuted = 0
         $aborted = 0
         $failedCounter = 0
+        $hostLifecycleFailed = $false
+        $runDiagnostics = New-Object System.Collections.Generic.List[string]
+        $runDiagnosticKeys = New-Object System.Collections.Generic.HashSet[string]([StringComparer]::Ordinal)
 
         foreach ($trx in $trxFiles) {
             try {
@@ -121,6 +124,26 @@ function Read-TestLedger {
                     $failedCounter += Get-IntAttribute $counters 'failed'
                 } else {
                     $parseErrors.Add("$($trx.Name): no ResultSummary/Counters element")
+                }
+
+                # A post-test host crash can coexist with executed=total and
+                # aborted=0. VSTest records that state in ResultSummary/RunInfos,
+                # so counters are necessary but not sufficient evidence that a
+                # shard completed. Restrict the match to lifecycle language so
+                # ordinary xUnit [FAIL] RunInfo messages do not become aborts.
+                foreach ($runInfo in @($document.SelectNodes('//*[local-name()="RunInfo"]'))) {
+                    $textNode = $runInfo.SelectSingleNode('./*[local-name()="Text"]')
+                    $runInfoText = if ($textNode) { [string] $textNode.InnerText } else { [string] $runInfo.InnerText }
+                    $flatRunInfo = ($runInfoText -replace '\s+', ' ').Trim()
+                    if (-not [string]::IsNullOrWhiteSpace($flatRunInfo)) {
+                        $outcome = if ($runInfo.outcome) { [string] $runInfo.outcome } else { '' }
+                        $diagnostic = if ($outcome) { "[$outcome] $flatRunInfo" } else { $flatRunInfo }
+                        if ($runDiagnosticKeys.Add($diagnostic)) { $runDiagnostics.Add($diagnostic) }
+                    }
+                    if ($flatRunInfo -match '(?i)\b(?:active\s+)?test\s+run\s+was\s+aborted\b' -or
+                        $flatRunInfo -match '(?i)\btest\s+host(?:\s+process)?\b.*\b(?:crash(?:ed)?|terminat(?:ed|ion)|abort(?:ed)?|exited\s+unexpectedly)\b') {
+                        $hostLifecycleFailed = $true
+                    }
                 }
 
                 $definitions = @{}
@@ -189,7 +212,7 @@ function Read-TestLedger {
         $stepOutcome = if ($metadata -and $metadata.testStepOutcome) { [string] $metadata.testStepOutcome } else { '' }
         $nonTestFailure = $stepOutcome -and $stepOutcome -ne 'success' -and $failures.Count -eq 0
         $incomplete = $missingTrx -or $parseErrors.Count -gt 0 -or $counterGap -or
-            $abnormalTermination -or $nonTestFailure
+            $abnormalTermination -or $hostLifecycleFailed -or $nonTestFailure
         $status = if ($incomplete) { 'Incomplete' } elseif ($failures.Count -gt 0 -or $failedCounter -gt 0) { 'Failed' } else { 'Passed' }
         $policyStatus = if ($incomplete) {
             'Incomplete'
@@ -212,6 +235,8 @@ function Read-TestLedger {
             confirmedFailed = $confirmedFailures.Count
             rerunPassedFailures = $rerunPassedFailures.Count
             missingTrx = $missingTrx
+            hostLifecycleFailed = $hostLifecycleFailed
+            runDiagnostics = @($runDiagnostics)
             parseErrors = @($parseErrors)
             testStepOutcome = $stepOutcome
         })
@@ -378,6 +403,7 @@ function Get-LedgerStatistics {
         passedShards = @($Ledger.shards | Where-Object status -eq 'Passed').Count
         failedShards = @($Ledger.shards | Where-Object status -eq 'Failed').Count
         incompleteShards = @($Ledger.shards | Where-Object status -eq 'Incomplete').Count
+        hostLifecycleFailedShards = @($Ledger.shards | Where-Object hostLifecycleFailed).Count
         policyPassedShards = @($Ledger.shards | Where-Object {
             $status = if ($_.PSObject.Properties['policyStatus']) { $_.policyStatus } else { $_.status }
             $status -eq 'Passed'
@@ -446,7 +472,7 @@ $current = Read-TestLedger -Root $CurrentResultsPath -Sha $CurrentSha
 Write-JsonFile $current $ledgerPath
 $current.shards |
     Select-Object key, name, status, policyStatus, total, executed, notExecuted, aborted,
-        failed, confirmedFailed, rerunPassedFailures, missingTrx, testStepOutcome |
+        failed, confirmedFailed, rerunPassedFailures, missingTrx, hostLifecycleFailed, testStepOutcome |
     Export-Csv -LiteralPath $shardCsvPath -NoTypeInformation -Encoding utf8
 $current.tests |
     Where-Object outcome -eq 'Failed' |

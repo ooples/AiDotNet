@@ -1,5 +1,6 @@
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
+using AiDotNet.Attributes;
 
 namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 
@@ -7,6 +8,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the SpeechGPTASR model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
 /// </remarks>
+[DimensionDivisibility(nameof(EncoderDim), nameof(NumAttentionHeads))]
 public class SpeechGPTASROptions : ModelOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>

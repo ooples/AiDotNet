@@ -182,26 +182,4 @@ public class DenseNetConfiguration
         return new DenseNetConfiguration(DenseNetVariant.DenseNet121, numClasses);
     }
 
-    /// <summary>
-    /// Creates a minimal DenseNet configuration optimized for fast test execution.
-    /// </summary>
-    /// <remarks>
-    /// Uses [2, 2, 2, 2] block configuration with small growth rate (8) and 32x32 input,
-    /// resulting in approximately 8 dense layers instead of 58+ in DenseNet-121.
-    /// Construction time is typically under 50ms.
-    /// </remarks>
-    /// <param name="numClasses">The number of output classes.</param>
-    /// <returns>A minimal DenseNet configuration for testing.</returns>
-    public static DenseNetConfiguration CreateForTesting(int numClasses)
-    {
-        return new DenseNetConfiguration(
-            variant: DenseNetVariant.Custom,
-            numClasses: numClasses,
-            inputHeight: 32,
-            inputWidth: 32,
-            inputChannels: 3,
-            growthRate: 8,
-            compressionFactor: 0.5,
-            customBlockLayers: [2, 2, 2, 2]);
-    }
 }

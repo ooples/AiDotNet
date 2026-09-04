@@ -1186,27 +1186,84 @@ public class LayerStateGenerator : IIncrementalGenerator
         }
         sb.AppendLine("    }");
 
-        var components = model.Parameters
-            .Where(p => p.UseBackedActivation
-                || (p.IsState && p.Kind is ValueKind.Component or ValueKind.JsonObject or ValueKind.CloneObject))
-            .ToList();
-        if (components.Count > 0)
+        // The in-memory clone channel must be COMPLETE on its own. Calling the durable writer first
+        // is not merely redundant for owned child layers: FormatCloneObject serializes every child
+        // weight into a Base64 string before this object channel overwrites the same key. AudioGen's
+        // decoder collection exceeded MemoryStream's 2 GB limit during a copy-on-write clone even
+        // though none of those weights needed to be copied. Emit every generated constructor value
+        // here, using live objects only for values whose readers independently clone them.
+        sb.AppendLine();
+        sb.AppendLine("    /// <inheritdoc/>");
+        sb.AppendLine("    protected override bool HasCompleteConstructionObjectState => true;");
+        sb.AppendLine();
+        sb.AppendLine("    /// <inheritdoc/>");
+        sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.LayerStateGenerator\", \"1.0.0\")]");
+        sb.AppendLine("    protected override void WriteConstructionObjects(global::System.Collections.Generic.Dictionary<string, object> __values)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        base.WriteConstructionObjects(__values);");
+        foreach (var p in model.Parameters.Where(p => p.UseBackedActivation))
         {
-            sb.AppendLine();
-            sb.AppendLine("    /// <inheritdoc/>");
-            sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.LayerStateGenerator\", \"1.0.0\")]");
-            sb.AppendLine("    protected override void WriteConstructionObjects(global::System.Collections.Generic.Dictionary<string, object> __values)");
-            sb.AppendLine("    {");
-            sb.AppendLine("        base.WriteConstructionObjects(__values);");
-            foreach (var p in components)
+            sb.AppendLine($"        if (this.{p.BackingMember} is object __component_{p.Name})");
+            sb.AppendLine("        {");
+            sb.AppendLine($"            __values[\"{p.Key}\"] = __component_{p.Name};");
+            sb.AppendLine("        }");
+        }
+        foreach (var p in model.Parameters.Where(p => p.IsState))
+        {
+            if (p.Kind is ValueKind.Component or ValueKind.JsonObject or ValueKind.CloneObject)
             {
                 sb.AppendLine($"        if (this.{p.BackingMember} is object __component_{p.Name})");
                 sb.AppendLine("        {");
                 sb.AppendLine($"            __values[\"{p.Key}\"] = __component_{p.Name};");
                 sb.AppendLine("        }");
+                continue;
             }
-            sb.AppendLine("    }");
+
+            if (p.Kind == ValueKind.PersistableState)
+            {
+                sb.AppendLine($"        if (this.{p.BackingMember} is not null)");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            __values[\"{p.Key}\"] = this.{p.BackingMember}.SaveState();");
+                sb.AppendLine("        }");
+                continue;
+            }
+            if (p.Kind == ValueKind.Expression)
+            {
+                sb.AppendLine($"        __values[\"{p.Key}\"] = global::AiDotNet.Serialization.ExpressionState.Save(this.{p.BackingMember});");
+                continue;
+            }
+            if (p.Kind == ValueKind.EnumArray)
+            {
+                sb.AppendLine($"        __values[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.FormatEnumArray(this.{p.BackingMember});");
+                continue;
+            }
+            if (p.Kind == ValueKind.NumericTypeParameter)
+            {
+                string numeric = model.TypeParameters.Count > 0 ? model.TypeParameters[0] : "T";
+                sb.AppendLine($"        __values[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.Format(global::AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<{numeric}>().ToDouble(this.{p.BackingMember}));");
+                continue;
+            }
+
+            var read = p.NeedsConvert
+                ? ConvertExpression(p, model.TypeParameters.Count > 0 ? model.TypeParameters[0] : "T")
+                : $"this.{p.BackingMember}";
+            if (p.OmitWhenNonPositive)
+            {
+                var positive = p.BackingMemberIsNullable
+                    ? $"this.{p.BackingMember}.HasValue && this.{p.BackingMember}.Value > 0"
+                    : $"this.{p.BackingMember} > 0";
+                var omitFormatter = p.BackingMemberIsNullable ? "FormatNullable" : "Format";
+                sb.AppendLine($"        if ({positive})");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            __values[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.{omitFormatter}({read});");
+                sb.AppendLine("        }");
+                continue;
+            }
+
+            var formatter = p.BackingMemberIsNullable ? "FormatNullable" : "Format";
+            sb.AppendLine($"        __values[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.{formatter}({read});");
         }
+        sb.AppendLine("    }");
         sb.AppendLine("}");
         // Close the outer types opened above.
         for (int i = 0; i < model.ContainingTypes.Count; i++)

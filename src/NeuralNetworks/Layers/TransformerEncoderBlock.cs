@@ -108,6 +108,10 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
             throw new ArgumentOutOfRangeException(nameof(numHeads));
         if (ffnDim <= 0)
             throw new ArgumentOutOfRangeException(nameof(ffnDim));
+        if (hiddenSize % numHeads != 0)
+            throw new ArgumentException(
+                $"Hidden size ({hiddenSize}) must be evenly divisible by the number of attention heads ({numHeads}).",
+                nameof(hiddenSize));
 
         _hiddenSize = hiddenSize;
         _numHeads = numHeads;

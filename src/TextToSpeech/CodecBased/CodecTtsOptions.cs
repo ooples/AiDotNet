@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.TextToSpeech.CodecBased;
 
 /// <summary>
@@ -6,6 +8,8 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the CodecTts model. Default values follow the original paper settings.</para>
 /// </remarks>
+[DimensionDivisibility(nameof(TextEncoderDim), nameof(NumHeads))]
+[DimensionDivisibility(nameof(LLMDim), nameof(NumHeads))]
 public class CodecTtsOptions : TtsModelOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
