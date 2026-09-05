@@ -123,12 +123,65 @@ string[] DeclarationCandidates =
 // Shapes that suit a name, tried before the generic list. Purely cosmetic — every one of these still has
 // to satisfy the compiler before it is accepted — but it keeps an audio buffer from being declared with
 // the dimensions of an RGB image.
-IEnumerable<string> OrderCandidatesFor(string name)
+// The type an example documents, derived from its member id, so the solver can offer "an instance of the
+// thing this page is about". That is what an undefined `model` or `network` almost always means in a doc
+// example, and no generic candidate list would ever supply it.
+IEnumerable<string> SelfCandidates(string fileKey)
+{
+    var name = fileKey.Contains(':') ? fileKey[(fileKey.IndexOf(':') + 1)..] : fileKey;
+    name = Regex.Replace(name, @"\(.*", "");
+    var arity = Regex.Match(name, @"`(\d+)");
+    name = Regex.Replace(name, @"`\d+", "");
+    var simple = name.Split('.').LastOrDefault(s => s.Length > 0 && char.IsUpper(s[0]));
+    if (simple is null) yield break;
+
+    if (!arity.Success || arity.Groups[1].Value == "0")
+    {
+        yield return $"new {simple}()";
+        yield break;
+    }
+    if (arity.Groups[1].Value == "1")
+    {
+        yield return $"new {simple}<double>()";
+        yield return $"new {simple}<float>()";
+        yield return $"new {simple}<double>(new NeuralNetworkArchitecture<double>(inputFeatures: 8, outputSize: 4))";
+        yield return $"new {simple}<float>(new NeuralNetworkArchitecture<float>(inputFeatures: 8, outputSize: 4))";
+    }
+}
+
+IEnumerable<string> OrderCandidatesFor(string name, string fileKey)
 {
     var lower = name.ToLowerInvariant();
     var preferred = new List<string>();
 
-    if (lower.Contains("audio") || lower.Contains("signal") || lower.Contains("wave") ||
+    // An undefined model/network/instance in a type's own documentation means that type.
+    if (lower is "model" or "network" or "instance" or "algorithm" || lower.EndsWith("model", StringComparison.Ordinal))
+    {
+        preferred.AddRange(SelfCandidates(fileKey));
+    }
+    // A count or a size is a number. Without this the solver reaches the Matrix candidate first and
+    // accepts it, because `var featureCount = new Matrix<double>(...)` compiles perfectly well and is
+    // nonsense — the compiler cannot object to a name, only to a type.
+    else if (lower.EndsWith("count", StringComparison.Ordinal) || lower.EndsWith("size", StringComparison.Ordinal) ||
+             lower.EndsWith("dim", StringComparison.Ordinal) || lower.EndsWith("length", StringComparison.Ordinal) ||
+             lower.StartsWith("num", StringComparison.Ordinal) || lower is "epochs" or "steps" or "index" or "seed")
+    {
+        preferred.Add("32");
+        preferred.Add("0.5");
+    }
+    else if (lower.EndsWith("rate", StringComparison.Ordinal) || lower.EndsWith("threshold", StringComparison.Ordinal) ||
+             lower.EndsWith("ratio", StringComparison.Ordinal) || lower is "alpha" or "beta" or "gamma" or "temperature")
+    {
+        preferred.Add("0.5");
+        preferred.Add("32");
+    }
+    else if (lower.EndsWith("name", StringComparison.Ordinal) || lower.EndsWith("path", StringComparison.Ordinal) ||
+             lower is "prompt" or "text" or "query" or "sentence")
+    {
+        preferred.Add("\"example\"");
+    }
+
+    else if (lower.Contains("audio") || lower.Contains("signal") || lower.Contains("wave") ||
         lower.Contains("melody") || lower.Contains("speech"))
     {
         preferred.Add("Tensor<float>.CreateRandom(1, 16000)");
@@ -269,7 +322,7 @@ void Check(string code, string fileKey, int idx, string? homeNamespace = null)
             // between candidates the compiler would accept equally. A tensor declared for
             // `noisyAudioTensor` binds just as well at (1, 3, 32, 32) as at (1, 16000), and both compile
             // — but one of them reads like an image, so the name picks the plausible shape.
-            foreach (var candidate in OrderCandidatesFor(name))
+            foreach (var candidate in OrderCandidatesFor(name, fileKey))
             {
                 string decl = $"var {name} = {candidate};";
                 var trial = Compile(Compose(code, homeNamespace, accepted.Append(decl)), ++probeId);

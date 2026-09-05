@@ -24,6 +24,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// </remarks>
 /// <example>
 /// <code>
+/// var audioTensor = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// // Create AudioPaLM for speech recognition using ONNX
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,

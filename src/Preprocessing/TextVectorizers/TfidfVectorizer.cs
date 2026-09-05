@@ -77,6 +77,7 @@ public class TfidfVectorizer<T> : TextVectorizerBase<T>
     /// </param>
     /// <example>
     /// <code>
+    /// var documents = new string[] { "first", "second" };
     /// // Basic usage with default tokenization
     /// var tfidf = new TfidfVectorizer&lt;double&gt;();
     /// var matrix = tfidf.FitTransform(documents);
