@@ -366,6 +366,7 @@ public class CAVIAOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     /// <exception cref="ArgumentNullException">Thrown when metaModel is null.</exception>
     /// <example>
     /// <code>
+    /// var myEncoder = new NeuralNetwork&lt;double&gt;(new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 8, outputSize: 4));
     /// // Create CAVIA with minimal configuration
     /// var options = new CAVIAOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myEncoder);
     /// var cavia = new CAVIAAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);

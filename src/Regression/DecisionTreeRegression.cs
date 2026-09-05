@@ -31,7 +31,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a decision tree regression model for predicting continuous values
-/// var options = new DecisionTreeOptions&lt;double&gt;();
+/// var options = new DecisionTreeOptions();
 /// var model = new DecisionTreeRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features each

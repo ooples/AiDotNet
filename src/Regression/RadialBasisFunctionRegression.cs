@@ -30,7 +30,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create an RBF regression with radial basis function features
-/// var options = new RadialBasisFunctionRegressionOptions&lt;double&gt;();
+/// var options = new RadialBasisFunctionOptions&lt;double&gt;();
 /// var model = new RadialBasisFunctionRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features each

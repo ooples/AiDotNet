@@ -334,6 +334,7 @@ public class ProtoNetsOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOp
     /// <exception cref="ArgumentNullException">Thrown when metaModel is null.</exception>
     /// <example>
     /// <code>
+    /// var myEncoder = new NeuralNetwork&lt;double&gt;(new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 8, outputSize: 4));
     /// // Create ProtoNets with minimal configuration
     /// var options = new ProtoNetsOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myEncoder);
     /// var protoNets = new ProtoNetsAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);

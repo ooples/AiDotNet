@@ -36,7 +36,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a gradient boosting regression model
-/// var options = new GradientBoostingRegressionOptions&lt;double&gt;();
+/// var options = new GradientBoostingRegressionOptions();
 /// var model = new GradientBoostingRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features each

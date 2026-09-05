@@ -41,7 +41,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a Beta regression for modeling proportions (values in 0-1)
-/// var options = new BetaRegressionOptions&lt;double&gt;();
+/// var options = new BetaRegressionOptions();
 /// var model = new BetaRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 5 samples with 2 features, targets are proportions

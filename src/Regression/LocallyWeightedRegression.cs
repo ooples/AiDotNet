@@ -36,7 +36,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a locally weighted regression (LOESS/LOWESS)
-/// var options = new LocallyWeightedRegressionOptions&lt;double&gt;();
+/// var options = new LocallyWeightedRegressionOptions();
 /// var model = new LocallyWeightedRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features each

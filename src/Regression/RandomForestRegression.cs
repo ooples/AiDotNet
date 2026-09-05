@@ -29,7 +29,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a random forest regression with ensemble of decision trees
-/// var options = new RandomForestRegressionOptions&lt;double&gt;();
+/// var options = new RandomForestRegressionOptions();
 /// var model = new RandomForestRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features each

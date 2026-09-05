@@ -42,7 +42,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create an Explainable Boosting Machine for interpretable regression
-/// var options = new ExplainableBoostingMachineRegressionOptions&lt;double&gt;();
+/// var options = new ExplainableBoostingMachineOptions&lt;double&gt;();
 /// var model = new ExplainableBoostingMachineRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features each

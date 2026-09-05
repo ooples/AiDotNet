@@ -32,7 +32,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a multilayer perceptron neural network for regression
-/// var options = new MultilayerPerceptronRegressionOptions&lt;double&gt;();
+/// var options = new MultilayerPerceptronOptions&lt;double&gt;();
 /// var model = new MultilayerPerceptronRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features each

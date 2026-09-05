@@ -43,7 +43,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create an AdaBoost.R2 regression model
-/// var options = new AdaBoostR2RegressionOptions&lt;double&gt;();
+/// var options = new AdaBoostR2RegressionOptions();
 /// var model = new AdaBoostR2Regression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features each

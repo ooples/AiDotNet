@@ -36,7 +36,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a Support Vector Regression with epsilon-tube fitting
-/// var options = new SupportVectorRegressionOptions&lt;double&gt;();
+/// var options = new SupportVectorRegressionOptions();
 /// var model = new SupportVectorRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features each

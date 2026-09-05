@@ -41,7 +41,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a Zero-Inflated regression for count data with excess zeros
-/// var options = new ZeroInflatedRegressionOptions&lt;double&gt;();
+/// var options = new ZeroInflatedRegressionOptions();
 /// var model = new ZeroInflatedRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features, count targets with excess zeros

@@ -30,7 +30,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a Quantile Regression Forest for distributional predictions
-/// var options = new QuantileRegressionForestsOptions&lt;double&gt;();
+/// var options = new QuantileRegressionForestsOptions();
 /// var model = new QuantileRegressionForests&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features each

@@ -57,6 +57,7 @@ namespace AiDotNet.Video.Prediction;
 /// </remarks>
 /// <example>
 /// <code>
+/// var observedFrames = Tensor&lt;double&gt;.CreateRandom(1, 3, 32, 32);
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,

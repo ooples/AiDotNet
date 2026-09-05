@@ -57,7 +57,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a histogram-based gradient boosting regression for fast large-scale training
-/// var options = new HistGradientBoostingOptions&lt;double&gt;();
+/// var options = new HistGradientBoostingOptions();
 /// var model = new HistGradientBoostingRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features each

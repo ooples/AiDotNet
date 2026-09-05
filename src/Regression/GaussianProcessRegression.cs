@@ -36,7 +36,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a Gaussian Process regression with uncertainty estimates
-/// var options = new GaussianProcessRegressionOptions&lt;double&gt;();
+/// var options = new GaussianProcessRegressionOptions();
 /// var model = new GaussianProcessRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 5 samples with 2 features each

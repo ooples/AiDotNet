@@ -41,7 +41,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a mixed-effects model for hierarchical/clustered data
-/// var options = new MixedEffectsModelOptions&lt;double&gt;();
+/// var options = new MixedEffectsModelOptions();
 /// var model = new MixedEffectsModel&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 fixed-effect features

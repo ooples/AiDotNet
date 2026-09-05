@@ -32,7 +32,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create an Extra Trees regression with additional randomization
-/// var options = new ExtremelyRandomizedTreesRegressionOptions&lt;double&gt;();
+/// var options = new ExtremelyRandomizedTreesRegressionOptions();
 /// var model = new ExtremelyRandomizedTreesRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features each

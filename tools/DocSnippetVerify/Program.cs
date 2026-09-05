@@ -50,6 +50,11 @@ var parse = new CSharpParseOptions(LanguageVersion.Latest);
 // the library grows: a new namespace is covered the next time this runs. Only namespaces that actually contain
 // a public type are imported, and `using` of a namespace is free when unused.
 var discoveredUsings = new SortedSet<string>(StringComparer.Ordinal);
+
+// Public types that can be built with no arguments, or with just an architecture. These let the
+// declaration solver answer a name like `myTokenizer` or `myEncoder` with a real type from the library —
+// something no fixed candidate list could contain, because the answer depends on what the library ships.
+var constructibleTypes = new List<(string Simple, int Arity, bool Parameterless, bool TakesArchitecture)>();
 {
     var probe = CSharpCompilation.Create("__ns_probe", Array.Empty<SyntaxTree>(), refs, options);
     foreach (var reference in refs)
@@ -67,6 +72,30 @@ var discoveredUsings = new SortedSet<string>(StringComparer.Ordinal);
             {
                 discoveredUsings.Add(ns.ToDisplayString());
             }
+
+            foreach (var type in ns.GetTypeMembers())
+            {
+                if (type.DeclaredAccessibility != Accessibility.Public || type.IsAbstract ||
+                    type.TypeKind != TypeKind.Class || type.Arity > 1)
+                {
+                    continue;
+                }
+
+                var ctors = type.InstanceConstructors
+                    .Where(c => c.DeclaredAccessibility == Accessibility.Public)
+                    .ToList();
+                bool none = ctors.Any(c => c.Parameters.All(p => p.HasExplicitDefaultValue));
+                bool arch = ctors.Any(c =>
+                    c.Parameters.Length > 0 &&
+                    c.Parameters[0].Type.Name == "NeuralNetworkArchitecture" &&
+                    c.Parameters.Skip(1).All(p => p.HasExplicitDefaultValue));
+
+                if (none || arch)
+                {
+                    constructibleTypes.Add((type.Name, type.Arity, none, arch));
+                }
+            }
+
             foreach (var child in ns.GetNamespaceMembers()) queue.Enqueue(child);
         }
     }
@@ -149,6 +178,37 @@ IEnumerable<string> SelfCandidates(string fileKey)
     }
 }
 
+// Constructions of library types whose name matches the variable's. `myTokenizer` looks for a type whose
+// name ends in "Tokenizer", `pool` for one ending in "Pool". The compiler still has to accept the result,
+// so a coincidental name match that does not fit the surrounding code is rejected like any other
+// candidate — this only widens what gets tried.
+IEnumerable<string> TypeCandidatesFor(string name)
+{
+    var word = Regex.Replace(name, @"^(my|the|a|an)(?=[A-Z])", "", RegexOptions.IgnoreCase);
+    word = Regex.Replace(word, @"\d+$", "");
+    if (word.Length < 4) yield break;
+
+    var matches = constructibleTypes
+        .Where(t => t.Simple.EndsWith(word, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(t.Simple, word, StringComparison.OrdinalIgnoreCase))
+        .OrderBy(t => t.Simple.Length)          // the least-decorated name is the likeliest intent
+        .Take(4)
+        .ToList();
+
+    foreach (var t in matches)
+    {
+        string generic = t.Arity == 1 ? "<double>" : "";
+        if (t.Parameterless) yield return $"new {t.Simple}{generic}()";
+        if (t.TakesArchitecture)
+        {
+            string archArg = t.Arity == 1
+                ? "new NeuralNetworkArchitecture<double>(inputFeatures: 8, outputSize: 4)"
+                : "new NeuralNetworkArchitecture<double>(inputFeatures: 8, outputSize: 4)";
+            yield return $"new {t.Simple}{generic}({archArg})";
+        }
+    }
+}
+
 IEnumerable<string> OrderCandidatesFor(string name, string fileKey)
 {
     var lower = name.ToLowerInvariant();
@@ -158,6 +218,16 @@ IEnumerable<string> OrderCandidatesFor(string name, string fileKey)
     if (lower is "model" or "network" or "instance" or "algorithm" || lower.EndsWith("model", StringComparison.Ordinal))
     {
         preferred.AddRange(SelfCandidates(fileKey));
+    }
+    // Names like myEncoder read as "some model of mine". These parameters are typed IFullModel, so a
+    // plain NeuralNetwork is both valid and recognisable; searching the library for a type ending in
+    // "Encoder" would instead offer whichever one sorts shortest — CIFEncoder, a speech
+    // continuous-integrate-and-fire encoder, in a Matching Networks example.
+    else if (lower.EndsWith("encoder", StringComparison.Ordinal) || lower.EndsWith("embedder", StringComparison.Ordinal) ||
+             lower.EndsWith("backbone", StringComparison.Ordinal) || lower.EndsWith("basemodel", StringComparison.Ordinal))
+    {
+        preferred.Add("new NeuralNetwork<double>(new NeuralNetworkArchitecture<double>(inputFeatures: 8, outputSize: 4))");
+        preferred.Add("new NeuralNetwork<float>(new NeuralNetworkArchitecture<float>(inputFeatures: 8, outputSize: 4))");
     }
     // A count or a size is a number. Without this the solver reaches the Matrix candidate first and
     // accepts it, because `var featureCount = new Matrix<double>(...)` compiles perfectly well and is
@@ -200,7 +270,9 @@ IEnumerable<string> OrderCandidatesFor(string name, string fileKey)
         preferred.Add("new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 })");
     }
 
-    return preferred.Concat(DeclarationCandidates);
+    // Name-matched library types come after the shape hints but before the generic fallbacks, so a
+    // recognisable input still gets a Matrix or a Tensor while a domain object gets its real type.
+    return preferred.Concat(TypeCandidatesFor(name)).Concat(DeclarationCandidates);
 }
 
 

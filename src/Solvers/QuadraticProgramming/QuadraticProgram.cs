@@ -40,6 +40,7 @@ namespace AiDotNet.Solvers.QuadraticProgramming;
 /// Non-negative least squares — fit <c>Xw ≈ y</c> with all weights required to be non-negative.
 /// Expanding <c>½‖Xw − y‖²</c> gives <c>Q = XᵀX</c> and <c>c = −Xᵀy</c>:
 /// <code>
+/// var featureCount = 32;
 /// var y = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
 /// var X = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// var program = new QuadraticProgram&lt;double&gt;(

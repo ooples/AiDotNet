@@ -37,7 +37,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a spline regression with piecewise polynomial fitting
-/// var options = new SplineRegressionOptions&lt;double&gt;();
+/// var options = new SplineRegressionOptions();
 /// var model = new SplineRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 1 feature

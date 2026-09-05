@@ -37,7 +37,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a Kernel Ridge Regression for nonlinear relationships
-/// var options = new KernelRidgeRegressionOptions&lt;double&gt;();
+/// var options = new KernelRidgeRegressionOptions();
 /// var model = new KernelRidgeRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 5 samples with 2 features each

@@ -42,7 +42,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a GAMLSS model for distributional regression
-/// var options = new GAMLSSRegressionOptions&lt;double&gt;();
+/// var options = new GAMLSSOptions&lt;double&gt;();
 /// var model = new GAMLSSRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features each

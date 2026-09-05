@@ -39,7 +39,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a symbolic regression to discover mathematical equations
-/// var options = new SymbolicRegressionOptions&lt;double&gt;();
+/// var options = new SymbolicRegressionOptions();
 /// var model = new SymbolicRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 5 samples with 2 features each

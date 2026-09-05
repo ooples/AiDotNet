@@ -65,6 +65,7 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 /// </remarks>
 /// <example>
 /// <code>
+/// var audio = Tensor&lt;double&gt;.CreateRandom(1, 16000);
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
