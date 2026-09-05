@@ -30,7 +30,7 @@ namespace AiDotNet.Finance.NLP;
 /// // Define architecture for financial language generation (2048 max tokens, 50B-parameter vocab)
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 2048, inputWidth: 1, inputDepth: 1, outputSize: 131072);
 ///
 /// // Training mode: decoder-only transformer trained on Bloomberg financial data

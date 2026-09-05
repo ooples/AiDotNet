@@ -36,9 +36,9 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// <example>
 /// <code>
 /// // Create a DMD2 model for single-step high-fidelity generation
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 1 };
-/// var model = new DMD2Model&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 4, DefaultInferenceSteps = 1 };
+/// var model = new DMD2Model&lt;float&gt;(options: options);
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4, 64, 64 });
 /// var generated = model.Predict(noise);
 /// </code>
 /// </example>

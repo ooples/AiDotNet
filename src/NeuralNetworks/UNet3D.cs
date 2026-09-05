@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new UNet3DOptions { InputChannels = 1, OutputChannels = 4, BaseChannels = 32 };
 /// var model = new UNet3D&lt;float&gt;(options);
-/// var volume = Tensor&lt;float&gt;.Random(new[] { 1, 1, 64, 64, 64 });
+/// var volume = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1, 64, 64, 64 });
 /// var segmented = model.Predict(volume);
 /// </code>
 /// </example>

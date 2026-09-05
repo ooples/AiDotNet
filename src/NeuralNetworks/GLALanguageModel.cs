@@ -25,7 +25,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new GLAOptions { VocabSize = 32000, ModelDim = 2048, NumLayers = 24 };
 /// var model = new GLALanguageModel&lt;float&gt;(options);
-/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
 /// var logits = model.Predict(tokens);
 /// </code>
 /// </example>

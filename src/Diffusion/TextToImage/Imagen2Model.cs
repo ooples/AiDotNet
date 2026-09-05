@@ -55,9 +55,9 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 64, Width = 64, NumInferenceSteps = 50 };
-/// var model = new Imagen2Model&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 8, 8 });
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 4, DefaultInferenceSteps = 50 };
+/// var model = new Imagen2Model&lt;float&gt;(options: options);
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4, 8, 8 });
 /// var generated = model.Predict(noise);
 /// </code>
 /// </example>

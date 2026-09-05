@@ -49,16 +49,14 @@ namespace AiDotNet.Classification.Online;
 /// var classifier = new HoeffdingTreeClassifier&lt;double&gt;(options);
 ///
 /// // Prepare streaming data batch
-/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
-///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
-///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 1.1 }, { 1.2, 0.9 }, { 0.8, 1.0 }, { 5.0, 5.1 }, { 5.2, 4.9 }, { 4.8, 5.0 } });
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
 ///
 /// // Train incrementally, splitting nodes when Hoeffding bound is satisfied
 /// classifier.Train(features, labels);
 ///
 /// // Predict class for new sample
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
+/// var newSample = new Matrix&lt;double&gt;(new double[,] { { 1.1, 1.0 } });
 /// var prediction = classifier.Predict(newSample);
 /// // Result is available in the returned value
 /// </code>

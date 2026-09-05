@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// <code>
 /// var options = new MambularOptions { NumFeatures = 20, ModelDim = 128, NumLayers = 4 };
 /// var model = new MambularNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20 });
 /// var output = model.Predict(input);
 /// </code>
 /// </example>

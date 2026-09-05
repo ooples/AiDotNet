@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new TransformerOptions { HiddenSize = 512, NumHeads = 8, NumLayers = 6 };
 /// var model = new Transformer&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 128, 512 });
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128, 512 });
 /// var output = model.Predict(input);
 /// </code>
 /// </example>

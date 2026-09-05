@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new MemoryNetworkOptions { InputSize = 50, MemorySize = 128, EmbeddingSize = 64 };
 /// var model = new MemoryNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 50 });
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 50 });
 /// var output = model.Predict(input);
 /// </code>
 /// </example>

@@ -31,17 +31,15 @@ namespace AiDotNet.Diffusion.Control;
 /// <example>
 /// <code>
 /// // Create a ControlNet Tile model for upscaling and detail enhancement
-/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// var options = new DiffusionModelOptions&lt;float&gt;
 /// {
 ///     LatentChannels = 4,
-///     Height = 1024,
-///     Width = 1024,
-///     NumInferenceSteps = 20
+///     DefaultInferenceSteps = 20
 /// };
-/// var model = new ControlNetTileModel&lt;float&gt;(options);
+/// var model = new ControlNetTileModel&lt;float&gt;(options: options);
 ///
 /// // Enhance a low-resolution image with regenerated details
-/// var blurryImage = Tensor&lt;float&gt;.Random(new[] { 1, 3, 1024, 1024 });
+/// var blurryImage = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 1024, 1024 });
 /// var sharpResult = model.Predict(blurryImage);
 /// </code>
 /// </example>

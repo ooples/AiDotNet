@@ -55,7 +55,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 52);
 /// var gr00t = new GR00TN1&lt;double&gt;(arch, new GR00TN1Options());
 ///

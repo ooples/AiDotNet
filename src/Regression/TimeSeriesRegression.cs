@@ -32,7 +32,7 @@ namespace AiDotNet.Regression;
 /// var model = new TimeSeriesRegression&lt;double&gt;(options, regularization);
 ///
 /// // Prepare historical data with temporal features
-/// var features = Matrix&lt;double&gt;.Build.Dense(24, 3); // 24 observations, 3 features
+/// var features = new Matrix&lt;double&gt;(24, 3); // 24 observations, 3 features
 /// var targets = new Vector&lt;double&gt;(new double[] { 112, 118, 132, 129, 121, 135,
 ///     148, 148, 136, 119, 104, 118, 115, 126, 141, 135, 125, 149, 170, 170, 158, 133, 114, 140 });
 ///
@@ -40,7 +40,7 @@ namespace AiDotNet.Regression;
 /// model.Train(features, targets);
 ///
 /// // Predict future values
-/// var newFeatures = Matrix&lt;double&gt;.Build.Dense(1, 3);
+/// var newFeatures = new Matrix&lt;double&gt;(1, 3);
 /// var forecast = model.Predict(newFeatures);
 /// // Result is available in the returned value
 /// </code>

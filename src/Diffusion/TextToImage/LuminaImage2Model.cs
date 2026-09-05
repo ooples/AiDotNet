@@ -52,9 +52,9 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 1024, Width = 1024, NumInferenceSteps = 28 };
-/// var model = new LuminaImage2Model&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 128, 128 });
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 16, DefaultInferenceSteps = 28 };
+/// var model = new LuminaImage2Model&lt;float&gt;(options: options);
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 16, 128, 128 });
 /// var generated = model.Predict(noise);
 /// </code>
 /// </example>

@@ -43,15 +43,14 @@ namespace AiDotNet.Regression;
 /// var model = new SymbolicRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 5 samples with 2 features each
-/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
-///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 }, { 9, 10 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 2.5, 5.3, 8.1, 10.9, 13.7 });
 ///
 /// // Train with genetic programming to evolve expression trees
 /// model.Train(features, targets);
 ///
 /// // Predict using the discovered mathematical expression
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var newSample = new Matrix&lt;double&gt;(new double[,] { { 11, 12 } });
 /// var prediction = model.Predict(newSample);
 /// </code>
 /// </example>

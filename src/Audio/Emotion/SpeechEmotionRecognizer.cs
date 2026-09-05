@@ -60,7 +60,7 @@ namespace AiDotNet.Audio.Emotion;
 /// // Create a speech emotion recognizer using a pre-trained ONNX model
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.AudioProcessing,
 ///     inputSize: 80,
 ///     outputSize: 7);
 ///

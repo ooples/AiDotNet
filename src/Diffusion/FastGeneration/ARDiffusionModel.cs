@@ -34,9 +34,9 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// <example>
 /// <code>
 /// // Create an AR-Diffusion model for autoregressive latent diffusion
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 8, Height = 256, Width = 256, NumInferenceSteps = 20 };
-/// var model = new ARDiffusionModel&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 8, 32, 32 });
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 8, DefaultInferenceSteps = 20 };
+/// var model = new ARDiffusionModel&lt;float&gt;(options: options);
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 8, 32, 32 });
 /// var generated = model.Predict(noise);
 /// </code>
 /// </example>

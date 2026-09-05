@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks
     /// <code>
     /// var options = new SPLADEOptions { VocabSize = 30522, MaxSequenceLength = 256 };
     /// var model = new SPLADE&lt;float&gt;(options);
-    /// var input = Tensor&lt;float&gt;.Random(new[] { 1, 256 });
+    /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 256 });
     /// var sparse = model.Predict(input);
     /// </code>
     /// </example>

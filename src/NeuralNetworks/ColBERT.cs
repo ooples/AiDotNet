@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks
     /// <code>
     /// var options = new ColBERTOptions { EmbeddingDim = 128, MaxQueryLength = 32 };
     /// var model = new ColBERT&lt;float&gt;(options);
-    /// var input = Tensor&lt;float&gt;.Random(new[] { 1, 32 });
+    /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 32 });
     /// var embedding = model.Predict(input);
     /// </code>
     /// </example>

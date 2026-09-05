@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new VideoCLIPOptions { ImageSize = 224, NumFrames = 8, EmbeddingDim = 512 };
 /// var model = new VideoCLIPNeuralNetwork&lt;float&gt;(options);
-/// var video = Tensor&lt;float&gt;.Random(new[] { 1, 3, 8, 224, 224 });
+/// var video = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 8, 224, 224 });
 /// var embedding = model.Predict(video);
 /// </code>
 /// </example>

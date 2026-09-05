@@ -63,7 +63,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new GraphIsomorphismNetworkOptions { NodeFeatureSize = 16, HiddenSize = 64, NumLayers = 5 };
 /// var model = new GraphIsomorphismNetwork&lt;float&gt;(options);
-/// var nodeFeatures = Tensor&lt;float&gt;.Random(new[] { 20, 16 });
+/// var nodeFeatures = Tensor&lt;float&gt;.CreateRandom(new[] { 20, 16 });
 /// var output = model.Predict(nodeFeatures);
 /// </code>
 /// </example>

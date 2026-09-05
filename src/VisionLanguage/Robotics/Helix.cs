@@ -54,7 +54,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// <code>
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 35);
 /// var helix = new Helix&lt;double&gt;(arch, new HelixOptions());
 ///

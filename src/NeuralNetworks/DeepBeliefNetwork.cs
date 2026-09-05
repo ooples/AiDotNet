@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new DeepBeliefNetworkOptions { InputSize = 784, HiddenLayers = new[] { 500, 200 } };
 /// var model = new DeepBeliefNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 784 });
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 784 });
 /// var output = model.Predict(input);
 /// </code>
 /// </example>

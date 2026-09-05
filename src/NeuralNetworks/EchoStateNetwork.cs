@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new EchoStateNetworkOptions { InputSize = 1, ReservoirSize = 500 };
 /// var model = new EchoStateNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 100, 1 });
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 100, 1 });
 /// var output = model.Predict(input);
 /// </code>
 /// </example>

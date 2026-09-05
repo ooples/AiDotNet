@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks;
 ///     inputSize: 2048,
 ///     outputSize: 256000);
 /// var model = new HawkLanguageModel&lt;float&gt;(architecture);
-/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
 /// var logits = model.Predict(tokens);
 /// </code>
 /// </example>

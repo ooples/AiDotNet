@@ -41,7 +41,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 /// // Create a UniVS model for unified multi-task video segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 480, inputWidth: 480, inputDepth: 3, outputSize: 80);
 /// var model = new UniVS&lt;double&gt;(architecture, numClasses: 80);
 ///

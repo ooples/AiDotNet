@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new RadialBasisFunctionNetworkOptions { InputSize = 10, NumCenters = 50 };
 /// var model = new RadialBasisFunctionNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 10 });
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 10 });
 /// var output = model.Predict(input);
 /// </code>
 /// </example>

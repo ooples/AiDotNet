@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 /// // Create a Speaker-Diarized ASR model for who-spoke-what transcription
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new SpeakerDiarizedASR&lt;double&gt;(architecture);
 ///

@@ -33,7 +33,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// // using ViT encoder with windowed attention for high-resolution images
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 256);
 ///
 /// // ONNX inference mode with pre-trained model

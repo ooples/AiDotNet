@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// // Create Phi-4 Audio for efficient speech recognition
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputSize: 80,
 ///     outputSize: 51200);
 ///

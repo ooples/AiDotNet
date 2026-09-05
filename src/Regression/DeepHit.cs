@@ -43,16 +43,14 @@ namespace AiDotNet.Regression;
 /// var model = new DeepHit&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 3 features (clinical covariates)
-/// var features = Matrix&lt;double&gt;.Build.Dense(6, 3, new double[] {
-///     55, 1, 2.1,  60, 0, 3.5,  45, 1, 1.8,
-///     70, 0, 4.2,  50, 1, 2.9,  65, 0, 3.1 });
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 55, 1, 2.1 }, { 60, 0, 3.5 }, { 45, 1, 1.8 }, { 70, 0, 4.2 }, { 50, 1, 2.9 }, { 65, 0, 3.1 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 12, 24, 36, 6, 18, 30 });
 ///
 /// // Train the survival model
 /// model.Train(features, targets);
 ///
 /// // Predict survival probabilities for a new patient
-/// var newPatient = Matrix&lt;double&gt;.Build.Dense(1, 3, new double[] { 58, 1, 2.5 });
+/// var newPatient = new Matrix&lt;double&gt;(new double[,] { { 58, 1, 2.5 } });
 /// var prediction = model.Predict(newPatient);
 /// </code>
 /// </example>

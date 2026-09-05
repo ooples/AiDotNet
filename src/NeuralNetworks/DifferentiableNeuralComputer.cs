@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new DifferentiableNeuralComputerOptions { InputSize = 64, MemorySize = 128, MemoryWordSize = 32 };
 /// var model = new DifferentiableNeuralComputer&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 10, 64 });
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 10, 64 });
 /// var output = model.Predict(input);
 /// </code>
 /// </example>

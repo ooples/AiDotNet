@@ -25,7 +25,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new MambaOptions { VocabSize = 50280, ModelDim = 2560, NumLayers = 64 };
 /// var model = new MambaLanguageModel&lt;float&gt;(options);
-/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
 /// var logits = model.Predict(tokens);
 /// </code>
 /// </example>

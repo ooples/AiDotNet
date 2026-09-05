@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new ACGANOptions { LatentSize = 100, NumClasses = 10 };
 /// var model = new ACGAN&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 100 });
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 100 });
 /// var generated = model.Predict(noise);
 /// </code>
 /// </example>

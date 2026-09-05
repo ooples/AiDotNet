@@ -18,7 +18,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// // Create Step-Audio for intelligent voice interaction
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Generation,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputSize: 512,
 ///     outputSize: 16000);
 ///

@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new OctonionNeuralNetworkOptions { InputSize = 8, HiddenSize = 64 };
 /// var model = new OctonionNeuralNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 8 });
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 8 });
 /// var output = model.Predict(input);
 /// </code>
 /// </example>

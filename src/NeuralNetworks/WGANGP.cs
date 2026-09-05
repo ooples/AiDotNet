@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new WGANGPOptions { LatentSize = 100, GradientPenaltyWeight = 10.0 };
 /// var model = new WGANGP&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 100 });
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 100 });
 /// var generated = model.Predict(noise);
 /// </code>
 /// </example>

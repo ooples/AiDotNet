@@ -42,7 +42,7 @@ namespace AiDotNet.TimeSeries;
 /// // Prepare long-horizon time series data
 /// var history = new Vector&lt;double&gt;(new double[] { 112, 118, 132, 129, 121, 135, 148, 148, 136, 119, 104, 118,
 ///     115, 126, 141, 135, 125, 149, 170, 170, 158, 133, 114, 140 });
-/// var trainingMatrix = Matrix&lt;double&gt;.Build.Dense(history.Count - 1, 1);
+/// var trainingMatrix = new Matrix&lt;double&gt;(history.Count - 1, 1);
 ///
 /// // Train using ProbSparse self-attention for O(L log L) efficiency
 /// model.Train(trainingMatrix, history.SubVector(1, history.Count - 1));

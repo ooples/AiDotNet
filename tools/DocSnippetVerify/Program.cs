@@ -35,15 +35,49 @@ foreach (var dll in Directory.GetFiles(AppContext.BaseDirectory, "*.dll")) AddRe
 if (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") is string tpa)
     foreach (var p in tpa.Split(Path.PathSeparator)) AddRef(p);
 
-const string commonUsings =
-    "using System;using System.Collections.Generic;using System.Linq;" +
-    "using System.Threading;using System.Threading.Tasks;" +
-    "using AiDotNet;using AiDotNet.Tensors;using AiDotNet.Tensors.LinearAlgebra;\n";
-
 var options = new CSharpCompilationOptions(
     OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true,
     nullableContextOptions: NullableContextOptions.Disable);
 var parse = new CSharpParseOptions(LanguageVersion.Latest);
+
+// ── Usings the harness prepends to every snippet ──
+// A documentation example names a type; it does not carry the library's import list, because a reader pastes it
+// into a file that already has those usings (or lets the IDE add them). Importing only three AiDotNet namespaces
+// therefore failed 1370 of 1403 snippets on CS0246 — "type not found" — which says nothing about the example and
+// hides the handful that reference types the library does not actually have.
+//
+// The namespace list is DISCOVERED from the referenced assemblies rather than hardcoded, so it cannot drift as
+// the library grows: a new namespace is covered the next time this runs. Only namespaces that actually contain
+// a public type are imported, and `using` of a namespace is free when unused.
+var discoveredUsings = new SortedSet<string>(StringComparer.Ordinal);
+{
+    var probe = CSharpCompilation.Create("__ns_probe", Array.Empty<SyntaxTree>(), refs, options);
+    foreach (var reference in refs)
+    {
+        if (probe.GetAssemblyOrModuleSymbol(reference) is not IAssemblySymbol assembly) continue;
+        if (!assembly.Name.StartsWith("AiDotNet", StringComparison.Ordinal)) continue;
+
+        var queue = new Queue<INamespaceSymbol>();
+        queue.Enqueue(assembly.GlobalNamespace);
+        while (queue.Count > 0)
+        {
+            var ns = queue.Dequeue();
+            if (!ns.IsGlobalNamespace &&
+                ns.GetTypeMembers().Any(t => t.DeclaredAccessibility == Accessibility.Public))
+            {
+                discoveredUsings.Add(ns.ToDisplayString());
+            }
+            foreach (var child in ns.GetNamespaceMembers()) queue.Enqueue(child);
+        }
+    }
+}
+
+string commonUsings =
+    "using System;using System.Collections.Generic;using System.Linq;" +
+    "using System.Threading;using System.Threading.Tasks;" +
+    string.Concat(discoveredUsings.Select(n => $"using {n};")) + "\n";
+
+Console.WriteLine($"Imported {discoveredUsings.Count} AiDotNet namespaces into the snippet harness.");
 
 var blockRe = new Regex("```csharp\\s*?\\n(.*?)```", RegexOptions.Singleline);
 var usingRe = new Regex(@"^\s*using\s+[A-Za-z_][\w.]*\s*;\s*$");
@@ -148,6 +182,15 @@ foreach (var g in byCode) Console.WriteLine($"  {g.Count(),4}  {g.Key}");
 Console.WriteLine("\nUnits with the most failures:");
 foreach (var kv in perFile.Where(p => p.Value.fail > 0).OrderByDescending(p => p.Value.fail).Take(25))
     Console.WriteLine($"  {kv.Value.fail,3}/{kv.Value.total,-3} {kv.Key}");
+
+// --dump <path> writes every failure, not a sample. Needed to work out which namespaces the snippet
+// harness must import: a sample cannot tell you which types are unresolved across 1400 snippets.
+var dumpIndex = Array.FindIndex(args, a => string.Equals(a, "--dump", StringComparison.OrdinalIgnoreCase));
+if (dumpIndex >= 0 && dumpIndex + 1 < args.Length)
+{
+    File.WriteAllLines(args[dumpIndex + 1], failures.Select(f => $"{f.file}#{f.idx}\t{f.err}"));
+    Console.WriteLine($"\nwrote {failures.Count} failures -> {args[dumpIndex + 1]}");
+}
 
 Console.WriteLine("\nSample failures:");
 foreach (var f in failures.Take(30))

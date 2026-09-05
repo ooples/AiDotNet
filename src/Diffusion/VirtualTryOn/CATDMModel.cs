@@ -30,9 +30,9 @@ namespace AiDotNet.Diffusion.VirtualTryOn;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 384, NumInferenceSteps = 30 };
-/// var model = new CATDMModel&lt;float&gt;(options);
-/// var personGarment = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 48 });
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 4, DefaultInferenceSteps = 30 };
+/// var model = new CATDMModel&lt;float&gt;(options: options);
+/// var personGarment = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4, 64, 48 });
 /// var tryOn = model.Predict(personGarment);
 /// </code>
 /// </example>

@@ -58,7 +58,7 @@ namespace AiDotNet.Diffusion;
 /// var model = new DDPMModel&lt;float&gt;(options);
 ///
 /// // Generate an image from random noise
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 3, 64, 64 });
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 64, 64 });
 /// var generated = model.Predict(noise);
 /// </code>
 /// </example>

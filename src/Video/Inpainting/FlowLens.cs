@@ -33,6 +33,7 @@ namespace AiDotNet.Video.Inpainting;
 /// // Create a FlowLens model for optical-flow-guided video inpainting
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new FlowLensOptions();
 /// var flowLens = new FlowLens&lt;double&gt;(architecture, options);

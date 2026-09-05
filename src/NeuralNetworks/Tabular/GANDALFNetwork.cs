@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// <code>
 /// var options = new GANDALFOptions { NumFeatures = 20, NumTrees = 64, TreeDepth = 6 };
 /// var model = new GANDALFNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20 });
 /// var output = model.Predict(input);
 /// </code>
 /// </example>

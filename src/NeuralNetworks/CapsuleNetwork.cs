@@ -33,7 +33,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new CapsuleNetworkOptions { InputSize = 784, NumCapsules = 10 };
 /// var model = new CapsuleNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 1, 28, 28 });
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1, 28, 28 });
 /// var output = model.Predict(input);
 /// </code>
 /// </example>

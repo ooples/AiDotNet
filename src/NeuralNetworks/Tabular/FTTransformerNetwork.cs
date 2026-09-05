@@ -45,7 +45,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// <code>
 /// var options = new FTTransformerOptions { NumFeatures = 20, EmbeddingDim = 192, NumHeads = 8, NumLayers = 3 };
 /// var model = new FTTransformerNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20 });
 /// var output = model.Predict(input);
 /// </code>
 /// </example>

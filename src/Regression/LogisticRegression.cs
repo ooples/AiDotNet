@@ -29,12 +29,10 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// var model = new LogisticRegression&lt;double&gt;();
-/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
-///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
-///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 1.1 }, { 1.2, 0.9 }, { 0.8, 1.0 }, { 5.0, 5.1 }, { 5.2, 4.9 }, { 4.8, 5.0 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
 /// model.Train(features, targets);
-/// var prediction = model.Predict(Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 3.0, 3.0 }));
+/// var prediction = model.Predict(new Matrix&lt;double&gt;(new double[,] { { 3.0, 3.0 } }));
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

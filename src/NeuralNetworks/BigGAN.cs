@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <example>
 /// <code>
 /// var model = new BigGAN&lt;float&gt;(latentSize: 120, numClasses: 1000, imageChannels: 3, imageHeight: 128, imageWidth: 128);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 120 });
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 120 });
 /// var generated = model.Predict(noise);
 /// </code>
 /// </example>

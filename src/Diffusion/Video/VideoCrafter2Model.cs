@@ -37,9 +37,9 @@ namespace AiDotNet.Diffusion.Video;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 320, Width = 512, NumInferenceSteps = 50 };
-/// var model = new VideoCrafter2Model&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 16, 40, 64 });
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 4, DefaultInferenceSteps = 50 };
+/// var model = new VideoCrafter2Model&lt;float&gt;(options: options);
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4, 16, 40, 64 });
 /// var video = model.Predict(noise);
 /// </code>
 /// </example>

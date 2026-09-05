@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new SpiralNetOptions { InputFeatures = 3, HiddenSize = 64, SpiralLength = 9 };
 /// var model = new SpiralNet&lt;float&gt;(options);
-/// var vertexFeatures = Tensor&lt;float&gt;.Random(new[] { 1, 500, 3 });
+/// var vertexFeatures = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 500, 3 });
 /// var output = model.Predict(vertexFeatures);
 /// </code>
 /// </example>

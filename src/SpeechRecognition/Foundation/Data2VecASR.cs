@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 /// // Create a Data2Vec ASR model for general self-supervised speech learning
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new Data2VecASR&lt;double&gt;(architecture);
 ///

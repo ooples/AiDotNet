@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks
     /// <code>
     /// var options = new FastTextOptions { EmbeddingDim = 300, MinNgramLength = 3, MaxNgramLength = 6 };
     /// var model = new FastText&lt;float&gt;(options);
-    /// var input = Tensor&lt;float&gt;.Random(new[] { 1, 50 });
+    /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 50 });
     /// var embedding = model.Predict(input);
     /// </code>
     /// </example>

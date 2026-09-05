@@ -37,9 +37,9 @@ namespace AiDotNet.Diffusion.Video;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 480, Width = 720, NumInferenceSteps = 50 };
-/// var model = new CogVideoX15Model&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 80, 60, 90 });
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 16, DefaultInferenceSteps = 50 };
+/// var model = new CogVideoX15Model&lt;float&gt;(options: options);
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 16, 80, 60, 90 });
 /// var video = model.Predict(noise);
 /// </code>
 /// </example>

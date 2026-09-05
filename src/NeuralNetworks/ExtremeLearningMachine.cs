@@ -31,7 +31,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new ExtremeLearningMachineOptions { InputSize = 10, HiddenSize = 500 };
 /// var model = new ExtremeLearningMachine&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 10 });
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 10 });
 /// var output = model.Predict(input);
 /// </code>
 /// </example>

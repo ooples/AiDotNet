@@ -65,7 +65,7 @@ namespace AiDotNet.Audio.AudioGen;
 /// // Create an AudioGen model for generating audio from text descriptions
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Generation,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputSize: 512,
 ///     outputSize: 32000);
 ///

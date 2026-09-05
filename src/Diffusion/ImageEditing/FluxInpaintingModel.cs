@@ -44,9 +44,9 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 1024, Width = 1024, NumInferenceSteps = 28 };
-/// var model = new FluxInpaintingModel&lt;float&gt;(options);
-/// var maskedInput = Tensor&lt;float&gt;.Random(new[] { 1, 16, 128, 128 });
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 16, DefaultInferenceSteps = 28 };
+/// var model = new FluxInpaintingModel&lt;float&gt;(options: options);
+/// var maskedInput = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 16, 128, 128 });
 /// var inpainted = model.Predict(maskedInput);
 /// </code>
 /// </example>

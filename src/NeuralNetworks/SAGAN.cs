@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <example>
 /// <code>
 /// var model = new SAGAN&lt;float&gt;(latentSize: 128, imageChannels: 3, imageHeight: 64, imageWidth: 64);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
 /// var generated = model.Predict(noise);
 /// </code>
 /// </example>

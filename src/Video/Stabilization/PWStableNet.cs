@@ -32,6 +32,7 @@ namespace AiDotNet.Video.Stabilization;
 /// // Create a PWStableNet model for pixel-wise video stabilization
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new PWStableNetOptions();
 /// var pwStable = new PWStableNet&lt;double&gt;(architecture, options);

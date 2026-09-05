@@ -43,9 +43,9 @@ namespace AiDotNet.Diffusion.SuperResolution;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 1024, Width = 1024, NumInferenceSteps = 20 };
-/// var model = new SeeSRModel&lt;float&gt;(options);
-/// var lowRes = Tensor&lt;float&gt;.Random(new[] { 1, 4, 32, 32 });
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 4, DefaultInferenceSteps = 20 };
+/// var model = new SeeSRModel&lt;float&gt;(options: options);
+/// var lowRes = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4, 32, 32 });
 /// var highRes = model.Predict(lowRes);
 /// </code>
 /// </example>

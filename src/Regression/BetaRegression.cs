@@ -45,15 +45,14 @@ namespace AiDotNet.Regression;
 /// var model = new BetaRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 5 samples with 2 features, targets are proportions
-/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
-///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 }, { 9, 10 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 0.15, 0.35, 0.50, 0.72, 0.88 });
 ///
 /// // Train the model (predictions will be bounded between 0 and 1)
 /// model.Train(features, targets);
 ///
 /// // Predict a proportion for a new sample
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var newSample = new Matrix&lt;double&gt;(new double[,] { { 11, 12 } });
 /// var prediction = model.Predict(newSample);
 /// </code>
 /// </example>

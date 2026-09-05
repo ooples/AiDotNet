@@ -32,17 +32,15 @@ namespace AiDotNet.Diffusion.Control;
 /// <example>
 /// <code>
 /// // Create ControlNet++ for FLUX with reward-guided conditioning
-/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// var options = new DiffusionModelOptions&lt;float&gt;
 /// {
 ///     LatentChannels = 16,
-///     Height = 1024,
-///     Width = 1024,
-///     NumInferenceSteps = 28
+///     DefaultInferenceSteps = 28
 /// };
-/// var model = new ControlNetPlusPlusFluxModel&lt;float&gt;(options, ControlType.Depth);
+/// var model = new ControlNetPlusPlusFluxModel&lt;float&gt;(options: options, controlType: ControlType.Depth);
 ///
 /// // Generate with enhanced depth-guided control on FLUX
-/// var depthMap = Tensor&lt;float&gt;.Random(new[] { 1, 1, 1024, 1024 });
+/// var depthMap = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1, 1024, 1024 });
 /// var result = model.Predict(depthMap);
 /// </code>
 /// </example>

@@ -45,7 +45,7 @@ namespace AiDotNet.NeuralNetworks
     /// <code>
     /// var options = new Word2VecOptions { EmbeddingDim = 300, VocabSize = 50000, WindowSize = 5 };
     /// var model = new Word2Vec&lt;float&gt;(options);
-    /// var input = Tensor&lt;float&gt;.Random(new[] { 1, 50 });
+    /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 50 });
     /// var embedding = model.Predict(input);
     /// </code>
     /// </example>

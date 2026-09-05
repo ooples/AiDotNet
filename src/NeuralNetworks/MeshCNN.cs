@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new MeshCNNOptions { InputEdgeFeatures = 5, HiddenSize = 64, NumLayers = 4 };
 /// var model = new MeshCNN&lt;float&gt;(options);
-/// var edgeFeatures = Tensor&lt;float&gt;.Random(new[] { 1, 500, 5 });
+/// var edgeFeatures = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 500, 5 });
 /// var output = model.Predict(edgeFeatures);
 /// </code>
 /// </example>

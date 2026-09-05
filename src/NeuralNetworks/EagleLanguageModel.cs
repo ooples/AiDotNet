@@ -29,7 +29,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new EagleOptions { VocabSize = 65536, ModelDim = 2560, NumLayers = 32, NumHeads = 40 };
 /// var model = new EagleLanguageModel&lt;float&gt;(options);
-/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
 /// var logits = model.Predict(tokens);
 /// </code>
 /// </example>

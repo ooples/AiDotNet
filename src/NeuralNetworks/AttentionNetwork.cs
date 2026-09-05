@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks;
 /// var options = new AttentionNetworkOptions { HeadCount = 8, EncoderBlockCount = 3 };
 /// var model = new AttentionNetwork&lt;float&gt;(architecture, sequenceLength: 10, embeddingSize: 64, options: options);
 ///
-/// var input = Tensor&lt;float&gt;.Random(new[] { 10, 64 });   // (sequenceLength, embeddingSize)
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 10, 64 });   // (sequenceLength, embeddingSize)
 /// var output = model.Predict(input);
 /// </code>
 /// </example>

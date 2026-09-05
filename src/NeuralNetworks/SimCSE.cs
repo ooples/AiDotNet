@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks
     /// <code>
     /// var options = new SimCSEOptions { EmbeddingDim = 768, MaxSequenceLength = 128 };
     /// var model = new SimCSE&lt;float&gt;(options);
-    /// var input = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+    /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
     /// var embedding = model.Predict(input);
     /// </code>
     /// </example>

@@ -31,9 +31,9 @@ namespace AiDotNet.Diffusion.Panorama;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
-/// var model = new CubeDiffModel&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 6, 4, 64, 64 });
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 4, DefaultInferenceSteps = 30 };
+/// var model = new CubeDiffModel&lt;float&gt;(options: options);
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 6, 4, 64, 64 });
 /// var panorama = model.Predict(noise);
 /// </code>
 /// </example>

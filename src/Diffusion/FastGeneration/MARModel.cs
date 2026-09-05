@@ -36,9 +36,9 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 256, Width = 256, NumInferenceSteps = 12 };
-/// var model = new MARModel&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 32, 32 });
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 16, DefaultInferenceSteps = 12 };
+/// var model = new MARModel&lt;float&gt;(options: options);
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 16, 32, 32 });
 /// var generated = model.Predict(noise);
 /// </code>
 /// </example>

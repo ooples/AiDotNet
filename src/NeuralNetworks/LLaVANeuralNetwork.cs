@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new LLaVAOptions { ImageSize = 336, MaxTextLength = 512 };
 /// var model = new LLaVANeuralNetwork&lt;float&gt;(options);
-/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 336, 336 });
+/// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 336, 336 });
 /// var output = model.Predict(image);
 /// </code>
 /// </example>
