@@ -3161,7 +3161,34 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 ? adamOpts.BatchSize
                 : PaperRaysPerBatch;
 
-        RunImageSpaceTrainingLoop(imageTrainable, typedLoader, raysPerBatch, imageEpochs, optimizerOptions, cancellationToken);
+        // Drive the configured training callbacks and monitor around this loop. The image-only path had no
+        // observability at all: a caller who configured ConfigureTrainingCallback saw no epochs and could not
+        // stop training, even though the facade itself owns the loop and knows every epoch boundary.
+        EpochProgressBridge? epochBridge = null;
+        if (_trainingCallbacks.Count > 0 || _trainingMonitor is not null)
+        {
+            epochBridge = new EpochProgressBridge(
+                this, monitorSessionId: null, cancellationToken, imageEpochs,
+                MathHelper.GetNumericOperations<T>().Zero);
+            InvokeTrainingCallbacksBegin(imageEpochs);
+        }
+
+        try
+        {
+            RunImageSpaceTrainingLoop(
+                imageTrainable, typedLoader, raysPerBatch, imageEpochs, optimizerOptions,
+                cancellationToken, epochBridge);
+        }
+        finally
+        {
+            // OnTrainEnd is contractually always called once OnTrainBegin has fired, including when the loop
+            // throws or a callback vetoed it (#1790).
+            if (epochBridge is not null)
+            {
+                InvokeTrainingCallbacksEnd(
+                    epochBridge.LastEpoch, imageEpochs, epochBridge.LastLoss, epochBridge.Elapsed);
+            }
+        }
 
         var result = new AiModelResult<T, TInput, TOutput>
         {
@@ -3185,17 +3212,31 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         int raysPerBatch,
         int epochs,
         AiDotNet.Models.Options.OptimizationAlgorithmOptions<T, TInput, TOutput>? optimizerOptions,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        EpochProgressBridge? epochBridge = null)
     {
         var imgOpts = optimizerOptions as AiDotNet.Models.Options.OptimizationAlgorithmOptions<
             T,
             AiDotNet.Tensors.LinearAlgebra.Tensor<T>,
             AiDotNet.Tensors.LinearAlgebra.Tensor<T>>;
 
+        // The facade owns this epoch loop, so it is the only place that can drive the configured
+        // ConfigureTrainingCallback / ConfigureTrainingMonitor for an image-space family. Without this the
+        // callback contract — documented as "return false to request an early stop" — was unobservable here:
+        // no epoch was ever reported and no veto could take effect, for every IImageTrainable model.
+        // Loss is not yet surfaced per epoch by TrainOnImageBatch, so zero is reported rather than a fabricated
+        // value; the epoch index, the total, and the elapsed time are real, and the veto is honoured.
+        var zeroLoss = MathHelper.GetNumericOperations<T>().Zero;
+
         for (int epoch = 0; epoch < epochs; epoch++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             imageTrainable.TrainOnImageBatch(typedLoader, raysPerBatch, imgOpts);
+
+            if (epochBridge is not null && !epochBridge.OnEpoch(epoch + 1, epochs, zeroLoss))
+            {
+                break;
+            }
         }
 
         if (_model is NeuralRadianceFields.Models.GaussianSplatting<T> gs
@@ -4920,7 +4961,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 RunImageSpaceTrainingLoop(
                     imageTrainable, typedImageLoader,
                     raysPerBatch, imageEpochs, configuredOptimizerOptions,
-                    cancellationToken: cancellationToken);
+                    cancellationToken: cancellationToken,
+                    epochBridge: epochBridge);
 
                 optimizationResult = new OptimizationResult<T, TInput, TOutput>
                 {
