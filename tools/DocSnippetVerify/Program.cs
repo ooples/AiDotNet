@@ -196,4 +196,28 @@ Console.WriteLine("\nSample failures:");
 foreach (var f in failures.Take(30))
     Console.WriteLine($"  {f.file} #{f.idx}: {f.err}");
 
+// --min-pass <n> is a ratchet: the run fails when FEWER examples compile than the recorded floor, and
+// prints the new floor when more do. A plain all-or-nothing gate cannot be switched on part-way through
+// repairing a large backlog — it would block every unrelated change until the last example is fixed — and
+// a warn-only gate lets the count silently rot back down, which is how these examples decayed in the first
+// place. The ratchet makes the next broken example a red build while the remaining backlog is worked off.
+var minPassIndex = Array.FindIndex(args, a => string.Equals(a, "--min-pass", StringComparison.OrdinalIgnoreCase));
+if (minPassIndex >= 0 && minPassIndex + 1 < args.Length &&
+    int.TryParse(args[minPassIndex + 1], out int floor))
+{
+    if (pass < floor)
+    {
+        Console.WriteLine(
+            $"\nFAIL: {pass} examples compile, below the recorded floor of {floor}. A change in this PR " +
+            "broke an example that used to compile. Fix it, or — if an example was deliberately removed — " +
+            "lower the floor in the workflow with the reason in the commit message.");
+        return 1;
+    }
+
+    Console.WriteLine(pass > floor
+        ? $"\nPASS: {pass} examples compile, above the floor of {floor}. Raise the floor to {pass}."
+        : $"\nPASS: {pass} examples compile, matching the floor.");
+    return 0;
+}
+
 return total - pass == 0 ? 0 : 1;

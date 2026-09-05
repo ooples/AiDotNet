@@ -40,7 +40,7 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// <code>
 /// // Create Point Transformer V3 for 3D semantic segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     inputSize: 6, outputSize: 40, networkType: NetworkType.Classification);
+///     inputFeatures: 6, numClasses: 40);
 /// var ptv3 = new PointTransformerV3&lt;float&gt;(architecture,
 ///     numClasses: 40, modelSize: PointTransformerV3ModelSize.Base);
 /// Tensor&lt;float&gt; labels = ptv3.Forward(pointCloudTensor);

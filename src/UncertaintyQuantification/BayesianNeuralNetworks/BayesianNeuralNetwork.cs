@@ -29,10 +29,7 @@ namespace AiDotNet.UncertaintyQuantification.BayesianNeuralNetworks;
 /// <example>
 /// <code>
 /// // Create a Bayesian Neural Network with uncertainty estimation
-/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     inputSize: 10, outputSize: 1,
-///     hiddenLayers: new[] { 64, 32 },
-///     networkType: NetworkType.Regression);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 10, outputSize: 1);
 /// var bnn = new BayesianNeuralNetwork&lt;float&gt;(architecture, numSamples: 30);
 /// // Get prediction with uncertainty via multiple weight-sampled forward passes
 /// var result = bnn.PredictWithUncertainty(inputTensor);

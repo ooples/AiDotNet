@@ -56,3 +56,14 @@ jobs:
       # AiDotNet assemblies. Fails on any drift that would break a published example.
       - name: Compile-check doc + wiki snippets
         run: dotnet run --project tools/DocSnippetVerify -c Debug -- website
+
+      # Compile-check the <example> blocks in the source XML doc comments. These are the examples a user
+      # sees in IntelliSense and on the API reference pages, and they were never gated: this step's
+      # markdown pass above only sees the generated wiki, where WikiGenerator has already rewritten
+      # ```csharp to ```cs for any block that did not compile — so broken examples were relabelled out of
+      # the gate's sight rather than reported. Checking the XML directly closes that loop.
+      #
+      # The floor ratchets: raise it whenever this run reports a higher number. Do not lower it without
+      # saying why in the commit message.
+      - name: Compile-check XML doc-comment examples (ratchet)
+        run: dotnet run --project tools/DocSnippetVerify -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml --min-pass 943
