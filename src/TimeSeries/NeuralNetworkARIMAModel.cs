@@ -28,6 +28,8 @@ namespace AiDotNet.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
+/// var trainingLabels = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var trainingMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Create a hybrid Neural Network + ARIMA model for complex time series
 /// var options = new NeuralNetworkARIMAOptions&lt;double&gt;();
 /// var nnArima = new NeuralNetworkARIMAModel&lt;double&gt;(options);

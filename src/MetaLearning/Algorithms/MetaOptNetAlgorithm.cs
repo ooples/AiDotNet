@@ -94,17 +94,17 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     /// <example>
     /// <code>
     /// // Create MetaOptNet with minimal configuration
-    /// var options = new MetaOptNetOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork);
-    /// var metaOptNet = new MetaOptNetAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var options = new MetaOptNetOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
+    /// var metaOptNet = new MetaOptNetAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create MetaOptNet with SVM solver
-    /// var options = new MetaOptNetOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork)
+    /// var options = new MetaOptNetOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     SolverType = ConvexSolverType.SVM,
     ///     RegularizationStrength = 1.0,
     ///     NumClasses = 5
     /// };
-    /// var metaOptNet = new MetaOptNetAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var metaOptNet = new MetaOptNetAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     /// </code>
     /// </example>
     public MetaOptNetAlgorithm(MetaOptNetOptions<T, TInput, TOutput> options)

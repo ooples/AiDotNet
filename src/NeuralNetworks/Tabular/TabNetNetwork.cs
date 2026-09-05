@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new TabNetOptions { NumFeatures = 20, NumDecisionSteps = 5, RelaxationFactor = 1.5 };
+/// var options = new TabNetOptions&lt;double&gt; { NumFeatures = 20, NumDecisionSteps = 5, RelaxationFactor = 1.5 };
 /// var model = new TabNetNetwork&lt;float&gt;(options);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20 });
 /// var output = model.Predict(input);

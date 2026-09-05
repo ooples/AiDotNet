@@ -79,18 +79,18 @@ public partial class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     /// <example>
     /// <code>
     /// // Create Reptile with minimal configuration
-    /// var options = new ReptileOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork);
-    /// var reptile = new ReptileAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var options = new ReptileOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
+    /// var reptile = new ReptileAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create Reptile with custom configuration
-    /// var options = new ReptileOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork)
+    /// var options = new ReptileOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     AdaptationSteps = 10,
     ///     InnerBatches = 2,
     ///     Interpolation = 0.5,
     ///     OuterLearningRate = 0.1
     /// };
-    /// var reptile = new ReptileAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var reptile = new ReptileAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     /// </code>
     /// </example>
     public ReptileAlgorithm(ReptileOptions<T, TInput, TOutput> options)

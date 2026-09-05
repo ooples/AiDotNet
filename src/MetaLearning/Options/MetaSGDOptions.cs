@@ -650,11 +650,11 @@ public class MetaSGDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
     /// <example>
     /// <code>
     /// // Create Meta-SGD options with minimal configuration
-    /// var options = new MetaSGDOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork);
-    /// var metaSGD = new MetaSGDAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var options = new MetaSGDOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
+    /// var metaSGD = new MetaSGDAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create Meta-SGD options with custom per-parameter optimizer
-    /// var options = new MetaSGDOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork)
+    /// var options = new MetaSGDOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     UpdateRuleType = MetaSGDUpdateRuleType.Adam,
     ///     LearnMomentum = true,

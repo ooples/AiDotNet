@@ -53,6 +53,8 @@ namespace AiDotNet.CausalInference;
 /// </remarks>
 /// <example>
 /// <code>
+/// var treatment = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// var ipw = new InverseProbabilityWeighting&lt;double&gt;(trimMin: 0.01, trimMax: 0.99);
 /// ipw.Fit(features, treatment, outcome);
 /// var (ate, se) = ipw.EstimateATE(features, treatment, outcome);
@@ -133,6 +135,8 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
     ///
     /// Usage:
     /// <code>
+    /// var treatment = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+    /// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
     /// var ipw = new InverseProbabilityWeighting&lt;double&gt;(trimMin: 0.05, trimMax: 0.95);
     /// var (ate, se) = ipw.EstimateATE(features, treatment, outcome);
     /// </code>

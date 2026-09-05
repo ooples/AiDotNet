@@ -63,7 +63,10 @@ jobs:
       # ```csharp to ```cs for any block that did not compile — so broken examples were relabelled out of
       # the gate's sight rather than reported. Checking the XML directly closes that loop.
       #
-      # The floor ratchets: raise it whenever this run reports a higher number. Do not lower it without
-      # saying why in the commit message.
+      # Both bounds are needed. --max-fail is what stops a NEW broken example from being added: doing so
+      # leaves the pass count untouched, so a pass-floor alone stays green while the backlog grows.
+      # --min-pass catches an existing example being broken in a change that also deletes another, where
+      # the failure count could stay level. Tighten both whenever this step reports better numbers; do not
+      # loosen either without saying why in the commit message.
       - name: Compile-check XML doc-comment examples (ratchet)
-        run: dotnet run --project tools/DocSnippetVerify -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml --min-pass 943
+        run: dotnet run --project tools/DocSnippetVerify -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml --min-pass 994 --max-fail 409

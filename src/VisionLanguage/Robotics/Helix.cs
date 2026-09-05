@@ -52,6 +52,7 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// </remarks>
 /// <example>
 /// <code>
+/// var image = Tensor&lt;double&gt;.CreateRandom(1, 3, 32, 32);
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
 ///     taskType: NeuralNetworkTaskType.ImageClassification,

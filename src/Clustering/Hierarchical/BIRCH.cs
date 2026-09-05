@@ -44,6 +44,7 @@ namespace AiDotNet.Clustering.Hierarchical;
 /// </remarks>
 /// <example>
 /// <code>
+/// var dataMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// var options = new BIRCHOptions&lt;double&gt;();
 /// var bIRCH = new BIRCH&lt;double&gt;(options);
 /// bIRCH.Fit(dataMatrix);

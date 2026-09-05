@@ -103,18 +103,18 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     /// <example>
     /// <code>
     /// // Create GNN Meta with minimal configuration
-    /// var options = new GNNMetaOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork);
-    /// var gnnMeta = new GNNMetaAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var options = new GNNMetaOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
+    /// var gnnMeta = new GNNMetaAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create GNN Meta with custom configuration
-    /// var options = new GNNMetaOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork)
+    /// var options = new GNNMetaOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     NumMessagePassingLayers = 5,
     ///     NodeEmbeddingDimension = 256,
     ///     AggregationType = GNNAggregationType.Attention,
     ///     SimilarityMetric = TaskSimilarityMetric.GradientSimilarity
     /// };
-    /// var gnnMeta = new GNNMetaAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var gnnMeta = new GNNMetaAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     /// </code>
     /// </example>
     public GNNMetaAlgorithm(GNNMetaOptions<T, TInput, TOutput> options)

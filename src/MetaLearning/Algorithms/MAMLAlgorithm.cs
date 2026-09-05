@@ -68,11 +68,11 @@ public partial class MAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <example>
     /// <code>
     /// // Create MAML with minimal configuration (uses all defaults)
-    /// var options = new MAMLOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork);
-    /// var maml = new MAMLAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var options = new MAMLOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
+    /// var maml = new MAMLAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create MAML with custom configuration
-    /// var options = new MAMLOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork)
+    /// var options = new MAMLOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     LossFunction = new CrossEntropyLoss&lt;double&gt;(),
     ///     InnerLearningRate = 0.01,
@@ -80,7 +80,7 @@ public partial class MAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     ///     AdaptationSteps = 5,
     ///     UseFirstOrderApproximation = true
     /// };
-    /// var maml = new MAMLAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var maml = new MAMLAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     /// </code>
     /// </example>
     public MAMLAlgorithm(MAMLOptions<T, TInput, TOutput> options)

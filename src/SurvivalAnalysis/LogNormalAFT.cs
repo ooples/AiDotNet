@@ -39,6 +39,7 @@ namespace AiDotNet.SurvivalAnalysis;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 /// <example>
 /// <code>
+/// var times = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
 /// var model = new LogNormalAFT&lt;double&gt;(maxIterations: 100, tolerance: 1e-6);
 /// model.Fit(times, events, features);
 /// double medianSurvival = model.PredictMedianSurvivalTime(newPatientFeatures);

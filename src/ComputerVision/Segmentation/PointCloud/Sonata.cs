@@ -38,6 +38,7 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// </remarks>
 /// <example>
 /// <code>
+/// var pointCloudTensor = Tensor&lt;float&gt;.CreateRandom(1, 128, 3);
 /// // Create a Sonata Mamba-based model for efficient 3D point cloud segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputFeatures: 6, numClasses: 40);

@@ -140,11 +140,11 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     /// <example>
     /// <code>
     /// // Create Meta-SGD with minimal configuration
-    /// var options = new MetaSGDOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork);
-    /// var metaSGD = new MetaSGDAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var options = new MetaSGDOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
+    /// var metaSGD = new MetaSGDAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create Meta-SGD with full per-parameter optimization
-    /// var options = new MetaSGDOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork)
+    /// var options = new MetaSGDOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     UpdateRuleType = MetaSGDUpdateRuleType.Adam,
     ///     LearnLearningRate = true,
@@ -152,7 +152,7 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     ///     LearnDirection = true,
     ///     LearnAdamBetas = true
     /// };
-    /// var metaSGD = new MetaSGDAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var metaSGD = new MetaSGDAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     /// </code>
     /// </example>
     public MetaSGDAlgorithm(MetaSGDOptions<T, TInput, TOutput> options)

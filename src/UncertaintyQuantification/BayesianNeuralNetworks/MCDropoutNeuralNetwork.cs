@@ -29,6 +29,7 @@ namespace AiDotNet.UncertaintyQuantification.BayesianNeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
+/// var inputTensor = Tensor&lt;float&gt;.CreateRandom(2, 4);
 /// // Create an MC Dropout network for uncertainty-aware predictions
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 10, outputSize: 1);
 /// // Add MCDropoutLayer instances to the architecture for stochastic inference

@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new TabTransformerOptions { NumFeatures = 20, EmbeddingDim = 32, NumHeads = 8, NumLayers = 6 };
+/// var options = new TabTransformerOptions&lt;double&gt; { NumFeatures = 20, EmbeddingDim = 32, NumHeads = 8, NumLayers = 6 };
 /// var model = new TabTransformerNetwork&lt;float&gt;(options);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20 });
 /// var output = model.Predict(input);

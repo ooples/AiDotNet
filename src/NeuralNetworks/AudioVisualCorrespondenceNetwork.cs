@@ -37,6 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
+/// var inputTensor = Tensor&lt;float&gt;.CreateRandom(2, 4);
 /// // Create an audio-visual correspondence network
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,

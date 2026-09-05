@@ -105,18 +105,18 @@ public partial class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <example>
     /// <code>
     /// // Create CNAP with minimal configuration
-    /// var options = new CNAPOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork);
-    /// var cnap = new CNAPAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var options = new CNAPOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
+    /// var cnap = new CNAPAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create CNAP with custom configuration
-    /// var options = new CNAPOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork)
+    /// var options = new CNAPOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     RepresentationDimension = 512,
     ///     UseAttention = true,
     ///     NumAttentionHeads = 8,
     ///     FastWeightMode = FastWeightApplicationMode.FiLM
     /// };
-    /// var cnap = new CNAPAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var cnap = new CNAPAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     /// </code>
     /// </example>
     public CNAPAlgorithm(CNAPOptions<T, TInput, TOutput> options)

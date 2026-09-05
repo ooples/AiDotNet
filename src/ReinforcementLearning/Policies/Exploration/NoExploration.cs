@@ -12,6 +12,7 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     /// <example>
     /// <code>
+    /// var state = Tensor&lt;double&gt;.CreateRandom(1, 8);
     /// // Create a no-exploration strategy that always uses the greedy action
     /// var exploration = new NoExploration&lt;double&gt;();
     ///

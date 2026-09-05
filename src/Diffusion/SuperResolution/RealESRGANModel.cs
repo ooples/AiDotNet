@@ -76,6 +76,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 /// </remarks>
 /// <example>
 /// <code>
+/// var lowResPhoto = Tensor&lt;double&gt;.CreateRandom(1, 3, 16, 16);
 /// // Create with industry-standard defaults
 /// var realEsrgan = new RealESRGANModel&lt;float&gt;();
 ///

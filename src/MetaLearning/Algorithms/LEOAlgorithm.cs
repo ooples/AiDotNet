@@ -99,18 +99,18 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     /// <example>
     /// <code>
     /// // Create LEO with minimal configuration
-    /// var options = new LEOOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork);
-    /// var leo = new LEOAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var options = new LEOOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
+    /// var leo = new LEOAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create LEO with custom configuration
-    /// var options = new LEOOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork)
+    /// var options = new LEOOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     LatentDimension = 64,
     ///     HiddenDimension = 256,
     ///     KLWeight = 0.01,
     ///     AdaptationSteps = 5
     /// };
-    /// var leo = new LEOAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var leo = new LEOAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     /// </code>
     /// </example>
     public LEOAlgorithm(LEOOptions<T, TInput, TOutput> options)

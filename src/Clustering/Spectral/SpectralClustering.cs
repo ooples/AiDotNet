@@ -37,6 +37,7 @@ namespace AiDotNet.Clustering.Spectral;
 /// </remarks>
 /// <example>
 /// <code>
+/// var dataMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// var options = new SpectralOptions&lt;double&gt;();
 /// var spectralClustering = new SpectralClustering&lt;double&gt;(options);
 /// spectralClustering.Train(dataMatrix);

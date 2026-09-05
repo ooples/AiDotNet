@@ -52,6 +52,8 @@ namespace AiDotNet.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
+/// var trainingLabels = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var trainingMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Decompose time series into unobserved trend, cycle, and seasonal components
 /// var options = new UnobservedComponentsOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
 /// var ucm = new UnobservedComponentsModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(options);

@@ -38,6 +38,7 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// </remarks>
 /// <example>
 /// <code>
+/// var pointCloudTensor = Tensor&lt;float&gt;.CreateRandom(1, 128, 3);
 /// // Create Point Transformer V3 for 3D semantic segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputFeatures: 6, numClasses: 40);

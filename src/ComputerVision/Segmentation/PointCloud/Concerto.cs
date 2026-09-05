@@ -69,6 +69,7 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// </remarks>
 /// <example>
 /// <code>
+/// var pointCloudTensor = Tensor&lt;float&gt;.CreateRandom(1, 128, 3);
 /// // Create a Concerto hybrid Mamba-Transformer model for 3D point cloud segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputFeatures: 6, numClasses: 40);

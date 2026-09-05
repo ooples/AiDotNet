@@ -87,8 +87,37 @@ int total = 0, pass = 0;
 var failures = new List<(string file, int idx, string err)>();
 var perFile = new Dictionary<string, (int total, int fail)>();
 
+// Returns the namespace a documented member lives in, or null. Rather than parse "M:Ns.Type.Method(args)"
+// by counting dots — which misreads nested types, explicit interface implementations and generic arity —
+// this takes the longest known namespace that prefixes the name, using the set discovered above.
+string? HomeNamespace(string memberName)
+{
+    int colon = memberName.IndexOf(':');
+    string name = colon >= 0 ? memberName[(colon + 1)..] : memberName;
+    int paren = name.IndexOf('(');
+    if (paren >= 0) name = name[..paren];
+
+    string? best = null;
+    foreach (var ns in discoveredUsings)
+    {
+        if (name.StartsWith(ns + ".", StringComparison.Ordinal) &&
+            (best is null || ns.Length > best.Length))
+        {
+            best = ns;
+        }
+    }
+    return best;
+}
+
 // Compiles one snippet, recording pass/fail against the given key.
-void Check(string code, string fileKey, int idx)
+//
+// homeNamespace, when given, wraps the snippet in that namespace. Importing every AiDotNet namespace makes
+// the 33 type names that are declared in two namespaces ambiguous — an artefact of the harness, not of the
+// example, since a reader imports the handful of namespaces they need rather than all 867. Compiling an
+// example inside the namespace of the member that documents it reproduces the reader's situation exactly:
+// C# resolves a type in the containing namespace ahead of anything a using directive brought in, so
+// `Donut` in the docs for AiDotNet.VisionLanguage.Document.Donut means that one, as the reader intends.
+void Check(string code, string fileKey, int idx, string? homeNamespace = null)
 {
     total++;
     var sb = new StringBuilder();
@@ -102,10 +131,16 @@ void Check(string code, string fileKey, int idx)
 
     string bodyText = body.ToString();
     bool isTypes = typeStartRe.IsMatch(bodyText.TrimStart());
-    string source = commonUsings + sb +
-        (isTypes
-            ? bodyText
-            : "static class __Snippet { static async System.Threading.Tasks.Task __Run() {\n" + bodyText + "\n} }");
+    string unit = isTypes
+        ? bodyText
+        : "static class __Snippet { static async System.Threading.Tasks.Task __Run() {\n" + bodyText + "\n} }";
+
+    if (homeNamespace is not null)
+    {
+        unit = $"namespace {homeNamespace} {{\n{unit}\n}}";
+    }
+
+    string source = commonUsings + sb + unit;
 
     var tree = CSharpSyntaxTree.ParseText(source, parse);
     var comp = CSharpCompilation.Create("snip" + total, new[] { tree }, refs, options);
@@ -129,11 +164,12 @@ foreach (var root in roots)
         foreach (var member in xdoc.Descendants("member"))
         {
             var memberName = (string?)member.Attribute("name") ?? "?";
+            var home = HomeNamespace(memberName);
             int idx = 0;
             foreach (var codeEl in member.Descendants("example").Elements("code"))
             {
                 idx++;
-                Check(codeEl.Value, memberName, idx);   // XDocument already unescaped &lt; etc.
+                Check(codeEl.Value, memberName, idx, home);   // XDocument already unescaped &lt; etc.
             }
 
             // Code shown in <remarks>/<summary> prose, which is where most of the library's copy-and-paste
@@ -196,28 +232,66 @@ Console.WriteLine("\nSample failures:");
 foreach (var f in failures.Take(30))
     Console.WriteLine($"  {f.file} #{f.idx}: {f.err}");
 
-// --min-pass <n> is a ratchet: the run fails when FEWER examples compile than the recorded floor, and
-// prints the new floor when more do. A plain all-or-nothing gate cannot be switched on part-way through
-// repairing a large backlog — it would block every unrelated change until the last example is fixed — and
-// a warn-only gate lets the count silently rot back down, which is how these examples decayed in the first
-// place. The ratchet makes the next broken example a red build while the remaining backlog is worked off.
-var minPassIndex = Array.FindIndex(args, a => string.Equals(a, "--min-pass", StringComparison.OrdinalIgnoreCase));
-if (minPassIndex >= 0 && minPassIndex + 1 < args.Length &&
-    int.TryParse(args[minPassIndex + 1], out int floor))
+// Two ratchets, because they catch different mistakes and neither alone is enough:
+//
+//   --max-fail <n>  the number of BROKEN examples may not rise. This is the one that catches a newly
+//                   added broken example, which a pass-count floor cannot see: add a bad example and the
+//                   pass count is unchanged, so a --min-pass gate stays green while the backlog grows.
+//   --min-pass <n>  the number of COMPILING examples may not drop. Catches an existing example being
+//                   broken even in the same change that deletes another, where the failure count could
+//                   stay level.
+//
+// A plain all-or-nothing gate cannot be switched on part-way through repairing a large backlog — it would
+// block every unrelated change until the last example is fixed — and a warn-only gate lets the count
+// silently rot back down, which is how these examples decayed in the first place.
+int failed = total - pass;
+bool ratcheted = false;
+int exit = 0;
+
+int Arg(string name)
 {
+    int i = Array.FindIndex(args, a => string.Equals(a, name, StringComparison.OrdinalIgnoreCase));
+    return i >= 0 && i + 1 < args.Length && int.TryParse(args[i + 1], out int v) ? v : -1;
+}
+
+if (Arg("--max-fail") is var ceiling and >= 0)
+{
+    ratcheted = true;
+    if (failed > ceiling)
+    {
+        Console.WriteLine(
+            $"\nFAIL: {failed} examples do not compile, above the recorded ceiling of {ceiling}. This change " +
+            "either broke a working example or added one that never compiled. Fix it, then lower the ceiling " +
+            $"in the workflow to {failed}.");
+        exit = 1;
+    }
+    else
+    {
+        Console.WriteLine(failed < ceiling
+            ? $"\nOK: {failed} examples fail, below the ceiling of {ceiling}. Lower the ceiling to {failed}."
+            : $"\nOK: {failed} examples fail, matching the ceiling.");
+    }
+}
+
+if (Arg("--min-pass") is var floor and >= 0)
+{
+    ratcheted = true;
     if (pass < floor)
     {
         Console.WriteLine(
-            $"\nFAIL: {pass} examples compile, below the recorded floor of {floor}. A change in this PR " +
-            "broke an example that used to compile. Fix it, or — if an example was deliberately removed — " +
-            "lower the floor in the workflow with the reason in the commit message.");
-        return 1;
+            $"\nFAIL: {pass} examples compile, below the recorded floor of {floor}. A change here broke an " +
+            "example that used to compile. Fix it, or — if an example was deliberately removed — lower the " +
+            "floor in the workflow with the reason in the commit message.");
+        exit = 1;
     }
-
-    Console.WriteLine(pass > floor
-        ? $"\nPASS: {pass} examples compile, above the floor of {floor}. Raise the floor to {pass}."
-        : $"\nPASS: {pass} examples compile, matching the floor.");
-    return 0;
+    else
+    {
+        Console.WriteLine(pass > floor
+            ? $"\nOK: {pass} examples compile, above the floor of {floor}. Raise the floor to {pass}."
+            : $"\nOK: {pass} examples compile, matching the floor.");
+    }
 }
 
-return total - pass == 0 ? 0 : 1;
+if (ratcheted) return exit;
+
+return failed == 0 ? 0 : 1;

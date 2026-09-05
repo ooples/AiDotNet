@@ -81,17 +81,17 @@ public partial class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     /// <example>
     /// <code>
     /// // Create iMAML with minimal configuration (uses all defaults)
-    /// var options = new iMAMLOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork);
-    /// var imaml = new iMAMLAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var options = new iMAMLOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
+    /// var imaml = new iMAMLAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create iMAML with custom configuration for more adaptation steps
-    /// var options = new iMAMLOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork)
+    /// var options = new iMAMLOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     AdaptationSteps = 20,  // iMAML can handle many steps!
     ///     LambdaRegularization = 2.0,
     ///     ConjugateGradientIterations = 15
     /// };
-    /// var imaml = new iMAMLAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var imaml = new iMAMLAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     /// </code>
     /// </example>
     public iMAMLAlgorithm(iMAMLOptions<T, TInput, TOutput> options)

@@ -99,18 +99,18 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <example>
     /// <code>
     /// // Create BOIL with minimal configuration
-    /// var options = new BOILOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork);
-    /// var boil = new BOILAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var options = new BOILOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
+    /// var boil = new BOILAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create BOIL with custom configuration
-    /// var options = new BOILOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork)
+    /// var options = new BOILOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     AdaptationSteps = 5,
     ///     InnerLearningRate = 0.01,
     ///     NumClasses = 5,
     ///     BodyAdaptationFraction = 0.5
     /// };
-    /// var boil = new BOILAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var boil = new BOILAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     /// </code>
     /// </example>
     public BOILAlgorithm(BOILOptions<T, TInput, TOutput> options)
