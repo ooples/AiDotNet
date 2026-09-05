@@ -34,7 +34,7 @@ namespace AiDotNet.TimeSeries;
 /// <example>
 /// <code>
 /// // Create an MA(2) model for forecasting based on past forecast errors
-/// var options = new MAModelOptions&lt;double&gt; { Order = 2 };
+/// var options = new MAModelOptions&lt;double&gt; { MAOrder = 2 };
 /// var maModel = new MAModel&lt;double&gt;(options);
 /// maModel.Train(trainingMatrix, trainingLabels);
 /// Vector&lt;double&gt; forecast = maModel.Predict(inputMatrix);

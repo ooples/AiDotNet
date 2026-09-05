@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new AutoIntOptions&lt;double&gt; { NumFeatures = 20, EmbeddingDim = 16, NumHeads = 2, NumLayers = 3 };
+/// var options = new AutoIntOptions&lt;double&gt; { NumFeatures = 20, EmbeddingDimension = 16, NumHeads = 2, NumLayers = 3 };
 /// var model = new AutoIntNetwork&lt;float&gt;(options);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20 });
 /// var output = model.Predict(input);

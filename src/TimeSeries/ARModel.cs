@@ -40,7 +40,7 @@ namespace AiDotNet.TimeSeries;
 /// <example>
 /// <code>
 /// // Create an AR(3) model for univariate time series forecasting
-/// var options = new ARModelOptions&lt;double&gt; { Order = 3 };
+/// var options = new ARModelOptions&lt;double&gt; { AROrder = 3 };
 /// var arModel = new ARModel&lt;double&gt;(options);
 /// arModel.Train(trainingMatrix, trainingLabels);
 /// Vector&lt;double&gt; forecast = arModel.Predict(inputMatrix);

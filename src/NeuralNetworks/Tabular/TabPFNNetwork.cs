@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new TabPFNOptions&lt;double&gt; { NumFeatures = 20, MaxTrainSamples = 1000 };
+/// var options = new TabPFNOptions&lt;double&gt; { NumFeatures = 20, MaxContextSamples = 1000 };
 /// var model = new TabPFNNetwork&lt;float&gt;(options);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20 });
 /// var output = model.Predict(input);
