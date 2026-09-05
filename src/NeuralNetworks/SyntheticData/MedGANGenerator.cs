@@ -93,6 +93,7 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 /// </para>
 /// <example>
 /// <code>
+/// var data = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 64, outputSize: 64);

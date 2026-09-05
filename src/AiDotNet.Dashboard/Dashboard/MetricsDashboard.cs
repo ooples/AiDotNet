@@ -118,7 +118,7 @@ public class MetricsDashboard : IDisposable
     /// using var monitor = MetricsDashboard.CreateTrainingMonitor&lt;double&gt;("My Training");
     ///
     /// // Configure the builder with the monitor
-    /// var result = new AiModelBuilder&lt;double, Matrix, Vector&gt;()
+    /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureTrainingMonitor(monitor)
     ///     .ConfigureModel(myModel)
     ///     .Build(trainingData, validationData);

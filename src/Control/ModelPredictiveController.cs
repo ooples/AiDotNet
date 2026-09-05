@@ -53,6 +53,8 @@ namespace AiDotNet.Control;
 /// </remarks>
 /// <example>
 /// <code>
+/// var q = 2;
+/// var r = 2;
 /// // A double integrator whose actuator saturates at ±0.5.
 /// var options = new ModelPredictiveControllerOptions&lt;double&gt;
 /// {

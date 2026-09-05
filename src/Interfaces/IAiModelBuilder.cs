@@ -1375,7 +1375,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     ///
     /// Example:
     /// <code>
-    /// var result = await new AiModelBuilder&lt;double, ...&gt;()
+    /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureModel(myModel)
     ///     .ConfigureInferenceOptimizations()  // Uses sensible defaults
     ///     .BuildAsync();
