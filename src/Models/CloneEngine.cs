@@ -671,10 +671,10 @@ public static class CloneEngine
                 return CopyArray(array);
 
             case IDictionary dictionary:
-                return CopyInto(dictionary, Activator.CreateInstance(dictionary.GetType()));
+                return CopyDictionary(dictionary);
 
             case IList list:
-                return CopyInto(list, Activator.CreateInstance(list.GetType()));
+                return CopyList(list);
         }
 
         // A set is neither IList nor IDictionary, so it is reached through its own Add.
@@ -700,28 +700,89 @@ public static class CloneEngine
         return copy;
     }
 
-    private static object? CopyInto(IDictionary source, object? target)
+    private static object CopyDictionary(IDictionary source)
     {
-        if (target is not IDictionary typed) return source;
-
-        foreach (DictionaryEntry entry in source)
+        Type sourceType = source.GetType();
+        if (sourceType.GetConstructor(Type.EmptyTypes)?.Invoke(null) is IDictionary writable
+            && !writable.IsReadOnly && !writable.IsFixedSize)
         {
-            typed[entry.Key] = DuplicateCollectionElement(entry.Value);
+            FillDictionary(source, writable);
+            return writable;
         }
 
-        return typed;
+        Type? contract = FindGenericCollectionContract(sourceType, typeof(IDictionary<,>));
+        if (contract is null)
+            throw new NotSupportedException(
+                $"Dictionary container {sourceType.Name} has no writable constructor or generic dictionary contract.");
+
+        Type mutableType = typeof(Dictionary<,>).MakeGenericType(contract.GetGenericArguments());
+        var mutable = (IDictionary)(Activator.CreateInstance(mutableType)
+            ?? throw new MissingMethodException($"Cannot create mutable dictionary {mutableType.Name}."));
+        FillDictionary(source, mutable);
+        return WrapCopiedCollection(sourceType, mutable);
     }
 
-    private static object? CopyInto(IList source, object? target)
+    private static void FillDictionary(IDictionary source, IDictionary target)
     {
-        if (target is not IList typed) return source;
-
-        foreach (var item in source)
+        foreach (DictionaryEntry entry in source)
         {
-            typed.Add(DuplicateCollectionElement(item));
+            target[entry.Key] = DuplicateCollectionElement(entry.Value);
+        }
+    }
+
+    private static object CopyList(IList source)
+    {
+        Type sourceType = source.GetType();
+        if (sourceType.GetConstructor(Type.EmptyTypes)?.Invoke(null) is IList writable
+            && !writable.IsReadOnly && !writable.IsFixedSize)
+        {
+            FillList(source, writable);
+            return writable;
         }
 
-        return typed;
+        Type? contract = FindGenericCollectionContract(sourceType, typeof(IList<>));
+        if (contract is null)
+            throw new NotSupportedException(
+                $"List container {sourceType.Name} has no writable constructor or generic list contract.");
+
+        Type mutableType = typeof(List<>).MakeGenericType(contract.GetGenericArguments());
+        var mutable = (IList)(Activator.CreateInstance(mutableType)
+            ?? throw new MissingMethodException($"Cannot create mutable list {mutableType.Name}."));
+        FillList(source, mutable);
+        return WrapCopiedCollection(sourceType, mutable);
+    }
+
+    private static void FillList(IList source, IList target)
+    {
+        foreach (var item in source)
+        {
+            target.Add(DuplicateCollectionElement(item));
+        }
+    }
+
+    private static Type? FindGenericCollectionContract(Type type, Type genericDefinition)
+    {
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == genericDefinition)
+            return type;
+        return type.GetInterfaces().FirstOrDefault(candidate =>
+            candidate.IsGenericType && candidate.GetGenericTypeDefinition() == genericDefinition);
+    }
+
+    private static object WrapCopiedCollection(Type sourceType, object mutableCopy)
+    {
+        if (sourceType.IsInstanceOfType(mutableCopy)) return mutableCopy;
+
+        ConstructorInfo? wrapper = sourceType.GetConstructors()
+            .FirstOrDefault(constructor =>
+            {
+                ParameterInfo[] parameters = constructor.GetParameters();
+                return parameters.Length == 1
+                       && parameters[0].ParameterType.IsInstanceOfType(mutableCopy);
+            });
+        if (wrapper is not null) return wrapper.Invoke(new[] { mutableCopy });
+
+        throw new NotSupportedException(
+            $"Container {sourceType.Name} cannot be rebuilt from an independent mutable copy.");
     }
 
     /// <summary>
