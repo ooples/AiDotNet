@@ -390,24 +390,50 @@ void Check(string code, string fileKey, int idx, string? homeNamespace = null)
 
         foreach (var name in undefined)
         {
-            // The compiler decides whether a candidate is CORRECT; the variable's name only chooses
-            // between candidates the compiler would accept equally. A tensor declared for
-            // `noisyAudioTensor` binds just as well at (1, 3, 32, 32) as at (1, 16000), and both compile
-            // — but one of them reads like an image, so the name picks the plausible shape.
+            // Score EVERY candidate and keep the best, rather than the first that helps.
+            //
+            // Taking the first improvement is what made this fail on a Train(matrix, vector) example: the
+            // Matrix candidate resolved `targetVector` and turned its CS0103 into a CS1503, which counts
+            // as fewer errors, so the Vector candidate that would have compiled cleanly was never tried.
+            // Scoring all of them lets a zero-error answer win whenever one exists.
+            //
+            // The compiler decides whether a candidate is CORRECT; the variable's name only orders
+            // candidates the compiler judges equally. A tensor for `noisyAudioTensor` binds just as well
+            // at (1, 3, 32, 32) as at (1, 16000) — both compile, but one reads like an image — so among
+            // equal scores the earlier (name-preferred) candidate wins.
+            string? best = null;
+            int bestScore = int.MaxValue;
+
             foreach (var candidate in OrderCandidatesFor(name, fileKey))
             {
                 string decl = $"var {name} = {candidate};";
                 var trial = Compile(Compose(code, homeNamespace, accepted.Append(decl)), ++probeId);
                 bool nameResolved = !trial.Any(d =>
                     d.Id == "CS0103" && d.GetMessage().Contains($"'{name}'", StringComparison.Ordinal));
-                if (nameResolved && trial.Count < errors.Count)
+                if (!nameResolved) continue;
+
+                if (trial.Count < bestScore)
                 {
-                    accepted.Add(decl);
-                    break;
+                    bestScore = trial.Count;
+                    best = decl;
+                    if (bestScore == 0) break;          // cannot do better than a clean compile
                 }
+            }
+
+            if (best is not null && bestScore < errors.Count)
+            {
+                accepted.Add(best);
             }
         }
 
+        // Only emit when the snippet compiles CLEANLY with the accepted set.
+        //
+        // Emitting partial solutions was tried and withdrawn. It looked safe — each candidate is accepted
+        // only if it reduces the error count — but reducing a count is not the same as being right: two
+        // CS0103s can collapse into one CS1503, so a wrongly-typed declaration still counts as progress.
+        // Applied across 43 snippets it moved 51 errors from one class to another, converted none to
+        // passing, and left declarations in the documentation whose types the compiler had never
+        // actually endorsed. A clean compile is the only signal worth acting on here.
         if (accepted.Count > 0 &&
             Compile(Compose(code, homeNamespace, accepted), ++probeId).Count == 0)
         {
