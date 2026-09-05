@@ -76,6 +76,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 /// </remarks>
 /// <example>
 /// <code>
+/// var degradedPhoto = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
 /// // Create with industry-standard defaults
 /// var diffbir = new DiffBIRModel&lt;float&gt;();
 ///

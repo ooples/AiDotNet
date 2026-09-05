@@ -79,6 +79,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 /// </remarks>
 /// <example>
 /// <code>
+/// var lowResImage = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
 /// // Create with industry-standard defaults
 /// var upscaler = new SDUpscalerModel&lt;float&gt;();
 ///

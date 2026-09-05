@@ -89,6 +89,68 @@ int total = 0, pass = 0;
 var failures = new List<(string file, int idx, string err)>();
 var perFile = new Dictionary<string, (int total, int fail)>();
 
+// --suggest-decls machinery. The candidate list is deliberately short and ordered from most to least
+// specific: an input that binds as a Matrix should be declared a Matrix rather than falling through to a
+// bare int that happens to satisfy some other overload.
+bool suggestDecls = args.Any(a => string.Equals(a, "--suggest-decls", StringComparison.OrdinalIgnoreCase));
+var suggestions = new List<(string file, int idx, string decl)>();
+int probeId = 0;
+string[] DeclarationCandidates =
+{
+    "new Matrix<double>(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } })",
+    "new Vector<double>(new double[] { 0.0, 1.0, 0.0, 1.0 })",
+    "new Matrix<float>(new float[,] { { 1.0f, 2.0f }, { 3.0f, 4.0f } })",
+    "new Vector<float>(new float[] { 0.0f, 1.0f })",
+    "Tensor<float>.CreateRandom(1, 3, 32, 32)",
+    "Tensor<double>.CreateRandom(2, 4)",
+    "Tensor<float>.CreateRandom(2, 4)",
+    "new double[] { 1.0, 2.0, 3.0 }",
+    "new string[] { \"first\", \"second\" }",
+    "new int[] { 0, 1, 2 }",
+    "new NeuralNetworkArchitecture<double>(inputFeatures: 8, outputSize: 4)",
+    "new NeuralNetworkArchitecture<float>(inputFeatures: 8, outputSize: 4)",
+    "new AiModelBuilder<double, Matrix<double>, Vector<double>>()",
+    "new Random(42)",
+    "new List<string> { \"first\", \"second\" }",
+    "new List<double> { 1.0, 2.0, 3.0 }",
+    "new Dictionary<string, double> { [\"alpha\"] = 1.0 }",
+    "\"example\"",
+    "32",
+    "0.5",
+    "true",
+};
+
+// Shapes that suit a name, tried before the generic list. Purely cosmetic — every one of these still has
+// to satisfy the compiler before it is accepted — but it keeps an audio buffer from being declared with
+// the dimensions of an RGB image.
+IEnumerable<string> OrderCandidatesFor(string name)
+{
+    var lower = name.ToLowerInvariant();
+    var preferred = new List<string>();
+
+    if (lower.Contains("audio") || lower.Contains("signal") || lower.Contains("wave") ||
+        lower.Contains("melody") || lower.Contains("speech"))
+    {
+        preferred.Add("Tensor<float>.CreateRandom(1, 16000)");
+        preferred.Add("Tensor<double>.CreateRandom(1, 16000)");
+    }
+    else if (lower.Contains("image") || lower.Contains("frame") || lower.Contains("photo") ||
+             lower.Contains("mask") || lower.Contains("pixel"))
+    {
+        preferred.Add("Tensor<float>.CreateRandom(1, 3, 32, 32)");
+        preferred.Add("Tensor<double>.CreateRandom(1, 3, 32, 32)");
+    }
+    else if (lower.Contains("token") || lower.Contains("sequence") || lower.Contains("series") ||
+             lower.Contains("window") || lower.Contains("prices"))
+    {
+        preferred.Add("Tensor<float>.CreateRandom(1, 128)");
+        preferred.Add("new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 })");
+    }
+
+    return preferred.Concat(DeclarationCandidates);
+}
+
+
 // Returns the namespace a documented member lives in, or null. Rather than parse "M:Ns.Type.Method(args)"
 // by counting dots — which misreads nested types, explicit interface implementations and generic arity —
 // this takes the longest known namespace that prefixes the name, using the set discovered above.
@@ -119,9 +181,9 @@ string? HomeNamespace(string memberName)
 // example inside the namespace of the member that documents it reproduces the reader's situation exactly:
 // C# resolves a type in the containing namespace ahead of anything a using directive brought in, so
 // `Donut` in the docs for AiDotNet.VisionLanguage.Document.Donut means that one, as the reader intends.
-void Check(string code, string fileKey, int idx, string? homeNamespace = null)
+// Builds the compilable unit for a snippet, optionally with extra declarations prepended to its body.
+string Compose(string code, string? homeNamespace, IEnumerable<string>? extraDeclarations)
 {
-    total++;
     var sb = new StringBuilder();
     var body = new StringBuilder();
     bool bodyStarted = false;
@@ -133,6 +195,14 @@ void Check(string code, string fileKey, int idx, string? homeNamespace = null)
 
     string bodyText = body.ToString();
     bool isTypes = typeStartRe.IsMatch(bodyText.TrimStart());
+
+    // Declarations only make sense inside a method body. A snippet that declares its own types is
+    // compiled as top-level declarations, where a `var` line would be a class member and not compile.
+    if (extraDeclarations is not null && !isTypes)
+    {
+        bodyText = string.Concat(extraDeclarations.Select(d => d + "\n")) + bodyText;
+    }
+
     string unit = isTypes
         ? bodyText
         : "static class __Snippet { static async System.Threading.Tasks.Task __Run() {\n" + bodyText + "\n} }";
@@ -142,7 +212,20 @@ void Check(string code, string fileKey, int idx, string? homeNamespace = null)
         unit = $"namespace {homeNamespace} {{\n{unit}\n}}";
     }
 
-    string source = commonUsings + sb + unit;
+    return commonUsings + sb + unit;
+}
+
+List<Diagnostic> Compile(string source, int id)
+{
+    var t = CSharpSyntaxTree.ParseText(source, parse);
+    var c = CSharpCompilation.Create("probe" + id, new[] { t }, refs, options);
+    return c.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error && d.Id != "CS5001").ToList();
+}
+
+void Check(string code, string fileKey, int idx, string? homeNamespace = null)
+{
+    total++;
+    string source = Compose(code, homeNamespace, null);
 
     var tree = CSharpSyntaxTree.ParseText(source, parse);
     var comp = CSharpCompilation.Create("snip" + total, new[] { tree }, refs, options);
@@ -162,6 +245,51 @@ void Check(string code, string fileKey, int idx, string? homeNamespace = null)
         foreach (var e in errors)
         {
             failures.Add((fileKey, idx, $"{e.Id}: {e.GetMessage()}"));
+        }
+    }
+
+    // --suggest-decls: for a snippet that only lacks variable declarations, work out declarations that
+    // make it compile and report them, instead of guessing a type from the variable's name. Naming
+    // conventions are not reliable enough — `q` and `r` are a QR factorisation as often as ARIMA orders —
+    // and a guess that merely compiles can put a false statement in the documentation. Here the compiler
+    // decides: a candidate is accepted only when it removes the error and introduces none.
+    if (suggestDecls && errors.Count > 0 && errors.All(e => e.Id == "CS0103"))
+    {
+        var accepted = new List<string>();
+        var undefined = errors
+            .Select(e => Regex.Match(e.GetMessage(), @"The name '([^']+)'"))
+            .Where(m => m.Success)
+            .Select(m => m.Groups[1].Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        foreach (var name in undefined)
+        {
+            // The compiler decides whether a candidate is CORRECT; the variable's name only chooses
+            // between candidates the compiler would accept equally. A tensor declared for
+            // `noisyAudioTensor` binds just as well at (1, 3, 32, 32) as at (1, 16000), and both compile
+            // — but one of them reads like an image, so the name picks the plausible shape.
+            foreach (var candidate in OrderCandidatesFor(name))
+            {
+                string decl = $"var {name} = {candidate};";
+                var trial = Compile(Compose(code, homeNamespace, accepted.Append(decl)), ++probeId);
+                bool nameResolved = !trial.Any(d =>
+                    d.Id == "CS0103" && d.GetMessage().Contains($"'{name}'", StringComparison.Ordinal));
+                if (nameResolved && trial.Count < errors.Count)
+                {
+                    accepted.Add(decl);
+                    break;
+                }
+            }
+        }
+
+        if (accepted.Count > 0 &&
+            Compile(Compose(code, homeNamespace, accepted), ++probeId).Count == 0)
+        {
+            foreach (var d in accepted)
+            {
+                suggestions.Add((fileKey, idx, d));
+            }
         }
     }
 
@@ -249,6 +377,20 @@ if (dumpIndex >= 0 && dumpIndex + 1 < args.Length)
 {
     File.WriteAllLines(args[dumpIndex + 1], failures.Select(f => $"{f.file}#{f.idx}\t{f.err}"));
     Console.WriteLine($"\nwrote {failures.Count} failures -> {args[dumpIndex + 1]}");
+}
+
+// --suggest-decls output: one accepted declaration per line, keyed by snippet. Written next to the dump
+// so a repair script can apply them; each was verified to make its snippet compile.
+if (suggestDecls)
+{
+    int i = Array.FindIndex(args, a => string.Equals(a, "--suggest-decls", StringComparison.OrdinalIgnoreCase));
+    string path = i >= 0 && i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal)
+        ? args[i + 1]
+        : "suggested-declarations.tsv";
+    File.WriteAllLines(path, suggestions.Select(s => $"{s.file}\t{s.idx}\t{s.decl}"));
+    Console.WriteLine(
+        $"\nSolved declarations for {suggestions.Select(s => (s.file, s.idx)).Distinct().Count()} snippet(s) " +
+        $"({suggestions.Count} declarations) -> {path}");
 }
 
 Console.WriteLine("\nSample failures:");

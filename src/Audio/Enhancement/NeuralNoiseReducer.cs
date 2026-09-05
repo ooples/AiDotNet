@@ -50,6 +50,7 @@ namespace AiDotNet.Audio.Enhancement;
 /// </remarks>
 /// <example>
 /// <code>
+/// var noisyAudioTensor = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// // Create a neural noise reducer with default settings
 /// var reducer = new NeuralNoiseReducer&lt;float&gt;();
 ///

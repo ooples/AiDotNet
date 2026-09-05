@@ -30,6 +30,7 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 /// itself:
 /// </para>
 /// <code>
+/// var audio = Tensor&lt;double&gt;.CreateRandom(1, 16000);
 ///   L_MTL(Y|X) = lambda1 * L_att(Y|X) + (1 - lambda1) * L_ctc(Y|X) + lambda2 * L_lid(Z|X)
 ///
 ///   CTC weight (1 - lambda1) = 0.2        lambda2 = 0.2
