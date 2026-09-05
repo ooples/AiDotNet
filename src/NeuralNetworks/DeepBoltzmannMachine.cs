@@ -33,7 +33,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new DeepBoltzmannMachineOptions { VisibleSize = 784, HiddenLayers = new[] { 500, 200 } };
+/// var options = new DeepBoltzmannMachineOptions { 200 } };
 /// var model = new DeepBoltzmannMachine&lt;float&gt;(options);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 784 });
 /// var output = model.Predict(input);

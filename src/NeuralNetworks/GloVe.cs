@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks
     /// </remarks>
     /// <example>
     /// <code>
-    /// var options = new GloVeOptions { EmbeddingDim = 300, VocabSize = 50000 };
+    /// var options = new GloVeOptions { };
     /// var model = new GloVe&lt;float&gt;(options);
     /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 50 });
     /// var embedding = model.Predict(input);

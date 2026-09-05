@@ -22,7 +22,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new JambaOptions { VocabSize = 65536, ModelDim = 4096, NumLayers = 32 };
+/// var options = new JambaOptions { };
 /// var model = new JambaLanguageModel&lt;float&gt;(options);
 /// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
 /// var logits = model.Predict(tokens);

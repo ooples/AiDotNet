@@ -24,7 +24,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new XLSTMOptions { VocabSize = 32000, ModelDim = 2048, NumLayers = 24 };
+/// var options = new XLSTMOptions { };
 /// var model = new XLSTMLanguageModel&lt;float&gt;(options);
 /// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
 /// var logits = model.Predict(tokens);

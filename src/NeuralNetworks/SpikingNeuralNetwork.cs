@@ -17,7 +17,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new SpikingNeuralNetworkOptions { InputSize = 784, HiddenSize = 500, TimeSteps = 100 };
+/// var options = new SpikingNeuralNetworkOptions { };
 /// var model = new SpikingNeuralNetwork&lt;float&gt;(options);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 784 });
 /// var output = model.Predict(input);

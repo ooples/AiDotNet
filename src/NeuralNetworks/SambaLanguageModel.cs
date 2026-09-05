@@ -22,7 +22,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new SambaOptions { VocabSize = 32000, ModelDim = 2048, NumLayers = 24 };
+/// var options = new SambaOptions { };
 /// var model = new SambaLanguageModel&lt;float&gt;(options);
 /// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
 /// var logits = model.Predict(tokens);

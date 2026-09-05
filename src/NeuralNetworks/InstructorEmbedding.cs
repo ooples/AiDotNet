@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks
     /// </remarks>
     /// <example>
     /// <code>
-    /// var options = new InstructorEmbeddingOptions { EmbeddingDim = 768, MaxSequenceLength = 512 };
+    /// var options = new InstructorEmbeddingOptions { };
     /// var model = new InstructorEmbedding&lt;float&gt;(options);
     /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 512 });
     /// var embedding = model.Predict(input);

@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new RecurrentNeuralNetworkOptions { InputSize = 10, HiddenSize = 64, NumLayers = 1 };
+/// var options = new RecurrentNeuralNetworkOptions { };
 /// var model = new RecurrentNeuralNetwork&lt;float&gt;(options);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20, 10 });
 /// var output = model.Predict(input);

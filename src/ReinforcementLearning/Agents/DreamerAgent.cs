@@ -45,7 +45,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.Dreamer;
 /// <example>
 /// <code>
 /// // Create a Dreamer agent that learns a world model for planning
-/// var options = new DreamerOptions&lt;double&gt; { LatentSize = 64, ActionSize = 4, ImagineHorizon = 15 };
+/// var options = new DreamerOptions&lt;double&gt; { LatentSize = 64, ActionSize = 4};
 /// var agent = new DreamerAgent&lt;double&gt;(options);
 ///
 /// // Select an action by imagining future trajectories

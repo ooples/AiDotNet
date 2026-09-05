@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks
     /// </remarks>
     /// <example>
     /// <code>
-    /// var options = new SGPTOptions { EmbeddingDim = 768, MaxSequenceLength = 512 };
+    /// var options = new SGPTOptions { };
     /// var model = new SGPT&lt;float&gt;(options);
     /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 512 });
     /// var embedding = model.Predict(input);

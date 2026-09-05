@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks
     /// </remarks>
     /// <example>
     /// <code>
-    /// var options = new MatryoshkaEmbeddingOptions { EmbeddingDim = 768, Dimensions = new[] { 768, 512, 256, 128, 64 } };
+    /// var options = new MatryoshkaEmbeddingOptions { 512, 256, 128, 64 } };
     /// var model = new MatryoshkaEmbedding&lt;float&gt;(options);
     /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 512 });
     /// var embedding = model.Predict(input);

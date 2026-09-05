@@ -32,8 +32,7 @@ namespace AiDotNet.TimeSeries;
 /// // Create a SARIMA model for monthly data with yearly seasonality
 /// var options = new SARIMAOptions&lt;double&gt;
 /// {
-///     LagOrder = 1, DifferencingOrder = 1, MAOrder = 1,
-///     SeasonalAROrder = 1, SeasonalDifferencingOrder = 1,
+///     LagOrder = 1, ///     SeasonalAROrder = 1, SeasonalDifferencingOrder = 1,
 ///     SeasonalMAOrder = 1, SeasonalPeriod = 12
 /// };
 /// var sarima = new SARIMAModel&lt;double&gt;(options);

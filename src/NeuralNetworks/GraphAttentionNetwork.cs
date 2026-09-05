@@ -55,7 +55,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new GraphAttentionNetworkOptions { NodeFeatureSize = 16, HiddenSize = 64, NumHeads = 8 };
+/// var options = new GraphAttentionNetworkOptions { };
 /// var model = new GraphAttentionNetwork&lt;float&gt;(options);
 /// var nodeFeatures = Tensor&lt;float&gt;.CreateRandom(new[] { 10, 16 });
 /// var output = model.Predict(nodeFeatures);

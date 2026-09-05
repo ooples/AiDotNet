@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks
     /// </remarks>
     /// <example>
     /// <code>
-    /// var options = new TransformerEmbeddingOptions { EmbeddingDim = 768, NumLayers = 12, NumHeads = 12 };
+    /// var options = new TransformerEmbeddingOptions { };
     /// var model = new TransformerEmbeddingNetwork&lt;float&gt;(options);
     /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
     /// var embedding = model.Predict(input);

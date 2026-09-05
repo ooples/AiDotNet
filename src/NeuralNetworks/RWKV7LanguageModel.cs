@@ -22,7 +22,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new RWKV7Options { VocabSize = 65536, ModelDim = 4096, NumLayers = 32 };
+/// var options = new RWKV7Options { };
 /// var model = new RWKV7LanguageModel&lt;float&gt;(options);
 /// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
 /// var logits = model.Predict(tokens);

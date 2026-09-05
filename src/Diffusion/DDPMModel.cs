@@ -50,10 +50,6 @@ namespace AiDotNet.Diffusion;
 /// // Create a DDPM model for image generation
 /// var options = new DiffusionModelOptions&lt;float&gt;
 /// {
-///     Height = 64,
-///     Width = 64,
-///     Channels = 3,
-///     NumTimesteps = 1000
 /// };
 /// var model = new DDPMModel&lt;float&gt;(options);
 ///

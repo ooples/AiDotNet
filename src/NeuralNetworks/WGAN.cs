@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new WGANOptions { LatentSize = 100, CriticIterations = 5, ClipValue = 0.01 };
+/// var options = new WGANOptions { };
 /// var model = new WGAN&lt;float&gt;(options);
 /// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 100 });
 /// var generated = model.Predict(noise);

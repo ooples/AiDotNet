@@ -34,7 +34,7 @@ namespace AiDotNet.TimeSeries;
 /// <example>
 /// <code>
 /// // Create a state space model for time series with hidden dynamics
-/// var options = new StateSpaceModelOptions&lt;double&gt; { StateDimension = 2 };
+/// var options = new StateSpaceModelOptions&lt;double&gt; { };
 /// var ssm = new StateSpaceModel&lt;double&gt;(options);
 /// ssm.Train(trainingMatrix, trainingLabels);
 /// Vector&lt;double&gt; filtered = ssm.Predict(inputMatrix);

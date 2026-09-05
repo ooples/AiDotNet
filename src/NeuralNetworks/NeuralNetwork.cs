@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new NeuralNetworkOptions { InputSize = 10, HiddenLayers = new[] { 64, 32 }, OutputSize = 2 };
+/// var options = new NeuralNetworkOptions { 32 }, OutputSize = 2 };
 /// var model = new NeuralNetwork&lt;float&gt;(options);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 10 });
 /// var output = model.Predict(input);

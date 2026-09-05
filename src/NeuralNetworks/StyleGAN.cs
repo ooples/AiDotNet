@@ -55,7 +55,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new StyleGANOptions { LatentSize = 512, MaxResolution = 1024 };
+/// var options = new StyleGANOptions { };
 /// var model = new StyleGAN&lt;float&gt;(options);
 /// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 512 });
 /// var generated = model.Predict(noise);

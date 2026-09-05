@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new GenerativeAdversarialNetworkOptions { LatentSize = 100, ImageSize = 28 };
+/// var options = new GenerativeAdversarialNetworkOptions { };
 /// var model = new GenerativeAdversarialNetwork&lt;float&gt;(options);
 /// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 100 });
 /// var generated = model.Predict(noise);

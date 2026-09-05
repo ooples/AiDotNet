@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new ResidualNeuralNetworkOptions { InputSize = 784, NumResidualBlocks = 4, HiddenSize = 256 };
+/// var options = new ResidualNeuralNetworkOptions { };
 /// var model = new ResidualNeuralNetwork&lt;float&gt;(options);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 784 });
 /// var output = model.Predict(input);

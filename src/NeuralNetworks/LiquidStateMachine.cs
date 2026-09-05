@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LiquidStateMachineOptions { InputSize = 10, ReservoirSize = 1000 };
+/// var options = new LiquidStateMachineOptions { };
 /// var model = new LiquidStateMachine&lt;float&gt;(options);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 100, 10 });
 /// var output = model.Predict(input);

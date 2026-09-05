@@ -57,7 +57,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new InfoGANOptions { LatentSize = 62, NumCategoricalCodes = 10, NumContinuousCodes = 2 };
+/// var options = new InfoGANOptions { };
 /// var model = new InfoGAN&lt;float&gt;(options);
 /// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 74 });
 /// var generated = model.Predict(noise);

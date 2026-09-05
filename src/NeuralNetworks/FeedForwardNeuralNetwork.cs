@@ -26,7 +26,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new FeedForwardNeuralNetworkOptions { InputSize = 10, HiddenLayers = new[] { 64, 32 }, OutputSize = 2 };
+/// var options = new FeedForwardNeuralNetworkOptions { 32 }, OutputSize = 2 };
 /// var model = new FeedForwardNeuralNetwork&lt;float&gt;(options);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 10 });
 /// var output = model.Predict(input);

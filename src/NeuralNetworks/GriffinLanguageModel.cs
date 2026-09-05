@@ -22,7 +22,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new GriffinOptions { VocabSize = 256000, ModelDim = 2560, NumLayers = 26 };
+/// var options = new GriffinOptions { };
 /// var model = new GriffinLanguageModel&lt;float&gt;(options);
 /// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
 /// var logits = model.Predict(tokens);

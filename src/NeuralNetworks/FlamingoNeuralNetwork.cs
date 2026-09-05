@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new FlamingoOptions { ImageSize = 224, MaxTextLength = 256 };
+/// var options = new FlamingoOptions { };
 /// var model = new FlamingoNeuralNetwork&lt;float&gt;(options);
 /// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 224, 224 });
 /// var output = model.Predict(image);

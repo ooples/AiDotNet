@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks
     /// </remarks>
     /// <example>
     /// <code>
-    /// var options = new SiameseNeuralNetworkOptions { InputSize = 784, EmbeddingSize = 128 };
+    /// var options = new SiameseNeuralNetworkOptions { };
     /// var model = new SiameseNeuralNetwork&lt;float&gt;(options);
     /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 784 });
     /// var embedding = model.Predict(input);

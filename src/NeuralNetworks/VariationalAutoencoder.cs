@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new VariationalAutoencoderOptions { InputSize = 784, LatentSize = 20 };
+/// var options = new VariationalAutoencoderOptions { };
 /// var model = new VariationalAutoencoder&lt;float&gt;(options);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 784 });
 /// var reconstructed = model.Predict(input);

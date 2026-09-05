@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new HyperbolicNeuralNetworkOptions { InputSize = 64, HiddenSize = 128, Curvature = 1.0 };
+/// var options = new HyperbolicNeuralNetworkOptions { };
 /// var model = new HyperbolicNeuralNetwork&lt;float&gt;(options);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 64 });
 /// var output = model.Predict(input);
