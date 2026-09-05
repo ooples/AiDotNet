@@ -139,7 +139,9 @@ public sealed class LlmExtrasTests
     [Fact]
     public void TheProcessClientRefusesSettingsThatCannotProduceARunnableCommand()
     {
-        Assert.Throws<ArgumentNullException>(() => new ProcessChatClient<double>(null!));
+#pragma warning disable CS8625 // Exercise the public null guard without a null-forgiving operator.
+        Assert.Throws<ArgumentNullException>(() => new ProcessChatClient<double>(null));
+#pragma warning restore CS8625
         Assert.Throws<ArgumentException>(() =>
             new ProcessChatClient<double>(new ProcessChatClientOptions { FileName = "  " }));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
