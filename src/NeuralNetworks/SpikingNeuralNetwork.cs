@@ -17,8 +17,8 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new SpikingNeuralNetworkOptions { };
-/// var model = new SpikingNeuralNetwork&lt;float&gt;(options);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var model = new SpikingNeuralNetwork&lt;float&gt;(architecture);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 784 });
 /// var output = model.Predict(input);
 /// </code>

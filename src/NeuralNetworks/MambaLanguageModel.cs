@@ -23,8 +23,8 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new MambaOptions { };
-/// var model = new MambaLanguageModel&lt;float&gt;(options);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var model = new MambaLanguageModel&lt;float&gt;(architecture);
 /// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
 /// var logits = model.Predict(tokens);
 /// </code>

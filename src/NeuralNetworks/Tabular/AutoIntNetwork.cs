@@ -42,8 +42,9 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </remarks>
 /// <example>
 /// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
 /// var options = new AutoIntOptions&lt;double&gt; { NumFeatures = 20, EmbeddingDimension = 16, NumHeads = 2, NumLayers = 3 };
-/// var model = new AutoIntNetwork&lt;float&gt;(options);
+/// var model = new AutoIntNetwork&lt;float&gt;(architecture);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20 });
 /// var output = model.Predict(input);
 /// </code>

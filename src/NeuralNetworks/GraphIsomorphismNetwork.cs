@@ -61,8 +61,8 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new GraphIsomorphismNetworkOptions { };
-/// var model = new GraphIsomorphismNetwork&lt;float&gt;(options);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var model = new GraphIsomorphismNetwork&lt;float&gt;(architecture);
 /// var nodeFeatures = Tensor&lt;float&gt;.CreateRandom(new[] { 20, 16 });
 /// var output = model.Predict(nodeFeatures);
 /// </code>

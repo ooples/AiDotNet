@@ -50,8 +50,8 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new Blip2Options { };
-/// var model = new Blip2NeuralNetwork&lt;float&gt;(options);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var model = new Blip2NeuralNetwork&lt;float&gt;(architecture);
 /// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 224, 224 });
 /// var output = model.Predict(image);
 /// </code>

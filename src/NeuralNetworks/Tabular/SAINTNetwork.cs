@@ -50,8 +50,9 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </remarks>
 /// <example>
 /// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
 /// var options = new SAINTOptions&lt;double&gt; { NumFeatures = 20, EmbeddingDimension = 32, NumHeads = 8, NumLayers = 6 };
-/// var model = new SAINTNetwork&lt;float&gt;(options);
+/// var model = new SAINTNetwork&lt;float&gt;(architecture);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20 });
 /// var output = model.Predict(input);
 /// </code>

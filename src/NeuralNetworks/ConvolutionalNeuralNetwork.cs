@@ -26,8 +26,8 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new ConvolutionalNeuralNetworkOptions { };
-/// var model = new ConvolutionalNeuralNetwork&lt;float&gt;(options);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var model = new ConvolutionalNeuralNetwork&lt;float&gt;(architecture);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 32, 32 });
 /// var output = model.Predict(input);
 /// </code>

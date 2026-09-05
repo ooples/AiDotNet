@@ -47,11 +47,12 @@ namespace AiDotNet.Diffusion;
 /// </remarks>
 /// <example>
 /// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
 /// // Create a DDPM model for image generation
 /// var options = new DiffusionModelOptions&lt;float&gt;
 /// {
 /// };
-/// var model = new DDPMModel&lt;float&gt;(options);
+/// var model = new DDPMModel&lt;float&gt;(architecture);
 ///
 /// // Generate an image from random noise
 /// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 64, 64 });
@@ -124,6 +125,7 @@ public partial class DDPMModel<T> : DiffusionModelBase<T>
     /// </list></para>
     /// <example>
     /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 8, outputSize: 4);
     /// // Create a minimal DDPM for testing with defaults
     /// var model = new DDPMModel&lt;double&gt;();
     ///
@@ -134,7 +136,7 @@ public partial class DDPMModel<T> : DiffusionModelBase<T>
     ///     TrainTimesteps = 1000,
     ///     DefaultInferenceSteps = 50
     /// };
-    /// var model2 = new DDPMModel&lt;double&gt;(options);
+    /// var model2 = new DDPMModel&lt;double&gt;(architecture);
     ///
     /// // Generate samples (note: without a trained noise predictor, results are random)
     /// var samples = model2.Generate(new[] { 1, 3, 64, 64 }, numInferenceSteps: 50);

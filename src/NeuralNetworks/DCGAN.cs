@@ -38,8 +38,8 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new DCGANOptions { };
-/// var model = new DCGAN&lt;float&gt;(options);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var model = new DCGAN&lt;float&gt;(architecture);
 /// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 100 });
 /// var generated = model.Predict(noise);
 /// </code>
