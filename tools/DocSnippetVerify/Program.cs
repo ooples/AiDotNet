@@ -15,7 +15,10 @@ using System.Xml.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
-string[] roots = args.Length > 0 ? args : new[] { "docs", "website" };
+// --include-prose also compile-checks <code> found in <remarks>/<summary>, not just <example>.
+bool includeProse = args.Any(a => string.Equals(a, "--include-prose", StringComparison.OrdinalIgnoreCase));
+string[] roots = args.Where(a => !a.StartsWith("--", StringComparison.Ordinal)).ToArray();
+if (roots.Length == 0) roots = new[] { "docs", "website" };
 
 // ── Reference set: AiDotNet + all transitive deps (this tool's own output) + BCL ──
 var refs = new List<MetadataReference>();
@@ -97,6 +100,21 @@ foreach (var root in roots)
             {
                 idx++;
                 Check(codeEl.Value, memberName, idx);   // XDocument already unescaped &lt; etc.
+            }
+
+            // Code shown in <remarks>/<summary> prose, which is where most of the library's copy-and-paste
+            // examples actually live. These were exempt from every gate: XML mode looked only inside <example>,
+            // and WikiGenerator.NormalizeBlock rewrites ```csharp to ```cs in prose so the markdown pass skips
+            // them too. That combination let 67 examples calling a non-existent Build(X, y) overload survive.
+            // Opt-in, because prose snippets are often deliberate fragments; run with --include-prose to measure.
+            if (includeProse)
+            {
+                foreach (var codeEl in member.Descendants("code"))
+                {
+                    if (codeEl.Parent is not null && codeEl.Parent.Name == "example") continue;   // already checked
+                    idx++;
+                    Check(codeEl.Value, memberName + " (prose)", idx);
+                }
             }
         }
         continue;

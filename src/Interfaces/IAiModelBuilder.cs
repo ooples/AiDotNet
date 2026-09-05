@@ -1875,6 +1875,28 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <exception cref="InvalidOperationException">Thrown if no valid training path was configured.</exception>
     Task<AiModelResult<T, TInput, TOutput>> BuildAsync();
 
+    /// <summary>Builds the model against data supplied directly rather than through a data loader.</summary>
+    /// <param name="features">The training inputs.</param>
+    /// <param name="labels">The training targets.</param>
+    /// <param name="cancellationToken">A token that cancels the build.</param>
+    /// <returns>The built result.</returns>
+    /// <remarks>
+    /// Declared here, not only on the concrete builder, because every fluent call returns this interface: a
+    /// terminal method absent from it is unreachable the moment a chain starts with <c>Configure*</c>, which is
+    /// how every documented example is written.
+    /// </remarks>
+    Task<AiModelResult<T, TInput, TOutput>> BuildAsync(TInput features, TOutput labels, CancellationToken cancellationToken = default);
+
+    /// <summary>Builds the model against data supplied directly, blocking until the build completes.</summary>
+    /// <param name="features">The training inputs.</param>
+    /// <param name="labels">The training targets.</param>
+    /// <returns>The built result.</returns>
+    /// <remarks>
+    /// The synchronous terminal call the library's examples use. Blocks the calling thread; prefer
+    /// <see cref="BuildAsync(TInput, TOutput, CancellationToken)"/> in a UI or classic ASP.NET context.
+    /// </remarks>
+    AiModelResult<T, TInput, TOutput> Build(TInput features, TOutput labels);
+
     // ============================================================================
     // Training Infrastructure Configuration Methods
     // ============================================================================
