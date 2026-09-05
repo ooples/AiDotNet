@@ -86,9 +86,15 @@ public sealed class ProcessProgramExecutionEngine : IProgramExecutionEngine, IDi
         _limits = _options.Limits;
         _concurrency = new SemaphoreSlim(_limits.MaxConcurrentExecutions, _limits.MaxConcurrentExecutions);
         _pinnedPath = BuildPinnedPath();
-        _workspaceRoot = string.IsNullOrWhiteSpace(_options.WorkingDirectory)
-            ? Path.Combine(Path.GetTempPath(), "aidotnet-program-sandbox")
-            : _options.WorkingDirectory ?? Path.GetTempPath();
+        string? configuredWorkingDirectory = _options.WorkingDirectory;
+        if (configuredWorkingDirectory is null)
+        {
+            _workspaceRoot = Path.Combine(Path.GetTempPath(), "aidotnet-program-sandbox");
+        }
+        else
+        {
+            _workspaceRoot = configuredWorkingDirectory;
+        }
     }
 
     /// <summary>Gets whether this machine can enforce the configured memory limit on a sandboxed child.</summary>
@@ -550,10 +556,8 @@ public sealed class ProcessProgramExecutionEngine : IProgramExecutionEngine, IDi
 
     private static void AddIfPresent(ProcessStartInfo startInfo, string name, string? value)
     {
-        if (!string.IsNullOrWhiteSpace(value))
-        {
-            startInfo.Environment[name] = value ?? string.Empty;
-        }
+        if (value is null || value.Trim().Length == 0) return;
+        startInfo.Environment[name] = value;
     }
 
     private string CreateWorkspace()

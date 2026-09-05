@@ -383,4 +383,17 @@ public sealed class ProgramDiffTests
 
         Assert.Throws<ArgumentOutOfRangeException>(() => new ProgramEvolutionOptions { MaxProgramChars = 0 }.Validate());
     }
+
+    [Fact]
+    public void EvolutionOptionsRejectEitherHalfOfAnExplicitMarkerPair()
+    {
+        var startOnly = new ProgramEvolutionOptions { EvolveBlockStartMarker = "/* START */" };
+        var endOnly = new ProgramEvolutionOptions { EvolveBlockEndMarker = "/* END */" };
+
+        ArgumentException missingEnd = Assert.Throws<ArgumentException>(() => startOnly.ResolveEvolveBlockMarkers());
+        ArgumentException missingStart = Assert.Throws<ArgumentException>(() => endOnly.ResolveEvolveBlockMarkers());
+
+        Assert.Equal(nameof(ProgramEvolutionOptions.EvolveBlockEndMarker), missingEnd.ParamName);
+        Assert.Equal(nameof(ProgramEvolutionOptions.EvolveBlockStartMarker), missingStart.ParamName);
+    }
 }

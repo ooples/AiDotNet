@@ -26,7 +26,7 @@ public sealed class SandboxedProgramFitnessEvaluatorTests
         StdOutTruncated = truncated
     };
 
-    private static ProgramExecuteResponse Failed(ProgramExecuteErrorCode code, string error, int exitCode = -1) => new()
+    private static ProgramExecuteResponse Failed(ProgramExecuteErrorCode code, string? error, int exitCode = -1) => new()
     {
         Success = false,
         Language = ProgramLanguage.Python,
@@ -106,6 +106,20 @@ public sealed class SandboxedProgramFitnessEvaluatorTests
         EvolutionDiagnostic diagnostic = Assert.Single(result.Diagnostics);
         Assert.Equal(expectedDiagnostic, diagnostic.Code);
         Assert.True(diagnostic.IsRedacted);
+    }
+
+    [Fact]
+    public async Task FailureWithoutAnEngineMessageGetsAnExplicitFallbackDiagnostic()
+    {
+        var engine = new ScriptedProgramExecutionEngine(
+            _ => Failed(ProgramExecuteErrorCode.ExecutionFailed, null, exitCode: 9));
+        var evaluator = new SandboxedProgramFitnessEvaluator(engine, new[] { Example("in", "ok") });
+
+        EvolutionTaskResult result = await evaluator.EvaluateAsync(Genome(), Context);
+
+        EvolutionDiagnostic diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Contains("failure without a message", diagnostic.Message, StringComparison.Ordinal);
+        Assert.Contains("exit 9", diagnostic.Message, StringComparison.Ordinal);
     }
 
     [Fact]

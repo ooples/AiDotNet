@@ -155,8 +155,9 @@ public static class ProgramLanguageDetector
     public static bool TryGetLanguageForFenceLabel(string? label, out ProgramLanguage language)
     {
         language = ProgramLanguage.Generic;
-        if (string.IsNullOrWhiteSpace(label)) return false;
-        string key = (label ?? string.Empty).Trim();
+        if (label is null) return false;
+        string key = label.Trim();
+        if (key.Length == 0) return false;
         if (!FenceLabels.TryGetValue(key, out ProgramLanguage resolved)) return false;
         language = resolved;
         return true;
@@ -169,8 +170,9 @@ public static class ProgramLanguageDetector
     public static bool TryGetLanguageForFileExtension(string? extension, out ProgramLanguage language)
     {
         language = ProgramLanguage.Generic;
-        if (string.IsNullOrWhiteSpace(extension)) return false;
-        string key = (extension ?? string.Empty).Trim();
+        if (extension is null) return false;
+        string key = extension.Trim();
+        if (key.Length == 0) return false;
         if (key.Length > 0 && key[0] == '.') key = key.Substring(1);
         if (!FileExtensions.TryGetValue(key, out ProgramLanguage resolved)) return false;
         language = resolved;

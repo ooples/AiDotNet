@@ -322,18 +322,27 @@ public sealed class ProgramEvolutionOptions
     /// <exception cref="ArgumentException">Exactly one of the two markers is set, or a set marker is invalid.</exception>
     public EvolveBlockMarkers ResolveEvolveBlockMarkers()
     {
-        bool hasStart = !string.IsNullOrWhiteSpace(EvolveBlockStartMarker);
-        bool hasEnd = !string.IsNullOrWhiteSpace(EvolveBlockEndMarker);
-        if (hasStart != hasEnd)
+        string? start = EvolveBlockStartMarker;
+        string? end = EvolveBlockEndMarker;
+        if (start is null || start.Trim().Length == 0)
+        {
+            if (end is not null && end.Trim().Length != 0)
+            {
+                throw new ArgumentException(
+                    "Set both EvolveBlockStartMarker and EvolveBlockEndMarker, or neither.",
+                    nameof(EvolveBlockStartMarker));
+            }
+
+            return EvolveBlockMarkers.ForLanguage(Language);
+        }
+
+        if (end is null || end.Trim().Length == 0)
         {
             throw new ArgumentException(
                 "Set both EvolveBlockStartMarker and EvolveBlockEndMarker, or neither.",
-                hasStart ? nameof(EvolveBlockEndMarker) : nameof(EvolveBlockStartMarker));
+                nameof(EvolveBlockEndMarker));
         }
 
-        if (!hasStart) return EvolveBlockMarkers.ForLanguage(Language);
-        string start = EvolveBlockStartMarker ?? EvolveBlock.DefaultStartMarker;
-        string end = EvolveBlockEndMarker ?? EvolveBlock.DefaultEndMarker;
         return new EvolveBlockMarkers(start, end);
     }
 

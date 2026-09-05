@@ -152,7 +152,7 @@ public sealed class ProgramDiversityDescriptor : IRebasableProgramDescriptor
             if (secondSet.Contains(character)) shared++;
         }
 
-        double symmetricDifference = firstSet.Count + secondSet.Count - (2 * shared);
+        double symmetricDifference = firstSet.Count + secondSet.Count - (2.0 * shared);
         return (lengthDifference * 0.1) + (lineDifference * 10.0) + (symmetricDifference * 0.5);
     }
 

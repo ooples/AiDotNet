@@ -106,7 +106,7 @@ public sealed class StableRandom
     {
         Guard.Positive(exclusiveMax);
         uint bound = (uint)exclusiveMax;
-        uint threshold = unchecked((uint)(0U - bound)) % bound;
+        uint threshold = unchecked(0U - bound) % bound;
         while (true)
         {
             uint value = NextUInt32();

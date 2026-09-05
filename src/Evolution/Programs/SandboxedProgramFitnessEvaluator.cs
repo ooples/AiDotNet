@@ -206,9 +206,16 @@ public sealed class SandboxedProgramFitnessEvaluator : IProgramFitnessEvaluator
 
     private static string DescribeFailureDetail(ProgramExecuteResponse response)
     {
-        string reason = string.IsNullOrWhiteSpace(response.Error)
-            ? "The engine reported a failure without a message."
-            : response.Error ?? string.Empty;
+        string? error = response.Error;
+        string reason;
+        if (error is null || error.Trim().Length == 0)
+        {
+            reason = "The engine reported a failure without a message.";
+        }
+        else
+        {
+            reason = error;
+        }
         return string.Concat(
             reason,
             " (exit ",
