@@ -33,8 +33,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new VisionTransformerOptions { };
-/// var model = new VisionTransformer&lt;float&gt;(options);
+/// var model = new VisionTransformer&lt;float&gt;();
 /// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 224, 224 });
 /// var output = model.Predict(image);
 /// </code>

@@ -46,7 +46,7 @@ namespace AiDotNet.Classification.Meta;
 /// <code>
 /// // Create stacking classifier with base classifiers and meta-learner
 /// var options = new StackingClassifierOptions&lt;double&gt;();
-/// var classifier = new StackingClassifier&lt;double&gt;(options);
+/// var classifier = new StackingClassifier&lt;double&gt;();
 ///
 /// // Prepare training data: 6 samples with 2 features
 /// var features = new Matrix&lt;double&gt;(6, 2);

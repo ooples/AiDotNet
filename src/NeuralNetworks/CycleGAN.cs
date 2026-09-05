@@ -46,8 +46,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new CycleGANOptions { };
-/// var model = new CycleGAN&lt;float&gt;(options);
+/// var model = new CycleGAN&lt;float&gt;();
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 256, 256 });
 /// var translated = model.Predict(input);
 /// </code>

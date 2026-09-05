@@ -37,8 +37,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new ConditionalGANOptions { };
-/// var model = new ConditionalGAN&lt;float&gt;(options);
+/// var model = new ConditionalGAN&lt;float&gt;();
 /// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 100 });
 /// var generated = model.Predict(noise);
 /// </code>

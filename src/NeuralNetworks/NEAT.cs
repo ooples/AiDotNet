@@ -41,8 +41,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new NEATOptions { };
-/// var model = new NEAT&lt;float&gt;(options);
+/// var model = new NEAT&lt;float&gt;();
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4 });
 /// var output = model.Predict(input);
 /// </code>

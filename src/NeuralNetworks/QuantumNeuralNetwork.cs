@@ -31,8 +31,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new QuantumNeuralNetworkOptions { };
-/// var model = new QuantumNeuralNetwork&lt;float&gt;(options);
+/// var model = new QuantumNeuralNetwork&lt;float&gt;();
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4 });
 /// var output = model.Predict(input);
 /// </code>
