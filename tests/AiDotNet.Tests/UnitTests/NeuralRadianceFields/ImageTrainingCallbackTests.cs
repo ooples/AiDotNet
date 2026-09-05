@@ -8,7 +8,6 @@ using AiDotNet.NeuralRadianceFields.Data;
 using AiDotNet.NeuralRadianceFields.Models;
 using AiDotNet.Optimizers;
 using AiDotNet.Models.Options;
-using AiDotNet.TrainingMonitoring;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -72,8 +71,7 @@ public class ImageTrainingCallbackTests
         var observed = new List<int>();
 
         var builder = BuilderWithEpochs(Epochs)
-            .ConfigureTrainingCallback(new DelegateTrainingCallback<float>(
-                onEpochEnd: p => { observed.Add(p.Epoch); return true; }));
+            .ConfigureTrainingCallback(p => { observed.Add(p.Epoch); return true; });
 
         await builder.BuildAsync();
 
@@ -89,8 +87,7 @@ public class ImageTrainingCallbackTests
         int seen = 0;
 
         var builder = BuilderWithEpochs(Epochs)
-            .ConfigureTrainingCallback(new DelegateTrainingCallback<float>(
-                onEpochEnd: _ => { seen++; return seen < 3; }));   // veto on the third epoch
+            .ConfigureTrainingCallback(_ => { seen++; return seen < 3; });   // veto on the third epoch
 
         await builder.BuildAsync();
 
@@ -105,8 +102,7 @@ public class ImageTrainingCallbackTests
         var totals = new List<int>();
 
         var builder = BuilderWithEpochs(Epochs)
-            .ConfigureTrainingCallback(new DelegateTrainingCallback<float>(
-                onEpochEnd: p => { totals.Add(p.TotalEpochs); return true; }));
+            .ConfigureTrainingCallback(p => { totals.Add(p.TotalEpochs); return true; });
 
         await builder.BuildAsync();
 
