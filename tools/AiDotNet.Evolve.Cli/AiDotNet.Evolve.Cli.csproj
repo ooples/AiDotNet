@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Not shipped. release-please packs and pushes src/AiDotNet.csproj ALONE, so a package here
+         would be one nothing publishes or consumes. Repo tooling, not a library. -->
+    <IsPackable>false</IsPackable>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>aidotnet-evolve</AssemblyName>
+    <RootNamespace>AiDotNet.Evolve.Cli</RootNamespace>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AiDotNet.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The command implementations are internal so the tool has no public surface to keep stable; the test project
+         calls them directly rather than spawning a process, which is what keeps the CLI tests fast and reliable. -->
+    <InternalsVisibleTo Include="AiDotNetTests" />
+  </ItemGroup>
+</Project>

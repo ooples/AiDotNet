@@ -1747,6 +1747,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // AutoML (redacted summary)
         AutoMLSummary = options.AutoMLSummary;
 
+        // Evolution (redacted summary, program result, and the engine's typed run result)
+        EvolutionSummary = options.EvolutionSummary;
+        ProgramEvolution = options.ProgramEvolution;
+        EvolutionRunResultObject = options.EvolutionRunResult;
+
         // Fine-tuning and adaptation
         LoRAConfiguration = options.LoRAConfiguration;
 
@@ -3847,6 +3852,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             LoRAConfiguration = LoRAConfiguration,
             CrossValidationResult = CrossValidationResult,
             AutoMLSummary = AutoMLSummary,
+            // Evolution results describe a finished search rather than the model's parameters, so a
+            // parameter update or a deep copy carries them across unchanged.
+            EvolutionSummary = EvolutionSummary,
+            ProgramEvolution = ProgramEvolution,
+            EvolutionRunResult = EvolutionRunResultObject,
             DeploymentConfiguration = DeploymentConfiguration,
             // JIT compilation is parameter-specific, don't copy
             InferenceOptimizationConfig = InferenceOptimizationConfig,
@@ -5600,6 +5610,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             LoRAConfiguration = LoRAConfiguration,
             CrossValidationResult = CrossValidationResult,
             AutoMLSummary = AutoMLSummary,
+            // Evolution results describe a finished search rather than the model's parameters, so a
+            // parameter update or a deep copy carries them across unchanged.
+            EvolutionSummary = EvolutionSummary,
+            ProgramEvolution = ProgramEvolution,
+            EvolutionRunResult = EvolutionRunResultObject,
             DeploymentConfiguration = DeploymentConfiguration,
             // JIT compilation is model-specific, don't copy
             InferenceOptimizationConfig = InferenceOptimizationConfig,
@@ -5817,6 +5832,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 LoRAConfiguration = deserializedObject.LoRAConfiguration;
                 CrossValidationResult = deserializedObject.CrossValidationResult;
                 AutoMLSummary = deserializedObject.AutoMLSummary;
+                // The redacted evolution summary round-trips with the payload. The program result and the
+                // engine's typed run result do not: both are [JsonIgnore], the first because it carries
+                // model-generated source and the second because its genome type is not known here, so a
+                // deserialized result keeps whichever instances it already held.
+                EvolutionSummary = deserializedObject.EvolutionSummary;
                 DeploymentConfiguration = deserializedObject.DeploymentConfiguration;
                 SegmentationVisualization = deserializedObject.SegmentationVisualization;
                 // Weight-streaming telemetry — preserve through deserialize so

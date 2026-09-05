@@ -73,7 +73,6 @@ namespace AiDotNet.NeuralNetworks.Layers
     {
         protected AiDotNet.Tensors.LinearAlgebra.Vector<T> Parameters = new();
         public virtual AiDotNet.Tensors.LinearAlgebra.Vector<T> GetParameters() => Parameters;
-        protected virtual bool LegacyParametersAreDerivedSnapshot => false;
         protected void RegisterTrainableParameter(
             AiDotNet.Tensors.LinearAlgebra.Tensor<T> tensor,
             AiDotNet.Tensors.Engines.PersistentTensorRole role) { }
@@ -588,7 +587,7 @@ public partial class CompositeLayer<T> : AiDotNet.NeuralNetworks.Layers.LayerBas
     }
 
     [Fact]
-    public void LayerGenerator_MarksLegacyFlatParameterSnapshotsAsDerived()
+    public void LayerGenerator_DoesNotReintroduceRetiredLegacyFlatParameterComponent()
     {
         const string source = @"
 using AiDotNet.Attributes;
@@ -606,7 +605,9 @@ public partial class LegacyComposite<T> : AiDotNet.NeuralNetworks.Layers.LayerBa
 
         string generated = Run(new AiDotNet.Generators.TrainableParameterGenerator(), source);
 
-        Assert.Contains("LegacyParametersAreDerivedSnapshot => true", generated, StringComparison.Ordinal);
+        Assert.Contains("HasDeclaredSubLayerStructure => true", generated, StringComparison.Ordinal);
+        Assert.Contains("EnsureSubLayersRegistered", generated, StringComparison.Ordinal);
+        Assert.DoesNotContain("LegacyParametersAreDerivedSnapshot", generated, StringComparison.Ordinal);
     }
 
     [Fact]

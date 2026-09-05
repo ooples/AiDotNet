@@ -1,4 +1,6 @@
-#if NET8_0_OR_GREATER
+// The tooling assembly these tests load by reflection is referenced only for net10.0, so on the compatibility
+// frameworks they compiled and then failed at run time with a missing assembly. The guard now matches the reference.
+#if NET10_0_OR_GREATER
 using System.Reflection;
 using Xunit;
 using System.Threading.Tasks;

@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Models;
+using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.Diffusion.VAE;
 
@@ -212,6 +213,11 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
 
     private bool _componentsRegistered;
 
+    // Retained because a VAE may defer constructing its layer graph until the shared parameter
+    // registry is first prepared. The thread-local construction scope can be changed by another
+    // model between new VAE(seed) and that first use.
+    private readonly int? _layerInitializationSeed;
+
     /// <summary>
     /// Declare this VAE's components here with <see cref="RegisterParameterComponent"/>.
     /// </summary>
@@ -232,6 +238,7 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     private void EnsureComponentsRegistered()
     {
         if (_componentsRegistered) return;
+        LayerInitializationSeedScope.ResetForModelConstruction(_layerInitializationSeed);
         _componentsRegistered = true;
         RegisterGeneratedParameterComponents(_parameterRegistry);
         RegisterComponents();
@@ -335,6 +342,8 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     /// <param name="seed">Optional random seed for reproducibility.</param>
     protected VAEModelBase(ILossFunction<T>? lossFunction = null, int? seed = null)
     {
+        _layerInitializationSeed = seed ?? LayerInitializationSeedScope.AmbientFallbackSeed;
+        LayerInitializationSeedScope.ResetForModelConstruction(_layerInitializationSeed);
         LossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         RandomGenerator = seed.HasValue
             ? RandomHelper.CreateSeededRandom(seed.Value)
@@ -503,7 +512,10 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     protected bool TryShareParametersFrom(VAEModelBase<T> source)
     {
         bool shared = AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(
-            source, this, out AiDotNet.Helpers.CopyOnWriteShareStatus status, out _);
+            source, this, out AiDotNet.Helpers.CopyOnWriteShareStatus status, out string mismatch);
+        if (status == AiDotNet.Helpers.CopyOnWriteShareStatus.AliasedLayerGraph)
+            throw new InvalidOperationException(
+                $"Clone configuration for {GetType().Name} retained source-owned layers: {mismatch}.");
         return shared || status == AiDotNet.Helpers.CopyOnWriteShareStatus.BothGraphsEmpty;
     }
 

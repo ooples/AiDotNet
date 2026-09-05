@@ -55,11 +55,67 @@ public sealed class AiModelBuilderInterfaceCompletenessTests
             string.Join("\n  ", missing.OrderBy(s => s, StringComparer.Ordinal)));
     }
 
+    /// <summary>
+    /// Terminal builder methods — those that end a chain rather than continue it — must also be on the interface.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The fluent test above cannot see these, because it selects on the RETURN type being
+    /// <see cref="IAiModelBuilder{T, TInput, TOutput}"/> and a terminal call returns a result instead. That blind
+    /// spot is not theoretical: <c>Build(features, labels)</c> was first added to the concrete builder only, and
+    /// was unreachable from every documented example, because each example begins with a <c>Configure*</c> call
+    /// and is therefore interface-typed by the time it reaches the terminal call. The build compiled and the
+    /// fluent completeness test stayed green.
+    /// </para>
+    /// <para>
+    /// "Terminal" is identified by name rather than by return type, because the results are heterogeneous
+    /// (<c>AiModelResult</c>, <c>Task&lt;AiModelResult&gt;</c>) and a name-based rule states the intent directly:
+    /// anything a caller invokes to finish a chain belongs on the interface.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    [Trait("category", "integration-configure-method")]
+    public void Every_terminal_builder_method_is_declared_on_the_interface()
+    {
+        var concrete = typeof(AiModelBuilder<,,>);
+        var iface = typeof(IAiModelBuilder<,,>);
+
+        var interfaceSignatures = new[] { iface }
+            .Concat(iface.GetInterfaces())
+            .SelectMany(i => i.GetMethods(BindingFlags.Public | BindingFlags.Instance))
+            .Select(Signature)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var missing = new List<string>();
+        foreach (var method in concrete.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+        {
+            if (method.IsSpecialName) continue;
+            if (!IsTerminalBuilderMethod(method)) continue;
+
+            var sig = Signature(method);
+            if (!interfaceSignatures.Contains(sig))
+            {
+                missing.Add(sig);
+            }
+        }
+
+        Assert.True(
+            missing.Count == 0,
+            "Every terminal AiModelBuilder method (Build/BuildAsync and friends) MUST be declared on " +
+            "IAiModelBuilder. A chain becomes interface-typed at its first Configure* call, so a terminal method " +
+            "declared only on the concrete builder is unreachable exactly where callers need it:\n  " +
+            string.Join("\n  ", missing.OrderBy(s => s, StringComparer.Ordinal)));
+    }
+
     private static bool ReturnsBuilderInterface(MethodInfo method)
     {
         var rt = method.ReturnType;
         return rt.IsGenericType && rt.GetGenericTypeDefinition() == typeof(IAiModelBuilder<,,>);
     }
+
+    private static bool IsTerminalBuilderMethod(MethodInfo method) =>
+        !ReturnsBuilderInterface(method) &&
+        (method.Name == "Build" || method.Name == "BuildAsync");
 
     // Name + ordered parameter types. Uses the (open) generic parameter names / type names, which are identical
     // between the concrete and interface open generic definitions, so a match means a real signature match.

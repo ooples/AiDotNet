@@ -20,9 +20,12 @@ namespace AiDotNet.Agentic.Pipeline;
 /// the stream finishes.
 /// </para>
 /// </remarks>
-public sealed class RecordingChatClient<T> : IChatClient<T>
+public sealed class RecordingChatClient<T> : IChatClientDecorator<T>
 {
     private readonly IChatClient<T> _inner;
+
+    /// <inheritdoc/>
+    public IChatClient<T> Inner => _inner;
     private readonly IChatInteractionStore _store;
 
     /// <summary>

@@ -1006,6 +1006,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             AutoMLSearchStrategy.BayesianOptimization => new AiDotNet.AutoML.BayesianOptimizationAutoML<T, TInput, TOutput>(RandomHelper.CreateSecureRandom()),
             AutoMLSearchStrategy.Evolutionary => new AiDotNet.AutoML.EvolutionaryAutoML<T, TInput, TOutput>(RandomHelper.CreateSecureRandom()),
             AutoMLSearchStrategy.MultiFidelity => new AiDotNet.AutoML.MultiFidelityAutoML<T, TInput, TOutput>(RandomHelper.CreateSecureRandom(), _autoMLOptions?.MultiFidelity),
+            AutoMLSearchStrategy.MapElites => new AiDotNet.AutoML.MapElitesAutoML<T, TInput, TOutput>(_autoMLOptions?.MapElites),
             AutoMLSearchStrategy.NeuralArchitectureSearch or
             AutoMLSearchStrategy.DARTS or
             AutoMLSearchStrategy.GDAS or

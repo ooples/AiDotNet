@@ -41,7 +41,8 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSource<T>,
     IParameterLayoutSource, IParameterChunkSource<T>, IParameterSurfaceLifecycle,
-    IUpstreamBiasRedundancy, IDisposable
+    IUpstreamBiasRedundancy, AiDotNet.Interfaces.ICloneable<LayerBase<T>>,
+    AiDotNet.Models.IConfigurationCloneable, IDisposable
 {
     /// <summary>
     /// Counter for generating unique instance IDs across all layer instances.
@@ -167,7 +168,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// Good initialization with proper randomness is important for neural networks to learn effectively.
     /// </para>
     /// </remarks>
-    protected static Random Random => RandomHelper.ThreadSafeRandom;
+    /// <remarks>
+    /// An explicitly seeded layer owns its random stream. Returning the process-shared stream here
+    /// made every derived layer that correctly used this base facility silently ignore
+    /// <see cref="RandomSeed"/>; FlashAttentionLayer was the first generated invariant to expose it,
+    /// but the defect affected every direct <c>Random.Next*</c> initialization path. Unseeded layers
+    /// retain the existing thread-local production stream and pay no additional allocation.
+    /// </remarks>
+    protected Random Random => RandomSeed.HasValue
+        ? _seededRandom ??= RandomHelper.CreateSeededRandom(RandomSeed.Value)
+        : RandomHelper.ThreadSafeRandom;
 
     /// <summary>
     /// The trainable parameters of this layer.
@@ -581,13 +591,31 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// when it is non-null.
     /// </para>
     /// </summary>
-    public int? RandomSeed { get; set; }
+    private int? _randomSeed;
+    private Random? _seededRandom;
+
+    public int? RandomSeed
+    {
+        get => _randomSeed;
+        set
+        {
+            if (_randomSeed == value) return;
+            _randomSeed = value;
+            // A changed seed denotes a new stream. Keeping the old Random instance here makes a
+            // post-construction LayerHelper wiring update look seeded while it continues from the
+            // previous seed (or from a clone-construction stream).
+            _seededRandom = null;
+        }
+    }
 
     /// <summary>Copies base-owned stochastic progress into a reconstructed clone.</summary>
     internal void CopyBaseRandomStateTo(LayerBase<T> clone, bool shareRandomState)
     {
         if (clone is null) throw new ArgumentNullException(nameof(clone));
         clone._initWeightsCallCounter = shareRandomState ? _initWeightsCallCounter : 0;
+        clone._seededRandom = shareRandomState && _seededRandom is not null
+            ? LayerCloning.CloneRandom(_seededRandom)
+            : null;
         clone.SetTrainingMode(IsTrainingMode);
     }
 
@@ -1539,6 +1567,26 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     protected virtual IReadOnlyList<TensorShape> DeclaredParameterCountShapes()
         => System.Array.Empty<TensorShape>();
+
+    /// <summary>
+    /// Copies allocation-free dimension state used by generated parameter declarations.
+    /// </summary>
+    /// <remarks>
+    /// A configuration constructor can deliberately leave an input-sized axis unresolved while an
+    /// enclosing graph resolves it without allocating weights. Source-generated layer overrides copy
+    /// only the writable integral roots referenced by their parameter-shape declarations. This is a
+    /// structural operation: it transfers no tensor, buffer, activation, or learned value.
+    /// </remarks>
+    protected virtual bool TryAdoptDeclaredParameterStructureFrom(LayerBase<T> source) => false;
+
+    /// <summary>
+    /// Attempts to align this layer's generated declaration dimensions with a same-typed source.
+    /// </summary>
+    internal bool TryAdoptDeclaredParameterStructure(LayerBase<T> source)
+    {
+        if (source is null || source.GetType() != GetType()) return false;
+        return TryAdoptDeclaredParameterStructureFrom(source);
+    }
 
     /// <summary>
     /// Gets whether this layer has at least one currently-enabled generated parameter-shape
@@ -5538,6 +5586,22 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     public virtual LayerBase<T> Clone()
         => (LayerBase<T>)LayerCloning.Clone(this, CloneOptions.Full);
 
+    /// <inheritdoc />
+    LayerBase<T> AiDotNet.Interfaces.ICloneable<LayerBase<T>>.DeepCopy() => Clone();
+
+    /// <summary>
+    /// Rebuilds only this layer's constructor-owned structure for an enclosing configuration clone.
+    /// </summary>
+    /// <remarks>
+    /// CloneEngine restores the enclosing model's learned state after construction. Using the public
+    /// full clone contract for a layer held inside a constructor container would read and materialize
+    /// the source layer's lazy weights merely to build that temporary graph, then transfer the same
+    /// state again at the parent boundary. The configuration contract keeps that construction phase
+    /// structural and allocation-free; the parent's shared state transfer remains authoritative.
+    /// </remarks>
+    object AiDotNet.Models.IConfigurationCloneable.CloneConfiguration()
+        => LayerCloning.Clone(this, CloneOptions.Architecture);
+
     /// <summary>
     /// Calculates the derivative of a scalar activation function for each element of a tensor.
     /// </summary>
@@ -8353,7 +8417,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         for (int i = 0; i < sourceBuffers.Count; i++)
         {
             var entry = sourceBuffers[i];
-            var shared = (Tensor<T>)entry.Tensor.CloneShared();
+            if (destinationBuffers.TryGetValue(entry.Name, out var existingPeer)
+                && AiDotNet.Helpers.CopyOnWriteCloneHelper.AreLiveCowPeers(entry.Tensor, existingPeer))
+            {
+                continue;
+            }
+
+            var shared = AiDotNet.Helpers.CopyOnWriteCloneHelper.ShareTensor(entry.Tensor);
             if (InstallRestoredBuffer(entry.Name, shared)) continue;
 
             // Readonly generated buffers cannot be rebound, but preflight proved their existing

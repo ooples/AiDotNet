@@ -91,11 +91,18 @@
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <ProjectReference Include="..\AiDotNet.ParameterSweepWorker\AiDotNet.ParameterSweepWorker.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\tools\AiDotNet.ProgramSynthesis.Tooling\AiDotNet.ProgramSynthesis.Tooling.csproj" />
+    <ProjectReference Include="..\..\tools\AiDotNet.Evolve.Cli\AiDotNet.Evolve.Cli.csproj" />
     <ProjectReference Include="..\..\src\AiDotNet.Serving\AiDotNet.Serving.csproj" />
     <ProjectReference Include="..\..\src\AiDotNet.Storage.Postgres\AiDotNet.Storage.Postgres.csproj" />
     <ProjectReference Include="..\..\src\AiDotNet.Storage.Redis\AiDotNet.Storage.Redis.csproj" />
     <ProjectReference Include="..\..\src\AiDotNet.Storage.Neo4j\AiDotNet.Storage.Neo4j.csproj" />
     <ProjectReference Include="..\..\src\AiDotNet.Storage.Elasticsearch\AiDotNet.Storage.Elasticsearch.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0'">
+    <!-- The command-line tool is a net10.0 executable, so its tests cannot compile against the compatibility
+         frameworks. Everything the tool depends on is in the library and is covered on all three. -->
+    <Compile Remove="IntegrationTests\Configuration\EvolveCommandLineTests.cs" />
   </ItemGroup>
 
   <ItemGroup>

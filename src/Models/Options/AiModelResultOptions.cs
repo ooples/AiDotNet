@@ -285,6 +285,45 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     /// </remarks>
     public AutoMLRunSummary? AutoMLSummary { get; set; }
 
+    /// <summary>
+    /// Gets or sets an optional redacted summary of an evolution run.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Set by the builder's evolution path. It holds counters, island statuses, archive coordinates, and file
+    /// paths, never a genome, so it is safe to log and to serialize with the result.
+    /// </para>
+    /// <para><b>For Beginners:</b> If you evolved a program or a custom candidate type, this stores the report card
+    /// for that search — why it stopped, what it found, and how much it cost.</para>
+    /// </remarks>
+    public EvolutionRunSummary? EvolutionSummary { get; set; }
+
+    /// <summary>
+    /// Gets or sets an optional program-evolution result carrying the winning source.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Set only by the builder's program-evolution path. Unlike <see cref="EvolutionSummary"/> this carries program
+    /// text produced by a language model, so it is deliberately excluded from serialization.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is where the evolved program itself ends up.</para>
+    /// </remarks>
+    public AiDotNet.Evolution.Programs.ProgramEvolutionResult? ProgramEvolution { get; set; }
+
+    /// <summary>
+    /// Gets or sets the engine's own typed evolution run result, boxed because the genome type is not a type
+    /// parameter of the result.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Callers reach it through <c>AiModelResult.GetEvolutionRunResult&lt;TGenome&gt;()</c>, which casts it back to
+    /// the genome type the run used.
+    /// </para>
+    /// <para><b>For Beginners:</b> The full search result, including every candidate found. You do not set this
+    /// yourself; the builder does.</para>
+    /// </remarks>
+    public object? EvolutionRunResult { get; set; }
+
     // ============================================================================
     // Ethical AI Properties
     // ============================================================================

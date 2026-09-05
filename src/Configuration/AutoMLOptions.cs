@@ -65,6 +65,13 @@ public class AutoMLOptions<T, TInput, TOutput>
     public AutoMLMultiFidelityOptions? MultiFidelity { get; set; }
 
     /// <summary>
+    /// Gets or sets quality-diversity options used when <see cref="SearchStrategy"/> is
+    /// <see cref="AutoMLSearchStrategy.MapElites"/>.
+    /// </summary>
+    /// <remarks>If null, deterministic bounded defaults are used.</remarks>
+    public MapElitesAutoMLOptions? MapElites { get; set; }
+
+    /// <summary>
     /// Gets or sets optional ensembling options applied after the AutoML search completes.
     /// </summary>
     /// <remarks>

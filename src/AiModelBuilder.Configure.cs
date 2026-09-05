@@ -1,3 +1,4 @@
+using AiDotNet.Data.Loaders;
 using AiDotNet.Augmentation;
 using AiDotNet.AutoML.NAS;
 using AiDotNet.RetrievalAugmentedGeneration.Graph.Communities;
@@ -1158,6 +1159,70 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public Task<AiModelResult<T, TInput, TOutput>> BuildAsync() => BuildAsync(CancellationToken.None);
 
     /// <summary>
+    /// Builds the model against data supplied directly, instead of through <see cref="ConfigureDataLoader(IDataLoader{T})"/>.
+    /// </summary>
+    /// <param name="features">The training inputs.</param>
+    /// <param name="labels">The training targets.</param>
+    /// <param name="cancellationToken">A token that cancels the build.</param>
+    /// <returns>The built result.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="features"/> or <paramref name="labels"/> is <c>null</c>.</exception>
+    /// <exception cref="InvalidOperationException">A data loader was already configured; supplying both is ambiguous.</exception>
+    /// <remarks>
+    /// <para>
+    /// Equivalent to <c>ConfigureDataLoader(new InMemoryDataLoader&lt;T, TInput, TOutput&gt;(features, labels))</c>
+    /// followed by <see cref="BuildAsync()"/>. It exists because handing the builder your data is the most common
+    /// thing a caller wants to do, and routing it through a loader for the in-memory case is ceremony.
+    /// </para>
+    /// <para>
+    /// Configuring a loader as well is rejected rather than silently preferring one, because which dataset trained
+    /// the model is not something a caller should have to guess.
+    /// </para>
+    /// <para><b>For Beginners:</b> Use this when your data is already in memory. Use
+    /// <c>ConfigureDataLoader</c> instead when it comes from a file, a stream, or anywhere that needs batching.</para>
+    /// </remarks>
+    public Task<AiModelResult<T, TInput, TOutput>> BuildAsync(
+        TInput features, TOutput labels, CancellationToken cancellationToken = default)
+    {
+        if (features is null) throw new ArgumentNullException(nameof(features));
+        if (labels is null) throw new ArgumentNullException(nameof(labels));
+        if (_dataLoader is not null)
+        {
+            throw new InvalidOperationException(
+                "BuildAsync(features, labels) was called on a builder that already has a data loader configured. " +
+                "Supply the data one way only: either ConfigureDataLoader(...) then BuildAsync(), or BuildAsync(features, labels).");
+        }
+
+        ConfigureDataLoader(new InMemoryDataLoader<T, TInput, TOutput>(features, labels));
+        return BuildAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Builds the model against data supplied directly, blocking until the build completes.
+    /// </summary>
+    /// <param name="features">The training inputs.</param>
+    /// <param name="labels">The training targets.</param>
+    /// <returns>The built result.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="features"/> or <paramref name="labels"/> is <c>null</c>.</exception>
+    /// <exception cref="InvalidOperationException">A data loader was already configured.</exception>
+    /// <remarks>
+    /// <para>
+    /// The synchronous counterpart of <see cref="BuildAsync(TInput, TOutput, CancellationToken)"/>, provided because
+    /// the documented examples throughout this library show a synchronous terminal call and a caller in a console
+    /// app, a test, or a LINQPad script has no reason to be forced into async.
+    /// </para>
+    /// <para>
+    /// It blocks the calling thread. In a UI or classic ASP.NET context, where blocking on a task can deadlock,
+    /// prefer <see cref="BuildAsync(TInput, TOutput, CancellationToken)"/>. <c>GetAwaiter().GetResult()</c> is used
+    /// rather than <c>.Result</c> so a failure surfaces as the original exception rather than wrapped in an
+    /// <see cref="AggregateException"/>.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the simplest way to build: hand it your inputs and targets and get a
+    /// result back. If your application is already async, use <c>BuildAsync</c> instead.</para>
+    /// </remarks>
+    public AiModelResult<T, TInput, TOutput> Build(TInput features, TOutput labels) =>
+        BuildAsync(features, labels, CancellationToken.None).GetAwaiter().GetResult();
+
+    /// <summary>
     /// Pushes the configured gradient-checkpointing segment size onto the
     /// current model. Called from <c>BuildAsync</c> at the top of the build
     /// flow AND after any code path that reassigns <c>_model</c> (e.g., the
@@ -1650,6 +1715,19 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             return result;
         }
 
+        // EVOLUTION PATH - a typed-genome run captured by ConfigureEvolution<TGenome>, or a program-evolution run
+        // from ConfigureProgramEvolution. Evolutionary search has no training dataset and produces no fitted model,
+        // so it cannot go through any of the training paths above and must be recognised before the inference-only
+        // branches below, which would otherwise claim a builder that also configured a code model. The result
+        // carries the search on AiModelResult.EvolutionSummary / ProgramEvolution / GetEvolutionRunResult<TGenome>()
+        // and reports IsGenomeOnlyResult, so Predict fails loudly instead of returning something meaningless.
+        // Unlike the supervised AutoML path, which still passes CancellationToken.None to its inner search, this
+        // branch propagates the caller's token all the way into proposal, refinement, and evaluation.
+        if (_evolutionRunner is not null || _programEvolutionOptions is not null)
+        {
+            return await BuildEvolutionInternalAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         // PROGRAM SYNTHESIS INFERENCE PATH - allow inference-only builds when a code model is configured.
         // This supports code-task workflows that do not require a training dataset, while keeping other
         // training paths explicit via ConfigureDataLoader/ConfigureReinforcementLearning/ConfigureMetaLearning.
@@ -1677,6 +1755,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             "- ConfigureReinforcementLearning() for RL training\n" +
             "- ConfigureDataLoader() for supervised learning (row-scalar OR image-space)\n" +
             "- ConfigureMetaLearning() for meta-learning\n" +
+            "- ConfigureProgramEvolution() to evolve source code, with ConfigureChatClient() for the model that\n" +
+            "  proposes edits (test cases or an evaluator script on the options say how a candidate is scored)\n" +
+            "- ConfigureEvolution<TGenome>(task, variation, ...) to evolve a candidate type of your own\n" +
             "For supervised learning, configure a data loader via ConfigureDataLoader() and then call BuildAsync().");
     }
 

@@ -210,7 +210,7 @@ public static class LayerCloning
         "MemberwiseClone", BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new InvalidOperationException("Object.MemberwiseClone is unavailable.");
 
-    private static Random CloneRandom(Random source)
+    internal static Random CloneRandom(Random source)
     {
         var clone = (Random)MemberwiseCloneMethod.Invoke(source, null)!;
 
