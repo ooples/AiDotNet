@@ -605,16 +605,16 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
 
         // Use Engine operations for parameter updates
         var scaledKeyGrad = Engine.TensorMultiplyScalar(_keyWeightsGradient, learningRate);
-        _keyWeights = Engine.TensorSubtract(_keyWeights, scaledKeyGrad);
+        Engine.TensorSubtractInPlace(_keyWeights, scaledKeyGrad);
 
         var scaledValueGrad = Engine.TensorMultiplyScalar(_valueWeightsGradient, learningRate);
-        _valueWeights = Engine.TensorSubtract(_valueWeights, scaledValueGrad);
+        Engine.TensorSubtractInPlace(_valueWeights, scaledValueGrad);
 
         var scaledOutputGrad = Engine.TensorMultiplyScalar(_outputWeightsGradient, learningRate);
-        _outputWeights = Engine.TensorSubtract(_outputWeights, scaledOutputGrad);
+        Engine.TensorSubtractInPlace(_outputWeights, scaledOutputGrad);
 
         var scaledBiasGrad = Engine.TensorMultiplyScalar(_outputBiasGradient, learningRate);
-        _outputBias = Engine.TensorSubtract(_outputBias, scaledBiasGrad);
+        Engine.TensorSubtractInPlace(_outputBias, scaledBiasGrad);
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_keyWeights);

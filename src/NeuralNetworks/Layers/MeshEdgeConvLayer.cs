@@ -684,10 +684,10 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>, IShapeContract
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         var scaledWeightGrad = Engine.TensorMultiplyScalar(_weightsGradient, learningRate);
-        _weights = Engine.TensorSubtract(_weights, scaledWeightGrad);
+        Engine.TensorSubtractInPlace(_weights, scaledWeightGrad);
 
         var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
-        _biases = Engine.TensorSubtract(_biases, scaledBiasGrad);
+        Engine.TensorSubtractInPlace(_biases, scaledBiasGrad);
     }
 
     /// <summary>

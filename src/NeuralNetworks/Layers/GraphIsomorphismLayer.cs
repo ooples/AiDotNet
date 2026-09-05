@@ -459,13 +459,13 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
         }
 
         // Update using vectorized Engine operations
-        _mlpWeights1 = Engine.TensorSubtract(_mlpWeights1,
+        Engine.TensorSubtractInPlace(_mlpWeights1,
             Engine.TensorMultiplyScalar(_mlpWeights1Gradient, learningRate));
-        _mlpWeights2 = Engine.TensorSubtract(_mlpWeights2,
+        Engine.TensorSubtractInPlace(_mlpWeights2,
             Engine.TensorMultiplyScalar(_mlpWeights2Gradient, learningRate));
-        _mlpBias1 = Engine.TensorSubtract(_mlpBias1,
+        Engine.TensorSubtractInPlace(_mlpBias1,
             Engine.TensorMultiplyScalar(_mlpBias1Gradient, learningRate));
-        _mlpBias2 = Engine.TensorSubtract(_mlpBias2,
+        Engine.TensorSubtractInPlace(_mlpBias2,
             Engine.TensorMultiplyScalar(_mlpBias2Gradient, learningRate));
 
         // Update epsilon if learnable

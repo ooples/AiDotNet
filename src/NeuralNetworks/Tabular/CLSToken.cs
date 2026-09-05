@@ -200,7 +200,7 @@ public partial class CLSToken<T>
     /// <param name="learningRate">The learning rate.</param>
     public void UpdateParameters(T learningRate)
     {
-        _clsEmbedding = Engine.TensorSubtract(_clsEmbedding,
+        Engine.TensorSubtractInPlace(_clsEmbedding,
             Engine.TensorMultiplyScalar(_clsGradient, learningRate));
     }
 

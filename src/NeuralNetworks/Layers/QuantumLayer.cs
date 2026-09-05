@@ -552,7 +552,7 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
     {
         // Use Engine operations for gradient update
         var scaledGradients = Engine.TensorMultiplyScalar(_angleGradients, learningRate);
-        _rotationAngles = Engine.TensorSubtract(_rotationAngles, scaledGradients);
+        Engine.TensorSubtractInPlace(_rotationAngles, scaledGradients);
 
         // Ensure angles stay within [0, 2π] and apply rotations
         for (int i = 0; i < _numQubits; i++)

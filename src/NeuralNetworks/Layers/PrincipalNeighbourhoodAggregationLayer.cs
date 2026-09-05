@@ -1193,21 +1193,21 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
         }
 
         // Update using vectorized Engine operations
-        _preTransformWeights = Engine.TensorSubtract(_preTransformWeights,
+        Engine.TensorSubtractInPlace(_preTransformWeights,
             Engine.TensorMultiplyScalar(_preTransformWeightsGradient, learningRate));
-        _preTransformBias = Engine.TensorSubtract(_preTransformBias,
+        Engine.TensorSubtractInPlace(_preTransformBias,
             Engine.TensorMultiplyScalar(_preTransformBiasGradient!, learningRate));
-        _postAggregationWeights1 = Engine.TensorSubtract(_postAggregationWeights1,
+        Engine.TensorSubtractInPlace(_postAggregationWeights1,
             Engine.TensorMultiplyScalar(_postAggregationWeights1Gradient, learningRate));
-        _postAggregationWeights2 = Engine.TensorSubtract(_postAggregationWeights2,
+        Engine.TensorSubtractInPlace(_postAggregationWeights2,
             Engine.TensorMultiplyScalar(_postAggregationWeights2Gradient, learningRate));
-        _postAggregationBias1 = Engine.TensorSubtract(_postAggregationBias1,
+        Engine.TensorSubtractInPlace(_postAggregationBias1,
             Engine.TensorMultiplyScalar(_postAggregationBias1Gradient!, learningRate));
-        _postAggregationBias2 = Engine.TensorSubtract(_postAggregationBias2,
+        Engine.TensorSubtractInPlace(_postAggregationBias2,
             Engine.TensorMultiplyScalar(_postAggregationBias2Gradient!, learningRate));
-        _selfWeights = Engine.TensorSubtract(_selfWeights,
+        Engine.TensorSubtractInPlace(_selfWeights,
             Engine.TensorMultiplyScalar(_selfWeightsGradient, learningRate));
-        _bias = Engine.TensorSubtract(_bias,
+        Engine.TensorSubtractInPlace(_bias,
             Engine.TensorMultiplyScalar(_biasGradient, learningRate));
     }
 

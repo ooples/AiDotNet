@@ -768,11 +768,11 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         }
 
         T negLR = NumOps.Negate(learningRate);
-        _queryWeights = Engine.TensorAdd(_queryWeights, Engine.TensorMultiplyScalar(_queryWeightsGradient, negLR));
-        _keyWeights = Engine.TensorAdd(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient, negLR));
-        _valueWeights = Engine.TensorAdd(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient, negLR));
-        _outputWeights = Engine.TensorAdd(_outputWeights, Engine.TensorMultiplyScalar(_outputWeightsGradient, negLR));
-        _outputBias = Engine.TensorAdd(_outputBias, Engine.TensorMultiplyScalar(_outputBiasGradient, negLR));
+        Engine.TensorAddInPlace(_queryWeights, Engine.TensorMultiplyScalar(_queryWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_outputWeights, Engine.TensorMultiplyScalar(_outputWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_outputBias, Engine.TensorMultiplyScalar(_outputBiasGradient, negLR));
     }
 
     public override Vector<T> GetParameterGradients()

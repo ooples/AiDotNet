@@ -1331,9 +1331,9 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         // Use Engine operations for GPU/CPU acceleration
-        _depthwiseKernels = Engine.TensorSubtract(_depthwiseKernels, Engine.TensorMultiplyScalar(_depthwiseKernelsGradient, learningRate));
-        _pointwiseKernels = Engine.TensorSubtract(_pointwiseKernels, Engine.TensorMultiplyScalar(_pointwiseKernelsGradient, learningRate));
-        _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasesGradient, learningRate));
+        Engine.TensorSubtractInPlace(_depthwiseKernels, Engine.TensorMultiplyScalar(_depthwiseKernelsGradient, learningRate));
+        Engine.TensorSubtractInPlace(_pointwiseKernels, Engine.TensorMultiplyScalar(_pointwiseKernelsGradient, learningRate));
+        Engine.TensorSubtractInPlace(_biases, Engine.TensorMultiplyScalar(_biasesGradient, learningRate));
 
         // Invalidate GPU cache after parameter update
         Engine.InvalidatePersistentTensor(_depthwiseKernels);

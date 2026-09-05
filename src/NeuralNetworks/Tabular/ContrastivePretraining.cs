@@ -396,9 +396,9 @@ public partial class ContrastivePretraining<T>
                 $"gradBias length ({gradBias.Length}) does not match projection bias length ({_projectionBias.Length}).");
         }
 
-        _projectionWeights = Engine.TensorSubtract(_projectionWeights,
+        Engine.TensorSubtractInPlace(_projectionWeights,
             Engine.TensorMultiplyScalar(gradWeights, learningRate));
-        _projectionBias = Engine.TensorSubtract(_projectionBias,
+        Engine.TensorSubtractInPlace(_projectionBias,
             Engine.TensorMultiplyScalar(gradBias, learningRate));
     }
 

@@ -190,7 +190,7 @@ public partial class ColumnEmbedding<T>
     {
         if (!_learnable) return;
 
-        _embeddings = Engine.TensorSubtract(_embeddings,
+        Engine.TensorSubtractInPlace(_embeddings,
             Engine.TensorMultiplyScalar(_embeddingGradients, learningRate));
     }
 

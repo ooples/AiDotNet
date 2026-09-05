@@ -602,17 +602,17 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>, IShapeContract
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         T negLR = NumOps.Negate(learningRate);
-        _nu = Engine.TensorAdd(_nu, Engine.TensorMultiplyScalar(_nuGradient, negLR));
-        _theta = Engine.TensorAdd(_theta, Engine.TensorMultiplyScalar(_thetaGradient!, negLR));
-        _bReal = Engine.TensorAdd(_bReal, Engine.TensorMultiplyScalar(_bRealGradient!, negLR));
-        _bImag = Engine.TensorAdd(_bImag, Engine.TensorMultiplyScalar(_bImagGradient!, negLR));
-        _cReal = Engine.TensorAdd(_cReal, Engine.TensorMultiplyScalar(_cRealGradient!, negLR));
-        _cImag = Engine.TensorAdd(_cImag, Engine.TensorMultiplyScalar(_cImagGradient!, negLR));
-        _dParam = Engine.TensorAdd(_dParam, Engine.TensorMultiplyScalar(_dParamGradient!, negLR));
-        _inputProjectionWeights = Engine.TensorAdd(_inputProjectionWeights, Engine.TensorMultiplyScalar(_inputProjectionWeightsGradient!, negLR));
-        _inputProjectionBias = Engine.TensorAdd(_inputProjectionBias, Engine.TensorMultiplyScalar(_inputProjectionBiasGradient!, negLR));
-        _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
-        _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_nu, Engine.TensorMultiplyScalar(_nuGradient, negLR));
+        Engine.TensorAddInPlace(_theta, Engine.TensorMultiplyScalar(_thetaGradient!, negLR));
+        Engine.TensorAddInPlace(_bReal, Engine.TensorMultiplyScalar(_bRealGradient!, negLR));
+        Engine.TensorAddInPlace(_bImag, Engine.TensorMultiplyScalar(_bImagGradient!, negLR));
+        Engine.TensorAddInPlace(_cReal, Engine.TensorMultiplyScalar(_cRealGradient!, negLR));
+        Engine.TensorAddInPlace(_cImag, Engine.TensorMultiplyScalar(_cImagGradient!, negLR));
+        Engine.TensorAddInPlace(_dParam, Engine.TensorMultiplyScalar(_dParamGradient!, negLR));
+        Engine.TensorAddInPlace(_inputProjectionWeights, Engine.TensorMultiplyScalar(_inputProjectionWeightsGradient!, negLR));
+        Engine.TensorAddInPlace(_inputProjectionBias, Engine.TensorMultiplyScalar(_inputProjectionBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
+        Engine.TensorAddInPlace(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
 
         // Register trainable parameters for tape-based autodiff
         // Register trainable parameters for tape-based autodiff. The state-space core belongs here

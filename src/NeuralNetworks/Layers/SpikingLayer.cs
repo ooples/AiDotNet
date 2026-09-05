@@ -1636,14 +1636,14 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
     {
         // Update weights using Engine operations: w = w - lr * gradient
         var scaledWeightGradients = Engine.TensorMultiplyScalar(_weightGradients, learningRate);
-        _weights = Engine.TensorSubtract(_weights, scaledWeightGradients);
+        Engine.TensorSubtractInPlace(_weights, scaledWeightGradients);
 
         // Reset weight gradients for next batch
         _weightGradients.Fill(NumOps.Zero);
 
         // Update biases using Engine operations: b = b - lr * gradient
         var scaledBiasGradients = Engine.TensorMultiplyScalar(_biasGradients, learningRate);
-        _bias = Engine.TensorSubtract(_bias, scaledBiasGradients);
+        Engine.TensorSubtractInPlace(_bias, scaledBiasGradients);
 
         // Reset bias gradients for next batch
         _biasGradients.Fill(NumOps.Zero);
