@@ -47,10 +47,6 @@ namespace AiDotNet.Inference.Quantization;
 /// Internal / assembly-internal usage (reachable from tests via
 /// <c>InternalsVisibleTo</c> and from <c>AiDotNet</c> consumer code via the facade):
 /// <code>
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 8, outputSize: 4);
-/// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
-/// var input = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
-/// var targets = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
 /// // Train a model as normal
 /// var transformer = new Transformer&lt;float&gt;(architecture, lossFn);
 /// transformer.Train(features, targets);

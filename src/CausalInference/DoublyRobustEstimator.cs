@@ -55,9 +55,6 @@ namespace AiDotNet.CausalInference;
 /// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
-/// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
-/// var outcome = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
-/// var treatment = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
 /// var dr = new DoublyRobustEstimator&lt;double&gt;(trimMin: 0.01, trimMax: 0.99);
 /// dr.Fit(features, treatment, outcome);
 /// var (ate, se) = dr.EstimateATE(features, treatment, outcome);
@@ -133,9 +130,6 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
     ///
     /// Usage:
     /// <code>
-    /// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
-    /// var outcome = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
-    /// var treatment = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
     /// var dr = new DoublyRobustEstimator&lt;double&gt;(useCrossFitting: true);
     /// var (ate, se) = dr.EstimateATE(features, treatment, outcome);
     /// </code>

@@ -14,8 +14,6 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     /// <example>
     /// <code>
-    /// var random = new Random(42);
-    /// var state = Tensor&lt;double&gt;.CreateRandom(1, 8);
     /// // Create Boltzmann exploration with temperature decay
     /// var exploration = new BoltzmannExploration&lt;double&gt;(temperatureStart: 1.0, temperatureEnd: 0.01, temperatureDecay: 0.995);
     ///

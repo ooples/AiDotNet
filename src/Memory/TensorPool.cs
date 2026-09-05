@@ -310,6 +310,7 @@ public class TensorPool<T> : IDisposable
     /// <returns>A <see cref="PoolStatistics"/> object containing pool metrics.</returns>
     /// <example>
     /// <code>
+    /// var pool = new TensorPool&lt;double&gt;();
     /// var stats = pool.GetStatistics();
     /// // Result is available in the returned value
     /// // Result is available in the returned value

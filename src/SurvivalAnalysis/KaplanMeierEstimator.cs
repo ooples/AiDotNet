@@ -49,7 +49,6 @@ namespace AiDotNet.SurvivalAnalysis;
 /// <example>
 /// <code>
 /// var timePoint = 2;
-/// var times = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
 /// var km = new KaplanMeierEstimator&lt;double&gt;();
 /// km.Fit(times, events);
 /// double survivalProb = km.PredictSurvival(timePoint);
@@ -108,7 +107,6 @@ public partial class KaplanMeierEstimator<T> : SurvivalModelBase<T>
     ///
     /// Usage:
     /// <code>
-    /// var times = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
     /// var km = new KaplanMeierEstimator&lt;double&gt;();
     /// km.FitSurvival(features, times, events);
     /// var survivalProbs = km.GetBaselineSurvival(timePoints);
