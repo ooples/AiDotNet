@@ -257,7 +257,7 @@ public partial class DiffBIRModel<T> : LatentDiffusionModelBase<T>
     /// var model = new DiffBIRModel&lt;float&gt;();
     ///
     /// // With text conditioning for prompt-guided restoration
-    /// var model = new DiffBIRModel&lt;float&gt;(conditioner: myClipEncoder);
+    /// var model2 = new DiffBIRModel&lt;float&gt;(conditioner: myClipEncoder);
     /// </code>
     /// </para>
     /// </remarks>

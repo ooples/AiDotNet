@@ -78,19 +78,21 @@ public partial class ReptileAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     /// <exception cref="InvalidOperationException">Thrown when required components are not set in options.</exception>
     /// <example>
     /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
     /// // Create Reptile with minimal configuration
     /// var options = new ReptileOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
     /// var reptile = new ReptileAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create Reptile with custom configuration
-    /// var options = new ReptileOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
+    /// var options2 = new ReptileOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     AdaptationSteps = 10,
     ///     InnerBatches = 2,
     ///     Interpolation = 0.5,
     ///     OuterLearningRate = 0.1
     /// };
-    /// var reptile = new ReptileAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
+    /// var reptile2 = new ReptileAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options2);
     /// </code>
     /// </example>
     public ReptileAlgorithm(ReptileOptions<T, TInput, TOutput> options)

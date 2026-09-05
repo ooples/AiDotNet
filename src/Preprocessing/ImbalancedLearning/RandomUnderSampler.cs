@@ -66,10 +66,10 @@ public class RandomUnderSampler<T> : UndersamplingBase<T>
     /// var undersampler = new RandomUnderSampler&lt;double&gt;();
     ///
     /// // Custom: keep majority at 2x minority size
-    /// var undersampler = new RandomUnderSampler&lt;double&gt;(samplingStrategy: 0.5);
+    /// var undersampler2 = new RandomUnderSampler&lt;double&gt;(samplingStrategy: 0.5);
     ///
     /// // Apply to your data
-    /// var (newX, newY) = undersampler.Resample(trainX, trainY);
+    /// var (newX, newY) = undersampler2.Resample(trainX, trainY);
     /// </code>
     ///
     /// The replacement parameter:

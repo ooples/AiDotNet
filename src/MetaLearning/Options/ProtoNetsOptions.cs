@@ -339,7 +339,7 @@ public class ProtoNetsOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOp
     /// var protoNets = new ProtoNetsAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create ProtoNets with custom configuration
-    /// var options = new ProtoNetsOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myEncoder)
+    /// var options2 = new ProtoNetsOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myEncoder)
     /// {
     ///     DistanceFunction = ProtoNetsDistanceFunction.Cosine,
     ///     NormalizeFeatures = true,

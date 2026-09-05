@@ -338,10 +338,10 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
     ///
     /// // Custom layers via NeuralNetworkArchitecture
     /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(..., layers: myCustomLayers);
-    /// var dit = new DiTNoisePredictor&lt;float&gt;(architecture: arch);
+    /// var dit2 = new DiTNoisePredictor&lt;float&gt;(architecture: arch);
     ///
     /// // DiT-L/2 configuration
-    /// var dit = new DiTNoisePredictor&lt;float&gt;(
+    /// var dit3 = new DiTNoisePredictor&lt;float&gt;(
     ///     hiddenSize: 1024, numLayers: 24, numHeads: 16);
     /// </code>
     /// </para>

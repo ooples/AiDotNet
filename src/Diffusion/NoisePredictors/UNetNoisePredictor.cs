@@ -239,10 +239,10 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
     ///
     /// // Custom layers via NeuralNetworkArchitecture
     /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(..., layers: myCustomLayers);
-    /// var unet = new UNetNoisePredictor&lt;float&gt;(architecture: arch);
+    /// var unet2 = new UNetNoisePredictor&lt;float&gt;(architecture: arch);
     ///
     /// // SDXL configuration
-    /// var unet = new UNetNoisePredictor&lt;float&gt;(
+    /// var unet3 = new UNetNoisePredictor&lt;float&gt;(
     ///     baseChannels: 320,
     ///     channelMultipliers: new[] { 1, 2, 4 },
     ///     contextDim: 2048);

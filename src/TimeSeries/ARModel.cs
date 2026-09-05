@@ -39,6 +39,7 @@ namespace AiDotNet.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
+/// var trainingMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Create an AR(3) model for univariate time series forecasting
 /// var options = new ARModelOptions&lt;double&gt; { AROrder = 3 };
 /// var arModel = new ARModel&lt;double&gt;(options);

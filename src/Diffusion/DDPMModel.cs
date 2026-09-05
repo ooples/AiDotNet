@@ -138,10 +138,10 @@ public partial class DDPMModel<T> : DiffusionModelBase<T>
     ///     TrainTimesteps = 1000,
     ///     DefaultInferenceSteps = 50
     /// };
-    /// var model = new DDPMModel&lt;double&gt;(options);
+    /// var model2 = new DDPMModel&lt;double&gt;(options);
     ///
     /// // Generate samples (note: without a trained noise predictor, results are random)
-    /// var samples = model.Generate(new[] { 1, 3, 64, 64 }, numInferenceSteps: 50);
+    /// var samples = model2.Generate(new[] { 1, 3, 64, 64 }, numInferenceSteps: 50);
     /// </code>
     /// </example>
     /// </remarks>

@@ -166,12 +166,12 @@ public partial class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
     /// var cc = new ClassifierChainClassifier&lt;double&gt;(() => new LogisticRegression&lt;double&gt;());
     ///
     /// // Specific order
-    /// var cc = new ClassifierChainClassifier&lt;double&gt;(
+    /// var cc2 = new ClassifierChainClassifier&lt;double&gt;(
     ///     () => new LogisticRegression&lt;double&gt;(),
     ///     chainOrder: new int[] { 2, 0, 1 });  // Predict label 2 first, then 0, then 1
     ///
     /// // Random order
-    /// var cc = new ClassifierChainClassifier&lt;double&gt;(
+    /// var cc3 = new ClassifierChainClassifier&lt;double&gt;(
     ///     () => new LogisticRegression&lt;double&gt;(),
     ///     useRandomOrder: true);
     /// </code>

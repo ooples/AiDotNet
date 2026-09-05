@@ -612,7 +612,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     ///     SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = true }
     /// };
     ///
-    /// var result = await builder
+    /// var result2 = await builder
     ///     .ConfigureInferenceOptimizations(config)
     ///     .BuildAsync();
     /// </code>

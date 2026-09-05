@@ -93,18 +93,20 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     /// <exception cref="InvalidOperationException">Thrown when required components are not set in options.</exception>
     /// <example>
     /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
     /// // Create MetaOptNet with minimal configuration
     /// var options = new MetaOptNetOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
     /// var metaOptNet = new MetaOptNetAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create MetaOptNet with SVM solver
-    /// var options = new MetaOptNetOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
+    /// var options2 = new MetaOptNetOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     SolverType = ConvexSolverType.SVM,
     ///     RegularizationStrength = 1.0,
     ///     NumClasses = 5
     /// };
-    /// var metaOptNet = new MetaOptNetAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
+    /// var metaOptNet2 = new MetaOptNetAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options2);
     /// </code>
     /// </example>
     public MetaOptNetAlgorithm(MetaOptNetOptions<T, TInput, TOutput> options)
@@ -146,6 +148,8 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     /// <para>
     /// <b>MetaOptNet Training Loop:</b>
     /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
     /// For each task:
     ///   1. Extract embeddings: Z_s = f_θ(X_s), Z_q = f_θ(X_q)
     ///   2. Solve for classifier: w* = ConvexSolver(Z_s, Y_s)

@@ -98,19 +98,21 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <exception cref="InvalidOperationException">Thrown when required components are not set in options.</exception>
     /// <example>
     /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
     /// // Create BOIL with minimal configuration
     /// var options = new BOILOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
     /// var boil = new BOILAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create BOIL with custom configuration
-    /// var options = new BOILOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
+    /// var options2 = new BOILOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     AdaptationSteps = 5,
     ///     InnerLearningRate = 0.01,
     ///     NumClasses = 5,
     ///     BodyAdaptationFraction = 0.5
     /// };
-    /// var boil = new BOILAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
+    /// var boil2 = new BOILAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options2);
     /// </code>
     /// </example>
     public BOILAlgorithm(BOILOptions<T, TInput, TOutput> options)
@@ -157,6 +159,8 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <para>
     /// <b>BOIL Inner Loop (per task):</b>
     /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
     /// 1. Clone body parameters from meta-learned initialization
     /// 2. Keep head parameters FROZEN
     /// 3. For each adaptation step:
@@ -170,6 +174,8 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <para>
     /// <b>BOIL Outer Loop:</b>
     /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
     /// 1. Accumulate gradients from all tasks' query losses
     /// 2. Update body initialization to provide better starting point
     /// 3. Update head weights (frozen during inner loop, but updated in outer loop)

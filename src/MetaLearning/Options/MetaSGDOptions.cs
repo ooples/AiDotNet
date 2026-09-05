@@ -649,12 +649,14 @@ public class MetaSGDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
     /// <exception cref="ArgumentNullException">Thrown when metaModel is null.</exception>
     /// <example>
     /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
     /// // Create Meta-SGD options with minimal configuration
     /// var options = new MetaSGDOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
     /// var metaSGD = new MetaSGDAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create Meta-SGD options with custom per-parameter optimizer
-    /// var options = new MetaSGDOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
+    /// var options2 = new MetaSGDOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     UpdateRuleType = MetaSGDUpdateRuleType.Adam,
     ///     LearnMomentum = true,

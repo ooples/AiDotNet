@@ -65,10 +65,10 @@ public class ADASYN<T> : OversamplingBase<T>
     /// var adasyn = new ADASYN&lt;double&gt;();
     ///
     /// // Custom settings
-    /// var adasyn = new ADASYN&lt;double&gt;(samplingStrategy: 0.8, kNeighbors: 7);
+    /// var adasyn2 = new ADASYN&lt;double&gt;(samplingStrategy: 0.8, kNeighbors: 7);
     ///
     /// // Apply to your data
-    /// var (newX, newY) = adasyn.Resample(trainX, trainY);
+    /// var (newX, newY) = adasyn2.Resample(trainX, trainY);
     /// </code>
     /// </para>
     /// </remarks>

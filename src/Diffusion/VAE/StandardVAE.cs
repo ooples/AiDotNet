@@ -280,10 +280,10 @@ public partial class StandardVAE<T> : VAEModelBase<T>
     ///
     /// // Custom layers via NeuralNetworkArchitecture
     /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(..., layers: myCustomLayers);
-    /// var vae = new StandardVAE&lt;float&gt;(architecture: arch);
+    /// var vae2 = new StandardVAE&lt;float&gt;(architecture: arch);
     ///
     /// // Custom encoder/decoder layers directly
-    /// var vae = new StandardVAE&lt;float&gt;(
+    /// var vae3 = new StandardVAE&lt;float&gt;(
     ///     encoderLayers: myEncoderLayers,
     ///     decoderLayers: myDecoderLayers);
     /// </code>

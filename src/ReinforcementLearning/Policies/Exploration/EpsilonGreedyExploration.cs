@@ -12,6 +12,7 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     /// <example>
     /// <code>
+    /// var random = new Random(42);
     /// var state = Tensor&lt;double&gt;.CreateRandom(1, 8);
     /// // Create epsilon-greedy exploration with annealing from 1.0 to 0.01
     /// var exploration = new EpsilonGreedyExploration&lt;double&gt;(epsilonStart: 1.0, epsilonEnd: 0.01, epsilonDecay: 0.995);

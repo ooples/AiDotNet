@@ -125,7 +125,7 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
     /// var br = new BinaryRelevance&lt;double&gt;(() => new LogisticRegression&lt;double&gt;());
     ///
     /// // Using SVM for each label
-    /// var br = new BinaryRelevance&lt;double&gt;(() => new SupportVectorClassifier&lt;double&gt;());
+    /// var br2 = new BinaryRelevance&lt;double&gt;(() => new SupportVectorClassifier&lt;double&gt;());
     /// </code>
     /// </para>
     /// </remarks>

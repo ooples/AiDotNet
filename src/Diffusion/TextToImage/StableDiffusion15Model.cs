@@ -274,10 +274,10 @@ public partial class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
     /// var model = new StableDiffusion15Model&lt;float&gt;();
     ///
     /// // With text conditioning for text-to-image
-    /// var model = new StableDiffusion15Model&lt;float&gt;(conditioner: myClipEncoder);
+    /// var model2 = new StableDiffusion15Model&lt;float&gt;(conditioner: myClipEncoder);
     ///
     /// // Full customization
-    /// var model = new StableDiffusion15Model&lt;float&gt;(
+    /// var model3 = new StableDiffusion15Model&lt;float&gt;(
     ///     unet: myCustomUNet,
     ///     vae: myCustomVAE,
     ///     conditioner: myClipEncoder,

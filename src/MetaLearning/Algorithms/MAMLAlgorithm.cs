@@ -67,12 +67,14 @@ public partial class MAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <exception cref="InvalidOperationException">Thrown when required components are not set in options.</exception>
     /// <example>
     /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
     /// // Create MAML with minimal configuration (uses all defaults)
     /// var options = new MAMLOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
     /// var maml = new MAMLAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create MAML with custom configuration
-    /// var options = new MAMLOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
+    /// var options2 = new MAMLOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     LossFunction = new CrossEntropyLoss&lt;double&gt;(),
     ///     InnerLearningRate = 0.01,
@@ -80,7 +82,7 @@ public partial class MAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     ///     AdaptationSteps = 5,
     ///     UseFirstOrderApproximation = true
     /// };
-    /// var maml = new MAMLAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
+    /// var maml2 = new MAMLAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options2);
     /// </code>
     /// </example>
     public MAMLAlgorithm(MAMLOptions<T, TInput, TOutput> options)

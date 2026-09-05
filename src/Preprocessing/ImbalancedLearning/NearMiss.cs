@@ -77,10 +77,10 @@ public class NearMiss<T> : UndersamplingBase<T>
     /// var nearmiss = new NearMiss&lt;double&gt;();
     ///
     /// // NearMiss-3 which keeps k nearest majority neighbors per minority sample
-    /// var nearmiss = new NearMiss&lt;double&gt;(version: NearMissVersion.Version3, kNeighbors: 5);
+    /// var nearmiss2 = new NearMiss&lt;double&gt;(version: NearMissVersion.Version3, kNeighbors: 5);
     ///
     /// // Apply to data
-    /// var (newX, newY) = nearmiss.Resample(trainX, trainY);
+    /// var (newX, newY) = nearmiss2.Resample(trainX, trainY);
     /// </code>
     /// </para>
     /// </remarks>

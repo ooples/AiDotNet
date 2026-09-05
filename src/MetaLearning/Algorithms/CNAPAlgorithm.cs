@@ -104,19 +104,21 @@ public partial class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <exception cref="InvalidOperationException">Thrown when required components are not set in options.</exception>
     /// <example>
     /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
     /// // Create CNAP with minimal configuration
     /// var options = new CNAPOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
     /// var cnap = new CNAPAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create CNAP with custom configuration
-    /// var options = new CNAPOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
+    /// var options2 = new CNAPOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     RepresentationDimension = 512,
     ///     UseAttention = true,
     ///     NumAttentionHeads = 8,
     ///     FastWeightMode = FastWeightApplicationMode.FiLM
     /// };
-    /// var cnap = new CNAPAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
+    /// var cnap2 = new CNAPAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options2);
     /// </code>
     /// </example>
     public CNAPAlgorithm(CNAPOptions<T, TInput, TOutput> options)

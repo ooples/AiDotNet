@@ -139,12 +139,14 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     /// </remarks>
     /// <example>
     /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
     /// // Create Meta-SGD with minimal configuration
     /// var options = new MetaSGDOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
     /// var metaSGD = new MetaSGDAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create Meta-SGD with full per-parameter optimization
-    /// var options = new MetaSGDOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
+    /// var options2 = new MetaSGDOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     UpdateRuleType = MetaSGDUpdateRuleType.Adam,
     ///     LearnLearningRate = true,
@@ -152,7 +154,7 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     ///     LearnDirection = true,
     ///     LearnAdamBetas = true
     /// };
-    /// var metaSGD = new MetaSGDAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
+    /// var metaSGD2 = new MetaSGDAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options2);
     /// </code>
     /// </example>
     public MetaSGDAlgorithm(MetaSGDOptions<T, TInput, TOutput> options)
@@ -277,6 +279,8 @@ public partial class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     /// <para>
     /// <b>Adaptation Process:</b>
     /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
     /// for each adaptation step:
     ///     gradients = compute_gradients(model, support_set)
     ///     for each parameter i:
