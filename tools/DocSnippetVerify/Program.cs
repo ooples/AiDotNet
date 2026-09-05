@@ -80,6 +80,8 @@ string commonUsings =
 Console.WriteLine($"Imported {discoveredUsings.Count} AiDotNet namespaces into the snippet harness.");
 
 var blockRe = new Regex("```csharp\\s*?\\n(.*?)```", RegexOptions.Singleline);
+// The kind label can contain spaces ("Base Classes"), so it is matched as anything between backticks.
+var pageNamespaceRe = new Regex(@"^`[^`\n]+`\s*·\s*`([A-Za-z0-9_.]+)`", RegexOptions.Multiline);
 var usingRe = new Regex(@"^\s*using\s+[A-Za-z_][\w.]*\s*;\s*$");
 var typeStartRe = new Regex(@"^\s*(\[|public |internal |private |protected |static |abstract |sealed |partial |class |record |struct |enum |interface |namespace )");
 
@@ -200,10 +202,19 @@ foreach (var root in roots)
         var text = File.ReadAllText(file);
         int idx = 0;
         var key = file.Replace('\\', '/');
+
+        // Generated API pages state the type's namespace on their first content line, as `kind` · `Ns`.
+        // Using it scopes the page's snippets the same way the XML pass scopes a member's, so a type name
+        // that exists in two namespaces resolves to the one the page is actually about.
+        var nsMatch = pageNamespaceRe.Match(text);
+        string? pageNamespace = nsMatch.Success && discoveredUsings.Contains(nsMatch.Groups[1].Value)
+            ? nsMatch.Groups[1].Value
+            : null;
+
         foreach (Match m in blockRe.Matches(text))
         {
             idx++;
-            Check(m.Groups[1].Value, key, idx);
+            Check(m.Groups[1].Value, key, idx, pageNamespace);
         }
     }
 }

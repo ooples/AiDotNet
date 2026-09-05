@@ -54,8 +54,13 @@ jobs:
 
       # Compile every ```csharp example in the website docs + generated wiki against the real
       # AiDotNet assemblies. Fails on any drift that would break a published example.
+      #
+      # This pass used to be unable to fail: WikiGenerator emitted any example it could not compile as a
+      # ```cs block precisely so this step would skip it — 1209 examples were published that way against
+      # 367 verified ones. The generator now labels every example ```csharp, so they are all checked, and
+      # the counts below are ratcheted the same way as the XML pass.
       - name: Compile-check doc + wiki snippets
-        run: dotnet run --project tools/DocSnippetVerify -c Debug -- website
+        run: dotnet run --project tools/DocSnippetVerify -c Debug -- website --min-pass 1388 --max-fail 312
 
       # Compile-check the <example> blocks in the source XML doc comments. These are the examples a user
       # sees in IntelliSense and on the API reference pages, and they were never gated: this step's
