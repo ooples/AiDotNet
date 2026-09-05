@@ -1875,6 +1875,16 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <exception cref="InvalidOperationException">Thrown if no valid training path was configured.</exception>
     Task<AiModelResult<T, TInput, TOutput>> BuildAsync();
 
+    /// <summary>Builds the configured model, observing a cancellation token.</summary>
+    /// <param name="cancellationToken">A token that cancels the build.</param>
+    /// <returns>The built result.</returns>
+    /// <remarks>
+    /// Present on the concrete builder from the start but missing here, which made cancellation unreachable for
+    /// any chain that had passed through a <c>Configure*</c> call — that is, every chain. Found by the terminal-method
+    /// completeness test rather than by a caller.
+    /// </remarks>
+    Task<AiModelResult<T, TInput, TOutput>> BuildAsync(CancellationToken cancellationToken);
+
     /// <summary>Builds the model against data supplied directly rather than through a data loader.</summary>
     /// <param name="features">The training inputs.</param>
     /// <param name="labels">The training targets.</param>
