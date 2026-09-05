@@ -36,8 +36,12 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new NeuralNetworkOptions { 32 }, OutputSize = 2 };
-/// var model = new NeuralNetwork&lt;float&gt;(options);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 10,
+///     outputSize: 2);
+/// var model = new NeuralNetwork&lt;float&gt;(architecture);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 10 });
 /// var output = model.Predict(input);
 /// </code>
