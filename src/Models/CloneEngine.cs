@@ -258,7 +258,10 @@ public static class CloneEngine
                 try
                 {
                     entry.Property.SetValue(
-                        clone, entry.Copy == CloneCopyKind.Deep ? Duplicate(value) : value);
+                        clone,
+                        entry.Copy == CloneCopyKind.Deep
+                            ? Duplicate(value)
+                            : DuplicateSubModel(value));
                 }
                 catch (TargetInvocationException ex)
                 {
@@ -325,7 +328,7 @@ public static class CloneEngine
 
                 if (!TryReadMember(type, candidate[i], source, out arguments[i])) { readable = false; break; }
 
-                arguments[i] = DuplicateSubModel(arguments[i]);
+                arguments[i] = DuplicateConstructorArgument(arguments[i]);
             }
 
             if (!readable) continue;
@@ -469,25 +472,6 @@ public static class CloneEngine
     }
 
     /// <summary>
-    /// Duplicates a mutable container so the copy and the original do not share storage.
-    /// </summary>
-    /// <param name="value">The value to duplicate.</param>
-    /// <returns>A duplicate, or the original when it is null or not a recognised container.</returns>
-    /// <remarks>
-    /// <para>
-    /// The copy is one level deep, which matches what the plan promises. A list of mutable objects
-    /// yields a new list holding the same elements: the two instances can no longer add or remove
-    /// independently of one another, which is the sharing bug this addresses, while the elements
-    /// themselves stay shared. Elements needing their own copies are configuration in their own
-    /// right and get their own plans.
-    /// </para>
-    /// <para>
-    /// A null container stays null rather than becoming an empty one. "Not configured" and
-    /// "configured to be empty" are different states, and a clone must not quietly convert one into
-    /// the other.
-    /// </para>
-    /// </remarks>
-    /// <summary>
     /// Rebuilds a constructor argument that is itself a model or a layer.
     /// </summary>
     /// <param name="value">The argument value read from the source.</param>
@@ -500,12 +484,11 @@ public static class CloneEngine
     /// parameter/state contract.
     /// </para>
     /// <para>
-    /// A materialized child is cloned through its public contract before falling back to
-    /// configuration-only reconstruction. Rebuilding a trained child as a blank shell loses lazy
-    /// layout information that its parent cannot infer: the parent then streams a 4,096-value chunk
-    /// into a child constructed for 64 values. Public clones use copy-on-write where supported, so
-    /// preserving that layout does not require eagerly duplicating foundation-scale storage; the
-    /// parent's state transfer remains the final authority.
+    /// Components that expose a configuration-only contract are rebuilt structurally first. Other
+    /// materialized children use their public clone contract before falling back to generated
+    /// reconstruction. This keeps layer-container reconstruction allocation-free while preserving
+    /// data-dependent layouts for components whose structure cannot be replayed from configuration;
+    /// the parent's state transfer remains the final authority.
     /// </para>
     /// <para>
     /// Matched on the library's own <c>ICloneable&lt;T&gt;</c> rather than a list of base types, so a
@@ -561,12 +544,8 @@ public static class CloneEngine
             if (schedulerCopy is not null) return schedulerCopy;
         }
 
-        var cloneable = value.GetType().GetInterfaces().FirstOrDefault(i =>
-            i.IsGenericType
-            && i.GetGenericTypeDefinition().Name == "ICloneable`1"
-            && i.Namespace == "AiDotNet.Interfaces");
-
-        if (cloneable?.GetMethod("Clone", Type.EmptyTypes) is not { } clone) return value;
+        if (FindCloneContract(value.GetType())?.GetMethod("Clone", Type.EmptyTypes) is not { } clone)
+            return value;
 
         // Preserve the child's materialized layout first. Configuration-only construction cannot
         // recover a width learned from data or a lazily-created sub-layer graph, and a later flat or
@@ -664,6 +643,23 @@ public static class CloneEngine
         return copy;
     }
 
+    private static Type? FindCloneContract(Type type)
+        => type.GetInterfaces().FirstOrDefault(i =>
+            i.IsGenericType
+            && i.GetGenericTypeDefinition().Name == "ICloneable`1"
+            && i.Namespace == "AiDotNet.Interfaces");
+
+    /// <summary>
+    /// Carries a constructor argument without handing mutable model structure back to the new
+    /// instance by reference. Model components use their public clone contract; mutable containers
+    /// use the same deep-container policy as generated configuration properties.
+    /// </summary>
+    private static object? DuplicateConstructorArgument(object? value)
+    {
+        object? componentCopy = DuplicateSubModel(value);
+        return ReferenceEquals(componentCopy, value) ? Duplicate(value) : componentCopy;
+    }
+
     private static object? Duplicate(object? value)
     {
         switch (value)
@@ -672,7 +668,7 @@ public static class CloneEngine
                 return null;
 
             case Array array:
-                return array.Clone();
+                return CopyArray(array);
 
             case IDictionary dictionary:
                 return CopyInto(dictionary, Activator.CreateInstance(dictionary.GetType()));
@@ -692,13 +688,25 @@ public static class CloneEngine
         return value;
     }
 
+    private static Array CopyArray(Array source)
+    {
+        var copy = (Array)source.Clone();
+        if (source.Rank != 1) return copy;
+
+        int lower = source.GetLowerBound(0);
+        int upper = source.GetUpperBound(0);
+        for (int i = lower; i <= upper; i++)
+            copy.SetValue(DuplicateCollectionElement(source.GetValue(i)), i);
+        return copy;
+    }
+
     private static object? CopyInto(IDictionary source, object? target)
     {
         if (target is not IDictionary typed) return source;
 
         foreach (DictionaryEntry entry in source)
         {
-            typed[entry.Key] = entry.Value;
+            typed[entry.Key] = DuplicateCollectionElement(entry.Value);
         }
 
         return typed;
@@ -710,10 +718,38 @@ public static class CloneEngine
 
         foreach (var item in source)
         {
-            typed.Add(item);
+            typed.Add(DuplicateCollectionElement(item));
         }
 
         return typed;
+    }
+
+    /// <summary>
+    /// Deep-copies a model/layer held directly in a mutable container. A small configuration
+    /// wrapper whose properties hold model components is reconstructed from its clone plan too, so
+    /// the container copy cannot retain live module references through one extra object hop.
+    /// Ordinary data objects retain the established by-reference element semantics.
+    /// </summary>
+    private static object? DuplicateCollectionElement(object? value)
+    {
+        object? componentCopy = DuplicateSubModel(value);
+        if (!ReferenceEquals(componentCopy, value)) return componentCopy;
+        if (value is null || value is string || value.GetType().IsValueType) return value;
+
+        var plan = CloneRegistry.GetPlan(value.GetType());
+        bool ownsCloneableComponent = false;
+        foreach (var entry in plan.Entries)
+        {
+            object? child = entry.Property.GetValue(value);
+            if (child is ModelOptions || child is IConfigurationCloneable
+                || (child is not null && FindCloneContract(child.GetType()) is not null))
+            {
+                ownsCloneableComponent = true;
+                break;
+            }
+        }
+
+        return ownsCloneableComponent ? CopyConfiguration(value) : value;
     }
 
     /// <summary>

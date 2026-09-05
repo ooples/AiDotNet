@@ -1017,6 +1017,30 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    }");
             sb.AppendLine();
 
+            // Some parameter dimensions are resolved by an enclosing graph without materializing
+            // the tensor. Constructor replay cannot recover that state: DeconvolutionalLayer, for
+            // example, is constructed with InputDepth=-1 and a U-Net later fixes InputDepth while
+            // propagating shapes. Emit a strongly typed structural transfer for the writable
+            // integral roots already discovered by the declaration-sentinel analysis. This keeps
+            // COW cloning allocation-free and avoids reflection or layer-name special cases.
+            var structuralRoots = sentinelRoots
+                .Where(root => IsWritableDeclaredDimensionRoot(classSymbol, root))
+                .OrderBy(root => root, System.StringComparer.Ordinal)
+                .ToList();
+            if (structuralRoots.Count > 0)
+            {
+                sb.AppendLine("    /// <summary>Copies resolved dimension roots used by generated parameter declarations.</summary>");
+                sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
+                sb.AppendLine($"    protected override bool TryAdoptDeclaredParameterStructureFrom(global::AiDotNet.NeuralNetworks.Layers.LayerBase<{tp}> source)");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        if (source is not {className}{typeParams} __source) return false;");
+                foreach (string root in structuralRoots)
+                    sb.AppendLine($"        this.{root} = __source.{root};");
+                sb.AppendLine("        return true;");
+                sb.AppendLine("    }");
+                sb.AppendLine();
+            }
+
         }
 
         // DeclaredParameterTensors — the slots and roles alone, with NO shape computed.
@@ -2210,6 +2234,45 @@ public class TrainableParameterGenerator : IIncrementalGenerator
 
             roots.Add(identifier);
         }
+    }
+
+    private static bool IsWritableDeclaredDimensionRoot(
+        INamedTypeSymbol classSymbol,
+        string memberName)
+    {
+        ISymbol? member = null;
+        for (INamedTypeSymbol? type = classSymbol; type is not null && member is null; type = type.BaseType)
+        {
+            member = type.GetMembers(memberName)
+                .FirstOrDefault(candidate => candidate is IFieldSymbol or IPropertySymbol);
+        }
+
+        if (member is IFieldSymbol field)
+        {
+            return !field.IsStatic
+                   && !field.IsReadOnly
+                   && !field.HasConstantValue
+                   && IsWritableFromGeneratedPartial(field, classSymbol);
+        }
+
+        if (member is IPropertySymbol property)
+        {
+            return !property.IsStatic
+                   && property.SetMethod is { IsInitOnly: false } setter
+                   && IsWritableFromGeneratedPartial(setter, classSymbol);
+        }
+
+        return false;
+    }
+
+    private static bool IsWritableFromGeneratedPartial(ISymbol member, INamedTypeSymbol classSymbol)
+    {
+        if (SymbolEqualityComparer.Default.Equals(member.ContainingType, classSymbol)) return true;
+        return member.DeclaredAccessibility is Accessibility.Public
+            or Accessibility.Internal
+            or Accessibility.Protected
+            or Accessibility.ProtectedOrInternal
+            or Accessibility.ProtectedAndInternal;
     }
 
     /// <summary>

@@ -593,6 +593,12 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
         _architecture = architecture;
         _options = options ?? new DiffusionModelOptions<T>();
 
+        // Diffusion models are model roots but do not derive from NeuralNetworkBase. Establish the
+        // same deterministic per-layer initialization scope before the derived constructor creates
+        // any model-owned layers; an architecture seed is the most specific initialization choice.
+        LayerInitializationSeedScope.ResetForModelConstruction(
+            architecture?.RandomSeed ?? _options.Seed);
+
         // Create scheduler from options if not provided
         if (scheduler != null)
         {
@@ -2387,8 +2393,12 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     protected bool TryShareParametersFrom(DiffusionModelBase<T> source)
     {
         if (!AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(
-                source, this, out AiDotNet.Helpers.CopyOnWriteShareStatus status, out _))
+                source, this, out AiDotNet.Helpers.CopyOnWriteShareStatus status, out string mismatch))
         {
+            if (status == AiDotNet.Helpers.CopyOnWriteShareStatus.AliasedLayerGraph)
+                throw new InvalidOperationException(
+                    $"Clone configuration for {GetType().Name} retained source-owned layers: {mismatch}.");
+
             // NOTHING MATERIALIZED IS NOT A MISMATCH. The share walks both graphs and declines when
             // the trainable-layer structures do not line up, and a model whose lazy layers have not
             // been resolved presents ZERO layers on both sides. That is a vacuous share, not a

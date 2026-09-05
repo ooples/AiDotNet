@@ -1001,6 +1001,10 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     /// <param name="seed">Optional random seed for reproducibility.</param>
     protected NoisePredictorBase(ILossFunction<T>? lossFunction = null, int? seed = null)
     {
+        // Noise predictors are model roots but do not derive from NeuralNetworkBase, which normally
+        // establishes the per-layer seed sequence. Reset here before any derived constructor builds
+        // layers so an explicit predictor seed cannot fall through to the process-shared RNG.
+        LayerInitializationSeedScope.ResetForModelConstruction(seed);
         LossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         RandomGenerator = seed.HasValue
             ? RandomHelper.CreateSeededRandom(seed.Value)
@@ -1844,6 +1848,9 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     {
         bool shared = AiDotNet.Helpers.CopyOnWriteCloneHelper.TryShareTrainableParameters<T>(
             source, this, out AiDotNet.Helpers.CopyOnWriteShareStatus status, out mismatch);
+        if (status == AiDotNet.Helpers.CopyOnWriteShareStatus.AliasedLayerGraph)
+            throw new InvalidOperationException(
+                $"Clone configuration for {GetType().Name} retained source-owned layers: {mismatch}.");
         return shared || status == AiDotNet.Helpers.CopyOnWriteShareStatus.BothGraphsEmpty;
     }
 

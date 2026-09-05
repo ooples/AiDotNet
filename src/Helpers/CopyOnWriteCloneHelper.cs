@@ -16,6 +16,7 @@ internal enum CopyOnWriteShareStatus
     BothGraphsEmpty,
     InvalidArguments,
     TypeMismatch,
+    AliasedLayerGraph,
     StructureMismatch,
     IncompleteCoverage
 }
@@ -76,6 +77,18 @@ internal static class CopyOnWriteCloneHelper
 
         return (Tensor<T>)source.CloneShared();
     }
+
+    /// <summary>
+    /// Returns whether two distinct tensors are the live copy-on-write peers produced by an
+    /// earlier clone step. Composite model reconstruction can clone a child before the parent
+    /// transfers its complete graph; retaining this pair avoids turning that second transfer into
+    /// Tensors' deliberate third-share deep-copy fallback.
+    /// </summary>
+    internal static bool AreLiveCowPeers<T>(Tensor<T> source, Tensor<T> destination)
+        => !ReferenceEquals(source, destination)
+           && source.IsCowShared
+           && destination.IsCowShared
+           && source.SharesStorageWith(destination);
 
     /// <summary>
     /// Re-binds every trainable parameter and registered persistent buffer of <paramref name="dest"/>
@@ -142,6 +155,55 @@ internal static class CopyOnWriteCloneHelper
             return false;
         }
 
+        // A configuration clone must own an independent module graph before any parameter state is
+        // transferred. Accepting the same layer object on both sides makes SetTrainableParameters
+        // rewrite the source through the destination reference and can leave ordinary, non-COW
+        // tensor aliases behind. This is not a shape mismatch with a safe streaming fallback: every
+        // fallback writes through the same aliased layer too, so report it as a distinct unsafe
+        // reconstruction outcome before mutating either graph.
+        for (int i = 0; i < srcLayers.Count; i++)
+        {
+            if (!ReferenceEquals(srcLayers[i], dstLayers[i])) continue;
+            status = CopyOnWriteShareStatus.AliasedLayerGraph;
+            mismatch = $"clone reconstruction reused source layer {i} ({srcLayers[i].GetType().Name})";
+            return false;
+        }
+
+        // Constructor replay can rebuild the right layer types while leaving a runtime-resolved
+        // dimension deferred. A transposed convolution is the canonical case: its output depth and
+        // kernel are constructor state, but its input depth is learned allocation-free when its
+        // owning U-Net propagates shapes. A wholly deferred source owns no tensors whose shapes can
+        // repair that omission, so the old path reported a successful share and returned a clone
+        // with an unknown manifest. Replay only that missing STRUCTURE from the corresponding source
+        // layer before parameter preflight. This never reads or allocates source weights.
+        if (!TryAlignDeclaredStructures(srcLayers, dstLayers, out mismatch))
+            return false;
+
+        // Shape-only resolution may construct registered children for a composite destination.
+        // Re-collect the graph and repeat the identity/type checks before using positional pairing.
+        dstLayers = CollectTrainableLayers<T>(dest);
+        if (srcLayers.Count != dstLayers.Count)
+        {
+            mismatch = $"trainable layer counts differ after structural alignment "
+                       + $"({srcLayers.Count} vs {dstLayers.Count})";
+            return false;
+        }
+        for (int i = 0; i < srcLayers.Count; i++)
+        {
+            if (ReferenceEquals(srcLayers[i], dstLayers[i]))
+            {
+                status = CopyOnWriteShareStatus.AliasedLayerGraph;
+                mismatch = $"clone reconstruction reused source layer {i} ({srcLayers[i].GetType().Name})";
+                return false;
+            }
+            if (srcLayers[i].GetType() != dstLayers[i].GetType())
+            {
+                mismatch = $"layer {i} types differ after structural alignment "
+                           + $"({srcLayers[i].GetType().Name} vs {dstLayers[i].GetType().Name})";
+                return false;
+            }
+        }
+
         // A model-level parameter registry may include sources that are not layers. The reflective
         // layer walk cannot share those matrices/vectors, so reject the COW path when the manifest
         // proves that its live surface is wider than the trainable tensors and persistent buffers
@@ -169,7 +231,7 @@ internal static class CopyOnWriteCloneHelper
                 }
 
                 // Legacy/non-LayerBase trainables have no declared checkpoint-state slots.
-                foreach (Tensor<T> tensor in GetAuthoritativeSourceValues(srcLayers[i]))
+                foreach (Tensor<T> tensor in GetAuthoritativeValues(srcLayers[i]))
                     covered = checked(covered + tensor.Length);
             }
 
@@ -201,8 +263,15 @@ internal static class CopyOnWriteCloneHelper
                 return false;
             }
 
-            var sps = GetAuthoritativeSourceValues(srcLayers[i]);
-            var dps = GetWithoutMaterialization(dstLayers[i]);
+            var sps = GetAuthoritativeValues(srcLayers[i]);
+            // Compare the same declaration-backed view on both sides. The generated public
+            // trainable view deliberately omits optional zero-sized placeholders, while the
+            // declaration-backed value view retains every conditionally-enabled slot that will
+            // exist after lazy initialization. Mixing those views made an untouched convolution
+            // with UseBias=true look like [kernel,bias] on the source and [kernel] on the clone.
+            // Multi-level UNets expose that split because cloning their block containers
+            // materializes the children while the top-level projections remain deferred.
+            var dps = GetAuthoritativeValues(dstLayers[i]);
             bool hasMaterializedSourceValue = false;
             bool hasSourcePlaceholder = false;
             for (int p = 0; p < sps.Count; p++)
@@ -269,16 +338,29 @@ internal static class CopyOnWriteCloneHelper
 
         for (int i = 0; i < srcLayers.Count; i++)
         {
-            var sp = GetAuthoritativeSourceValues(srcLayers[i]);
+            var sp = GetAuthoritativeValues(srcLayers[i]);
             bool hasSourceValues = sp.Count > 0;
             for (int p = 0; p < sp.Count && hasSourceValues; p++)
                 hasSourceValues = sp[p].Length > 0;
 
             if (hasSourceValues)
             {
+                var destinationParameters = GetWithoutMaterialization(dstLayers[i]);
                 var shared = new Tensor<T>[sp.Count];
                 for (int p = 0; p < sp.Count; p++)
-                    shared[p] = (Tensor<T>)sp[p].CloneShared();
+                {
+                    // CloneEngine duplicates model-valued constructor arguments before the owning
+                    // composite base transfers its full parameter graph. Those children have
+                    // already installed the correct COW tensors. Calling CloneShared on the source
+                    // again is a third-share attempt; Tensors correctly falls back to a deep copy,
+                    // which would discard the valid peer, double memory, and put source/clone on
+                    // different inference-allocation paths. Preserve only a proven live peer;
+                    // every other destination still receives the normal independent share/copy.
+                    shared[p] = p < destinationParameters.Count
+                        && AreLiveCowPeers(sp[p], destinationParameters[p])
+                            ? destinationParameters[p]
+                            : ShareTensor(sp[p]);
+                }
                 dstLayers[i].SetTrainableParameters(shared);
             }
             else if (sp.Count > 0
@@ -321,6 +403,81 @@ internal static class CopyOnWriteCloneHelper
         return true;
     }
 
+    private static bool TryAlignDeclaredStructures<T>(
+        IReadOnlyList<ITrainableLayer<T>> sourceLayers,
+        IReadOnlyList<ITrainableLayer<T>> destinationLayers,
+        out string mismatch)
+    {
+        mismatch = string.Empty;
+        for (int i = 0; i < sourceLayers.Count; i++)
+        {
+            if (sourceLayers[i].GetType() != destinationLayers[i].GetType())
+            {
+                mismatch = $"layer {i} types differ ({sourceLayers[i].GetType().Name} vs "
+                           + $"{destinationLayers[i].GetType().Name})";
+                return false;
+            }
+
+            if (sourceLayers[i] is not AiDotNet.NeuralNetworks.Layers.LayerBase<T> sourceBase
+                || destinationLayers[i] is not AiDotNet.NeuralNetworks.Layers.LayerBase<T> destinationBase
+                || !sourceBase.TryGetOwnDeclaredParameterCount(out long sourceCount, out _))
+                continue;
+
+            // Generated code can transfer declaration roots such as InputDepth directly. This is
+            // the only complete route when the source deliberately retains dynamic spatial axes:
+            // there is no fully concrete input shape to replay and no materialized tensor to infer
+            // the missing dimension from. Do this even when the aggregate counts happen to match:
+            // different shapes can have the same scalar product, so count equality alone is not a
+            // structural identity proof.
+            destinationBase.TryAdoptDeclaredParameterStructure(sourceBase);
+            if (destinationBase.TryGetOwnDeclaredParameterCount(out long destinationCount, out _)
+                && destinationCount == sourceCount)
+                continue;
+
+            int[] sourceShape;
+            try
+            {
+                sourceShape = sourceBase.GetInputShape();
+            }
+            catch (Exception ex)
+            {
+                mismatch = $"layer {i} ({sourceBase.GetType().Name}) declares {sourceCount} parameters, "
+                           + $"but its clone cannot recover that declaration and the source input shape "
+                           + $"is unavailable ({ex.GetType().Name})";
+                return false;
+            }
+
+            if (!sourceBase.IsShapeResolved || sourceShape.Length == 0 || sourceShape.Any(d => d <= 0))
+            {
+                mismatch = $"layer {i} ({sourceBase.GetType().Name}) declares {sourceCount} parameters, "
+                           + "but its clone cannot recover that declaration from a concrete source shape";
+                return false;
+            }
+
+            try
+            {
+                destinationBase.ResolveStructureShapesOnly(sourceShape);
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                mismatch = $"layer {i} ({sourceBase.GetType().Name}) could not replay its resolved "
+                           + $"structure on the clone ({ex.GetType().Name}: {ex.Message})";
+                return false;
+            }
+
+            if (!destinationBase.TryGetOwnDeclaredParameterCount(out destinationCount, out _)
+                || destinationCount != sourceCount)
+            {
+                mismatch = $"layer {i} ({sourceBase.GetType().Name}) declared {sourceCount} parameters, "
+                           + $"but its structurally aligned clone declares "
+                           + $"{(destinationBase.TryGetOwnDeclaredParameterCount(out destinationCount, out _) ? destinationCount.ToString() : "?")}";
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private static string DescribeShapes<T>(IReadOnlyList<Tensor<T>> tensors)
         => "[" + string.Join(", ", tensors.Select(t => "[" + string.Join(",", t.Shape.ToArray()) + "]")) + "]";
 
@@ -329,7 +486,7 @@ internal static class CopyOnWriteCloneHelper
             ? layerBase.GetTrainableParametersWithoutMaterialization()
             : layer.GetTrainableParameters();
 
-    private static IReadOnlyList<Tensor<T>> GetAuthoritativeSourceValues<T>(ITrainableLayer<T> layer) =>
+    private static IReadOnlyList<Tensor<T>> GetAuthoritativeValues<T>(ITrainableLayer<T> layer) =>
         layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> layerBase
             ? layerBase.GetOwnTrainableParameterValueTensors()
             : layer.GetTrainableParameters();
