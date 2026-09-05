@@ -48,7 +48,7 @@ namespace AiDotNet.Classification.SVM;
 /// <example>
 /// <code>
 /// // Create Nu-SVC with intuitive regularization parameter
-/// var options = new NuSVCOptions&lt;double&gt;();
+/// var options = new SVMOptions&lt;double&gt;();
 /// var classifier = new NuSupportVectorClassifier&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features

@@ -38,7 +38,7 @@ namespace AiDotNet.Classification.Linear;
 /// <example>
 /// <code>
 /// // Create the classic Perceptron classifier
-/// var options = new PerceptronClassifierOptions&lt;double&gt;();
+/// var options = new LinearClassifierOptions&lt;double&gt;();
 /// var classifier = new PerceptronClassifier&lt;double&gt;(options);
 ///
 /// // Prepare linearly separable training data: 6 samples with 2 features

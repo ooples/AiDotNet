@@ -33,7 +33,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a regression model optimized with genetic algorithms
-/// var options = new GeneticAlgorithmRegressionOptions&lt;double&gt;();
+/// var options = new RegressionOptions&lt;double&gt;();
 /// var model = new GeneticAlgorithmRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 5 samples with 2 features each

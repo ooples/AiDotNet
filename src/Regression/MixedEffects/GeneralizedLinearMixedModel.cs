@@ -43,7 +43,7 @@ namespace AiDotNet.Regression.MixedEffects;
 /// <example>
 /// <code>
 /// // Create a GLMM for non-Gaussian hierarchical data (e.g., binary outcomes)
-/// var options = new GeneralizedLinearMixedModelOptions&lt;double&gt;();
+/// var options = new GLMMOptions&lt;double&gt;();
 /// var model = new GeneralizedLinearMixedModel&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 fixed-effect features

@@ -42,7 +42,7 @@ namespace AiDotNet.Clustering.Hierarchical;
 /// // Use AiModelBuilder facade for agglomerative clustering
 /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigureModel(new AgglomerativeClustering&lt;double&gt;(
-///         new AgglomerativeClusteringOptions&lt;double&gt;()));
+///         new HierarchicalOptions&lt;double&gt;()));
 ///
 /// var result = builder.Build(dataMatrix, labels);
 /// var predictions = result.Predict(newData);

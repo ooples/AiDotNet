@@ -38,7 +38,7 @@ namespace AiDotNet.Classification.MultiLabel;
 /// // Use AiModelBuilder facade for rakelclassifier classification
 /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigureModel(new RAkELClassifier&lt;double&gt;(
-///         new RAkELClassifierOptions&lt;double&gt;()));
+///         new ClassifierOptions&lt;double&gt;()));
 ///
 /// var result = builder.Build(features, labels);
 /// var prediction = result.Predict(newSample);

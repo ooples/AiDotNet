@@ -44,7 +44,7 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// // Use AiModelBuilder facade for categoricalnaivebayes classification
 /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigureModel(new CategoricalNaiveBayes&lt;double&gt;(
-///         new CategoricalNaiveBayesOptions&lt;double&gt;()));
+///         new NaiveBayesOptions&lt;double&gt;()));
 ///
 /// var result = builder.Build(features, labels);
 /// var prediction = result.Predict(newSample);

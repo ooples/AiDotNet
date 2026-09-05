@@ -40,7 +40,7 @@ namespace AiDotNet.Classification.SVM;
 /// // Use AiModelBuilder facade for supportvectorclassifier classification
 /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigureModel(new SupportVectorClassifier&lt;double&gt;(
-///         new SupportVectorClassifierOptions&lt;double&gt;()));
+///         new SVMOptions&lt;double&gt;()));
 ///
 /// var result = builder.Build(features, labels);
 /// var prediction = result.Predict(newSample);
