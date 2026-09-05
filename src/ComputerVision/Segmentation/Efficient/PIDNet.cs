@@ -38,6 +38,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 /// </remarks>
 /// <example>
 /// <code>
+/// var inputImage = Tensor&lt;double&gt;.CreateRandom(1, 3, 32, 32);
 /// var trainingImages = Tensor&lt;double&gt;.CreateRandom(4, 3, 32, 32);
 /// // Use AiModelBuilder facade for real-time semantic segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(

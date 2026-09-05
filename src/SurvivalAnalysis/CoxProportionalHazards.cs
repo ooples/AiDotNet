@@ -49,6 +49,8 @@ namespace AiDotNet.SurvivalAnalysis;
 /// </remarks>
 /// <example>
 /// <code>
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var newPatientFeatures = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// var times = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
 /// var cox = new CoxProportionalHazards&lt;double&gt;(learningRate: 0.01, maxIterations: 1000);
 /// cox.Fit(times, events, features);
@@ -133,6 +135,7 @@ public partial class CoxProportionalHazards<T> : SurvivalModelBase<T>
     ///
     /// Usage:
     /// <code>
+    /// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
     /// var times = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
     /// var cox = new CoxProportionalHazards&lt;double&gt;(l2Penalty: 0.1);
     /// cox.FitSurvival(features, times, events);

@@ -150,8 +150,20 @@ void Check(string code, string fileKey, int idx, string? homeNamespace = null)
         .Where(d => d.Severity == DiagnosticSeverity.Error && d.Id != "CS5001")
         .ToList();
 
-    if (errors.Count == 0) pass++;
-    else failures.Add((fileKey, idx, $"{errors[0].Id}: {errors[0].GetMessage()}"));
+    if (errors.Count == 0)
+    {
+        pass++;
+    }
+    else
+    {
+        // Record every error, not just the first. A snippet routinely carries several independent
+        // defects, and reporting one at a time means a repair pass fixes one, a full rebuild follows,
+        // and the next is revealed — turning what could be a single sweep into a dozen slow rounds.
+        foreach (var e in errors)
+        {
+            failures.Add((fileKey, idx, $"{e.Id}: {e.GetMessage()}"));
+        }
+    }
 
     var cur = perFile.GetValueOrDefault(fileKey);
     perFile[fileKey] = (cur.total + 1, cur.fail + (errors.Count == 0 ? 0 : 1));

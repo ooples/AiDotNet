@@ -48,6 +48,7 @@ namespace AiDotNet.SurvivalAnalysis;
 /// </remarks>
 /// <example>
 /// <code>
+/// var timePoint = 2;
 /// var times = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
 /// var km = new KaplanMeierEstimator&lt;double&gt;();
 /// km.Fit(times, events);

@@ -19,6 +19,7 @@ namespace AiDotNet.Augmentation;
 ///
 /// <para><b>Example - Simple usage with defaults:</b></para>
 /// <code>
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
 /// var result = builder
 ///     .ConfigureModel(myModel)
 ///     .ConfigureAugmentation()  // Uses auto-detected defaults
@@ -27,6 +28,7 @@ namespace AiDotNet.Augmentation;
 ///
 /// <para><b>Example - Custom configuration:</b></para>
 /// <code>
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
 /// var config = new AugmentationConfig
 /// {
 ///     EnableTTA = true,
@@ -342,6 +344,7 @@ public class AugmentationConfig
 /// <typeparam name="TInput">Input data type — matches <c>AiModelBuilder&lt;..., TInput, ...&gt;</c>.</typeparam>
 /// <example>
 /// <code>
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
 /// var config = new AugmentationConfig&lt;float, Tensor&lt;float&gt;&gt;
 /// {
 ///     Augmenter = new MyTensorAugmenter(), // fully typed — IntelliSense + compile check

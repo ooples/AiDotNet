@@ -35,6 +35,9 @@ namespace AiDotNet.Classification.MultiLabel;
 /// </remarks>
 /// <example>
 /// <code>
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var newSample = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Use AiModelBuilder facade for rakelclassifier classification
 /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigureModel(new RAkELClassifier&lt;double&gt;(

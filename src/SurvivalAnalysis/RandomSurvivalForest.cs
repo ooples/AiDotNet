@@ -37,6 +37,9 @@ namespace AiDotNet.SurvivalAnalysis;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 /// <example>
 /// <code>
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var newPatientFeatures = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var timePoint = 2;
 /// var times = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
 /// var rsf = new RandomSurvivalForest&lt;double&gt;(numTrees: 100, maxDepth: 10);
 /// rsf.Fit(times, events, features);

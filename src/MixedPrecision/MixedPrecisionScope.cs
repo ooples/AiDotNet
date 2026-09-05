@@ -24,6 +24,7 @@ namespace AiDotNet.MixedPrecision;
 /// </remarks>
 /// <example>
 /// <code>
+/// var input = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Automatic usage (handled by MixedPrecisionTrainingLoop)
 /// // Users typically don't need to create scopes manually
 ///

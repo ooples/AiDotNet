@@ -35,6 +35,7 @@ namespace AiDotNet.MixedPrecision;
 /// </remarks>
 /// <example>
 /// <code>
+/// var targets = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
 /// // Create a loss scaler with defaults
 /// var scaler = new LossScaler&lt;float&gt;(
 ///     initialScale: 65536.0,
