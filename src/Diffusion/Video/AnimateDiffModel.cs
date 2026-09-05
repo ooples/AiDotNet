@@ -71,7 +71,7 @@ namespace AiDotNet.Diffusion.Video;
 ///     numInferenceSteps: 25);
 ///
 /// // Image-to-video with text guidance
-/// var inputImage = LoadImage("beach.jpg");
+/// var inputImage = ImageHelper&lt;float&gt;.LoadImage("beach.jpg");
 /// var animatedVideo = animateDiff.AnimateImage(
 ///     inputImage,
 ///     prompt: "gentle waves, moving clouds",

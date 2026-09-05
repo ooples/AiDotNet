@@ -58,7 +58,7 @@ namespace AiDotNet.Diffusion.Video;
 /// var svd = new StableVideoDiffusion&lt;float&gt;();
 ///
 /// // Load your image (batch=1, channels=3, height=576, width=1024)
-/// var inputImage = LoadImage("landscape.jpg");
+/// var inputImage = ImageHelper&lt;float&gt;.LoadImage("landscape.jpg");
 ///
 /// // Generate video with default settings
 /// var video = svd.GenerateFromImage(inputImage);

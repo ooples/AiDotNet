@@ -68,7 +68,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// // pointCloud shape: [1, 4096, 6] - XYZ + RGB per point
 ///
 /// // Generate from an image
-/// var image = LoadImage("chair_photo.jpg");
+/// var image = ImageHelper&lt;float&gt;.LoadImage("chair_photo.jpg");
 /// var fromImage = pointE.GenerateFromImage(image, numPoints: 4096);
 ///
 /// // Export to PLY file for viewing in 3D software
