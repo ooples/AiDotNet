@@ -40,7 +40,7 @@ namespace AiDotNet.Clustering.AutoML;
 ///     { "NumClusters", new object[] { 2, 3, 4, 5 } }
 /// };
 /// var result = gridSearch.Search(dataMatrix, p =&gt; new KMeans&lt;double&gt;(
-///     numClusters: (int)p["NumClusters"]), paramGrid);
+///     ), paramGrid);
 /// </code>
 /// </example>
 [ComponentType(ComponentType.Optimizer)]

@@ -36,7 +36,7 @@ namespace AiDotNet.Diffusion.Control;
 ///     LatentChannels = 4,
 ///     DefaultInferenceSteps = 25
 /// };
-/// var model = new ControlNetUnionProModel&lt;float&gt;(options: options, controlType: ControlType.Canny);
+/// var model = new ControlNetUnionProModel&lt;float&gt;(options: options);
 ///
 /// // Generate with any control type using the same model
 /// var controlInput = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1, 512, 512 });

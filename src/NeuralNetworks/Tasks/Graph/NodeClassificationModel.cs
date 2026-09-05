@@ -60,7 +60,7 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputSize: 16,   // node feature dimension
 ///     outputSize: 7,   // number of node classes
-///     hiddenSizes: new[] { 64 });
+///     );
 /// var model = new NodeClassificationModel&lt;float&gt;(architecture);
 ///
 /// // Prepare graph data (adjacency + node features as tensors)

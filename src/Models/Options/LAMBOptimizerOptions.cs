@@ -25,6 +25,7 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 /// <example>
 /// <code>
+/// var batchSize = 32;
 /// var options = new LAMBOptimizerOptions&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;
 /// {
 ///     InitialLearningRate = 0.00176 * Math.Sqrt(batchSize),  // Square root scaling for LAMB

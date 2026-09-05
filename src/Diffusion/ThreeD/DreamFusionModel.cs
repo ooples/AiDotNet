@@ -58,7 +58,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// <example>
 /// <code>
 /// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 4, DefaultInferenceSteps = 50 };
-/// var model = new DreamFusionModel&lt;float&gt;(options: options);
+/// var model = new DreamFusionModel&lt;float&gt;();
 /// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4, 8, 8 });
 /// var rendering = model.Predict(noise);
 /// </code>

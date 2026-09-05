@@ -21,6 +21,7 @@ namespace AiDotNet.Optimizers;
 /// </para>
 /// <para><b>Key Formula:</b></para>
 /// <code>
+/// var batchSize = 32;
 /// local_lr = trust_coeff * ||w|| / (||g|| + weight_decay * ||w|| + epsilon)
 /// update = local_lr * (g + weight_decay * w)
 /// w = w - lr * update (with momentum)
@@ -36,6 +37,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 /// <example>
 /// <code>
+/// var batchSize = 32;
 /// // For SimCLR training with large batches
 /// var options = new LARSOptimizerOptions&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;
 /// {

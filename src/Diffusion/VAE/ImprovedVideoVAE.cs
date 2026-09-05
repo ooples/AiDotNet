@@ -33,7 +33,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// </remarks>
 /// <example>
 /// <code>
-/// var vae = new ImprovedVideoVAE&lt;float&gt;(inputChannels: 3, latentChannels: 4, numFrames: 16);
+/// var vae = new ImprovedVideoVAE&lt;float&gt;(inputChannels: 3, latentChannels: 4);
 /// var video = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 16, 256, 256 });
 /// var latent = vae.Encode(video);
 /// </code>

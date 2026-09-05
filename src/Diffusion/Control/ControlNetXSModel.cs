@@ -55,7 +55,7 @@ namespace AiDotNet.Diffusion.Control;
 ///     LatentChannels = 4,
 ///     DefaultInferenceSteps = 20
 /// };
-/// var model = new ControlNetXSModel&lt;float&gt;(options: options, controlType: ControlType.Depth);
+/// var model = new ControlNetXSModel&lt;float&gt;(options: options);
 ///
 /// // Generate with minimal compute overhead
 /// var depthMap = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1, 512, 512 });
