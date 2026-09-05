@@ -106,6 +106,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <see cref="EvolutionOptions.NoveltyDistanceThreshold"/> is positive; without it the engine refuses the run,
     /// because a novelty gate has no way to tell two candidates apart.
     /// </param>
+    /// <param name="archiveFactory">
+    /// Optional factory for a distinct empty archive per island. When supplied, it replaces the MAP-Elites archive
+    /// described by <see cref="EvolutionOptions.Descriptors"/>.
+    /// </param>
+    /// <param name="winnerModelFactory">
+    /// Optional typed adapter that turns the best genome into the model carried by the built result. When omitted,
+    /// the result remains genome-only.
+    /// </param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
     /// <para>
@@ -132,11 +140,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         ICandidateRefiner<TGenome>? refiner = null,
         IMigrationPolicy<TGenome>? migration = null,
         IEvolutionObserver<TGenome>? observer = null,
-        IGenomeDistance<TGenome>? genomeDistance = null)
+        IGenomeDistance<TGenome>? genomeDistance = null,
+        Func<int, IEvolutionArchive<TGenome>>? archiveFactory = null,
+        Func<TGenome, IFullModel<T, TInput, TOutput>>? winnerModelFactory = null)
     {
         Guard.NotNull(task);
         Guard.NotNull(variation);
-        EvolutionOptions effective = ResolveTypedEvolutionOptions(options);
+        EvolutionOptions effective = ResolveTypedEvolutionOptions(options, archiveFactory is not null);
         if (effective.Resume || effective.CheckpointInterval > 0 || effective.CheckpointDirectory is not null)
         {
             throw new ArgumentException(
@@ -149,7 +159,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         _evolutionOptions = effective;
         _evolutionRunner = cancellationToken => RunTypedEvolutionAsync(
             task, variation, null, selection, refiner, migration, observer, null, genomeDistance,
-            cancellationToken);
+            archiveFactory, winnerModelFactory, cancellationToken);
         return this;
     }
 
@@ -174,6 +184,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// Optional structural distance between two candidates. Supply one whenever
     /// <see cref="EvolutionOptions.NoveltyDistanceThreshold"/> is positive; without it the engine refuses the run,
     /// because a novelty gate has no way to tell two candidates apart.
+    /// </param>
+    /// <param name="archiveFactory">
+    /// Optional factory for a distinct empty archive per island. When supplied, it replaces the MAP-Elites archive
+    /// described by <see cref="EvolutionOptions.Descriptors"/>.
+    /// </param>
+    /// <param name="winnerModelFactory">
+    /// Optional typed adapter that turns the best genome into the model carried by the built result. When omitted,
+    /// the result remains genome-only.
     /// </param>
     /// <returns>This builder instance for method chaining.</returns>
     /// <remarks>
@@ -200,15 +218,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         IMigrationPolicy<TGenome>? migration = null,
         IEvolutionObserver<TGenome>? observer = null,
         IEvolutionCheckpointStore? checkpointStore = null,
-        IGenomeDistance<TGenome>? genomeDistance = null)
+        IGenomeDistance<TGenome>? genomeDistance = null,
+        Func<int, IEvolutionArchive<TGenome>>? archiveFactory = null,
+        Func<TGenome, IFullModel<T, TInput, TOutput>>? winnerModelFactory = null)
     {
         Guard.NotNull(task);
         Guard.NotNull(variation);
         Guard.NotNull(genomeCodec);
-        _evolutionOptions = ResolveTypedEvolutionOptions(options);
+        _evolutionOptions = ResolveTypedEvolutionOptions(options, archiveFactory is not null);
         _evolutionRunner = cancellationToken => RunTypedEvolutionAsync(
             task, variation, genomeCodec, selection, refiner, migration, observer, checkpointStore, genomeDistance,
-            cancellationToken);
+            archiveFactory, winnerModelFactory, cancellationToken);
         return this;
     }
 
@@ -478,13 +498,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <summary>Resolves the options a typed run should use and enforces the archive requirement.</summary>
     /// <param name="options">The options passed to the overload, or <see langword="null"/> to reuse the configured ones.</param>
     /// <returns>A validated copy.</returns>
-    private EvolutionOptions ResolveTypedEvolutionOptions(EvolutionOptions? options)
+    private EvolutionOptions ResolveTypedEvolutionOptions(EvolutionOptions? options, bool hasCustomArchiveFactory)
     {
         EvolutionOptions effective = options is null
             ? _evolutionOptions ?? new EvolutionOptions().SnapshotAndValidate()
             : options.SnapshotAndValidate();
 
-        if (effective.Descriptors.Count == 0)
+        if (!hasCustomArchiveFactory && effective.Descriptors.Count == 0)
         {
             throw new ArgumentException(
                 "An evolution archive needs at least one behaviour axis. Add an EvolutionDescriptorDefinition to " +
@@ -519,13 +539,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         IEvolutionObserver<TGenome>? observer,
         IEvolutionCheckpointStore? checkpointStore,
         IGenomeDistance<TGenome>? genomeDistance,
+        Func<int, IEvolutionArchive<TGenome>>? archiveFactory,
+        Func<TGenome, IFullModel<T, TInput, TOutput>>? winnerModelFactory,
         CancellationToken cancellationToken)
     {
         EvolutionOptions effective = _evolutionOptions ?? new EvolutionOptions().SnapshotAndValidate();
         IReadOnlyList<TGenome> seeds = ResolveTypedSeeds<TGenome>();
         return await RunEvolutionAsync(
             effective, task, variation, genomeCodec, selection, refiner, migration, observer, checkpointStore,
-            genomeDistance, seeds, EvolutionRunSummary.DefaultEliteCount, cancellationToken).ConfigureAwait(false);
+            genomeDistance, archiveFactory, winnerModelFactory, seeds, EvolutionRunSummary.DefaultEliteCount,
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Casts the configured seeds to the genome type this run uses.</summary>
@@ -571,6 +594,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         IEvolutionObserver<TGenome>? observer,
         IEvolutionCheckpointStore? checkpointStore,
         IGenomeDistance<TGenome>? genomeDistance,
+        Func<int, IEvolutionArchive<TGenome>>? archiveFactory,
+        Func<TGenome, IFullModel<T, TInput, TOutput>>? winnerModelFactory,
         IReadOnlyList<TGenome> seeds,
         int maxElites,
         CancellationToken cancellationToken)
@@ -600,7 +625,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             var engine = new EvolutionEngine<TGenome>(
                 task,
                 variation,
-                _ => options.CreateArchive<TGenome>(),
+                archiveFactory ?? (_ => options.CreateArchive<TGenome>()),
                 options.ToEngineOptions(),
                 selection,
                 refiner,
@@ -613,6 +638,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             DateTimeOffset started = DateTimeOffset.UtcNow;
             EvolutionRunResult<TGenome> run = await engine.RunAsync(seeds, cancellationToken).ConfigureAwait(false);
             DateTimeOffset finished = DateTimeOffset.UtcNow;
+            IFullModel<T, TInput, TOutput>? winningModel = null;
+            if (winnerModelFactory is not null)
+            {
+                EvolutionArchiveEntry<TGenome> winner = run.Best ?? throw new InvalidOperationException(
+                    "The winner model factory cannot run because evolution completed without an archived genome.");
+                winningModel = winnerModelFactory(winner.Candidate.CanonicalGenome.Genome)
+                    ?? throw new InvalidOperationException("The winner model factory returned null.");
+            }
 
             EvolutionRunSummary summary = EvolutionRunSummary.Create(
                 options.RunId, engine.CompatibilityHash, run, started, finished, maxElites);
@@ -625,7 +658,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 summary.TraceRecordCount = tracer.Summary.RecordsWritten;
             }
 
-            return new EvolutionRunOutcome(summary, run);
+            return new EvolutionRunOutcome(summary, run, winningModel: winningModel);
         }
         finally
         {
@@ -745,6 +778,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 programObserver,
                 null,
                 genomeDistance,
+                null,
+                null,
                 programOptions.CreateSeedGenomes(),
                 programOptions.IncludeEliteSourceCount,
                 cancellationToken).ConfigureAwait(false);
@@ -987,13 +1022,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
     }
 
-    /// <summary>Runs the configured evolution and returns a result that carries the search rather than a model.</summary>
+    /// <summary>Runs the configured evolution and returns its search result and optional materialized winner model.</summary>
     /// <param name="cancellationToken">The token supplied to <c>BuildAsync</c>.</param>
-    /// <returns>A model result whose evolution properties describe the finished run.</returns>
+    /// <returns>A result whose evolution properties describe the finished run.</returns>
     /// <remarks>
-    /// Evolution searches a space of candidates rather than fitting a model to data, so the result deliberately has
-    /// no model: <c>AiModelResult.IsGenomeOnlyResult</c> is <see langword="true"/> and <c>Predict</c> throws a clear
-    /// <see cref="InvalidOperationException"/> instead of returning something meaningless.
+    /// A typed run remains genome-only unless its configure call supplied a winner model factory. Program evolution
+    /// is always genome-only because generated source is returned for review rather than silently executed as a model.
     /// </remarks>
     private async Task<AiModelResult<T, TInput, TOutput>> BuildEvolutionInternalAsync(CancellationToken cancellationToken)
     {
@@ -1003,9 +1037,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         var options = new AiModelResultOptions<T, TInput, TOutput>
         {
-            // No model was fitted, so the optimization result is empty rather than absent: the result type
-            // requires one, and an empty one keeps Model null so the prediction surface fails loudly.
-            OptimizationResult = new OptimizationResult<T, TInput, TOutput>(),
+            // The result type obtains its model from BestSolution. It remains null for the default genome-only mode,
+            // and carries the one model materialized from the winner when a typed factory was configured.
+            OptimizationResult = new OptimizationResult<T, TInput, TOutput>
+            {
+                BestSolution = outcome.WinningModel
+            },
             EvolutionSummary = outcome.Summary,
             ProgramEvolution = outcome.ProgramResult,
             EvolutionRunResult = outcome.RunResult,
@@ -1041,11 +1078,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         public EvolutionRunOutcome(
             EvolutionRunSummary summary,
             object runResult,
-            ProgramEvolutionResult? programResult = null)
+            ProgramEvolutionResult? programResult = null,
+            IFullModel<T, TInput, TOutput>? winningModel = null)
         {
             Summary = summary;
             RunResult = runResult;
             ProgramResult = programResult;
+            WinningModel = winningModel;
         }
 
         public EvolutionRunSummary Summary { get; }
@@ -1054,6 +1093,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         public object RunResult { get; }
 
         public ProgramEvolutionResult? ProgramResult { get; }
+
+        public IFullModel<T, TInput, TOutput>? WinningModel { get; }
     }
 
     /// <summary>Delivers each run event to two observers, so a caller's observer and the trace writer coexist.</summary>

@@ -12,6 +12,7 @@ using AiDotNet.ProgramSynthesis.Execution;
 using AiDotNet.ProgramSynthesis.Interfaces;
 using AiDotNet.ProgramSynthesis.Models;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tests.Helpers;
 using AiDotNetTests.UnitTests.Evolution;
 using Newtonsoft.Json;
 using Xunit;
@@ -259,6 +260,65 @@ public sealed class EvolutionFacadeIntegrationTests
 
         var exception = Assert.Throws<InvalidOperationException>(() => result.Predict(new Matrix<double>(1, 1)));
         Assert.Contains("Model", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task AWinningGenomeCanMaterializeTheBuiltModelThroughATypedFactory()
+    {
+        AiModelResult<double, Matrix<double>, Vector<double>> result =
+            await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+                .ConfigureEvolution(
+                    new SyntheticEvolutionTask(),
+                    new IncrementVariation(),
+                    CreateTypedOptions(),
+                    winnerModelFactory: genome => new MockFullModel(
+                        _ => new Vector<double>(new[] { (double)genome.Value })))
+                .ConfigureEvolutionSeeds(new[] { new TestGenome(30) })
+                .BuildAsync();
+
+        EvolutionRunResult<TestGenome> run =
+            Assert.IsType<EvolutionRunResult<TestGenome>>(result.GetEvolutionRunResult<TestGenome>());
+        TestGenome winner = Assert.IsType<TestGenome>(run.Best?.Candidate.CanonicalGenome.Genome);
+        Vector<double> prediction = result.Predict(new Matrix<double>(1, 1));
+
+        Assert.False(result.IsGenomeOnlyResult);
+        Assert.NotNull(result.Model);
+        Assert.Equal((double)winner.Value, prediction[0]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ACustomArchiveFactoryOwnsTheIslandArchivesWithoutFacadeDescriptors()
+    {
+        EvolutionOptions options = CreateTypedOptions();
+        options.Descriptors.Clear();
+        var islandIndexes = new List<int>();
+        var archives = new List<IEvolutionArchive<TestGenome>>();
+
+        IEvolutionArchive<TestGenome> CreateArchive(int island)
+        {
+            islandIndexes.Add(island);
+            var archive = new MapElitesArchive<TestGenome>(new[]
+            {
+                new EvolutionDescriptorDefinition("x", 0, 100, 5, EvolutionOutOfRangePolicy.Clamp)
+            });
+            archives.Add(archive);
+            return archive;
+        }
+
+        AiModelResult<double, Matrix<double>, Vector<double>> result =
+            await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+                .ConfigureEvolution(
+                    new SyntheticEvolutionTask(),
+                    new IncrementVariation(),
+                    options,
+                    archiveFactory: CreateArchive)
+                .ConfigureEvolutionSeeds(new[] { new TestGenome(30) })
+                .BuildAsync();
+
+        Assert.Equal(new[] { 0, 1 }, islandIndexes);
+        Assert.Equal(2, archives.Count);
+        Assert.NotSame(archives[0], archives[1]);
+        Assert.All(RequireSummary(result).Islands, island => Assert.Equal(5, island.TotalCells));
     }
 
     [Fact(Timeout = 120000)]
