@@ -67,6 +67,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// </remarks>
 /// <example>
 /// <code>
+/// var existingImage = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
 /// // Create with industry-standard defaults
 /// var sd15 = new StableDiffusion15Model&lt;float&gt;();
 ///
@@ -274,10 +275,10 @@ public partial class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
     /// var model = new StableDiffusion15Model&lt;float&gt;();
     ///
     /// // With text conditioning for text-to-image
-    /// var model = new StableDiffusion15Model&lt;float&gt;(conditioner: myClipEncoder);
+    /// var model2 = new StableDiffusion15Model&lt;float&gt;(conditioner: myClipEncoder);
     ///
     /// // Full customization
-    /// var model = new StableDiffusion15Model&lt;float&gt;(
+    /// var model3 = new StableDiffusion15Model&lt;float&gt;(
     ///     unet: myCustomUNet,
     ///     vae: myCustomVAE,
     ///     conditioner: myClipEncoder,

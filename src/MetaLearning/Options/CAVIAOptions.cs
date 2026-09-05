@@ -371,7 +371,7 @@ public class CAVIAOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     /// var cavia = new CAVIAAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create CAVIA with custom configuration
-    /// var options = new CAVIAOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myEncoder)
+    /// var options2 = new CAVIAOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myEncoder)
     /// {
     ///     ContextDimension = 64,
     ///     AdaptationSteps = 10,

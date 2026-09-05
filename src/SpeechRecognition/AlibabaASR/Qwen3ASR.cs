@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// // Create a Qwen3-ASR model for LLM-integrated multilingual speech recognition
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 32000);
 /// var model = new Qwen3ASR&lt;double&gt;(architecture);
 ///

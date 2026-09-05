@@ -35,9 +35,9 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 32, Height = 1024, Width = 1024, NumInferenceSteps = 1 };
-/// var model = new SANASprintModel&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 32, 32, 32 });
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 32, DefaultInferenceSteps = 1 };
+/// var model = new SANASprintModel&lt;float&gt;(options: options);
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 32, 32, 32 });
 /// var generated = model.Predict(noise);
 /// </code>
 /// </example>

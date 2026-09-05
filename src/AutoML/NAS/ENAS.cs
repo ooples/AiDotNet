@@ -27,6 +27,9 @@ namespace AiDotNet.AutoML.NAS
     /// </remarks>
     /// <example>
     /// <code>
+    /// var inputTensor = Tensor&lt;float&gt;.CreateRandom(2, 4);
+    /// var trainingLabels = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+    /// var trainingData = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
     /// // Use AiModelBuilder facade with ENAS for neural architecture search
     /// var builder = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
     ///     .ConfigureModel(new ENAS&lt;float&gt;(new SearchSpaceBase&lt;float&gt;(), numNodes: 4));

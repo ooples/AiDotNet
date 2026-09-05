@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// // Create a SALM model for speech-augmented LLM-based ASR
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 32000);
 /// var model = new SALM&lt;double&gt;(architecture);
 ///

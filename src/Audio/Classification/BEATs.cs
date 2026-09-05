@@ -801,6 +801,7 @@ public partial class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     ///
     /// Example:
     /// <code>
+    /// var NumOps = MathHelper.GetNumericOperations&lt;double&gt;();
     /// var probMatrix = beats.GetEventProbabilities(audioTensor);
     /// // probMatrix[0, 5] = probability of ClassLabels[5] in the first window
     /// // probMatrix[3, 10] = probability of ClassLabels[10] in the fourth window
@@ -902,6 +903,7 @@ public partial class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// threshold than the default (0.3). For example, if your microphone captures at 44100 Hz
     /// and you want to be very sensitive:
     /// <code>
+    /// var NumOps = MathHelper.GetNumericOperations&lt;double&gt;();
     /// using var session = beats.StartStreamingSession(
     ///     sampleRate: 44100,
     ///     threshold: NumOps.FromDouble(0.15));

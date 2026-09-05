@@ -31,17 +31,15 @@ namespace AiDotNet.Diffusion.Control;
 /// <example>
 /// <code>
 /// // Create a ControlNet QR model for artistic QR code generation
-/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// var options = new DiffusionModelOptions&lt;float&gt;
 /// {
 ///     LatentChannels = 4,
-///     Height = 768,
-///     Width = 768,
-///     NumInferenceSteps = 30
+///     DefaultInferenceSteps = 30
 /// };
-/// var model = new ControlNetQRModel&lt;float&gt;(options);
+/// var model = new ControlNetQRModel&lt;float&gt;(options: options);
 ///
 /// // Generate artwork with embedded QR code
-/// var qrPattern = Tensor&lt;float&gt;.Random(new[] { 1, 1, 768, 768 });
+/// var qrPattern = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1, 768, 768 });
 /// var artisticQR = model.Predict(qrPattern);
 /// </code>
 /// </example>

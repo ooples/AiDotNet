@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// // Create a Samba-ASR model using Mamba state-space architecture
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new SambaASR&lt;double&gt;(architecture);
 ///

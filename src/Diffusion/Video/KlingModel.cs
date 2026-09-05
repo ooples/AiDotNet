@@ -69,6 +69,7 @@ namespace AiDotNet.Diffusion.Video;
 /// </remarks>
 /// <example>
 /// <code>
+/// var referenceImage = Tensor&lt;double&gt;.CreateRandom(1, 3, 32, 32);
 /// // Create with default settings
 /// var kling = new KlingModel&lt;float&gt;();
 ///

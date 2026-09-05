@@ -34,17 +34,15 @@ namespace AiDotNet.Diffusion.Control;
 /// <example>
 /// <code>
 /// // Create a ControlNet++ model with reward-guided training
-/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// var options = new DiffusionModelOptions&lt;float&gt;
 /// {
 ///     LatentChannels = 4,
-///     Height = 512,
-///     Width = 512,
-///     NumInferenceSteps = 30
+///     DefaultInferenceSteps = 30
 /// };
-/// var model = new ControlNetPlusPlusModel&lt;float&gt;(options, ControlType.Canny);
+/// var model = new ControlNetPlusPlusModel&lt;float&gt;(options: options, controlType: ControlType.Canny);
 ///
 /// // Generate image with improved control adherence
-/// var edgeMap = Tensor&lt;float&gt;.Random(new[] { 1, 1, 512, 512 });
+/// var edgeMap = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1, 512, 512 });
 /// var result = model.Predict(edgeMap);
 /// </code>
 /// </example>

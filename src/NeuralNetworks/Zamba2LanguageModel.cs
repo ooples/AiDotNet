@@ -26,7 +26,7 @@ namespace AiDotNet.NeuralNetworks;
 ///     InputType.OneDimensional, NeuralNetworkTaskType.TextGeneration,
 ///     inputSize: 4096, outputSize: 32000);
 /// var model = new Zamba2LanguageModel&lt;float&gt;(architecture);
-/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
 /// var logits = model.Predict(tokens);
 /// </code>
 /// </example>

@@ -26,7 +26,7 @@ namespace AiDotNet.Models.Options;
 /// <code>
 /// var options = new LARSOptimizerOptions&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;
 /// {
-///     LearningRate = 0.3,        // Base learning rate (will be scaled per-layer)
+///     InitialLearningRate = 0.3,        // Base learning rate (will be scaled per-layer)
 ///     Momentum = 0.9,            // Standard momentum
 ///     WeightDecay = 1e-4,        // Weight decay
 ///     TrustCoefficient = 0.001,  // Controls layer-wise LR scaling

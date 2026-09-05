@@ -295,7 +295,7 @@ public class MANNOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
     /// var mann = new MANNAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create MANN with custom memory configuration
-    /// var options = new MANNOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myController)
+    /// var options2 = new MANNOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myController)
     /// {
     ///     MemorySize = 256,
     ///     MemoryKeySize = 128,

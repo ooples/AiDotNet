@@ -271,7 +271,7 @@ public class MatchingNetworksOptions<T, TInput, TOutput> : ModelOptions, IMetaLe
     /// var matchingNets = new MatchingNetworksAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create with custom attention function
-    /// var options = new MatchingNetworksOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myEncoder)
+    /// var options2 = new MatchingNetworksOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myEncoder)
     /// {
     ///     AttentionFunction = MatchingNetworksAttentionFunction.DotProduct,
     ///     UseBidirectionalEncoding = true

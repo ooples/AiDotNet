@@ -41,9 +41,10 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new TabMOptions { NumFeatures = 20, NumSubmodels = 32, HiddenSize = 128 };
-/// var model = new TabMNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var options = new TabMOptions&lt;double&gt; { NumFeatures = 20};
+/// var model = new TabMNetwork&lt;float&gt;(architecture);
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20 });
 /// var output = model.Predict(input);
 /// </code>
 /// </example>

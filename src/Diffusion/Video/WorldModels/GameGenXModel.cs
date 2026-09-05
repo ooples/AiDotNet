@@ -37,9 +37,9 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 720, Width = 1280, NumInferenceSteps = 30 };
-/// var model = new GameGenXModel&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 60, 90, 160 });
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 16, DefaultInferenceSteps = 30 };
+/// var model = new GameGenXModel&lt;float&gt;(options: options);
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 16, 60, 90, 160 });
 /// var gameplay = model.Predict(noise);
 /// </code>
 /// </example>

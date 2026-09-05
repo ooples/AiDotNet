@@ -65,13 +65,13 @@ public class SMOTE<T> : OversamplingBase<T>
     /// var smote = new SMOTE&lt;double&gt;();
     ///
     /// // Custom: partial balance (minority = 50% of majority), 3 neighbors
-    /// var smote = new SMOTE&lt;double&gt;(samplingStrategy: 0.5, kNeighbors: 3);
+    /// var smote2 = new SMOTE&lt;double&gt;(samplingStrategy: 0.5, kNeighbors: 3);
     ///
     /// // With reproducibility
-    /// var smote = new SMOTE&lt;double&gt;(seed: 42);
+    /// var smote3 = new SMOTE&lt;double&gt;(seed: 42);
     ///
     /// // Apply to your data
-    /// var (newX, newY) = smote.Resample(trainX, trainY);
+    /// var (newX, newY) = smote3.Resample(trainX, trainY);
     /// </code>
     /// </para>
     /// </remarks>

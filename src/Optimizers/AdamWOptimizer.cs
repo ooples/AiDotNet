@@ -36,7 +36,7 @@ namespace AiDotNet.Optimizers;
 /// <code>
 /// var options = new AdamWOptimizerOptions&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;
 /// {
-///     LearningRate = 0.001,
+///     InitialLearningRate = 0.001,
 ///     WeightDecay = 0.01,
 ///     Beta1 = 0.9,
 ///     Beta2 = 0.999

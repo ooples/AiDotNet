@@ -90,19 +90,21 @@ public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <exception cref="InvalidOperationException">Thrown when required components are not set in options.</exception>
     /// <example>
     /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
     /// // Create SEAL with minimal configuration
     /// var options = new SEALOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(myNeuralNetwork);
     /// var seal = new SEALAlgorithm&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(options);
     ///
     /// // Create SEAL with entropy regularization
-    /// var options = new SEALOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(myNeuralNetwork)
+    /// var options2 = new SEALOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     EntropyCoefficient = 0.01,
     ///     Temperature = 1.5,
     ///     UseAdaptiveInnerLR = true,
     ///     AdaptiveLearningRateMode = SEALAdaptiveLearningRateMode.RunningMean
     /// };
-    /// var seal = new SEALAlgorithm&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(options);
+    /// var seal2 = new SEALAlgorithm&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(options2);
     /// </code>
     /// </example>
     public SEALAlgorithm(SEALOptions<T, TInput, TOutput> options)

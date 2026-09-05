@@ -34,17 +34,15 @@ namespace AiDotNet.Diffusion.Control;
 /// <example>
 /// <code>
 /// // Create a ControlNeXt model for efficient spatial control
-/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// var options = new DiffusionModelOptions&lt;float&gt;
 /// {
 ///     LatentChannels = 4,
-///     Height = 512,
-///     Width = 512,
-///     NumInferenceSteps = 20
+///     DefaultInferenceSteps = 20
 /// };
-/// var model = new ControlNeXtModel&lt;float&gt;(options, ControlType.Depth);
+/// var model = new ControlNeXtModel&lt;float&gt;(options: options, controlType: ControlType.Depth);
 ///
 /// // Guide image generation with a depth map
-/// var depthMap = Tensor&lt;float&gt;.Random(new[] { 1, 1, 512, 512 });
+/// var depthMap = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1, 512, 512 });
 /// var generated = model.Predict(depthMap);
 /// </code>
 /// </example>

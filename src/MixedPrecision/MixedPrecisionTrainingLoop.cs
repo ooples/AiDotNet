@@ -28,6 +28,7 @@ namespace AiDotNet.MixedPrecision;
 /// </remarks>
 /// <example>
 /// <code>
+/// var inputTensor = Tensor&lt;double&gt;.CreateRandom(2, 4);
 /// // Create training loop
 /// var trainLoop = new MixedPrecisionTrainingLoop&lt;float&gt;(
 ///     network,

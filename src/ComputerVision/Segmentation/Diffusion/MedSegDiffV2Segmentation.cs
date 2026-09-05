@@ -39,6 +39,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Diffusion;
 /// </remarks>
 /// <example>
 /// <code>
+/// var trainingImages = Tensor&lt;double&gt;.CreateRandom(4, 3, 32, 32);
 /// // Use AiModelBuilder facade for medical image segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,

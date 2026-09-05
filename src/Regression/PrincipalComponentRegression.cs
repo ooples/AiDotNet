@@ -34,15 +34,14 @@ namespace AiDotNet.Regression;
 /// var model = new PrincipalComponentRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 5 samples with 3 features
-/// var features = Matrix&lt;double&gt;.Build.Dense(5, 3, new double[] {
-///     1, 2, 3,  4, 5, 6,  7, 8, 9,  10, 11, 12,  13, 14, 15 });
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 }, { 10, 11, 12 }, { 13, 14, 15 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 6.0, 15.1, 24.0, 33.2, 42.0 });
 ///
 /// // Train with PCA dimensionality reduction then regression
 /// model.Train(features, targets);
 ///
 /// // Predict for a new sample
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 3, new double[] { 16, 17, 18 });
+/// var newSample = new Matrix&lt;double&gt;(new double[,] { { 16, 17, 18 } });
 /// var prediction = model.Predict(newSample);
 /// </code>
 /// </example>

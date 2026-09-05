@@ -36,9 +36,9 @@ namespace AiDotNet.Diffusion.Video;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 2160, Width = 3840, NumInferenceSteps = 30 };
-/// var model = new LumaRay3Model&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 120, 270, 480 });
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 16, DefaultInferenceSteps = 30 };
+/// var model = new LumaRay3Model&lt;float&gt;(options: options);
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 16, 120, 270, 480 });
 /// var video = model.Predict(noise);
 /// </code>
 /// </example>

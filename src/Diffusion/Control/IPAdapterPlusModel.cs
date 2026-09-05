@@ -36,17 +36,15 @@ namespace AiDotNet.Diffusion.Control;
 /// <example>
 /// <code>
 /// // Create IP-Adapter Plus for image-prompt-guided generation
-/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// var options = new DiffusionModelOptions&lt;float&gt;
 /// {
 ///     LatentChannels = 4,
-///     Height = 512,
-///     Width = 512,
-///     NumInferenceSteps = 30
+///     DefaultInferenceSteps = 30
 /// };
-/// var model = new IPAdapterPlusModel&lt;float&gt;(options);
+/// var model = new IPAdapterPlusModel&lt;float&gt;(options: options);
 ///
 /// // Use a reference image to guide generation style and content
-/// var imageFeatures = Tensor&lt;float&gt;.Random(new[] { 1, 1024 });
+/// var imageFeatures = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1024 });
 /// var result = model.Predict(imageFeatures);
 /// </code>
 /// </example>

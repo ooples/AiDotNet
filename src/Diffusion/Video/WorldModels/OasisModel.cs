@@ -37,9 +37,9 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 360, Width = 640, NumInferenceSteps = 1 };
-/// var model = new OasisModel&lt;float&gt;(options);
-/// var actionInput = Tensor&lt;float&gt;.Random(new[] { 1, 16, 1, 45, 80 });
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 16, DefaultInferenceSteps = 1 };
+/// var model = new OasisModel&lt;float&gt;(options: options);
+/// var actionInput = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 16, 1, 45, 80 });
 /// var nextFrame = model.Predict(actionInput);
 /// </code>
 /// </example>

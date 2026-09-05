@@ -75,13 +75,13 @@ public class SMOTEENN<T> : IResamplingStrategy<T>
     /// var smoteenn = new SMOTEENN&lt;double&gt;();
     ///
     /// // Custom settings
-    /// var smoteenn = new SMOTEENN&lt;double&gt;(
+    /// var smoteenn2 = new SMOTEENN&lt;double&gt;(
     ///     kNeighborsSMOTE: 7,  // More neighbors for synthesis
     ///     kNeighborsENN: 5     // More neighbors for cleaning
     /// );
     ///
     /// // Apply to data
-    /// var (newX, newY) = smoteenn.Resample(trainX, trainY);
+    /// var (newX, newY) = smoteenn2.Resample(trainX, trainY);
     /// </code>
     /// </para>
     /// </remarks>

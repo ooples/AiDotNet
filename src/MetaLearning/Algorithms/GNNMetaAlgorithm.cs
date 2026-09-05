@@ -102,19 +102,21 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     /// <exception cref="InvalidOperationException">Thrown when required components are not set in options.</exception>
     /// <example>
     /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
     /// // Create GNN Meta with minimal configuration
-    /// var options = new GNNMetaOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork);
-    /// var gnnMeta = new GNNMetaAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var options = new GNNMetaOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
+    /// var gnnMeta = new GNNMetaAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create GNN Meta with custom configuration
-    /// var options = new GNNMetaOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork)
+    /// var options2 = new GNNMetaOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     NumMessagePassingLayers = 5,
     ///     NodeEmbeddingDimension = 256,
     ///     AggregationType = GNNAggregationType.Attention,
     ///     SimilarityMetric = TaskSimilarityMetric.GradientSimilarity
     /// };
-    /// var gnnMeta = new GNNMetaAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var gnnMeta2 = new GNNMetaAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options2);
     /// </code>
     /// </example>
     public GNNMetaAlgorithm(GNNMetaOptions<T, TInput, TOutput> options)

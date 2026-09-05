@@ -163,7 +163,7 @@ public partial class LabelPowerset<T> : MultiLabelClassifierBase<T>
     /// var lp = new LabelPowerset&lt;double&gt;(() => new LogisticRegression&lt;double&gt;());
     ///
     /// // Using a neural network
-    /// var lp = new LabelPowerset&lt;double&gt;(() => new NeuralNetworkClassifier&lt;double&gt;());
+    /// var lp2 = new LabelPowerset&lt;double&gt;(() => new NeuralNetworkClassifier&lt;double&gt;());
     /// </code>
     /// </para>
     /// </remarks>

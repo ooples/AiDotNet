@@ -29,6 +29,7 @@ namespace AiDotNet.TransferLearning.Algorithms;
 /// </remarks>
 /// <example>
 /// <code>
+/// var newData = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Transfer a Random Forest from source domain to target domain
 /// var options = new RandomForestRegressionOptions { NumberOfTrees = 100, MaxDepth = 10 };
 /// var transferRF = new TransferRandomForest&lt;double&gt;(options);
@@ -275,13 +276,14 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
 /// </remarks>
 /// <example>
 /// <code>
+/// var newData = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Create a mapped random forest that adapts source features to target domain
 /// var baseModel = sourceForest; // Pre-trained random forest from source domain
 /// var mapper = new FeatureMapper&lt;double&gt;(sourceFeatures, targetFeatures);
 /// var mappedModel = new MappedRandomForestModel&lt;double&gt;(baseModel, mapper, targetFeatureCount);
 ///
 /// // Predict on target domain data using feature mapping
-/// var targetFeatures = Matrix&lt;double&gt;.Build.Dense(1, 5);
+/// var targetFeatures = new Matrix&lt;double&gt;(1, 5);
 /// var prediction = mappedModel.Predict(targetFeatures);
 /// // Result is available in the returned value
 /// </code>

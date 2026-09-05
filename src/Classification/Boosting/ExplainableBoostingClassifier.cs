@@ -43,7 +43,7 @@ namespace AiDotNet.Classification.Boosting;
 /// <example>
 /// <code>
 /// // Create EBM classifier for interpretable predictions
-/// var options = new ExplainableBoostingOptions&lt;double&gt;();
+/// var options = new ExplainableBoostingClassifierOptions&lt;double&gt;();
 /// var classifier = new ExplainableBoostingClassifier&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features

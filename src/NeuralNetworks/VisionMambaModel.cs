@@ -65,7 +65,7 @@ public enum VisionScanPattern
 /// <code>
 /// var options = new VisionMambaOptions { ImageSize = 224, PatchSize = 16, ModelDim = 384, NumLayers = 24 };
 /// var model = new VisionMambaModel&lt;float&gt;(options);
-/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 224, 224 });
+/// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 224, 224 });
 /// var output = model.Predict(image);
 /// </code>
 /// </example>

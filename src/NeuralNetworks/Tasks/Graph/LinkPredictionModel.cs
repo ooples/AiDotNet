@@ -63,7 +63,7 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputSize: 16,   // node feature dimension
 ///     outputSize: 1,   // edge score
-///     hiddenSizes: new[] { 64, 32 });
+///     );
 /// var model = new LinkPredictionModel&lt;float&gt;(architecture);
 ///
 /// // Prepare graph data

@@ -38,9 +38,9 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new RestrictedBoltzmannMachineOptions { VisibleSize = 784, HiddenSize = 500 };
+/// var options = new RestrictedBoltzmannMachineOptions { };
 /// var model = new RestrictedBoltzmannMachine&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 784 });
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 784 });
 /// var output = model.Predict(input);
 /// </code>
 /// </example>

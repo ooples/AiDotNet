@@ -32,17 +32,15 @@ namespace AiDotNet.Diffusion.Control;
 /// <example>
 /// <code>
 /// // Create a ControlNet for FLUX.1 architecture
-/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// var options = new DiffusionModelOptions&lt;float&gt;
 /// {
 ///     LatentChannels = 16,
-///     Height = 1024,
-///     Width = 1024,
-///     NumInferenceSteps = 28
+///     DefaultInferenceSteps = 28
 /// };
-/// var model = new ControlNetFluxModel&lt;float&gt;(options, ControlType.Canny);
+/// var model = new ControlNetFluxModel&lt;float&gt;(options: options, controlType: ControlType.Canny);
 ///
 /// // Generate with edge-guided control
-/// var edgeCondition = Tensor&lt;float&gt;.Random(new[] { 1, 1, 1024, 1024 });
+/// var edgeCondition = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1, 1024, 1024 });
 /// var result = model.Predict(edgeCondition);
 /// </code>
 /// </example>

@@ -32,6 +32,7 @@ namespace AiDotNet.Preprocessing.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
+/// var data = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// var split = new TimeSeriesSplit(nSplits: 5, maxTrainSize: 1000);
 ///
 /// foreach (var (trainIndices, testIndices) in split.Split(data.Length))
@@ -230,6 +231,7 @@ public class TimeSeriesSplit
     /// <returns>Array of scores from each split.</returns>
     /// <example>
     /// <code>
+    /// var data = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
     /// var scores = splitter.CrossValidate(
     ///     data,
     ///     (train, test) =>

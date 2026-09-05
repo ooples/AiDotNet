@@ -34,9 +34,9 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new MobileNetV3Options { Variant = MobileNetV3Variant.Large, NumClasses = 1000 };
+/// var options = new MobileNetV3Options { };
 /// var model = new MobileNetV3Network&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 3, 224, 224 });
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 224, 224 });
 /// var output = model.Predict(input);
 /// </code>
 /// </example>

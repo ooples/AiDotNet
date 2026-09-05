@@ -78,13 +78,13 @@ public class SMOTETomek<T> : IResamplingStrategy<T>
     /// var smoteTomek = new SMOTETomek&lt;double&gt;();
     ///
     /// // Custom SMOTE settings
-    /// var smoteTomek = new SMOTETomek&lt;double&gt;(
+    /// var smoteTomek2 = new SMOTETomek&lt;double&gt;(
     ///     samplingStrategy: 0.8,  // 80% balance
     ///     kNeighbors: 7           // More neighbors
     /// );
     ///
     /// // Apply to data
-    /// var (newX, newY) = smoteTomek.Resample(trainX, trainY);
+    /// var (newX, newY) = smoteTomek2.Resample(trainX, trainY);
     /// </code>
     /// </para>
     /// </remarks>

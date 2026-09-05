@@ -43,15 +43,14 @@ namespace AiDotNet.Regression;
 /// var model = new SuperLearner&lt;double&gt;(baseModels);
 ///
 /// // Prepare training data: 6 samples with 2 features each
-/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
-///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 }, { 9, 10 }, { 11, 12 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
 ///
 /// // Train with cross-validated optimal meta-learner
 /// model.Train(features, targets);
 ///
 /// // Predict using the optimally weighted combination
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var newSample = new Matrix&lt;double&gt;(new double[,] { { 13, 14 } });
 /// var prediction = model.Predict(newSample);
 /// </code>
 /// </example>

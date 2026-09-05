@@ -53,6 +53,8 @@ namespace AiDotNet.Control;
 /// </remarks>
 /// <example>
 /// <code>
+/// var q = 2;
+/// var r = 2;
 /// // A pendulum: state is (angle, rate), input is torque.
 /// var controller = new NonlinearModelPredictiveController&lt;double&gt;(
 ///     dynamics: (x, u) =&gt; Step(x, u),

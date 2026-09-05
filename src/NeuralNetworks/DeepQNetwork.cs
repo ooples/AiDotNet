@@ -32,9 +32,9 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new DeepQNetworkOptions { StateSize = 4, ActionSize = 2 };
-/// var model = new DeepQNetwork&lt;float&gt;(options);
-/// var state = Tensor&lt;float&gt;.Random(new[] { 1, 4 });
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var model = new DeepQNetwork&lt;float&gt;(architecture);
+/// var state = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4 });
 /// var qValues = model.Predict(state);
 /// </code>
 /// </example>

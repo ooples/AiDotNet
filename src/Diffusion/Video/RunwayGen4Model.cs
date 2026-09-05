@@ -36,9 +36,9 @@ namespace AiDotNet.Diffusion.Video;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 1080, Width = 1920, NumInferenceSteps = 30 };
-/// var model = new RunwayGen4Model&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 120, 135, 240 });
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 16, DefaultInferenceSteps = 30 };
+/// var model = new RunwayGen4Model&lt;float&gt;(options: options);
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 16, 120, 135, 240 });
 /// var video = model.Predict(noise);
 /// </code>
 /// </example>

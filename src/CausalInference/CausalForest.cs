@@ -46,6 +46,10 @@ namespace AiDotNet.CausalInference;
 /// </remarks>
 /// <example>
 /// <code>
+/// var newFeatures = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var outcome = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var treatment = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// var forest = new CausalForest&lt;double&gt;(numTrees: 100, maxDepth: 10);
 /// forest.Fit(features, treatment, outcome);
 /// Vector&lt;double&gt; cate = forest.EstimateTreatmentEffect(newFeatures);

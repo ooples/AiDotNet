@@ -20,6 +20,7 @@ namespace AiDotNet.Optimizers;
 /// </para>
 /// <para><b>Key Formula:</b></para>
 /// <code>
+/// var batchSize = 32;
 /// m = beta1 * m + (1 - beta1) * g
 /// v = beta2 * v + (1 - beta2) * g^2
 /// m_hat = m / (1 - beta1^t)
@@ -45,6 +46,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 /// <example>
 /// <code>
+/// var batchSize = 32;
 /// // For BERT-style transformer training
 /// var options = new LAMBOptimizerOptions&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;
 /// {

@@ -49,6 +49,7 @@ namespace AiDotNet.Interfaces;
 /// <para>
 /// <b>Implementation Example:</b>
 /// <code>
+/// var NumOps = MathHelper.GetNumericOperations&lt;double&gt;();
 /// public class MixtureOfExpertsLayer&lt;T&gt; : LayerBase&lt;T&gt;, IAuxiliaryLossLayer&lt;T&gt;
 /// {
 ///     public T ComputeAuxiliaryLoss()

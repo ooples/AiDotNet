@@ -64,10 +64,10 @@ public class RandomOverSampler<T> : OversamplingBase<T>
     /// var oversampler = new RandomOverSampler&lt;double&gt;();
     ///
     /// // Custom: minority at 50% of majority size
-    /// var oversampler = new RandomOverSampler&lt;double&gt;(samplingStrategy: 0.5);
+    /// var oversampler2 = new RandomOverSampler&lt;double&gt;(samplingStrategy: 0.5);
     ///
     /// // Apply to your data
-    /// var (newX, newY) = oversampler.Resample(trainX, trainY);
+    /// var (newX, newY) = oversampler2.Resample(trainX, trainY);
     /// </code>
     /// </para>
     /// </remarks>

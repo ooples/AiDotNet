@@ -34,17 +34,15 @@ namespace AiDotNet.Diffusion.Control;
 /// <example>
 /// <code>
 /// // Create a ControlAR model for edge-guided image generation
-/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// var options = new DiffusionModelOptions&lt;float&gt;
 /// {
 ///     LatentChannels = 16,
-///     Height = 256,
-///     Width = 256,
-///     NumInferenceSteps = 30
+///     DefaultInferenceSteps = 30
 /// };
-/// var model = new ControlARModel&lt;float&gt;(options, ControlType.Canny);
+/// var model = new ControlARModel&lt;float&gt;(options: options, controlType: ControlType.Canny);
 ///
 /// // Generate an image guided by an edge map
-/// var edgeMap = Tensor&lt;float&gt;.Random(new[] { 1, 1, 256, 256 });
+/// var edgeMap = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1, 256, 256 });
 /// var result = model.Predict(edgeMap);
 /// </code>
 /// </example>

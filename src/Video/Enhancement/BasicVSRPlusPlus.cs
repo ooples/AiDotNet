@@ -57,6 +57,7 @@ namespace AiDotNet.Video.Enhancement;
 /// // Create architecture for video input
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 64, inputWidth: 64, inputDepth: 3);
 ///
 /// // Create model with 4x upscaling
@@ -265,6 +266,7 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     /// <code>
     /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
     ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
     ///     inputHeight: 64, inputWidth: 64, inputDepth: 3);
     /// var model = new BasicVSRPlusPlus&lt;double&gt;(arch);
     /// </code>
@@ -331,6 +333,7 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     /// <code>
     /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
     ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
     ///     inputHeight: 64, inputWidth: 64, inputDepth: 3);
     /// var model = new BasicVSRPlusPlus&lt;double&gt;(arch, "basicvsrpp_x4.onnx");
     /// var hrFrames = model.EnhanceVideo(lrFrames);

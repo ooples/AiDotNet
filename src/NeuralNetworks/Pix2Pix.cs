@@ -41,9 +41,9 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new Pix2PixOptions { ImageSize = 256, InputChannels = 3, OutputChannels = 3 };
+/// var options = new Pix2PixOptions { };
 /// var model = new Pix2Pix&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 3, 256, 256 });
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 256, 256 });
 /// var translated = model.Predict(input);
 /// </code>
 /// </example>

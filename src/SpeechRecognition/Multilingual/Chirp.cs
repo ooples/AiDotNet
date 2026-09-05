@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// // Create a Chirp model for production multilingual ASR (100+ languages)
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new Chirp&lt;double&gt;(architecture);
 ///

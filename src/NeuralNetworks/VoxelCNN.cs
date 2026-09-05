@@ -30,9 +30,9 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new VoxelCNNOptions { InputChannels = 1, GridSize = 32, NumClasses = 40 };
-/// var model = new VoxelCNN&lt;float&gt;(options);
-/// var voxels = Tensor&lt;float&gt;.Random(new[] { 1, 1, 32, 32, 32 });
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var model = new VoxelCNN&lt;float&gt;(architecture);
+/// var voxels = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1, 32, 32, 32 });
 /// var output = model.Predict(voxels);
 /// </code>
 /// </example>

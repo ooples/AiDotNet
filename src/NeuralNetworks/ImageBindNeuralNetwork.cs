@@ -41,9 +41,9 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new ImageBindOptions { ImageSize = 224, EmbeddingDim = 1024 };
-/// var model = new ImageBindNeuralNetwork&lt;float&gt;(options);
-/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 224, 224 });
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var model = new ImageBindNeuralNetwork&lt;float&gt;(architecture);
+/// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 224, 224 });
 /// var embedding = model.Predict(image);
 /// </code>
 /// </example>

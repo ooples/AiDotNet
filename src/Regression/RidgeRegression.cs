@@ -50,15 +50,14 @@ namespace AiDotNet.Regression;
 /// var model = new RidgeRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data
-/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
-///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 }, { 9, 10 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 2.1, 3.9, 6.2, 7.8, 10.1 });
 ///
 /// // Train with L2 penalty to prevent overfitting
 /// model.Train(features, targets);
 ///
 /// // Predict for new input
-/// var newFeatures = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var newFeatures = new Matrix&lt;double&gt;(new double[,] { { 11, 12 } });
 /// var prediction = model.Predict(newFeatures);
 /// // Result is available in the returned value
 /// </code>

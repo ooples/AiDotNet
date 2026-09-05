@@ -52,9 +52,9 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new BlipOptions { ImageSize = 384, MaxTextLength = 128 };
-/// var model = new BlipNeuralNetwork&lt;float&gt;(options);
-/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 384, 384 });
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var model = new BlipNeuralNetwork&lt;float&gt;(architecture);
+/// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 384, 384 });
 /// var output = model.Predict(image);
 /// </code>
 /// </example>

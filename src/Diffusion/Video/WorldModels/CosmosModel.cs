@@ -37,9 +37,9 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 1080, Width = 1920, NumInferenceSteps = 50 };
-/// var model = new CosmosModel&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 120, 135, 240 });
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 16, DefaultInferenceSteps = 50 };
+/// var model = new CosmosModel&lt;float&gt;(options: options);
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 16, 120, 135, 240 });
 /// var world = model.Predict(noise);
 /// </code>
 /// </example>

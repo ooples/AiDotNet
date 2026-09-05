@@ -30,6 +30,7 @@ namespace AiDotNet.Configuration;
 /// </remarks>
 /// <example>
 /// <code>
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
 /// // Silence all GPU diagnostics.
 /// builder.ConfigureGpuDiagnostics(new() { Level = GpuDiagnosticLevel.Silent });
 ///

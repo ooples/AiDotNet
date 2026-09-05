@@ -35,7 +35,7 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// // with convolution-based video token aggregation and audio support
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.FourDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 336, inputWidth: 336, inputDepth: 3, inputFrames: 8, outputSize: 512);
 ///
 /// // ONNX inference mode with pre-trained model

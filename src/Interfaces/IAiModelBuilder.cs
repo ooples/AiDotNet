@@ -1084,7 +1084,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// var loaded = builder.LoadModel("model.bin");  // Decompressed automatically
     ///
     /// // Or customize compression settings
-    /// var result = await builder
+    /// var result2 = await builder
     ///     .ConfigureCompression(new CompressionConfig
     ///     {
     ///         Mode = ModelCompressionMode.Full,
@@ -1375,7 +1375,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     ///
     /// Example:
     /// <code>
-    /// var result = await new AiModelBuilder&lt;double, ...&gt;()
+    /// var result = await new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
     ///     .ConfigureModel(myModel)
     ///     .ConfigureInferenceOptimizations()  // Uses sensible defaults
     ///     .BuildAsync();
@@ -1388,7 +1388,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     ///     SpeculativeDecoding = new SpeculativeDecodingOptions { Enabled = true }
     /// };
     ///
-    /// var result = await builder
+    /// var result2 = await builder
     ///     .ConfigureInferenceOptimizations(config)
     ///     .BuildAsync();
     /// </code>
@@ -1784,7 +1784,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     ///     .Build(features, labels);
     ///
     /// // Self-paced learning where model determines its own pace
-    /// var result = await builder
+    /// var result2 = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureCurriculumLearning(new CurriculumLearningOptions&lt;double, TInput, TOutput&gt;
     ///     {
@@ -1795,7 +1795,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     ///     .Build(features, labels);
     ///
     /// // Competence-based learning that advances when mastery is achieved
-    /// var result = await builder
+    /// var result3 = await builder
     ///     .ConfigureModel(model)
     ///     .ConfigureCurriculumLearning(new CurriculumLearningOptions&lt;double, TInput, TOutput&gt;
     ///     {

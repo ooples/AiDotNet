@@ -35,17 +35,15 @@ namespace AiDotNet.Diffusion.Control;
 /// <example>
 /// <code>
 /// // Create IP-Adapter FaceID Plus for identity-preserving generation
-/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// var options = new DiffusionModelOptions&lt;float&gt;
 /// {
 ///     LatentChannels = 4,
-///     Height = 512,
-///     Width = 512,
-///     NumInferenceSteps = 30
+///     DefaultInferenceSteps = 30
 /// };
-/// var model = new IPAdapterFaceIDPlusModel&lt;float&gt;(options);
+/// var model = new IPAdapterFaceIDPlusModel&lt;float&gt;(options: options);
 ///
 /// // Generate new images preserving a person's face identity
-/// var faceEmbedding = Tensor&lt;float&gt;.Random(new[] { 1, 512 });
+/// var faceEmbedding = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 512 });
 /// var result = model.Predict(faceEmbedding);
 /// </code>
 /// </example>

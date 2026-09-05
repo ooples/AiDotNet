@@ -58,6 +58,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// </remarks>
 /// <example>
 /// <code>
+/// var existingImage = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
 /// // Create with industry-standard defaults
 /// var omniGen = new OmniGenModel&lt;float&gt;();
 ///

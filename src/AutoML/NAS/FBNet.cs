@@ -28,7 +28,7 @@ namespace AiDotNet.AutoML.NAS
     /// <example>
     /// <code>
     /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
-    /// var fbnet = new FBNet&lt;float&gt;(searchSpace, numNodes: 4, targetPlatform: HardwarePlatform.Mobile);
+    /// var fbnet = new FBNet&lt;float&gt;(searchSpace, targetPlatform: HardwarePlatform.Mobile);
     /// Architecture&lt;float&gt; architecture = fbnet.DeriveArchitecture();
     /// </code>
     /// </example>

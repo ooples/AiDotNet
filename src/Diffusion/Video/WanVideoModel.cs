@@ -85,6 +85,7 @@ namespace AiDotNet.Diffusion.Video;
 /// </remarks>
 /// <example>
 /// <code>
+/// var referenceFrame = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
 /// // Create default 14B variant
 /// var wan = new WanVideoModel&lt;float&gt;();
 ///

@@ -61,7 +61,7 @@ namespace AiDotNet.NeuralNetworks;
 ///     hiddenDim: 128,
 ///     maxNodes: 50,
 ///     learningRate: 0.005);
-/// var nodeFeatures = Tensor&lt;float&gt;.Random(new[] { 20, 9 });
+/// var nodeFeatures = Tensor&lt;float&gt;.CreateRandom(new[] { 20, 9 });
 /// var graph = model.Predict(nodeFeatures);
 /// </code>
 /// </example>

@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks;
 /// <example>
 /// <code>
 /// var model = new ProgressiveGAN&lt;float&gt;(latentSize: 512, imageChannels: 3, maxResolutionLevel: 6);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 512 });
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 512 });
 /// var generated = model.Predict(noise);
 /// </code>
 /// </example>

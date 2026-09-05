@@ -46,6 +46,8 @@ namespace AiDotNet.Control;
 /// </remarks>
 /// <example>
 /// <code>
+/// var q = 2;
+/// var r = 2;
 /// var controller = new LinearQuadraticGaussian&lt;double&gt;(
 ///     stateMatrix: a, inputMatrix: b, observationMatrix: c,
 ///     stateCost: q, inputCost: r,

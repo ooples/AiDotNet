@@ -255,7 +255,7 @@ public class FTTransformerOptions<T> : RiskModelOptions<T>
     /// <summary>
     /// Creates a copy of the options.
     /// </summary>
-    /// <returns>A new FTTransformerOptions instance with the same values.</returns>
+    /// <returns>A new FTTransformerOptions&lt;double&gt; instance with the same values.</returns>
     public FTTransformerOptions<T> Clone()
     {
         return new FTTransformerOptions<T>

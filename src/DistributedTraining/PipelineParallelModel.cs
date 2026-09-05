@@ -57,7 +57,7 @@ namespace AiDotNet.DistributedTraining;
 /// <example>
 /// <code>
 /// // Wrap an existing model for pipeline-parallel training across multiple ranks
-/// var config = new ShardingConfiguration&lt;float&gt;(worldSize: 4, rank: 0);
+/// var config = new ShardingConfiguration&lt;float&gt;(rank: 0);
 /// var schedule = new GPipeSchedule&lt;float&gt;();
 /// var pipelineModel = new PipelineParallelModel&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;(
 ///     wrappedModel, config, microBatchCount: 4, schedule: schedule);

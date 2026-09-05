@@ -38,9 +38,9 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new HopfieldNetworkOptions { PatternSize = 100, MaxPatterns = 10 };
+/// var options = new HopfieldNetworkOptions { };
 /// var model = new HopfieldNetwork&lt;float&gt;(options);
-/// var pattern = Tensor&lt;float&gt;.Random(new[] { 1, 100 });
+/// var pattern = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 100 });
 /// var recalled = model.Predict(pattern);
 /// </code>
 /// </example>

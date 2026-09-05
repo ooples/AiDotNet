@@ -42,7 +42,7 @@ namespace AiDotNet.Classification.SVM;
 /// <example>
 /// <code>
 /// // Create linear SVC for fast large-scale classification
-/// var options = new LinearSVCOptions&lt;double&gt;();
+/// var options = new SVMOptions&lt;double&gt;();
 /// var classifier = new LinearSupportVectorClassifier&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features

@@ -33,9 +33,9 @@ namespace AiDotNet.Diffusion.MotionGeneration;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 263, Height = 1, Width = 196, NumInferenceSteps = 10 };
-/// var model = new MoMaskModel&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 263, 196 });
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 263, DefaultInferenceSteps = 10 };
+/// var model = new MoMaskModel&lt;float&gt;(options: options);
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 263, 196 });
 /// var motion = model.Predict(noise);
 /// </code>
 /// </example>
