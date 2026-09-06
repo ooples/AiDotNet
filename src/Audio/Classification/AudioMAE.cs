@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Audio.Features;
 using AiDotNet.Diffusion.Audio;
@@ -49,6 +50,9 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Masked Autoencoders that Listen", "https://arxiv.org/abs/2207.06405", Year = 2022, Authors = "Po-Yao Huang, Hu Xu, Juncheng Li, Alexei Baevski, Michael Auli, Wojciech Galuba, Florian Metze, Christoph Feichtenhofer")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.95, LearningRate = 0.0002,
+                ReferenceBatchSize = 512,
+                Source = "Huang et al. 2022: pre-training for 32 epochs with a batch size of 512 and a 0.0002 learning rate; the hyperparameter table gives AdamW with beta1 0.9 and beta2 0.95.")]
 public partial class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
@@ -93,7 +97,9 @@ public partial class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T
     {
         _options = options ?? new AudioMAEOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
         ClassLabels = _options.CustomLabels ?? AudioSetLabels;
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels, _options.FftSize, _options.HopLength, _options.FMin, _options.FMax, logMel: true);

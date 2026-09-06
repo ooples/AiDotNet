@@ -187,15 +187,16 @@ public partial class Mask2Former<T> : Common.PanopticSegmentationBase<T>
         if (_options.MaxGradientNorm < 0.0)
             throw new ArgumentOutOfRangeException(nameof(_options.MaxGradientNorm), "Maximum gradient norm cannot be negative.");
 
-        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                EnableGradientClipping = _options.MaxGradientNorm > 0.0,
-                MaxGradientNorm = _options.MaxGradientNorm,
-            });
+        return PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                    EnableGradientClipping = _options.MaxGradientNorm > 0.0,
+                    MaxGradientNorm = _options.MaxGradientNorm,
+                }));
     }
 
     /// <summary>

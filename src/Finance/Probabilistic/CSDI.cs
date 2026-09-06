@@ -90,8 +90,8 @@ namespace AiDotNet.Finance.Probabilistic;
 [ResearchPaper("CSDI: Conditional Score-based Diffusion Models for Probabilistic Time Series Imputation", "https://arxiv.org/abs/2107.03502", Year = 2021, Authors = "Yusuke Tashiro, Jiaming Song, Yang Song, Stefano Ermon")]
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001, ReferenceBatchSize = 16,
                 Schedule = LearningRateSchedulerType.MultiStep, DecayRate = 0.1,
-                Milestones = [150, 180],
-                Source = "Tashiro et al. 2021, hyperparameters: Adam at learning rate 0.001 decayed to 0.0001 and 0.00001 at 75% and 90% of the total epochs, batch size 16, 200 epochs. The milestones are those two points of a 200-epoch run.")]
+                MilestoneFractions = [0.75, 0.90],
+                Source = "Tashiro et al. 2021, hyperparameters: Adam at learning rate 0.001 decayed to 0.0001 and 0.00001 at 75% and 90% of the total epochs, batch size 16, 200 epochs. The decay points are kept as the fractions the paper states rather than transcribed into the step numbers of a 200-epoch run, which would be wrong at any other length.")]
 public partial class CSDI<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

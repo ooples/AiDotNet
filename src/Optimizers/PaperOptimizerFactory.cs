@@ -454,6 +454,26 @@ public static class PaperOptimizerFactory
             "warmup held at its share of the run; same treatment as the #1835 densification window");
         return scaled;
     }
+    /// <summary>Turns fractional decay points into the step numbers this run will actually reach.</summary>
+    /// <remarks>
+    /// Distinct and strictly increasing, because MultiStepLRScheduler requires increasing
+    /// milestones and two fractions of a short run can round to the same step -- 0.9 and 0.95 of a
+    /// 10-step run are both 9. Rounding them together would throw where the paper simply means
+    /// "decay twice, near the end".
+    /// </remarks>
+    private static int[] ResolveMilestones(double[] fractions, int totalSteps)
+    {
+        var resolved = new List<int>();
+        foreach (double fraction in fractions)
+        {
+            int step = Math.Max(1, (int)Math.Round(totalSteps * fraction));
+            if (resolved.Count > 0 && step <= resolved[resolved.Count - 1]) step = resolved[resolved.Count - 1] + 1;
+            if (step < totalSteps) resolved.Add(step);
+        }
+
+        return resolved.ToArray();
+    }
+
     /// <summary>Where a warmup ramp starts, so its first step is not a no-op.</summary>
     /// <remarks>
     /// <para>
@@ -638,6 +658,13 @@ public static class PaperOptimizerFactory
                     => new CyclicLRScheduler(
                            baseLearningRate: floor, maxLearningRate: recipe.LearningRate,
                            stepSizeUp: recipe.StepSize, mode: recipe.CyclicPolicy),
+
+                LearningRateSchedulerType.MultiStep
+                    when recipe.MilestoneFractions.Length > 0 && totalSteps > 0
+                    => new MultiStepLRScheduler(
+                           baseRate, ResolveMilestones(recipe.MilestoneFractions, totalSteps),
+                           gamma: double.IsNaN(recipe.DecayRate) ? 0.1 : recipe.DecayRate,
+                           minLearningRate: floor),
 
                 LearningRateSchedulerType.MultiStep when recipe.Milestones.Length > 0
                     => new MultiStepLRScheduler(

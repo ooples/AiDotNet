@@ -238,6 +238,19 @@ public sealed class PaperOptimizerAttribute : Attribute
     /// </remarks>
     public int[] Milestones { get; set; } = [];
 
+    /// <summary>
+    /// Decay points stated as fractions of the whole run, for papers that give them that way.
+    /// Empty means the paper gives absolute steps, or no step decay.
+    /// </summary>
+    /// <remarks>
+    /// Mask2Former decays "at 0.9 and 0.95 fractions of the total number of training steps"
+    /// (Cheng et al. 2022, Sec. 4), and CSDI at 75% and 90% of its epochs. Transcribing those into
+    /// absolute steps bakes in one particular run length and is wrong at every other, so the
+    /// fractions are kept and resolved against the configured run. Takes precedence over
+    /// <see cref="Milestones"/> when both are declared.
+    /// </remarks>
+    public double[] MilestoneFractions { get; set; } = [];
+
     /// <summary>Floor the schedule decays towards. Unset means unstated.</summary>
     public double MinLearningRate { get; set; } = double.NaN;
 
@@ -292,6 +305,7 @@ public sealed class PaperOptimizerAttribute : Attribute
         || !double.IsNaN(HoldFraction)
         || StepSize > 0
         || Milestones.Length > 0
+        || MilestoneFractions.Length > 0
         || CyclicPolicy != CyclicLRScheduler.CyclicMode.Triangular
         || PostWarmupDecay != LinearWarmupScheduler.DecayMode.Constant
         || !double.IsNaN(DecayRate)

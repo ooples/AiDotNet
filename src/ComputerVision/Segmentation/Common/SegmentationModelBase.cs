@@ -201,8 +201,17 @@ public abstract partial class SegmentationModelBase<T> : NeuralNetworkBase<T>, I
     /// <summary>
     /// Creates the optimizer used when the constructor was given none. Override to change the default.
     /// </summary>
+    /// <remarks>
+    /// Consults the paper recipe first, so a segmentation model that declares one trains the way
+    /// its paper says without any per-model plumbing. Deliberately done in the base rather than in
+    /// each derived model: those models do not construct an optimizer at all, so there is nowhere
+    /// else the recipe could be reached from, and doing it here honours every declaration in this
+    /// family by construction instead of one edit at a time. Falls back to the previous AdamW
+    /// default, so an undeclared model is unaffected.
+    /// </remarks>
     protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
-        => CreateAdamWOptimizer(DefaultLearningRate, DefaultWeightDecay);
+        => PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? CreateAdamWOptimizer(DefaultLearningRate, DefaultWeightDecay);
 
     /// <summary>
     /// Gets the base learning rate for the model's default AdamW training recipe.
