@@ -454,6 +454,44 @@ public static class PaperOptimizerFactory
             "warmup held at its share of the run; same treatment as the #1835 densification window");
         return scaled;
     }
+    /// <summary>Where a warmup ramp starts, so its first step is not a no-op.</summary>
+    /// <remarks>
+    /// <para>
+    /// A ramp computed as <c>step / warmup</c> returns exactly zero on step 0, so the first
+    /// optimizer step moves nothing. Over a paper-length run that is one wasted step; over a short
+    /// one it can be the whole warmup, and the model then appears not to train at all.
+    /// </para>
+    /// <para>
+    /// The reference implementations avoid this by indexing the ramp from one -- Vaswani's Eq. 3
+    /// is 1-indexed, and the fairseq and NeMo warmups both start at one step's worth of the peak.
+    /// Starting the ramp there reproduces that shape without changing LinearWarmupScheduler, whose
+    /// existing behaviour six test files already pin.
+    /// </para>
+    /// </remarks>
+    private static double FirstWarmupRate(double baseRate, int warmupSteps)
+        => warmupSteps > 0 ? baseRate / warmupSteps : baseRate;
+
+    /// <summary>A warmup ramp that holds its peak, for runs too short to decay across.</summary>
+    /// <remarks>
+    /// Reported rather than silent. Holding the peak is the safe half of the paper's schedule --
+    /// the model still trains -- but it is not the whole schedule, and a reproduction that never
+    /// anneals is a different result from one that does.
+    /// </remarks>
+    private static ILearningRateScheduler WarmupWithoutDecay(
+        PaperOptimizerAttribute recipe, double baseRate, int warmupSteps, int totalSteps)
+    {
+        if (recipe.PostWarmupDecay != LinearWarmupScheduler.DecayMode.Constant)
+        {
+            _pendingUnhonoured.Value?.Add(
+                $"the paper decays the rate after warmup, but this run is {totalSteps} steps against "
+                + $"{warmupSteps} of warmup, leaving nothing to decay across; the rate holds at its "
+                + "peak instead");
+        }
+
+        return new LinearWarmupScheduler(
+            baseRate, warmupSteps, warmupInitLr: FirstWarmupRate(baseRate, warmupSteps));
+    }
+
     /// <summary>Puts a warmup ramp in front of a schedule that does not have one of its own.</summary>
     /// <remarks>
     /// "Warm up, then decay" is how most papers state a schedule, but only three of the shapes here
@@ -562,9 +600,21 @@ public static class PaperOptimizerFactory
         {
             return recipe.Schedule switch
             {
-                LearningRateSchedulerType.LinearWarmup when warmupSteps > 0
+                // The decay needs a horizon. Without one, decaySteps goes negative and every step
+                // after warmup returns the floor -- a silent learning rate of zero, so the model
+                // trains not at all while every declaration still reads as faithful. Caught by
+                // Wav2Vec2's generated Training_ShouldChangeParameters, which failed with exactly
+                // "learning rate is 0" the first time a decaying warmup was declared.
+                LearningRateSchedulerType.LinearWarmup
+                    when warmupSteps > 0 && recipe.PostWarmupDecay != LinearWarmupScheduler.DecayMode.Constant
+                         && totalSteps > warmupSteps
                     => new LinearWarmupScheduler(baseRate, warmupSteps, totalSteps,
+                                                 warmupInitLr: FirstWarmupRate(baseRate, warmupSteps),
                                                  decayMode: recipe.PostWarmupDecay, endLr: floor),
+
+                // Warmup with no room to decay: keep the ramp, hold the peak, and say so.
+                LearningRateSchedulerType.LinearWarmup when warmupSteps > 0
+                    => WarmupWithoutDecay(recipe, baseRate, warmupSteps, totalSteps),
 
                 // Needs the run length because every phase is stated as a share of it.
                 LearningRateSchedulerType.TriStage when totalSteps > 0 && warmupSteps > 0
