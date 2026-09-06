@@ -61,14 +61,18 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 ///     // node feature dimension
 ///     outputSize: 7,   // number of node classes
 ///     );
-/// var model = new NodeClassificationModel&lt;float&gt;(architecture);
 ///
 /// // Prepare graph data (adjacency + node features as tensors)
 /// var adjacency = new Tensor&lt;float&gt;(new[] { 100, 100 }); // 100-node graph
 /// var nodeFeatures = new Tensor&lt;float&gt;(new[] { 100, 16 });
 ///
 /// // Classify each node using GCN with neighborhood aggregation
-/// var predictions = model.Predict(nodeFeatures);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new NodeClassificationModel&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var predictions = result.Predict(nodeFeatures);
 /// // Result is available in the returned value
 /// </code>
 /// </example>

@@ -38,9 +38,13 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 /// <example>
 /// <code>
 /// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 16, DefaultInferenceSteps = 20 };
-/// var model = new UniSimModel&lt;float&gt;(options: options);
 /// var actionInput = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 16, 30, 32, 32 });
-/// var simulated = model.Predict(actionInput);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new UniSimModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var simulated = result.Predict(actionInput);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

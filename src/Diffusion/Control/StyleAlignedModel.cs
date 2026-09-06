@@ -39,11 +39,15 @@ namespace AiDotNet.Diffusion.Control;
 ///     LatentChannels = 4,
 ///     DefaultInferenceSteps = 30
 /// };
-/// var model = new StyleAlignedModel&lt;float&gt;(options: options);
 ///
 /// // Generate multiple images with consistent artistic style
 /// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 4, 4, 64, 64 });
-/// var styledBatch = model.Predict(noise);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new StyleAlignedModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var styledBatch = result.Predict(noise);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

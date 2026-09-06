@@ -62,11 +62,15 @@ namespace AiDotNet.Diffusion.Control;
 ///     LatentChannels = 4,
 ///     DefaultInferenceSteps = 30
 /// };
-/// var model = new InstantIDModel&lt;float&gt;(options: options);
 ///
 /// // Generate images of a specific person from one reference photo
 /// var faceInput = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 512 });
-/// var personalized = model.Predict(faceInput);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new InstantIDModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var personalized = result.Predict(faceInput);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

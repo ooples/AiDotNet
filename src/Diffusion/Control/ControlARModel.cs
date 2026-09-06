@@ -39,11 +39,15 @@ namespace AiDotNet.Diffusion.Control;
 ///     LatentChannels = 16,
 ///     DefaultInferenceSteps = 30
 /// };
-/// var model = new ControlARModel&lt;float&gt;(options: options, controlType: ControlType.Canny);
 ///
 /// // Generate an image guided by an edge map
 /// var edgeMap = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1, 256, 256 });
-/// var result = model.Predict(edgeMap);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new ControlARModel&lt;float&gt;(options: options, controlType: ControlType.Canny))
+///     .Build(trainX, trainY);
+/// var prediction = result.Predict(edgeMap);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

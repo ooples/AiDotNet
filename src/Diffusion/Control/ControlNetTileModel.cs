@@ -36,11 +36,15 @@ namespace AiDotNet.Diffusion.Control;
 ///     LatentChannels = 4,
 ///     DefaultInferenceSteps = 20
 /// };
-/// var model = new ControlNetTileModel&lt;float&gt;(options: options);
 ///
 /// // Enhance a low-resolution image with regenerated details
 /// var blurryImage = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 1024, 1024 });
-/// var sharpResult = model.Predict(blurryImage);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new ControlNetTileModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var sharpResult = result.Predict(blurryImage);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

@@ -38,11 +38,15 @@ namespace AiDotNet.Diffusion.Control;
 ///     LatentChannels = 4,
 ///     DefaultInferenceSteps = 30
 /// };
-/// var model = new ReferenceOnlyModel&lt;float&gt;(options: options);
 ///
 /// // Use a reference image to guide generation style
 /// var referenceImage = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4, 64, 64 });
-/// var styledOutput = model.Predict(referenceImage);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new ReferenceOnlyModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var styledOutput = result.Predict(referenceImage);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

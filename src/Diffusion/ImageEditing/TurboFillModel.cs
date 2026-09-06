@@ -41,9 +41,13 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// <example>
 /// <code>
 /// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 4, DefaultInferenceSteps = 4 };
-/// var model = new TurboFillModel&lt;float&gt;(options: options);
 /// var maskedInput = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4, 128, 128 });
-/// var filled = model.Predict(maskedInput);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new TurboFillModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var filled = result.Predict(maskedInput);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

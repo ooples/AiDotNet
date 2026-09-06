@@ -37,11 +37,15 @@ namespace AiDotNet.Diffusion.Control;
 ///     LatentChannels = 16,
 ///     DefaultInferenceSteps = 28
 /// };
-/// var model = new ControlNetPlusPlusFluxModel&lt;float&gt;(options: options, controlType: ControlType.Depth);
 ///
 /// // Generate with enhanced depth-guided control on FLUX
 /// var depthMap = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1, 1024, 1024 });
-/// var result = model.Predict(depthMap);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new ControlNetPlusPlusFluxModel&lt;float&gt;(options: options, controlType: ControlType.Depth))
+///     .Build(trainX, trainY);
+/// var prediction = result.Predict(depthMap);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

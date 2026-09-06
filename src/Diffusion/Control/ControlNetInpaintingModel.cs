@@ -36,11 +36,15 @@ namespace AiDotNet.Diffusion.Control;
 ///     LatentChannels = 4,
 ///     DefaultInferenceSteps = 30
 /// };
-/// var model = new ControlNetInpaintingModel&lt;float&gt;(options: options, controlType: ControlType.Canny);
 ///
 /// // Inpaint masked regions guided by a control image
 /// var imageWithMask = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 5, 64, 64 }); // 4 latent + 1 mask
-/// var result = model.Predict(imageWithMask);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new ControlNetInpaintingModel&lt;float&gt;(options: options, controlType: ControlType.Canny))
+///     .Build(trainX, trainY);
+/// var prediction = result.Predict(imageWithMask);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

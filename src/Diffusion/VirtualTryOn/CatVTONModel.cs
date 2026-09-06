@@ -34,9 +34,13 @@ namespace AiDotNet.Diffusion.VirtualTryOn;
 /// <example>
 /// <code>
 /// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 4, DefaultInferenceSteps = 30 };
-/// var model = new CatVTONModel&lt;float&gt;(options: options);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4, 64, 48 });
-/// var tryOn = model.Predict(input);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new CatVTONModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var tryOn = result.Predict(input);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

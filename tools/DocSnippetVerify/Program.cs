@@ -419,10 +419,19 @@ List<string> FacadePlan(string source, string fileKey, int idx)
     var model = comp.GetSemanticModel(tree);
     var root = tree.GetRoot();
 
+    // A block that predicts without ever training is converted too. Those examples show a model being
+    // constructed and immediately predicted from, which is not a workflow that works — a model has to be
+    // fitted first — so routing them through the facade also corrects what they teach. The training
+    // arguments are left empty and the applier synthesises data from TInput and TOutput.
+    bool trains = root.DescendantNodes().OfType<InvocationExpressionSyntax>().Any(c =>
+        c.Expression is MemberAccessExpressionSyntax a &&
+        a.Name.Identifier.ValueText is "Train" or "Fit");
+
     foreach (var call in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
     {
         if (call.Expression is not MemberAccessExpressionSyntax access) continue;
-        if (access.Name.Identifier.ValueText is not ("Train" or "Fit")) continue;
+        var called = access.Name.Identifier.ValueText;
+        if (called is not ("Train" or "Fit") && !(called == "Predict" && !trains)) continue;
         if (access.Expression is not IdentifierNameSyntax id) continue;
 
         var receiver = model.GetTypeInfo(access.Expression).Type;
@@ -437,7 +446,9 @@ List<string> FacadePlan(string source, string fileKey, int idx)
         string ctor = declarator?.Initializer?.Value.ToString().Replace("\r", " ").Replace("\n", " ") ?? "";
         if (ctor.Length == 0) continue;
 
-        string args = string.Join(" | ", call.ArgumentList.Arguments.Select(a => a.ToString()));
+        string args = called == "Predict"
+            ? "<synthesise>"
+            : string.Join(" | ", call.ArgumentList.Arguments.Select(a => a.ToString()));
         string targs = string.Join(", ", full.TypeArguments.Select(a => a.ToDisplayString(FullType)));
 
         plan.Add(string.Join("\t", fileKey, idx.ToString(), id.Identifier.ValueText,

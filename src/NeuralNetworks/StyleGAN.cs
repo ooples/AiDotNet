@@ -56,9 +56,13 @@ namespace AiDotNet.NeuralNetworks;
 /// <example>
 /// <code>
 /// var options = new StyleGANOptions { };
-/// var model = new StyleGAN&lt;float&gt;(options);
 /// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 512 });
-/// var generated = model.Predict(noise);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new StyleGAN&lt;float&gt;(options))
+///     .Build(trainX, trainY);
+/// var generated = result.Predict(noise);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>

@@ -64,14 +64,18 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 ///     // node feature dimension
 ///     outputSize: 1,   // edge score
 ///     );
-/// var model = new LinkPredictionModel&lt;float&gt;(architecture);
 ///
 /// // Prepare graph data
 /// var adjacency = new Tensor&lt;float&gt;(new[] { 100, 100 }); // 100-node graph
 /// var nodeFeatures = new Tensor&lt;float&gt;(new[] { 100, 16 });
 ///
 /// // Predict edge likelihood between node pairs
-/// var scores = model.Predict(nodeFeatures);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new LinkPredictionModel&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var scores = result.Predict(nodeFeatures);
 /// // Result is available in the returned value
 /// </code>
 /// </example>

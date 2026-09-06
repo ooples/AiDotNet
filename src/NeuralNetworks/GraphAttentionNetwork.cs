@@ -56,9 +56,13 @@ namespace AiDotNet.NeuralNetworks;
 /// <example>
 /// <code>
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
-/// var model = new GraphAttentionNetwork&lt;float&gt;(architecture);
 /// var nodeFeatures = Tensor&lt;float&gt;.CreateRandom(new[] { 10, 16 });
-/// var output = model.Predict(nodeFeatures);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new GraphAttentionNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(nodeFeatures);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.GraphAnalysis)]

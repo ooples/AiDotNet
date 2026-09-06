@@ -35,9 +35,13 @@ namespace AiDotNet.NeuralNetworks;
 /// <example>
 /// <code>
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
-/// var model = new UNet3D&lt;float&gt;(architecture);
 /// var volume = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1, 64, 64, 64 });
-/// var segmented = model.Predict(volume);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new UNet3D&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var segmented = result.Predict(volume);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

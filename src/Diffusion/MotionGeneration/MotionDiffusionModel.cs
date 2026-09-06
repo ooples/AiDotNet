@@ -34,9 +34,13 @@ namespace AiDotNet.Diffusion.MotionGeneration;
 /// <example>
 /// <code>
 /// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 263, DefaultInferenceSteps = 50 };
-/// var model = new MotionDiffusionModel&lt;float&gt;(options: options);
 /// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 263, 196 });
-/// var motion = model.Predict(noise);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new MotionDiffusionModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var motion = result.Predict(noise);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

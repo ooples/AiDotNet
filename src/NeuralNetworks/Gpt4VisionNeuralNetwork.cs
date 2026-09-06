@@ -43,9 +43,13 @@ namespace AiDotNet.NeuralNetworks;
 /// <example>
 /// <code>
 /// var options = new Gpt4VisionOptions { };
-/// var model = new Gpt4VisionNeuralNetwork&lt;float&gt;(options);
 /// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 336, 336 });
-/// var output = model.Predict(image);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new Gpt4VisionNeuralNetwork&lt;float&gt;(options))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(image);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

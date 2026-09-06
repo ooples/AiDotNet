@@ -42,9 +42,13 @@ namespace AiDotNet.NeuralNetworks;
 /// <example>
 /// <code>
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
-/// var model = new VideoCLIPNeuralNetwork&lt;float&gt;(architecture);
 /// var video = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 8, 224, 224 });
-/// var embedding = model.Predict(video);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new VideoCLIPNeuralNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var embedding = result.Predict(video);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

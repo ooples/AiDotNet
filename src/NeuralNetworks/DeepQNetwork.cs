@@ -33,9 +33,13 @@ namespace AiDotNet.NeuralNetworks;
 /// <example>
 /// <code>
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
-/// var model = new DeepQNetwork&lt;float&gt;(architecture);
 /// var state = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4 });
-/// var qValues = model.Predict(state);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new DeepQNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var qValues = result.Predict(state);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

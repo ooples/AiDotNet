@@ -37,11 +37,15 @@ namespace AiDotNet.Diffusion.Control;
 ///     LatentChannels = 16,
 ///     DefaultInferenceSteps = 28
 /// };
-/// var model = new ControlNetSD3Model&lt;float&gt;(options: options, controlType: ControlType.Canny);
 ///
 /// // Generate with control on SD3's MMDiT architecture
 /// var controlImage = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1, 1024, 1024 });
-/// var result = model.Predict(controlImage);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new ControlNetSD3Model&lt;float&gt;(options: options, controlType: ControlType.Canny))
+///     .Build(trainX, trainY);
+/// var prediction = result.Predict(controlImage);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

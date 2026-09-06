@@ -28,9 +28,13 @@ namespace AiDotNet.NeuralNetworks;
 /// <example>
 /// <code>
 /// var options = new EagleOptions { VocabSize = 65536, ModelDim = 2560, NumLayers = 32, NumHeads = 40 };
-/// var model = new EagleLanguageModel&lt;float&gt;(options);
 /// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
-/// var logits = model.Predict(tokens);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new EagleLanguageModel&lt;float&gt;(options))
+///     .Build(trainX, trainY);
+/// var logits = result.Predict(tokens);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

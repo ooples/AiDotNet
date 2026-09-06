@@ -40,11 +40,15 @@ namespace AiDotNet.Diffusion.Control;
 ///     LatentChannels = 4,
 ///     DefaultInferenceSteps = 30
 /// };
-/// var model = new IPAdapterFaceIDPlusModel&lt;float&gt;(options: options);
 ///
 /// // Generate new images preserving a person's face identity
 /// var faceEmbedding = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 512 });
-/// var result = model.Predict(faceEmbedding);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new IPAdapterFaceIDPlusModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var prediction = result.Predict(faceEmbedding);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

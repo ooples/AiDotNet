@@ -32,9 +32,13 @@ namespace AiDotNet.Diffusion.Panorama;
 /// <example>
 /// <code>
 /// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 4, DefaultInferenceSteps = 30 };
-/// var model = new CubeDiffModel&lt;float&gt;(options: options);
 /// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 6, 4, 64, 64 });
-/// var panorama = model.Predict(noise);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new CubeDiffModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var panorama = result.Predict(noise);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

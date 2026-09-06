@@ -52,11 +52,15 @@ namespace AiDotNet.Diffusion;
 /// var options = new DiffusionModelOptions&lt;float&gt;
 /// {
 /// };
-/// var model = new DDPMModel&lt;float&gt;(architecture);
 ///
 /// // Generate an image from random noise
 /// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 64, 64 });
-/// var generated = model.Predict(noise);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new DDPMModel&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var generated = result.Predict(noise);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

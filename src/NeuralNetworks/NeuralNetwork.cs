@@ -41,9 +41,13 @@ namespace AiDotNet.NeuralNetworks;
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 10,
 ///     outputSize: 2);
-/// var model = new NeuralNetwork&lt;float&gt;(architecture);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 10 });
-/// var output = model.Predict(input);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new NeuralNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.General)]

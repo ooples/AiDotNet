@@ -59,9 +59,13 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// <example>
 /// <code>
 /// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 4, DefaultInferenceSteps = 20 };
-/// var model = new PixArtDeltaModel&lt;float&gt;(options: options);
 /// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4, 128, 128 });
-/// var generated = model.Predict(noise);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new PixArtDeltaModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var generated = result.Predict(noise);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

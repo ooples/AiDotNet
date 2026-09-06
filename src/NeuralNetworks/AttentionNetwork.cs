@@ -39,10 +39,14 @@ namespace AiDotNet.NeuralNetworks;
 ///     inputHeight: 10, inputWidth: 64, outputSize: 4);
 ///
 /// var options = new AttentionNetworkOptions { HeadCount = 8, EncoderBlockCount = 3 };
-/// var model = new AttentionNetwork&lt;float&gt;(architecture, sequenceLength: 10, embeddingSize: 64, options: options);
 ///
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 10, 64 });   // (sequenceLength, embeddingSize)
-/// var output = model.Predict(input);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new AttentionNetwork&lt;float&gt;(architecture, sequenceLength: 10, embeddingSize: 64, options: options))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

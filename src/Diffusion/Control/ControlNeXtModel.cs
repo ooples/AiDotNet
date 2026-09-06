@@ -39,11 +39,15 @@ namespace AiDotNet.Diffusion.Control;
 ///     LatentChannels = 4,
 ///     DefaultInferenceSteps = 20
 /// };
-/// var model = new ControlNeXtModel&lt;float&gt;(options: options, controlType: ControlType.Depth);
 ///
 /// // Guide image generation with a depth map
 /// var depthMap = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1, 512, 512 });
-/// var generated = model.Predict(depthMap);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new ControlNeXtModel&lt;float&gt;(options: options, controlType: ControlType.Depth))
+///     .Build(trainX, trainY);
+/// var generated = result.Predict(depthMap);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

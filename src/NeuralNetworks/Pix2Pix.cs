@@ -42,9 +42,13 @@ namespace AiDotNet.NeuralNetworks;
 /// <example>
 /// <code>
 /// var options = new Pix2PixOptions { };
-/// var model = new Pix2Pix&lt;float&gt;(options);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 256, 256 });
-/// var translated = model.Predict(input);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new Pix2Pix&lt;float&gt;(options))
+///     .Build(trainX, trainY);
+/// var translated = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>

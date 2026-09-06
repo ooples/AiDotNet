@@ -37,9 +37,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var model = new MemoryNetwork&lt;float&gt;();
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 50 });
-/// var output = model.Predict(input);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new MemoryNetwork&lt;float&gt;())
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

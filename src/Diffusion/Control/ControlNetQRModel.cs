@@ -36,11 +36,15 @@ namespace AiDotNet.Diffusion.Control;
 ///     LatentChannels = 4,
 ///     DefaultInferenceSteps = 30
 /// };
-/// var model = new ControlNetQRModel&lt;float&gt;(options: options);
 ///
 /// // Generate artwork with embedded QR code
 /// var qrPattern = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1, 768, 768 });
-/// var artisticQR = model.Predict(qrPattern);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new ControlNetQRModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var artisticQR = result.Predict(qrPattern);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

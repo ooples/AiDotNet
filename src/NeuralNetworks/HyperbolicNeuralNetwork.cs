@@ -37,9 +37,13 @@ namespace AiDotNet.NeuralNetworks;
 /// <example>
 /// <code>
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
-/// var model = new HyperbolicNeuralNetwork&lt;float&gt;(architecture);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 64 });
-/// var output = model.Predict(input);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new HyperbolicNeuralNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.General)]

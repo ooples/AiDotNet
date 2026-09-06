@@ -46,9 +46,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var model = new CycleGAN&lt;float&gt;();
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 256, 256 });
-/// var translated = model.Predict(input);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new CycleGAN&lt;float&gt;())
+///     .Build(trainX, trainY);
+/// var translated = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type.</typeparam>

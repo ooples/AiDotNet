@@ -64,9 +64,13 @@ public enum VisionScanPattern
 /// <example>
 /// <code>
 /// var options = new VisionMambaOptions { ImageSize = 224, PatchSize = 16, ModelDim = 384, NumLayers = 24 };
-/// var model = new VisionMambaModel&lt;float&gt;(options);
 /// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 224, 224 });
-/// var output = model.Predict(image);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new VisionMambaModel&lt;float&gt;(options))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(image);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

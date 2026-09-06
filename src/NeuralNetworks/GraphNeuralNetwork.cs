@@ -37,9 +37,13 @@ namespace AiDotNet.NeuralNetworks;
 /// <example>
 /// <code>
 /// var options = new GraphNeuralNetworkOptions { NodeFeatureSize = 16, HiddenSize = 64, NumLayers = 3 };
-/// var model = new GraphNeuralNetwork&lt;float&gt;(options);
 /// var nodeFeatures = Tensor&lt;float&gt;.CreateRandom(new[] { 10, 16 });
-/// var output = model.Predict(nodeFeatures);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new GraphNeuralNetwork&lt;float&gt;(options))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(nodeFeatures);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

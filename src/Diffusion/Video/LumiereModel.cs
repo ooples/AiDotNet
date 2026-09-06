@@ -37,9 +37,13 @@ namespace AiDotNet.Diffusion.Video;
 /// <example>
 /// <code>
 /// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 4, DefaultInferenceSteps = 30 };
-/// var model = new LumiereModel&lt;float&gt;(options: options);
 /// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4, 80, 64, 64 });
-/// var video = model.Predict(noise);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new LumiereModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var video = result.Predict(noise);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]
