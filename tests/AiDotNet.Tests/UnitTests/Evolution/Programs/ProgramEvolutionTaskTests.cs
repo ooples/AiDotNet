@@ -43,7 +43,10 @@ public sealed class ProgramEvolutionTaskTests
         Assert.Equal(genome.Id, canonical.Id);
         Assert.Equal(ProgramGenome.ComputeId("print(1)", ProgramLanguage.Python), canonical.Id);
         Assert.NotEqual(ProgramGenome.ComputeId("print(1)"), canonical.Id);
-        Assert.Same(genome, canonical.Genome);
+        Assert.NotSame(genome, canonical.Genome);
+        Assert.Equal(genome, canonical.Genome);
+        Assert.Equal(genome.Source, canonical.Genome.Source);
+        Assert.Equal(genome.Description, canonical.Genome.Description);
     }
 
     [Fact]

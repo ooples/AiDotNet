@@ -563,7 +563,7 @@ public sealed class MapElitesAutoML<T, TInput, TOutput> :
         }
     }
 
-    private sealed class MapElitesGenome : IImmutableEvolutionGenome
+    private sealed class MapElitesGenome : IImmutableEvolutionGenome<MapElitesGenome>
     {
         private readonly ReadOnlyDictionary<string, object> _parameters;
 
@@ -595,9 +595,19 @@ public sealed class MapElitesAutoML<T, TInput, TOutput> :
             Id = EvolutionHash.Combine(identity);
         }
 
+        private MapElitesGenome(MapElitesGenome source)
+        {
+            ModelType = source.ModelType;
+            _parameters = new ReadOnlyDictionary<string, object>(
+                source._parameters.ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal));
+            Id = source.Id;
+        }
+
         public Type ModelType { get; }
         public IReadOnlyDictionary<string, object> Parameters => _parameters;
         public string Id { get; }
+
+        public MapElitesGenome CreateOwnedSnapshot() => new(this);
 
         public Dictionary<string, object> ToTrialParameters()
         {
