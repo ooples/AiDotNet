@@ -74,4 +74,4 @@ jobs:
       # the failure count could stay level. Tighten both whenever this step reports better numbers; do not
       # loosen either without saying why in the commit message.
       - name: Compile-check XML doc-comment examples (ratchet)
-        run: dotnet run --project tools/DocSnippetVerify -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml --min-pass 1264 --max-fail 139
+        run: dotnet run --project tools/DocSnippetVerify -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml --min-pass 1275 --max-fail 128

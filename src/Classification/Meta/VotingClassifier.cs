@@ -40,7 +40,7 @@ namespace AiDotNet.Classification.Meta;
 /// <code>
 /// // Create voting classifier combining multiple models
 /// var options = new VotingClassifierOptions&lt;double&gt;();
-/// var classifier = new VotingClassifier&lt;double&gt;(options);
+/// var classifier = new VotingClassifier&lt;double&gt;();
 ///
 /// // Prepare training data: 6 samples with 2 features
 /// var features = new Matrix&lt;double&gt;(6, 2);

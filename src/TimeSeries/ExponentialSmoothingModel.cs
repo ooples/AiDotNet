@@ -36,7 +36,7 @@ namespace AiDotNet.TimeSeries;
 /// // Create a Holt-Winters exponential smoothing model for seasonal data
 /// var options = new ExponentialSmoothingOptions&lt;double&gt;
 /// {
-///     Gamma = 0.1, SeasonalPeriod = 12
+///     SeasonalPeriod = 12
 /// };
 /// var ets = new ExponentialSmoothingModel&lt;double&gt;(options);
 /// ets.Train(trainingMatrix, trainingLabels);

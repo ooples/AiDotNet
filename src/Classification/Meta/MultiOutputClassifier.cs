@@ -39,7 +39,7 @@ namespace AiDotNet.Classification.Meta;
 /// <code>
 /// // Create multi-output classifier with independent per-label classifiers
 /// var options = new MetaClassifierOptions&lt;double&gt;();
-/// var classifier = new MultiOutputClassifier&lt;double&gt;(options);
+/// var classifier = new MultiOutputClassifier&lt;double&gt;();
 ///
 /// // Prepare training data: 6 samples with 2 features
 /// var features = new Matrix&lt;double&gt;(6, 2);

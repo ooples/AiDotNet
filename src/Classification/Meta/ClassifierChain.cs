@@ -40,7 +40,7 @@ namespace AiDotNet.Classification.Meta;
 /// <code>
 /// // Create classifier chain for multi-label classification with dependencies
 /// var options = new ClassifierChainOptions&lt;double&gt;();
-/// var classifier = new ClassifierChain&lt;double&gt;(options);
+/// var classifier = new ClassifierChain&lt;double&gt;();
 ///
 /// // Prepare training data: 6 samples with 2 features
 /// var features = new Matrix&lt;double&gt;(6, 2);

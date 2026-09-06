@@ -28,6 +28,7 @@ namespace AiDotNet.Preprocessing.TimeSeries;
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 /// <example>
 /// <code>
+/// var data = Tensor&lt;double&gt;.CreateRandom(2, 4);
 /// // One window configuration, shared by every transformer in the pipeline.
 /// var featureOptions = new TimeSeriesFeatureOptions { WindowSizes = [7, 30] };
 ///

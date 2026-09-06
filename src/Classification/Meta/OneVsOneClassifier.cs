@@ -44,7 +44,7 @@ namespace AiDotNet.Classification.Meta;
 /// <code>
 /// // Create One-vs-One classifier with pairwise binary classifiers
 /// var options = new MetaClassifierOptions&lt;double&gt;();
-/// var classifier = new OneVsOneClassifier&lt;double&gt;(options);
+/// var classifier = new OneVsOneClassifier&lt;double&gt;();
 ///
 /// // Prepare multi-class training data (3 classes, 9 samples, 2 features)
 /// var features = new Matrix&lt;double&gt;(9, 2);
