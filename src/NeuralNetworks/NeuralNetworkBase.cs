@@ -581,6 +581,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected NeuralNetworkBase(NeuralNetworkArchitecture<T> architecture, ILossFunction<T> lossFunction, double maxGradNorm = 1.0)
     {
         Architecture = architecture;
+        // Refuse a second model on the same architecture instance BEFORE any layers are taken by reference.
+        // Every model type in the library reaches this constructor, so this is the one place the sharing can
+        // be caught for all of them.
+        architecture.ClaimForModel(this);
         // Begin a deterministic per-layer initialization-seed sequence for this
         // model's construction BEFORE the derived constructor builds its layers.
         // Each LayerBase<T> constructor pulls a seed from this scope so weight
