@@ -28,7 +28,7 @@ namespace AiDotNet.Regression;
 /// <code>
 /// // Create time series regression with autoregressive and seasonal components
 /// var options = new TimeSeriesRegressionOptions&lt;double&gt;();
-/// var regularization = new L2Regularization&lt;double&gt;();
+/// var regularization = new L2Regularization&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
 /// var model = new TimeSeriesRegression&lt;double&gt;(options, regularization);
 ///
 /// // Prepare historical data with temporal features

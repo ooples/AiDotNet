@@ -38,7 +38,7 @@ namespace AiDotNet.Classification.Meta;
 /// <example>
 /// <code>
 /// // Create multi-output classifier with independent per-label classifiers
-/// var options = new MultiOutputClassifierOptions&lt;double&gt;();
+/// var options = new MetaClassifierOptions&lt;double&gt;();
 /// var classifier = new MultiOutputClassifier&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features

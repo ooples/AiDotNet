@@ -43,7 +43,7 @@ namespace AiDotNet.Classification.Meta;
 /// <example>
 /// <code>
 /// // Create One-vs-One classifier with pairwise binary classifiers
-/// var options = new OneVsOneClassifierOptions&lt;double&gt;();
+/// var options = new MetaClassifierOptions&lt;double&gt;();
 /// var classifier = new OneVsOneClassifier&lt;double&gt;(options);
 ///
 /// // Prepare multi-class training data (3 classes, 9 samples, 2 features)

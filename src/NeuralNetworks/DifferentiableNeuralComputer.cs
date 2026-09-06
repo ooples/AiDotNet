@@ -35,8 +35,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new DifferentiableNeuralComputerOptions { };
-/// var model = new DifferentiableNeuralComputer&lt;float&gt;(options);
+/// var model = new DifferentiableNeuralComputer&lt;float&gt;();
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 10, 64 });
 /// var output = model.Predict(input);
 /// </code>

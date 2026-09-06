@@ -31,7 +31,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a conditional inference tree using statistical tests for splits
-/// var options = new ConditionalInferenceTreeRegressionOptions&lt;double&gt;();
+/// var options = new ConditionalInferenceTreeOptions&lt;double&gt;();
 /// var model = new ConditionalInferenceTreeRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features each

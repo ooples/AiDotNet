@@ -53,7 +53,7 @@ namespace AiDotNet.Classification.MultiLabel;
 /// // Use AiModelBuilder facade for binaryrelevance classification
 /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigureModel(new BinaryRelevance&lt;double&gt;(
-///         new BinaryRelevanceOptions&lt;double&gt;()));
+///         new ClassifierOptions&lt;double&gt;()));
 ///
 /// var result = builder.Build(features, labels);
 /// var prediction = result.Predict(newSample);

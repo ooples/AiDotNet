@@ -52,7 +52,7 @@ namespace AiDotNet.Data.Loaders;
 /// var labels = new Vector&lt;double&gt;(1000);         // Class labels 0-9
 ///
 /// // Create 5-way 3-shot loader with 10 query examples per class
-/// var loader = new UniformEpisodicDataLoader&lt;double&gt;(
+/// var loader = new UniformEpisodicDataLoader&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(
 ///     datasetX: features,
 ///     datasetY: labels,
 ///     nWay: 5,        // 5 classes per task

@@ -25,7 +25,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new OccupancyNetworkOptions { InputSize = 3, HiddenSize = 256 };
+/// var options = new OccupancyNeuralNetworkOptions { InputSize = 3, HiddenSize = 256 };
 /// var model = new OccupancyNeuralNetwork&lt;float&gt;(options);
 /// var points = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1000, 3 });
 /// var occupancy = model.Predict(points);

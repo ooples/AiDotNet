@@ -50,7 +50,7 @@ namespace AiDotNet.Data.Structures;
 /// var queryX = new Tensor&lt;double&gt;(new[] { 50, 784 });   // 50 query images
 /// var queryY = new Tensor&lt;double&gt;(new[] { 50, 5 });     // 50 query labels
 ///
-/// var task = new MetaLearningTask&lt;double&gt;
+/// var task = new MetaLearningTask&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;
 /// {
 ///     SupportSetX = supportX,
 ///     SupportSetY = supportY,

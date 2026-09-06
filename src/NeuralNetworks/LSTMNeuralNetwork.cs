@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LSTMNeuralNetworkOptions { InputSize = 10, HiddenSize = 128, NumLayers = 2 };
+/// var options = new LSTMOptions { InputSize = 10, HiddenSize = 128, NumLayers = 2 };
 /// var model = new LSTMNeuralNetwork&lt;float&gt;(options);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20, 10 });
 /// var output = model.Predict(input);

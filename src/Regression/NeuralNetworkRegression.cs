@@ -29,7 +29,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a feedforward neural network regression model
-/// var options = new NeuralNetworkRegressionOptions&lt;double&gt;();
+/// var options = new NeuralNetworkRegressionOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
 /// var model = new NeuralNetworkRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features each

@@ -54,7 +54,7 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// // Use AiModelBuilder facade for selftrainingclassifier classification
 /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigureModel(new SelfTrainingClassifier&lt;double&gt;(
-///         new SelfTrainingClassifierOptions&lt;double&gt;()));
+///         new ClassifierOptions&lt;double&gt;()));
 ///
 /// var result = builder.Build(features, labels);
 /// var prediction = result.Predict(newSample);
