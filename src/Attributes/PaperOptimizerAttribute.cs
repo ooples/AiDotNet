@@ -184,6 +184,19 @@ public sealed class PaperOptimizerAttribute : Attribute
     public LinearWarmupScheduler.DecayMode PostWarmupDecay { get; set; }
         = LinearWarmupScheduler.DecayMode.Constant;
 
+    /// <summary>
+    /// Warmup expressed as a fraction of the whole run, for papers that state it that way.
+    /// Unset means the paper gives an absolute step count, or no warmup.
+    /// </summary>
+    /// <remarks>
+    /// HuBERT ramps up over the first 8% of training steps (Hsu et al. 2021, Sec. IV-A), which no
+    /// absolute number can represent: 8% of a 400k-step pre-training run and 8% of a short
+    /// fine-tune are different counts and both are what the paper says. Stated as a fraction it
+    /// stays exact at any run length, where a transcribed step count would be wrong at every length
+    /// but one. Takes precedence over <see cref="WarmupSteps"/> when both are declared.
+    /// </remarks>
+    public double WarmupFraction { get; set; } = double.NaN;
+
     /// <summary>Multiplicative decay factor, for exponential and step schedules. Unset means unstated.</summary>
     public double DecayRate { get; set; } = double.NaN;
 
@@ -240,6 +253,7 @@ public sealed class PaperOptimizerAttribute : Attribute
         || !double.IsNaN(MaxGradientNorm)
         || UseNesterov
         || WarmupSteps > 0
+        || !double.IsNaN(WarmupFraction)
         || StepSize > 0
         || PostWarmupDecay != LinearWarmupScheduler.DecayMode.Constant
         || !double.IsNaN(DecayRate)

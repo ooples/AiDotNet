@@ -339,9 +339,16 @@ public static class PaperOptimizerFactory
     /// </remarks>
     private static int EffectiveWarmupSteps(object options, PaperOptimizerAttribute recipe)
     {
-        if (recipe.WarmupSteps <= 0) return 0;
-
         int iterations = GetInt(options, "MaxIterations");
+
+        // A fraction is exact at any run length, so it is computed rather than adapted.
+        if (!double.IsNaN(recipe.WarmupFraction) && recipe.WarmupFraction > 0)
+        {
+            if (iterations <= 0) return recipe.WarmupSteps;
+            return Math.Max(1, (int)Math.Round(iterations * recipe.WarmupFraction));
+        }
+
+        if (recipe.WarmupSteps <= 0) return 0;
         if (iterations <= 0 || recipe.WarmupSteps < iterations) return recipe.WarmupSteps;
 
         int scaled = Math.Max(1, iterations / 10);
@@ -493,7 +500,7 @@ public static class PaperOptimizerFactory
 
             bool variantExact = declaration.Variant.Length > 0
                 && !string.IsNullOrEmpty(variant)
-                && string.Equals(declaration.Variant, variant, StringComparison.Ordinal);
+                && string.Equals(declaration.Variant, variant, StringComparison.OrdinalIgnoreCase);
             bool variantFallback = declaration.Variant.Length == 0;
             if (!variantExact && !variantFallback) continue;
 
