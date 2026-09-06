@@ -123,6 +123,7 @@ var perFile = new Dictionary<string, (int total, int fail)>();
 // bare int that happens to satisfy some other overload.
 bool suggestDecls = args.Any(a => string.Equals(a, "--suggest-decls", StringComparison.OrdinalIgnoreCase));
 var suggestions = new List<(string file, int idx, string decl)>();
+var unsolvable = new List<string>();
 int probeId = 0;
 string[] DeclarationCandidates =
 {
@@ -423,6 +424,12 @@ void Check(string code, string fileKey, int idx, string? homeNamespace = null)
             if (best is not null && bestScore < errors.Count)
             {
                 accepted.Add(best);
+            }
+            else
+            {
+                // No candidate resolved this name. Recording it is how the candidate list grows: one
+                // unbuildable name blocks its whole snippet, so these are exactly the gaps worth filling.
+                unsolvable.Add(name);
             }
         }
 

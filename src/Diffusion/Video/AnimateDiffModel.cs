@@ -72,7 +72,7 @@ namespace AiDotNet.Diffusion.Video;
 ///
 /// // Image-to-video with text guidance
 /// var inputImage = ImageHelper&lt;float&gt;.LoadImage("beach.jpg");
-/// var animatedVideo = animateDiff.AnimateImage(
+/// var animatedVideo = animateDiff.GenerateFromImage(
 ///     inputImage,
 ///     prompt: "gentle waves, moving clouds",
 ///     numFrames: 16);

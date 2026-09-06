@@ -28,7 +28,7 @@ namespace AiDotNet.AutoML.NAS
     /// <code>
     /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
     /// var nas = new AttentiveNAS&lt;float&gt;(searchSpace);
-    /// Architecture&lt;float&gt; architecture = nas.DeriveArchitecture();
+    /// Architecture&lt;float&gt; architecture = nas.BestArchitecture();
     /// </code>
     /// </example>
     [ModelDomain(ModelDomain.MachineLearning)]
