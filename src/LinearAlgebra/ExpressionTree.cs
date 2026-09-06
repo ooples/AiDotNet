@@ -17,15 +17,21 @@ namespace AiDotNet.LinearAlgebra;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a symbolic expression tree: (x0 * 2.5) + x1
-/// var tree = ExpressionTree&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;.CreateOperation(
-///     ExpressionNodeType.Add,
-///     ExpressionTree&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;.CreateOperation(
-///         ExpressionNodeType.Multiply,
-///         ExpressionTree&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;.CreateVariable(0),
-///         ExpressionTree&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;.CreateConstant(2.5)),
-///     ExpressionTree&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;.CreateVariable(1));
-/// double result = tree.Evaluate(new double[] { 3.0, 1.0 }); // (3.0 * 2.5) + 1.0 = 8.5
+/// // A symbolic expression tree for (x0 * 2.5) + x1. Every node is the same constructor: a node type,
+/// // a value for leaves, and two children for operations.
+/// var x0 = new ExpressionTree&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(
+///     ExpressionNodeType.Variable, 0);
+/// var scale = new ExpressionTree&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(
+///     ExpressionNodeType.Constant, 2.5);
+/// var x1 = new ExpressionTree&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(
+///     ExpressionNodeType.Variable, 1);
+///
+/// var product = new ExpressionTree&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(
+///     ExpressionNodeType.Multiply, left: x0, right: scale);
+/// var tree = new ExpressionTree&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(
+///     ExpressionNodeType.Add, left: product, right: x1);
+///
+/// double value = tree.Evaluate(new Vector&lt;double&gt;(new double[] { 3.0, 1.0 })); // (3.0 * 2.5) + 1.0
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
