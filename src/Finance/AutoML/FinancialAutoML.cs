@@ -35,7 +35,7 @@ namespace AiDotNet.Finance.AutoML;
 /// var bestModel = await automl.SearchAsync(
 ///     trainInputs, trainTargets,
 ///     valInputs, valTargets,
-///     maxTrials: 20,
+///     
 ///     timeLimit: TimeSpan.FromMinutes(30));
 /// </code>
 /// </example>

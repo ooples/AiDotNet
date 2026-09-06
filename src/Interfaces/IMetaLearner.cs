@@ -79,7 +79,7 @@ namespace AiDotNet.Interfaces;
 ///     .Build();
 ///
 /// var metaLearner = new MAMLAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(
-///     metaModel: neuralNetwork,
+///     
 ///     lossFunction: new CrossEntropyLoss&lt;double&gt;(),
 ///     dataLoader: dataLoader,
 ///     options: options

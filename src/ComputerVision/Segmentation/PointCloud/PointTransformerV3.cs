@@ -44,7 +44,7 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 ///     inputFeatures: 6, numClasses: 40);
 /// var ptv3 = new PointTransformerV3&lt;float&gt;(architecture,
 ///     numClasses: 40, modelSize: PointTransformerV3ModelSize.Base);
-/// Tensor&lt;float&gt; labels = ptv3.Forward(pointCloudTensor);
+/// Tensor&lt;float&gt; labels = ptv3.Predict(pointCloudTensor);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

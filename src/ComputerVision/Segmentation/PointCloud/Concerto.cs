@@ -75,7 +75,7 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 ///     inputFeatures: 6, numClasses: 40);
 /// var concerto = new Concerto&lt;float&gt;(architecture,
 ///     numClasses: 40, modelSize: ConcertoModelSize.Base, dropRate: 0.1);
-/// Tensor&lt;float&gt; segmentationMap = concerto.Forward(pointCloudTensor);
+/// Tensor&lt;float&gt; segmentationMap = concerto.Predict(pointCloudTensor);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

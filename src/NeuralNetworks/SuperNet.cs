@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks
     /// <code>
     /// var inputTensor = Tensor&lt;float&gt;.CreateRandom(2, 4);
     /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
-    /// var superNet = new SuperNet&lt;float&gt;(searchSpace, numNodes: 4, outputSize: 10);
+    /// var superNet = new SuperNet&lt;float&gt;(searchSpace, numNodes: 4);
     /// superNet.ForwardPass(inputTensor);
     /// var architecture = superNet.DeriveArchitecture();
     /// </code>

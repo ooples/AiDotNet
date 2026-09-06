@@ -196,7 +196,7 @@ namespace AiDotNet.AutoML
     /// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
     /// <example>
     /// <code>
-    /// var automl = new DiffusionAutoML&lt;float&gt;(channels: 3);
+    /// var automl = new DiffusionAutoML&lt;float&gt;();
     /// var bestModel = await automl.SearchAsync(
     ///     trainImages, trainLabels,
     ///     valImages, valLabels,

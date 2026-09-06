@@ -44,7 +44,7 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 ///     inputFeatures: 6, numClasses: 40);
 /// var sonata = new Sonata&lt;float&gt;(architecture,
 ///     numClasses: 40, modelSize: SonataModelSize.Base);
-/// Tensor&lt;float&gt; segmentation = sonata.Forward(pointCloudTensor);
+/// Tensor&lt;float&gt; segmentation = sonata.Predict(pointCloudTensor);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

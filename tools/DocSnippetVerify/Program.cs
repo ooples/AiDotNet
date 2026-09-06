@@ -142,6 +142,9 @@ var perFile = new Dictionary<string, (int total, int fail)>();
 bool suggestDecls = args.Any(a => string.Equals(a, "--suggest-decls", StringComparison.OrdinalIgnoreCase));
 var suggestions = new List<(string file, int idx, string decl)>();
 var unsolvable = new List<string>();
+// --facade-check reports examples that train or predict on a model instead of an AiModelResult.
+bool facadeCheck = args.Any(a => string.Equals(a, "--facade-check", StringComparison.OrdinalIgnoreCase));
+var facadeViolations = new List<string>();
 int probeId = 0;
 string[] DeclarationCandidates =
 {
@@ -386,6 +389,44 @@ List<Diagnostic> Compile(string source, int id)
     return c.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error && d.Id != "CS5001").ToList();
 }
 
+// ── Facade conformance ──
+//
+// AiModelBuilder and AiModelResult are the whole supported surface: users configure a model through the
+// builder and predict through the result. An example that trains or predicts on the model object directly
+// teaches people to reach past that, and every such example is a place where the facade's own guarantees
+// — validation, preprocessing, the training pipeline, the callbacks — are silently skipped.
+//
+// Constructing a model is NOT the violation. ConfigureModel takes an IFullModel, so
+// `.ConfigureModel(new SimpleRegression<double>())` is exactly right. What this looks for is a
+// Train/Predict/Fit call whose RECEIVER is a model rather than an AiModelResult, resolved through the
+// semantic model rather than matched by name — a receiver's type is not something a regex can know.
+List<string> FacadeViolations(string source, string fileKey)
+{
+    var found = new List<string>();
+    var tree = CSharpSyntaxTree.ParseText(source, parse);
+    var comp = CSharpCompilation.Create("facade" + (++probeId), new[] { tree }, refs, options);
+    var model = comp.GetSemanticModel(tree);
+
+    foreach (var call in tree.GetRoot().DescendantNodes().OfType<InvocationExpressionSyntax>())
+    {
+        if (call.Expression is not MemberAccessExpressionSyntax access) continue;
+        var name = access.Name.Identifier.ValueText;
+        if (name is not ("Train" or "Predict" or "Fit" or "TrainAsync" or "PredictAsync")) continue;
+
+        var receiver = model.GetTypeInfo(access.Expression).Type;
+        if (receiver is null) continue;
+        if (receiver.Name is "AiModelResult") continue;               // the supported path
+
+        bool isModel = receiver.AllInterfaces.Any(i => i.Name is "IFullModel" or "IPredictiveModel")
+                       || receiver.Name is "IFullModel" or "IPredictiveModel";
+        if (isModel)
+        {
+            found.Add($"{fileKey}: {receiver.Name}.{name}(...) — train and predict through AiModelResult");
+        }
+    }
+    return found;
+}
+
 // ── Completing a documented partial class ──
 //
 // Some examples exist to show what goes ON a type, not how to write a whole one: three attributes on
@@ -623,6 +664,11 @@ void Check(string code, string fileKey, int idx, string? homeNamespace = null)
         }
     }
 
+    if (facadeCheck)
+    {
+        facadeViolations.AddRange(FacadeViolations(source, fileKey));
+    }
+
     var cur = perFile.GetValueOrDefault(fileKey);
     perFile[fileKey] = (cur.total + 1, cur.fail + (errors.Count == 0 ? 0 : 1));
 }
@@ -733,6 +779,37 @@ if (suggestDecls && unsolvable.Count > 0)
                                 .Take(40))
     {
         Console.WriteLine($"  {g.Count(),3}  {g.Key}");
+    }
+}
+
+// Facade conformance, and the ratchet that stops it regressing. AiModelBuilder and AiModelResult are the
+// whole supported surface; an example that trains or predicts on the model object teaches readers to reach
+// past it, skipping the validation, preprocessing and training pipeline the facade exists to run.
+if (facadeCheck)
+{
+    Console.WriteLine($"\nFacade conformance: {facadeViolations.Count} example call(s) train or predict " +
+                      "on a model rather than an AiModelResult.");
+    foreach (var g in facadeViolations.GroupBy(v => v.Contains(": ") ? v[..v.IndexOf(": ")] : v, StringComparer.Ordinal)
+                                      .OrderByDescending(g => g.Count())
+                                      .Take(10))
+    {
+        Console.WriteLine($"  {g.Count(),3}  {g.Key}");
+    }
+
+    int i = Array.FindIndex(args, a => string.Equals(a, "--max-facade-violations", StringComparison.OrdinalIgnoreCase));
+    if (i >= 0 && i + 1 < args.Length && int.TryParse(args[i + 1], out int facadeCeiling))
+    {
+        if (facadeViolations.Count > facadeCeiling)
+        {
+            Console.WriteLine(
+                $"\nFAIL: {facadeViolations.Count} non-facade calls, above the ceiling of {facadeCeiling}. Route the " +
+                "example through AiModelBuilder: configure the model, Build(features, labels), then predict " +
+                "on the returned AiModelResult.");
+            return 1;
+        }
+        Console.WriteLine(facadeViolations.Count < facadeCeiling
+            ? $"OK: {facadeViolations.Count} non-facade calls, below the ceiling of {facadeCeiling}. Lower it."
+            : $"OK: {facadeViolations.Count} non-facade calls, matching the ceiling.");
     }
 }
 

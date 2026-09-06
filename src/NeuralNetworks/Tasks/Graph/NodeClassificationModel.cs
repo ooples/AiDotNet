@@ -58,7 +58,7 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// <code>
 /// // Create a node classification model for semi-supervised learning on graphs
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     inputSize: 16,   // node feature dimension
+///     // node feature dimension
 ///     outputSize: 7,   // number of node classes
 ///     );
 /// var model = new NodeClassificationModel&lt;float&gt;(architecture);
@@ -143,7 +143,7 @@ public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDot
     ///     InputType.OneDimensional,
     ///     NeuralNetworkTaskType.MultiClassClassification,
     ///     NetworkComplexity.Simple,
-    ///     inputSize: 1433,    // Cora has 1433 word features
+    ///     // Cora has 1433 word features
     ///     outputSize: 7);     // 7 paper categories
     ///
     /// // Create model with default layers

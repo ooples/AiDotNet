@@ -61,7 +61,7 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// <code>
 /// // Create a link prediction model for graph edge prediction
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     inputSize: 16,   // node feature dimension
+///     // node feature dimension
 ///     outputSize: 1,   // edge score
 ///     );
 /// var model = new LinkPredictionModel&lt;float&gt;(architecture);
@@ -181,7 +181,7 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
     ///     InputType.OneDimensional,
     ///     NeuralNetworkTaskType.BinaryClassification,
     ///     NetworkComplexity.Simple,
-    ///     inputSize: 128,    // User features
+    ///     // User features
     ///     outputSize: 1);    // Edge score
     ///
     /// // Create model with default layers
