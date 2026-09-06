@@ -1236,6 +1236,66 @@ public class NeuralNetworkArchitecture<T> : IConfigurationCloneable
     object IConfigurationCloneable.CloneConfiguration() => CloneForModelConstruction();
 
     /// <summary>
+    /// The model that has taken ownership of this architecture's layer objects, if any.
+    /// </summary>
+    /// <remarks>
+    /// Weak so an architecture can never keep a model alive. A collected owner leaves the architecture
+    /// claimable again, which is correct: the layers it holds are no longer reachable through a live model.
+    /// </remarks>
+    private WeakReference<object>? _owner;
+
+    /// <summary>
+    /// Records that <paramref name="model"/> is about to use this architecture's layer objects, and refuses a
+    /// SECOND model trying to do the same.
+    /// </summary>
+    /// <remarks>
+    /// <para>Models built on this architecture take its layers BY REFERENCE - <c>InitializeLayers</c> does
+    /// <c>Layers.AddRange(Architecture.Layers)</c>, in 800-odd model types. Two models constructed from one
+    /// architecture instance therefore do not merely start from the same weights, they own the same mutable
+    /// layer objects, and training either one trains both.</para>
+    ///
+    /// <para>That is silent, and its worst case is a reinforcement-learning target network: the target IS the
+    /// online network, so the temporal-difference target is read from the network being updated in the same
+    /// batch, and a twin-critic minimum reduces to <c>min(Q, Q)</c>. Nothing throws, nothing warns, and the
+    /// resulting training curves look entirely ordinary. <see cref="CloneForModelConstruction"/> is the
+    /// remedy and the finance agents already call it - but nothing made the mistake impossible to repeat, and
+    /// the next model with a target network would repeat it exactly as quietly.</para>
+    ///
+    /// <para>Only architectures that CARRY layers are claimed. When <see cref="Layers"/> is empty each model
+    /// builds its own from the default factory, so there is nothing to share and reuse is perfectly safe -
+    /// that is the common case and it stays unaffected.</para>
+    /// </remarks>
+    internal void ClaimForModel(object model)
+    {
+        if (Layers.Count == 0)
+        {
+            return;
+        }
+
+        if (_owner is null)
+        {
+            _owner = new WeakReference<object>(model);
+            return;
+        }
+
+        // The same model re-initialising itself - deserialization and lazy shape resolution both re-enter
+        // InitializeLayers on an existing instance - is not a second owner.
+        if (!_owner.TryGetTarget(out var existing) || ReferenceEquals(existing, model))
+        {
+            _owner.SetTarget(model);
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"This {nameof(NeuralNetworkArchitecture<T>)} already belongs to a {existing.GetType().Name} and "
+            + "carries explicit layers, which models take BY REFERENCE. Constructing a second model from it "
+            + "would give both models the same mutable layers, so training either would train both - the "
+            + "failure that makes a reinforcement-learning target network silently equal to its online "
+            + $"network. Build the second model from {nameof(CloneForModelConstruction)}() so it gets "
+            + "independent layers.");
+    }
+
+    /// <summary>
     /// Creates an independent architecture for another model that must not share this instance's
     /// mutable layer objects.
     /// </summary>
