@@ -64,7 +64,7 @@ namespace AiDotNet.Diffusion.Video;
 ///
 /// // Text-to-video generation
 /// var video = animateDiff.GenerateFromText(
-///     waves gently rolling",
+///     "A beautiful sunset over the ocean, waves gently rolling",
 ///     width: 512,
 ///     height: 512,
 ///     numFrames: 16,
@@ -74,7 +74,6 @@ namespace AiDotNet.Diffusion.Video;
 /// var inputImage = ImageHelper&lt;float&gt;.LoadImage("beach.jpg");
 /// var animatedVideo = animateDiff.GenerateFromImage(
 ///     inputImage,
-///     moving clouds",
 ///     numFrames: 16);
 /// </code>
 /// </example>
