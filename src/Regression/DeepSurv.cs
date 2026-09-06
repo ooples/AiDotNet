@@ -44,18 +44,19 @@ namespace AiDotNet.Regression;
 /// <code>
 /// // Create a DeepSurv model for Cox proportional hazards survival analysis
 /// var options = new DeepSurvOptions&lt;double&gt;();
-/// var model = new DeepSurv&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 3 clinical features
 /// var features = new Matrix&lt;double&gt;(new double[,] { { 55, 1, 2.1 }, { 60, 0, 3.5 }, { 45, 1, 1.8 }, { 70, 0, 4.2 }, { 50, 1, 2.9 }, { 65, 0, 3.1 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 12, 24, 36, 6, 18, 30 });
 ///
 /// // Train the neural network for Cox regression
-/// model.Train(features, targets);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new DeepSurv&lt;double&gt;(options))
+///     .Build(features, targets);
 ///
 /// // Predict risk scores for a new patient
 /// var newPatient = new Matrix&lt;double&gt;(new double[,] { { 58, 1, 2.5 } });
-/// var prediction = model.Predict(newPatient);
+/// var prediction = result.Predict(newPatient);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>

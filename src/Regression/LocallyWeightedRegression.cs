@@ -37,18 +37,19 @@ namespace AiDotNet.Regression;
 /// <code>
 /// // Create a locally weighted regression (LOESS/LOWESS)
 /// var options = new LocallyWeightedRegressionOptions();
-/// var model = new LocallyWeightedRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features each
 /// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 }, { 9, 10 }, { 11, 12 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
 ///
 /// // Store all training examples for local model fitting
-/// model.Train(features, targets);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new LocallyWeightedRegression&lt;double&gt;(options))
+///     .Build(features, targets);
 ///
 /// // Predict by fitting a weighted local model near the query point
 /// var newSample = new Matrix&lt;double&gt;(new double[,] { { 6, 7 } });
-/// var prediction = model.Predict(newSample);
+/// var prediction = result.Predict(newSample);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

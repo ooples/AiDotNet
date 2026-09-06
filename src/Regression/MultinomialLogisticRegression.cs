@@ -30,18 +30,19 @@ namespace AiDotNet.Regression;
 /// <code>
 /// // Create a multinomial logistic regression for multi-class classification
 /// var options = new MultinomialLogisticRegressionOptions&lt;double&gt;();
-/// var model = new MultinomialLogisticRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 9 samples with 2 features, 3 classes (0, 1, 2)
 /// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 1 }, { 1, 2 }, { 2, 1 }, { 4, 4 }, { 5, 4 }, { 4, 5 }, { 8, 8 }, { 9, 8 }, { 8, 9 } });
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1, 2, 2, 2 });
 ///
 /// // Train the multi-class model with softmax
-/// model.Train(features, labels);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new MultinomialLogisticRegression&lt;double&gt;(options))
+///     .Build(features, labels);
 ///
 /// // Predict class probabilities for a new sample
 /// var newSample = new Matrix&lt;double&gt;(new double[,] { { 5, 5 } });
-/// var prediction = model.Predict(newSample);
+/// var prediction = result.Predict(newSample);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

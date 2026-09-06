@@ -74,7 +74,7 @@ jobs:
       # the failure count could stay level. Tighten both whenever this step reports better numbers; do not
       # loosen either without saying why in the commit message.
       - name: Compile-check XML doc-comment examples (ratchet)
-        run: dotnet run --project tools/DocSnippetVerify -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml --min-pass 1284 --max-fail 119
+        run: dotnet run --project tools/DocSnippetVerify -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml --min-pass 1288 --max-fail 115
 
       # AiModelBuilder and AiModelResult are the whole supported surface. An example that trains or
       # predicts on the model object teaches readers to reach past the facade, skipping the validation,
@@ -82,4 +82,4 @@ jobs:
       # Roslyn semantic analysis rather than matched by name, because a receiver's type is not something
       # a regex can know. Ratchet the ceiling DOWN as examples are converted.
       - name: Facade conformance in doc examples (ratchet)
-        run: dotnet run --project tools/DocSnippetVerify -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml --facade-check --max-facade-violations 557
+        run: dotnet run --project tools/DocSnippetVerify -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml --facade-check --max-facade-violations 318

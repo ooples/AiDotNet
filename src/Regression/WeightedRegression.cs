@@ -34,18 +34,19 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a weighted regression with per-sample importance weights
-/// var model = new WeightedRegression&lt;double&gt;();
 ///
 /// // Prepare training data: 5 samples with 2 features each
 /// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 }, { 9, 10 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 2.5, 5.3, 8.1, 10.9, 13.7 });
 ///
 /// // Train with sample weights (higher weight = more influence)
-/// model.Train(features, targets);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new WeightedRegression&lt;double&gt;())
+///     .Build(features, targets);
 ///
 /// // Predict for a new sample
 /// var newSample = new Matrix&lt;double&gt;(new double[,] { { 11, 12 } });
-/// var prediction = model.Predict(newSample);
+/// var prediction = result.Predict(newSample);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

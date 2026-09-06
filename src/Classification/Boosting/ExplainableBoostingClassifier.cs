@@ -44,7 +44,6 @@ namespace AiDotNet.Classification.Boosting;
 /// <code>
 /// // Create EBM classifier for interpretable predictions
 /// var options = new ExplainableBoostingClassifierOptions&lt;double&gt;();
-/// var classifier = new ExplainableBoostingClassifier&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features
 /// var features = new Matrix&lt;double&gt;(6, 2);
@@ -57,12 +56,14 @@ namespace AiDotNet.Classification.Boosting;
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
 ///
 /// // Train additive model with per-feature shape functions
-/// classifier.Train(features, labels);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new ExplainableBoostingClassifier&lt;double&gt;(options))
+///     .Build(features, labels);
 ///
 /// // Predict with full interpretability (shape function contributions visible)
 /// var newSample = new Matrix&lt;double&gt;(1, 2);
 /// newSample[0, 0] = 1.1; newSample[0, 1] = 1.0;
-/// var prediction = classifier.Predict(newSample);
+/// var prediction = result.Predict(newSample);
 /// // Result is available in the returned value
 /// </code>
 /// </example>

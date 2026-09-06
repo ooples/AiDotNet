@@ -39,9 +39,10 @@ namespace AiDotNet.TimeSeries;
 /// var inputMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Create a GARCH(1,1) model for modeling financial volatility clustering
 /// var options = new GARCHModelOptions&lt;double&gt;();
-/// var garch = new GARCHModel&lt;double&gt;(options);
-/// garch.Train(returnsMatrix, returnsVector);
-/// Vector&lt;double&gt; volatilityForecast = garch.Predict(inputMatrix);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new GARCHModel&lt;double&gt;(options))
+///     .Build(returnsMatrix, returnsVector);
+/// Vector&lt;double&gt; volatilityForecast = result.Predict(inputMatrix);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

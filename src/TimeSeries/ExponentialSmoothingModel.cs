@@ -38,9 +38,10 @@ namespace AiDotNet.TimeSeries;
 /// {
 ///     SeasonalPeriod = 12
 /// };
-/// var ets = new ExponentialSmoothingModel&lt;double&gt;(options);
-/// ets.Train(trainingMatrix, trainingLabels);
-/// Vector&lt;double&gt; forecast = ets.Predict(inputMatrix);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new ExponentialSmoothingModel&lt;double&gt;(options))
+///     .Build(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = result.Predict(inputMatrix);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

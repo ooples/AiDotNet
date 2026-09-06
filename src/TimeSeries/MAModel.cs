@@ -38,9 +38,10 @@ namespace AiDotNet.TimeSeries;
 /// var trainingMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Create an MA(2) model for forecasting based on past forecast errors
 /// var options = new MAModelOptions&lt;double&gt; { MAOrder = 2 };
-/// var maModel = new MAModel&lt;double&gt;(options);
-/// maModel.Train(trainingMatrix, trainingLabels);
-/// Vector&lt;double&gt; forecast = maModel.Predict(inputMatrix);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new MAModel&lt;double&gt;(options))
+///     .Build(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = result.Predict(inputMatrix);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

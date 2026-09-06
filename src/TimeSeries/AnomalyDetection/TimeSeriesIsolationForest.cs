@@ -54,9 +54,10 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 /// var trainingMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Create a time-series-aware isolation forest for anomaly detection
 /// var options = new TimeSeriesIsolationForestOptions&lt;double&gt;();
-/// var iForest = new TimeSeriesIsolationForest&lt;double&gt;(options);
-/// iForest.Train(trainingMatrix, trainingLabels);
-/// Vector&lt;double&gt; anomalyScores = iForest.Predict(testMatrix);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new TimeSeriesIsolationForest&lt;double&gt;(options))
+///     .Build(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; anomalyScores = result.Predict(testMatrix);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

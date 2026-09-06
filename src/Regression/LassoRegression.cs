@@ -43,11 +43,12 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// var options = new LassoRegressionOptions&lt;double&gt;();
-/// var model = new LassoRegression&lt;double&gt;(options);
 /// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 2, 0 }, { 3, 4, 0 }, { 5, 6, 0 }, { 7, 8, 0 }, { 9, 10, 0 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 2.1, 3.9, 6.2, 7.8, 10.1 });
-/// model.Train(features, targets);
-/// var prediction = model.Predict(new Matrix&lt;double&gt;(new double[,] { { 11, 12, 0 } }));
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new LassoRegression&lt;double&gt;(options))
+///     .Build(features, targets);
+/// var prediction = result.Predict(new Matrix&lt;double&gt;(new double[,] { { 11, 12, 0 } }));
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

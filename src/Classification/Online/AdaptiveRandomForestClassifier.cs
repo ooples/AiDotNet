@@ -52,18 +52,19 @@ namespace AiDotNet.Classification.Online;
 /// <code>
 /// // Create adaptive random forest for streaming data with concept drift
 /// var options = new AdaptiveRandomForestOptions&lt;double&gt;();
-/// var classifier = new AdaptiveRandomForestClassifier&lt;double&gt;(options);
 ///
 /// // Prepare initial training data
 /// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 1.1 }, { 1.2, 0.9 }, { 0.8, 1.0 }, { 5.0, 5.1 }, { 5.2, 4.9 }, { 4.8, 5.0 } });
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
 ///
 /// // Train with per-tree drift detection for local adaptation
-/// classifier.Train(features, labels);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new AdaptiveRandomForestClassifier&lt;double&gt;(options))
+///     .Build(features, labels);
 ///
 /// // Predict with weighted voting across adapted trees
 /// var newSample = new Matrix&lt;double&gt;(new double[,] { { 1.1, 1.0 } });
-/// var prediction = classifier.Predict(newSample);
+/// var prediction = result.Predict(newSample);
 /// // Result is available in the returned value
 /// </code>
 /// </example>

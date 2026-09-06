@@ -42,8 +42,9 @@ namespace AiDotNet.Clustering.Partitioning;
 /// <code>
 /// var dataMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// var options = new KMeansOptions&lt;double&gt;();
-/// var kMeans = new KMeans&lt;double&gt;(options);
-/// kMeans.Fit(dataMatrix);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new KMeans&lt;double&gt;(options))
+///     .Build(dataMatrix);
 /// int[] labels = kMeans.Labels;
 /// </code>
 /// </example>

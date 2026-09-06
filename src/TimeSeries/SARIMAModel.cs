@@ -38,9 +38,10 @@ namespace AiDotNet.TimeSeries;
 ///     LagOrder = 1, ///     SeasonalAROrder = 1, SeasonalDifferencingOrder = 1,
 ///     SeasonalPeriod = 12
 /// };
-/// var sarima = new SARIMAModel&lt;double&gt;(options);
-/// sarima.Train(trainingMatrix, trainingLabels);
-/// Vector&lt;double&gt; forecast = sarima.Predict(inputMatrix);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new SARIMAModel&lt;double&gt;(options))
+///     .Build(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = result.Predict(inputMatrix);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

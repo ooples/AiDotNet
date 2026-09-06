@@ -52,7 +52,6 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 /// <code>
 /// // Create balanced random forest for imbalanced fraud detection
 /// var options = new BalancedRandomForestOptions&lt;double&gt;();
-/// var classifier = new BalancedRandomForestClassifier&lt;double&gt;(options);
 ///
 /// // Prepare imbalanced training data: 8 samples, 6 majority (class 0), 2 minority (class 1)
 /// var features = new Matrix&lt;double&gt;(8, 2);
@@ -67,12 +66,14 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 0, 0, 0, 1, 1 });
 ///
 /// // Train trees on balanced bootstrap samples with random feature subsets
-/// classifier.Train(features, labels);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new BalancedRandomForestClassifier&lt;double&gt;(options))
+///     .Build(features, labels);
 ///
 /// // Predict using ensemble vote
 /// var newSample = new Matrix&lt;double&gt;(1, 2);
 /// newSample[0, 0] = 5.1; newSample[0, 1] = 5.0;
-/// var prediction = classifier.Predict(newSample);
+/// var prediction = result.Predict(newSample);
 /// // Result is available in the returned value
 /// </code>
 /// </example>

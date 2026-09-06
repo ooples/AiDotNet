@@ -37,18 +37,19 @@ namespace AiDotNet.Regression;
 /// <code>
 /// // Create a Support Vector Regression with epsilon-tube fitting
 /// var options = new SupportVectorRegressionOptions();
-/// var model = new SupportVectorRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features each
 /// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 }, { 9, 10 }, { 11, 12 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
 ///
 /// // Train with kernel-based epsilon-insensitive loss
-/// model.Train(features, targets);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new SupportVectorRegression&lt;double&gt;(options))
+///     .Build(features, targets);
 ///
 /// // Predict for a new sample
 /// var newSample = new Matrix&lt;double&gt;(new double[,] { { 13, 14 } });
-/// var prediction = model.Predict(newSample);
+/// var prediction = result.Predict(newSample);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

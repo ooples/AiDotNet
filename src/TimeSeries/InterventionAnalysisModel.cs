@@ -36,9 +36,10 @@ namespace AiDotNet.TimeSeries;
 /// var trainingMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Measure the impact of a policy change at time step 50 on a time series
 /// var options = new InterventionAnalysisOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
-/// var model = new InterventionAnalysisModel&lt;double&gt;(options);
-/// model.Train(trainingMatrix, trainingLabels);
-/// Vector&lt;double&gt; counterfactual = model.Predict(inputMatrix);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new InterventionAnalysisModel&lt;double&gt;(options))
+///     .Build(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; counterfactual = result.Predict(inputMatrix);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

@@ -53,9 +53,10 @@ namespace AiDotNet.TimeSeries;
 ///     LookbackWindow = 30, ForecastHorizon = 7,
 ///     HiddenSize = 40, NumLayers = 2
 /// };
-/// var deepar = new DeepARModel&lt;double&gt;(options);
-/// deepar.Train(trainingMatrix, trainingLabels);
-/// Vector&lt;double&gt; forecast = deepar.Predict(contextWindow);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new DeepARModel&lt;double&gt;(options))
+///     .Build(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = result.Predict(contextWindow);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

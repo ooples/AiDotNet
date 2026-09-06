@@ -18,11 +18,12 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// var options = new PolynomialRegressionOptions&lt;double&gt;();
-/// var model = new PolynomialRegression&lt;double&gt;(options);
 /// var features = new Matrix&lt;double&gt;(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 1.0, 4.1, 9.0, 16.2, 25.0 });
-/// model.Train(features, targets);
-/// var prediction = model.Predict(new Matrix&lt;double&gt;(new double[,] { { 6 } }));
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new PolynomialRegression&lt;double&gt;(options))
+///     .Build(features, targets);
+/// var prediction = result.Predict(new Matrix&lt;double&gt;(new double[,] { { 6 } }));
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

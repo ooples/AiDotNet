@@ -39,9 +39,10 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 /// var testData = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Create an LSTM-VAE model for detecting anomalies via reconstruction error
 /// var options = new LSTMVAEOptions&lt;double&gt;();
-/// var lstmVae = new LSTMVAE&lt;double&gt;(options);
-/// lstmVae.Train(normalTrainingData, normalLabels);
-/// Vector&lt;double&gt; reconstructionErrors = lstmVae.Predict(testData);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new LSTMVAE&lt;double&gt;(options))
+///     .Build(normalTrainingData, normalLabels);
+/// Vector&lt;double&gt; reconstructionErrors = result.Predict(testData);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

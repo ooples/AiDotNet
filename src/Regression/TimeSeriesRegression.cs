@@ -29,7 +29,6 @@ namespace AiDotNet.Regression;
 /// // Create time series regression with autoregressive and seasonal components
 /// var options = new TimeSeriesRegressionOptions&lt;double&gt;();
 /// var regularization = new L2Regularization&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
-/// var model = new TimeSeriesRegression&lt;double&gt;(options, regularization);
 ///
 /// // Prepare historical data with temporal features
 /// var features = new Matrix&lt;double&gt;(24, 3); // 24 observations, 3 features
@@ -37,11 +36,13 @@ namespace AiDotNet.Regression;
 ///     148, 148, 136, 119, 104, 118, 115, 126, 141, 135, 125, 149, 170, 170, 158, 133, 114, 140 });
 ///
 /// // Train the model to capture trends, seasonality, and autoregressive patterns
-/// model.Train(features, targets);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new TimeSeriesRegression&lt;double&gt;(options, regularization))
+///     .Build(features, targets);
 ///
 /// // Predict future values
 /// var newFeatures = new Matrix&lt;double&gt;(1, 3);
-/// var forecast = model.Predict(newFeatures);
+/// var forecast = result.Predict(newFeatures);
 /// // Result is available in the returned value
 /// </code>
 /// </example>

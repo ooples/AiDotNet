@@ -45,11 +45,12 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// var options = new ElasticNetRegressionOptions&lt;double&gt;();
-/// var model = new ElasticNetRegression&lt;double&gt;(options);
 /// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 }, { 9, 10 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 2.1, 3.9, 6.2, 7.8, 10.1 });
-/// model.Train(features, targets);
-/// var prediction = model.Predict(new Matrix&lt;double&gt;(new double[,] { { 11, 12 } }));
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new ElasticNetRegression&lt;double&gt;(options))
+///     .Build(features, targets);
+/// var prediction = result.Predict(new Matrix&lt;double&gt;(new double[,] { { 11, 12 } }));
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

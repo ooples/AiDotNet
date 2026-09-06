@@ -51,7 +51,6 @@ namespace AiDotNet.TimeSeries;
 /// <code>
 /// // Create N-HiTS model with default options for long-horizon forecasting
 /// var options = new NHiTSOptions&lt;double&gt;();
-/// var model = new NHiTSModel&lt;double&gt;(options);
 ///
 /// // Prepare historical time series data
 /// var history = new Vector&lt;double&gt;(new double[] { 112, 118, 132, 129, 121, 135, 148, 148, 136, 119, 104, 118,
@@ -59,10 +58,12 @@ namespace AiDotNet.TimeSeries;
 /// var trainingMatrix = new Matrix&lt;double&gt;(history.Count - 1, 1);
 ///
 /// // Train the model on historical observations
-/// model.Train(trainingMatrix, history.SubVector(1, history.Count - 1));
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new NHiTSModel&lt;double&gt;(options))
+///     .Build(trainingMatrix, history.SubVector(1, history.Count - 1));
 ///
 /// // Forecast future values using hierarchical interpolation
-/// var forecast = model.Predict(trainingMatrix);
+/// var forecast = result.Predict(trainingMatrix);
 /// // Result is available in the returned value
 /// </code>
 /// </example>

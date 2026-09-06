@@ -41,6 +41,10 @@ var options = new CSharpCompilationOptions(
     nullableContextOptions: NullableContextOptions.Disable);
 var parse = new CSharpParseOptions(LanguageVersion.Latest);
 
+// Fully-qualified type names for generated code, so a stub never collides with an imported name.
+var FullType = SymbolDisplayFormat.FullyQualifiedFormat
+    .WithMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
+
 // ── Usings the harness prepends to every snippet ──
 // A documentation example names a type; it does not carry the library's import list, because a reader pastes it
 // into a file that already has those usings (or lets the IDE add them). Importing only three AiDotNet namespaces
@@ -145,6 +149,9 @@ var unsolvable = new List<string>();
 // --facade-check reports examples that train or predict on a model instead of an AiModelResult.
 bool facadeCheck = args.Any(a => string.Equals(a, "--facade-check", StringComparison.OrdinalIgnoreCase));
 var facadeViolations = new List<string>();
+// --facade-plan <path> writes the facts a rewrite needs, one line per convertible call.
+bool facadePlan = args.Any(a => string.Equals(a, "--facade-plan", StringComparison.OrdinalIgnoreCase));
+var facadePlanLines = new List<string>();
 int probeId = 0;
 string[] DeclarationCandidates =
 {
@@ -400,6 +407,45 @@ List<Diagnostic> Compile(string source, int id)
 // `.ConfigureModel(new SimpleRegression<double>())` is exactly right. What this looks for is a
 // Train/Predict/Fit call whose RECEIVER is a model rather than an AiModelResult, resolved through the
 // semantic model rather than matched by name — a receiver's type is not something a regex can know.
+// Facts a rewrite needs, gathered where they can be known exactly. Which builder type arguments a model
+// requires is a property of its IFullModel implementation, not of its name — a regression is
+// <double, Matrix<double>, Vector<double>> while a network is <T, Tensor<T>, Tensor<T>> — so the plan is
+// produced here, from the semantic model, and applied as text elsewhere.
+List<string> FacadePlan(string source, string fileKey, int idx)
+{
+    var plan = new List<string>();
+    var tree = CSharpSyntaxTree.ParseText(source, parse);
+    var comp = CSharpCompilation.Create("plan" + (++probeId), new[] { tree }, refs, options);
+    var model = comp.GetSemanticModel(tree);
+    var root = tree.GetRoot();
+
+    foreach (var call in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
+    {
+        if (call.Expression is not MemberAccessExpressionSyntax access) continue;
+        if (access.Name.Identifier.ValueText is not ("Train" or "Fit")) continue;
+        if (access.Expression is not IdentifierNameSyntax id) continue;
+
+        var receiver = model.GetTypeInfo(access.Expression).Type;
+        if (receiver is null || receiver.Name == "AiModelResult") continue;
+
+        var full = receiver.AllInterfaces.FirstOrDefault(i => i.Name == "IFullModel");
+        if (full is null || full.TypeArguments.Length != 3) continue;
+
+        // the declaration this variable came from, so its constructor can move into ConfigureModel
+        var declarator = root.DescendantNodes().OfType<VariableDeclaratorSyntax>()
+            .FirstOrDefault(v => v.Identifier.ValueText == id.Identifier.ValueText);
+        string ctor = declarator?.Initializer?.Value.ToString().Replace("\r", " ").Replace("\n", " ") ?? "";
+        if (ctor.Length == 0) continue;
+
+        string args = string.Join(" | ", call.ArgumentList.Arguments.Select(a => a.ToString()));
+        string targs = string.Join(", ", full.TypeArguments.Select(a => a.ToDisplayString(FullType)));
+
+        plan.Add(string.Join("\t", fileKey, idx.ToString(), id.Identifier.ValueText,
+                             Regex.Replace(ctor, @"\s+", " "), targs, args));
+    }
+    return plan;
+}
+
 List<string> FacadeViolations(string source, string fileKey)
 {
     var found = new List<string>();
@@ -439,8 +485,6 @@ List<string> FacadeViolations(string source, string fileKey)
 // Nothing is skipped and nothing is hidden from the reader — the fragment is still compiled against the
 // real base type, so a renamed attribute, a changed base, or a member that no longer exists still fails
 // the build. That is the difference between this and an opt-out marker.
-var FullType = SymbolDisplayFormat.FullyQualifiedFormat
-    .WithMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
 
 string? CompletionFor(string source)
 {
@@ -669,6 +713,11 @@ void Check(string code, string fileKey, int idx, string? homeNamespace = null)
         facadeViolations.AddRange(FacadeViolations(source, fileKey));
     }
 
+    if (facadePlan)
+    {
+        facadePlanLines.AddRange(FacadePlan(source, fileKey, idx));
+    }
+
     var cur = perFile.GetValueOrDefault(fileKey);
     perFile[fileKey] = (cur.total + 1, cur.fail + (errors.Count == 0 ? 0 : 1));
 }
@@ -780,6 +829,18 @@ if (suggestDecls && unsolvable.Count > 0)
     {
         Console.WriteLine($"  {g.Count(),3}  {g.Key}");
     }
+}
+
+// The conversion plan: one row per call that can be routed through the facade, carrying the model
+// variable, its constructor text, the builder's three type arguments and the training arguments.
+if (facadePlan)
+{
+    int p = Array.FindIndex(args, a => string.Equals(a, "--facade-plan", StringComparison.OrdinalIgnoreCase));
+    string planPath = p >= 0 && p + 1 < args.Length && !args[p + 1].StartsWith("--", StringComparison.Ordinal)
+        ? args[p + 1]
+        : "facade-plan.tsv";
+    File.WriteAllLines(planPath, facadePlanLines);
+    Console.WriteLine($"\nwrote {facadePlanLines.Count} convertible call(s) -> {planPath}");
 }
 
 // Facade conformance, and the ratchet that stops it regressing. AiModelBuilder and AiModelResult are the

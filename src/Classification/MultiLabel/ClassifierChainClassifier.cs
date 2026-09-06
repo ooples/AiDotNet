@@ -51,18 +51,19 @@ namespace AiDotNet.Classification.MultiLabel;
 /// <example>
 /// <code>
 /// // Create Classifier Chain that captures label dependencies
-/// var classifier = new ClassifierChainClassifier&lt;double&gt;();
 ///
 /// // Prepare features and multi-label targets
 /// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// var labels = new Matrix&lt;double&gt;(new double[,] { { 1, 0, 1 }, { 1, 1, 0 }, { 0, 1, 1 }, { 0, 0, 1 } });
 ///
 /// // Train chained classifiers where each uses previous predictions as features
-/// classifier.Train(features, labels);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Matrix&lt;double&gt;&gt;()
+///     .ConfigureModel(new ClassifierChainClassifier&lt;double&gt;())
+///     .Build(features, labels);
 ///
 /// // Predict label set with label correlation awareness
 /// var newSample = new Matrix&lt;double&gt;(new double[,] { { 2.0, 3.0 } });
-/// var prediction = classifier.Predict(newSample);
+/// var prediction = result.Predict(newSample);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

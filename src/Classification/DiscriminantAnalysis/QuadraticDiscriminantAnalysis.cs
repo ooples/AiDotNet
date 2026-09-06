@@ -42,18 +42,19 @@ namespace AiDotNet.Classification.DiscriminantAnalysis;
 /// <code>
 /// // Create QDA classifier with per-class covariance matrices
 /// var options = new DiscriminantAnalysisOptions&lt;double&gt;();
-/// var classifier = new QuadraticDiscriminantAnalysis&lt;double&gt;(options);
 ///
 /// // Prepare training data with classes that have different covariance structures
 /// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 1.1 }, { 1.2, 0.9 }, { 0.8, 1.0 }, { 5.0, 5.1 }, { 5.2, 4.9 }, { 4.8, 5.0 } });
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
 ///
 /// // Train to learn per-class Gaussian distributions with quadratic boundaries
-/// classifier.Train(features, labels);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new QuadraticDiscriminantAnalysis&lt;double&gt;(options))
+///     .Build(features, labels);
 ///
 /// // Classify new sample using quadratic discriminant function
 /// var newSample = new Matrix&lt;double&gt;(new double[,] { { 1.1, 1.0 } });
-/// var prediction = classifier.Predict(newSample);
+/// var prediction = result.Predict(newSample);
 /// // Result is available in the returned value
 /// </code>
 /// </example>

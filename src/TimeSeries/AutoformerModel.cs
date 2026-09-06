@@ -79,9 +79,10 @@ namespace AiDotNet.TimeSeries;
 ///     
 ///     EmbeddingDim = 512
 /// };
-/// var autoformer = new AutoformerModel&lt;double&gt;(options);
-/// autoformer.Train(trainingMatrix, trainingLabels);
-/// Vector&lt;double&gt; forecast = autoformer.Predict(inputMatrix);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new AutoformerModel&lt;double&gt;(options))
+///     .Build(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = result.Predict(inputMatrix);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

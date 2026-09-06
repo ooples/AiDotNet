@@ -37,7 +37,6 @@ namespace AiDotNet.TimeSeries;
 /// <code>
 /// // Create Informer model for efficient long-sequence time series forecasting
 /// var options = new InformerOptions&lt;double&gt;();
-/// var model = new InformerModel&lt;double&gt;(options);
 ///
 /// // Prepare long-horizon time series data
 /// var history = new Vector&lt;double&gt;(new double[] { 112, 118, 132, 129, 121, 135, 148, 148, 136, 119, 104, 118,
@@ -45,10 +44,12 @@ namespace AiDotNet.TimeSeries;
 /// var trainingMatrix = new Matrix&lt;double&gt;(history.Count - 1, 1);
 ///
 /// // Train using ProbSparse self-attention for O(L log L) efficiency
-/// model.Train(trainingMatrix, history.SubVector(1, history.Count - 1));
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new InformerModel&lt;double&gt;(options))
+///     .Build(trainingMatrix, history.SubVector(1, history.Count - 1));
 ///
 /// // Generate multi-step forecasts in parallel via generative decoder
-/// var forecast = model.Predict(trainingMatrix);
+/// var forecast = result.Predict(trainingMatrix);
 /// // Result is available in the returned value
 /// </code>
 /// </example>

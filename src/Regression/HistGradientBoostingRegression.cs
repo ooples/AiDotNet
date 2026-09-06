@@ -48,28 +48,30 @@ namespace AiDotNet.Regression;
 /// Usage:
 /// <code>
 /// var options = new HistGradientBoostingOptions { NumberOfIterations = 100, LearningRate = 0.1 };
-/// var model = new HistGradientBoostingRegression&lt;double&gt;(options);
-/// model.Train(X, y);
-/// var predictions = model.Predict(X_test);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new HistGradientBoostingRegression&lt;double&gt;(options))
+///     .Build(features, targets);
+/// var predictions = result.Predict(X_test);
 /// </code>
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
 /// // Create a histogram-based gradient boosting regression for fast large-scale training
-/// var options = new HistGradientBoostingOptions();
-/// var model = new HistGradientBoostingRegression&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features each
 /// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 }, { 9, 10 }, { 11, 12 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
 ///
-/// // Train with histogram binning for O(bins*features) split finding
-/// model.Train(features, targets);
+/// // Train through the facade: the builder runs validation, preprocessing and the training pipeline,
+/// // then hands back a result you predict on.
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new HistGradientBoostingRegression&lt;double&gt;(new HistGradientBoostingOptions()))
+///     .Build(features, targets);
 ///
 /// // Predict for a new sample
 /// var newSample = new Matrix&lt;double&gt;(new double[,] { { 13, 14 } });
-/// var prediction = model.Predict(newSample);
+/// var prediction = result.Predict(newSample);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

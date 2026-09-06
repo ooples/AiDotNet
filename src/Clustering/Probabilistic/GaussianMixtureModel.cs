@@ -45,8 +45,9 @@ namespace AiDotNet.Clustering.Probabilistic;
 /// <code>
 /// var dataMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// var options = new GMMOptions&lt;double&gt;();
-/// var gaussianMixtureModel = new GaussianMixtureModel&lt;double&gt;(options);
-/// gaussianMixtureModel.Fit(dataMatrix);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new GaussianMixtureModel&lt;double&gt;(options))
+///     .Build(dataMatrix);
 /// int[] labels = gaussianMixtureModel.Labels;
 /// </code>
 /// </example>

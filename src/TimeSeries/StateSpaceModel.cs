@@ -38,9 +38,10 @@ namespace AiDotNet.TimeSeries;
 /// var trainingMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Create a state space model for time series with hidden dynamics
 /// var options = new StateSpaceModelOptions&lt;double&gt; { };
-/// var ssm = new StateSpaceModel&lt;double&gt;(options);
-/// ssm.Train(trainingMatrix, trainingLabels);
-/// Vector&lt;double&gt; filtered = ssm.Predict(inputMatrix);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new StateSpaceModel&lt;double&gt;(options))
+///     .Build(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; filtered = result.Predict(inputMatrix);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

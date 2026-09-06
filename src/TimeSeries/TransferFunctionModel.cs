@@ -38,9 +38,10 @@ namespace AiDotNet.TimeSeries;
 /// var futureInputs = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Model how advertising spend (input) affects sales (output) with time delays
 /// var options = new TransferFunctionOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
-/// var tfModel = new TransferFunctionModel&lt;double&gt;(options);
-/// tfModel.Train(inputOutputMatrix, outputVector);
-/// Vector&lt;double&gt; forecast = tfModel.Predict(futureInputs);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new TransferFunctionModel&lt;double&gt;(options))
+///     .Build(inputOutputMatrix, outputVector);
+/// Vector&lt;double&gt; forecast = result.Predict(futureInputs);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

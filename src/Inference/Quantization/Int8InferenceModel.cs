@@ -48,8 +48,9 @@ namespace AiDotNet.Inference.Quantization;
 /// <c>InternalsVisibleTo</c> and from <c>AiDotNet</c> consumer code via the facade):
 /// <code>
 /// // Train a model as normal
-/// var transformer = new Transformer&lt;float&gt;(architecture, lossFn);
-/// transformer.Train(features, targets);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new Transformer&lt;float&gt;(architecture, lossFn))
+///     .Build(features, targets);
 ///
 /// // Wrap for INT8 inference (internal call site)
 /// var int8 = Int8InferenceModel.FromTrained(transformer);

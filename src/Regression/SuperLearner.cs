@@ -40,18 +40,19 @@ namespace AiDotNet.Regression;
 ///     new RidgeRegression&lt;double&gt;(),
 ///     new MultipleRegression&lt;double&gt;()
 /// };
-/// var model = new SuperLearner&lt;double&gt;(baseModels);
 ///
 /// // Prepare training data: 6 samples with 2 features each
 /// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 }, { 9, 10 }, { 11, 12 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
 ///
 /// // Train with cross-validated optimal meta-learner
-/// model.Train(features, targets);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new SuperLearner&lt;double&gt;(baseModels))
+///     .Build(features, targets);
 ///
 /// // Predict using the optimally weighted combination
 /// var newSample = new Matrix&lt;double&gt;(new double[,] { { 13, 14 } });
-/// var prediction = model.Predict(newSample);
+/// var prediction = result.Predict(newSample);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
