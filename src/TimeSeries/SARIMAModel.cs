@@ -36,7 +36,7 @@ namespace AiDotNet.TimeSeries;
 /// var options = new SARIMAOptions&lt;double&gt;
 /// {
 ///     LagOrder = 1, ///     SeasonalAROrder = 1, SeasonalDifferencingOrder = 1,
-///     SeasonalMAOrder = 1, SeasonalPeriod = 12
+///     SeasonalPeriod = 12
 /// };
 /// var sarima = new SARIMAModel&lt;double&gt;(options);
 /// sarima.Train(trainingMatrix, trainingLabels);

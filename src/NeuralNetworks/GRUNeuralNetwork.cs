@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new GRUOptions { InputSize = 10, HiddenSize = 128, NumLayers = 2 };
+/// var options = new GRUOptions { HiddenSize = 128};
 /// var model = new GRUNeuralNetwork&lt;float&gt;(options);
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20, 10 });
 /// var output = model.Predict(input);

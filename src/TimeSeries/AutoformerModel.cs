@@ -76,8 +76,8 @@ namespace AiDotNet.TimeSeries;
 /// // Create an Autoformer with auto-correlation for long-range forecasting
 /// var options = new AutoformerOptions&lt;double&gt;
 /// {
-///     InputLength = 96, PredictionLength = 24,
-///     EmbeddingDim = 512, NumHeads = 8
+///     
+///     EmbeddingDim = 512
 /// };
 /// var autoformer = new AutoformerModel&lt;double&gt;(options);
 /// autoformer.Train(trainingMatrix, trainingLabels);

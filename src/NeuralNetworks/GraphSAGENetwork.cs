@@ -62,7 +62,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new GraphSAGEOptions { NodeFeatureSize = 16, HiddenSize = 128, NumLayers = 2 };
+/// var options = new GraphSAGEOptions { NumLayers = 2 };
 /// var model = new GraphSAGENetwork&lt;float&gt;(options);
 /// var nodeFeatures = Tensor&lt;float&gt;.CreateRandom(new[] { 50, 16 });
 /// var output = model.Predict(nodeFeatures);
