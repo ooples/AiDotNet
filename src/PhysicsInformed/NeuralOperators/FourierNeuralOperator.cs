@@ -91,7 +91,12 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     /// <example>
     /// <code>
     /// var fno = new FourierNeuralOperator&lt;float&gt;();
+    /// // One tensor per sampled function: the operator learns a mapping between whole functions,
+    /// // not between individual points.
+    /// var inputFunctions = new[] { Tensor&lt;float&gt;.CreateRandom(64, 1), Tensor&lt;float&gt;.CreateRandom(64, 1) };
+    /// var outputFunctions = new[] { Tensor&lt;float&gt;.CreateRandom(64, 1), Tensor&lt;float&gt;.CreateRandom(64, 1) };
     /// var history = fno.Train(inputFunctions, outputFunctions, epochs: 100);
+    /// var newInputFunction = Tensor&lt;float&gt;.CreateRandom(64, 1);
     /// Tensor&lt;float&gt; prediction = fno.Forward(newInputFunction);
     /// </code>
     /// </example>

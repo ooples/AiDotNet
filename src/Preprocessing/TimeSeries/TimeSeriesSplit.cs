@@ -35,7 +35,7 @@ namespace AiDotNet.Preprocessing.TimeSeries;
 /// var data = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// var split = new TimeSeriesSplit(nSplits: 5, maxTrainSize: 1000);
 ///
-/// foreach (var (trainIndices, testIndices) in split.Split(data.Length))
+/// foreach (var (trainIndices, testIndices) in split.Split(data.Rows))
 /// {
 ///     // trainIndices contains indices for training data
 ///     // testIndices contains indices for test/validation data
@@ -146,16 +146,13 @@ public class TimeSeriesSplit
     /// <example>
     /// <code>
     /// var splitter = new TimeSeriesSplit(nSplits: 3);
-    /// var data = LoadTimeSeriesData(); // 100 samples
+    /// var data = new Matrix&lt;double&gt;(100, 4);   // 100 samples, 4 features
     ///
-    /// foreach (var (train, test) in splitter.Split(data.Length))
+    /// // Split yields index pairs in time order: every test fold comes strictly after the rows it was
+    /// // trained on, which is what separates this from an ordinary k-fold.
+    /// foreach (var (train, test) in splitter.Split(data.Rows))
     /// {
-    ///     var trainData = data.GetRows(train);
-    ///     var testData = data.GetRows(test);
-    ///
-    ///     model.Fit(trainData);
-    ///     var predictions = model.Predict(testData);
-    ///     var score = Evaluate(predictions, testData.Labels);
+    ///     Console.WriteLine($"train on {train.Length} rows, test on {test.Length}");
     /// }
     /// </code>
     /// </example>
@@ -231,18 +228,14 @@ public class TimeSeriesSplit
     /// <returns>Array of scores from each split.</returns>
     /// <example>
     /// <code>
-    /// var data = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+    /// var splitter = new TimeSeriesSplit(nSplits: 3);
+    /// var data = new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 };
+    ///
+    /// // The evaluator is handed one training slice and one test slice per split, in time order,
+    /// // and returns a score for that split.
     /// var scores = splitter.CrossValidate(
     ///     data,
-    ///     (train, test) =>
-    ///     {
-    ///         model.Fit(train);
-    ///         var predictions = model.Predict(test);
-    ///         return CalculateMSE(predictions, test);
-    ///     });
-    ///
-    /// // Result is available in the returned value
-    /// // Result is available in the returned value
+    ///     (train, test) => test.Length == 0 ? 0.0 : test.Average());
     /// </code>
     /// </example>
     public double[] CrossValidate<TData>(TData[] data, Func<TData[], TData[], double> evaluator)

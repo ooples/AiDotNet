@@ -28,10 +28,12 @@ namespace AiDotNet.Preprocessing.TimeSeries;
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 /// <example>
 /// <code>
-/// // Create individual transformers
-/// var lagTransformer = new LagLeadTransformer&lt;double&gt;(lagOptions);
-/// var statsTransformer = new RollingStatsTransformer&lt;double&gt;(statsOptions);
-/// var indicatorTransformer = new TechnicalIndicatorsTransformer&lt;double&gt;(indOptions);
+/// // One window configuration, shared by every transformer in the pipeline.
+/// var featureOptions = new TimeSeriesFeatureOptions { WindowSizes = [7, 30] };
+///
+/// var lagTransformer = new LagLeadTransformer&lt;double&gt;(featureOptions);
+/// var statsTransformer = new RollingStatsTransformer&lt;double&gt;(featureOptions);
+/// var indicatorTransformer = new TechnicalIndicatorsTransformer&lt;double&gt;(featureOptions);
 ///
 /// // Build a pipeline
 /// var pipeline = new TimeSeriesTransformerPipeline&lt;double&gt;()
