@@ -33,7 +33,10 @@ namespace AiDotNet.NeuralNetworks;
 /// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
 /// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
-///     .ConfigureModel(new ClipNeuralNetwork&lt;float&gt;(options))
+///     .ConfigureModel(new ClipNeuralNetwork&lt;float&gt;(
+///         architecture,
+///         imageEncoderPath: "image_encoder.onnx", textEncoderPath: "text_encoder.onnx",
+///         tokenizer: CharacterTokenizer.CreateAscii()))
 ///     .Build(trainX, trainY);
 /// var embedding = result.Predict(image);
 /// </code>

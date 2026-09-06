@@ -47,7 +47,10 @@ namespace AiDotNet.NeuralNetworks;
 /// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
 /// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
-///     .ConfigureModel(new Gpt4VisionNeuralNetwork&lt;float&gt;(options))
+///     .ConfigureModel(new Gpt4VisionNeuralNetwork&lt;float&gt;(
+///         architecture,
+///         visionEncoderPath: "vision_encoder.onnx", languageModelPath: "language_model.onnx",
+///         tokenizer: CharacterTokenizer.CreateAscii()))
 ///     .Build(trainX, trainY);
 /// var output = result.Predict(image);
 /// </code>

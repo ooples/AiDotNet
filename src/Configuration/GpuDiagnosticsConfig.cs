@@ -45,7 +45,7 @@ namespace AiDotNet.Configuration;
 /// 
 /// // Option C: Custom sink (route to any logging framework).
 /// AiDotNet.Configuration.GpuDiagnosticsConfig.Sink =
-///     (level, msg) => myLogger.LogInformation("[gpu:{Level}] {Msg}", level, msg);
+///     (level, msg) => Console.WriteLine($"[gpu:{level}] {msg}");
 ///
 /// // Or via ILogger extension
 /// AiDotNet.Configuration.GpuDiagnosticsConfig.Sink = myLogger.ToSink();

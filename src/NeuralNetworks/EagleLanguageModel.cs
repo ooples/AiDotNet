@@ -27,7 +27,7 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new EagleOptions { VocabSize = 65536, ModelDim = 2560, NumLayers = 32, NumHeads = 40 };
+/// var options = new AiDotNet.NeuralNetworks.Options.EagleOptions { VocabSize = 65536, ModelDim = 2560, NumLayers = 32, NumHeads = 40 };
 /// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
 /// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
 /// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);

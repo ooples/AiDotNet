@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks;
 /// // Create an audio-visual event localization network
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Detection,
+///     taskType: NeuralNetworkTaskType.ObjectDetection,
 ///     inputSize: 512,
 ///     outputSize: 128);
 ///

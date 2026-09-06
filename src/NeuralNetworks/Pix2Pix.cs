@@ -48,7 +48,9 @@ namespace AiDotNet.NeuralNetworks;
 ///     var generatorArchitecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 8);
 ///     var discriminatorArchitecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 1);
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
-///     .ConfigureModel(new Pix2Pix&lt;float&gt;(generatorArchitecture, discriminatorArchitecture))
+///     .ConfigureModel(new Pix2Pix&lt;float&gt;(
+///         generatorArchitecture, discriminatorArchitecture,
+///         inputType: InputType.ThreeDimensional))
 ///     .Build(trainX, trainY);
 /// var translated = result.Predict(input);
 /// </code>
