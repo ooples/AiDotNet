@@ -31,7 +31,7 @@ namespace AiDotNet.Finance.AutoML;
 /// var valInputs = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// var valTargets = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
 /// var options = new FinancialAutoMLOptions&lt;float&gt;(architecture);
-/// var automl = new FinancialAutoML&lt;float&gt;(options);
+/// var automl = new FinancialAutoML&lt;float&gt;();
 /// var bestModel = await automl.SearchAsync(
 ///     trainInputs, trainTargets,
 ///     valInputs, valTargets,

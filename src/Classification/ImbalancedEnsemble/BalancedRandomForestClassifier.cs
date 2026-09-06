@@ -67,7 +67,7 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 ///
 /// // Train trees on balanced bootstrap samples with random feature subsets
 /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-///     .ConfigureModel(new BalancedRandomForestClassifier&lt;double&gt;(options))
+///     .ConfigureModel(new BalancedRandomForestClassifier&lt;double&gt;())
 ///     .Build(features, labels);
 ///
 /// // Predict using ensemble vote

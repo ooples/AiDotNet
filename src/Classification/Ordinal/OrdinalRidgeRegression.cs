@@ -70,7 +70,7 @@ namespace AiDotNet.Classification.Ordinal;
 ///
 /// // Train with closed-form ridge solution and immediate-threshold method
 /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-///     .ConfigureModel(new OrdinalRidgeRegression&lt;double&gt;(options))
+///     .ConfigureModel(new OrdinalRidgeRegression&lt;double&gt;())
 ///     .Build(features, labels);
 ///
 /// // Predict ordinal class using learned thresholds
