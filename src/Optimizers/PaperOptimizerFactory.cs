@@ -70,8 +70,9 @@ public static class PaperOptimizerFactory
 
         var adaptations = new List<RecipeAdaptation>();
         var unhonoured = new List<string>();
+        var cautions = new List<string>();
 
-        var optimizer = Build<T, TInput, TOutput>(model, recipe, adaptations, unhonoured);
+        var optimizer = Build<T, TInput, TOutput>(model, recipe, adaptations, unhonoured, cautions);
 
         if (optimizer is null)
         {
@@ -88,6 +89,7 @@ public static class PaperOptimizerFactory
             Source = recipe.Source,
             Adaptations = adaptations,
             Unhonoured = unhonoured,
+            Cautions = cautions,
         });
 
         return optimizer;
@@ -98,10 +100,12 @@ public static class PaperOptimizerFactory
         IFullModel<T, TInput, TOutput> model,
         PaperOptimizerAttribute recipe,
         List<RecipeAdaptation> adaptations,
-        List<string> unhonoured)
+        List<string> unhonoured,
+        List<string> cautions)
     {
         _pendingAdaptations.Value = adaptations;
         _pendingUnhonoured.Value = unhonoured;
+        _pendingCautions.Value = cautions;
         try
         {
             return recipe.Optimizer switch
@@ -154,6 +158,7 @@ public static class PaperOptimizerFactory
         {
             _pendingAdaptations.Value = null;
             _pendingUnhonoured.Value = null;
+            _pendingCautions.Value = null;
         }
     }
 
@@ -168,9 +173,12 @@ public static class PaperOptimizerFactory
     /// </remarks>
     private static readonly ThreadLocal<List<RecipeAdaptation>?> _pendingAdaptations = new();
     private static readonly ThreadLocal<List<string>?> _pendingUnhonoured = new();
+    private static readonly ThreadLocal<List<string>?> _pendingCautions = new();
 
     private static void NoteAdaptation(string setting, string paper, string applied, string rule)
         => _pendingAdaptations.Value?.Add(new RecipeAdaptation(setting, paper, applied, rule));
+
+    private static void NoteCaution(string caution) => _pendingCautions.Value?.Add(caution);
 
     /// <summary>Reports for models built on this process, keyed weakly so they do not retain models.</summary>
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, List<TrainingRecipeReport>> _reports = new();
@@ -271,17 +279,51 @@ public static class PaperOptimizerFactory
             int batch = GetInt(options, "BatchSize");
             if (batch > 0 && batch != recipe.ReferenceBatchSize)
             {
-                double scaled = recipe.LearningRate * batch / recipe.ReferenceBatchSize;
-                SetDouble(options, "InitialLearningRate", scaled);
-                NoteAdaptation(
-                    "LearningRate",
-                    $"{recipe.LearningRate:G6} at batch {recipe.ReferenceBatchSize}",
-                    $"{scaled:G6} at batch {batch}",
-                    "linear scaling rule, Goyal et al. 2017");
+                if (ScalesLinearlyWithBatch(recipe.Optimizer))
+                {
+                    double scaled = recipe.LearningRate * batch / recipe.ReferenceBatchSize;
+                    SetDouble(options, "InitialLearningRate", scaled);
+                    NoteAdaptation(
+                        "LearningRate",
+                        $"{recipe.LearningRate:G6} at batch {recipe.ReferenceBatchSize}",
+                        $"{scaled:G6} at batch {batch}",
+                        "linear scaling rule, Goyal et al. 2017");
+                }
+                else
+                {
+                    NoteCaution(
+                        $"the paper's rate {recipe.LearningRate:G6} was chosen for batch "
+                        + $"{recipe.ReferenceBatchSize} and this run uses batch {batch}; the linear "
+                        + $"scaling rule is established for SGD, not for {recipe.Optimizer}, so the "
+                        + "paper's rate is used unchanged");
+                }
             }
         }
 
     }
+
+    /// <summary>
+    /// Whether the linear scaling rule may be applied to this optimizer's learning rate.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Only for the SGD family, because that is the only family the rule was established on. Goyal
+    /// et al. 2017 state and evidence it for SGD with momentum on ImageNet; Krizhevsky 2014 Sec. 5
+    /// derives sqrt(k) from keeping the gradient variance constant and reports that k worked better
+    /// in his experiments -- also SGD with momentum. Neither result covers Adam-family optimizers,
+    /// whose per-parameter second-moment normalisation is precisely the thing the derivation
+    /// assumes away.
+    /// </para>
+    /// <para>
+    /// So for an adaptive optimizer the paper's rate is used exactly as published and the batch
+    /// mismatch is reported as a caution instead. Applying a scaling rule outside the regime it was
+    /// demonstrated in, and citing a paper that does not say it, would be exactly the fabrication
+    /// this whole feature is built to prevent -- and it would be invisible, because the report would
+    /// name a real citation for a rule that citation does not contain.
+    /// </para>
+    /// </remarks>
+    private static bool ScalesLinearlyWithBatch(OptimizerKind kind)
+        => kind is OptimizerKind.Sgd or OptimizerKind.SgdMomentum;
 
 
     /// <summary>
@@ -335,7 +377,7 @@ public static class PaperOptimizerFactory
 
         double baseRate = double.IsNaN(recipe.LearningRate) ? 0.001 : recipe.LearningRate;
         ILearningRateScheduler? scheduler = BuildScheduler(
-            recipe, baseRate, EffectiveWarmupSteps(options, recipe));
+            recipe, baseRate, EffectiveWarmupSteps(options, recipe), GetInt(options, "MaxIterations"));
         if (scheduler is not null) schedulerProperty.SetValue(options, scheduler);
     }
 
@@ -348,20 +390,47 @@ public static class PaperOptimizerFactory
     /// schedule is harder to notice than a missing one.
     /// </remarks>
     private static ILearningRateScheduler? BuildScheduler(
-        PaperOptimizerAttribute recipe, double baseRate, int warmupSteps)
+        PaperOptimizerAttribute recipe, double baseRate, int warmupSteps, int totalSteps)
     {
+        // A floor of zero is the usual published one, and it is also the correct fallback for the
+        // schedulers below, all of which decay towards zero when no floor is named.
+        double floor = double.IsNaN(recipe.MinLearningRate) ? 0.0 : recipe.MinLearningRate;
+
         try
         {
             return recipe.Schedule switch
             {
                 LearningRateSchedulerType.LinearWarmup when warmupSteps > 0
-                    => new LinearWarmupScheduler(baseRate, warmupSteps),
+                    => new LinearWarmupScheduler(baseRate, warmupSteps, totalSteps,
+                                                 decayMode: recipe.PostWarmupDecay, endLr: floor),
 
                 LearningRateSchedulerType.Exponential when !double.IsNaN(recipe.DecayRate)
                     => new ExponentialLRScheduler(baseRate, recipe.DecayRate),
 
                 LearningRateSchedulerType.Step when recipe.StepSize > 0 && !double.IsNaN(recipe.DecayRate)
                     => new StepLRScheduler(baseRate, recipe.StepSize, recipe.DecayRate),
+
+                // "Divide the rate by 10 when the error plateaus" is how a whole generation of
+                // vision papers state their schedule, so leaving it unmapped would report the most
+                // common published schedule in the catalogue as a deviation.
+                LearningRateSchedulerType.ReduceOnPlateau
+                    => new ReduceOnPlateauScheduler(
+                           baseRate,
+                           factor: double.IsNaN(recipe.DecayRate) ? 0.1 : recipe.DecayRate,
+                           patience: recipe.StepSize > 0 ? recipe.StepSize : 10,
+                           minLearningRate: floor),
+
+                LearningRateSchedulerType.CosineAnnealing when totalSteps > 0
+                    => new CosineAnnealingLRScheduler(baseRate, totalSteps, floor),
+
+                LearningRateSchedulerType.Polynomial when totalSteps > 0
+                    => new PolynomialLRScheduler(
+                           baseRate, totalSteps,
+                           power: double.IsNaN(recipe.DecayRate) ? 1.0 : recipe.DecayRate,
+                           endLearningRate: floor),
+
+                LearningRateSchedulerType.OneCycle when totalSteps > 0
+                    => new OneCycleLRScheduler(baseRate, totalSteps),
 
                 _ => Unexpressible(recipe),
             };
@@ -379,16 +448,6 @@ public static class PaperOptimizerFactory
         }
     }
 
-
-    /// <summary>True when a declaration applies to the component being built.</summary>
-    /// <remarks>
-    /// A declaration naming no component is the model-wide default and applies to every component
-    /// that has no entry of its own, so a composite model can declare shared settings once and
-    /// override only the parts whose paper values differ.
-    /// </remarks>
-    private static bool MatchesComponent(PaperOptimizerAttribute declaration, string component)
-        => declaration.Component.Length == 0
-        || string.Equals(declaration.Component, component, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Reports a declared schedule this library cannot express, and returns no scheduler.</summary>
     private static ILearningRateScheduler? Unexpressible(PaperOptimizerAttribute recipe)

@@ -101,6 +101,26 @@ public sealed class TrainingRecipeReport
     /// <summary>Parts of the recipe that could not be applied, and why.</summary>
     public IReadOnlyList<string> Unhonoured { get; init; } = [];
 
+    /// <summary>
+    /// Things a user should know about this configuration that are neither adjustments nor
+    /// failures — most often that the run's scale differs from the paper's in a way no published
+    /// rule covers.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Deliberately does NOT affect <see cref="Fidelity"/>. A paper value used exactly as published
+    /// is exact, even when the surrounding run differs; calling it Adapted would claim an adjustment
+    /// that was never made, and calling it Deviated would claim a failure that did not occur.
+    /// </para>
+    /// <para>
+    /// The case this exists for: the linear scaling rule is stated and evidenced for SGD (Goyal et
+    /// al. 2017; Krizhevsky 2014 Sec. 5, whose theory suggests sqrt(k) and whose experiments favour
+    /// k). Neither covers Adam-family optimizers, so applying it to AdamW would be inventing a rule
+    /// and presenting it as literature. Instead the paper's rate stands and the mismatch is stated.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> Cautions { get; init; } = [];
+
     /// <summary>How faithfully the applied configuration reproduces the paper.</summary>
     public RecipeFidelity Fidelity
         => PaperOptimizer == OptimizerKind.Unspecified ? RecipeFidelity.NotDeclared
@@ -122,6 +142,9 @@ public sealed class TrainingRecipeReport
 
         if (Unhonoured.Count > 0)
             summary += $"; NOT honoured: {string.Join("; ", Unhonoured)}";
+
+        if (Cautions.Count > 0)
+            summary += $"; note: {string.Join("; ", Cautions)}";
 
         return summary;
     }

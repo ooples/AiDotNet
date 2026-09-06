@@ -170,6 +170,20 @@ public sealed class PaperOptimizerAttribute : Attribute
     /// </remarks>
     public int WarmupSteps { get; set; }
 
+    /// <summary>
+    /// What the rate does AFTER warmup finishes, when <see cref="Schedule"/> is
+    /// <see cref="LearningRateSchedulerType.LinearWarmup"/>.
+    /// </summary>
+    /// <remarks>
+    /// Warmup and the decay that follows it are two halves of one published curve, and the second
+    /// half is the half that is usually dropped. Whisper warms up over 2048 updates and then decays
+    /// linearly to zero (Radford et al. 2022, Table 17); holding the rate flat after warmup would
+    /// reproduce the first 0.2% of that schedule and none of the rest. Left at
+    /// <c>Constant</c> the rate simply holds, which is right for papers that only specify warmup.
+    /// </remarks>
+    public LinearWarmupScheduler.DecayMode PostWarmupDecay { get; set; }
+        = LinearWarmupScheduler.DecayMode.Constant;
+
     /// <summary>Multiplicative decay factor, for exponential and step schedules. Unset means unstated.</summary>
     public double DecayRate { get; set; } = double.NaN;
 
@@ -227,6 +241,7 @@ public sealed class PaperOptimizerAttribute : Attribute
         || UseNesterov
         || WarmupSteps > 0
         || StepSize > 0
+        || PostWarmupDecay != LinearWarmupScheduler.DecayMode.Constant
         || !double.IsNaN(DecayRate)
         || Schedule != LearningRateSchedulerType.Constant;
 }
