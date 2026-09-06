@@ -120,7 +120,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </remarks>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        var probs = _actor.Predict(Tensor<T>.FromVector(state)).ToVector();
+        var probs = Softmax(_actor.Predict(Tensor<T>.FromVector(state)).ToVector());
         
         if (training)
         {
@@ -154,6 +154,79 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     /// <b>For Beginners:</b> In the FinancialA2CAgent model, SampleAction performs a supporting step in the workflow. It keeps the FinancialA2CAgent architecture pipeline consistent.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Turns the actor's raw outputs into a probability distribution.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The actor is built with <see cref="NeuralNetworkTaskType.Regression"/>, so its output layer carries an
+    /// identity activation and produces UNBOUNDED REALS. Those used to be fed straight into the inverse-CDF
+    /// sampler as if they were probabilities, and they are not: a negative output makes the running cumulative
+    /// non-monotonic, so an action can be skipped entirely, and when the outputs sum to less than 1 the loop
+    /// falls off the end and returns the LAST index every time. Exploration therefore collapsed onto the first
+    /// or last action and never sampled the interior ones - for a trading agent whose middle action is "hold",
+    /// it could not choose to do nothing. PPO does this correctly; A2C did not.
+    /// </para>
+    /// <para>
+    /// Shifted by the maximum before exponentiating, the standard guard against overflow on a large logit,
+    /// which changes nothing about the result.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Softmax turns any list of numbers into positive values that add up to 1, so they
+    /// can be read as "how likely is each choice".
+    /// </para>
+    /// </remarks>
+    /// <summary>Finite check that also compiles on net471, where <c>double.IsFinite</c> does not exist.</summary>
+    private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
+    private Vector<T> Softmax(Vector<T> logits)
+    {
+        var result = new Vector<T>(logits.Length);
+        if (logits.Length == 0)
+        {
+            return result;
+        }
+
+        double max = double.NegativeInfinity;
+        for (int i = 0; i < logits.Length; i++)
+        {
+            var value = NumOps.ToDouble(logits[i]);
+            if (IsFinite(value) && value > max)
+            {
+                max = value;
+            }
+        }
+
+        if (!IsFinite(max))
+        {
+            // Every output was NaN or infinite. A uniform distribution is the honest answer: the network has
+            // said nothing, and returning one action with certainty would be inventing a preference.
+            var uniform = 1.0 / logits.Length;
+            for (int i = 0; i < result.Length; i++)
+            {
+                result[i] = NumOps.FromDouble(uniform);
+            }
+
+            return result;
+        }
+
+        double sum = 0;
+        var exponentials = new double[logits.Length];
+        for (int i = 0; i < logits.Length; i++)
+        {
+            var value = NumOps.ToDouble(logits[i]);
+            exponentials[i] = IsFinite(value) ? Math.Exp(value - max) : 0.0;
+            sum += exponentials[i];
+        }
+
+        for (int i = 0; i < result.Length; i++)
+        {
+            result[i] = NumOps.FromDouble(sum > 0 ? exponentials[i] / sum : 1.0 / logits.Length);
+        }
+
+        return result;
+    }
+
     private int SampleAction(Vector<T> probabilities)
     {
         double r = RandomHelper.CreateSecureRandom().NextDouble();
