@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -62,6 +63,10 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("CSDI: Conditional Score-based Diffusion Models for Probabilistic Time Series Imputation", "https://arxiv.org/abs/2107.03502", Year = 2021, Authors = "Yusuke Tashiro, Jiaming Song, Yang Song, Stefano Ermon")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001, ReferenceBatchSize = 16,
+                Schedule = LearningRateSchedulerType.MultiStep, DecayRate = 0.1,
+                Milestones = [150, 180],
+                Source = "Tashiro et al. 2021, hyperparameters: Adam at learning rate 0.001 decayed to 0.0001 and 0.00001 at 75% and 90% of the total epochs, batch size 16, 200 epochs. The milestones are those two points of a 200-epoch run.")]
 public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
@@ -149,7 +154,9 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
         _useNativeMode = false;
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         CopyOptionsToFields(options);
     }
@@ -167,7 +174,9 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
         _useNativeMode = true;
         OnnxSession = null;
         OnnxModelPath = null;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         CopyOptionsToFields(options);
         InitializeLayers();
