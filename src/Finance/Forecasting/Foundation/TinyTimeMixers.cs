@@ -353,7 +353,7 @@ public partial class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
                 { "NumFeatures", _numFeatures },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
+            ModelDataProvider = () => _useNativeMode ? this.Serialize() : Array.Empty<byte>()
         };
     }
 

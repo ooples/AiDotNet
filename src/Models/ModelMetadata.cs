@@ -251,7 +251,80 @@ public class ModelMetadata<T>
     /// load the file and deserialize the model data to recreate the working model.
     /// </para>
     /// </remarks>
-    public byte[] ModelData { get; set; } = Array.Empty<byte>();
+    /// <remarks>
+    /// <para>
+    /// <b>Materialized on read.</b> Reading this property runs the deferred provider set through
+    /// <see cref="ModelDataProvider"/> (if any) exactly once and caches the result. Assigning a
+    /// byte array directly still works and simply discards any pending provider.
+    /// </para>
+    /// <para>
+    /// The laziness is load-bearing, not an optimization (#1830). Serializing a model is a
+    /// licensed persistence operation, and <c>AiModelResult</c>'s constructor captures metadata
+    /// for EVERY model it wraps. When the bytes were produced eagerly inside
+    /// <c>GetModelMetadata</c>, simply calling <c>AiModelBuilder.BuildAsync</c> ran a serialization
+    /// the caller never asked for, so an expired trial threw <c>LicenseRequiredException</c> out of
+    /// the primary training entry point. Deferring the work moves the licence check to the moment
+    /// a caller actually reads the bytes -- which is a genuine persistence action -- without
+    /// weakening the guard, since the read still goes through <c>Serialize()</c>.
+    /// </para>
+    /// </remarks>
+    public byte[] ModelData
+    {
+        get
+        {
+            var provider = _modelDataProvider;
+            if (provider is not null)
+            {
+                // Cleared BEFORE invoking so a provider that throws (an expired licence is the
+                // expected case) is not retried on every subsequent read, and so a provider that
+                // re-enters this getter cannot recurse.
+                _modelDataProvider = null;
+                _modelData = provider();
+            }
+
+            return _modelData ?? Array.Empty<byte>();
+        }
+        set
+        {
+            _modelData = value;
+            _modelDataProvider = null;
+        }
+    }
+
+    /// <summary>
+    /// Sets a deferred producer for <see cref="ModelData"/>, so the bytes are not computed until
+    /// something actually reads them.
+    /// </summary>
+    /// <remarks>
+    /// Declared <c>init</c>-only so it can be used inside the object initializer that model
+    /// implementations already return, turning <c>ModelData = this.Serialize()</c> into
+    /// <c>ModelDataProvider = () =&gt; this.Serialize()</c> without restructuring the method. Use
+    /// <see cref="SetModelDataProvider"/> when the metadata object already exists.
+    /// </remarks>
+    public Func<byte[]>? ModelDataProvider
+    {
+        init => _modelDataProvider = value;
+    }
+
+    /// <summary>
+    /// Sets a deferred producer for <see cref="ModelData"/> on an already-constructed instance.
+    /// </summary>
+    /// <param name="provider">Produces the serialized bytes on first read. May be <c>null</c> to clear.</param>
+    public void SetModelDataProvider(Func<byte[]>? provider)
+    {
+        _modelDataProvider = provider;
+        if (provider is not null) _modelData = null;
+    }
+
+    /// <summary>True when bytes are available without running a deferred serialization.</summary>
+    /// <remarks>
+    /// Lets infrastructure report or copy metadata without forcing a licensed serialization it did
+    /// not ask for. <c>ModelData.Length == 0</c> cannot answer this: it materializes the provider.
+    /// </remarks>
+    public bool IsModelDataMaterialized => _modelDataProvider is null;
+
+    private byte[]? _modelData = Array.Empty<byte>();
+    private Func<byte[]>? _modelDataProvider;
 
     /// <summary>
     /// Gets or sets the importance of each feature in the model.

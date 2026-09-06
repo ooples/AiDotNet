@@ -813,7 +813,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                     { "IdentifiedParameters", paramDict },
                     { "Regularization", _options.Regularization.ToString() }
                 },
-                ModelData = Serialize()
+                ModelDataProvider = () => Serialize()
             };
         }
 

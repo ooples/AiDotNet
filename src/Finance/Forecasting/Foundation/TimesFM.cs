@@ -620,7 +620,7 @@ public partial class TimesFM<T> : TimeSeriesFoundationModelBase<T>
                 { "UsePretrainedWeights", _usePretrainedWeights },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
+            ModelDataProvider = () => _useNativeMode ? this.Serialize() : Array.Empty<byte>()
         };
     }
 
