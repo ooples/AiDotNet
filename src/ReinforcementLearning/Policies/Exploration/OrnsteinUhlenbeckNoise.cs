@@ -15,7 +15,7 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// <example>
     /// <code>
     /// var random = new Random(42);
-    /// var state = Tensor&lt;double&gt;.CreateRandom(1, 8);
+    /// var state = new Vector&lt;double&gt;(new double[] { 0.1, -0.4, 0.7, 0.2 });
     /// // Create Ornstein-Uhlenbeck noise for temporally correlated exploration
     /// var ouNoise = new OrnsteinUhlenbeckNoise&lt;double&gt;(actionSize: 2, theta: 0.15, sigma: 0.2);
     ///

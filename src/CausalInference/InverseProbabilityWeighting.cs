@@ -55,10 +55,9 @@ namespace AiDotNet.CausalInference;
 /// <code>
 /// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// var outcome = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
-/// var treatment = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
-/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-///     .ConfigureModel(new InverseProbabilityWeighting&lt;double&gt;(trimMin: 0.01, trimMax: 0.99))
-///     .Build(features, treatment, outcome);
+/// var treatment = new Vector&lt;int&gt;(new int[] { 0, 1, 0, 1 });   // who was treated
+/// var ipw = new InverseProbabilityWeighting&lt;double&gt;(trimMin: 0.01, trimMax: 0.99);
+/// ipw.Fit(features, treatment, outcome);
 /// var (ate, se) = ipw.EstimateATE(features, treatment, outcome);
 /// </code>
 /// </example>
@@ -139,7 +138,7 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
     /// <code>
     /// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
     /// var outcome = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
-    /// var treatment = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+    /// var treatment = new Vector&lt;int&gt;(new int[] { 0, 1, 0, 1 });   // who was treated
     /// var ipw = new InverseProbabilityWeighting&lt;double&gt;(trimMin: 0.05, trimMax: 0.95);
     /// var (ate, se) = ipw.EstimateATE(features, treatment, outcome);
     /// </code>

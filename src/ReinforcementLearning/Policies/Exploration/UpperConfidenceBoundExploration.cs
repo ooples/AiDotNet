@@ -15,7 +15,7 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// <example>
     /// <code>
     /// var random = new Random(42);
-    /// var state = Tensor&lt;double&gt;.CreateRandom(1, 8);
+    /// var state = new Vector&lt;double&gt;(new double[] { 0.1, -0.4, 0.7, 0.2 });
     /// // Create UCB exploration that favors under-explored actions
     /// var exploration = new UpperConfidenceBoundExploration&lt;double&gt;(explorationConstant: 2.0);
     ///

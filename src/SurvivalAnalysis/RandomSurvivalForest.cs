@@ -37,14 +37,16 @@ namespace AiDotNet.SurvivalAnalysis;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 /// <example>
 /// <code>
-/// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
-/// var newPatientFeatures = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
-/// var times = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
-/// var timePoint = 2;
+/// // age and treatment-arm per patient
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 45, 1 }, { 52, 0 }, { 38, 1 }, { 61, 0 }, { 47, 1 }, { 55, 0 } });
+/// // months each patient was observed
+/// var times = new Vector&lt;double&gt;(new double[] { 5.0, 12.0, 3.0, 18.0, 9.0, 21.0 });
+///
 /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigureModel(new RandomSurvivalForest&lt;double&gt;(numTrees: 100, maxDepth: 10))
-///     .Build(times, events, features);
-/// double survivalProb = rsf.PredictSurvival(newPatientFeatures, timePoint);
+///     .Build(features, times);
+///
+/// var risk = result.Predict(features);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

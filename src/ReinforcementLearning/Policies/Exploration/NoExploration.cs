@@ -13,7 +13,7 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// <example>
     /// <code>
     /// var random = new Random(42);
-    /// var state = Tensor&lt;double&gt;.CreateRandom(1, 8);
+    /// var state = new Vector&lt;double&gt;(new double[] { 0.1, -0.4, 0.7, 0.2 });
     /// // Create a no-exploration strategy that always uses the greedy action
     /// var exploration = new NoExploration&lt;double&gt;();
     ///
