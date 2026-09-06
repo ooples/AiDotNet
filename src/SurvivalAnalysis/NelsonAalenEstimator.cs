@@ -39,8 +39,9 @@ namespace AiDotNet.SurvivalAnalysis;
 /// <example>
 /// <code>
 /// var timePoint = 2;
-/// var estimator = new NelsonAalenEstimator&lt;double&gt;();
-/// estimator.Fit(times, events);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new NelsonAalenEstimator&lt;double&gt;())
+///     .Build(times, events);
 /// double cumulativeHazard = estimator.PredictCumulativeHazard(timePoint);
 /// </code>
 /// </example>

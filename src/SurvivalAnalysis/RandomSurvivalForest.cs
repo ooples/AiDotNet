@@ -38,8 +38,9 @@ namespace AiDotNet.SurvivalAnalysis;
 /// <example>
 /// <code>
 /// var timePoint = 2;
-/// var rsf = new RandomSurvivalForest&lt;double&gt;(numTrees: 100, maxDepth: 10);
-/// rsf.Fit(times, events, features);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new RandomSurvivalForest&lt;double&gt;(numTrees: 100, maxDepth: 10))
+///     .Build(times, events, features);
 /// double survivalProb = rsf.PredictSurvival(newPatientFeatures, timePoint);
 /// </code>
 /// </example>

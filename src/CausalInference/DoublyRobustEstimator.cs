@@ -55,8 +55,9 @@ namespace AiDotNet.CausalInference;
 /// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
-/// var dr = new DoublyRobustEstimator&lt;double&gt;(trimMin: 0.01, trimMax: 0.99);
-/// dr.Fit(features, treatment, outcome);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new DoublyRobustEstimator&lt;double&gt;(trimMin: 0.01, trimMax: 0.99))
+///     .Build(features, treatment, outcome);
 /// var (ate, se) = dr.EstimateATE(features, treatment, outcome);
 /// </code>
 /// </example>
