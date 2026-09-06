@@ -53,9 +53,13 @@ namespace AiDotNet.Control;
 /// </remarks>
 /// <example>
 /// <code>
-/// var q = 2;
-/// var r = 2;
-/// // A double integrator whose actuator saturates at ±0.5.
+/// // A double integrator whose actuator saturates at ±0.5: state is (position, velocity).
+/// var a = new Matrix&lt;double&gt;(new double[,] { { 1.0, 1.0 }, { 0.0, 1.0 } });
+/// var b = new Matrix&lt;double&gt;(new double[,] { { 0.5 }, { 1.0 } });
+/// var q = Matrix&lt;double&gt;.CreateIdentity(2);
+/// var r = Matrix&lt;double&gt;.CreateIdentity(1);
+/// var currentState = new Vector&lt;double&gt;(new double[] { 1.0, 0.0 });
+///
 /// var options = new ModelPredictiveControllerOptions&lt;double&gt;
 /// {
 ///     Horizon = 20,
