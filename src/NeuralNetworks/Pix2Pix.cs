@@ -45,8 +45,10 @@ namespace AiDotNet.NeuralNetworks;
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 256, 256 });
 /// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
 /// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+///     var generatorArchitecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 8);
+///     var discriminatorArchitecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 1);
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
-///     .ConfigureModel(new Pix2Pix&lt;float&gt;(options))
+///     .ConfigureModel(new Pix2Pix&lt;float&gt;(generatorArchitecture, discriminatorArchitecture))
 ///     .Build(trainX, trainY);
 /// var translated = result.Predict(input);
 /// </code>
