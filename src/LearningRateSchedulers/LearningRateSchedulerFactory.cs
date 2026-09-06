@@ -168,6 +168,8 @@ public static class LearningRateSchedulerFactory
             LearningRateSchedulerType.LinearWarmup => new LinearWarmupScheduler(baseLearningRate, Math.Max(1, totalSteps / 10), totalSteps),
             LearningRateSchedulerType.Cyclic => new CyclicLRScheduler(baseLearningRate / 10, baseLearningRate, Math.Max(1, totalSteps / 4)),
             LearningRateSchedulerType.ReduceOnPlateau => new ReduceOnPlateauScheduler(baseLearningRate),
+            LearningRateSchedulerType.TriStage => TriStageScheduler.FromFractions(
+                baseLearningRate, totalSteps, warmupFraction: 0.1, holdFraction: 0.4),
             _ => throw new ArgumentException($"Unsupported scheduler type: {type}", nameof(type))
         };
     }

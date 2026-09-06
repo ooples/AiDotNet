@@ -197,6 +197,17 @@ public sealed class PaperOptimizerAttribute : Attribute
     /// </remarks>
     public double WarmupFraction { get; set; } = double.NaN;
 
+    /// <summary>
+    /// How much of the run is spent holding the peak rate before decay begins, for
+    /// <see cref="LearningRateSchedulerType.TriStage"/>. Unset means no hold phase.
+    /// </summary>
+    /// <remarks>
+    /// wav2vec 2.0 fine-tunes with warmup over the first 10% of updates, a constant hold for the
+    /// next 40%, and linear decay for the remainder (Baevski et al. 2020, Sec. 4.3). The hold is
+    /// not a detail: without it the rate begins falling four times earlier than published.
+    /// </remarks>
+    public double HoldFraction { get; set; } = double.NaN;
+
     /// <summary>Multiplicative decay factor, for exponential and step schedules. Unset means unstated.</summary>
     public double DecayRate { get; set; } = double.NaN;
 
@@ -254,6 +265,7 @@ public sealed class PaperOptimizerAttribute : Attribute
         || UseNesterov
         || WarmupSteps > 0
         || !double.IsNaN(WarmupFraction)
+        || !double.IsNaN(HoldFraction)
         || StepSize > 0
         || PostWarmupDecay != LinearWarmupScheduler.DecayMode.Constant
         || !double.IsNaN(DecayRate)

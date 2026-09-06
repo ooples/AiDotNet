@@ -411,6 +411,14 @@ public static class PaperOptimizerFactory
                     => new LinearWarmupScheduler(baseRate, warmupSteps, totalSteps,
                                                  decayMode: recipe.PostWarmupDecay, endLr: floor),
 
+                // Needs the run length because every phase is stated as a share of it.
+                LearningRateSchedulerType.TriStage when totalSteps > 0 && warmupSteps > 0
+                    => new TriStageScheduler(
+                           baseRate, warmupSteps,
+                           holdSteps: double.IsNaN(recipe.HoldFraction)
+                               ? 0 : (int)Math.Round(totalSteps * recipe.HoldFraction),
+                           totalSteps: totalSteps, minLearningRate: floor),
+
                 LearningRateSchedulerType.Exponential when !double.IsNaN(recipe.DecayRate)
                     => new ExponentialLRScheduler(baseRate, recipe.DecayRate),
 

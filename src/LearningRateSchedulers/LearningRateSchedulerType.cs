@@ -57,6 +57,16 @@ public enum LearningRateSchedulerType
     LinearWarmup,
 
     /// <summary>
+    /// Linear warmup, then a constant hold, then linear decay.
+    /// </summary>
+    /// <remarks>
+    /// The schedule wav2vec 2.0 fine-tunes with, and widely reused after it. Distinct from
+    /// <see cref="LinearWarmup"/>, which has no hold phase, and from the Noam-hold schedule, whose
+    /// final stage decays as a power of the step rather than linearly.
+    /// </remarks>
+    TriStage,
+
+    /// <summary>
     /// Cyclic learning rate: oscillate between bounds.
     /// </summary>
     Cyclic,

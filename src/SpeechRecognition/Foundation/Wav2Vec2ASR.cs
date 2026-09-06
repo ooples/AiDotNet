@@ -1,4 +1,6 @@
-﻿using AiDotNet.Attributes;
+﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -43,6 +45,9 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations", "https://arxiv.org/abs/2006.11477", Year = 2020, Authors = "Baevski et al.")]
+[PaperOptimizer(OptimizerKind.Adam, Schedule = LearningRateSchedulerType.TriStage,
+                WarmupFraction = 0.10, HoldFraction = 0.40, MinLearningRate = 0,
+                Source = "Baevski et al. 2020, fine-tuning setup: Adam with a tri-state schedule -- warmup over the first 10% of updates, held constant for the next 40%, then linearly decayed for the remainder. No learning rate is declared because the paper reports a seed search over two rates (2e-5 and 3e-5) rather than a single chosen value.")]
 public partial class Wav2Vec2ASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly Wav2Vec2ASROptions _options; public override ModelOptions GetOptions() => _options;
@@ -52,7 +57,9 @@ public partial class Wav2Vec2ASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
     public bool SupportsWordTimestamps => false;
 
     public Wav2Vec2ASR(NeuralNetworkArchitecture<T> architecture, string modelPath, Wav2Vec2ASROptions? options = null) : base(architecture) { _options = options ?? new Wav2Vec2ASROptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public Wav2Vec2ASR(NeuralNetworkArchitecture<T> architecture, Wav2Vec2ASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new Wav2Vec2ASROptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public Wav2Vec2ASR(NeuralNetworkArchitecture<T> architecture, Wav2Vec2ASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new Wav2Vec2ASROptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using wav2vec 2.0's SSL encoder with CTC decoding.
