@@ -30,18 +30,19 @@ namespace AiDotNet.Regression;
 /// <code>
 /// // Create an M5 model tree with linear models at leaves
 /// var options = new M5ModelTreeRegressionOptions&lt;double&gt;();
-/// var model = new M5ModelTree&lt;double&gt;(options);
 ///
 /// // Prepare training data: 6 samples with 2 features each
 /// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 }, { 9, 10 }, { 11, 12 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
 ///
 /// // Train tree structure with linear regression at each leaf
-/// model.Train(features, targets);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new M5ModelTree&lt;double&gt;(options))
+///     .Build(features, targets);
 ///
 /// // Predict using the appropriate leaf's linear model
 /// var newSample = new Matrix&lt;double&gt;(new double[,] { { 13, 14 } });
-/// var prediction = model.Predict(newSample);
+/// var prediction = result.Predict(newSample);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
