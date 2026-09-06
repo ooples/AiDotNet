@@ -32,6 +32,7 @@ namespace AiDotNet.Models.Options;
 ///     TrustCoefficient = 0.001,  // Controls layer-wise LR scaling
 ///     BatchSize = 4096           // Large batch size for SSL
 /// };
+/// var model = new SimpleRegression&lt;float&gt;();
 /// var optimizer = new LARSOptimizer&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;(model, options);
 /// </code>
 /// </example>

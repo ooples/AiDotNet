@@ -34,6 +34,7 @@ namespace AiDotNet.Models.Options;
 ///     WeightDecay = 0.01,
 ///     BatchSize = 8192
 /// };
+/// var model = new SimpleRegression&lt;float&gt;();
 /// var optimizer = new LAMBOptimizer&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;(model, options);
 /// </code>
 /// </example>
