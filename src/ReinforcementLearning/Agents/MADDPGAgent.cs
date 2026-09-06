@@ -45,8 +45,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.MADDPG;
 /// <code>
 /// // Create a multi-agent DDPG system with 3 cooperative agents
 /// var options = new MADDPGOptions&lt;double&gt; { NumAgents = 3, ActorLearningRate = 0.001 };
-/// var arch = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 8, outputSize: 2);
-/// var agent = new MADDPGAgent&lt;double&gt;(arch, options);
+/// var agent = new MADDPGAgent&lt;double&gt;(options);
 ///
 /// // Each agent selects a continuous action from its observation
 /// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2, 0.8, -0.1, 0.4, 0.6 });

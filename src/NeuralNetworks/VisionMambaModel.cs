@@ -63,12 +63,17 @@ public enum VisionScanPattern
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new AiDotNet.NeuralNetworks.Options.VisionMambaOptions { ImageSize = 224, PatchSize = 16, ModelDim = 384, NumLayers = 24 };
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     InputType.ThreeDimensional, NeuralNetworkTaskType.ImageClassification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 10);
 /// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 224, 224 });
 /// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
 /// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
-///     .ConfigureModel(new VisionMambaModel&lt;float&gt;(options))
+///     .ConfigureModel(new VisionMambaModel&lt;float&gt;(
+///         architecture,
+///         imageHeight: 224, imageWidth: 224, patchSize: 16,
+///         modelDimension: 384, numLayers: 24))
 ///     .Build(trainX, trainY);
 /// var output = result.Predict(image);
 /// </code>

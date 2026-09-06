@@ -51,7 +51,9 @@ namespace AiDotNet.TimeSeries;
 /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigureModel(new DynamicRegressionWithARIMAErrors&lt;double&gt;(options))
 ///     .Build(trainingMatrix, trainingLabels);
-/// Vector&lt;double&gt; forecast = drModel.Forecast(history, horizon: 12, futureExogenous);
+/// // future values of the exogenous drivers, one row per period ahead
+/// var futureExogenous = new Matrix&lt;double&gt;(new double[,] { { 9.0, 10.0 }, { 11.0, 12.0 } });
+/// Vector&lt;double&gt; forecast = result.Predict(futureExogenous);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

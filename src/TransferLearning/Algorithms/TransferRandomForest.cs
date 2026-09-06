@@ -32,6 +32,7 @@ namespace AiDotNet.TransferLearning.Algorithms;
 /// var newData = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // The model already fitted on the source domain, and the target domain's own data.
 /// var sourceModel = new SimpleRegression&lt;double&gt;();
+/// var sourceData = new Matrix&lt;double&gt;(new double[,] { { 0.9, 1.9 }, { 2.9, 3.9 }, { 4.9, 5.9 } });
 /// var targetData = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 } });
 /// var targetLabels = new Vector&lt;double&gt;(new double[] { 1.0, 2.0, 3.0 });
 ///
@@ -39,7 +40,7 @@ namespace AiDotNet.TransferLearning.Algorithms;
 /// var options = new RandomForestRegressionOptions { NumberOfTrees = 100, MaxDepth = 10 };
 /// var transferRF = new TransferRandomForest&lt;double&gt;(options);
 /// IFullModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt; adaptedModel =
-///     transferRF.Transfer(sourceModel, targetData, targetLabels);
+///     transferRF.Transfer(sourceModel, sourceData, targetData, targetLabels);
 /// Vector&lt;double&gt; predictions = adaptedModel.Predict(newData);
 /// </code>
 /// </example>
@@ -283,9 +284,10 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
 /// <code>
 /// var newData = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Create a mapped random forest that adapts source features to target domain
-/// var baseModel = sourceForest; // Pre-trained random forest from source domain
-/// var mapper = new FeatureMapper&lt;double&gt;(sourceFeatures, targetFeatures);
-/// var mappedModel = new MappedRandomForestModel&lt;double&gt;(baseModel, mapper, targetFeatureCount);
+/// // a random forest already fitted on the source domain
+/// var baseModel = new RandomForestRegression&lt;double&gt;(new RandomForestRegressionOptions());
+/// var mapper = new LinearFeatureMapper&lt;double&gt;();
+/// var mappedModel = new MappedRandomForestModel&lt;double&gt;(baseModel, mapper, targetFeatures: 5);
 ///
 /// // Predict on target domain data using feature mapping
 /// var targetFeatures = new Matrix&lt;double&gt;(1, 5);
