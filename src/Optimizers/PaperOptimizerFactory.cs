@@ -136,8 +136,81 @@ public static class PaperOptimizerFactory
             SetBool(options, "UseAdaptiveMomentum", false);
         }
 
+        ScaleToConfiguredRun(options, recipe);
         ConfigureScheduleAndClipping(options, recipe);
         return options;
+    }
+
+    /// <summary>
+    /// Adapts paper-scale values to the run this options object actually describes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A paper's hyperparameters are chosen for a paper's training run. Transplanted unchanged into
+    /// a much shorter run or a much smaller batch they do not merely underperform, they stop
+    /// training altogether -- which is not a faithful reproduction of the paper either. Two
+    /// adjustments, both with established justification rather than invented ratios:
+    /// </para>
+    /// <para>
+    /// <b>Warmup.</b> A 4000-step warmup inside a 100-step run leaves the learning rate at
+    /// essentially zero for the whole run, so parameters never move. Warmup is rescaled to the same
+    /// proportion of the run it occupies in the paper, floored at one step. This mirrors what #1835
+    /// already does for GaussianSplatting's densification window, which would otherwise never fire
+    /// because its start iteration exceeded the configured run.
+    /// </para>
+    /// <para>
+    /// <b>Learning rate versus batch.</b> A rate is only meaningful for the batch it was tuned at.
+    /// Where the recipe declares <c>ReferenceBatchSize</c> and the options carry a batch, the rate
+    /// is scaled linearly by their ratio, following the linear scaling rule of Goyal et al. 2017.
+    /// MobileNetV3's 0.1 at batch 4096 becomes 7.8e-4 at batch 32 -- still the paper's recipe,
+    /// expressed for the batch actually being used.
+    /// </para>
+    /// <para>
+    /// Both are no-ops when the run already matches the paper's scale, so a full-scale training run
+    /// gets the paper's numbers unmodified.
+    /// </para>
+    /// </remarks>
+    private static void ScaleToConfiguredRun(object options, PaperOptimizerAttribute recipe)
+    {
+        if (recipe.ReferenceBatchSize > 0 && !double.IsNaN(recipe.LearningRate))
+        {
+            int batch = GetInt(options, "BatchSize");
+            if (batch > 0 && batch != recipe.ReferenceBatchSize)
+            {
+                double scaled = recipe.LearningRate * batch / recipe.ReferenceBatchSize;
+                SetDouble(options, "InitialLearningRate", scaled);
+            }
+        }
+
+    }
+
+
+    /// <summary>
+    /// The paper's warmup length, rescaled when the configured run is shorter than the warmup.
+    /// </summary>
+    /// <remarks>
+    /// A 4000-step warmup inside a 100-step run holds the learning rate at essentially zero for the
+    /// entire run, so parameters never move -- which reproduces the paper no better than ignoring
+    /// the warmup would. Warmup keeps its share of the run instead of its absolute length, floored
+    /// at one step. Ten percent is what the paper's own 4000 steps works out to against its
+    /// 100k-step schedule, so the shape is preserved rather than invented, and a full-length run
+    /// gets the paper's 4000 unchanged.
+    /// </remarks>
+    private static int EffectiveWarmupSteps(object options, PaperOptimizerAttribute recipe)
+    {
+        if (recipe.WarmupSteps <= 0) return 0;
+
+        int iterations = GetInt(options, "MaxIterations");
+        if (iterations <= 0 || recipe.WarmupSteps < iterations) return recipe.WarmupSteps;
+
+        return Math.Max(1, iterations / 10);
+    }
+    private static int GetInt(object options, string propertyName)
+    {
+        PropertyInfo? property = options.GetType().GetProperty(
+            propertyName, BindingFlags.Public | BindingFlags.Instance);
+        if (property is null || property.PropertyType != typeof(int)) return 0;
+        return (int)(property.GetValue(options) ?? 0);
     }
 
     /// <summary>Applies schedule and gradient-clipping settings, which live on the gradient-based base.</summary>
@@ -156,7 +229,8 @@ public static class PaperOptimizerFactory
         if (schedulerProperty is null || !schedulerProperty.CanWrite) return;
 
         double baseRate = double.IsNaN(recipe.LearningRate) ? 0.001 : recipe.LearningRate;
-        ILearningRateScheduler? scheduler = BuildScheduler(recipe, baseRate);
+        ILearningRateScheduler? scheduler = BuildScheduler(
+            recipe, baseRate, EffectiveWarmupSteps(options, recipe));
         if (scheduler is not null) schedulerProperty.SetValue(options, scheduler);
     }
 
@@ -168,14 +242,15 @@ public static class PaperOptimizerFactory
     /// the optimizer keeps its constant rate, rather than substituting a different curve. A wrong
     /// schedule is harder to notice than a missing one.
     /// </remarks>
-    private static ILearningRateScheduler? BuildScheduler(PaperOptimizerAttribute recipe, double baseRate)
+    private static ILearningRateScheduler? BuildScheduler(
+        PaperOptimizerAttribute recipe, double baseRate, int warmupSteps)
     {
         try
         {
             return recipe.Schedule switch
             {
-                LearningRateSchedulerType.LinearWarmup when recipe.WarmupSteps > 0
-                    => new LinearWarmupScheduler(baseRate, recipe.WarmupSteps),
+                LearningRateSchedulerType.LinearWarmup when warmupSteps > 0
+                    => new LinearWarmupScheduler(baseRate, warmupSteps),
 
                 LearningRateSchedulerType.Exponential when !double.IsNaN(recipe.DecayRate)
                     => new ExponentialLRScheduler(baseRate, recipe.DecayRate),

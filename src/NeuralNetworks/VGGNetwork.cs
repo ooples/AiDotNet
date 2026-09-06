@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
@@ -61,6 +63,9 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Very Deep Convolutional Networks for Large-Scale Image Recognition", "https://arxiv.org/abs/1409.1556", Year = 2015, Authors = "Karen Simonyan, Andrew Zisserman")]
+[PaperOptimizer(OptimizerKind.SgdMomentum, LearningRate = 0.01, Momentum = 0.9, WeightDecay = 5e-4,
+                Schedule = LearningRateSchedulerType.ReduceOnPlateau,
+                Source = "Simonyan and Zisserman 2015, Sec. 3.1 (Training): SGD, initial lr 0.01 divided by 10 on plateau, momentum 0.9, weight decay 5e-4.")]
 public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly VGGOptions _options;
@@ -169,7 +174,9 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
         // Validate that architecture matches configuration
         ValidateArchitectureMatchesConfiguration(architecture, configuration);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         InitializeLayers();

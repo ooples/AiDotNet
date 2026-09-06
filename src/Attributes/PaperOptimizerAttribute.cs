@@ -158,6 +158,25 @@ public sealed class PaperOptimizerAttribute : Attribute
     /// <summary>Floor the schedule decays towards. Unset means unstated.</summary>
     public double MinLearningRate { get; set; } = double.NaN;
 
+    /// <summary>
+    /// The batch size the paper's learning rate was chosen for. Unset means unstated.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A learning rate is only meaningful alongside the batch it was tuned for. MobileNetV3's 0.1
+    /// is stated for batch 4096; applied at batch 32 it is roughly two orders of magnitude too
+    /// large, and training does not converge. Declaring the reference batch lets the library apply
+    /// the linear scaling rule -- multiply the rate by the ratio of actual to reference batch
+    /// (Goyal et al. 2017, "Accurate, Large Minibatch SGD") -- instead of transplanting a number
+    /// into a regime it was never chosen for.
+    /// </para>
+    /// <para>
+    /// Left unset, the declared rate is used as-is. That is the right default for papers that
+    /// state a rate without tying it to a large batch.
+    /// </para>
+    /// </remarks>
+    public int ReferenceBatchSize { get; set; }
+
     // ---- Gradient clipping ---------------------------------------------------------------
 
     /// <summary>The paper's gradient-norm clip. Unset means the paper does not clip.</summary>
