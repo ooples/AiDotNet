@@ -28,10 +28,18 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new ClipOptions { ImageSize = 224, EmbeddingDim = 512 };
-/// var model = new ClipNeuralNetwork&lt;float&gt;(options);
-/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 224, 224 });
-/// var embedding = model.Predict(image);
+/// var options = new ClipOptions { };
+/// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 224, 224 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new ClipNeuralNetwork&lt;float&gt;(
+///         architecture,
+///         imageEncoderPath: "image_encoder.onnx", textEncoderPath: "text_encoder.onnx",
+///         tokenizer: CharacterTokenizer.CreateAscii()))
+///     .Build(trainX, trainY);
+/// var embedding = result.Predict(image);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

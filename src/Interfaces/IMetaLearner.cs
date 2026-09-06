@@ -58,6 +58,8 @@ namespace AiDotNet.Interfaces;
 /// </remarks>
 /// <example>
 /// <code>
+/// var trainingLabels = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var trainingFeatures = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // 1. Setup: Create episodic data loader for 5-way 5-shot tasks
 /// var dataLoader = new UniformEpisodicDataLoader&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(
 ///     datasetX: trainingFeatures,
@@ -77,7 +79,7 @@ namespace AiDotNet.Interfaces;
 ///     .Build();
 ///
 /// var metaLearner = new MAMLAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(
-///     metaModel: neuralNetwork,
+///     
 ///     lossFunction: new CrossEntropyLoss&lt;double&gt;(),
 ///     dataLoader: dataLoader,
 ///     options: options

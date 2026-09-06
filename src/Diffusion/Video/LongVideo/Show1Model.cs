@@ -37,10 +37,14 @@ namespace AiDotNet.Diffusion.Video.LongVideo;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 256, Width = 256, NumInferenceSteps = 50 };
-/// var model = new Show1Model&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 29, 32, 32 });
-/// var video = model.Predict(noise);
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 4, DefaultInferenceSteps = 50 };
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4, 29, 32, 32 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new Show1Model&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var video = result.Predict(noise);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

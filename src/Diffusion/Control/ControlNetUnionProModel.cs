@@ -31,18 +31,20 @@ namespace AiDotNet.Diffusion.Control;
 /// <example>
 /// <code>
 /// // Create a unified ControlNet that handles multiple control types
-/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// var options = new DiffusionModelOptions&lt;float&gt;
 /// {
 ///     LatentChannels = 4,
-///     Height = 512,
-///     Width = 512,
-///     NumInferenceSteps = 25
+///     DefaultInferenceSteps = 25
 /// };
-/// var model = new ControlNetUnionProModel&lt;float&gt;(options, ControlType.Canny);
 ///
 /// // Generate with any control type using the same model
-/// var controlInput = Tensor&lt;float&gt;.Random(new[] { 1, 1, 512, 512 });
-/// var result = model.Predict(controlInput);
+/// var controlInput = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 1, 512, 512 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new ControlNetUnionProModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var prediction = result.Predict(controlInput);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

@@ -32,6 +32,7 @@ namespace AiDotNet.Video.Stabilization;
 /// // Create a FuSta model for full-frame video stabilization
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new FuStaOptions();
 /// var fuSta = new FuSta&lt;double&gt;(architecture, options);

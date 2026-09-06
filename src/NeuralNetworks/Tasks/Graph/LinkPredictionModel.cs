@@ -61,17 +61,21 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// <code>
 /// // Create a link prediction model for graph edge prediction
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     inputSize: 16,   // node feature dimension
+///     // node feature dimension
 ///     outputSize: 1,   // edge score
-///     hiddenSizes: new[] { 64, 32 });
-/// var model = new LinkPredictionModel&lt;float&gt;(architecture);
+///     );
 ///
 /// // Prepare graph data
 /// var adjacency = new Tensor&lt;float&gt;(new[] { 100, 100 }); // 100-node graph
 /// var nodeFeatures = new Tensor&lt;float&gt;(new[] { 100, 16 });
 ///
 /// // Predict edge likelihood between node pairs
-/// var scores = model.Predict(nodeFeatures);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new LinkPredictionModel&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var scores = result.Predict(nodeFeatures);
 /// // Result is available in the returned value
 /// </code>
 /// </example>
@@ -181,7 +185,7 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
     ///     InputType.OneDimensional,
     ///     NeuralNetworkTaskType.BinaryClassification,
     ///     NetworkComplexity.Simple,
-    ///     inputSize: 128,    // User features
+    ///     // User features
     ///     outputSize: 1);    // Edge score
     ///
     /// // Create model with default layers

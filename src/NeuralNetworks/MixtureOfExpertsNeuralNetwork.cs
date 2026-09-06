@@ -53,10 +53,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new MixtureOfExpertsOptions { InputSize = 64, NumExperts = 8, TopK = 2, HiddenSize = 256 };
-/// var model = new MixtureOfExpertsNeuralNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 64 });
-/// var output = model.Predict(input);
+/// var options = new MixtureOfExpertsOptions&lt;double&gt; { InputDim = 64, NumExperts = 8, TopK = 2};
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 64 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new MixtureOfExpertsNeuralNetwork&lt;float&gt;())
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.General)]

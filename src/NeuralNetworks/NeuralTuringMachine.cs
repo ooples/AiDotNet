@@ -33,10 +33,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new NeuralTuringMachineOptions { InputSize = 8, MemorySize = 128, MemoryWordSize = 20 };
-/// var model = new NeuralTuringMachine&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 10, 8 });
-/// var output = model.Predict(input);
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 10, 8 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new NeuralTuringMachine&lt;float&gt;())
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.General)]

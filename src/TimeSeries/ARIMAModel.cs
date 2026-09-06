@@ -37,6 +37,10 @@ namespace AiDotNet.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
+/// var timeSeries = new Vector&lt;double&gt;(new double[] { 1.0, 2.0, 3.0, 4.0 });
+/// var inputMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var trainingLabels = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var trainingMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Create an ARIMA(1,1,1) model for non-stationary time series
 /// var options = new ARIMAOptions&lt;double&gt;();
 /// var arima = new ARIMAModel&lt;double&gt;(options);

@@ -73,6 +73,11 @@ namespace AiDotNet.MetaLearning.Algorithms;
 ///     GateLearningRate = 1e-2,
 /// };
 /// var sparseMaml = new SparseMAMLAlgorithm&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(options);
+/// var taskBatch = new TaskBatch&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(
+///     new IMetaLearningTask&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;[]
+///     {
+///         new MetaLearningTask&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     });
 /// double metaLoss = Convert.ToDouble(sparseMaml.MetaTrain(taskBatch));
 /// </code>
 /// </example>

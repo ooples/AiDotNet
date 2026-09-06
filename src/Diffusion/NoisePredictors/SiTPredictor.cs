@@ -37,7 +37,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// <example>
 /// <code>
 /// var predictor = new SiTPredictor&lt;float&gt;(inputChannels: 4, hiddenSize: 1152, numLayers: 28, numHeads: 16);
-/// var noisyLatent = Tensor&lt;float&gt;.Random(new[] { 1, 4, 32, 32 });
+/// var noisyLatent = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4, 32, 32 });
 /// var predicted = predictor.PredictNoise(noisyLatent, timestep: 500);
 /// </code>
 /// </example>

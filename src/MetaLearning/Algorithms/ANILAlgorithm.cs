@@ -103,19 +103,21 @@ public partial class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <exception cref="InvalidOperationException">Thrown when required components are not set in options.</exception>
     /// <example>
     /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
     /// // Create ANIL with minimal configuration
-    /// var options = new ANILOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork);
-    /// var anil = new ANILAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var options = new ANILOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork);
+    /// var anil = new ANILAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create ANIL with custom configuration
-    /// var options = new ANILOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork)
+    /// var options2 = new ANILOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     AdaptationSteps = 5,
     ///     InnerLearningRate = 0.01,
     ///     NumClasses = 5,
     ///     FeatureDimension = 512
     /// };
-    /// var anil = new ANILAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+    /// var anil2 = new ANILAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options2);
     /// </code>
     /// </example>
     public ANILAlgorithm(ANILOptions<T, TInput, TOutput> options)

@@ -62,11 +62,15 @@ namespace AiDotNet.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
+/// var historicalData = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var historicalLabels = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var recentContext = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Use a pre-trained Chronos foundation model for zero-shot time series forecasting
 /// var options = new ChronosOptions&lt;double&gt;();
-/// var chronos = new ChronosFoundationModel&lt;double&gt;(options);
-/// chronos.Train(historicalData, historicalLabels);
-/// Vector&lt;double&gt; forecast = chronos.Predict(recentContext);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new ChronosFoundationModel&lt;double&gt;(options))
+///     .Build(historicalData, historicalLabels);
+/// Vector&lt;double&gt; forecast = result.Predict(recentContext);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]

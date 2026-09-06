@@ -35,7 +35,7 @@ namespace AiDotNet.Audio.Features;
 ///     binsPerOctave: 12, // Semitones
 ///     numOctaves: 7);
 ///
-/// var audio = LoadAudio("music.wav");
+/// var audio = ImageHelper&lt;float&gt;.LoadAudio("music.wav");
 /// var cqtSpectrum = cqt.Transform(audio);
 /// // cqtSpectrum has shape [time_frames, num_bins] where num_bins = 12 * 7 = 84
 /// </code>

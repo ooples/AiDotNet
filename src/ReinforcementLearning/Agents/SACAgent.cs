@@ -45,7 +45,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.SAC;
 /// <example>
 /// <code>
 /// // Create a Soft Actor-Critic agent for continuous control
-/// var options = new SACOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, AutoTuneAlpha = true };
+/// var options = new SACOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, AutoTuneTemperature = true };
 /// var agent = new SACAgent&lt;double&gt;(options);
 ///
 /// // Select a continuous action with entropy-driven exploration

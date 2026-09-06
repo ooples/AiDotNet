@@ -46,6 +46,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// // Create an XVFI model for extreme 4K/8K frame interpolation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
 /// var options = new XVFIOptions();
 /// var xvfi = new XVFI&lt;double&gt;(architecture, options);

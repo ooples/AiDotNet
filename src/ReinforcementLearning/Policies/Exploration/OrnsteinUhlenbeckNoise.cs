@@ -14,6 +14,8 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     /// <example>
     /// <code>
+    /// var random = new Random(42);
+    /// var state = Tensor&lt;double&gt;.CreateRandom(1, 8);
     /// // Create Ornstein-Uhlenbeck noise for temporally correlated exploration
     /// var ouNoise = new OrnsteinUhlenbeckNoise&lt;double&gt;(actionSize: 2, theta: 0.15, sigma: 0.2);
     ///

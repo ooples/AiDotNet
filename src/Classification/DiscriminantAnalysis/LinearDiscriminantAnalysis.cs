@@ -47,7 +47,6 @@ namespace AiDotNet.Classification.DiscriminantAnalysis;
 /// <code>
 /// // Create LDA classifier for linear class separation
 /// var options = new DiscriminantAnalysisOptions&lt;double&gt;();
-/// var classifier = new LinearDiscriminantAnalysis&lt;double&gt;(options);
 ///
 /// // Prepare training data with two classes: 6 samples, 2 features
 /// var features = new Matrix&lt;double&gt;(6, 2);
@@ -60,12 +59,14 @@ namespace AiDotNet.Classification.DiscriminantAnalysis;
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
 ///
 /// // Train to find optimal linear projection for class separation
-/// classifier.Train(features, labels);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new LinearDiscriminantAnalysis&lt;double&gt;(options))
+///     .Build(features, labels);
 ///
 /// // Classify new sample using discriminant function
 /// var newSample = new Matrix&lt;double&gt;(1, 2);
 /// newSample[0, 0] = 1.1; newSample[0, 1] = 1.0;
-/// var prediction = classifier.Predict(newSample);
+/// var prediction = result.Predict(newSample);
 /// // Result is available in the returned value
 /// </code>
 /// </example>

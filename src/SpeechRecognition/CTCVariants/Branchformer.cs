@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.CTCVariants;
 /// // Create a CTC Branchformer model with parallel attention and convolution branches
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new Branchformer&lt;double&gt;(architecture);
 ///

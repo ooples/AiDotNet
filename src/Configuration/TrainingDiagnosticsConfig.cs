@@ -35,6 +35,8 @@ namespace AiDotNet.Configuration;
 /// </remarks>
 /// <example>
 /// <code>
+/// var target = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var input = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Option A: environment variable (set before process start)
 /// //   AIDOTNET_TRAINING_DIAGNOSTICS=perstep
 ///
@@ -49,7 +51,9 @@ namespace AiDotNet.Configuration;
 /// };
 /// AiDotNet.Configuration.TrainingDiagnosticsConfig.Level =
 ///     TrainingDiagnosticLevel.PerStep;
-/// model.Train(input, target);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new ARModel&lt;double&gt;())
+///     .Build(input, target);
 /// AiDotNet.Configuration.TrainingDiagnosticsConfig.Level =
 ///     TrainingDiagnosticLevel.Silent;
 /// // grads now has one record per trainable parameter for that step.

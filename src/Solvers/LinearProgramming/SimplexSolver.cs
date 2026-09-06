@@ -38,6 +38,13 @@ namespace AiDotNet.Solvers.LinearProgramming;
 /// </para>
 /// <example>
 /// <code>
+/// // Maximise 3x + 2y subject to x + y &lt;= 4 and 2x + y &lt;= 6. The objective is the coefficient
+/// // vector; every constraint block is optional.
+/// var program = new LinearProgram&lt;double&gt;(
+///     objective: new Vector&lt;double&gt;(new double[] { 3.0, 2.0 }),
+///     inequalityMatrix: new Matrix&lt;double&gt;(new double[,] { { 1.0, 1.0 }, { 2.0, 1.0 } }),
+///     inequalityBounds: new Vector&lt;double&gt;(new double[] { 4.0, 6.0 }));
+///
 /// var solver = new SimplexSolver&lt;double&gt;();
 /// var solution = solver.Solve(program);
 /// if (solution.Status == LinearProgramStatus.Optimal)

@@ -79,10 +79,12 @@ public sealed partial class FlowMatchingScheduler<T> : NoiseSchedulerBase<T>
     /// scheduler.SetTimesteps(28);
     ///
     /// // Denoising loop
+    /// var noisySample = new Vector&lt;float&gt;(64);
     /// var eta = 0f; // Deterministic
     /// foreach (var t in scheduler.Timesteps)
     /// {
-    ///     var velocity = model.Predict(noisySample, t);
+    ///     // Your noise predictor supplies the velocity for this timestep.
+    ///     var velocity = new Vector&lt;float&gt;(64);
     ///     noisySample = scheduler.Step(velocity, t, noisySample, eta);
     /// }
     /// </code>

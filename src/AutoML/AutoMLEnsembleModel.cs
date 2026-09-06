@@ -30,12 +30,15 @@ namespace AiDotNet.AutoML;
 /// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
+/// var testData = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Create an ensemble from multiple trained models
+/// // Any IFullModel over the same input and output types can join the ensemble; these would normally
+/// // be models you have already trained.
 /// var models = new List&lt;IFullModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;&gt;
 /// {
-///     trainedModel1,
-///     trainedModel2,
-///     trainedModel3
+///     new SimpleRegression&lt;double&gt;(),
+///     new SimpleRegression&lt;double&gt;(),
+///     new SimpleRegression&lt;double&gt;()
 /// };
 /// var ensemble = new AutoMLEnsembleModel&lt;double&gt;(
 ///     models, PredictionType.Regression);

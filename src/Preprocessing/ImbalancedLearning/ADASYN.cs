@@ -61,14 +61,16 @@ public class ADASYN<T> : OversamplingBase<T>
     /// <b>For Beginners:</b> Example usage:
     ///
     /// <code>
+    /// var trainX = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+    /// var trainY = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
     /// // Default: balance classes adaptively
     /// var adasyn = new ADASYN&lt;double&gt;();
     ///
     /// // Custom settings
-    /// var adasyn = new ADASYN&lt;double&gt;(samplingStrategy: 0.8, kNeighbors: 7);
+    /// var adasyn2 = new ADASYN&lt;double&gt;(samplingStrategy: 0.8, kNeighbors: 7);
     ///
     /// // Apply to your data
-    /// var (newX, newY) = adasyn.Resample(trainX, trainY);
+    /// var (newX, newY) = adasyn2.Resample(trainX, trainY);
     /// </code>
     /// </para>
     /// </remarks>

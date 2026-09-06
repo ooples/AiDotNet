@@ -58,17 +58,21 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// <code>
 /// // Create a node classification model for semi-supervised learning on graphs
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     inputSize: 16,   // node feature dimension
+///     // node feature dimension
 ///     outputSize: 7,   // number of node classes
-///     hiddenSizes: new[] { 64 });
-/// var model = new NodeClassificationModel&lt;float&gt;(architecture);
+///     );
 ///
 /// // Prepare graph data (adjacency + node features as tensors)
 /// var adjacency = new Tensor&lt;float&gt;(new[] { 100, 100 }); // 100-node graph
 /// var nodeFeatures = new Tensor&lt;float&gt;(new[] { 100, 16 });
 ///
 /// // Classify each node using GCN with neighborhood aggregation
-/// var predictions = model.Predict(nodeFeatures);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new NodeClassificationModel&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var predictions = result.Predict(nodeFeatures);
 /// // Result is available in the returned value
 /// </code>
 /// </example>
@@ -143,7 +147,7 @@ public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDot
     ///     InputType.OneDimensional,
     ///     NeuralNetworkTaskType.MultiClassClassification,
     ///     NetworkComplexity.Simple,
-    ///     inputSize: 1433,    // Cora has 1433 word features
+    ///     // Cora has 1433 word features
     ///     outputSize: 7);     // 7 paper categories
     ///
     /// // Create model with default layers

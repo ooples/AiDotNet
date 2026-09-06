@@ -40,7 +40,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.CQL;
 /// <example>
 /// <code>
 /// // Create a Conservative Q-Learning agent for offline RL from recorded data
-/// var options = new CQLOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, ConservativeWeight = 5.0 };
+/// var options = new CQLOptions&lt;double&gt; { StateSize = 4, ActionSize = 2};
 /// var agent = new CQLAgent&lt;double&gt;(options);
 ///
 /// // Select an action given the current state

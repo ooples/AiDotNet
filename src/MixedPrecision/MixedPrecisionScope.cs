@@ -24,14 +24,18 @@ namespace AiDotNet.MixedPrecision;
 /// </remarks>
 /// <example>
 /// <code>
+/// var network = new NeuralNetwork&lt;double&gt;(
+///     new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2));
+/// var input = Tensor&lt;double&gt;.CreateRandom(1, 4);
 /// // Automatic usage (handled by MixedPrecisionTrainingLoop)
 /// // Users typically don't need to create scopes manually
 ///
 /// // For advanced manual usage:
-/// using (var scope = new MixedPrecisionScope(context, policy))
+/// var context = new MixedPrecisionContext();
+/// using (var scope = new MixedPrecisionScope(context))
 /// {
 ///     // Forward pass happens here
-///     var output = network.Forward(input);
+///     var output = network.Predict(input);
 ///     // Layers check MixedPrecisionScope.Current to determine precision
 /// }
 /// </code>

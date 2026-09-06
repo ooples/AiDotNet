@@ -73,14 +73,16 @@ public class NearMiss<T> : UndersamplingBase<T>
     /// <b>For Beginners:</b> Example usage:
     ///
     /// <code>
+    /// var trainX = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+    /// var trainY = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
     /// // Default: NearMiss-1 with balanced classes
     /// var nearmiss = new NearMiss&lt;double&gt;();
     ///
     /// // NearMiss-3 which keeps k nearest majority neighbors per minority sample
-    /// var nearmiss = new NearMiss&lt;double&gt;(version: NearMissVersion.Version3, kNeighbors: 5);
+    /// var nearmiss2 = new NearMiss&lt;double&gt;(version: NearMissVersion.Version3, kNeighbors: 5);
     ///
     /// // Apply to data
-    /// var (newX, newY) = nearmiss.Resample(trainX, trainY);
+    /// var (newX, newY) = nearmiss2.Resample(trainX, trainY);
     /// </code>
     /// </para>
     /// </remarks>

@@ -43,7 +43,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// <example>
 /// <code>
 /// var predictor = new UNetNoisePredictor&lt;float&gt;(inputChannels: 4, baseChannels: 320, contextDim: 768);
-/// var noisyLatent = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var noisyLatent = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4, 64, 64 });
 /// var predicted = predictor.PredictNoise(noisyLatent, timestep: 500);
 /// </code>
 /// </example>
@@ -239,10 +239,10 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
     ///
     /// // Custom layers via NeuralNetworkArchitecture
     /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(..., layers: myCustomLayers);
-    /// var unet = new UNetNoisePredictor&lt;float&gt;(architecture: arch);
+    /// var unet2 = new UNetNoisePredictor&lt;float&gt;(architecture: arch);
     ///
     /// // SDXL configuration
-    /// var unet = new UNetNoisePredictor&lt;float&gt;(
+    /// var unet3 = new UNetNoisePredictor&lt;float&gt;(
     ///     baseChannels: 320,
     ///     channelMultipliers: new[] { 1, 2, 4 },
     ///     contextDim: 2048);

@@ -49,7 +49,7 @@ namespace AiDotNet.Data.Loaders;
 /// var labels = new Vector&lt;double&gt;(1000);  // 20 classes with varying frequencies
 ///
 /// // Create balanced loader - all classes will be sampled equally over time
-/// var loader = new BalancedEpisodicDataLoader&lt;double&gt;(
+/// var loader = new BalancedEpisodicDataLoader&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(
 ///     datasetX: features,
 ///     datasetY: labels,
 ///     nWay: 5,

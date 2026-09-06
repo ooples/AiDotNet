@@ -68,7 +68,7 @@ namespace AiDotNet.Diffusion.Audio;
 ///     numInferenceSteps: 50);
 ///
 /// // Generate audio from mel-spectrogram (vocoder mode)
-/// var melSpec = ComputeMelSpectrogram(text);
+/// var melSpec = Tensor&lt;float&gt;.CreateRandom(1, 80, 128);  // a real pipeline computes this from audio
 /// var vocodedAudio = diffWave.GenerateFromMelSpectrogram(melSpec);
 /// </code>
 /// </example>

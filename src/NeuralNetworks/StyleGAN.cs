@@ -55,10 +55,20 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new StyleGANOptions { LatentSize = 512, MaxResolution = 1024 };
-/// var model = new StyleGAN&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 512 });
-/// var generated = model.Predict(noise);
+/// var options = new StyleGANOptions { };
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 512 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var mappingNetworkArchitecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 8);
+/// var synthesisNetworkArchitecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 1);
+/// var discriminatorArchitecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 1);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new StyleGAN&lt;float&gt;(
+///         mappingNetworkArchitecture, synthesisNetworkArchitecture,
+///         discriminatorArchitecture,
+///         latentSize: 512, intermediateLatentSize: 512))
+///     .Build(trainX, trainY);
+/// var generated = result.Predict(noise);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>

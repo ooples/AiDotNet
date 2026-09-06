@@ -39,10 +39,11 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
+/// var inputTensor = Tensor&lt;float&gt;.CreateRandom(2, 4);
 /// // Create an audio-visual event localization network
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Detection,
+///     taskType: NeuralNetworkTaskType.ObjectDetection,
 ///     inputSize: 512,
 ///     outputSize: 128);
 ///

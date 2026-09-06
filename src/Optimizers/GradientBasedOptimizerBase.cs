@@ -623,8 +623,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// var batcher = CreateBatcher(inputData, batchSize: 32, sampler: sampler);
     ///
     /// // Use balanced sampling for class imbalance
-    /// var sampler = Samplers.Balanced(labels, numClasses: 10);
-    /// var batcher = CreateBatcher(inputData, batchSize: 32, sampler: sampler);
+    /// var sampler2 = Samplers.Balanced(labels, numClasses: 10);
+    /// var batcher2 = CreateBatcher(inputData, batchSize: 32, sampler2: sampler2);
     /// </code>
     /// </para>
     /// </remarks>

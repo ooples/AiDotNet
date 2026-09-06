@@ -46,14 +46,27 @@ namespace AiDotNet.Control;
 /// </remarks>
 /// <example>
 /// <code>
+/// // A double integrator: state is (position, velocity), input is force, and only position is measured.
+/// var a = new Matrix&lt;double&gt;(new double[,] { { 1.0, 1.0 }, { 0.0, 1.0 } });
+/// var b = new Matrix&lt;double&gt;(new double[,] { { 0.5 }, { 1.0 } });
+/// var c = new Matrix&lt;double&gt;(new double[,] { { 1.0, 0.0 } });
+///
+/// // Costs and noise are weighting matrices, not scalars: identity penalises every term equally.
+/// var q = Matrix&lt;double&gt;.CreateIdentity(2);
+/// var r = Matrix&lt;double&gt;.CreateIdentity(1);
+/// var processCovariance = Matrix&lt;double&gt;.CreateIdentity(2);
+/// var sensorCovariance = Matrix&lt;double&gt;.CreateIdentity(1);
+///
 /// var controller = new LinearQuadraticGaussian&lt;double&gt;(
 ///     stateMatrix: a, inputMatrix: b, observationMatrix: c,
 ///     stateCost: q, inputCost: r,
 ///     processNoise: processCovariance, measurementNoise: sensorCovariance);
 ///
+/// var initialGuess = new Vector&lt;double&gt;(new double[] { 0.0, 0.0 });
 /// controller.Initialize(initialGuess, Matrix&lt;double&gt;.CreateIdentity(2));
 ///
 /// // Each control step: measure, then act.
+/// var measurement = new Vector&lt;double&gt;(new double[] { 0.1 });
 /// var input = controller.Step(measurement);
 /// </code>
 /// </example>

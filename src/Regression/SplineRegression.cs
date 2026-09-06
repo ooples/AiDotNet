@@ -37,19 +37,20 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a spline regression with piecewise polynomial fitting
-/// var options = new SplineRegressionOptions&lt;double&gt;();
-/// var model = new SplineRegression&lt;double&gt;(options);
+/// var options = new SplineRegressionOptions();
 ///
 /// // Prepare training data: 6 samples with 1 feature
-/// var features = Matrix&lt;double&gt;.Build.Dense(6, 1, new double[] { 1, 2, 3, 4, 5, 6 });
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1 }, { 2 }, { 3 }, { 4 }, { 5 }, { 6 } });
 /// var targets = new Vector&lt;double&gt;(new double[] { 1.0, 3.5, 4.0, 3.8, 5.5, 8.0 });
 ///
 /// // Train with piecewise polynomials at knot points
-/// model.Train(features, targets);
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new SplineRegression&lt;double&gt;(options))
+///     .Build(features, targets);
 ///
 /// // Predict for a new sample
-/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 1, new double[] { 3.5 });
-/// var prediction = model.Predict(newSample);
+/// var newSample = new Matrix&lt;double&gt;(new double[,] { { 3.5 } });
+/// var prediction = result.Predict(newSample);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

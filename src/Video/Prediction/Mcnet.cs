@@ -34,6 +34,7 @@ namespace AiDotNet.Video.Prediction;
 /// towards. Hence the move to <c>Video/Prediction</c> and the change of base class.
 /// </para>
 /// <code>
+/// var observedFrames = Tensor&lt;double&gt;.CreateRandom(1, 3, 32, 32);
 ///   motion    [d_t, c_t] = f_dyn(x_t - x_{t-1}, d_{t-1}, c_{t-1})     recurrent, on DIFFERENCES
 ///   content   s_t        = f_cont(x_t)                                single frame, no recurrence
 ///   combine   f_t        = g_comb([d_t, s_t])
@@ -56,6 +57,7 @@ namespace AiDotNet.Video.Prediction;
 /// </remarks>
 /// <example>
 /// <code>
+/// var observedFrames = Tensor&lt;double&gt;.CreateRandom(1, 3, 32, 32);
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,

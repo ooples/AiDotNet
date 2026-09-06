@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 /// // Create a Whisper.cpp model for optimized CPU-based ASR
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new WhisperCPP&lt;double&gt;(architecture);
 ///

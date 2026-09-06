@@ -52,10 +52,6 @@ namespace AiDotNet.Classification.Boosting;
 /// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
 /// <example>
 /// <code>
-/// // Create histogram-based gradient boosting classifier for fast training
-/// var classifier = new HistGradientBoostingClassifier&lt;double&gt;(
-///     maxBins: 256, maxDepth: 6, nEstimators: 100, learningRate: 0.1);
-///
 /// // Prepare training data: 6 samples with 2 features
 /// var features = new Matrix&lt;double&gt;(6, 2);
 /// features[0, 0] = 1.0; features[0, 1] = 1.1;
@@ -66,13 +62,17 @@ namespace AiDotNet.Classification.Boosting;
 /// features[5, 0] = 4.8; features[5, 1] = 5.0;
 /// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
 ///
-/// // Train with histogram binning for efficient split evaluation
-/// classifier.Train(features, labels);
+/// // Train through the facade: the builder configures the model, runs the training pipeline and
+/// // returns a result to predict on.
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new HistGradientBoostingClassifier&lt;double&gt;(
+///         maxBins: 256, maxDepth: 6, nEstimators: 100, learningRate: 0.1))
+///     .Build(features, labels);
 ///
 /// // Predict class for new sample
 /// var newSample = new Matrix&lt;double&gt;(1, 2);
 /// newSample[0, 0] = 1.1; newSample[0, 1] = 1.0;
-/// var prediction = classifier.Predict(newSample);
+/// var prediction = result.Predict(newSample);
 /// // Result is available in the returned value
 /// </code>
 /// </example>

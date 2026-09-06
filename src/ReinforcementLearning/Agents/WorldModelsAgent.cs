@@ -42,7 +42,7 @@ namespace AiDotNet.ReinforcementLearning.Agents.WorldModels;
 /// <example>
 /// <code>
 /// // Create a World Models agent that learns in its own dreams
-/// var options = new WorldModelsOptions&lt;double&gt; { StateSize = 64, ActionSize = 3, LatentSize = 32 };
+/// var options = new WorldModelsOptions&lt;double&gt; { LatentSize = 64, ActionSize = 3, LatentSize = 32 };
 /// var agent = new WorldModelsAgent&lt;double&gt;(options);
 ///
 /// // Select an action from the compressed latent representation

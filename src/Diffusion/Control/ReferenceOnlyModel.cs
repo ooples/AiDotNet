@@ -33,18 +33,20 @@ namespace AiDotNet.Diffusion.Control;
 /// <example>
 /// <code>
 /// // Create a Reference-Only model for style transfer
-/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// var options = new DiffusionModelOptions&lt;float&gt;
 /// {
 ///     LatentChannels = 4,
-///     Height = 512,
-///     Width = 512,
-///     NumInferenceSteps = 30
+///     DefaultInferenceSteps = 30
 /// };
-/// var model = new ReferenceOnlyModel&lt;float&gt;(options);
 ///
 /// // Use a reference image to guide generation style
-/// var referenceImage = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
-/// var styledOutput = model.Predict(referenceImage);
+/// var referenceImage = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4, 64, 64 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new ReferenceOnlyModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var styledOutput = result.Predict(referenceImage);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

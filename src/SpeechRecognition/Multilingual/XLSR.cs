@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// // Create an XLS-R model for cross-lingual speech representation (128 languages)
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new XLSR&lt;double&gt;(architecture);
 ///

@@ -28,7 +28,7 @@ namespace AiDotNet.AutoML.NAS
     /// <example>
     /// <code>
     /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
-    /// var bignas = new BigNAS&lt;float&gt;(searchSpace, numNodes: 4);
+    /// var bignas = new BigNAS&lt;float&gt;(searchSpace);
     /// List&lt;BigNASConfig&gt; configs = bignas.SandwichSample();
     /// </code>
     /// </example>

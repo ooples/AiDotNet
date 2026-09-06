@@ -65,7 +65,7 @@ namespace AiDotNet.Audio.AudioGen;
 /// // Create an AudioGen model for generating audio from text descriptions
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Generation,
+///     taskType: NeuralNetworkTaskType.Generative,
 ///     inputSize: 512,
 ///     outputSize: 32000);
 ///
@@ -74,7 +74,7 @@ namespace AiDotNet.Audio.AudioGen;
 ///     textEncoderPath: "text_encoder.onnx",
 ///     languageModelPath: "language_model.onnx",
 ///     audioDecoderPath: "audio_decoder.onnx",
-///     tokenizer: myTokenizer);
+///     tokenizer: CharacterTokenizer.CreateAscii());
 ///
 /// // Generate audio from a text prompt
 /// Tensor&lt;float&gt; audio = model.GenerateAudio("a dog barking loudly");

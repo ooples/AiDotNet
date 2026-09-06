@@ -376,12 +376,14 @@ public class SEALOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
     /// <exception cref="ArgumentNullException">Thrown when metaModel is null.</exception>
     /// <example>
     /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 2);
+    /// var myNeuralNetwork = new NeuralNetwork&lt;double&gt;(architecture);
     /// // Create SEAL options with minimal configuration (uses all defaults)
     /// var options = new SEALOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(myNeuralNetwork);
     /// var seal = new SEALAlgorithm&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(options);
     ///
     /// // Create SEAL with entropy regularization for better generalization
-    /// var options = new SEALOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(myNeuralNetwork)
+    /// var options2 = new SEALOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     EntropyCoefficient = 0.01,
     ///     Temperature = 1.5,
@@ -389,7 +391,7 @@ public class SEALOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
     /// };
     ///
     /// // Create SEAL with weight decay and gradient clipping
-    /// var options = new SEALOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(myNeuralNetwork)
+    /// var options3 = new SEALOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(myNeuralNetwork)
     /// {
     ///     WeightDecay = 0.001,
     ///     GradientClipThreshold = 5.0,

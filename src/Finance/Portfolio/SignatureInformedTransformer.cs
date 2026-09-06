@@ -43,6 +43,7 @@ namespace AiDotNet.Finance.Portfolio;
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <example>
 /// <code>
+/// var priceWindow = Tensor&lt;double&gt;.CreateRandom(2, 4);
 /// var model = new SignatureInformedTransformer&lt;double&gt;(
 ///     new SignatureInformedTransformerOptions&lt;double&gt; { NumAssets = 30 });
 /// Vector&lt;double&gt; weights = model.OptimizePortfolio(priceWindow);   // long-only, sums to 1

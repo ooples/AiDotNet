@@ -78,6 +78,7 @@ namespace AiDotNet.Diffusion.SuperResolution;
 /// </remarks>
 /// <example>
 /// <code>
+/// var degradedImage = Tensor&lt;float&gt;.CreateRandom(1, 3, 32, 32);
 /// // Create with industry-standard defaults (1024x1024 resolution)
 /// var supir = new SUPIRModel&lt;float&gt;();
 ///

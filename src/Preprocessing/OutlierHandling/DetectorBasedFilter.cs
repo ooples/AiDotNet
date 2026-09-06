@@ -55,12 +55,12 @@ public enum FilterMode
 ///     FilterMode.Remove);
 ///
 /// // Flag outliers using Z-Score (adds a column)
-/// var filter = new DetectorBasedFilter&lt;double&gt;(
+/// var filter2 = new DetectorBasedFilter&lt;double&gt;(
 ///     new ZScoreDetector&lt;double&gt;(),
 ///     FilterMode.Flag);
 ///
 /// // Replace outliers with median using IQR detector
-/// var filter = new DetectorBasedFilter&lt;double&gt;(
+/// var filter3 = new DetectorBasedFilter&lt;double&gt;(
 ///     new IQRDetector&lt;double&gt;(),
 ///     FilterMode.ReplaceWithMedian);
 /// </code>

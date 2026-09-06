@@ -36,7 +36,7 @@ namespace AiDotNet.Finance.NLP;
 /// // Define architecture for SEC filing classification (512 tokens, 10 filing categories)
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 10);
 ///
 /// // Training mode: BERT pre-trained on SEC 10-K, 10-Q, and 8-K filings

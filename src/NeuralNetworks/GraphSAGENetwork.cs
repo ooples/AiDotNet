@@ -62,10 +62,13 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new GraphSAGENetworkOptions { NodeFeatureSize = 16, HiddenSize = 128, NumLayers = 2 };
-/// var model = new GraphSAGENetwork&lt;float&gt;(options);
-/// var nodeFeatures = Tensor&lt;float&gt;.Random(new[] { 50, 16 });
-/// var output = model.Predict(nodeFeatures);
+/// var nodeFeatures = Tensor&lt;float&gt;.CreateRandom(new[] { 50, 16 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new GraphSAGENetwork&lt;float&gt;())
+///     .Build(trainX, trainY);
+/// var output = result.Predict(nodeFeatures);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.GraphAnalysis)]

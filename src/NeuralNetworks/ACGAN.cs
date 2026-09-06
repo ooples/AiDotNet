@@ -41,10 +41,18 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new ACGANOptions { LatentSize = 100, NumClasses = 10 };
-/// var model = new ACGAN&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 100 });
-/// var generated = model.Predict(noise);
+/// var options = new ACGANOptions { };
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 100 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+///     var generatorArchitecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 8);
+///     var discriminatorArchitecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 1);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new ACGAN&lt;float&gt;(
+///         generatorArchitecture, discriminatorArchitecture,
+///         numClasses: 10, inputType: InputType.OneDimensional))
+///     .Build(trainX, trainY);
+/// var generated = result.Predict(noise);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

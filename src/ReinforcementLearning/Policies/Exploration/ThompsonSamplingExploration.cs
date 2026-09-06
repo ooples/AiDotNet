@@ -15,6 +15,8 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
     /// <example>
     /// <code>
+    /// var random = new Random(42);
+    /// var state = Tensor&lt;double&gt;.CreateRandom(1, 8);
     /// // Create Thompson Sampling exploration with uniform Beta priors
     /// var exploration = new ThompsonSamplingExploration&lt;double&gt;(priorAlpha: 1.0, priorBeta: 1.0);
     ///

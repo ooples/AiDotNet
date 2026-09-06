@@ -41,10 +41,18 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new Pix2PixOptions { ImageSize = 256, InputChannels = 3, OutputChannels = 3 };
-/// var model = new Pix2Pix&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 3, 256, 256 });
-/// var translated = model.Predict(input);
+/// var options = new Pix2PixOptions { };
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 256, 256 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+///     var generatorArchitecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 8);
+///     var discriminatorArchitecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 1);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new Pix2Pix&lt;float&gt;(
+///         generatorArchitecture, discriminatorArchitecture,
+///         inputType: InputType.ThreeDimensional))
+///     .Build(trainX, trainY);
+/// var translated = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>

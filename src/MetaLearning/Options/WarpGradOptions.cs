@@ -307,6 +307,7 @@ public class WarpGradOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpt
     /// <exception cref="ArgumentNullException">Thrown when metaModel is null.</exception>
     /// <example>
     /// <code>
+    /// var myEncoder = new NeuralNetwork&lt;double&gt;(new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 8, outputSize: 4));
     /// var options = new WarpGradOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myEncoder)
     /// {
     ///     NumWarpLayers = 3,

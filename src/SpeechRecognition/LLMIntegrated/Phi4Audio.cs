@@ -24,10 +24,11 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// </remarks>
 /// <example>
 /// <code>
+/// var audioTensor = Tensor&lt;float&gt;.CreateRandom(1, 16000);
 /// // Create Phi-4 Audio for efficient speech recognition
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputSize: 80,
 ///     outputSize: 51200);
 ///

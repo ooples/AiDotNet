@@ -31,12 +31,14 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 ///
 /// <para><b>Standard Usage (via IDistillationStrategy):</b>
 /// <code>
+/// var NumOps = MathHelper.GetNumericOperations&lt;double&gt;();
 /// T outputLoss = strategy.ComputeLoss(studentOutput, teacherOutput, labels);
 /// Matrix&lt;T&gt; outputGrad = strategy.ComputeGradient(studentOutput, teacherOutput, labels);
 /// </code></para>
 ///
 /// <para><b>With Intermediate Activations (via IIntermediateActivationStrategy):</b>
 /// <code>
+/// var NumOps = MathHelper.GetNumericOperations&lt;double&gt;();
 /// // Collect activations during forward pass
 /// var studentActivations = new IntermediateActivations&lt;T&gt;();
 /// studentActivations.Add("layer3", studentLayer3Output);

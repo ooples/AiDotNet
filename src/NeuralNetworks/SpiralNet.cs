@@ -41,10 +41,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new SpiralNetOptions { InputFeatures = 3, HiddenSize = 64, SpiralLength = 9 };
-/// var model = new SpiralNet&lt;float&gt;(options);
-/// var vertexFeatures = Tensor&lt;float&gt;.Random(new[] { 1, 500, 3 });
-/// var output = model.Predict(vertexFeatures);
+/// var options = new SpiralNetOptions { InputFeatures = 3, SpiralLength = 9 };
+/// var vertexFeatures = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 500, 3 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new SpiralNet&lt;float&gt;(options))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(vertexFeatures);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.ThreeD)]

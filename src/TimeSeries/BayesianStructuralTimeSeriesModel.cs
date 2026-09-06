@@ -43,6 +43,9 @@ namespace AiDotNet.TimeSeries;
 /// </remarks>
 /// <example>
 /// <code>
+/// var history = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var trainingLabels = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+/// var trainingMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Create a BSTS model for causal impact analysis with structural components
 /// var options = new BayesianStructuralTimeSeriesOptions&lt;double&gt;();
 /// var bsts = new BayesianStructuralTimeSeriesModel&lt;double&gt;(options);

@@ -290,12 +290,15 @@ public class MANNOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
     /// <exception cref="ArgumentNullException">Thrown when metaModel is null.</exception>
     /// <example>
     /// <code>
+    /// var myController = new NeuralNetwork&lt;double&gt;(
+    ///     new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 8, outputSize: 4));
+    /// 
     /// // Create MANN with minimal configuration
     /// var options = new MANNOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myController);
     /// var mann = new MANNAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
     ///
     /// // Create MANN with custom memory configuration
-    /// var options = new MANNOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myController)
+    /// var options2 = new MANNOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(myController)
     /// {
     ///     MemorySize = 256,
     ///     MemoryKeySize = 128,

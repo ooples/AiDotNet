@@ -97,7 +97,7 @@ public class RealESRGANLoss<T> : LossFunctionBase<T>
     /// var loss = new RealESRGANLoss&lt;double&gt;(l1Weight: 2.0, ganWeight: 0.05);
     ///
     /// // More realistic textures (potential artifacts)
-    /// var loss = new RealESRGANLoss&lt;double&gt;(ganWeight: 0.2);
+    /// var loss2 = new RealESRGANLoss&lt;double&gt;(ganWeight: 0.2);
     /// </code>
     /// </para>
     /// </remarks>

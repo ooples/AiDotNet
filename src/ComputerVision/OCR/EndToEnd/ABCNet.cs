@@ -55,6 +55,7 @@ namespace AiDotNet.ComputerVision.OCR.EndToEnd;
 /// </remarks>
 /// <example>
 /// <code>
+/// var image = Tensor&lt;double&gt;.CreateRandom(1, 3, 32, 32);
 /// var model = new ABCNet&lt;double&gt;(new ABCNetOptions&lt;double&gt; { InputHeight = 256, InputWidth = 256 });
 /// foreach (var instance in model.Spot(image))
 ///     Console.WriteLine($"score {instance.Score}, {instance.CharacterIndices.Count} characters");
