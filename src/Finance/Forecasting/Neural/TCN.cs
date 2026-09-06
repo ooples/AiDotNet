@@ -77,7 +77,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("An Empirical Evaluation of Generic Convolutional and Recurrent Networks for Sequence Modeling", "https://arxiv.org/abs/1803.01271", Year = 2018, Authors = "Shaojie Bai, J. Zico Kolter, Vladlen Koltun")]
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.002,
-                Source = "Bai et al. 2018, experimental setup: Adam with learning rate 0.002 in most experiments.")]
+                Source = "Bai et al. 2018, Sec. 5 (Experiments): 'the Adam optimizer with learning rate 0.002 for TCN'. Gradient clipping is used but the paper gives a range [0.3, 1] rather than a value, so it is not declared. Verified against the paper.")]
 public partial class TCN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

@@ -92,7 +92,7 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
     Year = 2016,
     Authors = "Thomas N. Kipf, Max Welling")]
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.01,
-                Source = "Kipf and Welling 2016 (VGAE), experiments: Adam, lr 0.01, 200 iterations.")]
+                Source = "Kipf and Welling 2016 (VGAE), Sec. 2 (Experiments on link prediction): Adam, lr 0.01, 200 iterations. Verified against the paper.")]
 public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
 {
     private readonly ILossFunction<T> _lossFunction;

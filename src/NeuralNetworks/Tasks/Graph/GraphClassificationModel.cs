@@ -95,7 +95,7 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
     Year = 2017,
     Authors = "Thomas N. Kipf, Max Welling")]
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.01, WeightDecay = 5e-4,
-                Source = "Kipf and Welling 2017, Sec. 3.1 / experimental set-up: Adam, lr 0.01, L2 regularization 5e-4.")]
+                Source = "Kipf and Welling 2017, Sec. 5.2 (Experimental Set-Up): Adam, lr 0.01, L2 regularization 5e-4 for the citation networks. Verified against the paper.")]
 public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
 {
     private readonly ILossFunction<T> _lossFunction;

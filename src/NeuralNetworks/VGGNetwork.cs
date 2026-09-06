@@ -63,7 +63,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Very Deep Convolutional Networks for Large-Scale Image Recognition", "https://arxiv.org/abs/1409.1556", Year = 2015, Authors = "Karen Simonyan, Andrew Zisserman")]
-[PaperOptimizer(OptimizerKind.SgdMomentum, LearningRate = 0.01, Momentum = 0.9, WeightDecay = 5e-4,
+[PaperOptimizer(OptimizerKind.SgdMomentum, LearningRate = 0.01, Momentum = 0.9, WeightDecay = 5e-4, ReferenceBatchSize = 256,
                 Schedule = LearningRateSchedulerType.ReduceOnPlateau,
                 Source = "Simonyan and Zisserman 2015, Sec. 3.1 (Training): SGD, initial lr 0.01 divided by 10 on plateau, momentum 0.9, weight decay 5e-4.")]
 public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>

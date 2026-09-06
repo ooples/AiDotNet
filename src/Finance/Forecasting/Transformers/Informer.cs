@@ -69,7 +69,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ResearchPaper("Informer: Beyond Efficient Transformer for Long Sequence Time-Series Forecasting", "https://arxiv.org/abs/2012.07436", Year = 2021, Authors = "Haoyi Zhou, Shanghang Zhang, Jieqi Peng, Shuai Zhang, Jianxin Li, Hui Xiong, Wancai Zhang")]
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4,
                 Schedule = LearningRateSchedulerType.Exponential, DecayRate = 0.5,
-                Source = "Zhou et al. 2021, Sec. 4.2 (experimental details): Adam, initial lr 1e-4, halved each epoch.")]
+                Source = "Zhou et al. 2021 (Experimental Details / Setup): Adam, 'learning rate starts from 1e-4, decaying two times smaller every epoch', batch size 32. Verified against the paper.")]
 public partial class Informer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

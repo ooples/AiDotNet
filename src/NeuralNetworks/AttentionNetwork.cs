@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Attention Is All You Need", "https://arxiv.org/abs/1706.03762", Year = 2017, Authors = "Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin")]
 [PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-9,
-                Source = "Vaswani et al. 2017, Sec. 5.3 (Optimizer): Adam beta2 0.98, eps 1e-9, Eq. 3 warmup over 4000 steps. The warmup is NOT declared: the paper states no constant rate for it to warm up to, so expressing it would require inventing a base rate.")]
+                Source = "Vaswani et al. 2017, Sec. 5.3 (Optimizer): Adam with beta1 0.9, beta2 0.98, eps 1e-9. The rate is a formula of step and d_model with warmup_steps=4000, not a constant, so no learning rate or schedule is declared here. Verified against the paper.")]
 public partial class AttentionNetwork<T> : SequenceModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly AttentionNetworkOptions _options;
