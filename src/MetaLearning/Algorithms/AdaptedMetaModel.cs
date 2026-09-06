@@ -26,6 +26,10 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </remarks>
 /// <example>
 /// <code>
+/// var baseModel = new NeuralNetwork&lt;float&gt;(
+///     new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4));
+/// var queryInput = Tensor&lt;float&gt;.CreateRandom(1, 8);
+/// 
 /// // Create an adapted model after MAML inner-loop adaptation
 /// var adaptedParams = new Vector&lt;float&gt;(baseModel.GetParameters().Length);
 /// // ... inner-loop gradient updates fill adaptedParams ...
