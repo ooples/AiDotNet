@@ -82,3 +82,7 @@ AIDN098 | AiDotNet.ParameterAutomation | Warning | TrainableParameterGenerator, 
 AIDN099 | AiDotNet.ParameterAutomation | Warning | TrainableParameterGenerator, [TrainableParameter] on a non-partial class does nothing
 AIDN046 | AiDotNet.TestCoverage | Warning | TestScaffoldGenerator, Layer cannot be scaffolded and produces no generated tests
 AIDN077 | AiDotNet.GoldenPattern | Warning | GoldenPatternValidationGenerator, Optimizer builds its own random generator instead of drawing from the seeded OptimizerBase.Random
+AIDN101 | AiDotNet.PaperFidelity | Info | PaperOptimizerAnalyzer, Model cites a paper but does not declare the optimizer settings that paper specifies (Info while the backlog is large; promote per the AIDN087 ladder)
+AIDN102 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Declared paper hyperparameters must cite where they come from
+AIDN103 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Duplicate [PaperOptimizer] for the same optimizer and variant
+AIDN104 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Declared paper recipe is never used, because the optimizer is still hardcoded
