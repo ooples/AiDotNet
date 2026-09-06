@@ -35,7 +35,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a KNN regression model with K=3 nearest neighbors
-/// var options = new KNearestNeighborsOptions&lt;double&gt;();
+/// var options = new KNearestNeighborsOptions();
 ///
 /// // Prepare training data: 6 samples with 2 features each
 /// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 }, { 9, 10 }, { 11, 12 } });

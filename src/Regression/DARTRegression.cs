@@ -37,7 +37,7 @@ namespace AiDotNet.Regression;
 /// <example>
 /// <code>
 /// // Create a DART regression model with dropout regularization
-/// var options = new DARTOptions&lt;double&gt;();
+/// var options = new DARTOptions();
 ///
 /// // Prepare training data: 6 samples with 2 features each
 /// var features = new Matrix&lt;double&gt;(new double[,] { { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 }, { 9, 10 }, { 11, 12 } });
