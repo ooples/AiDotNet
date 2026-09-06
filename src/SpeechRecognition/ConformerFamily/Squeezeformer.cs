@@ -1,4 +1,6 @@
-﻿using AiDotNet.Attributes;
+﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -45,6 +47,11 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Squeezeformer: An Efficient Transformer for Automatic Speech Recognition", "https://arxiv.org/abs/2206.00888", Year = 2022, Authors = "Kim et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-3,
+                Schedule = LearningRateSchedulerType.NoamHoldAnnealing,
+                WarmupFraction = 0.04, HoldFraction = 0.32, DecayRate = 1.0,
+                ReferenceBatchSize = 1024,
+                Source = "Kim et al. 2022, Sec. A.1: warmup for 20 epochs, hold the peak for a further 160, and decay with d = 1, fixed across all experiments; over the 500-epoch run that is 4% warmup and 32% hold. Peak rate 2e-3 for the small variant (1.5e-3 medium, 1e-3/5e-4 large), batch size 1024. The small variant rate is used because this type selects no variant. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SqueezeformerOptions _options; public override ModelOptions GetOptions() => _options;
@@ -54,7 +61,8 @@ public partial class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     public bool SupportsWordTimestamps => true;
 
     public Squeezeformer(NeuralNetworkArchitecture<T> architecture, string modelPath, SqueezeformerOptions? options = null) : base(architecture) { _options = options ?? new SqueezeformerOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
-    public Squeezeformer(NeuralNetworkArchitecture<T> architecture, SqueezeformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new SqueezeformerOptions(); _useNativeMode = true; _optimizer = optimizer ?? CreateSqueezeformerOptimizer(); SetBaseTrainOptimizer(_optimizer); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
+    public Squeezeformer(NeuralNetworkArchitecture<T> architecture, SqueezeformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new SqueezeformerOptions(); _useNativeMode = true; _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
+            optimizer ?? CreateSqueezeformerOptimizer()); SetBaseTrainOptimizer(_optimizer); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
 
     /// <summary>
     /// Builds the optimizer Squeezeformer specifies (appendix A.1).

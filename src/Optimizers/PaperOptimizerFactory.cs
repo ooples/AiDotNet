@@ -673,6 +673,16 @@ public static class PaperOptimizerFactory
                            gamma: double.IsNaN(recipe.DecayRate) ? 0.1 : recipe.DecayRate,
                            minLearningRate: floor),
 
+                // Hold length comes from HoldFraction, the same field TriStage uses, because both
+                // schedules are warmup-hold-decay and only their decay shape differs.
+                LearningRateSchedulerType.NoamHoldAnnealing
+                    when warmupSteps > 0 && !double.IsNaN(recipe.LearningRate)
+                    => new NoamHoldAnnealingScheduler(
+                           recipe.LearningRate, warmupSteps,
+                           holdSteps: double.IsNaN(recipe.HoldFraction) || totalSteps <= 0
+                               ? 0 : (int)Math.Round(totalSteps * recipe.HoldFraction),
+                           decayRate: double.IsNaN(recipe.DecayRate) ? 0.5 : recipe.DecayRate),
+
                 LearningRateSchedulerType.Exponential when !double.IsNaN(recipe.DecayRate)
                     => new ExponentialLRScheduler(baseRate, recipe.DecayRate),
 
