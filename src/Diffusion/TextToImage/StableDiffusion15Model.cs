@@ -71,11 +71,12 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// // Create with industry-standard defaults
 /// var sd15 = new StableDiffusion15Model&lt;float&gt;();
 ///
-/// // Create with custom components for full customization
+/// // Swap in your own components. Every parameter is optional, so supply only what you are replacing;
+/// // a conditioner is omitted here because CLIPTextConditioner needs a tokenizer, which needs a
+/// // vocabulary — worth its own example rather than three lines of setup in this one.
 /// var customSd15 = new StableDiffusion15Model&lt;float&gt;(
-///     unet: myCustomUNet,
-///     vae: myCustomVAE,
-///     conditioner: myClipEncoder);
+///     unet: new UNetNoisePredictor&lt;float&gt;(),
+///     vae: new StandardVAE&lt;float&gt;());
 ///
 /// // Generate a 512x512 image from text
 /// var image = sd15.GenerateFromText(

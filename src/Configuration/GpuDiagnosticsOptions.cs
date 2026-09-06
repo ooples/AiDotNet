@@ -37,7 +37,9 @@ namespace AiDotNet.Configuration;
 /// // Verbose for troubleshooting.
 /// builder.ConfigureGpuDiagnostics(new() { Level = GpuDiagnosticLevel.Verbose });
 ///
-/// // Route through an ILogger.
+/// // Route through an ILogger. Any ILogger works; NullLogger keeps the example self-contained.
+/// Microsoft.Extensions.Logging.ILogger logger =
+///     Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
 /// builder.ConfigureGpuDiagnostics(new()
 /// {
 ///     Level = GpuDiagnosticLevel.Minimal,
