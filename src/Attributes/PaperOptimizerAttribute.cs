@@ -227,6 +227,17 @@ public sealed class PaperOptimizerAttribute : Attribute
     /// <summary>Interval, in steps or epochs, between decay events. Unset means unstated.</summary>
     public int StepSize { get; set; }
 
+    /// <summary>
+    /// The exact steps a paper decays at, for schedules stated as a list rather than an interval.
+    /// Empty means the paper gives an interval, or no step decay.
+    /// </summary>
+    /// <remarks>
+    /// Segment Anything decreases the rate by 10x at 60,000 and again at 86,666 iterations (Kirillov
+    /// et al. 2023, Training recipe) -- points that are not evenly spaced, so no
+    /// <see cref="StepSize"/> interval can describe them.
+    /// </remarks>
+    public int[] Milestones { get; set; } = [];
+
     /// <summary>Floor the schedule decays towards. Unset means unstated.</summary>
     public double MinLearningRate { get; set; } = double.NaN;
 
@@ -280,6 +291,7 @@ public sealed class PaperOptimizerAttribute : Attribute
         || !double.IsNaN(WarmupFraction)
         || !double.IsNaN(HoldFraction)
         || StepSize > 0
+        || Milestones.Length > 0
         || CyclicPolicy != CyclicLRScheduler.CyclicMode.Triangular
         || PostWarmupDecay != LinearWarmupScheduler.DecayMode.Constant
         || !double.IsNaN(DecayRate)

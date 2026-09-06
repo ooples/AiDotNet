@@ -454,6 +454,42 @@ public static class PaperOptimizerFactory
             "warmup held at its share of the run; same treatment as the #1835 densification window");
         return scaled;
     }
+    /// <summary>Puts a warmup ramp in front of a schedule that does not have one of its own.</summary>
+    /// <remarks>
+    /// "Warm up, then decay" is how most papers state a schedule, but only three of the shapes here
+    /// contain their own warmup. Without composition a recipe declaring warmup alongside step,
+    /// cosine or multi-step decay would build the decay and silently drop the ramp -- and dropping
+    /// warmup is not a small loss: for a post-norm transformer it is the difference between
+    /// training and diverging at the same rate.
+    /// </remarks>
+    private static ILearningRateScheduler? ComposeWarmup(
+        ILearningRateScheduler? scheduler, PaperOptimizerAttribute recipe,
+        double baseRate, int warmupSteps)
+    {
+        if (scheduler is null || warmupSteps <= 0) return scheduler;
+
+        // These three already ramp; wrapping them would warm up twice.
+        if (recipe.Schedule is LearningRateSchedulerType.LinearWarmup
+                            or LearningRateSchedulerType.TriStage
+                            or LearningRateSchedulerType.Noam)
+        {
+            return scheduler;
+        }
+
+        try
+        {
+            var ramp = new LinearWarmupScheduler(baseRate, warmupSteps);
+            return new SequentialLRScheduler([ramp, scheduler], [warmupSteps]);
+        }
+        catch (Exception)
+        {
+            _pendingUnhonoured.Value?.Add(
+                $"the paper warms up over {warmupSteps} steps before its {recipe.Schedule} schedule, "
+                + "which could not be composed here; the schedule runs without the warmup");
+            return scheduler;
+        }
+    }
+
     /// <summary>The model dimension, when the options expose one under a name we recognise.</summary>
     /// <remarks>
     /// Only the Noam schedule needs this, and only because its peak rate is derived from the
@@ -497,9 +533,12 @@ public static class PaperOptimizerFactory
         if (schedulerProperty is null || !schedulerProperty.CanWrite) return;
 
         double baseRate = double.IsNaN(recipe.LearningRate) ? 0.001 : recipe.LearningRate;
+        int warmupSteps = EffectiveWarmupSteps(options, recipe);
+        int totalSteps = GetInt(options, "MaxIterations");
+
         ILearningRateScheduler? scheduler = BuildScheduler(
-            recipe, baseRate, EffectiveWarmupSteps(options, recipe), GetInt(options, "MaxIterations"),
-            ModelDimension(options));
+            recipe, baseRate, warmupSteps, totalSteps, ModelDimension(options));
+        scheduler = ComposeWarmup(scheduler, recipe, baseRate, warmupSteps);
         if (scheduler is not null) schedulerProperty.SetValue(options, scheduler);
     }
 
@@ -549,6 +588,12 @@ public static class PaperOptimizerFactory
                     => new CyclicLRScheduler(
                            baseLearningRate: floor, maxLearningRate: recipe.LearningRate,
                            stepSizeUp: recipe.StepSize, mode: recipe.CyclicPolicy),
+
+                LearningRateSchedulerType.MultiStep when recipe.Milestones.Length > 0
+                    => new MultiStepLRScheduler(
+                           baseRate, recipe.Milestones,
+                           gamma: double.IsNaN(recipe.DecayRate) ? 0.1 : recipe.DecayRate,
+                           minLearningRate: floor),
 
                 LearningRateSchedulerType.Exponential when !double.IsNaN(recipe.DecayRate)
                     => new ExponentialLRScheduler(baseRate, recipe.DecayRate),
