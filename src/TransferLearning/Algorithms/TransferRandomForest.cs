@@ -30,6 +30,11 @@ namespace AiDotNet.TransferLearning.Algorithms;
 /// <example>
 /// <code>
 /// var newData = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// // The model already fitted on the source domain, and the target domain's own data.
+/// var sourceModel = new SimpleRegression&lt;double&gt;();
+/// var targetData = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 } });
+/// var targetLabels = new Vector&lt;double&gt;(new double[] { 1.0, 2.0, 3.0 });
+///
 /// // Transfer a Random Forest from source domain to target domain
 /// var options = new RandomForestRegressionOptions { NumberOfTrees = 100, MaxDepth = 10 };
 /// var transferRF = new TransferRandomForest&lt;double&gt;(options);
