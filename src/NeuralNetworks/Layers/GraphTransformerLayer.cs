@@ -1223,31 +1223,31 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
 
         // Update all parameters using Engine operations
         var scaledQueryGrad = Engine.TensorMultiplyScalar(_queryWeightsGradient, learningRate);
-        _queryWeights = Engine.TensorSubtract(_queryWeights, scaledQueryGrad);
+        Engine.TensorSubtractInPlace(_queryWeights, scaledQueryGrad);
 
         var scaledKeyGrad = Engine.TensorMultiplyScalar(_keyWeightsGradient, learningRate);
-        _keyWeights = Engine.TensorSubtract(_keyWeights, scaledKeyGrad);
+        Engine.TensorSubtractInPlace(_keyWeights, scaledKeyGrad);
 
         var scaledValueGrad = Engine.TensorMultiplyScalar(_valueWeightsGradient, learningRate);
-        _valueWeights = Engine.TensorSubtract(_valueWeights, scaledValueGrad);
+        Engine.TensorSubtractInPlace(_valueWeights, scaledValueGrad);
 
         var scaledOutputWeightsGrad = Engine.TensorMultiplyScalar(_outputWeightsGradient, learningRate);
-        _outputWeights = Engine.TensorSubtract(_outputWeights, scaledOutputWeightsGrad);
+        Engine.TensorSubtractInPlace(_outputWeights, scaledOutputWeightsGrad);
 
         var scaledOutputBiasGrad = Engine.TensorMultiplyScalar(_outputBiasGradient, learningRate);
-        _outputBias = Engine.TensorSubtract(_outputBias, scaledOutputBiasGrad);
+        Engine.TensorSubtractInPlace(_outputBias, scaledOutputBiasGrad);
 
         var scaledFFN1Grad = Engine.TensorMultiplyScalar(_ffnWeights1Gradient, learningRate);
-        _ffnWeights1 = Engine.TensorSubtract(_ffnWeights1, scaledFFN1Grad);
+        Engine.TensorSubtractInPlace(_ffnWeights1, scaledFFN1Grad);
 
         var scaledFFN2Grad = Engine.TensorMultiplyScalar(_ffnWeights2Gradient, learningRate);
-        _ffnWeights2 = Engine.TensorSubtract(_ffnWeights2, scaledFFN2Grad);
+        Engine.TensorSubtractInPlace(_ffnWeights2, scaledFFN2Grad);
 
         var scaledFFNBias1Grad = Engine.TensorMultiplyScalar(_ffnBias1Gradient, learningRate);
-        _ffnBias1 = Engine.TensorSubtract(_ffnBias1, scaledFFNBias1Grad);
+        Engine.TensorSubtractInPlace(_ffnBias1, scaledFFNBias1Grad);
 
         var scaledFFNBias2Grad = Engine.TensorMultiplyScalar(_ffnBias2Gradient, learningRate);
-        _ffnBias2 = Engine.TensorSubtract(_ffnBias2, scaledFFNBias2Grad);
+        Engine.TensorSubtractInPlace(_ffnBias2, scaledFFNBias2Grad);
     }
 
     /// <inheritdoc/>

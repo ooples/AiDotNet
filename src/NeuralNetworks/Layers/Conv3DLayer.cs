@@ -878,10 +878,10 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         var scaledKernelGrad = Engine.TensorMultiplyScalar(_kernelsGradient, learningRate);
-        _kernels = Engine.TensorSubtract(_kernels, scaledKernelGrad);
+        Engine.TensorSubtractInPlace(_kernels, scaledKernelGrad);
 
         var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
-        _biases = Engine.TensorSubtract(_biases, scaledBiasGrad);
+        Engine.TensorSubtractInPlace(_biases, scaledBiasGrad);
 
         // Invalidate GPU cache after parameter update
         Engine.InvalidatePersistentTensor(_kernels);

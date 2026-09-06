@@ -870,21 +870,21 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         T negLR = NumOps.Negate(learningRate);
-        _emaAlphaReal = Engine.TensorAdd(_emaAlphaReal, Engine.TensorMultiplyScalar(_emaAlphaRealGradient, negLR));
-        _emaAlphaImag = Engine.TensorAdd(_emaAlphaImag, Engine.TensorMultiplyScalar(_emaAlphaImagGradient!, negLR));
-        _emaInputWeights = Engine.TensorAdd(_emaInputWeights, Engine.TensorMultiplyScalar(_emaInputWeightsGradient!, negLR));
-        _emaInputBias = Engine.TensorAdd(_emaInputBias, Engine.TensorMultiplyScalar(_emaInputBiasGradient!, negLR));
-        _emaOutputWeights = Engine.TensorAdd(_emaOutputWeights, Engine.TensorMultiplyScalar(_emaOutputWeightsGradient!, negLR));
-        _emaOutputBias = Engine.TensorAdd(_emaOutputBias, Engine.TensorMultiplyScalar(_emaOutputBiasGradient!, negLR));
-        _tsNormGamma = Engine.TensorAdd(_tsNormGamma, Engine.TensorMultiplyScalar(_tsNormGammaGradient!, negLR));
-        _tsNormBeta = Engine.TensorAdd(_tsNormBeta, Engine.TensorMultiplyScalar(_tsNormBetaGradient!, negLR));
-        _queryWeights = Engine.TensorAdd(_queryWeights, Engine.TensorMultiplyScalar(_queryWeightsGradient!, negLR));
-        _keyWeights = Engine.TensorAdd(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient!, negLR));
-        _valueWeights = Engine.TensorAdd(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient!, negLR));
-        _gateWeights = Engine.TensorAdd(_gateWeights, Engine.TensorMultiplyScalar(_gateWeightsGradient!, negLR));
-        _gateBias = Engine.TensorAdd(_gateBias, Engine.TensorMultiplyScalar(_gateBiasGradient!, negLR));
-        _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
-        _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_emaAlphaReal, Engine.TensorMultiplyScalar(_emaAlphaRealGradient, negLR));
+        Engine.TensorAddInPlace(_emaAlphaImag, Engine.TensorMultiplyScalar(_emaAlphaImagGradient!, negLR));
+        Engine.TensorAddInPlace(_emaInputWeights, Engine.TensorMultiplyScalar(_emaInputWeightsGradient!, negLR));
+        Engine.TensorAddInPlace(_emaInputBias, Engine.TensorMultiplyScalar(_emaInputBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_emaOutputWeights, Engine.TensorMultiplyScalar(_emaOutputWeightsGradient!, negLR));
+        Engine.TensorAddInPlace(_emaOutputBias, Engine.TensorMultiplyScalar(_emaOutputBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_tsNormGamma, Engine.TensorMultiplyScalar(_tsNormGammaGradient!, negLR));
+        Engine.TensorAddInPlace(_tsNormBeta, Engine.TensorMultiplyScalar(_tsNormBetaGradient!, negLR));
+        Engine.TensorAddInPlace(_queryWeights, Engine.TensorMultiplyScalar(_queryWeightsGradient!, negLR));
+        Engine.TensorAddInPlace(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient!, negLR));
+        Engine.TensorAddInPlace(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient!, negLR));
+        Engine.TensorAddInPlace(_gateWeights, Engine.TensorMultiplyScalar(_gateWeightsGradient!, negLR));
+        Engine.TensorAddInPlace(_gateBias, Engine.TensorMultiplyScalar(_gateBiasGradient!, negLR));
+        Engine.TensorAddInPlace(_outputProjectionWeights, Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient!, negLR));
+        Engine.TensorAddInPlace(_outputProjectionBias, Engine.TensorMultiplyScalar(_outputProjectionBiasGradient!, negLR));
 
         // Register trainable parameters for tape-based autodiff
         RegisterTrainableParameter(_emaInputWeights, PersistentTensorRole.Weights);

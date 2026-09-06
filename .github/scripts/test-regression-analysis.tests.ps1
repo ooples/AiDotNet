@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 
 $analyzer = Join-Path $PSScriptRoot 'test-regression-analysis.ps1'
 $retrySelector = Join-Path $PSScriptRoot 'find-pr-new-failures.ps1'
@@ -407,6 +407,86 @@ internal static class TouchedRegressionProbe
         'the failure digest explicitly reports a lifecycle failure'
     Assert-Matches 'VisibleFailure' $reporterOutput `
         'the failure digest still reports every recorded assertion alongside the lifecycle failure'
+
+    # ---- #2086: a dispatched shard that uploaded nothing must not read as success ----
+    # Before this, inventory mode (no baseline) had no expected set: counts were taken over
+    # whatever artifacts arrived, so a shard whose runner died was simply absent and the run
+    # reported "N shards, N passed, 0 failed, 0 incomplete". Integration D died twice in a row
+    # on master and the gate still published "Regression status: improved".
+    $missingShardRoot = Join-Path $testRoot 'missing-shard'
+    Write-SyntheticShard $missingShardRoot 'ac01' 'Shard Alpha' 'AlphaTest' 'Passed'
+    Write-SyntheticShard $missingShardRoot 'ac01' 'Shard Beta' 'BetaTest' 'Passed'
+
+    # Control arm: with every dispatched shard present, inventory mode still passes and the
+    # ledger is publishable. Without this, the assertions below could pass simply because the
+    # new code failed everything.
+    $completeOutput = Join-Path $testRoot 'missing-shard-complete'
+    & $analyzer -CurrentResultsPath $missingShardRoot -OutputDirectory $completeOutput -CurrentSha 'ac01' `
+        -ExpectedShardNames @('Shard Alpha', 'Shard Beta')
+    $complete = Get-Content -LiteralPath (Join-Path $completeOutput 'comparison.json') -Raw | ConvertFrom-Json
+    Assert-Equal 'inventory' $complete.mode 'no baseline means inventory mode'
+    Assert-Equal $true $complete.policyPassed 'every dispatched shard uploaded an artifact'
+    Assert-Equal $true $complete.baselinePublishable 'a complete ledger is publishable as the baseline'
+    Assert-Equal 0 @($complete.missingExpectedShards).Count 'nothing is missing when all shards reported'
+
+    # The real case: the matrix dispatched three shards and only two uploaded.
+    $incompleteOutput = Join-Path $testRoot 'missing-shard-incomplete'
+    & $analyzer -CurrentResultsPath $missingShardRoot -OutputDirectory $incompleteOutput -CurrentSha 'ac01' `
+        -ExpectedShardNames @('Shard Alpha', 'Shard Beta', 'Shard Gamma')
+    $incomplete = Get-Content -LiteralPath (Join-Path $incompleteOutput 'comparison.json') -Raw | ConvertFrom-Json
+    Assert-Equal $false $incomplete.policyPassed 'a dispatched shard that uploaded nothing fails the policy'
+    Assert-Equal $false $incomplete.baselinePublishable 'an incomplete ledger is not publishable as the baseline'
+    Assert-Equal 1 @($incomplete.missingExpectedShards).Count 'exactly the absent shard is reported'
+    Assert-Equal 'Shard Gamma' @($incomplete.missingExpectedShards)[0] 'the absent shard is named'
+
+    # It must appear in the shard inventory as Missing, not be silently omitted -- that omission
+    # is what let the aggregate report "0 failing shards" while a shard had died.
+    $missingShardRows = @(Import-Csv -LiteralPath (Join-Path $incompleteOutput 'shards.csv') |
+        Where-Object { $_.name -eq 'Shard Gamma' })
+    Assert-Equal 1 $missingShardRows.Count 'the dead shard is present in shards.csv rather than dropped'
+    Assert-Equal 'Missing' $missingShardRows[0].status 'the dead shard is recorded as Missing, never as Passed'
+
+    $missingSummary = Get-Content -LiteralPath (Join-Path $incompleteOutput 'summary.md') -Raw
+    Assert-Matches 'Shard Gamma' $missingSummary 'the summary names the shard that produced no artifact'
+    Assert-Matches 'not.*published as the' $missingSummary 'the summary states the baseline is withheld'
+
+    # Enforcement: this must be a nonzero process exit even though there is no baseline. The
+    # pre-existing -FailOnPolicy gate only fired when a baseline existed, which is precisely why
+    # a baseline-establishing master run could go green with a dead shard.
+    $missingExitOutput = Join-Path $testRoot 'missing-shard-exit'
+    $null = & pwsh -NoLogo -NoProfile -File $analyzer `
+        -CurrentResultsPath $missingShardRoot -OutputDirectory $missingExitOutput -CurrentSha 'ac01' `
+        -ExpectedShardNames @('Shard Alpha', 'Shard Beta', 'Shard Gamma') 2>&1
+    Assert-Equal 1 $LASTEXITCODE 'a missing dispatched shard fails the run even with no baseline present'
+
+    # The hole must be recorded in the ledger artifact itself, not only in shards.csv --
+    # find-test-baseline.ps1 picks baselines without filtering on run conclusion, so a failed run's
+    # ledger can still be adopted later. The artifact has to carry its own evidence.
+    $incompleteLedger = Get-Content -LiteralPath (Join-Path $incompleteOutput 'ledger.json') -Raw | ConvertFrom-Json
+    Assert-Equal 1 @($incompleteLedger.missingExpectedShards).Count 'the ledger artifact records its own hole'
+    Assert-Equal 'Shard Gamma' @($incompleteLedger.missingExpectedShards)[0] 'the recorded hole names the absent shard'
+
+    $completeLedger = Get-Content -LiteralPath (Join-Path $completeOutput 'ledger.json') -Raw | ConvertFrom-Json
+    Assert-Equal 0 @($completeLedger.missingExpectedShards).Count 'a complete ledger records no holes'
+
+    # And a baseline carrying a hole must be refused outright: comparing against it would inherit
+    # the blind spot, since the absent shard is in neither side and its failures could never be
+    # classified as new.
+    $holedBaselineOutput = Join-Path $testRoot 'holed-baseline'
+    $holedBaselineError = $null
+    try {
+        & $analyzer -CurrentResultsPath $missingShardRoot `
+            -BaselineLedgerPath (Join-Path $incompleteOutput 'ledger.json') `
+            -OutputDirectory $holedBaselineOutput -CurrentSha 'ac02' -BaselineSha 'ac01'
+    } catch { $holedBaselineError = $_.Exception.Message }
+    Assert-Matches 'incomplete' $holedBaselineError 'a baseline with a missing shard is refused, not silently used'
+
+    # Backward compatibility: callers that pass no expected set keep the old behaviour, so the
+    # change cannot break local or ad-hoc invocations of the analyzer.
+    $legacyOutput = Join-Path $testRoot 'missing-shard-legacy'
+    & $analyzer -CurrentResultsPath $missingShardRoot -OutputDirectory $legacyOutput -CurrentSha 'ac01'
+    $legacy = Get-Content -LiteralPath (Join-Path $legacyOutput 'comparison.json') -Raw | ConvertFrom-Json
+    Assert-Equal $true $legacy.policyPassed 'with no expected set supplied, inventory mode behaves as before'
 
     Write-Host 'test-regression-analysis.tests.ps1: all assertions passed.'
 }

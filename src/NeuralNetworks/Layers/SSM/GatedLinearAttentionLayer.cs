@@ -334,13 +334,13 @@ public partial class GatedLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
         }
 
         T negLR = NumOps.Negate(learningRate);
-        _queryWeights = Engine.TensorAdd(_queryWeights, Engine.TensorMultiplyScalar(_queryWeightsGradient, negLR));
-        _keyWeights = Engine.TensorAdd(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient, negLR));
-        _valueWeights = Engine.TensorAdd(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient, negLR));
-        _gateWeights = Engine.TensorAdd(_gateWeights, Engine.TensorMultiplyScalar(_gateWeightsGradient, negLR));
-        _gateBias = Engine.TensorAdd(_gateBias, Engine.TensorMultiplyScalar(_gateBiasGradient, negLR));
-        _outputWeights = Engine.TensorAdd(_outputWeights, Engine.TensorMultiplyScalar(_outputWeightsGradient, negLR));
-        _outputBias = Engine.TensorAdd(_outputBias, Engine.TensorMultiplyScalar(_outputBiasGradient, negLR));
+        Engine.TensorAddInPlace(_queryWeights, Engine.TensorMultiplyScalar(_queryWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_keyWeights, Engine.TensorMultiplyScalar(_keyWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_gateWeights, Engine.TensorMultiplyScalar(_gateWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_gateBias, Engine.TensorMultiplyScalar(_gateBiasGradient, negLR));
+        Engine.TensorAddInPlace(_outputWeights, Engine.TensorMultiplyScalar(_outputWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_outputBias, Engine.TensorMultiplyScalar(_outputBiasGradient, negLR));
 
         // Register trainable parameters for tape-based autodiff
         RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);

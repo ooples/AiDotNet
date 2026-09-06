@@ -2232,12 +2232,32 @@ jobs:
           } | ConvertTo-Json -Depth 6 | Set-Content merged-shard-changes.json -Encoding utf8
           Write-Host "approved shard changes: $($changes.Count) ($(@($manifest.changes).Count) checked in, $($changes.Count - @($manifest.changes).Count) skipped by selection)"
 
+          # The shards this run actually dispatched. Inventory mode (a master push, which has no
+          # baseline to diff against) previously had no expected set, so a shard whose runner died
+          # before uploading was simply absent: the counts were taken over whatever arrived and the
+          # run reported "115 shards, 115 passed, 0 failed" while Integration D had died. Shards
+          # that selection deliberately skipped are not in this matrix, so anything expected and
+          # absent here died rather than being skipped. #2086.
+          $expectedShardNames = @()
+          $matrixJson = '${{ needs.select-shards.outputs.matrix }}'
+          if (-not [string]::IsNullOrWhiteSpace($matrixJson)) {
+            try {
+              $expectedShardNames = @(($matrixJson | ConvertFrom-Json).shard |
+                ForEach-Object { [string] $_.name } |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            } catch {
+              Write-Warning "Could not parse the selected shard matrix; shard-completeness enforcement is skipped: $($_.Exception.Message)"
+            }
+          }
+          Write-Host "expected shards from the dispatched matrix: $($expectedShardNames.Count)"
+
           $arguments = @{
             CurrentResultsPath = 'current-test-results'
             OutputDirectory = 'test-regression-analysis'
             CurrentSha = $env:CURRENT_SHA
             RepositoryPath = '.'
             ApprovedShardChangesPath = 'merged-shard-changes.json'
+            ExpectedShardNames = $expectedShardNames
           }
           $ledger = Get-ChildItem baseline-ledger -Recurse -Filter ledger.json -ErrorAction SilentlyContinue |
             Select-Object -First 1

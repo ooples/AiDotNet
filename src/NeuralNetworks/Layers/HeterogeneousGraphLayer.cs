@@ -1135,7 +1135,7 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
         {
             // Update basis matrices
             var scaledBasisGrad = Engine.TensorMultiplyScalar(_basisMatricesGradient, learningRate);
-            _basisMatrices = Engine.TensorSubtract(_basisMatrices, scaledBasisGrad);
+            Engine.TensorSubtractInPlace(_basisMatrices, scaledBasisGrad);
 
             // Update basis coefficients
             foreach (var kvp in _basisCoefficients)

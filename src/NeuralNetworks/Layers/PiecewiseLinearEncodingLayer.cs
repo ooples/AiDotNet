@@ -196,7 +196,7 @@ public partial class PiecewiseLinearEncodingLayer<T> : LayerBase<T>, IShapeContr
     /// <inheritdoc/>
     public override void UpdateParameters(T learningRate)
     {
-        _binBoundaries = Engine.TensorSubtract(_binBoundaries,
+        Engine.TensorSubtractInPlace(_binBoundaries,
             Engine.TensorMultiplyScalar(_binBoundaryGradients, learningRate));
     }
 

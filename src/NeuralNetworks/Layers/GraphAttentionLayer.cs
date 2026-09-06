@@ -867,10 +867,10 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         }
 
         // Update using Engine operations
-        _weights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(_weightsGradient, learningRate));
-        _attentionWeights = Engine.TensorSubtract(_attentionWeights,
+        Engine.TensorSubtractInPlace(_weights, Engine.TensorMultiplyScalar(_weightsGradient, learningRate));
+        Engine.TensorSubtractInPlace(_attentionWeights,
             Engine.TensorMultiplyScalar(_attentionWeightsGradient, learningRate));
-        _bias = Engine.TensorSubtract(_bias, Engine.TensorMultiplyScalar(_biasGradient, learningRate));
+        Engine.TensorSubtractInPlace(_bias, Engine.TensorMultiplyScalar(_biasGradient, learningRate));
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_weights);

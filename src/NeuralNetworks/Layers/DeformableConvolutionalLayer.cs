@@ -982,23 +982,23 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
         // Update main convolution weights using Engine tensor ops
         if (_weightGradients != null)
         {
-            _weights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(_weightGradients, learningRate));
+            Engine.TensorSubtractInPlace(_weights, Engine.TensorMultiplyScalar(_weightGradients, learningRate));
         }
 
         if (_biasGradients != null)
         {
-            _bias = Engine.TensorSubtract(_bias, Engine.TensorMultiplyScalar(_biasGradients, learningRate));
+            Engine.TensorSubtractInPlace(_bias, Engine.TensorMultiplyScalar(_biasGradients, learningRate));
         }
 
         // Update offset prediction network weights using Engine tensor ops
         if (_offsetWeightGradients != null)
         {
-            _offsetWeights = Engine.TensorSubtract(_offsetWeights, Engine.TensorMultiplyScalar(_offsetWeightGradients, learningRate));
+            Engine.TensorSubtractInPlace(_offsetWeights, Engine.TensorMultiplyScalar(_offsetWeightGradients, learningRate));
         }
 
         if (_offsetBiasGradients != null)
         {
-            _offsetBias = Engine.TensorSubtract(_offsetBias, Engine.TensorMultiplyScalar(_offsetBiasGradients, learningRate));
+            Engine.TensorSubtractInPlace(_offsetBias, Engine.TensorMultiplyScalar(_offsetBiasGradients, learningRate));
         }
 
         // Update mask prediction network weights (if using modulation) using Engine tensor ops
@@ -1006,12 +1006,12 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
         {
             if (_maskWeightGradients != null && _maskWeights != null)
             {
-                _maskWeights = Engine.TensorSubtract(_maskWeights, Engine.TensorMultiplyScalar(_maskWeightGradients, learningRate));
+                Engine.TensorSubtractInPlace(_maskWeights, Engine.TensorMultiplyScalar(_maskWeightGradients, learningRate));
             }
 
             if (_maskBiasGradients != null && _maskBias != null)
             {
-                _maskBias = Engine.TensorSubtract(_maskBias, Engine.TensorMultiplyScalar(_maskBiasGradients, learningRate));
+                Engine.TensorSubtractInPlace(_maskBias, Engine.TensorMultiplyScalar(_maskBiasGradients, learningRate));
             }
         }
 

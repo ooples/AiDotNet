@@ -3351,6 +3351,16 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         }
 
         MarkSpatialIndexDirty();
+
+        // Densification is a STRUCTURAL parameter change: this model's parameters are the
+        // Gaussians themselves (GetExtraTrainableTensors enumerates _gaussians), so pruning or
+        // splitting resizes the parameter surface exactly the way adding or removing a layer
+        // does. Without this the cached ParameterLayoutSnapshot keeps describing the previous
+        // cloud, so ParameterCount reports the pre-densification size while ApplyImageGradients
+        // publishes a gradient sized from the live list — and PublishFlatParameterGradients
+        // throws "Flat gradient length (224) must match ParameterCount (112)" on the very next
+        // training step. MarkSpatialIndexDirty above only invalidates the renderer's index.
+        InvalidateParameterCountCache();
     }
 
     protected override Tensor<T> PredictCore(Tensor<T> input)

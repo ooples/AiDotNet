@@ -441,15 +441,15 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
         var outputProjectionBiasGradient = _outputProjectionBiasGradient ?? throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         T negLR = NumOps.Negate(learningRate);
-        _compressWeights = Engine.TensorAdd(_compressWeights, Engine.TensorMultiplyScalar(_compressWeightsGradient, negLR));
-        _compressBias = Engine.TensorAdd(_compressBias, Engine.TensorMultiplyScalar(compressBiasGradient, negLR));
-        _keyUpWeights = Engine.TensorAdd(_keyUpWeights, Engine.TensorMultiplyScalar(keyUpWeightsGradient, negLR));
-        _valueUpWeights = Engine.TensorAdd(_valueUpWeights, Engine.TensorMultiplyScalar(valueUpWeightsGradient, negLR));
-        _queryWeights = Engine.TensorAdd(_queryWeights, Engine.TensorMultiplyScalar(queryWeightsGradient, negLR));
-        _outputGateWeights = Engine.TensorAdd(_outputGateWeights, Engine.TensorMultiplyScalar(outputGateWeightsGradient, negLR));
-        _outputGateBias = Engine.TensorAdd(_outputGateBias, Engine.TensorMultiplyScalar(outputGateBiasGradient, negLR));
-        _outputProjectionWeights = Engine.TensorAdd(_outputProjectionWeights, Engine.TensorMultiplyScalar(outputProjectionWeightsGradient, negLR));
-        _outputProjectionBias = Engine.TensorAdd(_outputProjectionBias, Engine.TensorMultiplyScalar(outputProjectionBiasGradient, negLR));
+        Engine.TensorAddInPlace(_compressWeights, Engine.TensorMultiplyScalar(_compressWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_compressBias, Engine.TensorMultiplyScalar(compressBiasGradient, negLR));
+        Engine.TensorAddInPlace(_keyUpWeights, Engine.TensorMultiplyScalar(keyUpWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_valueUpWeights, Engine.TensorMultiplyScalar(valueUpWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_queryWeights, Engine.TensorMultiplyScalar(queryWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_outputGateWeights, Engine.TensorMultiplyScalar(outputGateWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_outputGateBias, Engine.TensorMultiplyScalar(outputGateBiasGradient, negLR));
+        Engine.TensorAddInPlace(_outputProjectionWeights, Engine.TensorMultiplyScalar(outputProjectionWeightsGradient, negLR));
+        Engine.TensorAddInPlace(_outputProjectionBias, Engine.TensorMultiplyScalar(outputProjectionBiasGradient, negLR));
 
         // Register trainable parameters for tape-based autodiff
         RegisterTrainableParameter(_compressWeights, PersistentTensorRole.Weights);

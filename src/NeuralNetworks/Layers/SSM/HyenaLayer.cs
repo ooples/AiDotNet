@@ -512,11 +512,9 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
         }
 
         // Update output projection
-        _outputProjectionWeights = Engine.TensorAdd(
-            _outputProjectionWeights,
+        Engine.TensorAddInPlace(_outputProjectionWeights,
             Engine.TensorMultiplyScalar(_outputProjectionWeightsGradient, negLR));
-        _outputProjectionBias = Engine.TensorAdd(
-            _outputProjectionBias,
+        Engine.TensorAddInPlace(_outputProjectionBias,
             Engine.TensorMultiplyScalar(_outputProjectionBiasGradient, negLR));
 
         // Register trainable parameters for tape-based autodiff
