@@ -71,7 +71,7 @@ public class PaperOptimizerAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor DuplicateDeclaration = new(
         "AIDN103",
         "Duplicate [PaperOptimizer] for the same optimizer and variant",
-        "'{0}' declares [PaperOptimizer] more than once for {1} and variant '{2}'. Resolution picks "
+        "'{0}' declares [PaperOptimizer] more than once for {1} and {2}. Resolution picks "
             + "one of them, so the other is silently dead -- give each declaration a distinct "
             + "Variant, or keep a single entry",
         "AiDotNet.PaperFidelity",
@@ -156,6 +156,7 @@ public class PaperOptimizerAnalyzer : DiagnosticAnalyzer
                 : declaration.Identifier.GetLocation();
 
             string variant = GetStringArgument(attribute, "Variant") ?? string.Empty;
+            string component = GetStringArgument(attribute, "Component") ?? string.Empty;
             string source = GetStringArgument(attribute, "Source") ?? string.Empty;
             string optimizer = attribute.ConstructorArguments.Length > 0
                 ? attribute.ConstructorArguments[0].Value?.ToString() ?? "?"
@@ -166,11 +167,14 @@ public class PaperOptimizerAnalyzer : DiagnosticAnalyzer
                 context.ReportDiagnostic(Diagnostic.Create(MissingSource, location, type.Name));
             }
 
-            if (!seen.Add(optimizer + "|" + variant))
+            // Component is part of the identity, not just variant: a composite model
+            // legitimately declares one row per part (Stable Audio Open gives separate rates for
+            // its autoencoder, discriminators and DiT), and those rows differ only by component.
+            if (!seen.Add(optimizer + "|" + variant + "|" + component))
             {
                 context.ReportDiagnostic(Diagnostic.Create(
                     DuplicateDeclaration, location, type.Name, optimizer,
-                    variant.Length == 0 ? "(default)" : variant));
+                    DescribeKey(variant, component)));
             }
         }
 
@@ -179,6 +183,15 @@ public class PaperOptimizerAnalyzer : DiagnosticAnalyzer
             context.ReportDiagnostic(Diagnostic.Create(
                 DeclarationNotWired, declaration.Identifier.GetLocation(), type.Name));
         }
+    }
+
+    /// <summary>Human-readable form of the variant/component key a duplicate collided on.</summary>
+    private static string DescribeKey(string variant, string component)
+    {
+        if (variant.Length == 0 && component.Length == 0) return "(default)";
+        if (component.Length == 0) return $"variant '{variant}'";
+        if (variant.Length == 0) return $"component '{component}'";
+        return $"variant '{variant}', component '{component}'";
     }
 
     /// <summary>True when the class builds its optimizer through the paper-recipe factory.</summary>

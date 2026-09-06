@@ -83,6 +83,27 @@ public sealed class PaperOptimizerAttribute : Attribute
     /// </remarks>
     public string Variant { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Which part of a composite model this recipe applies to, for example
+    /// <c>"discriminator"</c>. Empty means the model as a whole.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Papers for composite models state different settings per part. Stable Audio Open gives a
+    /// base learning rate of 1.5e-4 for its autoencoder, 3e-4 for its discriminators and 5e-5 for
+    /// its DiT; a GAN paper routinely separates generator from discriminator. One recipe per model
+    /// cannot express any of that, and picking whichever number appears first would be a silent
+    /// mis-declaration of the rest.
+    /// </para>
+    /// <para>
+    /// The call site names the component it is building --
+    /// <c>PaperOptimizerFactory.CreateFor(this, "discriminator")</c> -- and matching is exact and
+    /// case-insensitive. A component with no declaration of its own falls back to the unnamed
+    /// recipe, so a model can declare a shared default and override only the parts that differ.
+    /// </para>
+    /// </remarks>
+    public string Component { get; set; } = string.Empty;
+
     // ---- Optimizer hyperparameters -------------------------------------------------------
 
     /// <summary>The paper's learning rate. Unset means the paper does not state a constant one.</summary>

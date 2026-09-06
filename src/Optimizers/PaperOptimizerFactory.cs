@@ -1,9 +1,11 @@
+using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Reflection;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.Optimizers;
@@ -53,14 +55,56 @@ public static class PaperOptimizerFactory
     /// <c>null</c> when there is no applicable declaration, so callers keep their existing default.
     /// </returns>
     public static IGradientBasedOptimizer<T, TInput, TOutput>? CreateFor<T, TInput, TOutput>(
-        IFullModel<T, TInput, TOutput> model)
+        IFullModel<T, TInput, TOutput> model, string component = "")
     {
         if (model is null) return null;
 
-        var recipe = Find(model);
-        if (recipe is null) return null;
+        var recipe = Find(model, component);
+        if (recipe is null)
+        {
+            // Record the absence too. "This model declares nothing" is a different statement from
+            // "we never looked", and only one of them is actionable.
+            Record(model, TrainingRecipeReport.NotDeclaredFor(component));
+            return null;
+        }
 
-        return recipe.Optimizer switch
+        var adaptations = new List<RecipeAdaptation>();
+        var unhonoured = new List<string>();
+
+        var optimizer = Build<T, TInput, TOutput>(model, recipe, adaptations, unhonoured);
+
+        if (optimizer is null)
+        {
+            unhonoured.Add(
+                $"the paper specifies {recipe.Optimizer}, which has no gradient-based implementation "
+                + "reachable here, so the model keeps its own default optimizer");
+        }
+
+        Record(model, new TrainingRecipeReport
+        {
+            Component = component,
+            PaperOptimizer = recipe.Optimizer,
+            AppliedOptimizer = optimizer?.GetType().Name ?? "(model default)",
+            Source = recipe.Source,
+            Adaptations = adaptations,
+            Unhonoured = unhonoured,
+        });
+
+        return optimizer;
+    }
+
+    /// <summary>Constructs the declared optimizer, or <c>null</c> when this library has none for it.</summary>
+    private static IGradientBasedOptimizer<T, TInput, TOutput>? Build<T, TInput, TOutput>(
+        IFullModel<T, TInput, TOutput> model,
+        PaperOptimizerAttribute recipe,
+        List<RecipeAdaptation> adaptations,
+        List<string> unhonoured)
+    {
+        _pendingAdaptations.Value = adaptations;
+        _pendingUnhonoured.Value = unhonoured;
+        try
+        {
+            return recipe.Optimizer switch
         {
             OptimizerKind.Adam => new AdamOptimizer<T, TInput, TOutput>(
                 model, Configure(new AdamOptimizerOptions<T, TInput, TOutput>(), recipe)),
@@ -99,10 +143,60 @@ public static class PaperOptimizerFactory
             OptimizerKind.Lion => new LionOptimizer<T, TInput, TOutput>(
                 model, Configure(new LionOptimizerOptions<T, TInput, TOutput>(), recipe)),
 
-            // Unspecified, and optimizers with no gradient-based implementation here, fall through
-            // to the caller's own default rather than being approximated by a different algorithm.
-            _ => null,
-        };
+                // Unspecified, and optimizers with no gradient-based implementation here, fall
+                // through to the caller's own default rather than being approximated by a
+                // different algorithm. Substituting one optimizer for another is not a smaller
+                // deviation than using the default; it is an undeclared one.
+                _ => null,
+            };
+        }
+        finally
+        {
+            _pendingAdaptations.Value = null;
+            _pendingUnhonoured.Value = null;
+        }
+    }
+
+    /// <summary>
+    /// Adaptations and unhonoured settings for the recipe currently being built on this thread.
+    /// </summary>
+    /// <remarks>
+    /// Thread-local rather than passed through every helper: Configure and its callees are reached
+    /// from a switch arm per optimizer kind, and threading two lists through all of them would
+    /// obscure the mapping they exist to express. Cleared in a finally so a throwing constructor
+    /// cannot leak state into the next build on the same thread.
+    /// </remarks>
+    private static readonly ThreadLocal<List<RecipeAdaptation>?> _pendingAdaptations = new();
+    private static readonly ThreadLocal<List<string>?> _pendingUnhonoured = new();
+
+    private static void NoteAdaptation(string setting, string paper, string applied, string rule)
+        => _pendingAdaptations.Value?.Add(new RecipeAdaptation(setting, paper, applied, rule));
+
+    /// <summary>Reports for models built on this process, keyed weakly so they do not retain models.</summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, List<TrainingRecipeReport>> _reports = new();
+
+    private static void Record(object model, TrainingRecipeReport report)
+    {
+        var list = _reports.GetOrCreateValue(model);
+        lock (list)
+        {
+            list.RemoveAll(r => string.Equals(r.Component, report.Component, StringComparison.OrdinalIgnoreCase));
+            list.Add(report);
+        }
+    }
+
+    /// <summary>
+    /// What this model's paper specifies for training, what was applied, and every difference.
+    /// </summary>
+    /// <remarks>
+    /// Returns one report per component built. Empty when no optimizer has been constructed for the
+    /// model yet, which for most models happens in their constructor.
+    /// </remarks>
+    public static IReadOnlyList<TrainingRecipeReport> ReportsFor(object? model)
+    {
+        if (model is null) return [];
+        if (!_reports.TryGetValue(model, out var list)) return [];
+        lock (list) return list.ToArray();
     }
 
     /// <summary>
@@ -179,6 +273,11 @@ public static class PaperOptimizerFactory
             {
                 double scaled = recipe.LearningRate * batch / recipe.ReferenceBatchSize;
                 SetDouble(options, "InitialLearningRate", scaled);
+                NoteAdaptation(
+                    "LearningRate",
+                    $"{recipe.LearningRate:G6} at batch {recipe.ReferenceBatchSize}",
+                    $"{scaled:G6} at batch {batch}",
+                    "linear scaling rule, Goyal et al. 2017");
             }
         }
 
@@ -203,7 +302,13 @@ public static class PaperOptimizerFactory
         int iterations = GetInt(options, "MaxIterations");
         if (iterations <= 0 || recipe.WarmupSteps < iterations) return recipe.WarmupSteps;
 
-        return Math.Max(1, iterations / 10);
+        int scaled = Math.Max(1, iterations / 10);
+        NoteAdaptation(
+            "WarmupSteps",
+            $"{recipe.WarmupSteps} steps",
+            $"{scaled} steps over a {iterations}-step run",
+            "warmup held at its share of the run; same treatment as the #1835 densification window");
+        return scaled;
     }
     private static int GetInt(object options, string propertyName)
     {
@@ -258,20 +363,47 @@ public static class PaperOptimizerFactory
                 LearningRateSchedulerType.Step when recipe.StepSize > 0 && !double.IsNaN(recipe.DecayRate)
                     => new StepLRScheduler(baseRate, recipe.StepSize, recipe.DecayRate),
 
-                _ => null,
+                _ => Unexpressible(recipe),
             };
         }
         catch (Exception)
         {
             // A scheduler whose constructor rejects these arguments must not take the model's
-            // construction down with it; falling back to a constant rate is recoverable, and the
-            // declaration is still visible in source for whoever fixes it.
+            // construction down with it; falling back to a constant rate is recoverable. But it is
+            // reported rather than swallowed -- a silently missing schedule is the failure this
+            // whole report exists to make impossible.
+            _pendingUnhonoured.Value?.Add(
+                $"the paper's {recipe.Schedule} schedule could not be constructed from the declared "
+                + "parameters; a constant learning rate is in use");
             return null;
         }
     }
 
+
+    /// <summary>True when a declaration applies to the component being built.</summary>
+    /// <remarks>
+    /// A declaration naming no component is the model-wide default and applies to every component
+    /// that has no entry of its own, so a composite model can declare shared settings once and
+    /// override only the parts whose paper values differ.
+    /// </remarks>
+    private static bool MatchesComponent(PaperOptimizerAttribute declaration, string component)
+        => declaration.Component.Length == 0
+        || string.Equals(declaration.Component, component, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Reports a declared schedule this library cannot express, and returns no scheduler.</summary>
+    private static ILearningRateScheduler? Unexpressible(PaperOptimizerAttribute recipe)
+    {
+        if (recipe.Schedule != LearningRateSchedulerType.Constant)
+        {
+            _pendingUnhonoured.Value?.Add(
+                $"the paper's {recipe.Schedule} schedule is declared but not yet mapped to a "
+                + "scheduler here; a constant learning rate is in use");
+        }
+
+        return null;
+    }
     /// <summary>The declaration matching this model: variant-specific when one exists, else unkeyed.</summary>
-    public static PaperOptimizerAttribute? Find(object? model)
+    public static PaperOptimizerAttribute? Find(object? model, string component = "")
     {
         if (model is null) return null;
 
@@ -284,25 +416,39 @@ public static class PaperOptimizerFactory
 
         string? variant = (model as IPaperOptimizerVariant)?.PaperOptimizerVariant;
 
-        PaperOptimizerAttribute? unkeyed = null;
+        // Two independent keys, each with the same precedence rule: an exact match beats the
+        // unnamed fallback. Ranking them rather than returning the first match matters because the
+        // shared model-wide declaration is usually written FIRST, so a first-wins scan would hand
+        // back the default and silently ignore the component's own row.
+        PaperOptimizerAttribute? best = null;
+        int bestRank = -1;
+
         foreach (var declaration in declarations)
         {
             if (declaration.Optimizer == OptimizerKind.Unspecified) continue;
 
-            if (string.IsNullOrEmpty(declaration.Variant))
-            {
-                unkeyed ??= declaration;
-                continue;
-            }
+            bool componentExact = declaration.Component.Length > 0
+                && string.Equals(declaration.Component, component, StringComparison.OrdinalIgnoreCase);
+            bool componentFallback = declaration.Component.Length == 0;
+            if (!componentExact && !componentFallback) continue;
 
-            if (!string.IsNullOrEmpty(variant)
-                && string.Equals(declaration.Variant, variant, StringComparison.Ordinal))
+            bool variantExact = declaration.Variant.Length > 0
+                && !string.IsNullOrEmpty(variant)
+                && string.Equals(declaration.Variant, variant, StringComparison.Ordinal);
+            bool variantFallback = declaration.Variant.Length == 0;
+            if (!variantExact && !variantFallback) continue;
+
+            // Component is the stronger key: it selects which PART of the model is being built,
+            // whereas variant only picks a size for that part.
+            int rank = (componentExact ? 2 : 0) + (variantExact ? 1 : 0);
+            if (rank > bestRank)
             {
-                return declaration;
+                bestRank = rank;
+                best = declaration;
             }
         }
 
-        return unkeyed;
+        return best;
     }
 
     private static void SetDouble(object options, string propertyName, double value)
