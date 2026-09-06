@@ -37,6 +37,7 @@ public class TriStageScheduler : LearningRateSchedulerBase
     private readonly int _warmupSteps;
     private readonly int _holdSteps;
     private readonly int _totalSteps;
+    private readonly double _decayPower;
 
     /// <summary>Creates a tri-stage schedule from explicit step counts.</summary>
     /// <param name="baseLearningRate">The peak rate, reached at the end of warmup.</param>
@@ -54,7 +55,8 @@ public class TriStageScheduler : LearningRateSchedulerBase
         int warmupSteps,
         int holdSteps,
         int totalSteps,
-        double minLearningRate = 0.0)
+        double minLearningRate = 0.0,
+        double decayPower = 1.0)
         : base(baseLearningRate, minLearningRate)
     {
         if (warmupSteps < 0)
@@ -73,7 +75,11 @@ public class TriStageScheduler : LearningRateSchedulerBase
 
         _warmupSteps = warmupSteps;
         _holdSteps = holdSteps;
+        if (decayPower <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(decayPower), decayPower, "Decay power must be positive.");
+
         _totalSteps = totalSteps;
+        _decayPower = decayPower;
     }
 
     /// <summary>Creates a tri-stage schedule from the fractions a paper usually states.</summary>
@@ -86,12 +92,14 @@ public class TriStageScheduler : LearningRateSchedulerBase
         int totalSteps,
         double warmupFraction,
         double holdFraction,
-        double minLearningRate = 0.0)
+        double minLearningRate = 0.0,
+        double decayPower = 1.0)
         => new(baseLearningRate,
                (int)Math.Round(totalSteps * warmupFraction),
                (int)Math.Round(totalSteps * holdFraction),
                totalSteps,
-               minLearningRate);
+               minLearningRate,
+               decayPower);
 
     /// <inheritdoc/>
     protected override double ComputeLearningRate(int step)
@@ -111,7 +119,12 @@ public class TriStageScheduler : LearningRateSchedulerBase
         if (decaySteps <= 0 || step >= _totalSteps) return _minLearningRate;
 
         double progress = (double)(step - decayStart) / decaySteps;
-        return _baseLearningRate - (_baseLearningRate - _minLearningRate) * progress;
+
+        // Power 1 is the linear decay of wav2vec 2.0. NeMo's Warmup-Hold-Decay uses a 2nd-order
+        // polynomial, which holds the rate higher for longer and then drops it faster; treating
+        // the two as interchangeable would substitute a visibly different curve.
+        double remaining = Math.Pow(1.0 - progress, _decayPower);
+        return _minLearningRate + (_baseLearningRate - _minLearningRate) * remaining;
     }
 
     /// <inheritdoc/>
@@ -121,6 +134,7 @@ public class TriStageScheduler : LearningRateSchedulerBase
         state["warmup_steps"] = _warmupSteps;
         state["hold_steps"] = _holdSteps;
         state["total_steps"] = _totalSteps;
+        state["decay_power"] = _decayPower;
         return state;
     }
 }

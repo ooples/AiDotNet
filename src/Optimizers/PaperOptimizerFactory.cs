@@ -642,7 +642,8 @@ public static class PaperOptimizerFactory
                            baseRate, warmupSteps,
                            holdSteps: double.IsNaN(recipe.HoldFraction)
                                ? 0 : (int)Math.Round(totalSteps * recipe.HoldFraction),
-                           totalSteps: totalSteps, minLearningRate: floor),
+                           totalSteps: totalSteps, minLearningRate: floor,
+                           decayPower: double.IsNaN(recipe.DecayRate) ? 1.0 : recipe.DecayRate),
 
                 // Alone among the schedules here, Noam has no stated peak rate: it is
                 // factor * d^-0.5 * min(t^-0.5, t * warmup^-1.5), a function of the model
