@@ -842,6 +842,11 @@ if (suggestDecls && unsolvable.Count > 0)
     }
 }
 
+// Ratchet state, declared before the gates that set it.
+int failed = total - pass;
+bool ratcheted = false;
+int exit = 0;
+
 // The conversion plan: one row per call that can be routed through the facade, carrying the model
 // variable, its constructor text, the builder's three type arguments and the training arguments.
 if (facadePlan)
@@ -871,6 +876,11 @@ if (facadeCheck)
     int i = Array.FindIndex(args, a => string.Equals(a, "--max-facade-violations", StringComparison.OrdinalIgnoreCase));
     if (i >= 0 && i + 1 < args.Length && int.TryParse(args[i + 1], out int facadeCeiling))
     {
+        // This is a ratchet in its own right, so it decides the exit code rather than falling through to
+        // the all-or-nothing compile check at the bottom. Without this the facade step always failed:
+        // examples still fail to compile, so the fallback returned 1 no matter what the facade count was.
+        ratcheted = true;
+
         if (facadeViolations.Count > facadeCeiling)
         {
             Console.WriteLine(
@@ -901,9 +911,6 @@ foreach (var f in failures.Take(30))
 // A plain all-or-nothing gate cannot be switched on part-way through repairing a large backlog — it would
 // block every unrelated change until the last example is fixed — and a warn-only gate lets the count
 // silently rot back down, which is how these examples decayed in the first place.
-int failed = total - pass;
-bool ratcheted = false;
-int exit = 0;
 
 int Arg(string name)
 {
