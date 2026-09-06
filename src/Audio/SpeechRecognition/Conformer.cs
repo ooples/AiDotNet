@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -47,6 +48,10 @@ namespace AiDotNet.Audio.SpeechRecognition;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Conformer: Convolution-augmented Transformer for Speech Recognition", "https://arxiv.org/abs/2005.08100", Year = 2020, Authors = "Anmol Gulati, James Qin, Chung-Cheng Chiu, Niki Parmar, Yu Zhang, Jiahui Yu, Wei Han, Shibo Wang, Zhengdong Zhang, Yonghui Wu, Ruoming Pang")]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-9,
+                WeightDecay = 1e-6, Schedule = LearningRateSchedulerType.Noam,
+                WarmupSteps = 10000,
+                Source = "Gulati et al. 2020, Sec. 3.3: Adam with beta1 0.9, beta2 0.98, eps 1e-9, the transformer (Noam) schedule of Vaswani et al. 2017 with 10k warmup steps, and L2 regularization of 1e-6 on all trainable weights. No learning rate is declared because the paper gives the peak as 0.05/sqrt(d), a function of the encoder dimension rather than a constant.")]
 public partial class Conformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     /// <inheritdoc />
@@ -104,7 +109,9 @@ public partial class Conformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     {
         _options = options ?? new ConformerOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         SupportedLanguages = new[] { _options.Language };
         InitializeLayers();

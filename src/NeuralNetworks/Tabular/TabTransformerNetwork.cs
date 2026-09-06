@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -66,6 +68,8 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2012.06678",
     Year = 2020,
     Authors = "Xin Huang, Ashish Khetan, Milan Cvitkovic, Zohar Karnin")]
+[PaperOptimizer(OptimizerKind.AdamW,
+                Source = "Huang et al. 2020, Experiments: AdamW with a constant learning rate throughout each training job. No rate is declared because the paper tunes it per dataset by hyperparameter search rather than stating one.")]
 public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly TabTransformerOptions<T> _options;
@@ -160,14 +164,15 @@ public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
         // Huang et al. train every deep baseline with AdamW and a constant learning rate.
         // Keep the optimizer fully replaceable, but make the built-in path match that recipe
         // instead of silently using plain Adam with no decoupled weight decay.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                UseAdaptiveLearningRate = false
-            });
+        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
+            optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                    UseAdaptiveLearningRate = false
+                }));
 
         // Validate configuration
         if (_options.EmbeddingDimension % _options.NumHeads != 0)

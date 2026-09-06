@@ -57,6 +57,27 @@ public enum LearningRateSchedulerType
     LinearWarmup,
 
     /// <summary>
+    /// Linear warmup, then a constant hold, then linear decay.
+    /// </summary>
+    /// <remarks>
+    /// The schedule wav2vec 2.0 fine-tunes with, and widely reused after it. Distinct from
+    /// <see cref="LinearWarmup"/>, which has no hold phase, and from the Noam-hold schedule, whose
+    /// final stage decays as a power of the step rather than linearly.
+    /// </remarks>
+    TriStage,
+
+    /// <summary>
+    /// The Noam schedule: linear warmup, then inverse-square-root decay.
+    /// </summary>
+    /// <remarks>
+    /// The schedule of Vaswani et al. 2017 Sec. 5.3, and the one a large part of the transformer
+    /// literature means by "the transformer learning rate schedule". Its peak is a function of the
+    /// model dimension rather than a stated constant, so unlike every other member here it cannot
+    /// be built from the recipe alone.
+    /// </remarks>
+    Noam,
+
+    /// <summary>
     /// Cyclic learning rate: oscillate between bounds.
     /// </summary>
     Cyclic,

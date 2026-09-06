@@ -83,6 +83,27 @@ public sealed class PaperOptimizerAttribute : Attribute
     /// </remarks>
     public string Variant { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Which part of a composite model this recipe applies to, for example
+    /// <c>"discriminator"</c>. Empty means the model as a whole.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Papers for composite models state different settings per part. Stable Audio Open gives a
+    /// base learning rate of 1.5e-4 for its autoencoder, 3e-4 for its discriminators and 5e-5 for
+    /// its DiT; a GAN paper routinely separates generator from discriminator. One recipe per model
+    /// cannot express any of that, and picking whichever number appears first would be a silent
+    /// mis-declaration of the rest.
+    /// </para>
+    /// <para>
+    /// The call site names the component it is building --
+    /// <c>PaperOptimizerFactory.CreateFor(this, "discriminator")</c> -- and matching is exact and
+    /// case-insensitive. A component with no declaration of its own falls back to the unnamed
+    /// recipe, so a model can declare a shared default and override only the parts that differ.
+    /// </para>
+    /// </remarks>
+    public string Component { get; set; } = string.Empty;
+
     // ---- Optimizer hyperparameters -------------------------------------------------------
 
     /// <summary>The paper's learning rate. Unset means the paper does not state a constant one.</summary>
@@ -149,14 +170,95 @@ public sealed class PaperOptimizerAttribute : Attribute
     /// </remarks>
     public int WarmupSteps { get; set; }
 
+    /// <summary>
+    /// What the rate does AFTER warmup finishes, when <see cref="Schedule"/> is
+    /// <see cref="LearningRateSchedulerType.LinearWarmup"/>.
+    /// </summary>
+    /// <remarks>
+    /// Warmup and the decay that follows it are two halves of one published curve, and the second
+    /// half is the half that is usually dropped. Whisper warms up over 2048 updates and then decays
+    /// linearly to zero (Radford et al. 2022, Table 17); holding the rate flat after warmup would
+    /// reproduce the first 0.2% of that schedule and none of the rest. Left at
+    /// <c>Constant</c> the rate simply holds, which is right for papers that only specify warmup.
+    /// </remarks>
+    public LinearWarmupScheduler.DecayMode PostWarmupDecay { get; set; }
+        = LinearWarmupScheduler.DecayMode.Constant;
+
+    /// <summary>
+    /// Warmup expressed as a fraction of the whole run, for papers that state it that way.
+    /// Unset means the paper gives an absolute step count, or no warmup.
+    /// </summary>
+    /// <remarks>
+    /// HuBERT ramps up over the first 8% of training steps (Hsu et al. 2021, Sec. IV-A), which no
+    /// absolute number can represent: 8% of a 400k-step pre-training run and 8% of a short
+    /// fine-tune are different counts and both are what the paper says. Stated as a fraction it
+    /// stays exact at any run length, where a transcribed step count would be wrong at every length
+    /// but one. Takes precedence over <see cref="WarmupSteps"/> when both are declared.
+    /// </remarks>
+    public double WarmupFraction { get; set; } = double.NaN;
+
+    /// <summary>
+    /// How much of the run is spent holding the peak rate before decay begins, for
+    /// <see cref="LearningRateSchedulerType.TriStage"/>. Unset means no hold phase.
+    /// </summary>
+    /// <remarks>
+    /// wav2vec 2.0 fine-tunes with warmup over the first 10% of updates, a constant hold for the
+    /// next 40%, and linear decay for the remainder (Baevski et al. 2020, Sec. 4.3). The hold is
+    /// not a detail: without it the rate begins falling four times earlier than published.
+    /// </remarks>
+    public double HoldFraction { get; set; } = double.NaN;
+
+    /// <summary>
+    /// Which cyclic policy the paper uses, for <see cref="LearningRateSchedulerType.Cyclic"/>.
+    /// </summary>
+    /// <remarks>
+    /// The policies differ in amplitude: triangular2 halves the range on every cycle where
+    /// triangular keeps it, so after four cycles -- what ECAPA-TDNN trains for (Desplanques et al.
+    /// 2020, Sec. 3) -- the two have drifted apart by 8x. For a cyclic schedule
+    /// <see cref="LearningRate"/> is the upper bound and <see cref="MinLearningRate"/> the lower,
+    /// with <see cref="StepSize"/> the half-cycle, which is how these papers state them.
+    /// </remarks>
+    public CyclicLRScheduler.CyclicMode CyclicPolicy { get; set; }
+        = CyclicLRScheduler.CyclicMode.Triangular;
+
     /// <summary>Multiplicative decay factor, for exponential and step schedules. Unset means unstated.</summary>
     public double DecayRate { get; set; } = double.NaN;
 
     /// <summary>Interval, in steps or epochs, between decay events. Unset means unstated.</summary>
     public int StepSize { get; set; }
 
+    /// <summary>
+    /// The exact steps a paper decays at, for schedules stated as a list rather than an interval.
+    /// Empty means the paper gives an interval, or no step decay.
+    /// </summary>
+    /// <remarks>
+    /// Segment Anything decreases the rate by 10x at 60,000 and again at 86,666 iterations (Kirillov
+    /// et al. 2023, Training recipe) -- points that are not evenly spaced, so no
+    /// <see cref="StepSize"/> interval can describe them.
+    /// </remarks>
+    public int[] Milestones { get; set; } = [];
+
     /// <summary>Floor the schedule decays towards. Unset means unstated.</summary>
     public double MinLearningRate { get; set; } = double.NaN;
+
+    /// <summary>
+    /// The batch size the paper's learning rate was chosen for. Unset means unstated.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A learning rate is only meaningful alongside the batch it was tuned for. MobileNetV3's 0.1
+    /// is stated for batch 4096; applied at batch 32 it is roughly two orders of magnitude too
+    /// large, and training does not converge. Declaring the reference batch lets the library apply
+    /// the linear scaling rule -- multiply the rate by the ratio of actual to reference batch
+    /// (Goyal et al. 2017, "Accurate, Large Minibatch SGD") -- instead of transplanting a number
+    /// into a regime it was never chosen for.
+    /// </para>
+    /// <para>
+    /// Left unset, the declared rate is used as-is. That is the right default for papers that
+    /// state a rate without tying it to a large batch.
+    /// </para>
+    /// </remarks>
+    public int ReferenceBatchSize { get; set; }
 
     // ---- Gradient clipping ---------------------------------------------------------------
 
@@ -186,7 +288,12 @@ public sealed class PaperOptimizerAttribute : Attribute
         || !double.IsNaN(MaxGradientNorm)
         || UseNesterov
         || WarmupSteps > 0
+        || !double.IsNaN(WarmupFraction)
+        || !double.IsNaN(HoldFraction)
         || StepSize > 0
+        || Milestones.Length > 0
+        || CyclicPolicy != CyclicLRScheduler.CyclicMode.Triangular
+        || PostWarmupDecay != LinearWarmupScheduler.DecayMode.Constant
         || !double.IsNaN(DecayRate)
         || Schedule != LearningRateSchedulerType.Constant;
 }

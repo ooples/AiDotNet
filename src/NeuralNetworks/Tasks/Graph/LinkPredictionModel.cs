@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Data.Structures;
@@ -89,6 +91,8 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
     "https://arxiv.org/abs/1611.07308",
     Year = 2016,
     Authors = "Thomas N. Kipf, Max Welling")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.01,
+                Source = "Kipf and Welling 2016 (VGAE), Sec. 2 (Experiments on link prediction): Adam, lr 0.01, 200 iterations. Verified against the paper.")]
 public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
 {
     private readonly ILossFunction<T> _lossFunction;
@@ -224,7 +228,9 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
         _decoderType = decoderType;
 
         _lossFunction = lossFunction ?? new BinaryCrossEntropyLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }

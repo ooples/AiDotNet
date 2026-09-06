@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Base;
@@ -51,6 +52,9 @@ namespace AiDotNet.Finance.Volatility;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-9,
+                Schedule = LearningRateSchedulerType.Noam, WarmupSteps = 4000,
+                Source = "Vaswani et al. 2017, Sec. 5.3 (Optimizer): Adam with beta1 0.9, beta2 0.98, eps 1e-9 and the Eq. 3 schedule -- linear warmup over 4000 steps then inverse-square-root decay. No constant learning rate is declared because the paper states none; the rate is the schedule, and its peak is a function of the model dimension.")]
 public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatilityModel<T>
 {
     #region Native Mode Fields
@@ -110,7 +114,9 @@ public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, I
         _dropoutRate = _options.DropoutRate;
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }
@@ -145,7 +151,9 @@ public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, I
         _dropoutRate = _options.DropoutRate;
 
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }

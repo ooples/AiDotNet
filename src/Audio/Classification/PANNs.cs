@@ -60,6 +60,8 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("PANNs: Large-Scale Pretrained Audio Neural Networks for Audio Pattern Recognition", "https://arxiv.org/abs/1912.10211", Year = 2020, Authors = "Qiuqiang Kong, Yin Cao, Turab Iqbal, Yuxuan Wang, Wenwu Wang, Mark D. Plumbley")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001, ReferenceBatchSize = 32,
+                Source = "Kong et al. 2020, Sec. IV: batch size 32 and an Adam optimizer with a learning rate of 0.001. Built here rather than by the factory because the paper does not clip gradients and the options default to clipping; the declaration verifies the hand-built values instead of replacing them.")]
 public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
@@ -102,17 +104,18 @@ public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         _options = options ?? new PANNsOptions(); _useNativeMode = true;
         if (_options.LearningRate <= 0.0)
             throw new ArgumentOutOfRangeException(nameof(options), "PANNs learning rate must be positive.");
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                // Kong et al.'s released AudioSet trainer uses ordinary Adam at 1e-3 and does not
-                // apply a global-norm clipping pass. AdamOptimizerOptions enables clipping as a
-                // library-wide transformer safety default, so disable that extra policy here.
-                InitialLearningRate = _options.LearningRate,
-                UseAdaptiveLearningRate = false,
-                EnableGradientClipping = false,
-            });
+        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
+            optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    // Kong et al.'s released AudioSet trainer uses ordinary Adam at 1e-3 and does not
+                    // apply a global-norm clipping pass. AdamOptimizerOptions enables clipping as a
+                    // library-wide transformer safety default, so disable that extra policy here.
+                    InitialLearningRate = _options.LearningRate,
+                    UseAdaptiveLearningRate = false,
+                    EnableGradientClipping = false,
+                }));
         base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
         ClassLabels = _options.CustomLabels ?? AudioSetLabels;
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels, _options.FftSize, _options.HopLength, _options.FMin, _options.FMax, logMel: true);

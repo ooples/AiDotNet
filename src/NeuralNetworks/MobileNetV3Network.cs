@@ -110,7 +110,9 @@ public partial class MobileNetV3Network<T> : ImageClassifierModelLayoutBase<T>
             InputType.ThreeDimensional,
             nameof(MobileNetV3Network<T>));
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         // Per Howard et al. ICCV 2019: ensure deterministic BLAS for reproducible

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.Collections.Concurrent;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -45,6 +46,10 @@ namespace AiDotNet.Audio.Speaker;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ECAPA-TDNN: Emphasized Channel Attention, Propagation and Aggregation in TDNN Based Speaker Verification", "https://arxiv.org/abs/2005.07143", Year = 2020, Authors = "Brecht Desplanques, Jenthe Thienpondt, Kris Demuynck")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, MinLearningRate = 1e-8,
+                WeightDecay = 2e-5, Schedule = LearningRateSchedulerType.Cyclic,
+                StepSize = 65000, CyclicPolicy = CyclicLRScheduler.CyclicMode.Triangular2,
+                Source = "Desplanques et al. 2020, Sec. 3: Adam with a cyclical learning rate between 1e-8 and 1e-3 under the triangular2 policy, one cycle lasting 130k iterations so the half-cycle is 65k, and weight decay 2e-5 on all weights except the AAM-softmax weights, which use 2e-4.")]
 public partial class ECAPATDNNSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpeakerEmbeddingExtractor<T>
 {
     #region Fields
@@ -102,7 +107,9 @@ public partial class ECAPATDNNSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVe
     {
         _options = options ?? new ECAPATDNNSpeakerOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         EmbeddingDimension = _options.EmbeddingDim;
         DefaultThreshold = NumOps.FromDouble(_options.DefaultThreshold);

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -46,7 +47,15 @@ namespace AiDotNet.Audio.Foundations;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations", "https://arxiv.org/abs/2006.11477", Year = 2020, Authors = "Alexei Baevski, Yuhao Zhou, Abdelrahman Mohamed, Michael Auli")]
-public partial class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 5e-4, Variant = "base",
+                Schedule = LearningRateSchedulerType.LinearWarmup, WarmupFraction = 0.08,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear, MinLearningRate = 0,
+                Source = "Baevski et al. 2020, pre-training setup: Adam, warmup over the first 8% of updates to a peak of 5e-4 for BASE and 3e-4 for LARGE, then linear decay. This row is the BASE peak rate.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 3e-4, Variant = "large",
+                Schedule = LearningRateSchedulerType.LinearWarmup, WarmupFraction = 0.08,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear, MinLearningRate = 0,
+                Source = "Baevski et al. 2020, pre-training setup: Adam, warmup over the first 8% of updates to a peak of 5e-4 for BASE and 3e-4 for LARGE, then linear decay. This row is the LARGE peak rate.")]
+public partial class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>, IPaperOptimizerVariant
 {
     /// <inheritdoc />
     /// <remarks>
@@ -98,10 +107,20 @@ public partial class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMo
     {
         _options = options ?? new Wav2Vec2Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }
+
+    /// <summary>The variant this instance was built at, keying the paper recipe for it.</summary>
+    /// <remarks>
+    /// The paper states a different peak rate for BASE and LARGE, so one recipe for the class
+    /// would be wrong for one of them. Read during construction, which is safe because the
+    /// options are assigned before the optimizer is built.
+    /// </remarks>
+    public string PaperOptimizerVariant => _options.Variant;
 
     internal static async Task<Wav2Vec2<T>> CreateAsync(Wav2Vec2Options? options = null, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {

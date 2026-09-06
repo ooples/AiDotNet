@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -56,6 +58,11 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Kirillov et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.999, LearningRate = 8e-4,
+                WeightDecay = 0.1, ReferenceBatchSize = 256, WarmupSteps = 250,
+                Schedule = LearningRateSchedulerType.MultiStep, DecayRate = 0.1,
+                Milestones = [60000, 86666],
+                Source = "Kirillov et al. 2023, Training recipe: AdamW with beta1 0.9, beta2 0.999, linear warmup for 250 iterations, initial rate 8e-4 after warmup, decreased 10x at 60k and again at 86666 iterations over a 90k-iteration run, batch size 256, weight decay 0.1.")]
 public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
 {
     private readonly SAMOptions _options;
@@ -100,7 +107,9 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
             _options = new SAMOptions(_options) { ImageSize = architecture.InputHeight };
         }
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.EmbeddingDim;

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -81,6 +82,8 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/2012.06678",
     Year = 2020,
     Authors = "Xin Huang, Ashish Khetan, Milan Cvitkovic, Zohar Karnin")]
+[PaperOptimizer(OptimizerKind.AdamW,
+                Source = "Huang et al. 2020, Experiments: AdamW with a constant learning rate throughout each training job. No rate is declared because the paper tunes it per dataset by hyperparameter search rather than stating one.")]
 public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly TabTransformerGenOptions<T> _options;
@@ -169,7 +172,9 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
     {
         _options = options ?? new TabTransformerGenOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();

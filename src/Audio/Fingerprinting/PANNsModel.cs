@@ -45,6 +45,8 @@ namespace AiDotNet.Audio.Fingerprinting;
     "https://arxiv.org/abs/1912.10211",
     Year = 2020,
     Authors = "Qiuqiang Kong, Yin Cao, Turab Iqbal, Yuxuan Wang, Wenwu Wang, Mark D. Plumbley")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001, ReferenceBatchSize = 32,
+                Source = "Kong et al. 2020, Sec. IV: batch size 32 and an Adam optimizer with a learning rate of 0.001. Built here rather than by the factory because the paper does not clip gradients and the options default to clipping; the declaration verifies the hand-built values instead of replacing them.")]
 public partial class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     /// <inheritdoc />
@@ -124,14 +126,15 @@ public partial class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
     {
         _options = options ?? new PANNsModelOptions();
         ValidateOptions(_options);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                EnableGradientClipping = _options.EnableGradientClipping,
-                MaxGradientNorm = _options.MaxGradientNorm
-            });
+        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
+            optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    EnableGradientClipping = _options.EnableGradientClipping,
+                    MaxGradientNorm = _options.MaxGradientNorm
+                }));
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMelBands;
         _useNativeMode = true;
