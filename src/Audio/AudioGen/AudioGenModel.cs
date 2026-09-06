@@ -74,7 +74,7 @@ namespace AiDotNet.Audio.AudioGen;
 ///     textEncoderPath: "text_encoder.onnx",
 ///     languageModelPath: "language_model.onnx",
 ///     audioDecoderPath: "audio_decoder.onnx",
-///     tokenizer: myTokenizer);
+///     tokenizer: CharacterTokenizer.CreateAscii());
 ///
 /// // Generate audio from a text prompt
 /// Tensor&lt;float&gt; audio = model.GenerateAudio("a dog barking loudly");

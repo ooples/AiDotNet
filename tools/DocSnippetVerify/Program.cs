@@ -56,6 +56,8 @@ var discoveredUsings = new SortedSet<string>(StringComparer.Ordinal);
 // declaration solver answer a name like `myTokenizer` or `myEncoder` with a real type from the library —
 // something no fixed candidate list could contain, because the answer depends on what the library ships.
 var constructibleTypes = new List<(string Simple, int Arity, bool Parameterless, bool TakesArchitecture)>();
+// Returned-type name -> a call that builds one with no arguments.
+var zeroArgFactories = new List<(string Returns, string Call)>();
 {
     var probe = CSharpCompilation.Create("__ns_probe", Array.Empty<SyntaxTree>(), refs, options);
     foreach (var reference in refs)
@@ -94,6 +96,21 @@ var constructibleTypes = new List<(string Simple, int Arity, bool Parameterless,
                 if (none || arch)
                 {
                     constructibleTypes.Add((type.Name, type.Arity, none, arch));
+                }
+
+                // Static factories that need no arguments. Several types are only reachable this way —
+                // CharacterTokenizer wants a vocabulary and special tokens, but CreateAscii() builds both,
+                // so an example can name a tokenizer in one line instead of four. Preferring the
+                // library's own factory is also what a reader should be shown.
+                foreach (var method in type.GetMembers().OfType<IMethodSymbol>())
+                {
+                    if (!method.IsStatic || method.DeclaredAccessibility != Accessibility.Public) continue;
+                    if (method.MethodKind != MethodKind.Ordinary) continue;
+                    if (!method.Parameters.All(p => p.HasExplicitDefaultValue)) continue;
+                    if (method.ReturnsVoid || method.Arity > 0) continue;
+
+                    string owner = type.Arity == 1 ? $"{type.Name}<double>" : type.Name;
+                    zeroArgFactories.Add((method.ReturnType.Name, $"{owner}.{method.Name}()"));
                 }
             }
 
@@ -189,6 +206,18 @@ IEnumerable<string> TypeCandidatesFor(string name)
     var word = Regex.Replace(name, @"^(my|the|a|an)(?=[A-Z])", "", RegexOptions.IgnoreCase);
     word = Regex.Replace(word, @"\d+$", "");
     if (word.Length < 4) yield break;
+
+    // Factories first: where the library offers one, it is both the shortest way to build the object and
+    // the call a reader should be shown. A tokenizer takes a vocabulary and special tokens through its
+    // constructor, but CharacterTokenizer.CreateAscii() supplies both.
+    foreach (var f in zeroArgFactories
+                 .Where(f => f.Returns.EndsWith(word, StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(f.Returns, word, StringComparison.OrdinalIgnoreCase))
+                 .OrderBy(f => f.Call.Length)
+                 .Take(3))
+    {
+        yield return f.Call;
+    }
 
     var matches = constructibleTypes
         .Where(t => t.Simple.EndsWith(word, StringComparison.OrdinalIgnoreCase) ||
