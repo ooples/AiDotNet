@@ -38,6 +38,7 @@ namespace AiDotNet.SurvivalAnalysis;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 /// <example>
 /// <code>
+/// var times = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
 /// var timePoint = 2;
 /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigureModel(new NelsonAalenEstimator&lt;double&gt;())

@@ -30,8 +30,6 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var options = new FinchOptions { };
 /// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
-/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
-/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
 ///     .ConfigureModel(new FinchLanguageModel&lt;float&gt;(options))
 ///     .Build(trainX, trainY);
