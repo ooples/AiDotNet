@@ -68,9 +68,9 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// <code>
 /// // Create a graph classification model for molecular property prediction
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     // node feature dimension
-///     outputSize: 2,   // number of classes (e.g., toxic / non-toxic)
-///     );
+///     InputType.OneDimensional, NeuralNetworkTaskType.MultiClassClassification,
+///     inputSize: 16,   // node feature dimension
+///     outputSize: 2);  // number of classes (e.g. toxic / non-toxic)
 ///
 /// // Prepare graph data (adjacency + node features as tensors)
 /// var adjacency = new Tensor&lt;float&gt;(new[] { 10, 10 }); // 10-node graph

@@ -64,9 +64,12 @@ namespace AiDotNet.VisionLanguage.Robotics;
 ///
 /// // Streaming: 200 Hz control loop with caller-owned timing.
 /// var runner = helix.CreateDualSystemRunner();
-/// while (running) {
+/// var currentInstruction = "stack the cups";
+/// for (int tick = 0; tick &lt; 200; tick++)
+/// {
+///     var currentImage = image;   // your latest camera frame
 ///     var action = runner.Step(currentImage, currentInstruction);
-///     SendToRobot(action);
+///     // send `action` to the robot
 /// }
 /// </code>
 /// </example>

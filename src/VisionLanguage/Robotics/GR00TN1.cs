@@ -65,9 +65,12 @@ namespace AiDotNet.VisionLanguage.Robotics;
 ///
 /// // Streaming control at the paper's 50 Hz S1 rate.
 /// var runner = gr00t.CreateDualSystemRunner();
-/// while (running) {
+/// var currentInstruction = "stack the cups";
+/// for (int tick = 0; tick &lt; 200; tick++)
+/// {
+///     var currentImage = image;   // your latest camera frame
 ///     var action = runner.Step(currentImage, currentInstruction);
-///     SendToHumanoid(action);
+///     // send `action` to the robot
 /// }
 /// </code>
 /// </example>

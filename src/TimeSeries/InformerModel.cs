@@ -41,12 +41,12 @@ namespace AiDotNet.TimeSeries;
 /// // Prepare long-horizon time series data
 /// var history = new Vector&lt;double&gt;(new double[] { 112, 118, 132, 129, 121, 135, 148, 148, 136, 119, 104, 118,
 ///     115, 126, 141, 135, 125, 149, 170, 170, 158, 133, 114, 140 });
-/// var trainingMatrix = new Matrix&lt;double&gt;(history.Count - 1, 1);
+/// var trainingMatrix = new Matrix&lt;double&gt;(history.Length - 1, 1);
 ///
 /// // Train using ProbSparse self-attention for O(L log L) efficiency
 /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigureModel(new InformerModel&lt;double&gt;(options))
-///     .Build(trainingMatrix, history.SubVector(1, history.Count - 1));
+///     .Build(trainingMatrix, history.SubVector(1, history.Length - 1));
 ///
 /// // Generate multi-step forecasts in parallel via generative decoder
 /// var forecast = result.Predict(trainingMatrix);

@@ -122,7 +122,9 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 ///     hiddenDim: 256,
 ///     numLayers: 8);
 /// // Render a novel view from camera position and direction
-/// Tensor&lt;float&gt; output = nerf.Forward(positionAndDirectionInput);
+/// var positions = Tensor&lt;float&gt;.CreateRandom(1024, 3);           // sample points along the rays
+/// var viewingDirections = Tensor&lt;float&gt;.CreateRandom(1024, 3);   // the direction each was seen from
+/// var (rgb, density) = nerf.QueryField(positions, viewingDirections);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

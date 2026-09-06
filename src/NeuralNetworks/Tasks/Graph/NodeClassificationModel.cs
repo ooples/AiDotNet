@@ -58,9 +58,9 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// <code>
 /// // Create a node classification model for semi-supervised learning on graphs
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     // node feature dimension
-///     outputSize: 7,   // number of node classes
-///     );
+///     InputType.OneDimensional, NeuralNetworkTaskType.MultiClassClassification,
+///     inputSize: 16,   // node feature dimension
+///     outputSize: 2);  // number of classes (e.g. toxic / non-toxic)
 ///
 /// // Prepare graph data (adjacency + node features as tensors)
 /// var adjacency = new Tensor&lt;float&gt;(new[] { 100, 100 }); // 100-node graph

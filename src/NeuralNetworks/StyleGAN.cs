@@ -66,7 +66,8 @@ namespace AiDotNet.NeuralNetworks;
 ///     .ConfigureModel(new StyleGAN&lt;float&gt;(
 ///         mappingNetworkArchitecture, synthesisNetworkArchitecture,
 ///         discriminatorArchitecture,
-///         latentSize: 512, intermediateLatentSize: 512))
+///         latentSize: 512, intermediateLatentSize: 512,
+///         inputType: InputType.OneDimensional))
 ///     .Build(trainX, trainY);
 /// var generated = result.Predict(noise);
 /// </code>
