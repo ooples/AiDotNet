@@ -28,8 +28,12 @@ namespace AiDotNet.MixedPrecision;
 /// </remarks>
 /// <example>
 /// <code>
-/// var inputTensor = Tensor&lt;double&gt;.CreateRandom(2, 4);
-/// // Create training loop
+/// var network = new NeuralNetwork&lt;float&gt;(
+///     new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 4, outputSize: 2));
+/// var optimizer = new AdamOptimizer&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;(network);
+/// var lossFunction = new MeanSquaredErrorLoss&lt;float&gt;();
+/// var mixedPrecisionContext = new MixedPrecisionContext();
+///
 /// var trainLoop = new MixedPrecisionTrainingLoop&lt;float&gt;(
 ///     network,
 ///     optimizer,
@@ -37,12 +41,9 @@ namespace AiDotNet.MixedPrecision;
 ///     mixedPrecisionContext
 /// );
 ///
-/// // Train for one step
-/// bool success = trainLoop.TrainStep(inputTensor, targetTensor);
-/// if (!success)
-/// {
-///     Console.WriteLine("Step skipped due to gradient overflow");
-/// }
+/// // The loop tracks loss scaling and skipped updates; read them back with GetStatistics.
+/// Console.WriteLine(trainLoop.GetStatistics());
+/// Console.WriteLine($"scale {trainLoop.CurrentLossScale}, skipped {trainLoop.SkippedSteps}");
 /// </code>
 /// </example>
 public class MixedPrecisionTrainingLoop<T>
