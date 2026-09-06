@@ -63,6 +63,9 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 ///     patchSize: 2);
 ///
 /// // Predict noise
+/// var noisyLatent = new Tensor&lt;float&gt;([1, 4, 32, 32]);      // [batch, latentChannels, h, w]
+/// var timestep = 500;                                          // where we are in the schedule
+/// var textEmbedding = new Tensor&lt;float&gt;([1, 77, 1152]);     // [batch, tokens, hiddenSize]
 /// var noisePrediction = dit.PredictNoise(noisyLatent, timestep, textEmbedding);
 /// </code>
 /// </example>

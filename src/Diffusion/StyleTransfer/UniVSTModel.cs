@@ -45,6 +45,15 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 /// <example>
 /// <code>
 /// var model = new UniVSTModel&lt;double&gt;();
+///
+/// // one feature tensor per video frame, and the mask you drew on the first
+/// var inversionFeatures = new List&lt;Tensor&lt;double&gt;&gt;
+/// {
+///     new Tensor&lt;double&gt;([1, 4, 64, 64]),
+///     new Tensor&lt;double&gt;([1, 4, 64, 64])
+/// };
+/// var firstFrameMask = new Tensor&lt;double&gt;([1, 1, 64, 64]);
+///
 /// var masks = model.MaskPropagation.Propagate(inversionFeatures, firstFrameMask);
 /// </code>
 /// </example>

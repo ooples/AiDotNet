@@ -54,7 +54,7 @@ namespace AiDotNet.Diffusion.VAE;
 ///     baseChannels: 64);
 ///
 /// // Encode a mel spectrogram
-/// var melSpec = LoadMelSpectrogram("audio.wav"); // Shape: [1, 64, 256]
+/// var melSpec = new Tensor&lt;float&gt;([1, 64, 256]);   // your mel spectrogram
 /// var latent = audioVAE.Encode(melSpec);         // Shape: [1, 8, 64]
 ///
 /// // Decode back to mel spectrogram

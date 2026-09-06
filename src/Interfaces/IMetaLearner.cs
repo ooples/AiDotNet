@@ -58,9 +58,10 @@ namespace AiDotNet.Interfaces;
 /// </remarks>
 /// <example>
 /// <code>
-/// var trainingLabels = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
 /// var trainingFeatures = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
-/// // 1. Setup: Create episodic data loader for 5-way 5-shot tasks
+/// var trainingLabels = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
+///
+/// // 1. Setup: an episodic loader that samples 5-way 5-shot tasks
 /// var dataLoader = new UniformEpisodicDataLoader&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(
 ///     datasetX: trainingFeatures,
 ///     datasetY: trainingLabels,
@@ -69,29 +70,29 @@ namespace AiDotNet.Interfaces;
 ///     queryShots: 15    // 15 query examples per class
 /// );
 ///
-/// // 2. Configure: Setup meta-learner with options
-/// var options = MetaLearnerOptionsBase&lt;double&gt;.CreateBuilder()
-///     .WithInnerLearningRate(0.01)
-///     .WithOuterLearningRate(0.001)
-///     .WithAdaptationSteps(5)
-///     .WithMetaBatchSize(4)
-///     .WithNumMetaIterations(1000)
-///     .Build();
+/// // 2. Configure: the meta-model is what the outer loop learns
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(inputFeatures: 4, outputSize: 5);
+/// var metaModel = new NeuralNetwork&lt;double&gt;(architecture);
 ///
-/// var metaLearner = new MAMLAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(
-///     
-///     lossFunction: new CrossEntropyLoss&lt;double&gt;(),
-///     dataLoader: dataLoader,
-///     options: options
-/// );
+/// var options = new MAMLOptions&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(metaModel)
+/// {
+///     InnerLearningRate = 0.01,
+///     OuterLearningRate = 0.001,
+///     AdaptationSteps = 5,
+///     MetaBatchSize = 4,
+///     NumMetaIterations = 1000,
+///     LossFunction = new CrossEntropyLoss&lt;double&gt;(),
+///     DataLoader = dataLoader
+/// };
 ///
-/// // 3. Meta-Training: Simply call Train()
+/// var metaLearner = new MAMLAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
+///
+/// // 3. Meta-training
 /// var trainingResult = metaLearner.Train();
 ///
-/// // 4. Deployment: Adapt to new task with 5 examples
+/// // 4. Deployment: adapt to a task the model has never seen
 /// var newTask = dataLoader.GetNextTask();
 /// var adaptResult = metaLearner.AdaptAndEvaluate(newTask);
-/// // Result is available in the returned value
 /// </code>
 /// </example>
 public interface IMetaLearner<T, TInput, TOutput>
