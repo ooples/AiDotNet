@@ -40,8 +40,7 @@ namespace AiDotNet.Classification.MultiLabel;
 /// var newSample = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // Use AiModelBuilder facade for rakelclassifier classification
 /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-///     .ConfigureModel(new RAkELClassifier&lt;double&gt;(
-///         new ClassifierOptions&lt;double&gt;()));
+///     .ConfigureModel(new RAkELClassifier&lt;double&gt;(labelsetSize: 3));
 ///
 /// var result = builder.Build(features, labels);
 /// var prediction = result.Predict(newSample);

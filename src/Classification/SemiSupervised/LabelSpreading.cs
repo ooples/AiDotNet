@@ -41,7 +41,6 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// <example>
 /// <code>
 /// // Create label spreading with symmetric normalization
-/// var options = new LabelSpreadingOptions&lt;double&gt;();
 ///
 /// // Prepare data: -1 indicates unlabeled samples
 /// var features = new Matrix&lt;double&gt;(6, 2);

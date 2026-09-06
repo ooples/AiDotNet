@@ -38,7 +38,6 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// <example>
 /// <code>
 /// // Create label propagation for semi-supervised learning
-/// var options = new LabelPropagationOptions&lt;double&gt;();
 ///
 /// // Prepare data: some labeled (-1 means unlabeled), some not
 /// var features = new Matrix&lt;double&gt;(6, 2);

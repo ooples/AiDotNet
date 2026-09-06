@@ -51,7 +51,6 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 /// <example>
 /// <code>
 /// // Create balanced random forest for imbalanced fraud detection
-/// var options = new BalancedRandomForestOptions&lt;double&gt;();
 ///
 /// // Prepare imbalanced training data: 8 samples, 6 majority (class 0), 2 minority (class 1)
 /// var features = new Matrix&lt;double&gt;(8, 2);

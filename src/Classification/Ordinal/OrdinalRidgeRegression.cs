@@ -56,7 +56,6 @@ namespace AiDotNet.Classification.Ordinal;
 /// <example>
 /// <code>
 /// // Create ordinal ridge regression with L2 regularization
-/// var options = new OrdinalRidgeRegressionOptions&lt;double&gt;();
 ///
 /// // Prepare training data: 6 samples with 2 features, ordinal labels
 /// var features = new Matrix&lt;double&gt;(6, 2);
