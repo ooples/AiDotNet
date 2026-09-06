@@ -32,7 +32,7 @@ namespace AiDotNet.Evolution.Programs;
 /// program. Because the object never changes after construction, it is safe to keep in an archive, write to a
 /// checkpoint, and share between threads.</para>
 /// </remarks>
-public sealed class ProgramGenome : IEquatable<ProgramGenome>
+public sealed class ProgramGenome : IEquatable<ProgramGenome>, IImmutableEvolutionGenome
 {
     /// <summary>The largest source length, in characters, that a genome may carry.</summary>
     public const int MaxSourceLength = 1_048_576;

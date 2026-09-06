@@ -563,7 +563,7 @@ public sealed class MapElitesAutoML<T, TInput, TOutput> :
         }
     }
 
-    private sealed class MapElitesGenome
+    private sealed class MapElitesGenome : IImmutableEvolutionGenome
     {
         private readonly ReadOnlyDictionary<string, object> _parameters;
 
