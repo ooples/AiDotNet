@@ -148,7 +148,7 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         IFullModel<T, TInput, TOutput> model,
         LBFGSOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
-        : base(model, options ?? new())
+        : base(model, PaperOptimizerDefaults.Resolve(model, options, OptimizerKind.LBfgs))
     {
         _s = new List<Vector<T>>();
         _y = new List<Vector<T>>();

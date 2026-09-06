@@ -97,7 +97,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     public AdamOptimizer(
         IFullModel<T, TInput, TOutput>? model,
         AdamOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(model, options ?? new())
+        : base(model, PaperOptimizerDefaults.Resolve(model, options, OptimizerKind.Adam))
     {
         _m = Vector<T>.Empty();
         _v = Vector<T>.Empty();
