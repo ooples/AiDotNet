@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,10 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2023,
     Authors = "Lee et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.8, Beta2 = 0.99, WeightDecay = 0.01,
+                LearningRate = 1e-4, Schedule = LearningRateSchedulerType.Exponential,
+                DecayRate = 0.999, ReferenceBatchSize = 32,
+                Source = "Lee et al. 2023, Sec. 4: batch size 32 and an initial learning rate of 1e-4 over 1M steps, explicitly halved from HiFi-GAN default of 2e-4 because that caused early training collapse. The optimizer and scheduler are stated to follow HiFi-GAN, so the AdamW betas, weight decay and 0.999 epoch decay come from Kong et al. 2020.")]
 public partial class BigVGAN<T> : VocoderBase<T>
 {
     private readonly BigVGANOptions _options;
@@ -80,7 +86,9 @@ public partial class BigVGAN<T> : VocoderBase<T>
     {
         _options = options ?? new BigVGANOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

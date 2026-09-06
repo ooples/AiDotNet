@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -47,6 +49,10 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2020,
     Authors = "Kong et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.8, Beta2 = 0.99, WeightDecay = 0.01,
+                LearningRate = 2e-4, Schedule = LearningRateSchedulerType.Exponential,
+                DecayRate = 0.999,
+                Source = "Kong et al. 2020, Sec. 3: AdamW with beta1 0.8, beta2 0.99 and weight decay 0.01, initial learning rate 2e-4 decayed by a 0.999 factor every epoch.")]
 public partial class HiFiGAN<T> : VocoderBase<T>
 {
     private readonly HiFiGANOptions _options;
@@ -87,7 +93,9 @@ public partial class HiFiGAN<T> : VocoderBase<T>
     {
         _options = options ?? new HiFiGANOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
