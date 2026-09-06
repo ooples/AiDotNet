@@ -14,6 +14,7 @@ using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 // --include-prose also compile-checks <code> found in <remarks>/<summary>, not just <example>.
 bool includeProse = args.Any(a => string.Equals(a, "--include-prose", StringComparison.OrdinalIgnoreCase));
@@ -320,7 +321,15 @@ string Compose(string code, string? homeNamespace, IEnumerable<string>? extraDec
     }
 
     string bodyText = body.ToString();
-    bool isTypes = typeStartRe.IsMatch(bodyText.TrimStart());
+
+    // Decide "declares types" from the first line that is actually code. A snippet routinely opens with a
+    // line or two of // comment explaining itself, and testing the raw first line meant those examples
+    // were compiled as statements — where a class declaration is a syntax error, reported as
+    // "Invalid expression term 'partial'" rather than anything a reader could act on.
+    string firstCode = bodyText.Replace("\r\n", "\n").Split('\n')
+        .Select(l => l.Trim())
+        .FirstOrDefault(l => l.Length > 0 && !l.StartsWith("//", StringComparison.Ordinal)) ?? "";
+    bool isTypes = typeStartRe.IsMatch(firstCode);
 
     // Declarations only make sense inside a method body. A snippet that declares its own types is
     // compiled as top-level declarations, where a `var` line would be a class member and not compile.
@@ -348,6 +357,122 @@ List<Diagnostic> Compile(string source, int id)
     return c.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error && d.Id != "CS5001").ToList();
 }
 
+// ── Completing a documented partial class ──
+//
+// Some examples exist to show what goes ON a type, not how to write a whole one: three attributes on
+// three fields of a `partial class MyNorm<T> : LayerBase<T>`. Six lines that say exactly one thing. They
+// cannot compile alone, because the base has abstract members the fragment does not implement — and
+// writing those in would take the example to about twenty-five lines and bury the three that matter.
+//
+// So the harness supplies the other half of the partial class: it asks Roslyn which inherited members are
+// unimplemented and emits a sibling part with stub overrides plus a constructor chaining to the base.
+// Nothing is skipped and nothing is hidden from the reader — the fragment is still compiled against the
+// real base type, so a renamed attribute, a changed base, or a member that no longer exists still fails
+// the build. That is the difference between this and an opt-out marker.
+var FullType = SymbolDisplayFormat.FullyQualifiedFormat
+    .WithMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
+
+string? CompletionFor(string source)
+{
+    var tree = CSharpSyntaxTree.ParseText(source, parse);
+    var comp = CSharpCompilation.Create("complete", new[] { tree }, refs, options);
+    var model = comp.GetSemanticModel(tree);
+
+    var parts = tree.GetRoot().DescendantNodes().OfType<TypeDeclarationSyntax>()
+        .Where(d => d.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)))
+        .ToList();
+    if (parts.Count == 0) return null;
+
+    var sb = new StringBuilder();
+    foreach (var part in parts)
+    {
+        if (model.GetDeclaredSymbol(part) is not INamedTypeSymbol type) continue;
+
+        var missing = new List<string>();
+        for (var b = type.BaseType; b is not null; b = b.BaseType)
+        {
+            foreach (var m in b.GetMembers())
+            {
+                if (!m.IsAbstract) continue;
+                if (type.FindImplementationForInterfaceMember(m) is not null) continue;
+                if (type.GetMembers(m.Name).Any()) continue;
+                var stub = StubFor(m);
+                if (stub is not null) missing.Add(stub);
+            }
+        }
+        foreach (var iface in type.AllInterfaces)
+        {
+            foreach (var m in iface.GetMembers())
+            {
+                if (type.FindImplementationForInterfaceMember(m) is not null) continue;
+                if (type.GetMembers(m.Name).Any()) continue;
+                var stub = StubFor(m, asOverride: false);
+                if (stub is not null) missing.Add(stub);
+            }
+        }
+
+        // A base with no parameterless constructor needs one chained explicitly.
+        string ctor = "";
+        var baseCtor = type.BaseType?.InstanceConstructors
+            .Where(c => c.DeclaredAccessibility != Accessibility.Private)
+            .OrderBy(c => c.Parameters.Length)
+            .FirstOrDefault();
+        if (baseCtor is not null && baseCtor.Parameters.Length > 0 &&
+            !type.InstanceConstructors.Any(c => c.Parameters.Length == 0 && !c.IsImplicitlyDeclared))
+        {
+            var args = string.Join(", ", baseCtor.Parameters.Select(
+                p => $"default({p.Type.ToDisplayString(FullType)})"));
+            ctor = $"    public {part.Identifier.ValueText}() : base({args}) {{ }}\n";
+        }
+
+        if (missing.Count == 0 && ctor.Length == 0) continue;
+
+        var typeParams = part.TypeParameterList?.ToString() ?? "";
+        sb.Append($"public partial class {part.Identifier.ValueText}{typeParams}\n{{\n")
+          .Append(ctor)
+          .Append(string.Concat(missing.Select(m => "    " + m + "\n")))
+          .Append("}\n");
+    }
+
+    return sb.Length == 0 ? null : sb.ToString();
+}
+
+string? StubFor(ISymbol member, bool asOverride = true)
+{
+    // An override may not widen access. LayerBase.InitializeLayers is protected, so emitting the stub as
+    // public is itself a compile error, and one that looks like a defect in the example rather than in
+    // the harness.
+    string access = member.DeclaredAccessibility switch
+    {
+        Accessibility.Protected => "protected",
+        Accessibility.ProtectedOrInternal => "protected internal",
+        Accessibility.Internal => "internal",
+        _ => "public",
+    };
+    string mod = asOverride ? $"{access} override " : $"{access} ";
+    switch (member)
+    {
+        case IMethodSymbol { MethodKind: MethodKind.Ordinary } method:
+        {
+            var ps = string.Join(", ", method.Parameters.Select(
+                p => $"{p.Type.ToDisplayString(FullType)} {p.Name}"));
+            var ret = method.ReturnType.ToDisplayString(FullType);
+            return method.ReturnsVoid
+                ? $"{mod}void {method.Name}({ps}) {{ }}"
+                : $"{mod}{ret} {method.Name}({ps}) => default({ret});";
+        }
+        case IPropertySymbol property:
+        {
+            var t = property.Type.ToDisplayString(FullType);
+            return property.SetMethod is null
+                ? $"{mod}{t} {property.Name} => default({t});"
+                : $"{mod}{t} {property.Name} {{ get; set; }}";
+        }
+        default:
+            return null;
+    }
+}
+
 void Check(string code, string fileKey, int idx, string? homeNamespace = null)
 {
     total++;
@@ -358,6 +483,24 @@ void Check(string code, string fileKey, int idx, string? homeNamespace = null)
     var errors = comp.GetDiagnostics()
         .Where(d => d.Severity == DiagnosticSeverity.Error && d.Id != "CS5001")
         .ToList();
+
+    // A documented partial class is a fragment by design; supply its other half and re-check.
+    //
+    // The generated part must sit in the SAME namespace as the fragment. Appended after the namespace
+    // block it lands in the global one instead, which declares an unrelated type of the same name and
+    // completes nothing — the errors come back identical and the whole mechanism looks inert.
+    if (errors.Any(e => e.Id is "CS0534" or "CS0535" or "CS1729" or "CS0501") &&
+        CompletionFor(source) is { } completion)
+    {
+        string placed = homeNamespace is null
+            ? completion
+            : $"namespace {homeNamespace} {{\n{completion}\n}}";
+        var completed = Compile(source + "\n" + placed, ++probeId);
+        if (completed.Count < errors.Count)
+        {
+            errors = completed;
+        }
+    }
 
     if (errors.Count == 0)
     {
