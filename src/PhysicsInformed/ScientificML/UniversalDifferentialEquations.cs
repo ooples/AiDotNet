@@ -402,7 +402,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                     { "StateDimension", _stateDim },
                     { "ParameterCount", GetParameterCount() }
                 },
-                ModelData = Serialize()
+                ModelDataProvider = () => Serialize()
             };
         }
 

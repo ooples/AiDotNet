@@ -724,7 +724,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                     { "PDEName", _multiScalePDE.Name },
                     { "ParameterCount", ParameterCount }
                 },
-                ModelData = Serialize()
+                ModelDataProvider = () => Serialize()
             };
         }
 

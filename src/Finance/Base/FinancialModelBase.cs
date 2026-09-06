@@ -711,7 +711,7 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
         return new ModelMetadata<T>
         {
             AdditionalInfo = additionalInfo,
-            ModelData = UseNativeMode ? this.Serialize() : Array.Empty<byte>()
+            ModelDataProvider = () => UseNativeMode ? this.Serialize() : Array.Empty<byte>()
         };
     }
 

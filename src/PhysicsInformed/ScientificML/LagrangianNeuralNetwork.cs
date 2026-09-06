@@ -317,7 +317,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                     { "ConfigurationDimension", _configurationDim },
                     { "ParameterCount", GetParameterCount() }
                 },
-                ModelData = Serialize()
+                ModelDataProvider = () => Serialize()
             };
         }
 
