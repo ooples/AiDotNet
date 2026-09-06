@@ -36,6 +36,11 @@ namespace AiDotNet.Models.Options;
 ///     DataType = MedGANDataType.Binary,
 /// };
 /// var medgan = new MedGANGenerator&lt;double&gt;(architecture, options);
+/// var columns = new[]
+/// {
+///     new ColumnMetadata("age", ColumnDataType.Continuous, columnIndex: 0),
+///     new ColumnMetadata("sex", ColumnDataType.Discrete, new[] { "f", "m" }, columnIndex: 1)
+/// };
 /// medgan.Fit(data, columns, epochs: 1000);
 /// var synthetic = medgan.Generate(1000);
 /// </code>

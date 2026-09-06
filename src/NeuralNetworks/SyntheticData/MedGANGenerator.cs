@@ -98,6 +98,11 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 ///     inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
 ///     inputSize: 64, outputSize: 64);
 /// var medgan = new MedGANGenerator&lt;double&gt;(architecture);
+/// var columns = new[]
+/// {
+///     new ColumnMetadata("age", ColumnDataType.Continuous, columnIndex: 0),
+///     new ColumnMetadata("sex", ColumnDataType.Discrete, new[] { "f", "m" }, columnIndex: 1)
+/// };
 /// medgan.Fit(data, columns, epochs: 1000);
 /// var synthetic = medgan.Generate(1000);
 /// </code>
