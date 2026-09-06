@@ -1,135 +1,192 @@
 using AiDotNet.Enums;
+using AiDotNet.LearningRateSchedulers;
 
 namespace AiDotNet.Attributes;
 
 /// <summary>
-/// Declares the optimizer and hyperparameters a model's research paper specifies, so the model
-/// trains at its paper's settings instead of the optimizer class's generic defaults.
+/// Declares the training recipe a model's research paper specifies — the optimizer, its
+/// hyperparameters, the learning-rate schedule and gradient clipping — so that a model given no
+/// optimizer trains the way its paper says rather than at an arbitrary library default.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Sits alongside <see cref="ResearchPaperAttribute"/> in the declarative block a model already
-/// carries, so the citation and the numbers it produced are read together and can be checked
+/// carries, so the citation and the recipe it produced are read together and can be checked
 /// against each other:
 /// </para>
 /// <code>
-/// [ResearchPaper("InternImage: Exploring Large-Scale Vision Foundation Models with Deformable Convolutions",
-///                "https://arxiv.org/abs/2211.05778", Year = 2023, Authors = "Wang et al.")]
-/// [PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, WeightDecay = 0.05,
-///                 Source = "Sec. 4.1, Table 8")]
-/// public partial class InternImage&lt;T&gt; : ...
+/// [ResearchPaper("Deep Residual Learning for Image Recognition",
+///                "https://arxiv.org/abs/1512.03385", Year = 2016, Authors = "He et al.")]
+/// [PaperOptimizer(OptimizerKind.SgdMomentum, LearningRate = 0.1, Momentum = 0.9,
+///                 WeightDecay = 1e-4, Schedule = LearningRateSchedulerType.ReduceOnPlateau,
+///                 Source = "Sec. 3.4 (Implementation)")]
+/// public class ResNetNetwork&lt;T&gt; : ...
 /// </code>
-/// <para><b>For Beginners:</b> Every model in this library is an implementation of a published
-/// paper, and papers specify how to train the model — which optimizer, what learning rate, how
-/// much weight decay. Without this attribute a model silently trains at whatever the optimizer
-/// class happens to default to, which is rarely what the paper used, so results do not match the
-/// published ones. This attribute records the paper's answer.
+/// <para><b>For Beginners:</b> A paper does not just give a learning rate — it gives a whole
+/// recipe: which optimizer, what learning rate, how that rate changes over training, and how
+/// gradients are clipped. Those parts only work together. ResNet's paper uses SGD at 0.1; feeding
+/// 0.1 to Adam instead would diverge immediately. So the recipe is declared as a unit, and the
+/// library builds the optimizer the paper actually used.
 /// </para>
 /// <para>
-/// <b>Only declare what the paper actually states.</b> Every hyperparameter here is an optional
-/// named property, and anything left unset falls back to the library default. An unset property
-/// reads as "the paper does not say"; a set one is a claim about the literature. Declaring a value
-/// the paper never gave is worse than leaving it out, because an invented number looks
-/// authoritative and nobody re-checks it. <see cref="Source"/> exists to make that discipline
-/// checkable.
+/// <b>The whole recipe, not just the rate.</b> An earlier revision recorded only scalars and
+/// applied them to whatever optimizer the model happened to construct, skipping the declaration
+/// when the kinds disagreed. That was the wrong shape: it left a model with the wrong optimizer
+/// and the wrong schedule while appearing to be paper-faithful. Resolution now CONSTRUCTS the
+/// declared optimizer.
 /// </para>
 /// <para>
-/// <b>Precedence.</b> A caller's <c>ConfigureOptimizer</c> options always win. This attribute only
-/// supplies defaults for the case where a model constructs its optimizer with no options at all —
-/// the situation issue #1928 describes, where 685 construction sites silently inherited the
-/// optimizer class's own defaults.
+/// <b>Only declare what the paper states.</b> Every hyperparameter is an optional named property,
+/// and anything left unset falls back to the library default. An unset property reads as "the
+/// paper does not say"; a set one is a claim about the literature. <see cref="Source"/> exists to
+/// make that discipline checkable — a value that cannot be pointed at a section should not be
+/// declared, because an invented number looks authoritative and nobody re-checks it.
 /// </para>
 /// <para>
-/// <b>Scope.</b> Scalar hyperparameters only. Schedule shape (warm-up, cosine decay) is not
-/// expressible as attribute arguments and stays in code; warm-up-and-decay is already the library
-/// default rather than a flat rate.
+/// <b>Precedence.</b> A caller's <c>ConfigureOptimizer</c> always wins. This supplies the default
+/// for the case where nothing was configured at all.
 /// </para>
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = true)]
 public sealed class PaperOptimizerAttribute : Attribute
 {
-    /// <summary>
-    /// Declares the optimizer this model's paper trains with.
-    /// </summary>
-    /// <param name="optimizer">The optimizer the paper specifies.</param>
+    /// <summary>Declares the training recipe this model's paper specifies.</summary>
+    /// <param name="optimizer">The optimizer the paper trains with. This one is built.</param>
     public PaperOptimizerAttribute(OptimizerKind optimizer)
     {
         Optimizer = optimizer;
     }
 
-    /// <summary>The optimizer the paper specifies.</summary>
+    /// <summary>The optimizer the paper specifies, and the one that will be constructed.</summary>
     public OptimizerKind Optimizer { get; }
 
     /// <summary>
-    /// Where in the paper these values come from, for example <c>"Sec. 4.1, Table 8"</c>.
+    /// Where in the paper this recipe comes from, for example <c>"Sec. 4.1, Table 8"</c>.
     /// </summary>
     /// <remarks>
-    /// Required whenever any hyperparameter is declared. It is the anti-fabrication guard: a value
-    /// that cannot be pointed at a section of the paper should not be declared at all. It also lets
-    /// a reviewer verify an entry without re-deriving it, which is the difference between a claim
-    /// that can be audited and one that merely looks confident.
+    /// Required whenever anything is declared, and enforced by AIDN102. It is the anti-fabrication
+    /// guard, and it lets a reviewer verify an entry without re-deriving it — the difference
+    /// between a claim that can be audited and one that merely looks confident.
     /// </remarks>
     public string Source { get; set; } = string.Empty;
 
     /// <summary>
-    /// Which model size or configuration variant these values apply to, matched against
+    /// Which model size or configuration variant this recipe applies to, matched against
     /// <see cref="AiDotNet.Interfaces.IPaperOptimizerVariant.PaperOptimizerVariant"/>.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// Papers routinely give different settings per size — InternImage-T and InternImage-H do not
-    /// share a learning rate — so one declaration per class cannot be faithful. Repeat the
-    /// attribute, keyed by variant, and prefer <c>nameof</c> over a literal so a renamed enum member
-    /// is a compile error rather than a silently unmatched key:
-    /// </para>
-    /// <code>
-    /// [PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4,
-    ///                 Variant = nameof(InternImageModelSize.Tiny), Source = "Table 8")]
-    /// [PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-5,
-    ///                 Variant = nameof(InternImageModelSize.Huge), Source = "Table 8")]
-    /// </code>
-    /// <para>
-    /// An attribute with no <see cref="Variant"/> is the fallback for every variant that has no
-    /// entry of its own, so partial population is expected and safe: declared variants use their
-    /// own values, the rest use the unkeyed entry, and models with neither keep library defaults.
-    /// </para>
+    /// Papers routinely give different settings per size, so one declaration per class cannot be
+    /// faithful. Repeat the attribute keyed by variant, preferring <c>nameof</c> over a literal so
+    /// a renamed enum member is a compile error rather than a silently unmatched key. An attribute
+    /// with no variant is the fallback for every variant lacking its own entry, so partial
+    /// population is safe.
     /// </remarks>
     public string Variant { get; set; } = string.Empty;
 
-    /// <summary>The paper's learning rate. Unset means the paper does not state one.</summary>
+    // ---- Optimizer hyperparameters -------------------------------------------------------
+
+    /// <summary>The paper's learning rate. Unset means the paper does not state a constant one.</summary>
+    /// <remarks>
+    /// Leave unset when the rate is produced by a formula rather than a constant — the Transformer's
+    /// warmup schedule, for instance. Declare <see cref="Schedule"/> instead.
+    /// </remarks>
     public double LearningRate { get; set; } = double.NaN;
 
     /// <summary>
-    /// The paper's weight decay. Unset means the paper does not state one.
+    /// The paper's weight decay. Unset means unstated.
     /// </summary>
     /// <remarks>
     /// Worth declaring explicitly as <c>0</c> when a paper specifies plain Adam, because AdamW
-    /// otherwise contributes its own decoupled decay of 0.01 to every parameter on every step. That
-    /// is not hypothetical: it is exactly the defect commit <c>1972a510a</c> fixed in
-    /// <c>SpanBasedNERBase</c>, where no span-NER paper asks for that decay.
+    /// otherwise contributes its own decoupled decay of 0.01 to every parameter on every step —
+    /// the defect commit <c>1972a510a</c> fixed in <c>SpanBasedNERBase</c>. Note also that L2
+    /// regularization in Adam and decoupled decay in AdamW are not the same operation, which is
+    /// another reason the optimizer must be declared alongside the number.
     /// </remarks>
     public double WeightDecay { get; set; } = double.NaN;
 
-    /// <summary>The paper's first moment decay (Adam-family beta1). Unset means unstated.</summary>
+    /// <summary>First moment decay (Adam-family beta1). Unset means unstated.</summary>
     public double Beta1 { get; set; } = double.NaN;
 
-    /// <summary>The paper's second moment decay (Adam-family beta2). Unset means unstated.</summary>
+    /// <summary>Second moment decay (Adam-family beta2). Unset means unstated.</summary>
     public double Beta2 { get; set; } = double.NaN;
 
-    /// <summary>The paper's numerical-stability epsilon. Unset means unstated.</summary>
+    /// <summary>Numerical-stability epsilon. Unset means unstated.</summary>
     public double Epsilon { get; set; } = double.NaN;
 
-    /// <summary>True when this declaration states at least one hyperparameter.</summary>
+    /// <summary>Momentum coefficient, for SGD-momentum, RMSProp and friends. Unset means unstated.</summary>
+    public double Momentum { get; set; } = double.NaN;
+
+    /// <summary>Whether the paper uses Nesterov momentum.</summary>
+    public bool UseNesterov { get; set; }
+
+    /// <summary>RMSProp's decay / smoothing constant (often written rho or alpha). Unset means unstated.</summary>
+    public double Rho { get; set; } = double.NaN;
+
+    // ---- Learning-rate schedule ----------------------------------------------------------
+
+    /// <summary>
+    /// The learning-rate schedule the paper uses.
+    /// </summary>
     /// <remarks>
-    /// <c>NaN</c> is the "unset" marker because it is the one double value that cannot be a
-    /// legitimate hyperparameter, so no real paper value is mistaken for an omission. Comparing
-    /// against 0 would misread a deliberately declared <c>WeightDecay = 0</c> as unstated, which is
-    /// precisely the case that matters most.
+    /// <para>
+    /// The schedule is part of the recipe, not an implementation detail. A post-LN transformer
+    /// trained without warmup diverges at the same learning rate that works with it, and a CNN
+    /// trained at a constant rate lands materially worse than one with step decay. Declaring the
+    /// rate while ignoring the schedule reproduces neither.
+    /// </para>
+    /// <para>
+    /// Left at <see cref="LearningRateSchedulerType.Constant"/> means the paper trains at a fixed
+    /// rate, or does not say. The schedule's parameters are the properties below; which ones apply
+    /// depends on the type chosen.
+    /// </para>
+    /// </remarks>
+    public LearningRateSchedulerType Schedule { get; set; } = LearningRateSchedulerType.Constant;
+
+    /// <summary>Warmup steps before the main schedule begins. Unset means no warmup.</summary>
+    /// <remarks>
+    /// The Transformer's 4000-step warmup is the canonical example; it is the difference between
+    /// training and diverging, not a tuning nicety.
+    /// </remarks>
+    public int WarmupSteps { get; set; }
+
+    /// <summary>Multiplicative decay factor, for exponential and step schedules. Unset means unstated.</summary>
+    public double DecayRate { get; set; } = double.NaN;
+
+    /// <summary>Interval, in steps or epochs, between decay events. Unset means unstated.</summary>
+    public int StepSize { get; set; }
+
+    /// <summary>Floor the schedule decays towards. Unset means unstated.</summary>
+    public double MinLearningRate { get; set; } = double.NaN;
+
+    // ---- Gradient clipping ---------------------------------------------------------------
+
+    /// <summary>The paper's gradient-norm clip. Unset means the paper does not clip.</summary>
+    /// <remarks>
+    /// Frequently specified for transformers and recurrent models, and frequently the reason a
+    /// reproduction is stable or not.
+    /// </remarks>
+    public double MaxGradientNorm { get; set; } = double.NaN;
+
+    /// <summary>True when this declaration states anything beyond the optimizer's identity.</summary>
+    /// <remarks>
+    /// <c>NaN</c> is the "unset" marker because it is the one double that cannot be a legitimate
+    /// hyperparameter, so no real paper value is mistaken for an omission. Comparing against 0
+    /// would misread a deliberately declared <c>WeightDecay = 0</c> — precisely the case that
+    /// matters most.
     /// </remarks>
     public bool DeclaresAnyHyperparameter
         => !double.IsNaN(LearningRate)
         || !double.IsNaN(WeightDecay)
         || !double.IsNaN(Beta1)
         || !double.IsNaN(Beta2)
-        || !double.IsNaN(Epsilon);
+        || !double.IsNaN(Epsilon)
+        || !double.IsNaN(Momentum)
+        || !double.IsNaN(Rho)
+        || !double.IsNaN(MinLearningRate)
+        || !double.IsNaN(MaxGradientNorm)
+        || UseNesterov
+        || WarmupSteps > 0
+        || StepSize > 0
+        || !double.IsNaN(DecayRate)
+        || Schedule != LearningRateSchedulerType.Constant;
 }

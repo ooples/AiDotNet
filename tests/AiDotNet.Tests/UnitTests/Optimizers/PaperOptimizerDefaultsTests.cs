@@ -1,49 +1,38 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.Models.Options;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Optimizers;
-using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Optimizers;
 
 /// <summary>
-/// Tests for the #1928 mechanism: a model that constructs its optimizer with no options should
-/// train at its paper's settings rather than the optimizer class's generic defaults.
+/// Tests for how a model's <c>[PaperOptimizer]</c> recipe is selected (#1928).
 /// </summary>
 /// <remarks>
-/// These exercise <see cref="PaperOptimizerDefaults.Resolve"/> directly, which is the exact call
-/// the four optimizer constructors now make (<c>: base(model, PaperOptimizerDefaults.Resolve(model,
-/// options, OptimizerKind.X))</c>), so they cover the real path without standing up a full model.
+/// <para>
+/// These cover selection, which is the part with branching. That the selected recipe actually
+/// produces the paper's optimizer is asserted against REAL model types in the population batch,
+/// because a declaration can only be attached to a type at compile time — a synthetic fixture here
+/// could not prove that a shipped model is wired.
+/// </para>
 /// </remarks>
 public class PaperOptimizerDefaultsTests
 {
-    private const double PaperLearningRate = 1.6e-4;
-    private const double PaperWeightDecay = 0.05;
-
     private sealed class Undeclared { }
 
-    [PaperOptimizer(OptimizerKind.AdamW,
-                    LearningRate = PaperLearningRate, WeightDecay = PaperWeightDecay,
+    [PaperOptimizer(OptimizerKind.SgdMomentum, LearningRate = 0.1, Momentum = 0.9, WeightDecay = 1e-4,
                     Source = "Synthetic fixture, not a real paper")]
-    private sealed class DeclaresAdamW { }
+    private sealed class DeclaresSgdMomentum { }
 
-    // A paper specifying plain Adam with NO weight decay. AdamW would otherwise contribute its own
-    // decoupled 0.01 to every parameter on every step -- the exact defect commit 1972a510a fixed in
-    // SpanBasedNERBase. Declaring zero has to be distinguishable from declaring nothing.
-    [PaperOptimizer(OptimizerKind.AdamW, WeightDecay = 0.0, Source = "Synthetic fixture")]
-    private sealed class DeclaresZeroWeightDecay { }
+    // A declaration carrying no values at all still identifies the optimizer, which is itself the
+    // most consequential part of the recipe -- it decides which algorithm runs.
+    [PaperOptimizer(OptimizerKind.Adam, Source = "Synthetic fixture")]
+    private sealed class DeclaresOptimizerOnly { }
 
-    [PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, Source = "Synthetic fixture")]
-    private sealed class DeclaresAdamOnly { }
-
-    private sealed class SizedModel : IPaperOptimizerVariant
-    {
-        public SizedModel(string? variant) => PaperOptimizerVariant = variant;
-        public string? PaperOptimizerVariant { get; }
-    }
+    [PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 0.5, Source = "Synthetic fixture")]
+    private sealed class DeclaresUnspecified { }
 
     [PaperOptimizer(OptimizerKind.AdamW, LearningRate = 9e-9, Source = "fixture: default row")]
     [PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, Variant = "Tiny", Source = "fixture: Table 8")]
@@ -54,126 +43,111 @@ public class PaperOptimizerDefaultsTests
         public string? PaperOptimizerVariant { get; }
     }
 
-    private static AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>> ResolveAdamW(
-        object? model, AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>? caller = null)
-        => PaperOptimizerDefaults.Resolve(model, caller, OptimizerKind.AdamW);
-
     [Fact]
-    public void ModelWithNoDeclaration_KeepsTheLibraryDefaults()
+    public void AModelDeclaringNothing_ResolvesToNoRecipe()
     {
-        // Control arm. Without this, every assertion below could pass simply because the mechanism
-        // overwrites everything it touches.
-        var untouched = new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>();
-        var resolved = ResolveAdamW(new Undeclared());
-
-        Assert.Equal(untouched.InitialLearningRate, resolved.InitialLearningRate);
-        Assert.Equal(untouched.WeightDecay, resolved.WeightDecay);
+        // The behaviour-neutrality guarantee: with no declaration the factory returns nothing and
+        // the call site keeps the optimizer it already constructed. Without this, migrating 592
+        // call sites would silently change how every model trains.
+        Assert.Null(PaperOptimizerFactory.Find(new Undeclared()));
     }
 
     [Fact]
-    public void DeclaredHyperparameters_AreAppliedWhenTheCallerSuppliesNoOptions()
+    public void ANullModel_IsSafe()
     {
-        var resolved = ResolveAdamW(new DeclaresAdamW());
-
-        Assert.Equal(PaperLearningRate, resolved.InitialLearningRate);
-        Assert.Equal(PaperWeightDecay, resolved.WeightDecay);
-
-        // And they genuinely differ from the defaults, or the assertion proves nothing.
-        var untouched = new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>();
-        Assert.NotEqual(untouched.InitialLearningRate, resolved.InitialLearningRate);
-        Assert.NotEqual(untouched.WeightDecay, resolved.WeightDecay);
+        Assert.Null(PaperOptimizerFactory.Find(null));
     }
 
     [Fact]
-    public void CallerSuppliedOptions_AlwaysWin()
+    public void TheDeclaredOptimizerAndItsScalarsAreResolved()
     {
-        // ConfigureOptimizer must never be overridden by a paper default; the paper is the default,
-        // not the law.
-        var caller = new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>
-        {
-            InitialLearningRate = 0.42,
-            WeightDecay = 0.99,
-        };
+        var recipe = PaperOptimizerFactory.Find(new DeclaresSgdMomentum());
 
-        var resolved = ResolveAdamW(new DeclaresAdamW(), caller);
-
-        Assert.Same(caller, resolved);
-        Assert.Equal(0.42, resolved.InitialLearningRate);
-        Assert.Equal(0.99, resolved.WeightDecay);
+        Assert.NotNull(recipe);
+        // The optimizer identity is the point: this model's paper trains with SGD-momentum, and an
+        // earlier design would have discarded the whole recipe because the model builds Adam.
+        Assert.Equal(OptimizerKind.SgdMomentum, recipe!.Optimizer);
+        Assert.Equal(0.1, recipe.LearningRate, precision: 12);
+        Assert.Equal(0.9, recipe.Momentum, precision: 12);
+        Assert.Equal(1e-4, recipe.WeightDecay, precision: 12);
     }
 
     [Fact]
-    public void ADeclarationForADifferentOptimizer_IsNotApplied()
+    public void ARecipeNamingOnlyTheOptimizer_IsStillResolved()
     {
-        // A learning rate chosen for Adam is not a learning rate for AdamW. Transplanting values
-        // across optimizers would be worse than the default it replaced.
-        var untouched = new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>();
-        var resolved = ResolveAdamW(new DeclaresAdamOnly());
+        // Knowing the paper uses Adam rather than AdamW matters even with no numbers attached:
+        // AdamW's decoupled decay is applied on every step and is not the same operation as Adam's
+        // L2. So a declaration with no scalars is still worth honouring.
+        var recipe = PaperOptimizerFactory.Find(new DeclaresOptimizerOnly());
 
-        Assert.Equal(untouched.InitialLearningRate, resolved.InitialLearningRate);
+        Assert.NotNull(recipe);
+        Assert.Equal(OptimizerKind.Adam, recipe!.Optimizer);
+        Assert.False(recipe.DeclaresAnyHyperparameter);
     }
 
     [Fact]
-    public void ExplicitZeroWeightDecay_IsAppliedRatherThanTreatedAsUnset()
+    public void ARecipeLeftUnspecified_IsIgnored()
     {
-        // The case that matters most. AdamW's own default is 0.01, so a paper specifying plain Adam
-        // needs to say zero and have it stick. If "unset" were encoded as 0 instead of NaN, this
-        // declaration would be silently ignored and the defect would survive the fix.
-        var untouched = new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>();
-        Assert.Equal(0.01, untouched.WeightDecay);
-
-        var resolved = ResolveAdamW(new DeclaresZeroWeightDecay());
-
-        Assert.Equal(0.0, resolved.WeightDecay);
-        // Unstated values are left alone -- this declaration says nothing about the learning rate.
-        Assert.Equal(untouched.InitialLearningRate, resolved.InitialLearningRate);
+        // Unspecified names no algorithm, so there is nothing to build; falling through to the
+        // caller's default beats guessing.
+        Assert.Null(PaperOptimizerFactory.Find(new DeclaresUnspecified()));
     }
 
     [Theory]
     [InlineData("Tiny", 1e-4)]
     [InlineData("Huge", 5e-5)]
-    public void VariantKeyedDeclaration_SelectsTheMatchingRow(string variant, double expected)
+    public void AVariantKeyedRecipe_SelectsTheMatchingRow(string variant, double expected)
     {
-        var resolved = ResolveAdamW(new VariantModel(variant));
-        Assert.Equal(expected, resolved.InitialLearningRate);
+        var recipe = PaperOptimizerFactory.Find(new VariantModel(variant));
+        Assert.NotNull(recipe);
+        Assert.Equal(expected, recipe!.LearningRate, precision: 12);
     }
 
     [Fact]
-    public void AVariantWithNoRowOfItsOwn_FallsBackToTheUnkeyedDeclaration()
+    public void AVariantWithNoRowOfItsOwn_FallsBackToTheUnkeyedRecipe()
     {
-        // Partial population is the expected steady state: sizes get filled in as papers are read.
-        var resolved = ResolveAdamW(new VariantModel("SomeSizeNobodyDeclared"));
-        Assert.Equal(9e-9, resolved.InitialLearningRate);
+        // Partial population is the expected steady state as sizes get filled in one at a time.
+        var recipe = PaperOptimizerFactory.Find(new VariantModel("SomeSizeNobodyDeclared"));
+        Assert.Equal(9e-9, recipe!.LearningRate, precision: 12);
     }
 
     [Fact]
-    public void AModelExposingNoVariant_UsesTheUnkeyedDeclaration()
+    public void AModelExposingNoVariant_UsesTheUnkeyedRecipe()
     {
-        var resolved = ResolveAdamW(new VariantModel(null));
-        Assert.Equal(9e-9, resolved.InitialLearningRate);
+        var recipe = PaperOptimizerFactory.Find(new VariantModel(null));
+        Assert.Equal(9e-9, recipe!.LearningRate, precision: 12);
     }
 
     [Fact]
-    public void ANullModel_IsSafeAndChangesNothing()
+    public void UnsetIsNaN_SoAnExplicitZeroIsDistinguishable()
     {
-        // Optimizers accept a null model and have it set later, so resolution must tolerate it.
-        var untouched = new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>();
-        var resolved = ResolveAdamW(model: null);
+        // The case that matters most. A paper specifying plain Adam declares WeightDecay = 0 and it
+        // must stick, because AdamW's own default is 0.01 applied to every parameter on every step.
+        // Encoding unset as 0 would silently drop exactly that declaration.
+        var zero = new PaperOptimizerAttribute(OptimizerKind.Adam) { WeightDecay = 0.0 };
+        var unset = new PaperOptimizerAttribute(OptimizerKind.Adam);
 
-        Assert.Equal(untouched.InitialLearningRate, resolved.InitialLearningRate);
-        Assert.Equal(untouched.WeightDecay, resolved.WeightDecay);
+        Assert.True(zero.DeclaresAnyHyperparameter);
+        Assert.False(unset.DeclaresAnyHyperparameter);
+        Assert.True(double.IsNaN(unset.WeightDecay));
     }
 
     [Fact]
-    public void AnOptionsTypeWithoutTheDeclaredKnob_SkipsItRatherThanThrowing()
+    public void ScheduleAndClippingArePartOfTheRecipe()
     {
-        // AdamOptimizerOptions has no WeightDecay. A paper that states one is telling the reader
-        // something true that this optimizer cannot express -- information, not a crash.
-        var resolved = PaperOptimizerDefaults.Resolve(
-            new DeclaresAdamW(),
-            (AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>?)null,
-            OptimizerKind.AdamW);
+        // The schedule is not an implementation detail: a post-LN transformer without warmup
+        // diverges at the same learning rate that works with it. Declaring the rate while dropping
+        // the schedule reproduces neither.
+        var recipe = new PaperOptimizerAttribute(OptimizerKind.Adam)
+        {
+            Schedule = LearningRateSchedulerType.LinearWarmup,
+            WarmupSteps = 4000,
+            MaxGradientNorm = 1.0,
+        };
 
-        Assert.Equal(PaperLearningRate, resolved.InitialLearningRate);
+        Assert.True(recipe.DeclaresAnyHyperparameter);
+        Assert.Equal(LearningRateSchedulerType.LinearWarmup, recipe.Schedule);
+        Assert.Equal(4000, recipe.WarmupSteps);
+        Assert.Equal(1.0, recipe.MaxGradientNorm, precision: 12);
     }
 }

@@ -168,7 +168,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     public Adam8BitOptimizer(
         IFullModel<T, TInput, TOutput>? model,
         Adam8BitOptimizerOptions<T, TInput, TOutput>? options = null)
-        : base(model, PaperOptimizerDefaults.Resolve(model, options, OptimizerKind.Adam8Bit))
+        : base(model, options ?? new())
     {
         _t = 0;
         _currentBeta1 = NumOps.Zero;

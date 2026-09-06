@@ -80,9 +80,31 @@ public class PaperOptimizerAnalyzer : DiagnosticAnalyzer
         description: "Ambiguous declarations make the applied hyperparameters depend on attribute "
             + "ordering rather than on what the paper says.");
 
+
+    /// <summary>A declared recipe that nothing routes through the factory, so it never applies.</summary>
+    /// <remarks>
+    /// The declaration is only half the work: the model must also build its optimizer through
+    /// <c>PaperOptimizerFactory.CreateFor</c>, or the recipe sits in source looking authoritative
+    /// while the model keeps training on its hardcoded default. That failure is invisible at
+    /// runtime -- nothing throws, the numbers are simply not the paper's -- which is exactly the
+    /// class of defect #1928 is about, so it is worth a build error rather than a note.
+    /// </remarks>
+    private static readonly DiagnosticDescriptor DeclarationNotWired = new(
+        "AIDN104",
+        "Declared paper recipe is never used, because the optimizer is still hardcoded",
+        "'{0}' declares [PaperOptimizer] but constructs its optimizer directly, so the recipe is "
+            + "inert. Route the construction through PaperOptimizerFactory.CreateFor, keeping the "
+            + "existing constructor as the fallback: optimizer ?? PaperOptimizerFactory.CreateFor(this) "
+            + "?? new SomeOptimizer(this)",
+        "AiDotNet.PaperFidelity",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "A recipe that is declared but not wired reads as if the model trains at its "
+            + "paper's settings when it does not.");
+
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
-        => ImmutableArray.Create(MissingPaperOptimizer, MissingSource, DuplicateDeclaration);
+        => ImmutableArray.Create(MissingPaperOptimizer, MissingSource, DuplicateDeclaration, DeclarationNotWired);
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)
@@ -151,7 +173,20 @@ public class PaperOptimizerAnalyzer : DiagnosticAnalyzer
                     variant.Length == 0 ? "(default)" : variant));
             }
         }
+
+        if (ConstructsOptimizerWithoutOptions(declaration) && !RoutesThroughPaperOptimizerFactory(declaration))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                DeclarationNotWired, declaration.Identifier.GetLocation(), type.Name));
+        }
     }
+
+    /// <summary>True when the class builds its optimizer through the paper-recipe factory.</summary>
+    private static bool RoutesThroughPaperOptimizerFactory(ClassDeclarationSyntax declaration)
+        => declaration.DescendantNodes()
+            .OfType<MemberAccessExpressionSyntax>()
+            .Any(access => access.Name.Identifier.Text == "CreateFor"
+                && access.Expression is IdentifierNameSyntax { Identifier.Text: "PaperOptimizerFactory" });
 
     /// <summary>
     /// True when the class contains a <c>new SomethingOptimizer&lt;...&gt;(this)</c> with no options
