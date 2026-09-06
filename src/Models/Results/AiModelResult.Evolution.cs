@@ -84,16 +84,20 @@ public partial class AiModelResult<T, TInput, TOutput>
         EvolutionRunResultObject as EvolutionRunResult<TGenome>;
 
     /// <summary>
-    /// Gets whether this result came from an evolution run and therefore carries no trained model.
+    /// Gets whether this result came from an evolution run that did not materialize its winner as a model.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Evolution searches a space of candidates; it does not fit a model to data. A result built this way has an
-    /// empty <c>OptimizationResult</c> and a <see langword="null"/> <c>Model</c>, so the prediction and persistence
+    /// Evolution normally returns genomes rather than fitting a model. A genome-only result has an empty
+    /// <c>OptimizationResult</c> and a <see langword="null"/> <c>Model</c>, so the prediction and persistence
     /// surface cannot work: <c>Predict</c> throws <see cref="InvalidOperationException"/> explaining that no model
     /// was built, and <c>SaveModel</c> writes a payload with no model in it. Everything the run actually produced is
     /// on <see cref="EvolutionSummary"/>, <see cref="ProgramEvolution"/>, and
     /// <see cref="GetEvolutionRunResult{TGenome}"/>.
+    /// </para>
+    /// <para>
+    /// A typed evolution configuration can instead supply a winner model factory; in that case this property is
+    /// <see langword="false"/> and the ordinary prediction surface uses the materialized winner.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Check this before calling <c>Predict</c>. If it is <see langword="true"/>, there is no
