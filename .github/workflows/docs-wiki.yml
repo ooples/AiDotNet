@@ -60,7 +60,7 @@ jobs:
       # 367 verified ones. The generator now labels every example ```csharp, so they are all checked, and
       # the counts below are ratcheted the same way as the XML pass.
       - name: Compile-check doc + wiki snippets
-        run: dotnet run --project tools/DocSnippetVerify -c Debug -- website --min-pass 1587 --max-fail 113
+        run: dotnet run --project tools/DocSnippetVerify -c Debug -- website --min-pass 1592 --max-fail 108
 
       # Compile-check the <example> blocks in the source XML doc comments. These are the examples a user
       # sees in IntelliSense and on the API reference pages, and they were never gated: this step's
