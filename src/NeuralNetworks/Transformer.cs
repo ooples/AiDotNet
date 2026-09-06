@@ -43,10 +43,14 @@ namespace AiDotNet.NeuralNetworks;
 /// <code>
 /// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
 /// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
-/// var options = new TransformerOptions { };
 /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128, 512 });
+/// var architecture = new TransformerArchitecture&lt;float&gt;(
+///     InputType.OneDimensional, NeuralNetworkTaskType.SequenceClassification,
+///     numEncoderLayers: 0, numDecoderLayers: 2, numHeads: 2,
+///     modelDimension: 32, feedForwardDimension: 64,
+///     NetworkComplexity.Simple, inputSize: 64, outputSize: 64);
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
-///     .ConfigureModel(new Transformer&lt;float&gt;(options))
+///     .ConfigureModel(new Transformer&lt;float&gt;(architecture))
 ///     .Build(trainX, trainY);
 /// var output = result.Predict(input);
 /// </code>

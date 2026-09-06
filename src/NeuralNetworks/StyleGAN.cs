@@ -59,8 +59,12 @@ namespace AiDotNet.NeuralNetworks;
 /// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 512 });
 /// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
 /// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var mappingNetworkArchitecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 8);
+/// var synthesisNetworkArchitecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 1);
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
-///     .ConfigureModel(new StyleGAN&lt;float&gt;(options))
+///     .ConfigureModel(new StyleGAN&lt;float&gt;(
+///         mappingNetworkArchitecture, synthesisNetworkArchitecture,
+///         inputType: InputType.OneDimensional))
 ///     .Build(trainX, trainY);
 /// var generated = result.Predict(noise);
 /// </code>
