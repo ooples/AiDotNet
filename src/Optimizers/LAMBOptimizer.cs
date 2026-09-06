@@ -56,6 +56,7 @@ namespace AiDotNet.Optimizers;
 ///     WeightDecay = 0.01,
 ///     WarmupEpochs = 1
 /// };
+/// var model = new SimpleRegression&lt;float&gt;();
 /// var optimizer = new LAMBOptimizer&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;(model, options);
 /// </code>
 /// </example>

@@ -47,6 +47,7 @@ namespace AiDotNet.Optimizers;
 ///     TrustCoefficient = 0.001,
 ///     WarmupEpochs = 10
 /// };
+/// var model = new SimpleRegression&lt;float&gt;();
 /// var optimizer = new LARSOptimizer&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;(model, options);
 /// </code>
 /// </example>

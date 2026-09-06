@@ -61,10 +61,12 @@ namespace AiDotNet.NeuralNetworks;
 /// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
 /// var mappingNetworkArchitecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 8);
 /// var synthesisNetworkArchitecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 1);
+/// var discriminatorArchitecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 1);
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
 ///     .ConfigureModel(new StyleGAN&lt;float&gt;(
 ///         mappingNetworkArchitecture, synthesisNetworkArchitecture,
-///         inputType: InputType.OneDimensional))
+///         discriminatorArchitecture,
+///         latentSize: 512, intermediateLatentSize: 512))
 ///     .Build(trainX, trainY);
 /// var generated = result.Predict(noise);
 /// </code>

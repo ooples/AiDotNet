@@ -44,7 +44,8 @@ namespace AiDotNet.NeuralNetworks;
 ///     var discriminatorArchitecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 1);
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
 ///     .ConfigureModel(new GenerativeAdversarialNetwork&lt;float&gt;(
-///         discriminatorArchitecture, InputType.OneDimensional))
+///         generatorArchitecture, discriminatorArchitecture,
+///         inputType: InputType.OneDimensional))
 ///     .Build(trainX, trainY);
 /// var generated = result.Predict(noise);
 /// </code>

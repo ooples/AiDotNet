@@ -41,6 +41,7 @@ namespace AiDotNet.Optimizers;
 ///     Beta1 = 0.9,
 ///     Beta2 = 0.999
 /// };
+/// var model = new SimpleRegression&lt;float&gt;();
 /// var optimizer = new AdamWOptimizer&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;(model, options);
 /// </code>
 /// </example>
