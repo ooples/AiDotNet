@@ -67,6 +67,17 @@ public enum LearningRateSchedulerType
     TriStage,
 
     /// <summary>
+    /// The Noam schedule: linear warmup, then inverse-square-root decay.
+    /// </summary>
+    /// <remarks>
+    /// The schedule of Vaswani et al. 2017 Sec. 5.3, and the one a large part of the transformer
+    /// literature means by "the transformer learning rate schedule". Its peak is a function of the
+    /// model dimension rather than a stated constant, so unlike every other member here it cannot
+    /// be built from the recipe alone.
+    /// </remarks>
+    Noam,
+
+    /// <summary>
     /// Cyclic learning rate: oscillate between bounds.
     /// </summary>
     Cyclic,

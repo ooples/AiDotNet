@@ -359,6 +359,25 @@ public static class PaperOptimizerFactory
             "warmup held at its share of the run; same treatment as the #1835 densification window");
         return scaled;
     }
+    /// <summary>The model dimension, when the options expose one under a name we recognise.</summary>
+    /// <remarks>
+    /// Only the Noam schedule needs this, and only because its peak rate is derived from the
+    /// dimension rather than stated. Returns 0 when nothing matches, which leaves the schedule
+    /// reported as unhonoured -- deliberately, since guessing a dimension would silently produce a
+    /// peak rate that appears in no paper.
+    /// </remarks>
+    private static int ModelDimension(object options)
+    {
+        foreach (string name in new[] { "ModelDimension", "ModelDim", "HiddenDim", "HiddenSize",
+                                        "EmbeddingSize", "EmbeddingDimension", "DModel" })
+        {
+            int value = GetInt(options, name);
+            if (value > 0) return value;
+        }
+
+        return 0;
+    }
+
     private static int GetInt(object options, string propertyName)
     {
         PropertyInfo? property = options.GetType().GetProperty(
@@ -384,7 +403,8 @@ public static class PaperOptimizerFactory
 
         double baseRate = double.IsNaN(recipe.LearningRate) ? 0.001 : recipe.LearningRate;
         ILearningRateScheduler? scheduler = BuildScheduler(
-            recipe, baseRate, EffectiveWarmupSteps(options, recipe), GetInt(options, "MaxIterations"));
+            recipe, baseRate, EffectiveWarmupSteps(options, recipe), GetInt(options, "MaxIterations"),
+            ModelDimension(options));
         if (scheduler is not null) schedulerProperty.SetValue(options, scheduler);
     }
 
@@ -397,7 +417,8 @@ public static class PaperOptimizerFactory
     /// schedule is harder to notice than a missing one.
     /// </remarks>
     private static ILearningRateScheduler? BuildScheduler(
-        PaperOptimizerAttribute recipe, double baseRate, int warmupSteps, int totalSteps)
+        PaperOptimizerAttribute recipe, double baseRate, int warmupSteps, int totalSteps,
+        int modelDimension)
     {
         // A floor of zero is the usual published one, and it is also the correct fallback for the
         // schedulers below, all of which decay towards zero when no floor is named.
@@ -418,6 +439,14 @@ public static class PaperOptimizerFactory
                            holdSteps: double.IsNaN(recipe.HoldFraction)
                                ? 0 : (int)Math.Round(totalSteps * recipe.HoldFraction),
                            totalSteps: totalSteps, minLearningRate: floor),
+
+                // Alone among the schedules here, Noam has no stated peak rate: it is
+                // factor * d^-0.5 * min(t^-0.5, t * warmup^-1.5), a function of the model
+                // dimension. When that dimension cannot be found the schedule is reported as
+                // unhonoured rather than approximated, because the nearest shape this library
+                // has decays linearly and Noam decays as the inverse square root.
+                LearningRateSchedulerType.Noam when modelDimension > 0 && warmupSteps > 0
+                    => new NoamSchedule(modelDimension, warmupSteps),
 
                 LearningRateSchedulerType.Exponential when !double.IsNaN(recipe.DecayRate)
                     => new ExponentialLRScheduler(baseRate, recipe.DecayRate),

@@ -46,9 +46,9 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Conformer: Convolution-augmented Transformer for Speech Recognition", "https://arxiv.org/abs/2005.08100", Year = 2020, Authors = "Gulati et al.")]
 [PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-9,
-                WeightDecay = 1e-6, Schedule = LearningRateSchedulerType.LinearWarmup,
+                WeightDecay = 1e-6, Schedule = LearningRateSchedulerType.Noam,
                 WarmupSteps = 10000,
-                Source = "Gulati et al. 2020, Sec. 3.3: Adam with beta1 0.9, beta2 0.98, eps 1e-9, a transformer schedule with 10k warmup steps, and L2 regularization of 1e-6 on all trainable weights. No learning rate is declared because the paper gives the peak as 0.05/sqrt(d), a function of the encoder dimension rather than a constant.")]
+                Source = "Gulati et al. 2020, Sec. 3.3: Adam with beta1 0.9, beta2 0.98, eps 1e-9, the transformer (Noam) schedule of Vaswani et al. 2017 with 10k warmup steps, and L2 regularization of 1e-6 on all trainable weights. No learning rate is declared because the paper gives the peak as 0.05/sqrt(d), a function of the encoder dimension rather than a constant.")]
 public partial class ConformerCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly ConformerCTCOptions _options; public override ModelOptions GetOptions() => _options;
