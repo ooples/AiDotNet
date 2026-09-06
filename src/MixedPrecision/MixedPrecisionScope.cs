@@ -29,7 +29,8 @@ namespace AiDotNet.MixedPrecision;
 /// // Users typically don't need to create scopes manually
 ///
 /// // For advanced manual usage:
-/// using (var scope = new MixedPrecisionScope(context, policy))
+/// var context = new MixedPrecisionContext();
+/// using (var scope = new MixedPrecisionScope(context))
 /// {
 ///     // Forward pass happens here
 ///     var output = network.Forward(input);

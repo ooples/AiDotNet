@@ -45,10 +45,10 @@ namespace AiDotNet.Data.Structures;
 /// // Support set: 5 classes × 3 shots = 15 examples
 /// // Query set: 5 classes × 10 queries = 50 examples
 ///
-/// var supportX = new Tensor&lt;double&gt;(new[] { 15, 784 }); // 15 images, 784 pixels each
-/// var supportY = new Tensor&lt;double&gt;(new[] { 15, 5 });   // 15 one-hot labels, 5 classes
-/// var queryX = new Tensor&lt;double&gt;(new[] { 50, 784 });   // 50 query images
-/// var queryY = new Tensor&lt;double&gt;(new[] { 50, 5 });     // 50 query labels
+/// var supportX = new Matrix&lt;double&gt;(15, 784);  // 15 images, 784 pixels each
+/// var supportY = new Vector&lt;double&gt;(15);       // one label per support example
+/// var queryX = new Matrix&lt;double&gt;(50, 784);    // 50 query images
+/// var queryY = new Vector&lt;double&gt;(50);         // one label per query example
 ///
 /// var task = new MetaLearningTask&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;
 /// {
@@ -58,9 +58,8 @@ namespace AiDotNet.Data.Structures;
 ///     QuerySetY = queryY
 /// };
 ///
-/// // Use with MAML, Reptile, or SEAL algorithms
-/// var innerLoss = model.Train(task.SupportSetX, task.SupportSetY);
-/// var outerLoss = model.Evaluate(task.QuerySetX, task.QuerySetY);
+/// // Hand the task to MAML, Reptile or SEAL: each adapts on the support set and is scored on the
+/// // query set, which is what makes the split meaningful.
 /// </code>
 /// </example>
 public class MetaLearningTask<T, TInput, TOutput> : IMetaLearningTask<T, TInput, TOutput>
