@@ -194,11 +194,18 @@ public class PaperOptimizerAnalyzer : DiagnosticAnalyzer
         return $"variant '{variant}', component '{component}'";
     }
 
-    /// <summary>True when the class builds its optimizer through the paper-recipe factory.</summary>
+    /// <summary>True when the class reaches the paper-recipe factory at all.</summary>
+    /// <remarks>
+    /// Two ways count. <c>CreateFor</c> has the factory build the paper optimizer. <c>VerifyHandBuilt</c>
+    /// keeps an optimizer the model constructs itself and checks it against the declaration -- which
+    /// is what models that already implement their paper need, and several do: replacing a
+    /// dimension-aware Noam schedule, or an options object that deliberately disables clipping the
+    /// paper does not use, would make those models LESS faithful, not more.
+    /// </remarks>
     private static bool RoutesThroughPaperOptimizerFactory(ClassDeclarationSyntax declaration)
         => declaration.DescendantNodes()
             .OfType<MemberAccessExpressionSyntax>()
-            .Any(access => access.Name.Identifier.Text == "CreateFor"
+            .Any(access => access.Name.Identifier.Text is "CreateFor" or "VerifyHandBuilt"
                 && access.Expression is IdentifierNameSyntax { Identifier.Text: "PaperOptimizerFactory" });
 
     /// <summary>

@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.Diagnostics;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
@@ -63,6 +64,10 @@ namespace AiDotNet.Audio.TextToSpeech;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FastSpeech 2: Fast and High-Quality End-to-End Text to Speech", "https://arxiv.org/abs/2006.04558", Year = 2021, Authors = "Yi Ren, Chenxu Hu, Xu Tan, Tao Qin, Sheng Zhao, Zhou Zhao, Tie-Yan Liu")]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-9,
+                Schedule = LearningRateSchedulerType.Noam, WarmupSteps = 4000,
+                ReferenceBatchSize = 48,
+                Source = "Ren et al. 2021, Sec. 4.1: Adam with beta1 0.9, beta2 0.98, eps 1e-9 following the learning rate schedule of Vaswani et al. 2017, batch size 48 sentences, 160k steps. No constant rate is declared because that schedule states none.")]
 public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 {
     private readonly TtsOptions _options;
@@ -466,7 +471,9 @@ public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
         // Initialize optimizer and loss function
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Initialize available voices
         AvailableVoices = GetDefaultVoices();

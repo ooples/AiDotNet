@@ -200,6 +200,101 @@ public static class PaperOptimizerFactory
     /// Returns one report per component built. Empty when no optimizer has been constructed for the
     /// model yet, which for most models happens in their constructor.
     /// </remarks>
+    /// <summary>
+    /// Checks an optimizer the model built itself against its declared paper recipe, records the
+    /// result, and returns that same optimizer unchanged.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For models that already implement their paper by hand. Some of them are MORE faithful than
+    /// the factory could be: Transformer builds a Noam schedule from the architecture's own model
+    /// dimension, which a recipe cannot see, and PANNs deliberately turns off the gradient clipping
+    /// the options default to because the paper does not clip. Replacing either would lose the
+    /// thing that made it correct, so nothing here is replaced.
+    /// </para>
+    /// <para>
+    /// The declaration becomes an assertion instead. Every value the paper states is compared with
+    /// what the model actually built, and a difference is reported as a deviation naming both. That
+    /// is strictly stronger than the factory path: there the recipe IS the configuration and cannot
+    /// disagree with itself, whereas here a later edit that quietly moves a rate away from its
+    /// published value is caught and named.
+    /// </para>
+    /// </remarks>
+    public static IGradientBasedOptimizer<T, TInput, TOutput> VerifyHandBuilt<T, TInput, TOutput>(
+        IFullModel<T, TInput, TOutput> model,
+        IGradientBasedOptimizer<T, TInput, TOutput> optimizer,
+        string component = "")
+    {
+        if (optimizer is null)
+        {
+            // Nothing to verify and nothing to hand back; a caller reaching here with no
+            // optimizer has a bug worth surfacing rather than a state worth tolerating.
+            throw new ArgumentNullException(
+                nameof(optimizer), "VerifyHandBuilt checks an optimizer the model already built.");
+        }
+
+        if (model is null) return optimizer;
+
+        var recipe = Find(model, component);
+        if (recipe is null)
+        {
+            Record(model, TrainingRecipeReport.NotDeclaredFor(component));
+            return optimizer;
+        }
+
+        var mismatches = new List<string>();
+        object? options = null;
+        try { options = optimizer.GetOptions(); }
+        catch (Exception)
+        {
+            // An options accessor that throws must not take the model down; it only means this
+            // recipe cannot be checked, which is itself worth reporting.
+            mismatches.Add("the built optimizer did not expose its options, so the recipe could not be verified");
+        }
+
+        if (options is not null)
+        {
+            Compare(options, "InitialLearningRate", recipe.LearningRate, "LearningRate", mismatches);
+            Compare(options, "Beta1", recipe.Beta1, "Beta1", mismatches);
+            Compare(options, "Beta2", recipe.Beta2, "Beta2", mismatches);
+            Compare(options, "Epsilon", recipe.Epsilon, "Epsilon", mismatches);
+            Compare(options, "WeightDecay", recipe.WeightDecay, "WeightDecay", mismatches);
+            Compare(options, "MaxGradientNorm", recipe.MaxGradientNorm, "MaxGradientNorm", mismatches);
+        }
+
+        Record(model, new TrainingRecipeReport
+        {
+            Component = component,
+            PaperOptimizer = recipe.Optimizer,
+            AppliedOptimizer = optimizer.GetType().Name,
+            Source = recipe.Source,
+            Unhonoured = mismatches,
+        });
+
+        return optimizer;
+    }
+
+    /// <summary>Reports a hand-built value that disagrees with the paper.</summary>
+    /// <remarks>
+    /// An unstated value is skipped rather than compared against zero: a paper that says nothing
+    /// about weight decay is not a paper that says zero, and treating the two alike would report a
+    /// deviation on every model that simply declares less than the whole recipe.
+    /// </remarks>
+    private static void Compare(
+        object options, string propertyName, double declared, string label, List<string> mismatches)
+    {
+        if (double.IsNaN(declared)) return;
+
+        PropertyInfo? property = options.GetType().GetProperty(
+            propertyName, BindingFlags.Public | BindingFlags.Instance);
+        if (property is null || property.PropertyType != typeof(double)) return;
+
+        double actual = (double)(property.GetValue(options) ?? 0.0);
+        if (Math.Abs(actual - declared) <= Math.Abs(declared) * 1e-9) return;
+
+        mismatches.Add($"the paper states {label} {declared:G6} but this model builds {actual:G6}");
+    }
+
     public static IReadOnlyList<TrainingRecipeReport> ReportsFor(object? model)
     {
         if (model is null) return [];
@@ -447,6 +542,13 @@ public static class PaperOptimizerFactory
                 // has decays linearly and Noam decays as the inverse square root.
                 LearningRateSchedulerType.Noam when modelDimension > 0 && warmupSteps > 0
                     => new NoamSchedule(modelDimension, warmupSteps),
+
+                // The bounds are the declared rate and floor; StepSize is the half-cycle.
+                LearningRateSchedulerType.Cyclic
+                    when recipe.StepSize > 0 && !double.IsNaN(recipe.LearningRate)
+                    => new CyclicLRScheduler(
+                           baseLearningRate: floor, maxLearningRate: recipe.LearningRate,
+                           stepSizeUp: recipe.StepSize, mode: recipe.CyclicPolicy),
 
                 LearningRateSchedulerType.Exponential when !double.IsNaN(recipe.DecayRate)
                     => new ExponentialLRScheduler(baseRate, recipe.DecayRate),

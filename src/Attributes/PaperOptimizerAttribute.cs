@@ -208,6 +208,19 @@ public sealed class PaperOptimizerAttribute : Attribute
     /// </remarks>
     public double HoldFraction { get; set; } = double.NaN;
 
+    /// <summary>
+    /// Which cyclic policy the paper uses, for <see cref="LearningRateSchedulerType.Cyclic"/>.
+    /// </summary>
+    /// <remarks>
+    /// The policies differ in amplitude: triangular2 halves the range on every cycle where
+    /// triangular keeps it, so after four cycles -- what ECAPA-TDNN trains for (Desplanques et al.
+    /// 2020, Sec. 3) -- the two have drifted apart by 8x. For a cyclic schedule
+    /// <see cref="LearningRate"/> is the upper bound and <see cref="MinLearningRate"/> the lower,
+    /// with <see cref="StepSize"/> the half-cycle, which is how these papers state them.
+    /// </remarks>
+    public CyclicLRScheduler.CyclicMode CyclicPolicy { get; set; }
+        = CyclicLRScheduler.CyclicMode.Triangular;
+
     /// <summary>Multiplicative decay factor, for exponential and step schedules. Unset means unstated.</summary>
     public double DecayRate { get; set; } = double.NaN;
 
@@ -267,6 +280,7 @@ public sealed class PaperOptimizerAttribute : Attribute
         || !double.IsNaN(WarmupFraction)
         || !double.IsNaN(HoldFraction)
         || StepSize > 0
+        || CyclicPolicy != CyclicLRScheduler.CyclicMode.Triangular
         || PostWarmupDecay != LinearWarmupScheduler.DecayMode.Constant
         || !double.IsNaN(DecayRate)
         || Schedule != LearningRateSchedulerType.Constant;
