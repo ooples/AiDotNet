@@ -72,7 +72,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// var fromImage = pointE.GenerateFromImage(image, numPoints: 4096);
 ///
 /// // Export to PLY file for viewing in 3D software
-/// ExportToPLY(pointCloud, "chair.ply");
+/// // pointCloud is the result tensor — write it out with your own encoder.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]

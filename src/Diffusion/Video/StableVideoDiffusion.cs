@@ -73,7 +73,7 @@ namespace AiDotNet.Diffusion.Video;
 ///     seed: 42);
 ///
 /// // Output shape: [1, 25, 3, 576, 1024] (batch, frames, channels, height, width)
-/// SaveVideo(dynamicVideo, "output.mp4");
+/// // dynamicVideo is the result tensor — write it out with your own encoder.
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

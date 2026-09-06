@@ -551,6 +551,19 @@ if (suggestDecls)
         $"({suggestions.Count} declarations) -> {path}");
 }
 
+// Names the solver could not build. One of these blocks its entire snippet, so the list is the work
+// queue: either the candidate set needs to grow, or the example needs writing by hand.
+if (suggestDecls && unsolvable.Count > 0)
+{
+    Console.WriteLine("\nNames no candidate could build (each blocks its whole snippet):");
+    foreach (var g in unsolvable.GroupBy(n => n, StringComparer.Ordinal)
+                                .OrderByDescending(g => g.Count())
+                                .Take(40))
+    {
+        Console.WriteLine($"  {g.Count(),3}  {g.Key}");
+    }
+}
+
 Console.WriteLine("\nSample failures:");
 foreach (var f in failures.Take(30))
     Console.WriteLine($"  {f.file} #{f.idx}: {f.err}");

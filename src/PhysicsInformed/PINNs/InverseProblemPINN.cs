@@ -58,7 +58,9 @@ namespace AiDotNet.PhysicsInformed.PINNs
     ///     taskType: NeuralNetworkTaskType.Regression,
     ///     inputSize: 2, outputSize: 1);
     /// var inverseProblem = new HeatConductivityInverseProblem&lt;float&gt;();
-    /// var bc = new IBoundaryCondition&lt;float&gt;[] { dirichletBC };
+    /// // No IBoundaryCondition implementation ships with the library: write your own with
+    /// // IsOnBoundary, ComputeBoundaryResidual and Name, then put instances in this array.
+    /// var bc = Array.Empty&lt;IBoundaryCondition&lt;float&gt;&gt;();
     /// var pinn = new InverseProblemPINN&lt;float&gt;(architecture, inverseProblem, bc);
     /// </code>
     /// </example>
