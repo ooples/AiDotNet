@@ -61,6 +61,11 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     private readonly ReplayBuffer<T> ReplayBuffer;
     private readonly NeuralNetworkArchitecture<T> _architecture;
 
+    /// <summary>Current exploration rate, decayed from EpsilonStart toward EpsilonEnd on every training step.</summary>
+    private double _epsilon;
+
+
+
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
@@ -109,8 +114,23 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
         _qNetwork = new NeuralNetwork<T>(architecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         _targetNetwork = new NeuralNetwork<T>(architecture.CloneForModelConstruction(), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
+        _epsilon = TradingOptions.EpsilonStart;
         UpdateTargetNetwork();
     }
+
+    /// <summary>
+    /// Current exploration rate. Starts at <c>EpsilonStart</c> and decays toward <c>EpsilonEnd</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Epsilon is how often the agent ignores what it has learned and tries something at
+    /// random. It should start high (explore) and fall (exploit what you found). Exposed so a training loop can
+    /// record the curve and confirm that is actually happening.
+    /// </para>
+    /// </remarks>
+    public double Epsilon => _epsilon;
+
+
 
     #endregion
 
@@ -124,7 +144,14 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </remarks>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        if (training && RandomHelper.CreateSecureRandom().NextDouble() < TradingOptions.EpsilonStart)
+        // Compares against the CURRENT epsilon, not EpsilonStart.
+        //
+        // This read TradingOptions.EpsilonStart directly. EpsilonStart defaults to 1.0 and nothing ever
+        // decayed it - EpsilonEnd and EpsilonDecay were declared, validated against each other, and read by
+        // nobody - so the behaviour policy was 100% uniform random for the entire run. Every "learning curve"
+        // it produced was the return of a random policy, and the network's own Q-values were never once acted
+        // on during training.
+        if (training && RandomHelper.CreateSecureRandom().NextDouble() < _epsilon)
         {
             var action = new Vector<T>(TradingOptions.ActionSize);
             int randomAction = RandomHelper.CreateSecureRandom().Next(TradingOptions.ActionSize);
@@ -224,7 +251,22 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
         var expected = new Tensor<T>([n, actionCount], expectedData);
         _qNetwork.Train(states, expected);
 
-        if (RandomHelper.CreateSecureRandom().Next(TradingOptions.TargetUpdateFrequency) == 0)
+        // The inherited counter, which every other agent advances in its own Train() and which the state
+        // generator serialises. This agent never advanced it at all, so nothing downstream could tell how much
+        // training had happened.
+        TrainingSteps++;
+
+        // Decay epsilon toward EpsilonEnd. Multiplicative, matching what EpsilonDecay (0.995) means and what
+        // the reference DQNAgent already does.
+        _epsilon = Math.Max(TradingOptions.EpsilonEnd, _epsilon * TradingOptions.EpsilonDecay);
+
+        // Sync the target network on a DETERMINISTIC schedule.
+        //
+        // This was `rng.Next(TargetUpdateFrequency) == 0` - a coin flip with probability 1/N per step, not
+        // "every N steps". At the default N = 1000 a 600-step run expects 0.6 syncs, so the target network
+        // usually held its initial random weights for the whole run and the TD target was noise. It is also
+        // unreproducible: two runs with the same seed synced at different steps.
+        if (TrainingSteps % Math.Max(1, TradingOptions.TargetUpdateFrequency) == 0)
         {
             UpdateTargetNetwork();
         }
