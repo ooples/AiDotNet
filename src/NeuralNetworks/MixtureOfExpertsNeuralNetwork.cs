@@ -156,6 +156,9 @@ public partial class MixtureOfExpertsNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// var model = new MixtureOfExpertsNeuralNetwork&lt;float&gt;(options, architecture);
     ///
     /// // Use with AiModelBuilder (standard pattern)
+    /// var trainingData = Tensor&lt;float&gt;.CreateRandom(4, 128);
+    /// var trainingLabels = Tensor&lt;float&gt;.CreateRandom(4, 10);
+    /// 
     /// var builder = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;();
     /// var result = builder.ConfigureModel(model).Build(trainingData, trainingLabels);
     /// </code>

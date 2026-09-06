@@ -13,6 +13,10 @@
          output, so snippets can be compiled against the real assemblies. -->
     <ProjectReference Include="..\..\src\AiDotNet.csproj" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <!-- AiDotNet resolves this transitively but never copies it to an output directory, so
+         without an explicit reference the snippet compiler cannot resolve ILogger. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+
   </ItemGroup>
 
 </Project>

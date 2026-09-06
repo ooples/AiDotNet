@@ -347,7 +347,7 @@ public class AugmentationConfig
 /// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
 /// var config = new AugmentationConfig&lt;float, Tensor&lt;float&gt;&gt;
 /// {
-///     Augmenter = new MyTensorAugmenter(), // fully typed — IntelliSense + compile check
+///     Augmenter = new Compose&lt;float, Tensor&lt;float&gt;&gt;(), // fully typed — IntelliSense + compile check
 ///     ImageSettings = new ImageAugmentationSettings { EnableFlips = true },
 /// };
 /// builder.ConfigureAugmentation(config);

@@ -123,12 +123,18 @@ var zeroArgFactories = new List<(string Returns, string Call)>();
     }
 }
 
+// A few namespaces belong to dependencies rather than to AiDotNet, but appear in AiDotNet's own public
+// signatures — GpuDiagnosticsLoggerExtensions.ToSink extends ILogger. A reader of that API has the
+// namespace imported; the harness needs it for the same reason. Listed rather than discovered, because
+// importing every dependency namespace would invite ambiguity with AiDotNet's own type names.
+foreach (var ns in new[] { "Microsoft.Extensions.Logging" }) discoveredUsings.Add(ns);
+
 string commonUsings =
     "using System;using System.Collections.Generic;using System.Linq;" +
     "using System.Threading;using System.Threading.Tasks;" +
     string.Concat(discoveredUsings.Select(n => $"using {n};")) + "\n";
 
-Console.WriteLine($"Imported {discoveredUsings.Count} AiDotNet namespaces into the snippet harness.");
+Console.WriteLine($"Imported {discoveredUsings.Count} namespaces into the snippet harness.");
 
 var blockRe = new Regex("```csharp\\s*?\\n(.*?)```", RegexOptions.Singleline);
 // The kind label can contain spaces ("Base Classes"), so it is matched as anything between backticks.

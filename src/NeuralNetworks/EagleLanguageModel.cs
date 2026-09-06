@@ -27,13 +27,20 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new AiDotNet.NeuralNetworks.Options.EagleOptions { VocabSize = 65536, ModelDim = 2560, NumLayers = 32, NumHeads = 40 };
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     InputType.OneDimensional, NeuralNetworkTaskType.TextGeneration,
+///     inputSize: 128, outputSize: 65536);
+///
 /// var tokens = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 128 });
 /// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
 /// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+///
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
-///     .ConfigureModel(new EagleLanguageModel&lt;float&gt;(options))
+///     .ConfigureModel(new EagleLanguageModel&lt;float&gt;(
+///         architecture,
+///         vocabSize: 65536, modelDimension: 2560, numLayers: 32, numHeads: 40))
 ///     .Build(trainX, trainY);
+///
 /// var logits = result.Predict(tokens);
 /// </code>
 /// </example>

@@ -35,8 +35,8 @@ public static class GpuDiagnosticsLoggerExtensions
     /// </exception>
     /// <example>
     /// <code>
-    /// services.AddLogging();
-    /// var logger = serviceProvider.GetRequiredService&lt;ILogger&lt;MyApp&gt;&gt;();
+    /// // any ILogger will do — one from DI, from a factory, or a test double
+    /// ILogger logger = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
     /// AiDotNet.Configuration.GpuDiagnosticsConfig.Sink = logger.ToSink();
     /// </code>
     /// </example>

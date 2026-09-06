@@ -55,9 +55,12 @@ namespace AiDotNet.CausalInference;
 /// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// var outcome = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
 /// var treatment = new Vector&lt;int&gt;(new int[] { 0, 1, 0, 1 });   // who was treated
+///
 /// var psm = new PropensityScoreMatching&lt;double&gt;(caliper: 0.2, matchRatio: 1);
-/// psm.Fit(features, treatment, outcome);
-/// double att = psm.EstimateAtt();
+/// psm.Fit(features, treatment);
+///
+/// // effect on the treated, with its standard error
+/// var (att, se) = psm.EstimateATT(features, treatment, outcome);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

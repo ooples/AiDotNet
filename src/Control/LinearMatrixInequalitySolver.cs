@@ -51,6 +51,13 @@ namespace AiDotNet.Control;
 /// <code>
 /// // Find a diagonal P = diag(x0, x1) that is positive definite:
 /// //   F(x) = -epsilon*I + x0*E00 + x1*E11 &gt;= 0
+/// var constantTerm = Matrix&lt;double&gt;.CreateIdentity(2).Multiply(-1e-6);
+/// var basis = new List&lt;Matrix&lt;double&gt;&gt;
+/// {
+///     new Matrix&lt;double&gt;(new double[,] { { 1.0, 0.0 }, { 0.0, 0.0 } }),   // E00
+///     new Matrix&lt;double&gt;(new double[,] { { 0.0, 0.0 }, { 0.0, 1.0 } })    // E11
+/// };
+///
 /// var result = new LinearMatrixInequalitySolver&lt;double&gt;().Solve(constantTerm, basis);
 /// if (result.Status == LinearMatrixInequalityStatus.Feasible)
 /// {
