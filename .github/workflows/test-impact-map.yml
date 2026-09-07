@@ -246,15 +246,29 @@ jobs:
             if ([string] $j.conclusion -ne 'success') { [void] $failedShards.Add($name.Substring($i + 4)) }
           }
           $pruned = 0
+          $prunedShards = @()
           foreach ($f in $carried) {
             $shard = [string] (Get-Content $f.FullName -Raw | ConvertFrom-Json).shard
             if ($failedShards.Contains($shard)) {
               Write-Host "pruning carried digest for failed shard '$shard' - it becomes always-run"
               Remove-Item -LiteralPath $f.FullName -Force
               $pruned++
+              $prunedShards += $shard
             }
           }
           Write-Host "carried digests: $($carried.Count), pruned: $pruned"
+
+          # A pruned shard does not merely become always-run: every file that ONLY it covered drops
+          # out of the map, so any PR touching those files escalates to the complete matrix, and the
+          # nightly audit escalates too and therefore never certifies. One failed shard is enough to
+          # disable selective CI repo-wide, and it previously did so for days while this step still
+          # reported success. Say it loudly rather than in a Write-Host nobody reads.
+          if ($pruned -gt 0) {
+            $list = ($prunedShards | Sort-Object) -join ', '
+            Write-Host "::warning::shard map degraded - pruned $pruned failed shard(s): $list. Files covered only by these shards are now unmapped, so PRs touching them escalate to the complete matrix."
+            "### Shard map degraded`n`n$pruned shard(s) failed in source run ${{ steps.source.outputs.run_id }} and were pruned from the map: **$list**.`n`nEach becomes always-run, and any file covered only by them is now unmapped, so PRs touching those files escalate to the complete matrix. Fix the failing shard(s) to restore selective CI." |
+              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
 
       - name: Build the map
         if: steps.source.outputs.found == 'true'
@@ -384,6 +398,16 @@ jobs:
           $certified = Test-Path -LiteralPath certified-map/certification.json
           "certified=$($certified.ToString().ToLowerInvariant())" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+          # Not certifying is the whole ballgame: the PR selector accepts only certified-shard-map,
+          # so with no certificate every pull request runs the complete matrix. This step still exits
+          # successfully and the upload below is merely 'skipped', which is precisely how a repo-wide
+          # CI regression stayed invisible across several attempted fixes. Announce it.
+          if (-not $certified) {
+            Write-Host "::warning::no certified shard map produced - $verdict. Until a candidate certifies, every pull request runs the complete shard matrix."
+            "### No certified shard map`n`nCertification was skipped: $verdict.`n`nThe pull-request selector accepts only a certified-shard-map artifact, so until a candidate certifies **every pull request runs the complete shard matrix**." |
+              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
           exit $auditExit
 
       - name: Upload certified map
