@@ -147,6 +147,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     private int _architectureLayerOwnershipEstablished;
 
+    /// <summary>
+    /// Tracks nested validation entry points so one failed validation chain rolls back its provisional
+    /// architecture claim exactly once at the outer transaction boundary.
+    /// </summary>
+    private int _customLayerValidationDepth;
+
 
     /// <summary>
     /// Gets the collection of layers that make up this neural network (read-only access).
@@ -4013,15 +4019,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <exception cref="ArgumentException">Thrown when the layer configuration is invalid.</exception>
     protected virtual void ValidateCustomLayers(List<ILayer<T>> layers)
     {
-        try
-        {
-            ValidateCustomLayersInternalCore(layers);
-        }
-        catch
-        {
-            RollbackRejectedCustomLayers();
-            throw;
-        }
+        ValidateWithOwnershipRollback(() => ValidateCustomLayersInternalCore(layers));
     }
 
     /// <summary>
@@ -4035,15 +4033,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     protected void ValidateCustomLayersWithOwnershipRollback(List<ILayer<T>> layers)
     {
-        try
-        {
-            ValidateCustomLayers(layers);
-        }
-        catch
-        {
-            RollbackRejectedCustomLayers();
-            throw;
-        }
+        ValidateWithOwnershipRollback(() => ValidateCustomLayers(layers));
     }
 
     /// <summary>
@@ -4052,14 +4042,28 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <param name="layers">The layers to validate.</param>
     protected void ValidateCustomLayersInternal(List<ILayer<T>> layers)
     {
+        ValidateWithOwnershipRollback(() => ValidateCustomLayersInternalCore(layers));
+    }
+
+    private void ValidateWithOwnershipRollback(Action validate)
+    {
+        bool ownsRollback = _customLayerValidationDepth++ == 0;
         try
         {
-            ValidateCustomLayersInternalCore(layers);
+            validate();
         }
         catch
         {
-            RollbackRejectedCustomLayers();
+            if (ownsRollback)
+            {
+                RollbackRejectedCustomLayers();
+            }
+
             throw;
+        }
+        finally
+        {
+            _customLayerValidationDepth--;
         }
     }
 
