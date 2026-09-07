@@ -210,8 +210,24 @@ public abstract partial class SegmentationModelBase<T> : NeuralNetworkBase<T>, I
     /// default, so an undeclared model is unaffected.
     /// </remarks>
     protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
-        => PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-        ?? CreateAdamWOptimizer(DefaultLearningRate, DefaultWeightDecay);
+    {
+        // Only let the recipe BUILD when it states a learning rate. Many papers name an
+        // optimizer and its decay without a rate, and building from such a recipe silently
+        // replaces this model's own DefaultLearningRate -- which derived models override, often
+        // from caller-supplied options -- with the generic optimizer default. VisionMamba diverged
+        // exactly that way: loss 5.0 to 91.9, because its configured rate was discarded.
+        var recipe = PaperOptimizerFactory.Find(this);
+        if (recipe is not null && !double.IsNaN(recipe.LearningRate))
+        {
+            var built = PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this);
+            if (built is not null) return built;
+        }
+
+        // Otherwise keep this model's own optimizer and let the declaration check it, so the
+        // paper is still recorded and any disagreement is still reported.
+        return PaperOptimizerFactory.VerifyHandBuilt(
+            this, CreateAdamWOptimizer(DefaultLearningRate, DefaultWeightDecay));
+    }
 
     /// <summary>
     /// Gets the base learning rate for the model's default AdamW training recipe.

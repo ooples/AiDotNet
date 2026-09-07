@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -55,6 +56,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Mamba;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Vision Mamba: Efficient Visual Representation Learning with Bidirectional State Space Model", "https://arxiv.org/abs/2401.09417", Year = 2024, Authors = "Zhu et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, WeightDecay = 0.05,
+                ReferenceBatchSize = 1024, Phase = TrainingPhase.PreTraining,
+                Source = "Zhu et al. 2024: AdamW with a momentum of 0.9 -- which for an Adam-family optimizer is beta1, the first-moment coefficient, not the SGD momentum term -- a total batch size of 1024 and a weight decay of 0.05 when training on 224-pixel images.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-5, WeightDecay = 1e-8,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Zhu et al. 2024: fine-tuning at long sequence length uses a constant learning rate of 1e-5 and a weight decay of 1e-8.")]
 public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly VisionMambaOptions _options;

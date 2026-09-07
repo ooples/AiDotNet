@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -56,6 +57,9 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Medical SAM 2: Segment Medical Images As Video Via Segment Anything Model 2", "https://arxiv.org/abs/2408.00874", Year = 2024, Authors = "Zhu et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.999, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Zhu et al. 2024: AdamW with beta1 0.9 and beta2 0.999, a linear learning rate warmup followed by cosine decay. Neither the peak rate nor the warmup length is stated, so neither is declared.")]
 public partial class MedSAM2<T> : Common.MedicalSegmentationBase<T>
 {
     private readonly MedSAM2Options _options;

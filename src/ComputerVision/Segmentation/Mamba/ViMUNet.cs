@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -56,6 +57,9 @@ namespace AiDotNet.ComputerVision.Segmentation.Mamba;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ViM-UNet: Vision Mamba for Biomedical Segmentation", "https://arxiv.org/abs/2404.07705", Year = 2024, Authors = "Archit and Pape")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, DecayRate = 0.1,
+                Schedule = LearningRateSchedulerType.ReduceOnPlateau,
+                Source = "Archit and Pape 2024: Adam with an initial learning rate of 1e-4 and reduction on plateau, over 100k iterations. The reduction factor is not stated, so the library default of 0.1 applies and is declared explicitly.")]
 public partial class ViMUNet<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly ViMUNetOptions _options;
