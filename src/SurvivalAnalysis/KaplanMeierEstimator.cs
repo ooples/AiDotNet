@@ -48,8 +48,13 @@ namespace AiDotNet.SurvivalAnalysis;
 /// </remarks>
 /// <example>
 /// <code>
-/// // age and treatment-arm per patient
-/// var features = new Matrix&lt;double&gt;(new double[,] { { 45, 1 }, { 52, 0 }, { 38, 1 }, { 61, 0 }, { 47, 1 }, { 55, 0 } });
+/// // Column 0 says whether the event was actually observed: 1 = it happened, 0 = the
+/// // patient was censored (still fine when the study ended, or lost to follow-up).
+/// // Columns 1.. are the covariates — here age and treatment arm.
+/// var features = new Matrix&lt;double&gt;(new double[,]
+/// {
+///     { 1, 45, 1 }, { 0, 52, 0 }, { 1, 38, 1 }, { 0, 61, 0 }, { 1, 47, 1 }, { 1, 55, 0 }
+/// });
 /// // months each patient was observed
 /// var times = new Vector&lt;double&gt;(new double[] { 5.0, 12.0, 3.0, 18.0, 9.0, 21.0 });
 ///

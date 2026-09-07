@@ -502,17 +502,87 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
     }
 
     /// <summary>
-    /// Standard model training - redirects to survival-specific training.
+    /// Standard model training — splits the design matrix and redirects to survival-specific training.
     /// </summary>
+    /// <param name="x">
+    /// The design matrix. Column 0 is the event indicator — 1 if the event was observed, 0 if the
+    /// subject was censored — and columns 1.. are the covariates.
+    /// </param>
+    /// <param name="y">The observed time for each subject: time to event, or time to censoring.</param>
+    /// <remarks>
+    /// <para>
+    /// Survival data is three things — a time, whether the event actually happened, and the covariates —
+    /// but the <c>IFullModel</c> contract this base inherits exposes a single <c>Train(X, Y)</c>. The
+    /// convention here matches the one <see cref="AiDotNet.CausalInference.CausalModelBase{T}"/> already
+    /// uses for its treatment indicator: the extra per-subject signal is column 0 of X.
+    /// </para>
+    /// <para>
+    /// This method used to set every event indicator to 1, which silently asserted that nobody was
+    /// censored. Censoring is the entire reason survival analysis exists as a separate field: a subject
+    /// still alive when the study ended has not had the event, and counting them as though they had
+    /// biases every survival estimate downward. A model that quietly does that is worse than one that
+    /// refuses the data, because the answer looks reasonable.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Say you follow 100 patients for a year. Some have the event you are
+    /// measuring; others are still fine when the year ends, or move away and stop being followed. You do
+    /// not know when — or whether — the event will happen for that second group; you only know it had not
+    /// happened yet. That is "censored", and column 0 is where you say which is which.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// X has fewer than two columns, its row count does not match <paramref name="y"/>, or column 0
+    /// holds something other than 0 and 1.
+    /// </exception>
     public virtual void Train(Matrix<T> x, Vector<T> y)
     {
-        var events = new Vector<int>(y.Length);
-        for (int i = 0; i < y.Length; i++)
+        if (x is null) throw new ArgumentNullException(nameof(x));
+        if (y is null) throw new ArgumentNullException(nameof(y));
+
+        if (x.Columns < 2)
         {
-            events[i] = 1;
+            throw new ArgumentException(
+                "Survival models require at least 2 columns in X: column 0 is the event indicator " +
+                "(1 = the event was observed, 0 = the subject was censored) and columns 1.. are the " +
+                "covariates. Y is the observed time for each subject.",
+                nameof(x));
         }
 
-        FitSurvival(x, y, events);
+        if (x.Rows != y.Length)
+        {
+            throw new ArgumentException(
+                $"Sample count mismatch: X has {x.Rows} rows but Y has {y.Length} times.",
+                nameof(y));
+        }
+
+        int n = x.Rows;
+        int p = x.Columns - 1;
+        var features = new Matrix<T>(n, p);
+        var events = new Vector<int>(n);
+
+        for (int i = 0; i < n; i++)
+        {
+            // Reading the indicator strictly rather than rounding: a covariate left in column 0 by
+            // mistake is the one failure this cannot recover from, and it would otherwise be read as
+            // censoring and silently change the answer.
+            double indicator = NumOps.ToDouble(x[i, 0]);
+            if (indicator != 0.0 && indicator != 1.0)
+            {
+                throw new ArgumentException(
+                    $"Column 0 of X is the event indicator and must be 0 or 1; found {indicator} at row " +
+                    $"{i}. If that column is a covariate, move it: survival training needs to know which " +
+                    "subjects were censored, and cannot infer it.",
+                    nameof(x));
+            }
+
+            events[i] = (int)indicator;
+            for (int j = 0; j < p; j++)
+            {
+                features[i, j] = x[i, j + 1];
+            }
+        }
+
+        FitSurvival(features, y, events);
     }
 
     #endregion
