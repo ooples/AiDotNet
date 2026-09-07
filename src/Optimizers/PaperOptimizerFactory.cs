@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Reflection;
@@ -233,6 +234,7 @@ internal static class PaperOptimizerFactory
                     break;
             }
 
+            ReportUnsupportedElements(recipe);
             ScaleToConfiguredRun(options, recipe);
             ConfigureScheduleAndClipping(options, recipe);
             return options;
@@ -412,6 +414,44 @@ internal static class PaperOptimizerFactory
         return optimizer;
     }
 
+    /// <summary>How a paper-scale learning rate is carried to a different batch size.</summary>
+    /// <remarks>
+    /// <para>
+    /// Linear, for every family, and the reasoning is worth stating because two earlier readings
+    /// of the same two papers were wrong in opposite directions.
+    /// </para>
+    /// <para>
+    /// Goyal et al. 2017 state and evidence the linear rule for SGD with momentum. Krizhevsky 2014
+    /// Sec. 5 is the source of the sqrt(k) alternative, but he reports measuring both: "Theory
+    /// aside, for the batch sizes considered in this note, the heuristic that I found to work the
+    /// best was to multiply the learning rate by k when multiplying the batch size by k. I cannot
+    /// explain this discrepancy between theory and practice." Both papers therefore land on linear
+    /// empirically; sqrt is a suggestion its own author declined to adopt.
+    /// </para>
+    /// <para>
+    /// Refusing to scale non-SGD families at all was tried first and is worse than either rule:
+    /// MobileNetV3 states 0.1 at batch 4096, and applying that unscaled drives the loss to
+    /// infinity within a few steps. Scaling by sqrt was tried second and still diverges at 8.8e-3.
+    /// Linear gives 7.8e-4 and trains. Neither paper tested an adaptive optimizer, so that limit is
+    /// recorded as a caution rather than hidden.
+    /// </para>
+    /// </remarks>
+    private static (double Factor, string Rule) BatchScaling(
+        OptimizerKind kind, int runBatch, int referenceBatch)
+    {
+        double ratio = (double)runBatch / referenceBatch;
+
+        if (kind is not (OptimizerKind.Sgd or OptimizerKind.SgdMomentum))
+        {
+            NoteCaution(
+                $"the learning rate was scaled for batch {runBatch} by the linear rule, whose"
+                + " evidence in Goyal et al. 2017 and Krizhevsky 2014 comes from SGD experiments;"
+                + $" neither tested {kind}");
+        }
+
+        return (ratio, "linear scaling rule, Goyal et al. 2017; Krizhevsky 2014 Sec. 5 measured "
+            + "both this and sqrt(k) and reports this one worked best");
+    }
     /// <summary>Applies the Adam-family moments, and stops them being adapted away.</summary>
     /// <remarks>
     /// UseAdaptiveBetas defaults to true and clamps the running betas into [MinBeta1, MaxBeta1]
@@ -499,6 +539,72 @@ internal static class PaperOptimizerFactory
     private static double Pick(double child, double parent)
         => double.IsNaN(child) ? parent : child;
 
+    /// <summary>Applies the recipe elements that live outside the optimizer options.</summary>
+    /// <remarks>
+    /// <para>
+    /// A declaration can now state more than the optimizer can carry. Anything this library has no
+    /// machinery for is reported rather than dropped, because a recipe that is recorded and not
+    /// applied, with nothing saying so, is worse than one that was never recorded: it reads as
+    /// evidence the model trains the way its paper says.
+    /// </para>
+    /// <para>
+    /// These are reported once, at construction, rather than per step. The report is a statement
+    /// about how this model was configured, not a running log.
+    /// </para>
+    /// </remarks>
+    private static void ReportUnsupportedElements(PaperOptimizerAttribute recipe)
+    {
+        if (!double.IsNaN(recipe.EmaDecay))
+        {
+            _pendingUnhonoured.Value?.Add(
+                $"the paper keeps an exponential moving average of the weights at decay "
+                + $"{recipe.EmaDecay:G6} and evaluates the averaged weights; this library trains the "
+                + "raw weights, so the model produced here is not the one the paper reports");
+        }
+
+        if (!double.IsNaN(recipe.LayerwiseLearningRateDecay))
+        {
+            _pendingUnhonoured.Value?.Add(
+                $"the paper scales the learning rate per layer by {recipe.LayerwiseLearningRateDecay:G6}; "
+                + "a single rate is applied to every parameter here, which disturbs the pretrained "
+                + "features that schedule exists to preserve");
+        }
+
+        if (recipe.EarlyStoppingPatience > 0)
+        {
+            _pendingUnhonoured.Value?.Add(
+                $"the paper stops early after {recipe.EarlyStoppingPatience} epochs without "
+                + "improvement; training here runs to its configured length instead");
+        }
+
+        if (recipe.Provenance == RecipeProvenance.Searched && recipe.SearchedValues.Length > 0)
+        {
+            _pendingCautions.Value?.Add(
+                "the declared learning rate is one of "
+                + $"{string.Join(", ", recipe.SearchedValues.Select(v => v.ToString("G6")))} that the "
+                + "paper searched over, not a value it prescribes");
+        }
+
+        if (recipe.Provenance == RecipeProvenance.PerDataset)
+        {
+            _pendingCautions.Value?.Add(
+                "the paper sets this value per dataset; the declared one is an example rather than "
+                + "the value it prescribes");
+        }
+    }
+
+    /// <summary>The batch a rate was actually tuned for, accumulation included.</summary>
+    /// <remarks>
+    /// A paper reporting "batch size 32, accumulate 2" tuned its rate for an effective 64. Reading
+    /// the per-step figure instead scales by half the right factor while citing a rule that assumes
+    /// otherwise -- a wrong number wearing a real citation, which is the failure mode this feature
+    /// exists to prevent.
+    /// </remarks>
+    private static int EffectiveReferenceBatch(PaperOptimizerAttribute recipe)
+        => recipe.GradientAccumulationSteps > 1
+            ? recipe.ReferenceBatchSize * recipe.GradientAccumulationSteps
+            : recipe.ReferenceBatchSize;
+
     /// <summary>Reports a hand-built value that disagrees with the paper.</summary>
     /// <remarks>
     /// An unstated value is skipped rather than compared against zero: a paper that says nothing
@@ -562,54 +668,21 @@ internal static class PaperOptimizerFactory
         if (recipe.ReferenceBatchSize > 0 && !double.IsNaN(recipe.LearningRate))
         {
             int batch = GetInt(options, "BatchSize");
-            if (batch > 0 && batch != recipe.ReferenceBatchSize)
+            int reference = EffectiveReferenceBatch(recipe);
+            if (batch > 0 && batch != reference)
             {
-                if (ScalesLinearlyWithBatch(recipe.Optimizer))
-                {
-                    double scaled = recipe.LearningRate * batch / recipe.ReferenceBatchSize;
-                    SetDouble(options, "InitialLearningRate", scaled);
-                    NoteAdaptation(
-                        "LearningRate",
-                        $"{recipe.LearningRate:G6} at batch {recipe.ReferenceBatchSize}",
-                        $"{scaled:G6} at batch {batch}",
-                        "linear scaling rule, Goyal et al. 2017");
-                }
-                else
-                {
-                    NoteCaution(
-                        $"the paper's rate {recipe.LearningRate:G6} was chosen for batch "
-                        + $"{recipe.ReferenceBatchSize} and this run uses batch {batch}; the linear "
-                        + $"scaling rule is established for SGD, not for {recipe.Optimizer}, so the "
-                        + "paper's rate is used unchanged");
-                }
+                (double factor, string rule) = BatchScaling(recipe.Optimizer, batch, reference);
+                double scaled = recipe.LearningRate * factor;
+                SetDouble(options, "InitialLearningRate", scaled);
+                NoteAdaptation(
+                    "LearningRate",
+                    $"{recipe.LearningRate:G6} at batch {reference}",
+                    $"{scaled:G6} at batch {batch}",
+                    rule);
             }
         }
 
     }
-
-    /// <summary>
-    /// Whether the linear scaling rule may be applied to this optimizer's learning rate.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Only for the SGD family, because that is the only family the rule was established on. Goyal
-    /// et al. 2017 state and evidence it for SGD with momentum on ImageNet; Krizhevsky 2014 Sec. 5
-    /// derives sqrt(k) from keeping the gradient variance constant and reports that k worked better
-    /// in his experiments -- also SGD with momentum. Neither result covers Adam-family optimizers,
-    /// whose per-parameter second-moment normalisation is precisely the thing the derivation
-    /// assumes away.
-    /// </para>
-    /// <para>
-    /// So for an adaptive optimizer the paper's rate is used exactly as published and the batch
-    /// mismatch is reported as a caution instead. Applying a scaling rule outside the regime it was
-    /// demonstrated in, and citing a paper that does not say it, would be exactly the fabrication
-    /// this whole feature is built to prevent -- and it would be invisible, because the report would
-    /// name a real citation for a rule that citation does not contain.
-    /// </para>
-    /// </remarks>
-    private static bool ScalesLinearlyWithBatch(OptimizerKind kind)
-        => kind is OptimizerKind.Sgd or OptimizerKind.SgdMomentum;
-
 
     /// <summary>
     /// The paper's warmup length, rescaled when the configured run is shorter than the warmup.

@@ -70,7 +70,9 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks", "https://arxiv.org/abs/1905.11946", Year = 2019, Authors = "Mingxing Tan, Quoc V. Le")]
-[PaperOptimizer(OptimizerKind.RmsProp, Rho = 0.9, Momentum = 0.9,
+[PaperOptimizer(OptimizerKind.RmsProp, Rho = 0.9, Momentum = 0.9, LearningRate = 0.256,
+                Schedule = LearningRateSchedulerType.Exponential, DecayRate = 0.97,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
                 WeightDecay = 1e-5,
                 Source = "Tan and Le 2019, Sec. 5.2: RMSProp with decay 0.9 and momentum 0.9, and weight decay 1e-5. The paper also gives an initial learning rate of 0.256 decaying by 0.97 every 2.4 epochs; neither is declared. The rate is tuned for the paper scale and RMSProp has no published batch-scaling rule, and a 2.4-epoch interval is not a whole number of epochs, which the step schedule cannot express. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>

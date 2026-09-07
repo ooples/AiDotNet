@@ -222,7 +222,14 @@ public sealed class PaperOptimizerAnalyzer : DiagnosticAnalyzer
         while (selection.Parent is ParenthesizedExpressionSyntax
             or CastExpressionSyntax
             or BinaryExpressionSyntax
-            or ConditionalExpressionSyntax)
+            or ConditionalExpressionSyntax
+            // A construction passed INTO the factory is reached through the argument list, not
+            // through an assignment. Stopping at the argument missed exactly the shape
+            // VerifyHandBuilt takes -- a bare `new SomeOptimizer(this)` handed to it as the
+            // fallback -- and reported those models as unwired.
+            or ArgumentSyntax
+            or ArgumentListSyntax
+            or InvocationExpressionSyntax)
         {
             selection = selection.Parent;
         }
