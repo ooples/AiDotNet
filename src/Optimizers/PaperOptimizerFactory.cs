@@ -164,6 +164,15 @@ internal static class PaperOptimizerFactory
         {
             if (!double.IsNaN(recipe.LearningRate)) options.InitialLearningRate = recipe.LearningRate;
 
+            // Adafactor normally derives its own step size. A paper that states a rate -- AudioPaLM
+            // fine-tunes at a constant 5e-5 -- means that rule must stand down, or the stated rate
+            // is accepted and then ignored.
+            if (options is AdafactorOptimizerOptions<T, TInput, TOutput> adafactor
+                && !double.IsNaN(recipe.LearningRate))
+            {
+                adafactor.UseRelativeStepSize = false;
+            }
+
             if (!double.IsNaN(recipe.Momentum))
             {
                 options.InitialMomentum = recipe.Momentum;
@@ -277,6 +286,9 @@ internal static class PaperOptimizerFactory
 
             OptimizerKind.Adam8Bit => new Adam8BitOptimizer<T, TInput, TOutput>(
                 model, Configured(new Adam8BitOptimizerOptions<T, TInput, TOutput>())),
+
+            OptimizerKind.Adafactor => new AdafactorOptimizer<T, TInput, TOutput>(
+                model, Configured(new AdafactorOptimizerOptions<T, TInput, TOutput>())),
 
             OptimizerKind.LBfgs => new LBFGSOptimizer<T, TInput, TOutput>(
                 model, Configured(new LBFGSOptimizerOptions<T, TInput, TOutput>())),

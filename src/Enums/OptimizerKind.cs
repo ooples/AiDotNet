@@ -64,4 +64,11 @@ public enum OptimizerKind
 
     /// <summary>L-BFGS, limited-memory quasi-Newton.</summary>
     LBfgs,
+
+    /// <summary>Adafactor: Adam-style adaptivity with factored, O(n+m) second moments.</summary>
+    /// <remarks>
+    /// Shazeer and Stern 2018. Used where the optimizer state would otherwise rival the model:
+    /// AudioPaLM and SPEAR-TTS both train with it.
+    /// </remarks>
+    Adafactor,
 }
