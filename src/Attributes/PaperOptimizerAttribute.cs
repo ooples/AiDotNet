@@ -106,6 +106,77 @@ public sealed class PaperOptimizerAttribute : Attribute
     /// </remarks>
     public string Component { get; set; } = string.Empty;
 
+    // ---- Which recipe this is ------------------------------------------------------------
+
+    /// <summary>Which stage of training this recipe describes. Defaults to pre-training.</summary>
+    /// <remarks>
+    /// A model declaring several phases records the whole of what its paper says, and resolution
+    /// picks the one being built. Before this key existed the only option was to declare one stage
+    /// and describe the others in prose, which put the paper's own words out of reach of any check.
+    /// </remarks>
+    public TrainingPhase Phase { get; set; } = TrainingPhase.PreTraining;
+
+    /// <summary>
+    /// A phase whose unstated values this one copies, for papers that say a later stage uses the
+    /// same settings as an earlier one.
+    /// </summary>
+    /// <remarks>
+    /// SPEAR-TTS states its second stage as "the optimizer and the learning rate schedule are the
+    /// same as for S1". Repeating the values instead would be a transcription the paper never made,
+    /// and two copies of a number drift apart the first time one is corrected. Only values this
+    /// declaration leaves unset are inherited, so an override stays visible.
+    /// </remarks>
+    public TrainingPhase InheritsFrom { get; set; } = TrainingPhase.Unspecified;
+
+    /// <summary>How this recipe's values were arrived at. Defaults to stated outright.</summary>
+    public RecipeProvenance Provenance { get; set; } = RecipeProvenance.Stated;
+
+    /// <summary>
+    /// The learning rates a paper searched over, when <see cref="Provenance"/> is
+    /// <see cref="RecipeProvenance.Searched"/>. Empty otherwise.
+    /// </summary>
+    /// <remarks>
+    /// A search is not a recommendation. iTransformer tries {1e-3, 5e-4, 1e-4} and BERT tries
+    /// {5e-5, 3e-5, 2e-5}; declaring any single one as though the paper prescribed it would invent
+    /// a fact. Recording the set keeps the paper's actual claim, and a caller can see the range.
+    /// </remarks>
+    public double[] SearchedValues { get; set; } = [];
+
+    // ---- Recipe elements beyond the optimizer itself --------------------------------------
+
+    /// <summary>Decay of an exponential moving average kept over the weights. Unset means none.</summary>
+    /// <remarks>
+    /// Twelve of 122 surveyed papers keep an EMA, almost always at 0.9999 — DDPM, MobileNetV3 and
+    /// ADM among them — and the averaged weights, not the raw ones, are what those papers evaluate.
+    /// A reproduction that skips it produces a visibly different model, so its absence is a
+    /// deviation worth reporting rather than a detail.
+    /// </remarks>
+    public double EmaDecay { get; set; } = double.NaN;
+
+    /// <summary>Per-layer multiplier applied to the base rate, deepest layer first. Unset means none.</summary>
+    /// <remarks>
+    /// Standard when fine-tuning a pretrained backbone: each layer nearer the input gets the rate
+    /// of the one above it times this factor, so early features move less than the head. ConvNeXt
+    /// and BLIP-2 both use it, and applying a flat rate instead disturbs exactly the pretrained
+    /// features the stage is meant to preserve.
+    /// </remarks>
+    public double LayerwiseLearningRateDecay { get; set; } = double.NaN;
+
+    /// <summary>Epochs without improvement before training stops. Unset means the paper does not stop early.</summary>
+    /// <remarks>
+    /// For several papers this IS the stopping rule — DeepAR states early stopping and no length at
+    /// all — so a fixed-length run reproduces neither its cost nor its result.
+    /// </remarks>
+    public int EarlyStoppingPatience { get; set; }
+
+    /// <summary>Micro-batches accumulated before each optimizer step. Unset means one.</summary>
+    /// <remarks>
+    /// Load-bearing rather than incidental: the batch a rate was tuned for is the EFFECTIVE batch,
+    /// accumulation included. Band-Split RNN reaches its effective 64 as 32 x 2. Reading
+    /// <see cref="ReferenceBatchSize"/> as the per-step batch when the paper meant the accumulated
+    /// one would scale the rate by the wrong factor while citing a rule that assumes otherwise.
+    /// </remarks>
+    public int GradientAccumulationSteps { get; set; }
     // ---- Optimizer hyperparameters -------------------------------------------------------
 
     /// <summary>The paper's learning rate. Unset means the paper does not state a constant one.</summary>
@@ -330,5 +401,10 @@ public sealed class PaperOptimizerAttribute : Attribute
         || CyclicPolicy != CyclicLRScheduler.CyclicMode.Triangular
         || PostWarmupDecay != LinearWarmupScheduler.DecayMode.Constant
         || !double.IsNaN(DecayRate)
-        || Schedule != LearningRateSchedulerType.Constant;
+        || Schedule != LearningRateSchedulerType.Constant
+        || !double.IsNaN(EmaDecay)
+        || !double.IsNaN(LayerwiseLearningRateDecay)
+        || EarlyStoppingPatience > 0
+        || GradientAccumulationSteps > 0
+        || SearchedValues.Length > 0;
 }

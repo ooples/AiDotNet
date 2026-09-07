@@ -428,6 +428,77 @@ internal static class PaperOptimizerFactory
             options.UseAdaptiveBetas = false;
     }
 
+    /// <summary>Fills a phase's unstated values from the phase it declares it inherits.</summary>
+    /// <remarks>
+    /// SPEAR-TTS states its second stage as using the same optimizer and schedule as its first.
+    /// Copying those values into the declaration by hand would be a transcription the paper never
+    /// made, and two copies of a number drift the first time one is corrected.
+    /// </remarks>
+    /// <returns>
+    /// A merged view. Neither input is modified: a declaration records what a paper says, and that
+    /// cannot depend on which other declaration happened to be read alongside it.
+    /// </returns>
+    private static PaperOptimizerAttribute Merge(
+        PaperOptimizerAttribute child, PaperOptimizerAttribute parent)
+    {
+        var merged = new PaperOptimizerAttribute(
+            child.Optimizer == OptimizerKind.Unspecified ? parent.Optimizer : child.Optimizer)
+        {
+            Phase = child.Phase,
+            Variant = child.Variant,
+            Component = child.Component,
+            Provenance = child.Provenance,
+            Source = child.Source,
+
+            LearningRate = Pick(child.LearningRate, parent.LearningRate),
+            MinLearningRate = Pick(child.MinLearningRate, parent.MinLearningRate),
+            WeightDecay = Pick(child.WeightDecay, parent.WeightDecay),
+            Beta1 = Pick(child.Beta1, parent.Beta1),
+            Beta2 = Pick(child.Beta2, parent.Beta2),
+            Epsilon = Pick(child.Epsilon, parent.Epsilon),
+            Momentum = Pick(child.Momentum, parent.Momentum),
+            Rho = Pick(child.Rho, parent.Rho),
+            DecayRate = Pick(child.DecayRate, parent.DecayRate),
+            MaxGradientNorm = Pick(child.MaxGradientNorm, parent.MaxGradientNorm),
+            WarmupFraction = Pick(child.WarmupFraction, parent.WarmupFraction),
+            HoldFraction = Pick(child.HoldFraction, parent.HoldFraction),
+            EmaDecay = Pick(child.EmaDecay, parent.EmaDecay),
+            LayerwiseLearningRateDecay = Pick(
+                child.LayerwiseLearningRateDecay, parent.LayerwiseLearningRateDecay),
+
+            UseNesterov = child.UseNesterov || parent.UseNesterov,
+            WarmupSteps = child.WarmupSteps > 0 ? child.WarmupSteps : parent.WarmupSteps,
+            StepSize = child.StepSize > 0 ? child.StepSize : parent.StepSize,
+            ReferenceBatchSize = child.ReferenceBatchSize > 0
+                ? child.ReferenceBatchSize : parent.ReferenceBatchSize,
+            EarlyStoppingPatience = child.EarlyStoppingPatience > 0
+                ? child.EarlyStoppingPatience : parent.EarlyStoppingPatience,
+            GradientAccumulationSteps = child.GradientAccumulationSteps > 0
+                ? child.GradientAccumulationSteps : parent.GradientAccumulationSteps,
+
+            Schedule = child.Schedule != LearningRateSchedulerType.Constant
+                ? child.Schedule : parent.Schedule,
+            PostWarmupDecay = child.PostWarmupDecay != LinearWarmupScheduler.DecayMode.Constant
+                ? child.PostWarmupDecay : parent.PostWarmupDecay,
+            ScheduleStepMode = child.ScheduleStepMode != SchedulerStepMode.StepPerBatch
+                ? child.ScheduleStepMode : parent.ScheduleStepMode,
+            CyclicPolicy = child.CyclicPolicy != CyclicLRScheduler.CyclicMode.Triangular
+                ? child.CyclicPolicy : parent.CyclicPolicy,
+
+            Milestones = child.Milestones.Length > 0 ? child.Milestones : parent.Milestones,
+            MilestoneFractions = child.MilestoneFractions.Length > 0
+                ? child.MilestoneFractions : parent.MilestoneFractions,
+            SearchedValues = child.SearchedValues.Length > 0
+                ? child.SearchedValues : parent.SearchedValues,
+        };
+
+        return merged;
+    }
+
+    /// <summary>The child's value when it states one, otherwise the inherited value.</summary>
+    private static double Pick(double child, double parent)
+        => double.IsNaN(child) ? parent : child;
+
     /// <summary>Reports a hand-built value that disagrees with the paper.</summary>
     /// <remarks>
     /// An unstated value is skipped rather than compared against zero: a paper that says nothing
@@ -918,7 +989,10 @@ internal static class PaperOptimizerFactory
         return null;
     }
     /// <summary>The declaration matching this model: variant-specific when one exists, else unkeyed.</summary>
-    internal static PaperOptimizerAttribute? Find(object? model, string component = "")
+    internal static PaperOptimizerAttribute? Find(
+        object? model,
+        string component = "",
+        TrainingPhase phase = TrainingPhase.PreTraining)
     {
         if (model is null) return null;
 
@@ -940,7 +1014,14 @@ internal static class PaperOptimizerFactory
 
         foreach (var declaration in declarations)
         {
-            if (declaration.Optimizer == OptimizerKind.Unspecified) continue;
+            // An unspecified optimizer normally means an empty declaration worth skipping, but a
+            // phase that INHERITS its optimizer states exactly that and is not empty at all. The
+            // guard predates inheritance and silently discarded every inheriting phase.
+            if (declaration.Optimizer == OptimizerKind.Unspecified
+                && declaration.InheritsFrom == TrainingPhase.Unspecified)
+            {
+                continue;
+            }
 
             bool componentExact = declaration.Component.Length > 0
                 && string.Equals(declaration.Component, component, StringComparison.OrdinalIgnoreCase);
@@ -955,6 +1036,11 @@ internal static class PaperOptimizerFactory
 
             // Component is the stronger key: it selects which PART of the model is being built,
             // whereas variant only picks a size for that part.
+            // Phase outranks both: it selects WHICH recipe is being asked for, where variant
+            // and component only narrow one. A fine-tuning caller must not be handed the
+            // pre-training rate because the pre-training row also matched its component.
+            if (declaration.Phase != phase) continue;
+
             int rank = (componentExact ? 2 : 0) + (variantExact ? 1 : 0);
             if (rank > bestRank)
             {
@@ -963,7 +1049,15 @@ internal static class PaperOptimizerFactory
             }
         }
 
-        return best;
+        if (best is null || best.InheritsFrom == TrainingPhase.Unspecified) return best;
+
+        // A phase that inherits is resolved against its parent, which is itself resolved
+        // first so a chain of stages works. Self-reference would recurse forever and means a
+        // mistaken declaration rather than a real inheritance.
+        if (best.InheritsFrom == best.Phase) return best;
+
+        var parent = Find(model, component, best.InheritsFrom);
+        return parent is null ? best : Merge(best, parent);
     }
 
     private static void SetDouble(object options, string propertyName, double value)

@@ -267,8 +267,28 @@ public sealed class PaperOptimizerAnalyzer : DiagnosticAnalyzer
     /// those as a duplicate of the others.
     /// </remarks>
     private static string RecipeKey(AttributeData attribute)
-        => (GetStringArgument(attribute, "Variant") ?? string.Empty)
+        => DescribePhase(attribute)
+            + "|" + (GetStringArgument(attribute, "Variant") ?? string.Empty)
             + "|" + (GetStringArgument(attribute, "Component") ?? string.Empty);
+
+    /// <summary>The declared phase, as part of a recipe identity.</summary>
+    /// <remarks>
+    /// A model declaring both a pre-training and a fine-tuning recipe records what its paper
+    /// says rather than repeating itself. Keying without the phase reports every multi-stage
+    /// model as a duplicate, which is exactly what happened when the phase key was introduced.
+    /// </remarks>
+    private static string DescribePhase(AttributeData attribute)
+    {
+        foreach (var named in attribute.NamedArguments)
+        {
+            if (named.Key == "Phase" && named.Value.Value is not null)
+            {
+                return named.Value.Value.ToString() ?? string.Empty;
+            }
+        }
+
+        return string.Empty;
+    }
 
     private static IEnumerable<AttributeData> EnumerateEffectiveRecipes(INamedTypeSymbol type)
     {
