@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -57,6 +59,10 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Visual Instruction Tuning", "https://arxiv.org/abs/2304.08485", Year = 2023, Authors = "Haotian Liu, Chunyuan Li, Qingyang Wu, Yong Jae Lee")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-3, WeightDecay = 0,
+                ReferenceBatchSize = 128,
+                Schedule = LearningRateSchedulerType.CosineAnnealing, MinLearningRate = 0,
+                Source = "Liu et al. 2023, Sec. 5: Adam with NO weight decay and a cosine learning rate; pre-training for 1 epoch at 2e-3 with batch size 128. Fine-tuning uses 2e-5 at batch size 32, which is a different stage and not what this declares. The zero weight decay is declared explicitly rather than left unset, because unset would fall back to a library default and the paper states there is none.")]
 public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaVAModel<T>
 {
     private readonly LLaVAOptions _options;
@@ -215,7 +221,9 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
             // Tokenizer is required for ONNX mode - must match the language model backbone
             Guard.NotNull(tokenizer);
             _tokenizer = tokenizer;
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
             InitializeLayers();
         }
@@ -277,7 +285,9 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
 
         // Use factory to create appropriate tokenizer for the backbone, or use provided tokenizer
         _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(languageModelBackbone);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
 
         InitializeNativeLayers(channels);

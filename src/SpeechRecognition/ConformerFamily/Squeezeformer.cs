@@ -60,9 +60,9 @@ public partial class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => true;
 
-    public Squeezeformer(NeuralNetworkArchitecture<T> architecture, string modelPath, SqueezeformerOptions? options = null) : base(architecture) { _options = options ?? new SqueezeformerOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
+    public Squeezeformer(NeuralNetworkArchitecture<T> architecture, string modelPath, SqueezeformerOptions? options = null) : base(architecture) { _options = options ?? new SqueezeformerOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { _options.Language }; InitializeSqueezeformerLayers(); }
     public Squeezeformer(NeuralNetworkArchitecture<T> architecture, SqueezeformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new SqueezeformerOptions(); _useNativeMode = true; _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
-            optimizer ?? CreateSqueezeformerOptimizer()); SetBaseTrainOptimizer(_optimizer); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { _options.Language }; InitializeLayers(); }
+            optimizer ?? CreateSqueezeformerOptimizer()); base.SetBaseTrainOptimizer(_optimizer); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { _options.Language }; InitializeSqueezeformerLayers(); }
 
     /// <summary>
     /// Builds the optimizer Squeezeformer specifies (appendix A.1).
@@ -179,7 +179,9 @@ public partial class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     }
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("Squeezeformer does not support streaming.");
 
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultSqueezeformerLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, feedForwardExpansionFactor: _options.FeedForwardExpansionFactor, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate, useLayerNormalization: _options.UseLayerNormalization)); }
+    protected override void InitializeLayers() => InitializeSqueezeformerLayers();
+
+    private void InitializeSqueezeformerLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultSqueezeformerLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, feedForwardExpansionFactor: _options.FeedForwardExpansionFactor, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate, useLayerNormalization: _options.UseLayerNormalization)); }
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
