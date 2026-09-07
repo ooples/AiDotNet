@@ -154,6 +154,11 @@ try {
         Assert-True ($LASTEXITCODE -eq 0 -and
             (Test-Path -LiteralPath selected-failure-certified/certification.json)) `
             'the end-to-end chain rejected a complete audit whose only failure was selected'
+        & $certificateValidator -MapFile selected-failure-certified/shard-map.json `
+            -CertificateFile selected-failure-certified/certification.json `
+            -CertificationRunId 103
+        Assert-True ($LASTEXITCODE -eq 0) `
+            'the validator rejected a generated certificate with a selected failure'
 
         @(
             [ordered]@{ shard = 'Alpha'; outcome = 'success' },
