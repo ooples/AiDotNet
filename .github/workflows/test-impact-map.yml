@@ -48,6 +48,10 @@ jobs:
         run: |
           ./tools/TestImpact/Test-CertifiedShardMap.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'Test-CertifiedShardMap self-test failed' }
+          ./tools/TestImpact/Measure-SelectionMiss.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Measure-SelectionMiss self-test failed' }
+          ./tools/TestImpact/New-ShardMapCertificate.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'New-ShardMapCertificate self-test failed' }
           ./tools/TestImpact/Test-CiImpactWorkflow.ps1
           if ($LASTEXITCODE -ne 0) { throw 'CI impact workflow contract failed' }
           ./tools/TestImpact/Test-TestImpactEndToEnd.ps1
@@ -350,6 +354,7 @@ jobs:
           New-Item -ItemType Directory -Path $auditTools -Force | Out-Null
           Copy-Item tools/TestImpact/Select-Shards.ps1 (Join-Path $auditTools 'Select-Shards.ps1')
           Copy-Item tools/TestImpact/Measure-SelectionMiss.ps1 (Join-Path $auditTools 'Measure-SelectionMiss.ps1')
+          Copy-Item tools/TestImpact/New-ShardMapCertificate.ps1 (Join-Path $auditTools 'New-ShardMapCertificate.ps1')
 
           # HEAD must be the audited tree; the selector diffs from the prior map commit to HEAD.
           & git checkout --quiet '${{ steps.source.outputs.sha }}'
@@ -362,38 +367,23 @@ jobs:
           $a = Get-Content audit.json -Raw | ConvertFrom-Json
           $verdict = if ($a.Escalated) { 'would have escalated - nothing skipped' }
                      elseif ($a.MissCount -gt 0) { "**$($a.MissCount) MISSED**: $($a.Missed -join ', ')" }
-                     elseif ($a.Failed -eq 0) { 'no failure opportunity; miss safety was not exercised' }
+                     elseif ($a.Failed -eq 0) { 'complete clean matrix; zero observed misses' }
                      else { 'no misses' }
           "### Selection audit`n`n- map in effect: ${{ steps.source.outputs.map_run_id }}`n- would run $($a.WouldRun)/$($a.TotalShards), skip $($a.WouldSkip)`n- $($a.Failed) shard(s) failed`n- $verdict" |
             Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
-          # Escalation is safe, but it proves only the fallback. Certification authorizes actual
-          # reduction, so require both a non-escalated plan that would skip work and at least one
-          # failing shard that gave the audit a real opportunity to observe a selection miss.
-          if ($auditExit -eq 0 -and -not [bool] $a.Escalated -and
-              [int] $a.WouldSkip -gt 0 -and [int] $a.Failed -gt 0) {
-            $previousMap = Get-Content prevmap/shard-map.json -Raw | ConvertFrom-Json
-            New-Item -ItemType Directory -Path certified-map -Force | Out-Null
-            Copy-Item -LiteralPath prevmap/shard-map.json -Destination certified-map/shard-map.json
-            [ordered]@{
-              schemaVersion = 1
-              candidateMapRunId = [long] '${{ steps.source.outputs.map_run_id }}'
-              candidateMapSha = [string] $previousMap.sha
-              auditSourceRunId = [long] '${{ steps.source.outputs.run_id }}'
-              auditSourceSha = '${{ steps.source.outputs.sha }}'
-              certificationRunId = [long] $env:GITHUB_RUN_ID
-              escalated = [bool] $a.Escalated
-              wouldRun = [int] $a.WouldRun
-              wouldSkip = [int] $a.WouldSkip
-              failedShards = [int] $a.Failed
-              missCount = [int] $a.MissCount
-            } | ConvertTo-Json -Depth 4 | Set-Content certified-map/certification.json -Encoding utf8
-            "certified=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          }
-          else {
-            "certified=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            Write-Host 'candidate did not exercise both failure detection and reduction - not certifying it'
-          }
+          # The shipping policy is executable outside YAML. It validates the exact map universe,
+          # source outcomes and audit counts before producing either file in the certified pair.
+          & (Join-Path $auditTools 'New-ShardMapCertificate.ps1') `
+              -MapFile prevmap/shard-map.json -AuditFile audit.json -OutcomesFile outcomes.json `
+              -CandidateMapRunId ([long] '${{ steps.source.outputs.map_run_id }}') `
+              -AuditSourceRunId ([long] '${{ steps.source.outputs.run_id }}') `
+              -AuditSourceSha '${{ steps.source.outputs.sha }}' `
+              -CertificationRunId ([long] $env:GITHUB_RUN_ID) -OutDirectory certified-map
+          if ($LASTEXITCODE -ne 0) { throw "certificate policy exited $LASTEXITCODE" }
+          $certified = Test-Path -LiteralPath certified-map/certification.json
+          "certified=$($certified.ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           exit $auditExit
 
       - name: Upload certified map

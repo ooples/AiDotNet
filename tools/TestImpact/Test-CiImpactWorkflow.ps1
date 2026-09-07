@@ -198,14 +198,20 @@ Assert-Contract ($map.Contains('name: certified-shard-map')) `
     'map workflow does not publish certified-shard-map'
 Assert-Contract ($map.Contains('certification.json')) `
     'certified map artifact has no provenance record'
+Assert-Contract ($map.Contains('./tools/TestImpact/Measure-SelectionMiss.ps1 -SelfTest')) `
+    'map certification can run without first proving that skipped failures are detected'
+Assert-Contract ($map.Contains('./tools/TestImpact/New-ShardMapCertificate.ps1 -SelfTest')) `
+    'the shipping certification policy is not tested before use'
 Assert-Contract ($map.Contains('found=false')) `
     'automatic no-source bootstrap is still represented as a workflow failure'
 Assert-Contract ($map.Contains("candidate_ready: `${{ steps.source.outputs.found }}")) `
     'map workflow does not expose whether this invocation produced a candidate'
 Assert-Contract ($map.Contains("if: steps.audit.outputs.certified == 'true'")) `
     'certified artifact upload is not gated by the audit decision'
-Assert-Contract ($map -match '(?s)if \(\$auditExit -eq 0.*?\$a\.WouldSkip -gt 0.*?\$a\.Failed -gt 0\)') `
-    'map certification does not require a real failing-shard opportunity as well as reduction'
+Assert-Contract ($map.Contains("(Join-Path `$auditTools 'New-ShardMapCertificate.ps1')")) `
+    'the workflow does not execute the tested certification policy'
+Assert-Contract (-not ($map -match '\$a\.Failed -gt 0')) `
+    'map certification still depends on a naturally occurring shard failure'
 Assert-Contract ($map -match "if \[ '.*needs\.build-map\.result.*' = 'success' \] && \[ '.*candidate_ready.*' = 'true' \]") `
     'coverage dispatch can cite the current map run when no candidate was produced'
 
