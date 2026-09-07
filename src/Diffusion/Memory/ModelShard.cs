@@ -32,6 +32,12 @@ namespace AiDotNet.Diffusion.Memory;
 ///
 /// Usage:
 /// ```csharp
+/// var layers = new List&lt;ILayer&lt;float&gt;&gt;
+/// {
+///     new DenseLayer&lt;float&gt;(outputSize: 256),
+///     new DenseLayer&lt;float&gt;(outputSize: 128)
+/// };
+/// var input = Tensor&lt;float&gt;.CreateRandom(1, 512);
 /// var shard = new ModelShard&lt;float&gt;(layers, numDevices: 4);
 /// var output = shard.Forward(input);
 /// ```

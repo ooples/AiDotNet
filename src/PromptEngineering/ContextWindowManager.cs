@@ -26,6 +26,7 @@ namespace AiDotNet.PromptEngineering;
 /// }
 ///
 /// // Or split long text into chunks
+/// var longDocument = string.Join(" ", Enumerable.Repeat("some long document text.", 500));
 /// var chunks = manager.SplitIntoChunks(longDocument);
 /// ```
 ///

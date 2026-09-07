@@ -81,6 +81,9 @@ namespace AiDotNet.LoRA;
 /// var loraConfig = new DefaultLoRAConfiguration&lt;double&gt;(rank: 8, alpha: 8, freezeBaseLayer: true);
 ///
 /// // Apply to all layers in your model
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 8, outputSize: 1);
+/// var model = new NeuralNetwork&lt;double&gt;(architecture);
 /// var adaptedLayers = model.Layers.Select(layer => loraConfig.ApplyLoRA(layer)).ToList();
 /// ```
 ///

@@ -29,8 +29,15 @@ namespace AiDotNet.PhysicsInformed;
 ///
 /// Usage:
 /// ```csharp
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 2, outputSize: 1);
+/// var myPinn = new PhysicsInformedNeuralNetwork&lt;double&gt;(
+///     architecture,
+///     new HeatEquation&lt;double&gt;(),
+///     Array.Empty&lt;IBoundaryCondition&lt;double&gt;&gt;());
+///
 /// var trainer = new GpuPINNTrainer&lt;double&gt;(myPinn);
-/// var history = trainer.Train(epochs: 10000, options: GpuPINNTrainingOptions.Default);
+/// var history = trainer.Train(epochs: 10000, learningRate: 0.001);
 /// ```
 ///
 /// The trainer automatically falls back to CPU if GPU is not available.
