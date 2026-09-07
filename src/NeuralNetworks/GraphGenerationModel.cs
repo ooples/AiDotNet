@@ -56,13 +56,19 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var model = new GraphGenerationModel&lt;float&gt;(
-///     inputFeatures: 9,
-///     hiddenDim: 128,
-///     maxNodes: 50,
-///     learningRate: 0.005);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 9);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 9);
+///
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new GraphGenerationModel&lt;float&gt;(
+///         inputFeatures: 9,
+///         hiddenDim: 128,
+///         maxNodes: 50,
+///         learningRate: 0.005))
+///     .Build(trainX, trainY);
+///
 /// var nodeFeatures = Tensor&lt;float&gt;.CreateRandom(new[] { 20, 9 });
-/// var graph = model.Predict(nodeFeatures);
+/// var graph = result.Predict(nodeFeatures);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.GraphAnalysis)]

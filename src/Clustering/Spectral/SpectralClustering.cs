@@ -37,11 +37,15 @@ namespace AiDotNet.Clustering.Spectral;
 /// </remarks>
 /// <example>
 /// <code>
-/// var dataMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
-/// var options = new SpectralOptions&lt;double&gt;();
-/// var spectralClustering = new SpectralClustering&lt;double&gt;(options);
-/// spectralClustering.Train(dataMatrix);
-/// Vector&lt;double&gt;? labels = spectralClustering.Labels;
+/// var dataMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 1.5, 1.8 }, { 5.0, 8.0 }, { 8.0, 8.0 } });
+/// // clustering is unsupervised, so the builder's label argument is ignored
+/// var unused = new Vector&lt;double&gt;(dataMatrix.Rows);
+///
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new SpectralClustering&lt;double&gt;(new SpectralOptions&lt;double&gt;()))
+///     .Build(dataMatrix, unused);
+///
+/// Vector&lt;double&gt;? labels = result.GetClusterLabels();
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

@@ -37,18 +37,21 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var inputTensor = Tensor&lt;float&gt;.CreateRandom(2, 4);
-/// // Create an audio-visual correspondence network
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Embedding,
 ///     inputSize: 512,
-///     outputSize: 256);
+///     outputSize: 128);
 ///
-/// var model = new AudioVisualCorrespondenceNetwork&lt;float&gt;(architecture);
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 512);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 128);
 ///
-/// // Compute correspondence between audio and visual inputs
-/// Tensor&lt;float&gt; embedding = model.Predict(inputTensor);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new AudioVisualCorrespondenceNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+///
+/// var inputTensor = Tensor&lt;float&gt;.CreateRandom(1, 512);
+/// Tensor&lt;float&gt; embedding = result.Predict(inputTensor);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]

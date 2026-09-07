@@ -48,10 +48,15 @@ namespace AiDotNet.Clustering.Neural;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new SelfOrganizingMapOptions&lt;double&gt;();
-/// var selfOrganizingMap = new SelfOrganizingMap&lt;double&gt;(options);
-/// selfOrganizingMap.Train(dataMatrix);
-/// Vector<double> labels = selfOrganizingMap.Labels;
+/// var dataMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 1.5, 1.8 }, { 5.0, 8.0 }, { 8.0, 8.0 } });
+/// // clustering is unsupervised, so the builder's label argument is ignored
+/// var unused = new Vector&lt;double&gt;(dataMatrix.Rows);
+///
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new SelfOrganizingMap&lt;double&gt;(new SOMOptions&lt;double&gt;()))
+///     .Build(dataMatrix, unused);
+///
+/// Vector&lt;double&gt;? labels = result.GetClusterLabels();
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

@@ -52,9 +52,16 @@ namespace AiDotNet.Diffusion.Video;
 /// <example>
 /// <code>
 /// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 4, DefaultInferenceSteps = 30 };
-/// var model = new LuminaT2XModel&lt;float&gt;(options: options);
-/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4, 16, 64, 64 });
-/// var video = model.Predict(noise);
+///
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(2, 4, 32, 32);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(2, 4, 32, 32);
+///
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new LuminaT2XModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+///
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 4, 128, 128 });
+/// var generated = result.Predict(noise);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Multimodal)]

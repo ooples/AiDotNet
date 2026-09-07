@@ -38,13 +38,19 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// </remarks>
 /// <example>
 /// <code>
-/// var pointCloudTensor = Tensor&lt;float&gt;.CreateRandom(1, 128, 3);
-/// // Create Point Transformer V3 for 3D semantic segmentation
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     inputFeatures: 6, numClasses: 40);
-/// var ptv3 = new PointTransformerV3&lt;float&gt;(architecture,
-///     numClasses: 40, modelSize: PointTransformerV3ModelSize.Base);
-/// Tensor&lt;float&gt; labels = ptv3.Predict(pointCloudTensor);
+///     InputType.ThreeDimensional, NeuralNetworkTaskType.ImageSegmentation,
+///     inputSize: 6, outputSize: 40);
+///
+/// var trainPoints = Tensor&lt;float&gt;.CreateRandom(4, 128, 6);
+/// var trainLabels = Tensor&lt;float&gt;.CreateRandom(4, 128, 40);
+///
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new PointTransformerV3&lt;float&gt;(architecture, numClasses: 40, modelSize: PointTransformerV3ModelSize.Base))
+///     .Build(trainPoints, trainLabels);
+///
+/// var pointCloudTensor = Tensor&lt;float&gt;.CreateRandom(1, 128, 6);
+/// Tensor&lt;float&gt; labels = result.Predict(pointCloudTensor);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
