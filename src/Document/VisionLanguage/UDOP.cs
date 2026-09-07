@@ -1,4 +1,5 @@
-﻿using AiDotNet.Attributes;
+﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -57,6 +58,9 @@ namespace AiDotNet.Document.VisionLanguage;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Unifying Vision, Text, and Layout for Universal Document Processing", "https://arxiv.org/abs/2212.02623", Year = 2023, Authors = "Zineng Tang, Ziyi Yang, Guoxin Wang, Yuwei Fang, Yang Liu, Chenguang Zhu, Michael Zeng, Cha Zhang, Mohit Bansal")]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, LearningRate = 5e-5,
+                WeightDecay = 1e-2, WarmupSteps = 1000, ReferenceBatchSize = 16,
+                Source = "Tang et al. 2023, Sec. 5: Adam with learning rate 5e-5, 1000 warmup steps, batch size 16, weight decay 1e-2, beta1 0.9 and beta2 0.98 for the DUE-Benchmark finetuning experiments. FUNSD and CORD use 3e-4 and RVL-CDIP 1e-3, which are different datasets and not what this declares. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocumentQA<T>, IDocumentClassifier<T>
 {
     private readonly UDOPOptions _options;
@@ -196,14 +200,15 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         // Built with no options, this ran at Adam's 1e-3 default -- twenty times the paper rate.
         // The paper pairs Adam with weight decay, which is AdamW's behaviour, so that is the
         // faithful mapping here.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                Beta1 = 0.9,
-                Beta2 = 0.98,
-                WeightDecay = 0.01
-            });
+        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
+            optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    Beta1 = 0.9,
+                    Beta2 = 0.98,
+                    WeightDecay = 0.01
+                }));
 
         ImageSize = imageSize;
         MaxSequenceLength = maxSequenceLength;
