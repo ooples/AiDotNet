@@ -777,6 +777,16 @@ jobs:
             Write-Host "::error::duplicate shard name(s) in .github/test-shards.yml: $($dupes -join ', ')"
             exit 1
           }
+          $slugDupes = @(
+            $all |
+              Group-Object { $_.name -replace '[\\/:*?"<>|\s-]+', '_' } |
+              Where-Object Count -gt 1 |
+              ForEach-Object Name
+          )
+          if ($slugDupes.Count -gt 0) {
+            Write-Host "::error::shard name(s) collide after artifact-key normalization: $($slugDupes -join ', ')"
+            exit 1
+          }
           Write-Host "shard list: $($all.Count) shard(s)"
 
           $escalate = $true
@@ -2239,17 +2249,11 @@ jobs:
           # run reported "115 shards, 115 passed, 0 failed" while Integration D had died. Shards
           # that selection deliberately skipped are not in this matrix, so anything expected and
           # absent here died rather than being skipped. #2086.
-          $expectedShardNames = @()
           $matrixJson = $env:EXPECTED_SHARD_MATRIX
-          if (-not [string]::IsNullOrWhiteSpace($matrixJson)) {
-            try {
-              $expectedShardNames = @(($matrixJson | ConvertFrom-Json).shard |
-                ForEach-Object { [string] $_.name } |
-                Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-            } catch {
-              Write-Warning "Could not parse the selected shard matrix; shard-completeness enforcement is skipped: $($_.Exception.Message)"
-            }
-          }
+          $expectedShardNames = @(
+            & ./.github/scripts/get-selected-shard-names.ps1 -MatrixJson $matrixJson
+          )
+          "inventory_valid=true" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
           Write-Host "expected shards from the dispatched matrix: $($expectedShardNames.Count)"
 
           $arguments = @{
@@ -2305,7 +2309,9 @@ jobs:
           ./.github/scripts/test-regression-analysis.ps1 @arguments
 
       - name: Upload final TRX ledger and comparison report
-        if: always()
+        # Missing/invalid selection output cannot prove which shards were dispatched. Do not
+        # publish a partial ledger that a later run could mistake for a complete baseline.
+        if: always() && steps.analyze.outputs.inventory_valid == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
           name: test-outcome-ledger-${{ github.sha }}

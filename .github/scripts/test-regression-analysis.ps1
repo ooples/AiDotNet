@@ -466,6 +466,23 @@ function Add-MarkdownList {
     $Lines.Add('')
 }
 
+# Validate the expected inventory before creating any report files. Distinct display names can
+# collapse to the same artifact/ledger key (for example, "Shard A-B" and "Shard A B"). If that
+# ambiguity is accepted, one artifact can satisfy two dispatched rows and conceal a dead shard.
+$expectedShards = New-Object System.Collections.Generic.List[object]
+$expectedShardKeys = New-Object System.Collections.Generic.HashSet[string]([StringComparer]::Ordinal)
+foreach ($expectedName in $ExpectedShardNames) {
+    if ([string]::IsNullOrWhiteSpace($expectedName)) { continue }
+    $expectedKey = ConvertTo-ShardKey $expectedName
+    if (-not $expectedShardKeys.Add($expectedKey)) {
+        throw "Expected shard names collide after normalization: '$expectedName' maps to '$expectedKey'."
+    }
+    $expectedShards.Add([PSCustomObject]@{
+        key = $expectedKey
+        name = [string] $expectedName
+    })
+}
+
 New-Item -Path $OutputDirectory -ItemType Directory -Force | Out-Null
 $ledgerPath = Join-Path $OutputDirectory 'ledger.json'
 $comparisonPath = Join-Path $OutputDirectory 'comparison.json'
@@ -486,18 +503,16 @@ $current = Read-TestLedger -Root $CurrentResultsPath -Sha $CurrentSha
 # Shards that selection deliberately skipped are excluded upstream (they are merged into
 # the approved shard-change manifest), so anything expected-but-absent here died.
 $missingExpectedShards = New-Object System.Collections.Generic.List[object]
-if ($ExpectedShardNames.Count -gt 0) {
+if ($expectedShards.Count -gt 0) {
     $presentShardKeys = New-Object System.Collections.Generic.HashSet[string]([StringComparer]::Ordinal)
     foreach ($shard in @($current.shards)) { [void] $presentShardKeys.Add([string] $shard.key) }
 
-    foreach ($expectedName in $ExpectedShardNames) {
-        if ([string]::IsNullOrWhiteSpace($expectedName)) { continue }
-        $expectedKey = ConvertTo-ShardKey $expectedName
-        if ($presentShardKeys.Contains($expectedKey)) { continue }
+    foreach ($expectedShard in $expectedShards) {
+        if ($presentShardKeys.Contains($expectedShard.key)) { continue }
 
         $missingExpectedShards.Add([PSCustomObject]@{
-            key = $expectedKey
-            name = [string] $expectedName
+            key = $expectedShard.key
+            name = $expectedShard.name
             status = 'Missing'
             policyStatus = 'Missing'
             total = 0

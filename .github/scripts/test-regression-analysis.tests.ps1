@@ -1,6 +1,7 @@
 ﻿$ErrorActionPreference = 'Stop'
 
 $analyzer = Join-Path $PSScriptRoot 'test-regression-analysis.ps1'
+$matrixParser = Join-Path $PSScriptRoot 'get-selected-shard-names.ps1'
 $retrySelector = Join-Path $PSScriptRoot 'find-pr-new-failures.ps1'
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ("aidotnet-trx-analysis-" + [Guid]::NewGuid().ToString('N'))
 
@@ -577,6 +578,35 @@ internal static class TouchedRegressionProbe
     & $analyzer -CurrentResultsPath $missingShardRoot -OutputDirectory $legacyOutput -CurrentSha 'ac01'
     $legacy = Get-Content -LiteralPath (Join-Path $legacyOutput 'comparison.json') -Raw | ConvertFrom-Json
     Assert-Equal $true $legacy.policyPassed 'with no expected set supplied, inventory mode behaves as before'
+
+    # Expected names are artifact keys after normalization. Two distinct display names must not
+    # be allowed to alias one uploaded artifact, and validation must happen before report output.
+    $collidingOutput = Join-Path $testRoot 'colliding-shard-names'
+    $collidingRun = Invoke-AnalyzerChild -Analyzer $analyzer `
+        -CurrentResultsPath $missingShardRoot -OutputDirectory $collidingOutput -CurrentSha 'ac01' `
+        -ExpectedShardNames @('Shard A-B', 'Shard A B')
+    Assert-Equal 1 $collidingRun.ExitCode 'normalized expected shard keys must be unique'
+    Assert-Matches 'collide after normalization' ($collidingRun.Output -join "`n") `
+        'the collision failure identifies the violated key contract'
+    Assert-Equal $false (Test-Path -LiteralPath (Join-Path $collidingOutput 'ledger.json')) `
+        'an ambiguous expected inventory is rejected before any reusable ledger is written'
+
+    # The workflow output is an array of shard objects, not an object with a `shard` property.
+    # Parse that exact shape and fail closed for every form that cannot prove a nonempty inventory.
+    $validMatrix = '[{"name":"Shard Alpha","framework":"net10.0"},{"name":"Shard Beta","framework":"net10.0"}]'
+    $parsedNames = @(& $matrixParser -MatrixJson $validMatrix)
+    Assert-Equal 2 $parsedNames.Count 'the selected-shard array yields every dispatched name'
+    Assert-Equal 'Shard Alpha' $parsedNames[0] 'the first selected shard is preserved'
+    Assert-Equal 'Shard Beta' $parsedNames[1] 'the second selected shard is preserved'
+
+    foreach ($invalidMatrix in @('', '{not-json', '[]', '{"name":"not-an-array"}', '[{"framework":"net10.0"}]',
+            '[{"name":"Shard A-B"},{"name":"Shard A B"}]')) {
+        $matrixError = $null
+        try { $null = & $matrixParser -MatrixJson $invalidMatrix }
+        catch { $matrixError = $_.Exception.Message }
+        Assert-Equal $false ([string]::IsNullOrWhiteSpace($matrixError)) `
+            "an unverifiable selected matrix fails closed: $invalidMatrix"
+    }
 
     Write-Host 'test-regression-analysis.tests.ps1: all assertions passed.'
 }
