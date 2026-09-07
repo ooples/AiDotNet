@@ -1959,6 +1959,24 @@ public interface IAiModelBuilder<T, TInput, TOutput>
         AiDotNet.Tensors.LinearAlgebra.Vector<int> treatment,
         AiDotNet.Tensors.LinearAlgebra.Vector<T> outcome);
 
+    /// <summary>
+    /// Builds an unsupervised model from data alone.
+    /// </summary>
+    /// <param name="features">The data to fit, one row per sample.</param>
+    /// <returns>The built result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Clustering has no labels to learn from, so <see cref="Build(TInput, TOutput)"/> forced every
+    /// caller to construct an argument the model ignores and then explain it. This overload constructs
+    /// it instead. Assignments come off the result through <c>GetClusterLabels</c>.
+    /// </para>
+    /// <para>
+    /// Only meaningful on a builder configured with an unsupervised model; anything else throws rather
+    /// than quietly discarding labels the model would have used.
+    /// </para>
+    /// </remarks>
+    AiModelResult<T, TInput, TOutput> Build(TInput features);
+
     // ============================================================================
     // Training Infrastructure Configuration Methods
     // ============================================================================

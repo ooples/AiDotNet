@@ -399,6 +399,45 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     ///   Forward dispatch.</item>
     /// </list>
     /// </remarks>
+    /// <summary>
+    /// Whether a model's parameters can be handed to an optimizer to initialize, answering "no" when the
+    /// model cannot yet say.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is a path-selection probe, so it runs before training and its exceptions abort the whole
+    /// build. A model whose parameter shape is only known once it has been fitted has a FitDeferred
+    /// layout, and reading <c>ParameterCount</c> on one raises
+    /// <see cref="AiDotNet.Models.Parameters.ParameterLayoutNotReadyException"/> — which is exactly what
+    /// four causal models did, failing every build with a message about parameter layouts rather than
+    /// anything the caller could act on (#2116).
+    /// </para>
+    /// <para>
+    /// The fix for that model was to stop answering with a count, but the pattern is not rare: most
+    /// bases still write <c>SupportsParameterInitialization =&gt; ParameterCount &gt; 0</c>, and so does
+    /// the <see cref="IParameterizable{T, TInput, TOutput}"/> default. Catching only
+    /// <c>ParameterLayoutNotReadyException</c> — never a bare catch — turns the next such model into a
+    /// correct path choice instead of an aborted build: "not ready" means the optimizer cannot seed it,
+    /// which is precisely what routes it to direct training.
+    /// </para>
+    /// </remarks>
+    private static bool CanInitializeParameters(IFullModel<T, TInput, TOutput> model)
+    {
+        if (model is not IParameterizable<T, TInput, TOutput> parameterizable)
+        {
+            return false;
+        }
+
+        try
+        {
+            return parameterizable.SupportsParameterInitialization;
+        }
+        catch (AiDotNet.Models.Parameters.ParameterLayoutNotReadyException)
+        {
+            return false;
+        }
+    }
+
     private bool UseDirectTrainingPath(IFullModel<T, TInput, TOutput> model)
     {
         // The `model` parameter is the resolved model at the call site
@@ -412,8 +451,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // these clauses without realising the intent (the
         // IParameterizable check follows the wrapped chain; the other
         // two follow the original user choice).
-        bool modelLacksParameterizableInit =
-            model is not IParameterizable<T, TInput, TOutput> { SupportsParameterInitialization: true };
+        bool modelLacksParameterizableInit = !CanInitializeParameters(model);
         bool isClusteringBase = _model is Clustering.Base.ClusteringBase<T>;
         bool isLoraWrappedNeuralNetwork =
             _loraConfiguration is not null && _model is NeuralNetworks.NeuralNetworkBase<T>;
