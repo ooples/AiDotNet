@@ -40,7 +40,12 @@ namespace AiDotNet.Optimizers;
 ///     ?? new AdamWOptimizer&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;(this);
 /// </code>
 /// </remarks>
-public static class PaperOptimizerFactory
+/// <remarks>
+/// Internal by design: applications configure optimizers through the model and facade API, and
+/// models reach this only to choose their paper-faithful default when the caller supplied none.
+/// InternalsVisibleTo already exposes it to the test assembly.
+/// </remarks>
+internal static class PaperOptimizerFactory
 {
     /// <summary>
     /// Cached per model type: the reflection cost would otherwise be paid on every construction,
@@ -54,7 +59,7 @@ public static class PaperOptimizerFactory
     /// <returns>
     /// <c>null</c> when there is no applicable declaration, so callers keep their existing default.
     /// </returns>
-    public static IGradientBasedOptimizer<T, TInput, TOutput>? CreateFor<T, TInput, TOutput>(
+    internal static IGradientBasedOptimizer<T, TInput, TOutput>? CreateFor<T, TInput, TOutput>(
         IFullModel<T, TInput, TOutput> model, string component = "")
     {
         if (model is null) return null;
@@ -95,6 +100,45 @@ public static class PaperOptimizerFactory
         return optimizer;
     }
 
+    /// <summary>
+    /// Builds one complete, already-configured recipe without going through attribute lookup.
+    /// </summary>
+    /// <remarks>
+    /// Kept separate from reflection-based selection so every optimizer kind and every scheduler
+    /// contract can be exercised directly against a synthetic recipe, rather than only through
+    /// whichever models happen to declare one.
+    /// </remarks>
+    internal static IGradientBasedOptimizer<T, TInput, TOutput> CreateFromRecipe<T, TInput, TOutput>(
+        IFullModel<T, TInput, TOutput> model,
+        PaperOptimizerAttribute recipe)
+    {
+        if (model is null) throw new ArgumentNullException(nameof(model));
+        if (recipe is null) throw new ArgumentNullException(nameof(recipe));
+
+        var built = Build<T, TInput, TOutput>(
+            model, recipe, new List<RecipeAdaptation>(), new List<string>(), new List<string>());
+
+        return built ?? throw new NotSupportedException(
+            "The declared paper optimizer " + recipe.Optimizer
+                + " has no gradient-based implementation here.");
+    }
+
+    /// <summary>Builds the scheduler a recipe declares, for a run whose length is not known.</summary>
+    /// <remarks>
+    /// The two-argument form, for callers and tests that hold only the recipe. Schedules needing
+    /// a horizon degrade exactly as they would in a real short run.
+    /// </remarks>
+    internal static ILearningRateScheduler? BuildScheduler(PaperOptimizerAttribute recipe, double baseRate)
+    {
+        if (recipe is null) throw new ArgumentNullException(nameof(recipe));
+
+        ValidateSchedule(recipe);
+
+        int warmupSteps = recipe.WarmupSteps > 0 ? recipe.WarmupSteps : 0;
+        var scheduler = BuildScheduler(recipe, baseRate, warmupSteps, totalSteps: 0, modelDimension: 0);
+        return ComposeWarmup(scheduler, recipe, baseRate, warmupSteps);
+    }
+
     /// <summary>Constructs the declared optimizer, or <c>null</c> when this library has none for it.</summary>
     private static IGradientBasedOptimizer<T, TInput, TOutput>? Build<T, TInput, TOutput>(
         IFullModel<T, TInput, TOutput> model,
@@ -106,46 +150,140 @@ public static class PaperOptimizerFactory
         _pendingAdaptations.Value = adaptations;
         _pendingUnhonoured.Value = unhonoured;
         _pendingCautions.Value = cautions;
+
+        // Typed rather than reflective. Setting a value by name cannot see the flag that governs
+        // it, and several optimizers here pair a hyperparameter with an adapt-during-training
+        // switch that is ON by default: Adam and AdamW clamp their running betas into
+        // [MinBeta1, MaxBeta1] every step under UseAdaptiveBetas, which silently rewrote the
+        // beta1 of 0.5 that MelGAN declares to 0.8, while the report still read Exact. A typed
+        // switch makes each pairing explicit, and makes a renamed property a compile error
+        // rather than a silent no-op.
+        TOptions Configured<TOptions>(TOptions options)
+            where TOptions : GradientBasedOptimizerOptions<T, TInput, TOutput>
+        {
+            if (!double.IsNaN(recipe.LearningRate)) options.InitialLearningRate = recipe.LearningRate;
+
+            if (!double.IsNaN(recipe.Momentum))
+            {
+                options.InitialMomentum = recipe.Momentum;
+                options.UseAdaptiveMomentum = false;
+            }
+
+            switch (options)
+            {
+                // Adam8Bit derives from the Adam options, so it must precede the Adam case.
+                case Adam8BitOptimizerOptions<T, TInput, TOutput> adam8Bit:
+                    ApplyAdamFamily(adam8Bit, recipe);
+                    break;
+                case AdamOptimizerOptions<T, TInput, TOutput> adam:
+                    ApplyAdamFamily(adam, recipe);
+                    break;
+                // AdamW options do not derive from Adam options, so this cannot share the helper.
+                case AdamWOptimizerOptions<T, TInput, TOutput> adamW:
+                    if (!double.IsNaN(recipe.Beta1)) adamW.Beta1 = recipe.Beta1;
+                    if (!double.IsNaN(recipe.Beta2)) adamW.Beta2 = recipe.Beta2;
+                    if (!double.IsNaN(recipe.Epsilon)) adamW.Epsilon = recipe.Epsilon;
+                    if (!double.IsNaN(recipe.WeightDecay)) adamW.WeightDecay = recipe.WeightDecay;
+                    if (!double.IsNaN(recipe.Beta1) || !double.IsNaN(recipe.Beta2))
+                        adamW.UseAdaptiveBetas = false;
+                    break;
+                case RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput> rmsProp:
+                    if (!double.IsNaN(recipe.Rho)) rmsProp.Decay = recipe.Rho;
+                    if (!double.IsNaN(recipe.Epsilon)) rmsProp.Epsilon = recipe.Epsilon;
+                    break;
+                case AdagradOptimizerOptions<T, TInput, TOutput> adagrad:
+                    if (!double.IsNaN(recipe.Epsilon)) adagrad.Epsilon = recipe.Epsilon;
+                    break;
+                case AdaDeltaOptimizerOptions<T, TInput, TOutput> adadelta:
+                    if (!double.IsNaN(recipe.Rho))
+                    {
+                        adadelta.Rho = recipe.Rho;
+                        adadelta.UseAdaptiveRho = false;
+                    }
+                    if (!double.IsNaN(recipe.Epsilon)) adadelta.Epsilon = recipe.Epsilon;
+                    break;
+                case AdaMaxOptimizerOptions<T, TInput, TOutput> adamax:
+                    if (!double.IsNaN(recipe.Beta1)) adamax.Beta1 = recipe.Beta1;
+                    if (!double.IsNaN(recipe.Beta2)) adamax.Beta2 = recipe.Beta2;
+                    if (!double.IsNaN(recipe.Epsilon)) adamax.Epsilon = recipe.Epsilon;
+                    break;
+                case NadamOptimizerOptions<T, TInput, TOutput> nadam:
+                    if (!double.IsNaN(recipe.Beta1)) nadam.Beta1 = recipe.Beta1;
+                    if (!double.IsNaN(recipe.Beta2)) nadam.Beta2 = recipe.Beta2;
+                    if (!double.IsNaN(recipe.Epsilon)) nadam.Epsilon = recipe.Epsilon;
+                    break;
+                case LAMBOptimizerOptions<T, TInput, TOutput> lamb:
+                    if (!double.IsNaN(recipe.Beta1)) lamb.Beta1 = recipe.Beta1;
+                    if (!double.IsNaN(recipe.Beta2)) lamb.Beta2 = recipe.Beta2;
+                    if (!double.IsNaN(recipe.Epsilon)) lamb.Epsilon = recipe.Epsilon;
+                    if (!double.IsNaN(recipe.WeightDecay)) lamb.WeightDecay = recipe.WeightDecay;
+                    break;
+                case LionOptimizerOptions<T, TInput, TOutput> lion:
+                    if (!double.IsNaN(recipe.Beta1))
+                    {
+                        lion.Beta1 = recipe.Beta1;
+                        lion.UseAdaptiveBeta1 = false;
+                    }
+                    if (!double.IsNaN(recipe.Beta2))
+                    {
+                        lion.Beta2 = recipe.Beta2;
+                        lion.UseAdaptiveBeta2 = false;
+                    }
+                    if (!double.IsNaN(recipe.WeightDecay)) lion.WeightDecay = recipe.WeightDecay;
+                    break;
+            }
+
+            ScaleToConfiguredRun(options, recipe);
+            ConfigureScheduleAndClipping(options, recipe);
+            return options;
+        }
+
         try
         {
             return recipe.Optimizer switch
         {
             OptimizerKind.Adam => new AdamOptimizer<T, TInput, TOutput>(
-                model, Configure(new AdamOptimizerOptions<T, TInput, TOutput>(), recipe)),
+                model, Configured(new AdamOptimizerOptions<T, TInput, TOutput>())),
 
             OptimizerKind.AdamW => new AdamWOptimizer<T, TInput, TOutput>(
-                model, Configure(new AdamWOptimizerOptions<T, TInput, TOutput>(), recipe)),
+                model, Configured(new AdamWOptimizerOptions<T, TInput, TOutput>())),
 
             OptimizerKind.Sgd => new StochasticGradientDescentOptimizer<T, TInput, TOutput>(
-                model, Configure(new StochasticGradientDescentOptimizerOptions<T, TInput, TOutput>(), recipe)),
+                model, Configured(new StochasticGradientDescentOptimizerOptions<T, TInput, TOutput>())),
 
             OptimizerKind.SgdMomentum when recipe.UseNesterov
                 => new NesterovAcceleratedGradientOptimizer<T, TInput, TOutput>(
-                    model, Configure(new NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>(), recipe)),
+                    model, Configured(new NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>())),
 
             OptimizerKind.SgdMomentum => new MomentumOptimizer<T, TInput, TOutput>(
-                model, Configure(new MomentumOptimizerOptions<T, TInput, TOutput>(), recipe)),
+                model, Configured(new MomentumOptimizerOptions<T, TInput, TOutput>())),
 
             OptimizerKind.RmsProp => new RootMeanSquarePropagationOptimizer<T, TInput, TOutput>(
-                model, Configure(new RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>(), recipe)),
+                model, Configured(new RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>())),
 
             OptimizerKind.Adagrad => new AdagradOptimizer<T, TInput, TOutput>(
-                model, Configure(new AdagradOptimizerOptions<T, TInput, TOutput>(), recipe)),
+                model, Configured(new AdagradOptimizerOptions<T, TInput, TOutput>())),
 
             OptimizerKind.Adadelta => new AdaDeltaOptimizer<T, TInput, TOutput>(
-                model, Configure(new AdaDeltaOptimizerOptions<T, TInput, TOutput>(), recipe)),
+                model, Configured(new AdaDeltaOptimizerOptions<T, TInput, TOutput>())),
 
             OptimizerKind.Adamax => new AdaMaxOptimizer<T, TInput, TOutput>(
-                model, Configure(new AdaMaxOptimizerOptions<T, TInput, TOutput>(), recipe)),
+                model, Configured(new AdaMaxOptimizerOptions<T, TInput, TOutput>())),
 
             OptimizerKind.Nadam => new NadamOptimizer<T, TInput, TOutput>(
-                model, Configure(new NadamOptimizerOptions<T, TInput, TOutput>(), recipe)),
+                model, Configured(new NadamOptimizerOptions<T, TInput, TOutput>())),
+
+            OptimizerKind.Adam8Bit => new Adam8BitOptimizer<T, TInput, TOutput>(
+                model, Configured(new Adam8BitOptimizerOptions<T, TInput, TOutput>())),
+
+            OptimizerKind.LBfgs => new LBFGSOptimizer<T, TInput, TOutput>(
+                model, Configured(new LBFGSOptimizerOptions<T, TInput, TOutput>())),
 
             OptimizerKind.Lamb => new LAMBOptimizer<T, TInput, TOutput>(
-                model, Configure(new LAMBOptimizerOptions<T, TInput, TOutput>(), recipe)),
+                model, Configured(new LAMBOptimizerOptions<T, TInput, TOutput>())),
 
             OptimizerKind.Lion => new LionOptimizer<T, TInput, TOutput>(
-                model, Configure(new LionOptimizerOptions<T, TInput, TOutput>(), recipe)),
+                model, Configured(new LionOptimizerOptions<T, TInput, TOutput>())),
 
                 // Unspecified, and optimizers with no gradient-based implementation here, fall
                 // through to the caller's own default rather than being approximated by a
@@ -220,7 +358,7 @@ public static class PaperOptimizerFactory
     /// published value is caught and named.
     /// </para>
     /// </remarks>
-    public static IGradientBasedOptimizer<T, TInput, TOutput> VerifyHandBuilt<T, TInput, TOutput>(
+    internal static IGradientBasedOptimizer<T, TInput, TOutput> VerifyHandBuilt<T, TInput, TOutput>(
         IFullModel<T, TInput, TOutput> model,
         IGradientBasedOptimizer<T, TInput, TOutput> optimizer,
         string component = "")
@@ -274,6 +412,22 @@ public static class PaperOptimizerFactory
         return optimizer;
     }
 
+    /// <summary>Applies the Adam-family moments, and stops them being adapted away.</summary>
+    /// <remarks>
+    /// UseAdaptiveBetas defaults to true and clamps the running betas into [MinBeta1, MaxBeta1]
+    /// on every step, so a paper value outside that band is silently replaced. Declaring a beta
+    /// therefore also means declaring that it does not move.
+    /// </remarks>
+    private static void ApplyAdamFamily<T, TInput, TOutput>(
+        AdamOptimizerOptions<T, TInput, TOutput> options, PaperOptimizerAttribute recipe)
+    {
+        if (!double.IsNaN(recipe.Beta1)) options.Beta1 = recipe.Beta1;
+        if (!double.IsNaN(recipe.Beta2)) options.Beta2 = recipe.Beta2;
+        if (!double.IsNaN(recipe.Epsilon)) options.Epsilon = recipe.Epsilon;
+        if (!double.IsNaN(recipe.Beta1) || !double.IsNaN(recipe.Beta2))
+            options.UseAdaptiveBetas = false;
+    }
+
     /// <summary>Reports a hand-built value that disagrees with the paper.</summary>
     /// <remarks>
     /// An unstated value is skipped rather than compared against zero: a paper that says nothing
@@ -295,48 +449,13 @@ public static class PaperOptimizerFactory
         mismatches.Add($"the paper states {label} {declared:G6} but this model builds {actual:G6}");
     }
 
-    public static IReadOnlyList<TrainingRecipeReport> ReportsFor(object? model)
+    internal static IReadOnlyList<TrainingRecipeReport> ReportsFor(object? model)
     {
         if (model is null) return [];
         if (!_reports.TryGetValue(model, out var list)) return [];
         lock (list) return list.ToArray();
     }
 
-    /// <summary>
-    /// Applies the recipe's scalars, schedule and clipping to a freshly-built options object.
-    /// </summary>
-    /// <remarks>
-    /// Property-name based because the hyperparameters are spread across an options hierarchy
-    /// rather than a shared interface — <c>InitialLearningRate</c> on the base,
-    /// <c>Beta1</c>/<c>Beta2</c>/<c>Epsilon</c> on the Adam family, <c>WeightDecay</c> only on
-    /// AdamW, <c>Momentum</c> only on the momentum optimizers. A knob the chosen optimizer does not
-    /// have is skipped rather than treated as an error: it means the paper stated something this
-    /// optimizer cannot express, which is information for a reader, not a crash.
-    /// </remarks>
-    private static TOptions Configure<TOptions>(TOptions options, PaperOptimizerAttribute recipe)
-        where TOptions : class
-    {
-        SetDouble(options, "InitialLearningRate", recipe.LearningRate);
-        SetDouble(options, "WeightDecay", recipe.WeightDecay);
-        SetDouble(options, "Beta1", recipe.Beta1);
-        SetDouble(options, "Beta2", recipe.Beta2);
-        SetDouble(options, "Epsilon", recipe.Epsilon);
-        SetDouble(options, "Rho", recipe.Rho);
-        SetDouble(options, "Decay", recipe.Rho);
-
-        if (!double.IsNaN(recipe.Momentum))
-        {
-            SetDouble(options, "Momentum", recipe.Momentum);
-            SetDouble(options, "InitialMomentum", recipe.Momentum);
-            // The adaptive-momentum controller would otherwise drift away from the paper's value
-            // on its own schedule, which is not what the paper describes.
-            SetBool(options, "UseAdaptiveMomentum", false);
-        }
-
-        ScaleToConfiguredRun(options, recipe);
-        ConfigureScheduleAndClipping(options, recipe);
-        return options;
-    }
 
     /// <summary>
     /// Adapts paper-scale values to the run this options object actually describes.
@@ -590,6 +709,8 @@ public static class PaperOptimizerFactory
             "LearningRateScheduler", BindingFlags.Public | BindingFlags.Instance);
         if (schedulerProperty is null || !schedulerProperty.CanWrite) return;
 
+        ValidateSchedule(recipe);
+
         double baseRate = double.IsNaN(recipe.LearningRate) ? 0.001 : recipe.LearningRate;
         int warmupSteps = EffectiveWarmupSteps(options, recipe);
         int totalSteps = GetInt(options, "MaxIterations");
@@ -697,7 +818,7 @@ public static class PaperOptimizerFactory
                            decayRate: double.IsNaN(recipe.DecayRate) ? 0.5 : recipe.DecayRate),
 
                 LearningRateSchedulerType.Exponential when !double.IsNaN(recipe.DecayRate)
-                    => new ExponentialLRScheduler(baseRate, recipe.DecayRate),
+                    => new ExponentialLRScheduler(baseRate, recipe.DecayRate, floor),
 
                 LearningRateSchedulerType.Step when recipe.StepSize > 0 && !double.IsNaN(recipe.DecayRate)
                     => new StepLRScheduler(baseRate, recipe.StepSize, recipe.DecayRate),
@@ -724,6 +845,9 @@ public static class PaperOptimizerFactory
                 LearningRateSchedulerType.OneCycle when totalSteps > 0
                     => new OneCycleLRScheduler(baseRate, totalSteps),
 
+                // Reached only when an arm could not match because RUNTIME data is missing --
+                // no known run length, no discoverable model dimension. A malformed or
+                // unmapped declaration was already rejected by ValidateSchedule.
                 _ => Unexpressible(recipe),
             };
         }
@@ -741,6 +865,46 @@ public static class PaperOptimizerFactory
     }
 
 
+    /// <summary>Rejects a declaration this library can never honour, before anything is built.</summary>
+    /// <remarks>
+    /// Runs outside the construction try/catch on purpose. That catch exists so a scheduler
+    /// constructor rejecting its arguments cannot take the model down, but it would equally
+    /// swallow these, turning a malformed declaration back into the silent constant rate this is
+    /// meant to prevent. Everything checked here depends only on the recipe, never on the run.
+    /// </remarks>
+    private static void ValidateSchedule(PaperOptimizerAttribute recipe)
+    {
+        switch (recipe.Schedule)
+        {
+            case LearningRateSchedulerType.Exponential when double.IsNaN(recipe.DecayRate):
+                throw new ArgumentException(
+                    "Exponential scheduling requires DecayRate.", nameof(recipe));
+
+            case LearningRateSchedulerType.Step when recipe.StepSize <= 0 || double.IsNaN(recipe.DecayRate):
+                throw new ArgumentException(
+                    "Step scheduling requires a positive StepSize and a DecayRate.", nameof(recipe));
+
+            case LearningRateSchedulerType.Constant:
+            case LearningRateSchedulerType.LinearWarmup:
+            case LearningRateSchedulerType.TriStage:
+            case LearningRateSchedulerType.Noam:
+            case LearningRateSchedulerType.NoamHoldAnnealing:
+            case LearningRateSchedulerType.Exponential:
+            case LearningRateSchedulerType.Step:
+            case LearningRateSchedulerType.MultiStep:
+            case LearningRateSchedulerType.CosineAnnealing:
+            case LearningRateSchedulerType.Polynomial:
+            case LearningRateSchedulerType.OneCycle:
+            case LearningRateSchedulerType.Cyclic:
+            case LearningRateSchedulerType.ReduceOnPlateau:
+                return;
+
+            default:
+                throw new NotSupportedException(
+                    "Paper optimizer recipes do not express " + recipe.Schedule
+                        + "; choose a supported schedule or extend the recipe contract.");
+        }
+    }
     /// <summary>Reports a declared schedule this library cannot express, and returns no scheduler.</summary>
     private static ILearningRateScheduler? Unexpressible(PaperOptimizerAttribute recipe)
     {
@@ -754,7 +918,7 @@ public static class PaperOptimizerFactory
         return null;
     }
     /// <summary>The declaration matching this model: variant-specific when one exists, else unkeyed.</summary>
-    public static PaperOptimizerAttribute? Find(object? model, string component = "")
+    internal static PaperOptimizerAttribute? Find(object? model, string component = "")
     {
         if (model is null) return null;
 
