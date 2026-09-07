@@ -79,7 +79,7 @@ public class PaperRecipeDeclarationHygieneTests
         var duplicated = new List<string>();
         foreach (var (type, rows) in Declarations())
         {
-            var keys = rows.Select(r => r.Variant + "|" + r.Component).ToList();
+            var keys = rows.Select(r => r.Phase + "|" + r.Variant + "|" + r.Component).ToList();
             if (keys.Count != keys.Distinct(StringComparer.OrdinalIgnoreCase).Count())
                 duplicated.Add(type.Name);
         }

@@ -287,6 +287,9 @@ internal static class PaperOptimizerFactory
             OptimizerKind.Adam8Bit => new Adam8BitOptimizer<T, TInput, TOutput>(
                 model, Configured(new Adam8BitOptimizerOptions<T, TInput, TOutput>())),
 
+            OptimizerKind.ScheduleFreeAdamW => new ScheduleFreeAdamWOptimizer<T, TInput, TOutput>(
+                model, Configured(new ScheduleFreeAdamWOptimizerOptions<T, TInput, TOutput>())),
+
             OptimizerKind.Adafactor => new AdafactorOptimizer<T, TInput, TOutput>(
                 model, Configured(new AdafactorOptimizerOptions<T, TInput, TOutput>())),
 

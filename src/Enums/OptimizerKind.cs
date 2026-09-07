@@ -71,4 +71,11 @@ public enum OptimizerKind
     /// AudioPaLM and SPEAR-TTS both train with it.
     /// </remarks>
     Adafactor,
+
+    /// <summary>Schedule-Free AdamW: no learning-rate schedule, by iterate averaging.</summary>
+    /// <remarks>
+    /// Defazio et al. 2024. Used where the run length is not known in advance; Moonshine trains
+    /// with it.
+    /// </remarks>
+    ScheduleFreeAdamW,
 }
