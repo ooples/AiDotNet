@@ -158,7 +158,9 @@ public partial class DoublyRobustEstimator<T> : CausalModelBase<T>
         double trimMin = 0.01,
         double trimMax = 0.99,
         bool useCrossFitting = false,
-        int numFolds = 5)
+        int numFolds = 5,
+        int? randomSeed = null)
+        : base(randomSeed)
     {
         // Validate trimming bounds to prevent divide-by-zero in DR/IPW corrections
         if (trimMin <= 0 || trimMin >= 1)

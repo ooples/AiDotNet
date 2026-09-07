@@ -187,6 +187,7 @@ public partial class CausalForest<T> : CausalModelBase<T>
         bool honest = true,
         double honestFraction = 0.5,
         int? seed = null)
+        : base(seed)
     {
         _numTrees = numTrees;
         _maxDepth = maxDepth;

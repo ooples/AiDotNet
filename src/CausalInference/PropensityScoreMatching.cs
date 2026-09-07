@@ -180,6 +180,7 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
         bool withReplacement = true,
         int matchRatio = 1,
         int? seed = null)
+        : base(seed)
     {
         if (caliper <= 0)
         {
@@ -749,7 +750,8 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
         {
             { "Caliper", _caliper },
             { "WithReplacement", _withReplacement },
-            { "MatchRatio", _matchRatio }
+            { "MatchRatio", _matchRatio },
+            { "RandomSeed", RandomSeed.HasValue ? RandomSeed.Value : (object)string.Empty }
         };
 
         if (_propensityCoefficients is not null)
@@ -783,8 +785,17 @@ public partial class PropensityScoreMatching<T> : CausalModelBase<T>
         if (matchRatioToken is not null)
             _matchRatio = matchRatioToken.ToObject<int>();
 
-        // Reinitialize random with cryptographically secure randomness (cannot restore exact state)
-        _random = RandomHelper.CreateSecureRandom();
+        // The generator's internal state cannot be restored, but the seed can — and the seed is what
+        // makes a standard error reproducible, so a round-tripped model keeps producing the same one.
+        var seedToken = modelDataObj["RandomSeed"];
+        int? restoredSeed = seedToken is not null
+            && seedToken.Type == Newtonsoft.Json.Linq.JTokenType.Integer
+                ? seedToken.ToObject<int>()
+                : null;
+        RestoreRandomSeed(restoredSeed);
+        _random = restoredSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(restoredSeed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         var coeffsToken = modelDataObj["PropensityCoefficients"];
         if (coeffsToken is not null)

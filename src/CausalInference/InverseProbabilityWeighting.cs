@@ -160,7 +160,9 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
     public InverseProbabilityWeighting(
         double trimMin = 0.01,
         double trimMax = 0.99,
-        bool stabilizedWeights = true)
+        bool stabilizedWeights = true,
+        int? randomSeed = null)
+        : base(randomSeed)
     {
         // Validate trimming bounds to prevent infinite weights
         if (trimMin <= 0 || trimMin >= 1)
