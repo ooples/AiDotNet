@@ -137,6 +137,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     private readonly List<ILayer<T>> _layers;
 
+    /// <summary>
+    /// Indicates that this model has crossed the architecture-layer ownership boundary.
+    /// </summary>
+    /// <remarks>
+    /// Keeps the ownership guard off inference and training hot paths after the first layer-collection
+    /// access. A competing first access may repeat the idempotent same-model claim, but neither access can
+    /// return the collection until the architecture's atomic claim has completed.
+    /// </remarks>
+    private int _architectureLayerOwnershipEstablished;
+
 
     /// <summary>
     /// Gets the collection of layers that make up this neural network (read-only access).
@@ -150,7 +160,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Use AddLayerToCollection() or RemoveLayerFromCollection() instead to ensure proper cache invalidation.
     /// </para>
     /// </remarks>
-    public List<ILayer<T>> Layers => _layers;
+    public List<ILayer<T>> Layers
+    {
+        get
+        {
+            // Claim only at the first point where this model can take references to the architecture's
+            // mutable layers. Claiming in the base constructor poisoned the architecture when a derived
+            // constructor rejected its configuration before touching Layers; a corrected construction
+            // then looked like an illegal second owner. The getter is evaluated before Add/AddRange can
+            // capture anything, while ClaimForModel's lock still makes competing captures atomic.
+            if (Volatile.Read(ref _architectureLayerOwnershipEstablished) == 0)
+            {
+                Architecture.ClaimForModel(this);
+                Volatile.Write(ref _architectureLayerOwnershipEstablished, 1);
+            }
+
+            return _layers;
+        }
+    }
 
     /// <summary>
     /// Moves the whole model — every layer's parameters and buffers — to the given device, the model-level
@@ -581,10 +608,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected NeuralNetworkBase(NeuralNetworkArchitecture<T> architecture, ILossFunction<T> lossFunction, double maxGradNorm = 1.0)
     {
         Architecture = architecture;
-        // Refuse a second model on the same architecture instance BEFORE any layers are taken by reference.
-        // Every model type in the library reaches this constructor, so this is the one place the sharing can
-        // be caught for all of them.
-        architecture.ClaimForModel(this);
         // Begin a deterministic per-layer initialization-seed sequence for this
         // model's construction BEFORE the derived constructor builds its layers.
         // Each LayerBase<T> constructor pulls a seed from this scope so weight

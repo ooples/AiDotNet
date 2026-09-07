@@ -1,4 +1,9 @@
 using System;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using AiDotNet.Configuration;
+using AiDotNet.Exceptions;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks;
 using Xunit;
@@ -122,5 +127,49 @@ public class ArchitectureSharingGuardTests
         }
 
         Assert.Equal(0, moved);
+    }
+
+    [Fact]
+    public void A_constructor_failure_before_layer_capture_does_not_claim_the_architecture()
+    {
+        var architecture = ArchitectureWithLayers();
+
+        // VGG rejects this one-dimensional architecture before InitializeLayers. The old eager claim in
+        // NeuralNetworkBase nevertheless consumed it, so even a corrected model type could not retry.
+        Assert.Throws<InvalidInputTypeException>(() => new VGGNetwork<double>(
+            architecture,
+            VGGConfiguration.CreateVGG16BN(numClasses: 2)));
+
+        var correctedRetry = new NeuralNetwork<double>(architecture);
+        Assert.NotNull(correctedRetry);
+    }
+
+    [Fact]
+    public async Task Concurrent_claims_allow_exactly_one_model_to_capture_explicit_layers()
+    {
+        for (int attempt = 0; attempt < 20; attempt++)
+        {
+            var architecture = ArchitectureWithLayers();
+            using var start = new ManualResetEventSlim(false);
+            var attempts = Enumerable.Range(0, 16)
+                .Select(_ => Task.Run(() =>
+                {
+                    start.Wait();
+                    try
+                    {
+                        return new NeuralNetwork<double>(architecture) is not null;
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        return false;
+                    }
+                }))
+                .ToArray();
+
+            start.Set();
+            bool[] results = await Task.WhenAll(attempts);
+
+            Assert.Equal(1, results.Count(succeeded => succeeded));
+        }
     }
 }

@@ -1245,6 +1245,11 @@ public class NeuralNetworkArchitecture<T> : IConfigurationCloneable
     private WeakReference<object>? _owner;
 
     /// <summary>
+    /// Serializes ownership decisions for the mutable layer graph.
+    /// </summary>
+    private readonly object _ownerSync = new();
+
+    /// <summary>
     /// Records that <paramref name="model"/> is about to use this architecture's layer objects, and refuses a
     /// SECOND model trying to do the same.
     /// </summary>
@@ -1267,32 +1272,35 @@ public class NeuralNetworkArchitecture<T> : IConfigurationCloneable
     /// </remarks>
     internal void ClaimForModel(object model)
     {
-        if (Layers.Count == 0)
+        lock (_ownerSync)
         {
-            return;
-        }
+            if (Layers.Count == 0)
+            {
+                return;
+            }
 
-        if (_owner is null)
-        {
-            _owner = new WeakReference<object>(model);
-            return;
-        }
+            if (_owner is null)
+            {
+                _owner = new WeakReference<object>(model);
+                return;
+            }
 
-        // The same model re-initialising itself - deserialization and lazy shape resolution both re-enter
-        // InitializeLayers on an existing instance - is not a second owner.
-        if (!_owner.TryGetTarget(out var existing) || ReferenceEquals(existing, model))
-        {
-            _owner.SetTarget(model);
-            return;
-        }
+            // The same model re-initialising itself - deserialization and lazy shape resolution both re-enter
+            // InitializeLayers on an existing instance - is not a second owner.
+            if (!_owner.TryGetTarget(out var existing) || ReferenceEquals(existing, model))
+            {
+                _owner.SetTarget(model);
+                return;
+            }
 
-        throw new InvalidOperationException(
-            $"This {nameof(NeuralNetworkArchitecture<T>)} already belongs to a {existing.GetType().Name} and "
-            + "carries explicit layers, which models take BY REFERENCE. Constructing a second model from it "
-            + "would give both models the same mutable layers, so training either would train both - the "
-            + "failure that makes a reinforcement-learning target network silently equal to its online "
-            + $"network. Build the second model from {nameof(CloneForModelConstruction)}() so it gets "
-            + "independent layers.");
+            throw new InvalidOperationException(
+                $"This {nameof(NeuralNetworkArchitecture<T>)} already belongs to a {existing.GetType().Name} and "
+                + "carries explicit layers, which models take BY REFERENCE. Constructing a second model from it "
+                + "would give both models the same mutable layers, so training either would train both - the "
+                + "failure that makes a reinforcement-learning target network silently equal to its online "
+                + $"network. Build the second model from {nameof(CloneForModelConstruction)}() so it gets "
+                + "independent layers.");
+        }
     }
 
     /// <summary>
