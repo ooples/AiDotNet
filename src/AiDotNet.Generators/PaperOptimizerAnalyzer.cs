@@ -54,6 +54,19 @@ public sealed class PaperOptimizerAnalyzer : DiagnosticAnalyzer
         description: "A model variant identifies one complete training recipe. Multiple optimizer "
             + "kinds for the same variant make resolution depend on attribute ordering.");
 
+    private static readonly DiagnosticDescriptor MalformedCitation = new(
+        "AIDN105",
+        "Citation URL is not a usable arXiv reference",
+        "'{0}' cites arXiv id '{1}', which cannot exist: an arXiv identifier is YYMM.NNNNN and "
+            + "this one has month {2}. A wrong citation makes every value declared from it wrong "
+            + "while looking sourced.",
+        "AiDotNet.PaperFidelity",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description:
+            "Only URLs on arxiv.org are checked. A DOI contains digit runs of the same shape, and "
+            + "parsing ids out of arbitrary URLs reports valid DOIs as broken.");
+
     private static readonly DiagnosticDescriptor DeclarationNotWired = new(
         "AIDN104",
         "Declared paper recipe is never used, because the optimizer is still hardcoded",
@@ -69,7 +82,7 @@ public sealed class PaperOptimizerAnalyzer : DiagnosticAnalyzer
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
-        => ImmutableArray.Create(MissingPaperOptimizer, MissingSource, DuplicateDeclaration, DeclarationNotWired);
+        => ImmutableArray.Create(MissingPaperOptimizer, MissingSource, DuplicateDeclaration, DeclarationNotWired, MalformedCitation);
 
     /// <inheritdoc />
     public override void Initialize(AnalysisContext context)
@@ -136,6 +149,7 @@ public sealed class PaperOptimizerAnalyzer : DiagnosticAnalyzer
 
         var declaredRecipes = type.GetAttributes().Where(IsPaperOptimizer).ToArray();
         ValidateOwnedRecipes(context, type, declarations[0], declaredRecipes);
+        ValidateCitations(context, type, declarations[0]);
 
         // Abstract bases own and are diagnosed for their declarations, but wiring is a concrete
         // model responsibility. Derived types consume inherited recipes without repeating their
@@ -277,6 +291,42 @@ public sealed class PaperOptimizerAnalyzer : DiagnosticAnalyzer
         => DescribePhase(attribute)
             + "|" + (GetStringArgument(attribute, "Variant") ?? string.Empty)
             + "|" + (GetStringArgument(attribute, "Component") ?? string.Empty);
+
+    /// <summary>Rejects an arXiv id whose month cannot exist.</summary>
+    /// <remarks>
+    /// Structural only. Whether a citation points at the RIGHT paper cannot be decided without
+    /// fetching it, which is why the two real mis-citations here were found by comparing the
+    /// declared title against the PDF rather than by any analyzer.
+    /// </remarks>
+    private static void ValidateCitations(SymbolAnalysisContext context, INamedTypeSymbol type,
+        ClassDeclarationSyntax fallbackDeclaration)
+    {
+        foreach (var citation in type.GetAttributes().Where(IsResearchPaper))
+        {
+            string url = citation.ConstructorArguments.Length > 1
+                ? citation.ConstructorArguments[1].Value?.ToString() ?? string.Empty
+                : string.Empty;
+            if (url.Length == 0) continue;
+
+            var match = ArxivId.Match(url);
+            if (!match.Success) continue;
+
+            if (!int.TryParse(match.Groups[2].Value, out int month)) continue;
+            if (month >= 1 && month <= 12) continue;
+
+            Location location = citation.ApplicationSyntaxReference is { } reference
+                ? Location.Create(reference.SyntaxTree, reference.Span)
+                : fallbackDeclaration.Identifier.GetLocation();
+            context.ReportDiagnostic(Diagnostic.Create(
+                MalformedCitation, location, type.Name, match.Value, month));
+        }
+    }
+
+    /// <summary>An arXiv identifier, and only on an arXiv host.</summary>
+    private static readonly System.Text.RegularExpressions.Regex ArxivId = new(
+        @"arxiv\.org/(?:abs|pdf|html)/(\d{2})(\d{2})\.\d{4,5}",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase,
+        TimeSpan.FromSeconds(1));
 
     /// <summary>The declared phase, as part of a recipe identity.</summary>
     /// <remarks>
