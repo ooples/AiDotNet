@@ -336,12 +336,9 @@ public sealed class PaperOptimizerAnalyzer : DiagnosticAnalyzer
     /// </remarks>
     private static string DescribePhase(AttributeData attribute)
     {
-        foreach (var named in attribute.NamedArguments)
+        foreach (var named in attribute.NamedArguments.Where(named => named.Key == "Phase" && named.Value.Value is not null))
         {
-            if (named.Key == "Phase" && named.Value.Value is not null)
-            {
-                return named.Value.Value.ToString() ?? string.Empty;
-            }
+            return named.Value.Value.ToString() ?? string.Empty;
         }
 
         return string.Empty;
