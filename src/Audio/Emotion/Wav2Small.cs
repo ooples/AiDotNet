@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -42,6 +43,10 @@ namespace AiDotNet.Audio.Emotion;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Wav2Small: Distilling Wav2Vec2.0 to 72K Parameters for Low-Resource Speech Emotion Recognition", "https://arxiv.org/abs/2408.13920", Year = 2024, Authors = "Alejandro Gomez-Alanis, Jose A. Gonzalez-Lopez, S. Pavankumar Dubagunta")]
+[PaperOptimizer(OptimizerKind.Sgd, LearningRate = 5e-5, WeightDecay = 0,
+                Momentum = 0, ReferenceBatchSize = 16,
+                Phase = TrainingPhase.Distillation,
+                Source = "Triantafyllopoulos et al. 2024: SGD at a fixed learning rate of 5e-5 on a constant schedule, weight decay 0 and momentum 0, batch size 16. Both zeros are the paper values rather than omissions.")]
 public partial class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
 {
     #region Fields
@@ -79,7 +84,9 @@ public partial class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T
     {
         _options = options ?? new Wav2SmallOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }

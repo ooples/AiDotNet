@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -43,6 +44,8 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Lightweight Instrument-Agnostic Model for Polyphonic Note Transcription and Multipitch Estimation", "https://arxiv.org/abs/2203.09893", Year = 2022, Authors = "Rachel M. Bittner, Juan Jose Bosch, David Rubinstein, Gabriel Meseguer-Brocal, Sebastian Ewert")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001, ReferenceBatchSize = 16,
+                Source = "Bittner et al. 2022: Adam with a learning rate of 0.001 and a batch size of 16.")]
 public partial class BasicPitch<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
 {
     /// <inheritdoc />
@@ -97,7 +100,9 @@ public partial class BasicPitch<T> : AudioNeuralNetworkBase<T>, IMusicTranscribe
     {
         _options = options ?? new BasicPitchOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }

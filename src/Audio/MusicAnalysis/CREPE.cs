@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -40,6 +41,8 @@ namespace AiDotNet.Audio.MusicAnalysis;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("CREPE: A Convolutional Representation for Pitch Estimation", "https://arxiv.org/abs/1802.06182", Year = 2018, Authors = "Jong Wook Kim, Justin Salamon, Peter Li, Juan Pablo Bello")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.0002,
+                Source = "Kim et al. 2018: Adam with a learning rate of 0.0002.")]
 public partial class CREPE<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
 {
     /// <inheritdoc />
@@ -98,7 +101,9 @@ public partial class CREPE<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
     {
         _options = options ?? new CREPEOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         MinPitch = _options.MinFrequency;
         MaxPitch = _options.MaxFrequency;
