@@ -882,8 +882,14 @@ foreach (var kv in perFile.Where(p => p.Value.fail > 0).OrderByDescending(p => p
 var dumpIndex = Array.FindIndex(args, a => string.Equals(a, "--dump", StringComparison.OrdinalIgnoreCase));
 if (dumpIndex >= 0 && dumpIndex + 1 < args.Length)
 {
-    File.WriteAllLines(args[dumpIndex + 1], failures.Select(f => $"{f.file}#{f.idx}\t{f.err}"));
-    Console.WriteLine($"\nwrote {failures.Count} failures -> {args[dumpIndex + 1]}");
+    // Under --facade-check the interesting output is the violations, not the compile failures — the
+    // console only ever prints the ten largest groups, which is no use for working through the list.
+    var lines = facadeCheck
+        ? facadeViolations
+        : failures.Select(f => $"{f.file}#{f.idx}\t{f.err}").ToList();
+    File.WriteAllLines(args[dumpIndex + 1], lines);
+    Console.WriteLine($"\nwrote {lines.Count} {(facadeCheck ? "facade violations" : "failures")} " +
+                      $"-> {args[dumpIndex + 1]}");
 }
 
 // --suggest-decls output: one accepted declaration per line, keyed by snippet. Written next to the dump

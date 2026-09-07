@@ -53,14 +53,25 @@ namespace AiDotNet.CausalInference;
 /// </remarks>
 /// <example>
 /// <code>
-/// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
-/// var outcome = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0, 1.0 });
-/// var treatment = new Vector&lt;int&gt;(new int[] { 0, 1, 0, 1 });   // who was treated
+/// // Column 0 is the treatment indicator; columns 1.. are the covariates.
+/// var design = new Matrix&lt;double&gt;(new double[,]
+/// {
+///     { 0, 45, 1 }, { 1, 52, 0 }, { 0, 38, 1 }, { 1, 61, 0 }, { 0, 47, 1 }, { 1, 55, 0 }
+/// });
+/// var outcome = new Vector&lt;double&gt;(new double[] { 3.1, 7.2, 2.8, 8.0, 3.4, 7.6 });
 ///
-/// var ipw = new InverseProbabilityWeighting&lt;double&gt;(trimMin: 0.01, trimMax: 0.99);
-/// ipw.Fit(features, treatment);        // fits the propensity model P(treated | x)
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new InverseProbabilityWeighting&lt;double&gt;(trimMin: 0.01, trimMax: 0.99))
+///     .Build(design, outcome);
 ///
-/// var (ate, se) = ipw.EstimateATE(features, treatment, outcome);
+/// // The estimators take the covariates and the treatment separately.
+/// var covariates = new Matrix&lt;double&gt;(new double[,]
+/// {
+///     { 45, 1 }, { 52, 0 }, { 38, 1 }, { 61, 0 }, { 47, 1 }, { 55, 0 }
+/// });
+/// var treatment = new Vector&lt;int&gt;(new int[] { 0, 1, 0, 1, 0, 1 });
+///
+/// var (ate, se) = result.EstimateATE(covariates, treatment, outcome);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
