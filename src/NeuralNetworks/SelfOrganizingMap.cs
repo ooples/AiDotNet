@@ -30,9 +30,17 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 /// <example>
 /// <code>
-/// var arch = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Clustering, inputSize: 10, outputSize: 100);
-/// var model = new SelfOrganizingMap&lt;float&gt;(arch);
-/// var output = model.Predict(Tensor&lt;float&gt;.CreateDefault(new[] { 10 }, 0f));
+/// var arch = new NeuralNetworkArchitecture&lt;float&gt;(
+///     InputType.OneDimensional, NeuralNetworkTaskType.Clustering, inputSize: 10, outputSize: 100);
+///
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(8, 10);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(8, 100);
+///
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new SelfOrganizingMap&lt;float&gt;(arch))
+///     .Build(trainX, trainY);
+///
+/// var output = result.Predict(Tensor&lt;float&gt;.CreateDefault(new[] { 1, 10 }, 0f));
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

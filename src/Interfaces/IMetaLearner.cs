@@ -85,14 +85,17 @@ namespace AiDotNet.Interfaces;
 ///     DataLoader = dataLoader
 /// };
 ///
-/// var metaLearner = new MAMLAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options);
-///
 /// // 3. Meta-training
-/// var trainingResult = metaLearner.Train();
+/// var trainX = Tensor&lt;double&gt;.CreateRandom(4, 4);
+/// var trainY = Tensor&lt;double&gt;.CreateRandom(4, 5);
+///
+/// var result = new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+///     .ConfigureModel(new MAMLAlgorithm&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(options))
+///     .Build(trainX, trainY);
 ///
 /// // 4. Deployment: adapt to a task the model has never seen
 /// var newTask = dataLoader.GetNextTask();
-/// var adaptResult = metaLearner.AdaptAndEvaluate(newTask);
+/// var adaptResult = result.AdaptAndEvaluate(newTask);
 /// </code>
 /// </example>
 public interface IMetaLearner<T, TInput, TOutput>

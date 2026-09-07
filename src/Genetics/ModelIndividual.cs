@@ -34,13 +34,20 @@ namespace AiDotNet.Genetics;
 /// </remarks>
 /// <example>
 /// <code>
-/// var inputMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
-/// // Create a genetic individual wrapping a model, evolved via gene-to-model factory
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.1, 7.2, 11.0, 15.1 });
+///
+/// // A genetic individual wrapping a model, built from its genes by a factory.
 /// var genes = new List&lt;RealGene&gt; { new(0.5), new(1.2), new(-0.3) };
 /// Func&lt;ICollection&lt;RealGene&gt;, IFullModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;&gt; factory =
 ///     g =&gt; new VectorModel&lt;double&gt;(new Vector&lt;double&gt;(g.Select(x =&gt; x.Value).ToArray()));
-/// var individual = new ModelIndividual&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;, RealGene&gt;(genes, factory);
-/// Vector&lt;double&gt; prediction = individual.Predict(inputMatrix);
+///
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new ModelIndividual&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;, RealGene&gt;(genes, factory))
+///     .Build(features, targets);
+///
+/// var inputMatrix = new Matrix&lt;double&gt;(new double[,] { { 9.0, 10.0 } });
+/// Vector&lt;double&gt; prediction = result.Predict(inputMatrix);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

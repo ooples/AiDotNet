@@ -29,7 +29,6 @@ namespace AiDotNet.TransferLearning.Algorithms;
 /// </remarks>
 /// <example>
 /// <code>
-/// var newData = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
 /// // The model already fitted on the source domain, and the target domain's own data.
 /// var sourceModel = new SimpleRegression&lt;double&gt;();
 /// var sourceData = new Matrix&lt;double&gt;(new double[,] { { 0.9, 1.9 }, { 2.9, 3.9 }, { 4.9, 5.9 } });
@@ -41,7 +40,13 @@ namespace AiDotNet.TransferLearning.Algorithms;
 /// var transferRF = new TransferRandomForest&lt;double&gt;(options);
 /// IFullModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt; adaptedModel =
 ///     transferRF.Transfer(sourceModel, sourceData, targetData, targetLabels);
-/// Vector&lt;double&gt; predictions = adaptedModel.Predict(newData);
+///
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(adaptedModel)
+///     .Build(targetData, targetLabels);
+///
+/// var newData = new Matrix&lt;double&gt;(new double[,] { { 7.0, 8.0 } });
+/// Vector&lt;double&gt; predictions = result.Predict(newData);
 /// </code>
 /// </example>
 [ComponentType(ComponentType.TransferAlgorithm)]
@@ -282,17 +287,24 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
 /// </remarks>
 /// <example>
 /// <code>
-/// var newData = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
-/// // Create a mapped random forest that adapts source features to target domain
-/// // a random forest already fitted on the source domain
+/// // Create a mapped random forest that adapts source features to target domain.
+/// // The base model is a random forest already fitted on the source domain.
 /// var baseModel = new RandomForestRegression&lt;double&gt;(new RandomForestRegressionOptions());
 /// var mapper = new LinearFeatureMapper&lt;double&gt;();
 /// var mappedModel = new MappedRandomForestModel&lt;double&gt;(baseModel, mapper, targetFeatures: 5);
 ///
+/// var targetFeatures = new Matrix&lt;double&gt;(new double[,]
+/// {
+///     { 1.0, 2.0, 3.0, 4.0, 5.0 }, { 2.0, 3.0, 4.0, 5.0, 6.0 }, { 3.0, 4.0, 5.0, 6.0, 7.0 }
+/// });
+/// var targetLabels = new Vector&lt;double&gt;(new double[] { 1.0, 2.0, 3.0 });
+///
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(mappedModel)
+///     .Build(targetFeatures, targetLabels);
+///
 /// // Predict on target domain data using feature mapping
-/// var targetFeatures = new Matrix&lt;double&gt;(1, 5);
-/// var prediction = mappedModel.Predict(targetFeatures);
-/// // Result is available in the returned value
+/// var prediction = result.Predict(targetFeatures);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

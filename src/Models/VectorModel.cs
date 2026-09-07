@@ -45,14 +45,24 @@ namespace AiDotNet.Models;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a linear model with 3 feature coefficients
-/// var coefficients = new Vector&lt;double&gt;(new double[] { 50000, 100, 20000 });
-/// var model = new VectorModel&lt;double&gt;(coefficients);
+/// // bedrooms, square feet, bathrooms
+/// var features = new Matrix&lt;double&gt;(new double[,]
+/// {
+///     { 3, 1500, 2 }, { 4, 2100, 3 }, { 2, 900, 1 }, { 5, 3000, 3 }
+/// });
+/// var prices = new Vector&lt;double&gt;(new double[] { 320000, 415000, 210000, 560000 });
 ///
-/// // Predict house price: 3 bedrooms, 1500 sqft, 2 bathrooms
+/// // A linear model is one coefficient per feature; the builder fits them.
+/// var coefficients = new Vector&lt;double&gt;(new double[] { 50000, 100, 20000 });
+///
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new VectorModel&lt;double&gt;(coefficients))
+///     .Build(features, prices);
+///
+/// // Predict the price of a 3-bed, 1500 sqft, 2-bath house
 /// var input = new Matrix&lt;double&gt;(1, 3);
 /// input[0, 0] = 3; input[0, 1] = 1500; input[0, 2] = 2;
-/// Vector&lt;double&gt; prediction = model.Predict(input);
+/// Vector&lt;double&gt; prediction = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>

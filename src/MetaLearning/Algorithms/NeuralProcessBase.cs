@@ -327,11 +327,15 @@ public abstract partial class NeuralProcessBase<T, TInput, TOutput> : MetaLearne
 /// // the context examples, encoded and aggregated into one representation
 /// var aggregatedRepresentation = new Vector&lt;float&gt;(new float[] { 0.2f, -0.1f, 0.4f });
 ///
-/// var npModel = new NeuralProcessModel&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;(
-///     baseModel, parameters, aggregatedRepresentation);
-///
 /// var targetInputs = new Matrix&lt;float&gt;(new float[,] { { 1.0f, 2.0f }, { 3.0f, 4.0f } });
-/// Vector&lt;float&gt; prediction = npModel.Predict(targetInputs);
+/// var targetOutputs = new Vector&lt;float&gt;(new float[] { 3.1f, 7.2f });
+///
+/// var result = new AiModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+///     .ConfigureModel(new NeuralProcessModel&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;(
+///         baseModel, parameters, aggregatedRepresentation))
+///     .Build(targetInputs, targetOutputs);
+///
+/// Vector&lt;float&gt; prediction = result.Predict(targetInputs);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
