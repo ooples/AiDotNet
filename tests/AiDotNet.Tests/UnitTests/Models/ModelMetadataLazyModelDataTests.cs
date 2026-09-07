@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.Models;
 using Xunit;
 
@@ -120,6 +122,76 @@ public class ModelMetadataLazyModelDataTests
         var metadata = new ModelMetadata<double>();
 
         Assert.Empty(metadata.ModelData);
+        Assert.True(metadata.IsModelDataMaterialized);
+    }
+
+    [Fact(Timeout = 10000)]
+    public async Task ConcurrentReaders_WaitForOneMaterializationAndReceiveTheSameBytes()
+    {
+        int invocations = 0;
+        using var providerEntered = new ManualResetEventSlim();
+        using var releaseProvider = new ManualResetEventSlim();
+        using var secondReaderStarted = new ManualResetEventSlim();
+        var expected = new byte[] { 3, 1, 4 };
+        var metadata = new ModelMetadata<double>
+        {
+            ModelDataProvider = () =>
+            {
+                Interlocked.Increment(ref invocations);
+                providerEntered.Set();
+                releaseProvider.Wait();
+                return expected;
+            },
+        };
+
+        Task<byte[]> firstRead = Task.Run(() => metadata.ModelData);
+        Assert.True(providerEntered.Wait(TimeSpan.FromSeconds(5)));
+        Task<byte[]> secondRead = Task.Run(() =>
+        {
+            secondReaderStarted.Set();
+            return metadata.ModelData;
+        });
+        Assert.True(secondReaderStarted.Wait(TimeSpan.FromSeconds(5)));
+
+        releaseProvider.Set();
+        byte[][] results = await Task.WhenAll(firstRead, secondRead);
+
+        Assert.Equal(1, invocations);
+        Assert.All(results, result => Assert.Same(expected, result));
+        Assert.True(metadata.IsModelDataMaterialized);
+    }
+
+    [Fact(Timeout = 10000)]
+    public async Task ConcurrentReaders_WaitWhenTheProviderThrows()
+    {
+        int invocations = 0;
+        using var providerEntered = new ManualResetEventSlim();
+        using var releaseProvider = new ManualResetEventSlim();
+        using var secondReaderStarted = new ManualResetEventSlim();
+        var metadata = new ModelMetadata<double>
+        {
+            ModelDataProvider = () =>
+            {
+                Interlocked.Increment(ref invocations);
+                providerEntered.Set();
+                releaseProvider.Wait();
+                throw new InvalidOperationException("boom");
+            },
+        };
+
+        Task<byte[]> firstRead = Task.Run(() => metadata.ModelData);
+        Assert.True(providerEntered.Wait(TimeSpan.FromSeconds(5)));
+        Task<byte[]> secondRead = Task.Run(() =>
+        {
+            secondReaderStarted.Set();
+            return metadata.ModelData;
+        });
+        Assert.True(secondReaderStarted.Wait(TimeSpan.FromSeconds(5)));
+
+        releaseProvider.Set();
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await firstRead);
+        Assert.Empty(await secondRead);
+        Assert.Equal(1, invocations);
         Assert.True(metadata.IsModelDataMaterialized);
     }
 }

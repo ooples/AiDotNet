@@ -272,22 +272,29 @@ public class ModelMetadata<T>
     {
         get
         {
-            var provider = _modelDataProvider;
-            if (provider is not null)
+            lock (_modelDataSync)
             {
-                // Cleared BEFORE invoking so a provider that throws (an expired licence is the
-                // expected case) is not retried on every subsequent read, and so a provider that
-                // re-enters this getter cannot recurse.
-                _modelDataProvider = null;
-                _modelData = provider();
-            }
+                var provider = _modelDataProvider;
+                if (provider is not null)
+                {
+                    // Clear before invoking so a provider that throws is not retried and a
+                    // provider that re-enters this getter cannot recurse. The lock is deliberately
+                    // held across invocation: concurrent readers wait for the one materialization
+                    // attempt instead of observing the temporary empty state.
+                    _modelDataProvider = null;
+                    _modelData = provider();
+                }
 
-            return _modelData ?? Array.Empty<byte>();
+                return _modelData ?? Array.Empty<byte>();
+            }
         }
         set
         {
-            _modelData = value;
-            _modelDataProvider = null;
+            lock (_modelDataSync)
+            {
+                _modelData = value;
+                _modelDataProvider = null;
+            }
         }
     }
 
@@ -301,19 +308,29 @@ public class ModelMetadata<T>
     /// <c>ModelDataProvider = () =&gt; this.Serialize()</c> without restructuring the method. Use
     /// <see cref="SetModelDataProvider"/> when the metadata object already exists.
     /// </remarks>
-    public Func<byte[]>? ModelDataProvider
+    internal Func<byte[]>? ModelDataProvider
     {
-        init => _modelDataProvider = value;
+        init
+        {
+            lock (_modelDataSync)
+            {
+                _modelDataProvider = value;
+                if (value is not null) _modelData = null;
+            }
+        }
     }
 
     /// <summary>
     /// Sets a deferred producer for <see cref="ModelData"/> on an already-constructed instance.
     /// </summary>
     /// <param name="provider">Produces the serialized bytes on first read. May be <c>null</c> to clear.</param>
-    public void SetModelDataProvider(Func<byte[]>? provider)
+    internal void SetModelDataProvider(Func<byte[]>? provider)
     {
-        _modelDataProvider = provider;
-        if (provider is not null) _modelData = null;
+        lock (_modelDataSync)
+        {
+            _modelDataProvider = provider;
+            if (provider is not null) _modelData = null;
+        }
     }
 
     /// <summary>True when bytes are available without running a deferred serialization.</summary>
@@ -321,8 +338,18 @@ public class ModelMetadata<T>
     /// Lets infrastructure report or copy metadata without forcing a licensed serialization it did
     /// not ask for. <c>ModelData.Length == 0</c> cannot answer this: it materializes the provider.
     /// </remarks>
-    public bool IsModelDataMaterialized => _modelDataProvider is null;
+    public bool IsModelDataMaterialized
+    {
+        get
+        {
+            lock (_modelDataSync)
+            {
+                return _modelDataProvider is null;
+            }
+        }
+    }
 
+    private readonly object _modelDataSync = new object();
     private byte[]? _modelData = Array.Empty<byte>();
     private Func<byte[]>? _modelDataProvider;
 
