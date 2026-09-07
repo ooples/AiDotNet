@@ -18,7 +18,8 @@ namespace AiDotNet.Attributes;
 /// [ResearchPaper("Deep Residual Learning for Image Recognition",
 ///                "https://arxiv.org/abs/1512.03385", Year = 2016, Authors = "He et al.")]
 /// [PaperOptimizer(OptimizerKind.SgdMomentum, LearningRate = 0.1, Momentum = 0.9,
-///                 WeightDecay = 1e-4, Schedule = LearningRateSchedulerType.ReduceOnPlateau,
+///                 WeightDecay = 1e-4, Schedule = LearningRateSchedulerType.Step,
+///                 StepSize = 30, DecayRate = 0.1,
 ///                 Source = "Sec. 3.4 (Implementation)")]
 /// public class ResNetNetwork&lt;T&gt; : ...
 /// </code>
@@ -64,7 +65,8 @@ public sealed class PaperOptimizerAttribute : Attribute
     /// Where in the paper this recipe comes from, for example <c>"Sec. 4.1, Table 8"</c>.
     /// </summary>
     /// <remarks>
-    /// Required whenever anything is declared, and enforced by AIDN102. It is the anti-fabrication
+    /// Required for every declaration, including one that identifies only an optimizer, and
+    /// enforced by AIDN102. It is the anti-fabrication
     /// guard, and it lets a reviewer verify an entry without re-deriving it — the difference
     /// between a claim that can be audited and one that merely looks confident.
     /// </remarks>
