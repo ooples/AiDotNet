@@ -1934,6 +1934,31 @@ public interface IAiModelBuilder<T, TInput, TOutput>
         AiDotNet.Tensors.LinearAlgebra.Vector<T> times,
         AiDotNet.Tensors.LinearAlgebra.Vector<int> events);
 
+    /// <summary>
+    /// Builds a causal model from covariates, who was treated, and what happened to them.
+    /// </summary>
+    /// <param name="covariates">The covariates, one row per subject. No treatment column.</param>
+    /// <param name="treatment">1 for the subjects who were treated, 0 for the controls.</param>
+    /// <param name="outcome">The outcome observed for each subject.</param>
+    /// <returns>The built result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Causal data is three things and <see cref="Build(TInput, TOutput)"/> takes two. Rather than leave
+    /// the caller packing the treatment indicator into the covariate matrix — where a covariate left in
+    /// column 0 is read as treatment and silently changes the answer — this overload keeps the three
+    /// signals as three named arguments.
+    /// </para>
+    /// <para>
+    /// It sits beside the survival overload above, which takes its arguments in the other order. The two
+    /// are told apart by which one is the <c>Vector&lt;int&gt;</c> indicator, so passing them the wrong
+    /// way round is a compile error rather than a silently different call.
+    /// </para>
+    /// </remarks>
+    AiModelResult<T, TInput, TOutput> Build(
+        AiDotNet.Tensors.LinearAlgebra.Matrix<T> covariates,
+        AiDotNet.Tensors.LinearAlgebra.Vector<int> treatment,
+        AiDotNet.Tensors.LinearAlgebra.Vector<T> outcome);
+
     // ============================================================================
     // Training Infrastructure Configuration Methods
     // ============================================================================

@@ -417,7 +417,18 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         bool isClusteringBase = _model is Clustering.Base.ClusteringBase<T>;
         bool isLoraWrappedNeuralNetwork =
             _loraConfiguration is not null && _model is NeuralNetworks.NeuralNetworkBase<T>;
-        return modelLacksParameterizableInit || isClusteringBase || isLoraWrappedNeuralNetwork;
+
+        // A model handed its third input by Build(covariates, treatment, outcome) or
+        // Build(features, times, events) has to be trained once, on the caller's rows, in the caller's
+        // order: the indicator is one value per row, so the optimizer's repeated fits over candidate
+        // subsets would pair each subject with somebody else's treatment or censoring. Same reason
+        // clustering is here, one line up.
+        bool hasSuppliedThirdInput =
+            (_model is CausalInference.CausalModelBase<T> causalTarget && causalTarget.HasSuppliedTreatment)
+            || (_model is SurvivalAnalysis.SurvivalModelBase<T> survivalTarget && survivalTarget.HasSuppliedEvents);
+
+        return modelLacksParameterizableInit || isClusteringBase || isLoraWrappedNeuralNetwork
+            || hasSuppliedThirdInput;
     }
 
     /// <summary>

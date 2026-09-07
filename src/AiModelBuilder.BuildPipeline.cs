@@ -4716,7 +4716,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // with somebody else's censoring.
             bool useFullData = _model is Clustering.Base.ClusteringBase<T>
                 || (_model is SurvivalAnalysis.SurvivalModelBase<T> survivalTarget
-                    && survivalTarget.HasSuppliedEvents);
+                    && survivalTarget.HasSuppliedEvents)
+                || (_model is CausalInference.CausalModelBase<T> causalTarget
+                    && causalTarget.HasSuppliedTreatment);
             // Clustering models need ALL data points for correct density estimation.
             // Use preparedX/preparedY (the full dataset before train/test split) when
             // the preprocessing pipeline is not configured. When it IS configured,

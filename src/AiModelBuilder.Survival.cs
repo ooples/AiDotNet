@@ -29,6 +29,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// and the convention is nobody's problem but this method's.
     /// </para>
     /// <para>
+    /// One limitation, recorded because it is invisible until you hit it: when <typeparamref name="T"/>
+    /// is <c>int</c> the two three-argument overloads have the same signature, and a call cannot pick
+    /// between them. That is a compile error at the call site rather than a silently different call, and
+    /// neither domain has a use for integer times or outcomes, so it is a corner rather than a trap.
+    /// </para>
+    /// <para>
     /// <b>For Beginners:</b> "Censored" means the study ended, or you lost track of someone, before the
     /// thing you were measuring happened to them. You do not know when it will happen — only that it had
     /// not yet. Telling the model which subjects those are is the whole point of survival analysis; a

@@ -50,19 +50,18 @@ namespace AiDotNet.CausalInference;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 /// <example>
 /// <code>
-/// // Column 0 is the treatment indicator; columns 1.. are the covariates.
-/// var design = new Matrix&lt;double&gt;(new double[,]
+/// var covariates = new Matrix&lt;double&gt;(new double[,]
 /// {
-///     { 0, 45, 1 }, { 1, 52, 0 }, { 0, 38, 1 }, { 1, 61, 0 }, { 0, 47, 1 }, { 1, 55, 0 }
+///     { 45, 1 }, { 52, 0 }, { 38, 1 }, { 61, 0 }, { 47, 1 }, { 55, 0 }
 /// });
+/// var treatment = new Vector&lt;int&gt;(new int[] { 0, 1, 0, 1, 0, 1 });   // who was treated
 /// var outcome = new Vector&lt;double&gt;(new double[] { 3.1, 7.2, 2.8, 8.0, 3.4, 7.6 });
 ///
 /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
 ///     .ConfigureModel(new XLearner&lt;double&gt;(maxIterations: 100, learningRate: 0.1))
-///     .Build(design, outcome);
+///     .Build(covariates, treatment, outcome);
 ///
 /// // One effect per person, over the covariates alone.
-/// var covariates = new Matrix&lt;double&gt;(new double[,] { { 45, 1 }, { 52, 0 }, { 38, 1 } });
 /// Vector&lt;double&gt; cate = result.EstimateTreatmentEffect(covariates);
 /// </code>
 /// </example>
