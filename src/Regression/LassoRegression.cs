@@ -30,13 +30,18 @@ namespace AiDotNet.Regression;
 ///
 /// Example usage:
 /// ```csharp
-/// var options = new LassoRegressionOptions&lt;double&gt; { Alpha = 1.0 };
-/// var lasso = new LassoRegression&lt;double&gt;(options);
-/// lasso.Train(features, targets);
-/// var predictions = lasso.Predict(newFeatures);
+/// var features = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.1, 7.2, 11.0, 15.1 });
+///
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new LassoRegression&lt;double&gt;(new LassoRegressionOptions&lt;double&gt; { Alpha = 1.0 }))
+///     .Build(features, targets);
+///
+/// var newFeatures = new Matrix&lt;double&gt;(new double[,] { { 9.0, 10.0 } });
+/// var predictions = result.Predict(newFeatures);
 ///
 /// // Check which features were selected (non-zero coefficients)
-/// var selectedFeatures = lasso.GetActiveFeatureIndices();
+/// var selectedFeatures = result.GetActiveFeatureIndices();
 /// ```
 /// </para>
 /// </remarks>
