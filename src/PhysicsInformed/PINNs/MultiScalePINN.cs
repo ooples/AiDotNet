@@ -58,15 +58,60 @@ namespace AiDotNet.PhysicsInformed.PINNs
     /// </remarks>
     /// <example>
     /// <code>
-    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-    ///     inputType: InputType.OneDimensional,
-    ///     taskType: NeuralNetworkTaskType.Regression,
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+    ///     InputType.OneDimensional, NeuralNetworkTaskType.Regression,
     ///     inputSize: 2, outputSize: 1);
-    /// var pde = new MultiScaleReactionDiffusion&lt;float&gt;();
-    /// // No IBoundaryCondition implementation ships with the library: write your own with
+    ///
+    /// var pde = new MultiScaleReactionDiffusion();
+    ///
+    /// // No IBoundaryCondition implementation ships either (#2099): write your own with
     /// // IsOnBoundary, ComputeBoundaryResidual and Name, then put instances in this array.
-    /// var bc = Array.Empty&lt;IBoundaryCondition&lt;float&gt;&gt;();
-    /// var msPinn = new MultiScalePINN&lt;float&gt;(architecture, pde, bc);
+    /// var bc = Array.Empty&lt;IBoundaryCondition&lt;double&gt;&gt;();
+    ///
+    /// var msPinn = new MultiScalePINN&lt;double&gt;(architecture, pde, bc);
+    ///
+    /// // Your equation, one residual per scale. AiDotNet ships no IMultiScalePDE yet (#2105).
+    /// public sealed class MultiScaleReactionDiffusion : IMultiScalePDE&lt;double&gt;
+    /// {
+    ///     private const double CoarseDiffusivity = 1.0;
+    ///     private const double FineDiffusivity = 0.01;
+    ///
+    ///     public string Name =&gt; "Two-scale reaction-diffusion";
+    ///     public int InputDimension =&gt; 2;              // (x, t)
+    ///     public int OutputDimension =&gt; 1;             // concentration
+    ///     public int NumberOfScales =&gt; 2;
+    ///     public double[] ScaleCharacteristicLengths =&gt; new[] { 1.0, 0.1 };
+    ///
+    ///     // Finer scales are weighted up so they are not swamped by the coarse one.
+    ///     public double GetScaleLossWeight(int scaleIndex) =&gt; scaleIndex == 0 ? 1.0 : 10.0;
+    ///     public int GetScaleOutputDimension(int scaleIndex) =&gt; 1;
+    ///
+    ///     public double ComputeScaleResidual(
+    ///         int scaleIndex, double[] inputs, double[] outputs, PDEDerivatives&lt;double&gt; derivatives)
+    ///     {
+    ///         if (derivatives.FirstDerivatives is null || derivatives.SecondDerivatives is null) return 0.0;
+    ///
+    ///         double k = scaleIndex == 0 ? CoarseDiffusivity : FineDiffusivity;
+    ///         double dudt = derivatives.FirstDerivatives[0, 1];
+    ///         double d2udx2 = derivatives.SecondDerivatives[0, 0, 0];
+    ///         return dudt - k * d2udx2;
+    ///     }
+    ///
+    ///     // How far the scales disagree where they overlap.
+    ///     public double ComputeScaleCoupling(
+    ///         int coarseIndex, int fineIndex, double[] inputs,
+    ///         double[] coarseOutputs, double[] fineOutputs,
+    ///         PDEDerivatives&lt;double&gt; coarseDerivatives, PDEDerivatives&lt;double&gt; fineDerivatives)
+    ///         =&gt; Math.Abs(coarseOutputs[0] - fineOutputs[0]);
+    ///
+    ///     public double ComputeResidual(
+    ///         Vector&lt;double&gt; inputs, Vector&lt;double&gt; outputs, PDEDerivatives&lt;double&gt; derivatives)
+    ///     {
+    ///         var x = inputs.ToArray();
+    ///         var u = outputs.ToArray();
+    ///         return ComputeScaleResidual(0, x, u, derivatives) + ComputeScaleResidual(1, x, u, derivatives);
+    ///     }
+    /// }
     /// </code>
     /// </example>
     [ModelDomain(ModelDomain.Science)]

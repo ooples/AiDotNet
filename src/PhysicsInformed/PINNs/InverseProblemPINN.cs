@@ -53,15 +53,55 @@ namespace AiDotNet.PhysicsInformed.PINNs
     /// </remarks>
     /// <example>
     /// <code>
-    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-    ///     inputType: InputType.OneDimensional,
-    ///     taskType: NeuralNetworkTaskType.Regression,
+    /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+    ///     InputType.OneDimensional, NeuralNetworkTaskType.Regression,
     ///     inputSize: 2, outputSize: 1);
-    /// var inverseProblem = new HeatConductivityInverseProblem&lt;float&gt;();
-    /// // No IBoundaryCondition implementation ships with the library: write your own with
-    /// // IsOnBoundary, ComputeBoundaryResidual and Name, then put instances in this array.
-    /// var bc = Array.Empty&lt;IBoundaryCondition&lt;float&gt;&gt;();
-    /// var pinn = new InverseProblemPINN&lt;float&gt;(architecture, inverseProblem, bc);
+    ///
+    /// // What you measured: a temperature at each (x, t) you probed.
+    /// var observations = new[]
+    /// {
+    ///     (location: new[] { 0.25, 0.1 }, value: new[] { 0.82 }),
+    ///     (location: new[] { 0.50, 0.1 }, value: new[] { 0.95 }),
+    ///     (location: new[] { 0.75, 0.1 }, value: new[] { 0.80 })
+    /// };
+    ///
+    /// var problem = new HeatConductivityInverseProblem(observations, initialGuess: 0.5);
+    /// var bc = Array.Empty&lt;IBoundaryCondition&lt;double&gt;&gt;();   // see #2099
+    ///
+    /// var pinn = new InverseProblemPINN&lt;double&gt;(architecture, problem, bc);
+    ///
+    /// // Recovering one unknown coefficient from those measurements. AiDotNet ships no
+    /// // IInverseProblem yet (#2105), so the problem statement is yours to write.
+    /// public sealed class HeatConductivityInverseProblem : IInverseProblem&lt;double&gt;
+    /// {
+    ///     private readonly IReadOnlyList&lt;(double[] location, double[] value)&gt; _observations;
+    ///     private readonly double _initialGuess;
+    ///
+    ///     public HeatConductivityInverseProblem(
+    ///         IEnumerable&lt;(double[] location, double[] value)&gt; observations, double initialGuess)
+    ///     {
+    ///         _observations = observations.ToList();
+    ///         _initialGuess = initialGuess;
+    ///     }
+    ///
+    ///     public string[] ParameterNames =&gt; new[] { "thermal_conductivity" };
+    ///     public int NumberOfParameters =&gt; 1;
+    ///     public double[] InitialParameterGuesses =&gt; new[] { _initialGuess };
+    ///     public double[]? ParameterLowerBounds =&gt; new[] { 0.001 };
+    ///     public double[]? ParameterUpperBounds =&gt; new[] { 100.0 };
+    ///     public IReadOnlyList&lt;(double[] location, double[] value)&gt; Observations =&gt; _observations;
+    ///
+    ///     // Set these when you know how noisy your instrument is.
+    ///     public bool HasMeasurementNoiseLevel =&gt; false;
+    ///     public double MeasurementNoiseLevel =&gt; 0.0;
+    ///
+    ///     public bool ValidateParameters(double[] parameters)
+    ///         =&gt; parameters.Length == 1 &amp;&amp; parameters[0] &gt;= 0.001 &amp;&amp; parameters[0] &lt;= 100.0;
+    ///
+    ///     // The forward equation, with the current guess substituted in.
+    ///     public IPDESpecification&lt;double&gt; CreateParameterizedPDE(double[] parameters)
+    ///         =&gt; new HeatEquation&lt;double&gt;(parameters[0]);
+    /// }
     /// </code>
     /// </example>
     [ModelDomain(ModelDomain.Science)]

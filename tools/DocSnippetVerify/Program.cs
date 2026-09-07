@@ -413,6 +413,25 @@ string Compose(string code, string? homeNamespace, IEnumerable<string>? extraDec
         .FirstOrDefault(l => l.Length > 0 && !l.StartsWith("//", StringComparison.Ordinal)) ?? "";
     bool isTypes = typeStartRe.IsMatch(firstCode);
 
+    // A snippet may do BOTH: use an API and then show the type the reader has to supply for it. That is
+    // the only honest shape for an example whose parameter type the library does not implement — and it
+    // is what C# top-level statements already allow. Parsing the body tells statements from declarations
+    // exactly, so the types go out to namespace level and the statements stay in the method, instead of
+    // the whole snippet being forced into one mode and failing on whichever half lost.
+    string typeText = "";
+    if (!isTypes)
+    {
+        var parsed = CSharpSyntaxTree.ParseText(bodyText, parse).GetRoot() as CompilationUnitSyntax;
+        var declared = parsed?.Members.OfType<BaseTypeDeclarationSyntax>().ToList();
+        if (declared is { Count: > 0 } &&
+            parsed!.Members.OfType<GlobalStatementSyntax>().Any())
+        {
+            typeText = string.Concat(declared.Select(d => d.ToFullString() + "\n"));
+            bodyText = string.Concat(parsed.Members.OfType<GlobalStatementSyntax>()
+                .Select(s => s.ToFullString()));
+        }
+    }
+
     // Declarations only make sense inside a method body. A snippet that declares its own types is
     // compiled as top-level declarations, where a `var` line would be a class member and not compile.
     if (extraDeclarations is not null && !isTypes)
@@ -422,7 +441,7 @@ string Compose(string code, string? homeNamespace, IEnumerable<string>? extraDec
 
     string unit = isTypes
         ? bodyText
-        : "static class __Snippet { static async System.Threading.Tasks.Task __Run() {\n" + bodyText + "\n} }";
+        : "static class __Snippet { static async System.Threading.Tasks.Task __Run() {\n" + bodyText + "\n} }\n" + typeText;
 
     if (homeNamespace is not null)
     {
