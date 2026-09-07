@@ -1,11 +1,15 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Configuration;
+using AiDotNet.Enums;
 using AiDotNet.Exceptions;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
@@ -171,5 +175,66 @@ public class ArchitectureSharingGuardTests
 
             Assert.Equal(1, results.Count(succeeded => succeeded));
         }
+    }
+
+    [Fact]
+    public void A_custom_layer_validation_failure_releases_its_provisional_claim()
+    {
+        List<ILayer<double>> incompatibleLayers =
+        [
+            new FullyConnectedLayer<double>(3072, 8),
+            new FullyConnectedLayer<double>(7, 2)
+        ];
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 32,
+            inputWidth: 32,
+            inputDepth: 3,
+            outputSize: 2,
+            layers: incompatibleLayers);
+        var configuration = new VGGConfiguration(
+            VGGVariant.VGG16_BN,
+            numClasses: 2,
+            inputHeight: 32,
+            inputWidth: 32,
+            inputChannels: 3);
+
+        Assert.Throws<ArgumentException>(() => new VGGNetwork<double>(architecture, configuration));
+
+        // The architecture itself is the resource under test. A fresh owner must be able to claim it
+        // immediately, without waiting for the failed VGG instance to become eligible for collection.
+        var correctedOwner = new object();
+        architecture.ClaimForModel(correctedOwner);
+        Assert.Throws<InvalidOperationException>(() => architecture.ClaimForModel(new object()));
+        GC.KeepAlive(correctedOwner);
+    }
+
+    [Fact]
+    public void A_model_specific_validation_failure_also_releases_its_provisional_claim()
+    {
+        var architecture = ArchitectureWithLayers();
+
+        // The common shape checks pass, but Autoencoder's symmetry check rejects the 4-to-2 graph.
+        // This exercises an override throwing after base validation has already succeeded.
+        Assert.Throws<ArgumentException>(() => new Autoencoder<double>(architecture));
+
+        var correctedOwner = new object();
+        architecture.ClaimForModel(correctedOwner);
+        Assert.Throws<InvalidOperationException>(() => architecture.ClaimForModel(new object()));
+        GC.KeepAlive(correctedOwner);
+    }
+
+    [Fact]
+    public void A_stale_release_cannot_clear_the_current_owners_claim()
+    {
+        var architecture = ArchitectureWithLayers();
+        var currentOwner = new object();
+        architecture.ClaimForModel(currentOwner);
+
+        architecture.ReleaseForModel(new object());
+
+        Assert.Throws<InvalidOperationException>(() => architecture.ClaimForModel(new object()));
+        GC.KeepAlive(currentOwner);
     }
 }

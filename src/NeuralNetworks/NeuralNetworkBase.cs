@@ -4006,14 +4006,75 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <remarks>
     /// <b>For Beginners:</b> Not all combinations of layers make a valid neural network. This method checks that
     /// the layers can properly connect to each other (like making sure puzzle pieces fit together).
+    /// Derived implementations may add model-specific checks. Their initialization path must enter through
+    /// <see cref="ValidateCustomLayersWithOwnershipRollback"/> so failures after the base checks also release
+    /// the provisional architecture claim.
     /// </remarks>
     /// <exception cref="ArgumentException">Thrown when the layer configuration is invalid.</exception>
     protected virtual void ValidateCustomLayers(List<ILayer<T>> layers)
     {
-        ValidateCustomLayersInternal(layers);
+        try
+        {
+            ValidateCustomLayersInternalCore(layers);
+        }
+        catch
+        {
+            RollbackRejectedCustomLayers();
+            throw;
+        }
     }
 
+    /// <summary>
+    /// Runs a model-specific custom-layer validator inside the architecture ownership transaction.
+    /// </summary>
+    /// <param name="layers">The layers to validate.</param>
+    /// <remarks>
+    /// Derived models that override <see cref="ValidateCustomLayers"/> call this non-virtual entry point from
+    /// initialization. It catches failures thrown after the base validator returns while preserving the existing
+    /// protected virtual extension point for downstream models.
+    /// </remarks>
+    protected void ValidateCustomLayersWithOwnershipRollback(List<ILayer<T>> layers)
+    {
+        try
+        {
+            ValidateCustomLayers(layers);
+        }
+        catch
+        {
+            RollbackRejectedCustomLayers();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Validates only the common layer contracts while preserving the ownership transaction.
+    /// </summary>
+    /// <param name="layers">The layers to validate.</param>
     protected void ValidateCustomLayersInternal(List<ILayer<T>> layers)
+    {
+        try
+        {
+            ValidateCustomLayersInternalCore(layers);
+        }
+        catch
+        {
+            RollbackRejectedCustomLayers();
+            throw;
+        }
+    }
+
+    private void RollbackRejectedCustomLayers()
+    {
+        // Validation is the commit point for a caller-supplied layer graph. Until it succeeds, the
+        // ownership claim is provisional. Drop this model's references before releasing the claim so
+        // an immediate corrected construction can take the graph without ever overlapping owners.
+        _layers.Clear();
+        InvalidateParameterCountCache();
+        Architecture.ReleaseForModel(this);
+        Volatile.Write(ref _architectureLayerOwnershipEstablished, 0);
+    }
+
+    private void ValidateCustomLayersInternalCore(List<ILayer<T>> layers)
     {
         if (layers == null || layers.Count == 0)
         {

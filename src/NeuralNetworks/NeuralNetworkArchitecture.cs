@@ -1304,6 +1304,25 @@ public class NeuralNetworkArchitecture<T> : IConfigurationCloneable
     }
 
     /// <summary>
+    /// Releases a provisional layer-graph claim after the claiming model rejects the graph.
+    /// </summary>
+    /// <param name="model">The model whose claim should be released.</param>
+    /// <remarks>
+    /// Reference identity prevents a failed or stale constructor from releasing a newer model's claim.
+    /// The same lock as <see cref="ClaimForModel"/> makes release-versus-claim ordering atomic.
+    /// </remarks>
+    internal void ReleaseForModel(object model)
+    {
+        lock (_ownerSync)
+        {
+            if (_owner is not null && _owner.TryGetTarget(out var existing) && ReferenceEquals(existing, model))
+            {
+                _owner = null;
+            }
+        }
+    }
+
+    /// <summary>
     /// Creates an independent architecture for another model that must not share this instance's
     /// mutable layer objects.
     /// </summary>
