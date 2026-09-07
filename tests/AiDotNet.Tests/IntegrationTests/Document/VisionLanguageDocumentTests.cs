@@ -40,7 +40,7 @@ public class VisionLanguageDocumentTests
     public async Task DocOwl_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new DocOwl<double>(arch, imageSize: 64);
+        using var model = new DocOwl<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -48,9 +48,9 @@ public class VisionLanguageDocumentTests
     public async Task DocOwl_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new DocOwl<double>(arch, imageSize: 64);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new DocOwl<double>(arch, imageSize: 64);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -76,15 +76,17 @@ public class VisionLanguageDocumentTests
     public async Task DocOwl_TextTokens_ChangeTheOutput()
     {
         await Task.Yield();
-        var model = CreateSmallDocOwl();
+        using var model = CreateSmallDocOwl();
         model.SetTrainingMode(false);
-        var image = CreateSmallImage(64);
+        using var image = CreateSmallImage(64);
 
-        var imageOnly = model.Predict(image);
+        using var imageOnly = model.Predict(image);
         // Genuinely different sequences. An earlier version varied only the vocab bound, which for
         // six tokens produced the SAME ids both times and made the assertion unfalsifiable.
-        var withTextA = model.Predict(image, CreateTokenIds(6, offset: 0));
-        var withTextB = model.Predict(image, CreateTokenIds(6, offset: 17));
+        using var tokensA = CreateTokenIds(6, offset: 0);
+        using var tokensB = CreateTokenIds(6, offset: 17);
+        using var withTextA = model.Predict(image, tokensA);
+        using var withTextB = model.Predict(image, tokensB);
 
         Assert.NotNull(imageOnly);
         Assert.True(Differs(withTextA, withTextB),
@@ -101,16 +103,16 @@ public class VisionLanguageDocumentTests
     public async Task DocOwl_TrainingWithText_ChangesParameters()
     {
         await Task.Yield();
-        var model = CreateSmallDocOwl();
-        var image = CreateSmallImage(64);
-        var tokens = CreateTokenIds(6);
+        using var model = CreateSmallDocOwl();
+        using var image = CreateSmallImage(64);
+        using var tokens = CreateTokenIds(6);
 
         model.SetTrainingMode(false);
 
         // Run one forward BEFORE snapshotting. The token table allocates lazily, so a count taken
         // first is short by its size and the comparison below would report a length change rather
         // than the weight movement it is actually testing.
-        var logits = model.Predict(image, tokens);
+        using var logits = model.Predict(image, tokens);
         int nonFiniteLogits = logits.ToArray().Count(value => !IsFinite(value));
         Assert.True(nonFiniteLogits == 0,
             $"DocOwl produced {nonFiniteLogits}/{logits.Length} non-finite logits before training.");
@@ -123,7 +125,7 @@ public class VisionLanguageDocumentTests
         // produced an invalid CE target whose gradient could vanish depending on initialization.
         // Select a different class from the current argmax at every position to guarantee a real,
         // well-posed supervised signal without assuming a particular random initialization.
-        var target = CreateContrastingClassTarget(logits);
+        using var target = CreateContrastingClassTarget(logits);
 
         var analyticGradients = model.ComputeGradients(image, tokens, target);
         int analyticNonFinite = analyticGradients.Count(value => !IsFinite(value));
@@ -240,7 +242,7 @@ public class VisionLanguageDocumentTests
     public async Task DocOwl_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new DocOwl<double>(arch, imageSize: 64);
+        using var model = new DocOwl<double>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("DocOwl", meta.Name);
     }
@@ -253,7 +255,7 @@ public class VisionLanguageDocumentTests
     public async Task InfographicVQA_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new InfographicVQA<double>(arch, imageSize: 64);
+        using var model = new InfographicVQA<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -261,9 +263,9 @@ public class VisionLanguageDocumentTests
     public async Task InfographicVQA_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new InfographicVQA<double>(arch, imageSize: 64);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new InfographicVQA<double>(arch, imageSize: 64);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -273,7 +275,7 @@ public class VisionLanguageDocumentTests
     public async Task InfographicVQA_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new InfographicVQA<double>(arch, imageSize: 64);
+        using var model = new InfographicVQA<double>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("InfographicVQA", meta.Name);
     }
@@ -286,7 +288,7 @@ public class VisionLanguageDocumentTests
     public async Task UDOP_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new UDOP<double>(arch, imageSize: 64);
+        using var model = new UDOP<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -294,9 +296,9 @@ public class VisionLanguageDocumentTests
     public async Task UDOP_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new UDOP<double>(arch, imageSize: 64);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new UDOP<double>(arch, imageSize: 64);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -306,7 +308,7 @@ public class VisionLanguageDocumentTests
     public async Task UDOP_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new UDOP<double>(arch, imageSize: 64);
+        using var model = new UDOP<double>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("UDOP", meta.Name);
     }
@@ -318,17 +320,26 @@ public class VisionLanguageDocumentTests
     [Fact(Timeout = 120000)]
     public async Task AllVisionLanguageModels_SupportsTraining_InNativeMode()
     {
-        var arch = CreateArchitecture();
         var models = new DocumentNeuralNetworkBase<double>[]
         {
-            new DocOwl<double>(arch, imageSize: 64),
-            new InfographicVQA<double>(arch, imageSize: 64),
-            new UDOP<double>(arch, imageSize: 64),
+            new DocOwl<double>(CreateArchitecture(), imageSize: 64),
+            new InfographicVQA<double>(CreateArchitecture(), imageSize: 64),
+            new UDOP<double>(CreateArchitecture(), imageSize: 64),
         };
 
-        foreach (var model in models)
+        try
         {
-            Assert.True(model.SupportsTraining);
+            foreach (var model in models)
+            {
+                Assert.True(model.SupportsTraining);
+            }
+        }
+        finally
+        {
+            foreach (var model in models)
+            {
+                model.Dispose();
+            }
         }
     }
 

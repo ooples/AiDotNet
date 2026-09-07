@@ -40,7 +40,7 @@ public class PixelToSequenceDocumentTests
     public async Task Donut_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new Donut<double>(arch, imageHeight: 64, imageWidth: 64);
+        using var model = new Donut<double>(arch, imageHeight: 64, imageWidth: 64);
         Assert.NotNull(model);
     }
 
@@ -48,9 +48,9 @@ public class PixelToSequenceDocumentTests
     public async Task Donut_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new Donut<double>(arch, imageHeight: 64, imageWidth: 64);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new Donut<double>(arch, imageHeight: 64, imageWidth: 64);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -60,7 +60,7 @@ public class PixelToSequenceDocumentTests
     public async Task Donut_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new Donut<double>(arch, imageHeight: 64, imageWidth: 64);
+        using var model = new Donut<double>(arch, imageHeight: 64, imageWidth: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("Donut", meta.Name);
     }
@@ -73,7 +73,7 @@ public class PixelToSequenceDocumentTests
     public async Task Nougat_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new Nougat<double>(arch, imageSize: 64);
+        using var model = new Nougat<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -81,9 +81,9 @@ public class PixelToSequenceDocumentTests
     public async Task Nougat_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new Nougat<double>(arch, imageSize: 64);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new Nougat<double>(arch, imageSize: 64);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -93,7 +93,7 @@ public class PixelToSequenceDocumentTests
     public async Task Nougat_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new Nougat<double>(arch, imageSize: 64);
+        using var model = new Nougat<double>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("Nougat", meta.Name);
     }
@@ -106,7 +106,7 @@ public class PixelToSequenceDocumentTests
     public async Task Pix2Struct_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new Pix2Struct<double>(arch, imageSize: 64);
+        using var model = new Pix2Struct<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -114,9 +114,9 @@ public class PixelToSequenceDocumentTests
     public async Task Pix2Struct_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new Pix2Struct<double>(arch, imageSize: 64);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new Pix2Struct<double>(arch, imageSize: 64);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -126,7 +126,7 @@ public class PixelToSequenceDocumentTests
     public async Task Pix2Struct_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new Pix2Struct<double>(arch, imageSize: 64);
+        using var model = new Pix2Struct<double>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("Pix2Struct", meta.Name);
     }
@@ -139,7 +139,7 @@ public class PixelToSequenceDocumentTests
     public async Task Dessurt_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new Dessurt<double>(arch, imageSize: 64);
+        using var model = new Dessurt<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -147,9 +147,9 @@ public class PixelToSequenceDocumentTests
     public async Task Dessurt_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new Dessurt<double>(arch, imageSize: 64);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new Dessurt<double>(arch, imageSize: 64);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -159,7 +159,7 @@ public class PixelToSequenceDocumentTests
     public async Task Dessurt_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new Dessurt<double>(arch, imageSize: 64);
+        using var model = new Dessurt<double>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("Dessurt", meta.Name);
     }
@@ -172,7 +172,7 @@ public class PixelToSequenceDocumentTests
     public async Task MATCHA_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new MATCHA<double>(arch, imageSize: 64);
+        using var model = new MATCHA<double>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -180,9 +180,9 @@ public class PixelToSequenceDocumentTests
     public async Task MATCHA_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new MATCHA<double>(arch, imageSize: 64);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new MATCHA<double>(arch, imageSize: 64);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -192,7 +192,7 @@ public class PixelToSequenceDocumentTests
     public async Task MATCHA_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new MATCHA<double>(arch, imageSize: 64);
+        using var model = new MATCHA<double>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("MATCHA", meta.Name);
     }
@@ -204,20 +204,29 @@ public class PixelToSequenceDocumentTests
     [Fact(Timeout = 120000)]
     public async Task AllPixelToSequenceModels_RequiresOCR_IsFalse()
     {
-        var arch = CreateArchitecture();
         var models = new DocumentNeuralNetworkBase<double>[]
         {
-            new Donut<double>(arch, imageHeight: 64, imageWidth: 64),
-            new Nougat<double>(arch, imageSize: 64),
-            new Pix2Struct<double>(arch, imageSize: 64),
-            new Dessurt<double>(arch, imageSize: 64),
-            new MATCHA<double>(arch, imageSize: 64),
+            new Donut<double>(CreateArchitecture(), imageHeight: 64, imageWidth: 64),
+            new Nougat<double>(CreateArchitecture(), imageSize: 64),
+            new Pix2Struct<double>(CreateArchitecture(), imageSize: 64),
+            new Dessurt<double>(CreateArchitecture(), imageSize: 64),
+            new MATCHA<double>(CreateArchitecture(), imageSize: 64),
         };
 
-        foreach (var model in models)
+        try
         {
-            // Pixel-to-sequence models process raw pixels, no OCR required
-            Assert.False(model.RequiresOCR);
+            foreach (var model in models)
+            {
+                // Pixel-to-sequence models process raw pixels, no OCR required
+                Assert.False(model.RequiresOCR);
+            }
+        }
+        finally
+        {
+            foreach (var model in models)
+            {
+                model.Dispose();
+            }
         }
     }
 

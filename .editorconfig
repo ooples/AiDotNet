@@ -177,6 +177,12 @@ dotnet_diagnostic.AIDN081.severity = warning
 dotnet_diagnostic.AIDN082.severity = warning
 dotnet_diagnostic.ADN0063.severity = warning
 
+# Document integration models own large pooled tensor buffers. An undisposed model can retain
+# several gigabytes until a full GC, which previously exhausted the Integration-D runner before
+# xUnit could report the remaining tests. Keep disposal a compile-time contract for this family.
+[tests/AiDotNet.Tests/IntegrationTests/Document/*.cs]
+dotnet_diagnostic.CA2000.severity = error
+
 [src/libraries/System.Net.Http/src/System/Net/Http/{SocketsHttpHandler/Http3RequestStream.cs,BrowserHttpHandler/BrowserHttpHandler.cs}]
 # disable CA2025, the analyzer throws a NullReferenceException when processing this file: https://github.com/dotnet/roslyn-analyzers/issues/7652
 dotnet_diagnostic.CA2025.severity = none

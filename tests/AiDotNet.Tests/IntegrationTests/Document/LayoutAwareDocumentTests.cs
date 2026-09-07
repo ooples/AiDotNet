@@ -52,7 +52,7 @@ public class LayoutAwareDocumentTests
     public async Task LayoutLM_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutLM<float>(arch);
+        using var model = new LayoutLM<float>(arch);
         Assert.NotNull(model);
     }
 
@@ -60,9 +60,9 @@ public class LayoutAwareDocumentTests
     public async Task LayoutLM_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutLM<float>(arch);
-        var input = CreateTokenSequence();
-        var output = model.Predict(input);
+        using var model = new LayoutLM<float>(arch);
+        using var input = CreateTokenSequence();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -72,7 +72,7 @@ public class LayoutAwareDocumentTests
     public async Task LayoutLM_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutLM<float>(arch);
+        using var model = new LayoutLM<float>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("LayoutLM", meta.Name);
     }
@@ -85,7 +85,7 @@ public class LayoutAwareDocumentTests
     public async Task LayoutLMv2_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutLMv2<float>(arch);
+        using var model = new LayoutLMv2<float>(arch);
         Assert.NotNull(model);
     }
 
@@ -93,9 +93,9 @@ public class LayoutAwareDocumentTests
     public async Task LayoutLMv2_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutLMv2<float>(arch);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new LayoutLMv2<float>(arch);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -105,7 +105,7 @@ public class LayoutAwareDocumentTests
     public async Task LayoutLMv2_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutLMv2<float>(arch);
+        using var model = new LayoutLMv2<float>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("LayoutLMv2", meta.Name);
     }
@@ -118,7 +118,7 @@ public class LayoutAwareDocumentTests
     public async Task LayoutLMv3_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutLMv3<float>(arch);
+        using var model = new LayoutLMv3<float>(arch);
         Assert.NotNull(model);
     }
 
@@ -126,9 +126,9 @@ public class LayoutAwareDocumentTests
     public async Task LayoutLMv3_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutLMv3<float>(arch);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new LayoutLMv3<float>(arch);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -138,7 +138,7 @@ public class LayoutAwareDocumentTests
     public async Task LayoutLMv3_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutLMv3<float>(arch);
+        using var model = new LayoutLMv3<float>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("LayoutLMv3", meta.Name);
     }
@@ -151,7 +151,7 @@ public class LayoutAwareDocumentTests
     public async Task LayoutXLM_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutXLM<float>(arch);
+        using var model = new LayoutXLM<float>(arch);
         Assert.NotNull(model);
     }
 
@@ -159,9 +159,9 @@ public class LayoutAwareDocumentTests
     public async Task LayoutXLM_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutXLM<float>(arch);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new LayoutXLM<float>(arch);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -171,7 +171,7 @@ public class LayoutAwareDocumentTests
     public async Task LayoutXLM_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new LayoutXLM<float>(arch);
+        using var model = new LayoutXLM<float>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("LayoutXLM", meta.Name);
     }
@@ -184,7 +184,7 @@ public class LayoutAwareDocumentTests
     public async Task DocFormer_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new DocFormer<float>(arch);
+        using var model = new DocFormer<float>(arch);
         Assert.NotNull(model);
     }
 
@@ -192,9 +192,9 @@ public class LayoutAwareDocumentTests
     public async Task DocFormer_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new DocFormer<float>(arch);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new DocFormer<float>(arch);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -204,7 +204,7 @@ public class LayoutAwareDocumentTests
     public async Task DocFormer_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new DocFormer<float>(arch);
+        using var model = new DocFormer<float>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("DocFormer", meta.Name);
     }
@@ -217,7 +217,7 @@ public class LayoutAwareDocumentTests
     public async Task DiT_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new DiT<float>(arch, imageSize: 64);
+        using var model = new DiT<float>(arch, imageSize: 64);
         Assert.NotNull(model);
     }
 
@@ -225,9 +225,9 @@ public class LayoutAwareDocumentTests
     public async Task DiT_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new DiT<float>(arch, imageSize: 64);
-        var input = CreateSmallImage();
-        var output = model.Predict(input);
+        using var model = new DiT<float>(arch, imageSize: 64);
+        using var input = CreateSmallImage();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -237,7 +237,7 @@ public class LayoutAwareDocumentTests
     public async Task DiT_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new DiT<float>(arch, imageSize: 64);
+        using var model = new DiT<float>(arch, imageSize: 64);
         var meta = model.GetModelMetadata();
         Assert.Equal("DiT", meta.Name);
     }
@@ -250,7 +250,7 @@ public class LayoutAwareDocumentTests
     public async Task LiLT_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        var model = new LiLT<float>(arch);
+        using var model = new LiLT<float>(arch);
         Assert.NotNull(model);
     }
 
@@ -258,14 +258,14 @@ public class LayoutAwareDocumentTests
     public async Task LiLT_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        var model = new LiLT<float>(arch);
+        using var model = new LiLT<float>(arch);
         // LiLT (Wang et al., ACL 2022) is text + layout with NO vision stream — decoupling the two is
         // the paper's whole point, which is what lets one layout encoder pair with any language's text
         // encoder. Handing it a document IMAGE fed float pixels straight into its front EmbeddingLayer,
         // which correctly refused them ("requires token indices, but element 0 is 0.0655..."). Same
         // fixture mistake already corrected for LayoutLM above.
-        var input = CreateTokenSequence();
-        var output = model.Predict(input);
+        using var input = CreateTokenSequence();
+        using var output = model.Predict(input);
         Assert.NotNull(output);
         Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
         Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
@@ -275,7 +275,7 @@ public class LayoutAwareDocumentTests
     public async Task LiLT_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        var model = new LiLT<float>(arch);
+        using var model = new LiLT<float>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("LiLT", meta.Name);
     }
@@ -287,21 +287,30 @@ public class LayoutAwareDocumentTests
     [Fact(Timeout = 120000)]
     public async Task AllLayoutAwareModels_RequiresOCR_IsTrue()
     {
-        var arch = CreateArchitecture();
         var models = new DocumentNeuralNetworkBase<float>[]
         {
-            new LayoutLM<float>(arch),
-            new LayoutLMv2<float>(arch),
-            new LayoutLMv3<float>(arch),
-            new LayoutXLM<float>(arch),
-            new DocFormer<float>(arch),
-            new LiLT<float>(arch),
+            new LayoutLM<float>(CreateArchitecture()),
+            new LayoutLMv2<float>(CreateArchitecture()),
+            new LayoutLMv3<float>(CreateArchitecture()),
+            new LayoutXLM<float>(CreateArchitecture()),
+            new DocFormer<float>(CreateArchitecture()),
+            new LiLT<float>(CreateArchitecture()),
         };
 
-        foreach (var model in models)
+        try
         {
-            // Layout-aware models require OCR to provide text and bounding boxes
-            Assert.True(model.RequiresOCR);
+            foreach (var model in models)
+            {
+                // Layout-aware models require OCR to provide text and bounding boxes
+                Assert.True(model.RequiresOCR);
+            }
+        }
+        finally
+        {
+            foreach (var model in models)
+            {
+                model.Dispose();
+            }
         }
     }
 
@@ -309,7 +318,7 @@ public class LayoutAwareDocumentTests
     public async Task DiT_RequiresOCR_IsFalse()
     {
         var arch = CreateArchitecture();
-        var model = new DiT<float>(arch, imageSize: 64);
+        using var model = new DiT<float>(arch, imageSize: 64);
         // DiT is vision-only, does not require OCR
         Assert.False(model.RequiresOCR);
     }
@@ -344,12 +353,13 @@ public class LayoutAwareDocumentTests
     public async Task LiLT_BiACM_LayoutStreamInfluencesTextOutput()
     {
         await Task.Yield();
-        var model = CreateSmallLiLT();
+        using var model = CreateSmallLiLT();
         model.SetTrainingMode(false);
-        var tokens = CreateIntTokenVector(8);
+        using var tokens = CreateIntTokenVector(8);
+        using var boxes = CreateBoxFeatures(8);
 
-        var textOnly = model.EncodeDualStream(tokens, layoutBoxes: null);
-        var fused = model.EncodeDualStream(tokens, CreateBoxFeatures(8));
+        using var textOnly = model.EncodeDualStream(tokens, layoutBoxes: null);
+        using var fused = model.EncodeDualStream(tokens, boxes);
 
         // Same shape, both finite.
         Assert.Equal(textOnly.Length, fused.Length);
@@ -369,10 +379,11 @@ public class LayoutAwareDocumentTests
     public async Task LiLT_TextOnly_IsFiniteAndDegradesGracefully()
     {
         await Task.Yield();
-        var model = CreateSmallLiLT();
+        using var model = CreateSmallLiLT();
         model.SetTrainingMode(false);
 
-        var output = model.EncodeDualStream(CreateIntTokenVector(8), layoutBoxes: null);
+        using var tokens = CreateIntTokenVector(8);
+        using var output = model.EncodeDualStream(tokens, layoutBoxes: null);
         Assert.True(output.Length > 0);
         var d = output.ToArray();
         for (int i = 0; i < d.Length; i++)
@@ -422,11 +433,12 @@ public class LayoutAwareDocumentTests
     public async Task LayoutXLM_EncodeMultimodal_GrowsSequenceNotBatch_AndIsFinite()
     {
         await Task.Yield();
-        var model = CreateSmallLayoutXLM();
+        using var model = CreateSmallLayoutXLM();
         model.SetTrainingMode(false);
-        var image = CreateSmallImage(32);
+        using var image = CreateSmallImage(32);
+        using var tokens = CreateTokenIds(16);
 
-        var fused = model.EncodeMultimodal(CreateTokenIds(16), image);
+        using var fused = model.EncodeMultimodal(tokens, image);
 
         Assert.Equal(3, fused.Rank);
         Assert.Equal(1, fused.Shape[0]);          // batch preserved — pre-fix this was 1 + Ltext
@@ -438,12 +450,14 @@ public class LayoutAwareDocumentTests
     public async Task LayoutXLM_EncodeMultimodal_MoreTextTokens_LengthensSequence()
     {
         await Task.Yield();
-        var model = CreateSmallLayoutXLM();
+        using var model = CreateSmallLayoutXLM();
         model.SetTrainingMode(false);
-        var image = CreateSmallImage(32);
+        using var image = CreateSmallImage(32);
+        using var tokens8 = CreateTokenIds(8);
+        using var tokens24 = CreateTokenIds(24);
 
-        var fused8 = model.EncodeMultimodal(CreateTokenIds(8), image);
-        var fused24 = model.EncodeMultimodal(CreateTokenIds(24), image);
+        using var fused8 = model.EncodeMultimodal(tokens8, image);
+        using var fused24 = model.EncodeMultimodal(tokens24, image);
 
         // 16 extra text tokens must extend the joint SEQUENCE by 16 while the batch stays 1.
         // Pre-fix (concat on axis 0) the extra tokens grew the batch dimension instead.
@@ -457,11 +471,12 @@ public class LayoutAwareDocumentTests
     public async Task LayoutLMv2_EncodeMultimodal_GrowsSequenceNotBatch_AndIsFinite()
     {
         await Task.Yield();
-        var model = CreateSmallLayoutLMv2();
+        using var model = CreateSmallLayoutLMv2();
         model.SetTrainingMode(false);
-        var image = CreateSmallImage(32);
+        using var image = CreateSmallImage(32);
+        using var tokens = CreateTokenIds(16);
 
-        var fused = model.EncodeMultimodal(CreateTokenIds(16), image);
+        using var fused = model.EncodeMultimodal(tokens, image);
 
         Assert.Equal(3, fused.Rank);
         Assert.Equal(1, fused.Shape[0]);
@@ -473,12 +488,14 @@ public class LayoutAwareDocumentTests
     public async Task LayoutLMv2_EncodeMultimodal_MoreTextTokens_LengthensSequence()
     {
         await Task.Yield();
-        var model = CreateSmallLayoutLMv2();
+        using var model = CreateSmallLayoutLMv2();
         model.SetTrainingMode(false);
-        var image = CreateSmallImage(32);
+        using var image = CreateSmallImage(32);
+        using var tokens8 = CreateTokenIds(8);
+        using var tokens24 = CreateTokenIds(24);
 
-        var fused8 = model.EncodeMultimodal(CreateTokenIds(8), image);
-        var fused24 = model.EncodeMultimodal(CreateTokenIds(24), image);
+        using var fused8 = model.EncodeMultimodal(tokens8, image);
+        using var fused24 = model.EncodeMultimodal(tokens24, image);
 
         Assert.Equal(1, fused8.Shape[0]);
         Assert.Equal(1, fused24.Shape[0]);
@@ -493,15 +510,20 @@ public class LayoutAwareDocumentTests
         // thread-local tensor pool, then a fresh model's fusion must still produce finite output.
         // Pre-fix (uninitialized concat tail) this leaked stale pool data as NaN.
         await Task.Yield();
-        var churn = CreateSmallLayoutXLM();
+        using var churn = CreateSmallLayoutXLM();
         churn.SetTrainingMode(false);
-        var churnImage = CreateSmallImage(32);
+        using var churnImage = CreateSmallImage(32);
         for (int i = 0; i < 5; i++)
-            churn.EncodeMultimodal(CreateTokenIds(16 + i), churnImage);
+        {
+            using var churnTokens = CreateTokenIds(16 + i);
+            using var churnOutput = churn.EncodeMultimodal(churnTokens, churnImage);
+        }
 
-        var model = CreateSmallLayoutXLM();
+        using var model = CreateSmallLayoutXLM();
         model.SetTrainingMode(false);
-        var fused = model.EncodeMultimodal(CreateTokenIds(16), CreateSmallImage(32));
+        using var tokens = CreateTokenIds(16);
+        using var image = CreateSmallImage(32);
+        using var fused = model.EncodeMultimodal(tokens, image);
 
         AssertAllFinite(fused, "LayoutXLM fusion after pool churn");
         Assert.Equal(1, fused.Shape[0]);
@@ -512,13 +534,15 @@ public class LayoutAwareDocumentTests
     {
         // Modality-robustness edge cases: the fusion path degrades gracefully to each single stream.
         await Task.Yield();
-        var model = CreateSmallLayoutXLM();
+        using var model = CreateSmallLayoutXLM();
         model.SetTrainingMode(false);
 
-        var imageOnly = model.Predict(CreateSmallImage(32));   // routes through the visual stream
+        using var image = CreateSmallImage(32);
+        using var imageOnly = model.Predict(image);   // routes through the visual stream
         AssertAllFinite(imageOnly, "LayoutXLM image-only");
 
-        var textOnly = model.Predict(CreateTokenIds(16));      // routes through the text stream
+        using var tokens = CreateTokenIds(16);
+        using var textOnly = model.Predict(tokens);      // routes through the text stream
         AssertAllFinite(textOnly, "LayoutXLM text-only");
     }
 
@@ -536,11 +560,13 @@ public class LayoutAwareDocumentTests
     public async Task LiLT_PackedInput_ReachesTheLayoutStream()
     {
         await Task.Yield();
-        var model = new LiLT<float>(CreateArchitecture());
+        using var model = new LiLT<float>(CreateArchitecture());
         model.SetTrainingMode(false);
 
-        var left = model.Predict(CreatePackedTokens(8, x0: 0, y0: 0));
-        var right = model.Predict(CreatePackedTokens(8, x0: 300, y0: 400));
+        using var leftTokens = CreatePackedTokens(8, x0: 0, y0: 0);
+        using var rightTokens = CreatePackedTokens(8, x0: 300, y0: 400);
+        using var left = model.Predict(leftTokens);
+        using var right = model.Predict(rightTokens);
 
         AssertAllFinite(left, "LiLT packed left");
         AssertAllFinite(right, "LiLT packed right");
@@ -565,10 +591,12 @@ public class LayoutAwareDocumentTests
     public async Task LiLT_TokensOnly_StillRunsTextOnly()
     {
         await Task.Yield();
-        var model = new LiLT<float>(CreateArchitecture());
+        using var model = new LiLT<float>(CreateArchitecture());
         model.SetTrainingMode(false);
 
-        AssertAllFinite(model.Predict(CreateTokenIds(16)), "LiLT text-only");
+        using var tokens = CreateTokenIds(16);
+        using var output = model.Predict(tokens);
+        AssertAllFinite(output, "LiLT text-only");
     }
 
     #endregion
@@ -592,13 +620,15 @@ public class LayoutAwareDocumentTests
     public async Task DocFormer_BothModalities_RouteAndStayFinite()
     {
         await Task.Yield();
-        var model = CreateSmallDocFormer();
+        using var model = CreateSmallDocFormer();
         model.SetTrainingMode(false);
 
-        var imageOnly = model.Predict(CreateSmallImage(32));   // visual backbone, then the shared stack
+        using var image = CreateSmallImage(32);
+        using var imageOnly = model.Predict(image);   // visual backbone, then the shared stack
         AssertAllFinite(imageOnly, "DocFormer image-only");
 
-        var textOnly = model.Predict(CreateTokenIds(16));      // layout embedding, then the shared stack
+        using var tokens = CreateTokenIds(16);
+        using var textOnly = model.Predict(tokens);      // layout embedding, then the shared stack
         AssertAllFinite(textOnly, "DocFormer text-only");
     }
 
@@ -611,11 +641,13 @@ public class LayoutAwareDocumentTests
     public async Task DocFormer_BoundingBoxes_ChangeTheOutput()
     {
         await Task.Yield();
-        var model = CreateSmallDocFormer();
+        using var model = CreateSmallDocFormer();
         model.SetTrainingMode(false);
 
-        var topLeft = model.Predict(CreatePackedTokens(8, x0: 0, y0: 0));
-        var bottomRight = model.Predict(CreatePackedTokens(8, x0: 300, y0: 400));
+        using var topLeftTokens = CreatePackedTokens(8, x0: 0, y0: 0);
+        using var bottomRightTokens = CreatePackedTokens(8, x0: 300, y0: 400);
+        using var topLeft = model.Predict(topLeftTokens);
+        using var bottomRight = model.Predict(bottomRightTokens);
 
         AssertAllFinite(topLeft, "DocFormer packed top-left");
         AssertAllFinite(bottomRight, "DocFormer packed bottom-right");
