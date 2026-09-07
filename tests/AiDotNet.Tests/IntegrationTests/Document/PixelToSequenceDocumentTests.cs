@@ -204,29 +204,21 @@ public class PixelToSequenceDocumentTests
     [Fact(Timeout = 120000)]
     public async Task AllPixelToSequenceModels_RequiresOCR_IsFalse()
     {
-        var models = new DocumentNeuralNetworkBase<double>[]
-        {
-            new Donut<double>(CreateArchitecture(), imageHeight: 64, imageWidth: 64),
-            new Nougat<double>(CreateArchitecture(), imageSize: 64),
-            new Pix2Struct<double>(CreateArchitecture(), imageSize: 64),
-            new Dessurt<double>(CreateArchitecture(), imageSize: 64),
-            new MATCHA<double>(CreateArchitecture(), imageSize: 64),
-        };
+        // Each model owns pooled buffers, so it is declared under its own using scope before the
+        // array is built: if a later constructor throws, the array assignment never completes and a
+        // finally-based cleanup would never run, leaking every model already constructed.
+        using var donut = new Donut<double>(CreateArchitecture(), imageHeight: 64, imageWidth: 64);
+        using var nougat = new Nougat<double>(CreateArchitecture(), imageSize: 64);
+        using var pix2Struct = new Pix2Struct<double>(CreateArchitecture(), imageSize: 64);
+        using var dessurt = new Dessurt<double>(CreateArchitecture(), imageSize: 64);
+        using var matcha = new MATCHA<double>(CreateArchitecture(), imageSize: 64);
 
-        try
+        var models = new DocumentNeuralNetworkBase<double>[] { donut, nougat, pix2Struct, dessurt, matcha };
+
+        foreach (var model in models)
         {
-            foreach (var model in models)
-            {
-                // Pixel-to-sequence models process raw pixels, no OCR required
-                Assert.False(model.RequiresOCR);
-            }
-        }
-        finally
-        {
-            foreach (var model in models)
-            {
-                model.Dispose();
-            }
+            // Pixel-to-sequence models process raw pixels, no OCR required
+            Assert.False(model.RequiresOCR);
         }
     }
 

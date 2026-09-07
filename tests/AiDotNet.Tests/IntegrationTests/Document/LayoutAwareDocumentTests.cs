@@ -287,30 +287,26 @@ public class LayoutAwareDocumentTests
     [Fact(Timeout = 120000)]
     public async Task AllLayoutAwareModels_RequiresOCR_IsTrue()
     {
+        // Each model owns pooled buffers, so it is declared under its own using scope before the
+        // array is built: if a later constructor throws, the array assignment never completes and a
+        // finally-based cleanup would never run, leaking every model already constructed. On this
+        // shard that leak is measured in gigabytes and is what exhausts the runner.
+        using var layoutLm = new LayoutLM<float>(CreateArchitecture());
+        using var layoutLmV2 = new LayoutLMv2<float>(CreateArchitecture());
+        using var layoutLmV3 = new LayoutLMv3<float>(CreateArchitecture());
+        using var layoutXlm = new LayoutXLM<float>(CreateArchitecture());
+        using var docFormer = new DocFormer<float>(CreateArchitecture());
+        using var liLt = new LiLT<float>(CreateArchitecture());
+
         var models = new DocumentNeuralNetworkBase<float>[]
         {
-            new LayoutLM<float>(CreateArchitecture()),
-            new LayoutLMv2<float>(CreateArchitecture()),
-            new LayoutLMv3<float>(CreateArchitecture()),
-            new LayoutXLM<float>(CreateArchitecture()),
-            new DocFormer<float>(CreateArchitecture()),
-            new LiLT<float>(CreateArchitecture()),
+            layoutLm, layoutLmV2, layoutLmV3, layoutXlm, docFormer, liLt,
         };
 
-        try
+        foreach (var model in models)
         {
-            foreach (var model in models)
-            {
-                // Layout-aware models require OCR to provide text and bounding boxes
-                Assert.True(model.RequiresOCR);
-            }
-        }
-        finally
-        {
-            foreach (var model in models)
-            {
-                model.Dispose();
-            }
+            // Layout-aware models require OCR to provide text and bounding boxes
+            Assert.True(model.RequiresOCR);
         }
     }
 

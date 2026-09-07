@@ -286,28 +286,20 @@ public class GraphBasedDocumentTests
     [Fact(Timeout = 120000)]
     public async Task AllGraphBasedModels_SupportsTraining_InNativeMode()
     {
-        var models = new DocumentNeuralNetworkBase<double>[]
-        {
-            new DocGCN<double>(CreateArchitecture()),
-            new PICK<double>(CreateArchitecture()),
-            new TRIE<double>(CreateArchitecture()),
-            new LayoutGraph<double>(CreateArchitecture()),
-        };
+        // Each model owns pooled buffers, so it is declared under its own using scope before the
+        // array is built: if a later constructor throws, the array assignment never completes and a
+        // finally-based cleanup would never run, leaking every model already constructed.
+        using var docGcn = new DocGCN<double>(CreateArchitecture());
+        using var pick = new PICK<double>(CreateArchitecture());
+        using var trie = new TRIE<double>(CreateArchitecture());
+        using var layoutGraph = new LayoutGraph<double>(CreateArchitecture());
 
-        try
+        var models = new DocumentNeuralNetworkBase<double>[] { docGcn, pick, trie, layoutGraph };
+
+        foreach (var model in models)
         {
-            foreach (var model in models)
-            {
-                // All native mode models support training
-                Assert.True(model.SupportsTraining);
-            }
-        }
-        finally
-        {
-            foreach (var model in models)
-            {
-                model.Dispose();
-            }
+            // All native mode models support training
+            Assert.True(model.SupportsTraining);
         }
     }
 

@@ -197,28 +197,20 @@ public class OCRTextRecognitionTests
     public async Task AllTextRecognizers_RequiresOCR_IsFalse()
     {
         await Task.Yield();
-        var models = new DocumentNeuralNetworkBase<double>[]
-        {
-            new CRNN<double>(CreateArchitecture(), imageWidth: 128),
-            CreateSmallTrOCR(CreateArchitecture()),
-            new SVTR<double>(CreateArchitecture()),
-            new ABINet<double>(CreateArchitecture(), imageWidth: 128, imageHeight: 32),
-        };
+        // Each model owns pooled buffers, so it is declared under its own using scope before the
+        // array is built: if a later constructor throws, the array assignment never completes and a
+        // finally-based cleanup would never run, leaking every model already constructed.
+        using var crnn = new CRNN<double>(CreateArchitecture(), imageWidth: 128);
+        using var trOcr = CreateSmallTrOCR(CreateArchitecture());
+        using var svtr = new SVTR<double>(CreateArchitecture());
+        using var abiNet = new ABINet<double>(CreateArchitecture(), imageWidth: 128, imageHeight: 32);
 
-        try
+        var models = new DocumentNeuralNetworkBase<double>[] { crnn, trOcr, svtr, abiNet };
+
+        foreach (var model in models)
         {
-            foreach (var model in models)
-            {
-                // Text recognizers are OCR components themselves, they don't require OCR
-                Assert.False(model.RequiresOCR);
-            }
-        }
-        finally
-        {
-            foreach (var model in models)
-            {
-                model.Dispose();
-            }
+            // Text recognizers are OCR components themselves, they don't require OCR
+            Assert.False(model.RequiresOCR);
         }
     }
 

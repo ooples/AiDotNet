@@ -181,27 +181,19 @@ public class OCRTextDetectionTests
     [Fact(Timeout = 120000)]
     public async Task AllTextDetectors_SupportedDocumentTypes_NotNone()
     {
-        var models = new DocumentNeuralNetworkBase<double>[]
-        {
-            new CRAFT<double>(CreateArchitecture(), imageSize: 64),
-            new DBNet<double>(CreateArchitecture(), imageSize: 64),
-            new EAST<double>(CreateArchitecture(), imageSize: 64),
-            new PSENet<double>(CreateArchitecture(), imageSize: 64),
-        };
+        // Each model owns pooled buffers, so it is declared under its own using scope before the
+        // array is built: if a later constructor throws, the array assignment never completes and a
+        // finally-based cleanup would never run, leaking every model already constructed.
+        using var craft = new CRAFT<double>(CreateArchitecture(), imageSize: 64);
+        using var dbNet = new DBNet<double>(CreateArchitecture(), imageSize: 64);
+        using var east = new EAST<double>(CreateArchitecture(), imageSize: 64);
+        using var pseNet = new PSENet<double>(CreateArchitecture(), imageSize: 64);
 
-        try
+        var models = new DocumentNeuralNetworkBase<double>[] { craft, dbNet, east, pseNet };
+
+        foreach (var model in models)
         {
-            foreach (var model in models)
-            {
-                Assert.NotEqual(DocumentType.None, model.SupportedDocumentTypes);
-            }
-        }
-        finally
-        {
-            foreach (var model in models)
-            {
-                model.Dispose();
-            }
+            Assert.NotEqual(DocumentType.None, model.SupportedDocumentTypes);
         }
     }
 

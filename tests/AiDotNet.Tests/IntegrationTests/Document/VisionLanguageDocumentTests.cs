@@ -320,26 +320,18 @@ public class VisionLanguageDocumentTests
     [Fact(Timeout = 120000)]
     public async Task AllVisionLanguageModels_SupportsTraining_InNativeMode()
     {
-        var models = new DocumentNeuralNetworkBase<double>[]
-        {
-            new DocOwl<double>(CreateArchitecture(), imageSize: 64),
-            new InfographicVQA<double>(CreateArchitecture(), imageSize: 64),
-            new UDOP<double>(CreateArchitecture(), imageSize: 64),
-        };
+        // Each model owns pooled buffers, so it is declared under its own using scope before the
+        // array is built: if a later constructor throws, the array assignment never completes and a
+        // finally-based cleanup would never run, leaking every model already constructed.
+        using var docOwl = new DocOwl<double>(CreateArchitecture(), imageSize: 64);
+        using var infographicVqa = new InfographicVQA<double>(CreateArchitecture(), imageSize: 64);
+        using var udop = new UDOP<double>(CreateArchitecture(), imageSize: 64);
 
-        try
+        var models = new DocumentNeuralNetworkBase<double>[] { docOwl, infographicVqa, udop };
+
+        foreach (var model in models)
         {
-            foreach (var model in models)
-            {
-                Assert.True(model.SupportsTraining);
-            }
-        }
-        finally
-        {
-            foreach (var model in models)
-            {
-                model.Dispose();
-            }
+            Assert.True(model.SupportsTraining);
         }
     }
 
