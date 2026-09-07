@@ -345,6 +345,43 @@ string? HomeNamespace(string memberName)
     return best;
 }
 
+// True when a documented member sits on a type a user of the package can actually name. The gate asks
+// "can a reader paste this and have it compile", and a reader cannot reference an internal type at all,
+// so an example on one has no audience to fail: it documents the library to its own maintainers. Those
+// examples are reported separately rather than counted as user-facing breakage.
+var publiclyReachable = new Dictionary<string, bool>(StringComparer.Ordinal);
+bool IsUserReachable(string memberName)
+{
+    int colon = memberName.IndexOf(':');
+    string name = colon >= 0 ? memberName[(colon + 1)..] : memberName;
+    int paren = name.IndexOf('(');
+    if (paren >= 0) name = name[..paren];
+
+    string? home = HomeNamespace(name);
+    if (home is null) return true;   // not ours to judge
+
+    // The type is the first segment after the namespace; anything deeper is a member or a nested type.
+    string rest = name[(home.Length + 1)..];
+    int dot = rest.IndexOf('.');
+    string typeName = home + "." + (dot >= 0 ? rest[..dot] : rest);
+
+    if (publiclyReachable.TryGetValue(typeName, out bool known)) return known;
+
+    var probe = CSharpCompilation.Create("__vis_probe", Array.Empty<SyntaxTree>(), refs, options);
+    var symbol = probe.GetTypeByMetadataName(typeName)
+              ?? probe.GetTypeByMetadataName(typeName + "`1")
+              ?? probe.GetTypeByMetadataName(typeName + "`2")
+              ?? probe.GetTypeByMetadataName(typeName + "`3");
+
+    // Unresolved means the type is not in the reference set at all, which is itself invisible to a user.
+    bool reachable = symbol is not null &&
+        symbol.DeclaredAccessibility is Accessibility.Public or Accessibility.Protected
+            or Accessibility.ProtectedOrInternal;
+    publiclyReachable[typeName] = reachable;
+    return reachable;
+}
+int internalSkipped = 0;
+
 // Compiles one snippet, recording pass/fail against the given key.
 //
 // homeNamespace, when given, wraps the snippet in that namespace. Importing every AiDotNet namespace makes
@@ -748,6 +785,11 @@ foreach (var root in roots)
         foreach (var member in xdoc.Descendants("member"))
         {
             var memberName = (string?)member.Attribute("name") ?? "?";
+            if (!IsUserReachable(memberName))
+            {
+                internalSkipped += member.Descendants("example").Elements("code").Count();
+                continue;
+            }
             var home = HomeNamespace(memberName);
             int idx = 0;
             foreach (var codeEl in member.Descendants("example").Elements("code"))
@@ -803,6 +845,10 @@ foreach (var root in roots)
 
 Console.WriteLine($"\n=== Example compile results ===");
 Console.WriteLine($"Total: {total}   PASS: {pass}   FAIL: {total - pass}\n");
+if (internalSkipped > 0)
+{
+    Console.WriteLine($"Skipped {internalSkipped} example(s) on internal types — no user can reference them.\n");
+}
 
 var byCode = failures.GroupBy(f => f.err.Split(':')[0]).OrderByDescending(g => g.Count());
 Console.WriteLine("Failures by error code:");

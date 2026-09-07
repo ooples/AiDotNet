@@ -321,9 +321,16 @@ public abstract partial class NeuralProcessBase<T, TInput, TOutput> : MetaLearne
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Neural Process model after encoding context examples
+/// var baseModel = new SimpleRegression&lt;float&gt;();
+/// var parameters = new Vector&lt;float&gt;((int)baseModel.ParameterCount);
+///
+/// // the context examples, encoded and aggregated into one representation
+/// var aggregatedRepresentation = new Vector&lt;float&gt;(new float[] { 0.2f, -0.1f, 0.4f });
+///
 /// var npModel = new NeuralProcessModel&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;(
-///     baseModel, aggregatedRepresentation);
+///     baseModel, parameters, aggregatedRepresentation);
+///
+/// var targetInputs = new Matrix&lt;float&gt;(new float[,] { { 1.0f, 2.0f }, { 3.0f, 4.0f } });
 /// Vector&lt;float&gt; prediction = npModel.Predict(targetInputs);
 /// </code>
 /// </example>
