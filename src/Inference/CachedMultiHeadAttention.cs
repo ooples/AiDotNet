@@ -538,11 +538,24 @@ public partial class CachedMultiHeadAttention<T> : LayerBase<T>, IShapeContract
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
         }
 
-        Engine.TensorSubtractInPlace(_queryWeights, Tensor<T>.FromMatrix(_queryWeightsGradient.Multiply(learningRate)));
-        Engine.TensorSubtractInPlace(_keyWeights, Tensor<T>.FromMatrix(_keyWeightsGradient.Multiply(learningRate)));
-        Engine.TensorSubtractInPlace(_valueWeights, Tensor<T>.FromMatrix(_valueWeightsGradient.Multiply(learningRate)));
-        Engine.TensorSubtractInPlace(_outputWeights, Tensor<T>.FromMatrix(_outputWeightsGradient.Multiply(learningRate)));
-        Engine.TensorSubtractInPlace(_outputBias, new Tensor<T>([_outputBias.Length], _outputBiasGradient.Multiply(learningRate)));
+        using var queryUpdate = Tensor<T>.FromMatrix(_queryWeightsGradient.Multiply(learningRate));
+        using var keyUpdate = Tensor<T>.FromMatrix(_keyWeightsGradient.Multiply(learningRate));
+        using var valueUpdate = Tensor<T>.FromMatrix(_valueWeightsGradient.Multiply(learningRate));
+        using var outputUpdate = Tensor<T>.FromMatrix(_outputWeightsGradient.Multiply(learningRate));
+        using var outputBiasUpdate =
+            new Tensor<T>([_outputBias.Length], _outputBiasGradient.Multiply(learningRate));
+
+        Engine.TensorSubtractInPlace(_queryWeights, queryUpdate);
+        Engine.TensorSubtractInPlace(_keyWeights, keyUpdate);
+        Engine.TensorSubtractInPlace(_valueWeights, valueUpdate);
+        Engine.TensorSubtractInPlace(_outputWeights, outputUpdate);
+        Engine.TensorSubtractInPlace(_outputBias, outputBiasUpdate);
+
+        Engine.InvalidatePersistentTensor(_queryWeights);
+        Engine.InvalidatePersistentTensor(_keyWeights);
+        Engine.InvalidatePersistentTensor(_valueWeights);
+        Engine.InvalidatePersistentTensor(_outputWeights);
+        Engine.InvalidatePersistentTensor(_outputBias);
     }
 
     /// <summary>

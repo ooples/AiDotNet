@@ -74,20 +74,26 @@ public class ParameterUpdateInPlaceAnalyzer : DiagnosticAnalyzer
     {
         var method = (MethodDeclarationSyntax)context.Node;
         if (method.Identifier.Text != "UpdateParameters") return;
-        if (method.Body is null) return;
+        if (method.Body is null && method.ExpressionBody is null) return;
 
         var model = context.SemanticModel;
+        if (model.GetDeclaredSymbol(method) is not IMethodSymbol methodSymbol) return;
+        var registrations =
+            ParameterMemberSemanticModel.GetRegistrationClassifications(methodSymbol.ContainingType);
 
-        foreach (var assignment in method.Body.DescendantNodes().OfType<AssignmentExpressionSyntax>())
+        foreach (var assignment in method.DescendantNodes()
+            .OfType<AssignmentExpressionSyntax>()
+            .Where(candidate => candidate.IsKind(SyntaxKind.SimpleAssignmentExpression)))
         {
-            if (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression)) continue;
-            if (model.GetSymbolInfo(assignment.Left).Symbol is not IFieldSymbol field) continue;
+            var field = ResolveCurrentInstanceRootField(assignment.Left, model);
+            if (field is null) continue;
             if (field.IsStatic || field.IsConst) continue;
-            if (IsScratchStorage(field)) continue;
+            var classification =
+                ParameterMemberSemanticModel.ClassifyWithRegistrations(field, registrations);
+            if (classification.Kind != ParameterMemberSemanticModel.Kind.Trainable) continue;
 
             string? engineCall = GetEngineCallName(assignment.Right);
             if (engineCall is null) continue;
-            if (IsLazyInitialization(assignment, model)) continue;
 
             context.ReportDiagnostic(Diagnostic.Create(
                 ParameterReboundToEngineResult,
@@ -98,77 +104,43 @@ public class ParameterUpdateInPlaceAnalyzer : DiagnosticAnalyzer
     }
 
     /// <summary>
-    /// True when the assignment is a first-use allocation guarded by a null check on the same
-    /// field, e.g. <c>if (_tracesGpu == null) { _tracesGpu = gpuEngine.ZerosGpu&lt;T&gt;(...); }</c>.
+    /// Resolves the current instance's field for both direct assignments and container element
+    /// assignments such as <c>_weights[i] = ...</c> or <c>this._weights[key] = ...</c>.
     /// </summary>
-    /// <remarks>
-    /// Lazy initialization CREATES the persistent buffer rather than rebinding a live weight to a
-    /// transient one, so it is not the defect this rule describes. Excluding it keeps the analyzer
-    /// at zero false positives: without this, every GPU-state layer that allocates its buffers on
-    /// first use would be reported, and a rule that cries wolf gets suppressed rather than obeyed.
-    /// </remarks>
-    private static bool IsLazyInitialization(AssignmentExpressionSyntax assignment, SemanticModel model)
+    private static IFieldSymbol? ResolveCurrentInstanceRootField(
+        ExpressionSyntax left,
+        SemanticModel model)
     {
-        for (SyntaxNode? node = assignment.Parent; node is not null; node = node.Parent)
+        ExpressionSyntax candidate = left;
+        while (true)
         {
-            if (node is MethodDeclarationSyntax) break;
-            if (node is not IfStatementSyntax ifStatement) continue;
-            // Only the true-branch is initialization; an assignment in the `else` is a live update.
-            if (!ifStatement.Statement.Span.Contains(assignment.Span)) continue;
-            if (TestsAnyFieldAgainstNull(ifStatement.Condition, model)) return true;
-        }
+            switch (candidate)
+            {
+                case ParenthesizedExpressionSyntax parenthesized:
+                    candidate = parenthesized.Expression;
+                    continue;
 
-        return false;
-    }
+                case ElementAccessExpressionSyntax elementAccess:
+                    candidate = elementAccess.Expression;
+                    continue;
 
-    /// <summary>True when the condition null-tests a field of the enclosing type.</summary>
-    /// <remarks>
-    /// Any field, not merely the one being assigned: layers commonly allocate a whole group of
-    /// buffers behind ONE guard, e.g.
-    /// <c>if (_presynapticTracesGpu == null) { _presynapticTracesGpu = ...; _postsynapticTracesGpu = ...; }</c>.
-    /// Requiring the guard to name each field individually would report the siblings. A genuine
-    /// parameter update is never wrapped in a null test on a field, so this stays specific.
-    /// </remarks>
-    private static bool TestsAnyFieldAgainstNull(ExpressionSyntax condition, SemanticModel model)
-    {
-        switch (condition)
-        {
-            case BinaryExpressionSyntax binary when binary.IsKind(SyntaxKind.EqualsExpression):
-                return IsFieldNullTest(binary.Left, binary.Right, model)
-                    || IsFieldNullTest(binary.Right, binary.Left, model);
+                case IdentifierNameSyntax identifier:
+                    return model.GetSymbolInfo(identifier).Symbol as IFieldSymbol;
 
-            // `_x is null`
-            case IsPatternExpressionSyntax isPattern
-                when isPattern.Pattern is ConstantPatternSyntax constant
-                    && constant.Expression.IsKind(SyntaxKind.NullLiteralExpression):
-                return model.GetSymbolInfo(isPattern.Expression).Symbol is IFieldSymbol;
+                case MemberAccessExpressionSyntax memberAccess:
+                    if (model.GetSymbolInfo(memberAccess).Symbol is IFieldSymbol field)
+                    {
+                        return memberAccess.Expression is ThisExpressionSyntax or BaseExpressionSyntax
+                            ? field
+                            : null;
+                    }
+                    return null;
 
-            // `_x == null || _y == null`, or a guard combined with other preconditions.
-            case BinaryExpressionSyntax logical
-                when logical.IsKind(SyntaxKind.LogicalOrExpression)
-                    || logical.IsKind(SyntaxKind.LogicalAndExpression):
-                return TestsAnyFieldAgainstNull(logical.Left, model)
-                    || TestsAnyFieldAgainstNull(logical.Right, model);
-
-            case ParenthesizedExpressionSyntax parenthesized:
-                return TestsAnyFieldAgainstNull(parenthesized.Expression, model);
-
-            default:
-                return false;
+                default:
+                    return null;
+            }
         }
     }
-
-    private static bool IsFieldNullTest(
-        ExpressionSyntax candidate, ExpressionSyntax other, SemanticModel model)
-        => other.IsKind(SyntaxKind.NullLiteralExpression)
-            && model.GetSymbolInfo(candidate).Symbol is IFieldSymbol;
-
-    /// <summary>
-    /// True for storage the codebase already declares as transient, which is meant to be rebound.
-    /// </summary>
-    private static bool IsScratchStorage(IFieldSymbol field)
-        => field.GetAttributes().Any(a => a.AttributeClass?.Name
-            is "ScratchAttribute" or "Scratch" or "BufferAttribute" or "Buffer");
 
     /// <summary>
     /// The invoked member name when the expression is (or wraps) an <c>Engine.X(...)</c> call.

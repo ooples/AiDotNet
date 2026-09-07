@@ -1126,7 +1126,8 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
                 if (_edgeTypeWeightsGradients.TryGetValue(edgeType, out var gradient))
                 {
                     var scaledGrad = Engine.TensorMultiplyScalar(gradient, learningRate);
-                    _edgeTypeWeights[edgeType] = Engine.TensorSubtract(_edgeTypeWeights[edgeType], scaledGrad);
+                    Engine.TensorSubtractInPlace(_edgeTypeWeights[edgeType], scaledGrad);
+                    Engine.InvalidatePersistentTensor(_edgeTypeWeights[edgeType]);
                 }
             }
         }
@@ -1136,6 +1137,7 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
             // Update basis matrices
             var scaledBasisGrad = Engine.TensorMultiplyScalar(_basisMatricesGradient, learningRate);
             Engine.TensorSubtractInPlace(_basisMatrices, scaledBasisGrad);
+            Engine.InvalidatePersistentTensor(_basisMatrices);
 
             // Update basis coefficients
             foreach (var kvp in _basisCoefficients)
@@ -1144,7 +1146,8 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
                 if (_basisCoefficientsGradients.TryGetValue(edgeType, out var gradient))
                 {
                     var scaledGrad = Engine.TensorMultiplyScalar(gradient, learningRate);
-                    _basisCoefficients[edgeType] = Engine.TensorSubtract(_basisCoefficients[edgeType], scaledGrad);
+                    Engine.TensorSubtractInPlace(_basisCoefficients[edgeType], scaledGrad);
+                    Engine.InvalidatePersistentTensor(_basisCoefficients[edgeType]);
                 }
             }
         }
@@ -1156,7 +1159,8 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
             if (_selfLoopWeightsGradients.TryGetValue(nodeType, out var gradient))
             {
                 var scaledGrad = Engine.TensorMultiplyScalar(gradient, learningRate);
-                _selfLoopWeights[nodeType] = Engine.TensorSubtract(_selfLoopWeights[nodeType], scaledGrad);
+                Engine.TensorSubtractInPlace(_selfLoopWeights[nodeType], scaledGrad);
+                Engine.InvalidatePersistentTensor(_selfLoopWeights[nodeType]);
             }
         }
 
@@ -1167,7 +1171,8 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
             if (_biasesGradients.TryGetValue(nodeType, out var gradient))
             {
                 var scaledGrad = Engine.TensorMultiplyScalar(gradient, learningRate);
-                _biases[nodeType] = Engine.TensorSubtract(_biases[nodeType], scaledGrad);
+                Engine.TensorSubtractInPlace(_biases[nodeType], scaledGrad);
+                Engine.InvalidatePersistentTensor(_biases[nodeType]);
             }
         }
     }

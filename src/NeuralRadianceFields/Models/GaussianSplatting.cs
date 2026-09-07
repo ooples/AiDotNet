@@ -3261,6 +3261,10 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         int cap = EffectiveMaxGaussianCount;
         if (_gaussians.Count >= cap)
         {
+            // Pruning above may have changed both the renderer's integer indices and the model's
+            // parameter surface even though no split can be added at the cap.
+            MarkSpatialIndexDirty();
+            InvalidateParameterCountCache();
             return;
         }
 

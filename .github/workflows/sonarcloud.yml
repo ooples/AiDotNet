@@ -2197,6 +2197,7 @@ jobs:
         id: analyze
         shell: pwsh
         env:
+          EXPECTED_SHARD_MATRIX: ${{ needs.select-shards.outputs.matrix }}
           CURRENT_SHA: ${{ github.sha }}
           COMPARE: ${{ steps.comparison.outputs.compare }}
           BASE_SHA: ${{ steps.comparison.outputs.base_sha }}
@@ -2239,7 +2240,7 @@ jobs:
           # that selection deliberately skipped are not in this matrix, so anything expected and
           # absent here died rather than being skipped. #2086.
           $expectedShardNames = @()
-          $matrixJson = '${{ needs.select-shards.outputs.matrix }}'
+          $matrixJson = $env:EXPECTED_SHARD_MATRIX
           if (-not [string]::IsNullOrWhiteSpace($matrixJson)) {
             try {
               $expectedShardNames = @(($matrixJson | ConvertFrom-Json).shard |

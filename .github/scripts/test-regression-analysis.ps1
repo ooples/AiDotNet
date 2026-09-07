@@ -754,7 +754,26 @@ if (-not $baseline) {
     $touchedSurfaceClean = $touchedNew.Count -eq 0 -and
         ($touchedSurfaceKnown -or $confirmedNew.Count -eq 0)
     $baselineIncomplete = @($baseline.shards | Where-Object status -eq 'Incomplete')
-    $effectiveCurrentIncomplete = @($currentIncomplete) + @($missingCurrentShards.ToArray())
+    # The expected matrix is authoritative for this run. A missing expected shard can be new and
+    # therefore absent from the baseline-key walk above; merge all three sources by shard key so it
+    # is neither dropped nor double-counted when it also existed in the baseline.
+    $effectiveCurrentIncomplete = New-Object System.Collections.Generic.List[object]
+    $effectiveCurrentIncompleteKeys = New-Object System.Collections.Generic.HashSet[string]([StringComparer]::Ordinal)
+    foreach ($incompleteShard in @($currentIncomplete)) {
+        if ($effectiveCurrentIncompleteKeys.Add([string] $incompleteShard.key)) {
+            $effectiveCurrentIncomplete.Add($incompleteShard)
+        }
+    }
+    foreach ($incompleteShard in $missingCurrentShards.ToArray()) {
+        if ($effectiveCurrentIncompleteKeys.Add([string] $incompleteShard.key)) {
+            $effectiveCurrentIncomplete.Add($incompleteShard)
+        }
+    }
+    foreach ($incompleteShard in $missingExpectedShards.ToArray()) {
+        if ($effectiveCurrentIncompleteKeys.Add([string] $incompleteShard.key)) {
+            $effectiveCurrentIncomplete.Add($incompleteShard)
+        }
+    }
     $baselineStats = Get-LedgerStatistics $baseline
     $baselineCategories = @(Get-FailureCategories $baselineFailures)
     $greenToRedArray = @($greenToRed | ForEach-Object { $_ })
@@ -762,7 +781,9 @@ if (-not $baseline) {
     # when failures change, explicit current passes must at least offset genuinely new failures.
     $netImproved = $fixed.Count -ge $confirmedNew.Count
     $incompleteNotIncreased = $effectiveCurrentIncomplete.Count -le $baselineIncomplete.Count
-    $policyPassed = $netImproved -and $incompleteNotIncreased -and $greenToRed.Count -eq 0 -and $touchedSurfaceClean
+    $allDispatchedShardsReported = $missingExpectedShards.Count -eq 0
+    $policyPassed = $netImproved -and $incompleteNotIncreased -and
+        $greenToRed.Count -eq 0 -and $touchedSurfaceClean -and $allDispatchedShardsReported
 
     $resolvedBaselineSha = [string] $baseline.sha
     if ($BaselineSha) { $resolvedBaselineSha = [string] $BaselineSha }
@@ -776,6 +797,7 @@ if (-not $baseline) {
             incompleteShardsDidNotIncrease = $incompleteNotIncreased
             noPreviouslyGreenShardRegressed = $greenToRed.Count -eq 0
             noTouchedSurfaceRegression = $touchedSurfaceClean
+            allDispatchedShardsReported = $allDispatchedShardsReported
         }
         touchedTokenDiscovery = $touchedTokenResult
         counts = [PSCustomObject]@{
@@ -801,6 +823,7 @@ if (-not $baseline) {
             baselineIncompleteShards = $baselineIncomplete.Count
             currentIncompleteShards = $effectiveCurrentIncomplete.Count
             missingCurrentShardArtifacts = $missingCurrentShards.Count
+            missingExpectedShardArtifacts = $missingExpectedShards.Count
             approvedShardChanges = $approvedMissingShardChanges.Count
             greenToRedShards = $greenToRed.Count
             touchedNewFailures = $touchedNew.Count
@@ -813,7 +836,7 @@ if (-not $baseline) {
         fixedFailures = @($fixed)
         persistentFailures = @($persistent)
         baselineFailuresNotObserved = @($notObserved)
-        currentIncompleteShards = @($effectiveCurrentIncomplete)
+        currentIncompleteShards = $effectiveCurrentIncomplete.ToArray()
         missingCurrentShardArtifacts = $missingCurrentShards.ToArray()
         approvedShardChanges = $approvedMissingShardChanges.ToArray()
         baselineFailureCategories = $baselineCategories
@@ -840,6 +863,7 @@ if (-not $baseline) {
     $lines.Add("| Incomplete shards do not increase | $(if ($incompleteNotIncreased) { 'PASS' } else { 'FAIL' }) |")
     $lines.Add("| Previously-green shards stay green | $(if ($greenToRed.Count -eq 0) { 'PASS' } else { 'FAIL' }) |")
     $lines.Add("| No unresolved touched-surface regression risk | $(if ($touchedSurfaceClean) { 'PASS' } else { 'FAIL' }) |")
+    $lines.Add("| Every dispatched shard uploaded an artifact | $(if ($allDispatchedShardsReported) { 'PASS' } else { 'FAIL' }) |")
     $lines.Add('')
     if (-not $touchedSurfaceKnown) {
         $lines.Add("Touched-surface discovery is unavailable: **$(ConvertTo-MarkdownCell ([string] $touchedTokenResult.error))**")
@@ -878,20 +902,19 @@ if ($env:GITHUB_STEP_SUMMARY) {
     catch { Write-Warning "Could not write GitHub step summary: $($_.Exception.Message)" }
 }
 
-if ($FailOnPolicy -and $baseline) {
-    $result = Get-Content -LiteralPath $comparisonPath -Raw | ConvertFrom-Json
-    if (-not $result.policyPassed) { exit 1 }
-}
-
-# Inventory mode has no baseline to compare against, so the check above never ran for it and a
-# dead shard could not fail the run. A dispatched shard that uploaded nothing is a hole in the
-# ledger regardless of whether a baseline exists, and this ledger becomes the baseline that
-# later pull requests are measured against -- so enforce it unconditionally. #2086.
-if (-not $baseline -and $missingExpectedShards.Count -gt 0) {
+# A dispatched shard that uploaded nothing is a hole regardless of whether this is inventory or
+# comparison mode. Check it before the general policy verdict so both paths emit the actionable
+# shard names, and never let a baseline comparison hide a newly-added missing shard. #2086.
+if ($missingExpectedShards.Count -gt 0) {
     $names = ($missingExpectedShards | ForEach-Object { $_.name }) -join ', '
     # Write-Host + exit rather than Write-Error: $ErrorActionPreference is 'Stop' here, so
     # Write-Error would throw before `exit 1` ever ran and the caller would see a terminating
     # error instead of a deterministic exit code.
-    Write-Host "::error::$($missingExpectedShards.Count) dispatched shard(s) uploaded no artifact and are recorded as Missing: $names. Refusing to publish an incomplete ledger as the baseline."
+    Write-Host "::error::$($missingExpectedShards.Count) dispatched shard(s) uploaded no artifact and are recorded as Missing: $names. Refusing to accept an incomplete test ledger."
     exit 1
+}
+
+if ($FailOnPolicy -and $baseline) {
+    $result = Get-Content -LiteralPath $comparisonPath -Raw | ConvertFrom-Json
+    if (-not $result.policyPassed) { exit 1 }
 }

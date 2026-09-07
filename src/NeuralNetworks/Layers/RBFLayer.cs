@@ -468,9 +468,11 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
         // Use Engine.TensorSubtract and TensorMultiplyScalar for GPU/CPU acceleration
         var scaledCentersGradient = Engine.TensorMultiplyScalar(_centersGradient, learningRate);
         Engine.TensorSubtractInPlace(_centers, scaledCentersGradient);
+        Engine.InvalidatePersistentTensor(_centers);
 
         var scaledWidthsGradient = Engine.TensorMultiplyScalar(_widthsGradient, learningRate);
         Engine.TensorSubtractInPlace(_widths, scaledWidthsGradient);
+        Engine.InvalidatePersistentTensor(_widths);
     }
 
     /// <inheritdoc/>
