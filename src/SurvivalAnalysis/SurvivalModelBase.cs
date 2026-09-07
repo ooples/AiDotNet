@@ -502,6 +502,26 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
     }
 
     /// <summary>
+    /// Event indicators handed over by the builder's three-argument Build, consumed by the next
+    /// <see cref="Train(Matrix{T}, Vector{T})"/> and cleared, so a reused model cannot pick up a stale set.
+    /// </summary>
+    private Vector<int>? _suppliedEvents;
+
+    /// <summary>
+    /// Hands the next <see cref="Train(Matrix{T}, Vector{T})"/> its event indicators, so X can stay the
+    /// covariate matrix. Internal because it is the builder's way of passing a third input through a
+    /// two-argument contract, not a step a caller should have to know about.
+    /// </summary>
+    /// <param name="events">1 where the event was observed, 0 where the subject was censored.</param>
+    internal void SupplyEvents(Vector<int>? events) => _suppliedEvents = events;
+
+    /// <summary>
+    /// Whether indicators are waiting to be consumed, which the build pipeline reads to decide that this
+    /// model must see every row in the order it was given.
+    /// </summary>
+    internal bool HasSuppliedEvents => _suppliedEvents is not null;
+
+    /// <summary>
     /// Standard model training — splits the design matrix and redirects to survival-specific training.
     /// </summary>
     /// <param name="x">
@@ -538,6 +558,18 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
     {
         if (x is null) throw new ArgumentNullException(nameof(x));
         if (y is null) throw new ArgumentNullException(nameof(y));
+
+        // Supplied by AiModelBuilder.Build(features, times, events), which has the three signals as
+        // three arguments and no reason to fold one into the other two. Taking that path keeps X the
+        // covariate matrix, which matters after training as much as during it: prediction takes
+        // covariates, and whether the event occurred is the thing being predicted, so a design matrix
+        // is not something a caller can produce at predict time.
+        var supplied = System.Threading.Interlocked.Exchange(ref _suppliedEvents, null);
+        if (supplied is not null && supplied.Length == y.Length && x.Rows == y.Length)
+        {
+            FitSurvival(x, y, supplied);
+            return;
+        }
 
         if (x.Columns < 2)
         {

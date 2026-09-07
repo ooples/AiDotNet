@@ -1907,6 +1907,33 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// </remarks>
     AiModelResult<T, TInput, TOutput> Build(TInput features, TOutput labels);
 
+    /// <summary>
+    /// Builds a survival model from covariates, observed times, and who was censored.
+    /// </summary>
+    /// <param name="features">The covariates, one row per subject. No indicator column.</param>
+    /// <param name="times">
+    /// The observed time for each subject: time to the event, or time to censoring for those who did not
+    /// have it.
+    /// </param>
+    /// <param name="events">1 where the event was observed, 0 where the subject was censored.</param>
+    /// <returns>The built result.</returns>
+    /// <remarks>
+    /// <para>
+    /// Survival data is three things and <see cref="Build(TInput, TOutput)"/> takes two. Rather than
+    /// leave the caller packing the event indicator into the covariate matrix — where a covariate left
+    /// in column 0 is read as censoring and silently changes the answer — this overload keeps the three
+    /// signals as three named arguments and does the packing itself.
+    /// </para>
+    /// <para>
+    /// Only meaningful on a builder over <c>Matrix&lt;T&gt;</c> and <c>Vector&lt;T&gt;</c> configured
+    /// with a survival model; anything else throws rather than training on a quietly wrong matrix.
+    /// </para>
+    /// </remarks>
+    AiModelResult<T, TInput, TOutput> Build(
+        AiDotNet.Tensors.LinearAlgebra.Matrix<T> features,
+        AiDotNet.Tensors.LinearAlgebra.Vector<T> times,
+        AiDotNet.Tensors.LinearAlgebra.Vector<int> events);
+
     // ============================================================================
     // Training Infrastructure Configuration Methods
     // ============================================================================
