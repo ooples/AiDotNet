@@ -45,10 +45,16 @@ namespace AiDotNet.TextToSpeech.MultiModal;
     Year = 2022,
     Authors = "Ao et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 5e-4, MinLearningRate = 1e-8,
+                Phase = TrainingPhase.FineTuning, StepSize = 30000,
+                Schedule = LearningRateSchedulerType.Cyclic,
+                CyclicPolicy = CyclicLRScheduler.CyclicMode.Triangular,
+                Source = "Ao et al. 2022, Sec. 4.2: fine-tuning uses one cycle of a triangular cyclical schedule between 1e-8 and 5e-4 over 60k steps, so the half-cycle is 30k.")]
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4,
+                Phase = TrainingPhase.PreTraining,
                 Schedule = LearningRateSchedulerType.LinearWarmup, WarmupFraction = 0.08,
                 PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear, MinLearningRate = 0,
-                Source = "Ao et al. 2022, Sec. 4.1 (pre-training): Adam warming up over the first 8% of updates to a peak of 2e-4, then linearly decayed. Fine-tuning uses a different triangular cyclical schedule between 1e-8 and 5e-4, which is not what this declares. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
+                Source = "Ao et al. 2022, Sec. 4.1 (pre-training): Adam warming up over the first 8% of updates to a peak of 2e-4, then linearly decayed. Fine-tuning is declared separately as its own phase. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class SpeechT5<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly SpeechT5Options _options;

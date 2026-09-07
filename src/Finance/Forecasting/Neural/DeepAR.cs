@@ -65,8 +65,8 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DeepAR: Probabilistic Forecasting with Autoregressive Recurrent Networks", "https://arxiv.org/abs/1704.04110", Year = 2020, Authors = "David Salinas, Valentin Flunkert, Jan Gasthaus, Tim Januschowski")]
-[PaperOptimizer(OptimizerKind.Adam,
-                Source = "Salinas et al. 2020, Sec. 4: Adam with early stopping. No learning rate is declared because the paper states it is tuned manually for every dataset rather than fixed at one value.")]
+[PaperOptimizer(OptimizerKind.Adam, Provenance = RecipeProvenance.PerDataset,
+                Source = "Salinas et al. 2020, Sec. 4: Adam with early stopping. The paper tunes the learning rate manually per dataset, so there is no single value to declare and the provenance says so rather than the omission being silent.")]
 public partial class DeepAR<T> : ForecastingModelBase<T>
 {
     #region Native Mode Fields

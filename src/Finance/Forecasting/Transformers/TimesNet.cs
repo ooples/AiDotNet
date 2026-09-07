@@ -70,7 +70,8 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("TimesNet: Temporal 2D-Variation Modeling for General Time Series Analysis", "https://arxiv.org/abs/2210.02186", Year = 2023, Authors = "Haixu Wu, Tengge Hu, Yong Liu, Hang Zhou, Jianmin Wang, Mingsheng Long")]
 [PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.999,
-                Source = "Wu et al. 2023, Table 7: Adam with (beta1, beta2) of (0.9, 0.999). No learning rate is declared because the table sets one per dataset rather than stating a single value.")]
+                Provenance = RecipeProvenance.PerDataset,
+                Source = "Wu et al. 2023, Table 7: Adam with (beta1, beta2) of (0.9, 0.999). The table sets a learning rate per dataset, which is recorded as provenance rather than left out: the paper states rates, just not one rate.")]
 public partial class TimesNet<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

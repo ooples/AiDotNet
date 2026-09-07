@@ -46,8 +46,10 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations", "https://arxiv.org/abs/2006.11477", Year = 2020, Authors = "Baevski et al.")]
 [PaperOptimizer(OptimizerKind.Adam, Schedule = LearningRateSchedulerType.TriStage,
+                Phase = TrainingPhase.FineTuning, LearningRate = 3e-5,
+                Provenance = RecipeProvenance.Searched, SearchedValues = [2e-5, 3e-5],
                 WarmupFraction = 0.10, HoldFraction = 0.40, MinLearningRate = 0,
-                Source = "Baevski et al. 2020, fine-tuning setup: Adam with a tri-state schedule -- warmup over the first 10% of updates, held constant for the next 40%, then linearly decayed for the remainder. No learning rate is declared because the paper reports a seed search over two rates (2e-5 and 3e-5) rather than a single chosen value.")]
+                Source = "Baevski et al. 2020, fine-tuning setup: Adam with a tri-state schedule -- warmup over the first 10% of updates, held constant for the next 40%, then linearly decayed for the remainder. The rate is recorded as searched: the paper reports a seed search over 2e-5 and 3e-5, and both are carried rather than one being presented as chosen.")]
 public partial class Wav2Vec2ASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly Wav2Vec2ASROptions _options; public override ModelOptions GetOptions() => _options;

@@ -59,10 +59,15 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Visual Instruction Tuning", "https://arxiv.org/abs/2304.08485", Year = 2023, Authors = "Haotian Liu, Chunyuan Li, Qingyang Wu, Yong Jae Lee")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-5, WeightDecay = 0,
+                ReferenceBatchSize = 32, Phase = TrainingPhase.FineTuning,
+                Schedule = LearningRateSchedulerType.CosineAnnealing, MinLearningRate = 0,
+                Source = "Liu et al. 2023, Sec. 5: fine-tuning for 3 epochs at 2e-5 with a batch size of 32, Adam with no weight decay and a cosine learning rate.")]
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-3, WeightDecay = 0,
+                Phase = TrainingPhase.PreTraining,
                 ReferenceBatchSize = 128,
                 Schedule = LearningRateSchedulerType.CosineAnnealing, MinLearningRate = 0,
-                Source = "Liu et al. 2023, Sec. 5: Adam with NO weight decay and a cosine learning rate; pre-training for 1 epoch at 2e-3 with batch size 128. Fine-tuning uses 2e-5 at batch size 32, which is a different stage and not what this declares. The zero weight decay is declared explicitly rather than left unset, because unset would fall back to a library default and the paper states there is none.")]
+                Source = "Liu et al. 2023, Sec. 5: Adam with NO weight decay and a cosine learning rate; pre-training for 1 epoch at 2e-3 with batch size 128. Fine-tuning is declared separately as its own phase. The zero weight decay is declared explicitly rather than left unset, because unset would fall back to a library default and the paper states there is none.")]
 public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaVAModel<T>
 {
     private readonly LLaVAOptions _options;

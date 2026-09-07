@@ -61,9 +61,14 @@ namespace AiDotNet.VisionLanguage.Document;
     Year = 2024,
     Authors = "Feng et al."
 )]
-[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-3, ReferenceBatchSize = 64,
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-5, ReferenceBatchSize = 8,
+                Phase = TrainingPhase.FineTuning,
                 Schedule = LearningRateSchedulerType.OneCycle,
-                Source = "Feng et al. 2023, Sec. 4: a one-cycle learning rate strategy with a peak of 1e-3 and batch size 64 for pre-training. Fine-tuning uses a peak of 1e-5 at batch size 8, which is a different stage and not what this declares.")]
+                Source = "Feng et al. 2023, Sec. 4: the fine-tuning stage peaks at 1e-5 with a batch size of 8, under the same one-cycle strategy.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-3, ReferenceBatchSize = 64,
+                Phase = TrainingPhase.PreTraining,
+                Schedule = LearningRateSchedulerType.OneCycle,
+                Source = "Feng et al. 2023, Sec. 4: a one-cycle learning rate strategy with a peak of 1e-3 and batch size 64 for pre-training. Fine-tuning is declared separately as its own phase.")]
 public partial class DocPedia<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<T>
 {
     private readonly DocPediaOptions _options;

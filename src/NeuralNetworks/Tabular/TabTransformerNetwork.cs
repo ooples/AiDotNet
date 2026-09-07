@@ -68,7 +68,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2012.06678",
     Year = 2020,
     Authors = "Xin Huang, Ashish Khetan, Milan Cvitkovic, Zohar Karnin")]
-[PaperOptimizer(OptimizerKind.AdamW,
+[PaperOptimizer(OptimizerKind.AdamW, Provenance = RecipeProvenance.PerDataset,
                 Source = "Huang et al. 2020, Experiments: AdamW with a constant learning rate throughout each training job. No rate is declared because the paper tunes it per dataset by hyperparameter search rather than stating one.")]
 public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
 {

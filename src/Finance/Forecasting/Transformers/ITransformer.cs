@@ -62,8 +62,10 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("iTransformer: Inverted Transformers Are Effective for Time Series Forecasting", "https://arxiv.org/abs/2310.06625", Year = 2024, Authors = "Yong Liu, Tengge Hu, Haoran Zhang, Haixu Wu, Shiyu Wang, Lintao Ma, Mingsheng Long")]
-[PaperOptimizer(OptimizerKind.Adam, ReferenceBatchSize = 32,
-                Source = "Liu et al. 2024, Sec. 4: Adam with a batch size uniformly 32 over 10 epochs. No learning rate is declared because the paper searches over {1e-3, 5e-4, 1e-4} rather than stating one.")]
+[PaperOptimizer(OptimizerKind.Adam, ReferenceBatchSize = 32, LearningRate = 5e-4,
+                Provenance = RecipeProvenance.Searched,
+                SearchedValues = [1e-3, 5e-4, 1e-4],
+                Source = "Liu et al. 2024, Sec. 4: Adam with a batch size uniformly 32 over 10 epochs. The rate is recorded as searched rather than prescribed: the paper tries 1e-3, 5e-4 and 1e-4, and the middle value stands for the set, which is carried alongside it.")]
 public partial class ITransformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

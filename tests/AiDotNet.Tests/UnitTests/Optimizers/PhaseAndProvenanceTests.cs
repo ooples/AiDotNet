@@ -93,6 +93,29 @@ public class PhaseAndProvenanceTests
         Assert.True(recipe.DeclaresAnyHyperparameter);
     }
 
+    [Fact]
+    public void AShippedModelResolvesEachOfItsDeclaredPhases()
+    {
+        // The fixtures above prove the mechanism; this proves a real declaration uses it.
+        // LLaVA pre-trains at 2e-3 with batch 128 and fine-tunes at 2e-5 with batch 32 (Liu et
+        // al. 2023, Sec. 5). Before the phase key, one of those was recorded and the other was a
+        // sentence in the Source that nothing could check.
+        var model = typeof(AiDotNet.NeuralNetworks.LLaVANeuralNetwork<double>);
+        var rows = (PaperOptimizerAttribute[])model.GetCustomAttributes(
+            typeof(PaperOptimizerAttribute), inherit: false);
+
+        var pre = Assert.Single(rows.Where(r => r.Phase == TrainingPhase.PreTraining));
+        var fine = Assert.Single(rows.Where(r => r.Phase == TrainingPhase.FineTuning));
+
+        Assert.Equal(2e-3, pre.LearningRate, precision: 12);
+        Assert.Equal(2e-5, fine.LearningRate, precision: 12);
+        Assert.Equal(128, pre.ReferenceBatchSize);
+        Assert.Equal(32, fine.ReferenceBatchSize);
+
+        // Both state the paper explicitly rather than one inheriting silently.
+        Assert.All(rows, r => Assert.False(string.IsNullOrWhiteSpace(r.Source)));
+    }
+
     [PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-3, ReferenceBatchSize = 128,
                     Phase = TrainingPhase.PreTraining, Source = "fixture: pre-training stage")]
     [PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-5, ReferenceBatchSize = 32,
