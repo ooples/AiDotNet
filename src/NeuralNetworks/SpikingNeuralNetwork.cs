@@ -24,7 +24,8 @@ namespace AiDotNet.NeuralNetworks;
 /// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
 /// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
 /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
-///     .ConfigureModel(new SpikingNeuralNetwork&lt;float&gt;(architecture))
+///     .ConfigureModel(new SpikingNeuralNetwork&lt;float&gt;(
+///         architecture, scalarActivation: new ReLUActivation&lt;float&gt;()))
 ///     .Build(trainX, trainY);
 /// var output = result.Predict(input);
 /// </code>
