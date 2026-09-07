@@ -65,6 +65,8 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("N-BEATS: Neural Basis Expansion Analysis for Interpretable Time Series Forecasting", "https://arxiv.org/abs/1905.10437", Year = 2020, Authors = "Boris N. Oreshkin, Dmitri Carpov, Nicolas Chapados, Yoshua Bengio")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001, ReferenceBatchSize = 1024,
+                Source = "Oreshkin et al. 2020, Sec. 5: Adam with default settings and an initial learning rate of 0.001, training batches of fixed size 1024. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class NBEATSFinance<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -595,21 +597,22 @@ public partial class NBEATSFinance<T> : ForecastingModelBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
     {
         bool clipGradients = _options.GradientClipNorm > 0.0;
-        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                BatchSize = _options.BatchSize,
-                InitialLearningRate = _options.LearningRate,
-                Beta1 = _options.OptimizerBeta1,
-                Beta2 = _options.OptimizerBeta2,
-                Epsilon = _options.OptimizerEpsilon,
-                UseAdaptiveLearningRate = false,
-                UseAdaptiveBetas = false,
-                UseAMSGrad = false,
-                EnableGradientClipping = clipGradients,
-                MaxGradientNorm = _options.GradientClipNorm,
-            });
+        return PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    BatchSize = _options.BatchSize,
+                    InitialLearningRate = _options.LearningRate,
+                    Beta1 = _options.OptimizerBeta1,
+                    Beta2 = _options.OptimizerBeta2,
+                    Epsilon = _options.OptimizerEpsilon,
+                    UseAdaptiveLearningRate = false,
+                    UseAdaptiveBetas = false,
+                    UseAMSGrad = false,
+                    EnableGradientClipping = clipGradients,
+                    MaxGradientNorm = _options.GradientClipNorm,
+                }));
     }
 
     /// <summary>
