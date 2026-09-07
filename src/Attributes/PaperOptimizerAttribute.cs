@@ -225,6 +225,24 @@ public sealed class PaperOptimizerAttribute : Attribute
     public double DecayRate { get; set; } = double.NaN;
 
     /// <summary>Interval, in steps or epochs, between decay events. Unset means unstated.</summary>
+    /// <summary>
+    /// Whether the schedule's intervals are counted in optimizer steps or in epochs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Papers overwhelmingly state decay in EPOCHS -- "decay by 0.01 every 3 epochs", "halved every
+    /// two epochs", "a 0.999 factor in every epoch" -- while a scheduler steps per batch by default.
+    /// Declaring the interval without its unit silently reinterprets epochs as steps, which is not a
+    /// small error: MobileNetV3's 0.01 every 3 epochs becomes a 100x cut every 3 steps, and the model
+    /// stops training within a few updates.
+    /// </para>
+    /// <para>
+    /// Left at <c>StepPerBatch</c>, which is the library default, so declaring nothing changes
+    /// nothing. Set <c>StepPerEpoch</c> whenever the paper counts in epochs.
+    /// </para>
+    /// </remarks>
+    public SchedulerStepMode ScheduleStepMode { get; set; } = SchedulerStepMode.StepPerBatch;
+
     public int StepSize { get; set; }
 
     /// <summary>
@@ -304,6 +322,7 @@ public sealed class PaperOptimizerAttribute : Attribute
         || !double.IsNaN(WarmupFraction)
         || !double.IsNaN(HoldFraction)
         || StepSize > 0
+        || ScheduleStepMode != SchedulerStepMode.StepPerBatch
         || Milestones.Length > 0
         || MilestoneFractions.Length > 0
         || CyclicPolicy != CyclicLRScheduler.CyclicMode.Triangular

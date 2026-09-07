@@ -51,6 +51,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 )]
 [PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.8, Beta2 = 0.99, WeightDecay = 0.01,
                 LearningRate = 2e-4, Schedule = LearningRateSchedulerType.Exponential,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
                 DecayRate = 0.999,
                 Source = "Kong et al. 2020, Sec. 3: AdamW with beta1 0.8, beta2 0.99 and weight decay 0.01, initial learning rate 2e-4 decayed by a 0.999 factor every epoch.")]
 public partial class HiFiGAN<T> : VocoderBase<T>

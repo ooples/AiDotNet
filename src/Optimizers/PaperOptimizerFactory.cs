@@ -598,6 +598,19 @@ public static class PaperOptimizerFactory
             recipe, baseRate, warmupSteps, totalSteps, ModelDimension(options));
         scheduler = ComposeWarmup(scheduler, recipe, baseRate, warmupSteps);
         if (scheduler is not null) schedulerProperty.SetValue(options, scheduler);
+
+        // A schedule stated in epochs must be stepped in epochs. Without this the interval is
+        // read as batches and the rate collapses far faster than the paper intends.
+        if (recipe.ScheduleStepMode != SchedulerStepMode.StepPerBatch)
+        {
+            PropertyInfo? modeProperty = options.GetType().GetProperty(
+                "SchedulerStepMode", BindingFlags.Public | BindingFlags.Instance);
+            if (modeProperty is not null && modeProperty.CanWrite
+                && modeProperty.PropertyType == typeof(SchedulerStepMode))
+            {
+                modeProperty.SetValue(options, recipe.ScheduleStepMode);
+            }
+        }
     }
 
     /// <summary>

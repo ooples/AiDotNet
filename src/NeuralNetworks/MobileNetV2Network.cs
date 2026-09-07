@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Configuration;
@@ -69,6 +70,11 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MobileNetV2: Inverted Residuals and Linear Bottlenecks", "https://arxiv.org/abs/1801.04381", Year = 2018, Authors = "Mark Sandler, Andrew Howard, Menglong Zhu, Andrey Zhmoginov, Liang-Chieh Chen")]
+[PaperOptimizer(OptimizerKind.RmsProp, Momentum = 0.9, Rho = 0.9,
+                LearningRate = 0.045, WeightDecay = 0.00004, ReferenceBatchSize = 96,
+                Schedule = LearningRateSchedulerType.Exponential, DecayRate = 0.98,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Sandler et al. 2018, Training setup: RMSProp with both decay and momentum set to 0.9, weight decay 0.00004, initial learning rate 0.045 decayed by 0.98 per epoch, batch size 96. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly MobileNetV2Options _options;
@@ -139,16 +145,17 @@ public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
         InitializeLayers();
     }
 
-    private AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
     {
-        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = 1e-4,
-                Epsilon = 1e-6,
-                UseAMSGrad = true
-            });
+        return PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = 1e-4,
+                    Epsilon = 1e-6,
+                    UseAMSGrad = true
+                }));
     }
 
     private static bool _determinismSet;
