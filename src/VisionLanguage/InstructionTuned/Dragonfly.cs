@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -65,6 +67,16 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Chen et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-5, ReferenceBatchSize = 64,
+                WarmupFraction = 0.01, MinLearningRate = 0,
+                Phase = TrainingPhase.PreTraining,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Chen et al. 2024, Table 9: stage 1 uses a batch size of 64 at a learning rate of 2e-5 with a cosine schedule and a 0.01 warmup ratio.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-6, ReferenceBatchSize = 16,
+                WarmupFraction = 0.01, MinLearningRate = 0,
+                Phase = TrainingPhase.FineTuning,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Chen et al. 2024, Table 9: stage 2 uses a batch size of 16 at a learning rate of 2e-6, otherwise as stage 1.")]
 public partial class Dragonfly<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly DragonflyOptions _options;
@@ -109,7 +121,9 @@ public partial class Dragonfly<T> : VisionLanguageModelBase<T>, IInstructionTune
         _options = options ?? new DragonflyOptions();
         _options.ValidateVisualSizing();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
