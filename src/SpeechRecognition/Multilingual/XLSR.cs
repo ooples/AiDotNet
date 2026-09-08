@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -43,6 +45,22 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("XLS-R: Self-supervised Cross-lingual Speech Representation Learning at Scale", "https://arxiv.org/abs/2111.09296", Year = 2022, Authors = "Babu et al.")]
+[PaperOptimizer(OptimizerKind.Adam, WarmupSteps = 32000, MinLearningRate = 0,
+                DecayRate = 1.0, Schedule = LearningRateSchedulerType.Polynomial,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Babu et al. 2021, Sec. 3: models are optimized with Adam, the learning rate "
+                        + "warmed up over the first 32K steps followed by polynomial decay to zero. The "
+                        + "paper states no peak rate for pre-training, so none is declared; the decay is "
+                        + "declared as a polynomial of power 1. The model keeps its own optimizer and is "
+                        + "verified against this record rather than built from it: with no peak rate "
+                        + "stated, building from the recipe would apply this warmup and decay-to-zero on "
+                        + "top of the library default rate, a combination the paper never sanctioned.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 3e-4,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Babu et al. 2021, Sec. 3: fine-tuning uses Adam at a learning rate of 3e-4. "
+                        + "No reference batch size is declared because the paper gives the effective "
+                        + "batch as 66M samples, about 68 minutes of audio, rather than as a count of "
+                        + "examples.")]
 public partial class XLSR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly XLSROptions _options; public override ModelOptions GetOptions() => _options;
@@ -52,7 +70,8 @@ public partial class XLSR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public bool SupportsWordTimestamps => false;
 
     public XLSR(NeuralNetworkArchitecture<T> architecture, string modelPath, XLSROptions? options = null) : base(architecture) { _options = options ?? new XLSROptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "sw" }; InitializeLayers(); }
-    public XLSR(NeuralNetworkArchitecture<T> architecture, XLSROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new XLSROptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "sw" }; InitializeLayers(); }
+    public XLSR(NeuralNetworkArchitecture<T> architecture, XLSROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new XLSROptions(); _useNativeMode = true; _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this)); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "sw" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using XLS-R's cross-lingual SSL encoder with CTC.

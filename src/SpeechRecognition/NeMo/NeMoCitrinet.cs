@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -46,6 +48,16 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Citrinet: Closing the Gap between Non-Autoregressive and Autoregressive End-to-End Models for Automatic Speech Recognition", "https://arxiv.org/abs/2104.01721", Year = 2021, Authors = "Majumdar et al.")]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 0.05, Beta1 = 0.8,
+                Beta2 = 0.25, WeightDecay = 0.001, ReferenceBatchSize = 1024,
+                MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Majumdar et al. 2021, Sec. 4: Citrinet is trained with the NovoGrad optimizer "
+                        + "at a learning rate of 0.05, beta1 0.8, beta2 0.25 and a weight decay of "
+                        + "0.001, for 1000 epochs on 32 GPUs at a batch size of 32 per GPU -- 1024 in "
+                        + "total. The optimizer kind is recorded as unspecified because NovoGrad has no "
+                        + "implementation in this library; every value it configures is declared, and "
+                        + "the report will show the built optimizer differing from the paper's.")]
 public partial class NeMoCitrinet<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly NeMoCitrinetOptions _options; public override ModelOptions GetOptions() => _options;
@@ -55,7 +67,9 @@ public partial class NeMoCitrinet<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
     public bool SupportsWordTimestamps => false;
 
     public NeMoCitrinet(NeuralNetworkArchitecture<T> architecture, string modelPath, NeMoCitrinetOptions? options = null) : base(architecture) { _options = options ?? new NeMoCitrinetOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public NeMoCitrinet(NeuralNetworkArchitecture<T> architecture, NeMoCitrinetOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new NeMoCitrinetOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public NeMoCitrinet(NeuralNetworkArchitecture<T> architecture, NeMoCitrinetOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new NeMoCitrinetOptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using 1D time-channel separable convolutions with CTC decoding.
