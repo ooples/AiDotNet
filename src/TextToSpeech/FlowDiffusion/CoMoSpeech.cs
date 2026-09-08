@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,12 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
     Year = 2023,
     Authors = "Ye et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-3, DecayRate = 0.5,
+                StepSize = 50000, Schedule = LearningRateSchedulerType.Exponential,
+                Source = "Ye et al. 2023, Sec. 4: the teacher model and CoMoSpeech are both trained for "
+                        + "250k steps with the AdamW optimizer, an initial learning rate of 1e-3 and an "
+                        + "exponential decay of 0.5 every 50k steps. The separate Adam at 1e-4 in the "
+                        + "same section belongs to a different component.")]
 public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly CoMoSpeechOptions _options;
@@ -89,14 +97,15 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
         // 1e-3 default with beta2 = 0.999, epsilon = 1e-8 and a decoupled weight decay of
         // 0.01 that no paper here specifies. Ten times the intended rate is enough to blow
         // the first step into a region training cannot recover from.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                Beta1 = 0.9,
-                Beta2 = 0.98,
-                Epsilon = 1e-9
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    Beta1 = 0.9,
+                    Beta2 = 0.98,
+                    Epsilon = 1e-9
+                }));
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
