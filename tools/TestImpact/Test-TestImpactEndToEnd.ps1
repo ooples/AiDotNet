@@ -165,9 +165,14 @@ try {
             [ordered]@{ shard = 'Beta'; outcome = 'failure' },
             [ordered]@{ shard = 'Always'; outcome = 'success' }
         ) | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath missed-failure-outcomes.json -Encoding utf8
-        & $missMeasurer -SelectorPath $selector -MapFile certified/shard-map.json `
-            -OutcomesFile missed-failure-outcomes.json -OutFile missed-failure-audit.json
-        Assert-True ($LASTEXITCODE -eq 1) 'a skipped shard failure did not fail the miss audit'
+        $expectedMissOutput = @(& $missMeasurer -SelectorPath $selector `
+            -MapFile certified/shard-map.json -OutcomesFile missed-failure-outcomes.json `
+            -OutFile missed-failure-audit.json 6>&1)
+        $expectedMissExit = $LASTEXITCODE
+        foreach ($line in $expectedMissOutput) {
+            Write-Host (('[expected miss] ' + [string] $line) -replace '::error::', '')
+        }
+        Assert-True ($expectedMissExit -eq 1) 'a skipped shard failure did not fail the miss audit'
         & $certificateWriter -MapFile certified/shard-map.json -AuditFile missed-failure-audit.json `
             -OutcomesFile missed-failure-outcomes.json -CandidateMapRunId 100 `
             -AuditSourceRunId 101 -AuditSourceSha 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' `
@@ -180,8 +185,13 @@ try {
         'name: changed-ci' | Set-Content -LiteralPath .github/workflows/fixture.yml -Encoding utf8
         Invoke-Git add .github/workflows/fixture.yml
         Invoke-Git commit --quiet -m infrastructure-change
-        & $selector -MapFile certified/shard-map.json -ExpectedShards @('Alpha', 'Beta', 'Always') `
-            -OutFile infrastructure-selection.json
+        $expectedEscalationOutput = @(& $selector -MapFile certified/shard-map.json `
+            -ExpectedShards @('Alpha', 'Beta', 'Always') -OutFile infrastructure-selection.json 6>&1)
+        $expectedEscalationExit = $LASTEXITCODE
+        foreach ($line in $expectedEscalationOutput) {
+            Write-Host (('[expected escalation] ' + [string] $line) -replace '::warning::', '')
+        }
+        Assert-True ($expectedEscalationExit -eq 0) 'an infrastructure edit made the selector fail'
         $infrastructure = Get-Content infrastructure-selection.json -Raw | ConvertFrom-Json
         Assert-True ([bool] $infrastructure.escalate) 'a workflow edit did not fail closed to the full matrix'
 
