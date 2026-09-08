@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -53,6 +54,13 @@ namespace AiDotNet.Document.LayoutAware;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("LayoutLM: Pre-training of Text and Layout for Document Image Understanding", "https://doi.org/10.1145/3394486.3403172", Year = 2020, Authors = "Yiheng Xu, Minghao Li, Lei Cui, Shaohan Huang, Furu Wei, Ming Zhou")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 5e-5, ReferenceBatchSize = 16,
+                MinLearningRate = 0, DecayRate = 1.0,
+                Schedule = LearningRateSchedulerType.Polynomial,
+                Source = "Xu et al. 2020, Sec. 3: the Adam optimizer with an initial learning rate of "
+                        + "5e-5 and a linear decay schedule, trained for 100 epochs at a batch size of "
+                        + "16. The linear decay is declared as a polynomial schedule of power 1, which "
+                        + "is the same curve.")]
 public partial class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
 {
     private readonly LayoutLMOptions _options;
@@ -162,7 +170,9 @@ public partial class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector
         // peak LR=5e-5, linear warmup, weight decay 0.01. The framework default
         // (LR=1e-3) is BERT-pretraining-from-scratch territory and diverges
         // immediately on fine-tuning-scale models with random init.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-5 });
 
