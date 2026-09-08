@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -87,6 +88,11 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/1906.09338",
     Year = 2019,
     Authors = "James Jordon, Jinsung Yoon, Mihaela van der Schaar")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3,
+                Source = "Jordon et al. 2019, Sec. 5: the Adam optimizer with a learning rate of 1e-3 "
+                        + "on all three datasets. The 1e-4 the paper mentions alongside clips the "
+                        + "adversarial perturbations, not the gradients, so no gradient clip is "
+                        + "declared.")]
 public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly PATEGANOptions<T> _options;
@@ -179,7 +185,8 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
                 UseAdaptiveLearningRate = false,
                 UseAMSGrad = false,
             });
-        _generatorOptimizer = optimizer ?? MakeAdam();
+        _generatorOptimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            MakeAdam());
         _studentOptimizer = MakeAdam();
         _teacherOptimizers = new IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>[Math.Max(1, _options.NumTeachers)];
         for (int t = 0; t < _teacherOptimizers.Length; t++) _teacherOptimizers[t] = MakeAdam();
