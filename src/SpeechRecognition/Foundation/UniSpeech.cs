@@ -1,4 +1,6 @@
-﻿using AiDotNet.Attributes;
+﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -43,6 +45,21 @@ namespace AiDotNet.SpeechRecognition.Foundation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("UniSpeech: Unified Speech Representation Learning with Labeled and Unlabeled Data", "https://arxiv.org/abs/2101.07597", Year = 2021, Authors = "Wang et al.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 5e-4, WarmupFraction = 0.1,
+                MinLearningRate = 0, Schedule = LearningRateSchedulerType.LinearWarmup,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Wang et al. 2021, Sec. 3: Adam with the learning rate warmed up over the "
+                        + "first 10 percent of updates to a peak of 5e-4 for the Base model, then "
+                        + "linearly decayed over a total of 250k updates. The Large model uses 1e-3.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-5, WarmupFraction = 0.1,
+                HoldFraction = 0.4, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.TriStage,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Wang et al. 2021, Sec. 3: fine-tuning warms up over 2k updates to 2e-5, holds "
+                        + "it constant for 8k updates and then linearly decays over 10k -- a 20k run "
+                        + "whose three stages are the 10 percent, 40 percent and 50 percent declared "
+                        + "here.")]
 public partial class UniSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly UniSpeechOptions _options; public override ModelOptions GetOptions() => _options;
@@ -52,7 +69,9 @@ public partial class UniSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     public bool SupportsWordTimestamps => false;
 
     public UniSpeech(NeuralNetworkArchitecture<T> architecture, string modelPath, UniSpeechOptions? options = null) : base(architecture) { _options = options ?? new UniSpeechOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public UniSpeech(NeuralNetworkArchitecture<T> architecture, UniSpeechOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new UniSpeechOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public UniSpeech(NeuralNetworkArchitecture<T> architecture, UniSpeechOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new UniSpeechOptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using UniSpeech's unified SSL/supervised encoder with CTC.
