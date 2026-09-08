@@ -114,7 +114,7 @@ public abstract class AudioHyperparameterOptions : ModelHyperparameterOptions
     /// <summary>
     /// Throws if a signal parameter every audio model requires has been left unset.
     /// </summary>
-    /// <exception cref="InvalidOperationException">
+    /// <exception cref="ArgumentException">
     /// Thrown when a required value is zero or negative, which means the derived options class
     /// did not assign its model's published defaults.
     /// </exception>

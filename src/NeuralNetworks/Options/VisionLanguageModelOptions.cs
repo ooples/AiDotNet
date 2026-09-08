@@ -100,7 +100,7 @@ public abstract class VisionLanguageModelOptions : ModelHyperparameterOptions
     /// <summary>
     /// Throws if a dimension every vision-language model requires has been left unset.
     /// </summary>
-    /// <exception cref="InvalidOperationException">
+    /// <exception cref="ArgumentException">
     /// Thrown when a required dimension is zero or negative, which means the derived options
     /// class did not assign its paper defaults.
     /// </exception>

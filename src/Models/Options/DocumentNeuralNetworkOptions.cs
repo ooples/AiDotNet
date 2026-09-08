@@ -141,7 +141,7 @@ public class DocumentNeuralNetworkOptions : ModelHyperparameterOptions
     /// <summary>
     /// Throws if a dimension every document model requires has been left unset.
     /// </summary>
-    /// <exception cref="InvalidOperationException">
+    /// <exception cref="ArgumentException">
     /// Thrown when a required dimension is zero or negative, which means the derived options
     /// class did not assign its paper defaults.
     /// </exception>

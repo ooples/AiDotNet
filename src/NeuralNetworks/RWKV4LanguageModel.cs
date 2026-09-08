@@ -112,12 +112,8 @@ public partial class RWKV4LanguageModel<T> : TokenLanguageModelLayoutBase<T>
     /// <param name="options">Optional RWKV-4 specific options.</param>
     public RWKV4LanguageModel(
         NeuralNetworkArchitecture<T> architecture,
-        int vocabSize = 50277,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int maxSeqLength = 512,
-        ILossFunction<T>? lossFunction = null,
-        RWKV4Options? options = null)
+        RWKV4Options? options = null,
+        ILossFunction<T>? lossFunction = null)
         : base(
             architecture,
             // RWKV's LM head emits RAW LOGITS (DenseLayer with no activation), so the loss must be
@@ -129,21 +125,14 @@ public partial class RWKV4LanguageModel<T> : TokenLanguageModelLayoutBase<T>
             lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new RWKV4Options();
+        _options.Validate();
         Options = _options;
 
-        if (vocabSize <= 0)
-            throw new ArgumentException($"Vocab size ({vocabSize}) must be positive.", nameof(vocabSize));
-        if (modelDimension <= 0)
-            throw new ArgumentException($"Model dimension ({modelDimension}) must be positive.", nameof(modelDimension));
-        if (numLayers <= 0)
-            throw new ArgumentException($"Number of layers ({numLayers}) must be positive.", nameof(numLayers));
-        if (maxSeqLength <= 0)
-            throw new ArgumentException($"Max sequence length ({maxSeqLength}) must be positive.", nameof(maxSeqLength));
 
-        _vocabSize = vocabSize;
-        _modelDimension = modelDimension;
-        _numLayers = numLayers;
-        _maxSeqLength = maxSeqLength;
+        _vocabSize = _options.VocabSize;
+        _modelDimension = _options.ModelDimension;
+        _numLayers = _options.NumLayers;
+        _maxSeqLength = _options.MaxSequenceLength;
 
         InitializeLayers();
     }
