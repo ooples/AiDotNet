@@ -3504,7 +3504,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         {
             ResolveFromShape(publishedShape);
         }
-        catch (Exception ex) when (ex is ArgumentException || ex is InvalidOperationException)
+        catch (Exception ex) when (
+            (ex is ArgumentException || ex is InvalidOperationException)
+            && !IsShapeResolved)
         {
             ResolveFromShape(LayerCloning.WithBatchAxis(publishedShape));
         }
