@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
@@ -44,6 +45,12 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Dynamic Routing Between Capsules", "https://arxiv.org/abs/1710.09829", Year = 2017, Authors = "Sara Sabour, Nicholas Frosst, Geoffrey E. Hinton")]
+[PaperOptimizer(OptimizerKind.Adam,
+                Source = "Sabour et al. 2017, Sec. 4: the Adam optimizer with its TensorFlow default "
+                        + "parameters. No values are declared because the paper defers them to a "
+                        + "framework default rather than stating them, and those defaults have changed "
+                        + "across TensorFlow versions. The separately mentioned Adam training on 2-pixel "
+                        + "shifted MNIST belongs to the baseline, not to this model.")]
 public partial class CapsuleNetwork<T> : ImageClassifierModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly CapsuleNetworkOptions _options;
@@ -422,9 +429,10 @@ public partial class CapsuleNetwork<T> : ImageClassifierModelLayoutBase<T>, IAux
         SetTrainingMode(true);
         try
         {
-            _optimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-                this,
-                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true });
+            _optimizer ??= PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                    this,
+                    new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true }));
             TrainWithTape(input, expectedOutput, _optimizer);
 
             // Incorporate auxiliary reconstruction loss into diagnostics.
