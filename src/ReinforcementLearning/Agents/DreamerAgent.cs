@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -63,6 +64,13 @@ namespace AiDotNet.ReinforcementLearning.Agents.Dreamer;
     "https://arxiv.org/abs/1912.01603",
     Year = 2020,
     Authors = "Hafner, D., Lillicrap, T., Ba, J., & Norouzi, M.")]
+[PaperOptimizer(OptimizerKind.Adam,
+                Source = "Hafner et al. 2020, Learning updates: batches of 50 sequences of length 50 "
+                        + "train the world, value and action models using Adam. No single learning rate "
+                        + "is declared because the paper sets 6e-4, 8e-5 and 8e-5 for those three models "
+                        + "respectively, and one optimizer over all of them could not honour any single "
+                        + "value. No reference batch size is declared either, since the batch is given "
+                        + "as sequences rather than examples.")]
 public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 {
 
@@ -132,13 +140,14 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         // The zero was silent until an optimizer validated its rate at construction, at which point
         // it became "Base learning rate must be positive" and took DreamerAgent's whole suite plus
         // AllDefaultConstructableModels_ShouldConstructWithoutException with it. Silent was worse.
-        _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
-        {
-            InitialLearningRate = NumOps.ToDouble(LearningRate),
-            Beta1 = 0.9,
-            Beta2 = 0.999,
-            Epsilon = 1e-8
-        });
+        _optimizer = optimizer ?? options.Optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
+            {
+                InitialLearningRate = NumOps.ToDouble(LearningRate),
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8
+            }));
         _updateCount = 0;
 
         // Initialize networks directly in constructor

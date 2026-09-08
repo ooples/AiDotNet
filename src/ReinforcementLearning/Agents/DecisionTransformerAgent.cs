@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -61,6 +62,13 @@ namespace AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
     "https://arxiv.org/abs/2106.01345",
     Year = 2021,
     Authors = "Chen, L., Lu, K., Rajeswaran, A., Lee, K., Grover, A., Laskin, M., Abbeel, P., Srinivas, A., & Mordatch, I.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, WeightDecay = 1e-4,
+                ReferenceBatchSize = 64, WarmupSteps = 100000,
+                Schedule = LearningRateSchedulerType.LinearWarmup,
+                Source = "Chen et al. 2021, Appendix A: AdamW following PyTorch defaults, trained for "
+                        + "10^5 gradient steps with a learning rate of 1e-4, a weight decay of 1e-4, a "
+                        + "batch size of 64 and linear warmup over the first 10^5 training steps. The "
+                        + "exponents render as a bare 105 in extraction.")]
 public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
 
