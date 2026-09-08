@@ -265,9 +265,23 @@ sequenced last.
 
 ### 5.2 Family base classes
 
-Six new base classes, each declaring the shared knobs once. Four live under
-`src/NeuralNetworks/Options/`; the `Video` and `Document` bases are colocated
-with their areas, matching how those areas already organise Options:
+Seven base classes, each declaring the shared knobs once. Four are new under
+`src/NeuralNetworks/Options/`; the rest live in `src/Models/Options/` or beside
+their area. Two of them turned out to exist already, which changed the plan:
+
+- **`DocumentNeuralNetworkOptions` already existed and all 29 Document options
+  classes already derive from it.** It was empty. Extending it reaches the whole
+  area without touching a single leaf — no new base was needed.
+- **Video has no base in use.** 96 of its 108 options classes derive straight
+  from `NeuralNetworkOptions`. A `VideoModelOptions<T>` exists but takes a type
+  parameter it never uses, follows the nullable + `Effective*` pattern, and is
+  derived from by exactly one class; `DocumentModelOptions<T>` is its twin and
+  nothing derives from it at all. Both look like an earlier attempt at this same
+  work that was never wired up. They are left alone here and removed in their
+  areas' phases. The new base is named `VideoHyperparameterOptions` to avoid
+  colliding with the abandoned one.
+
+The seven:
 
 - `SequenceModelOptions : NeuralNetworkOptions` — `VocabSize`, `ModelDimension`,
   `NumLayers`, `NumHeads`, `StateDimension`, `MaxSeqLength`, `ExpandFactor`,
@@ -442,7 +456,8 @@ Each phase is independently mergeable and leaves the build green.
 | 5 | `NeuralNetworks` — long tail (40 models, 97 params) | 483 → 386 |
 | 6 | `src/Document` (29 models, 203 missing) | 386 → 183 |
 | 7 | `src/Video` (44 models, 134 params) | 183 → 49 |
-| 8 | `docs/model-paper-defaults.tsv`, `[PaperDefaults]`, fidelity test, correction of the §2.4 placeholder values | 49 |
+| 8 | `TextToSpeech`, `SpeechRecognition`, `Audio` (22 models, ~192 params) — added 2026-09-08, see §2.6 | 183 → 49 |
+| 9 | `docs/model-paper-defaults.tsv`, `[PaperDefaults]`, fidelity test, correction of the §2.4 placeholder values | 49 |
 
 The floor of 49 is the out-of-scope architecture types and compiled-model hosts
 of §5.1, which the ratchet excludes from its in-scope count but which are listed
@@ -523,11 +538,14 @@ Recorded so the spec can be reviewed against what was agreed:
    follow-up issue. One sweep, one ratchet, one consistent result; the cost is
    163 models and 757 in-scope parameters, tracked as the primary risk in §9.4.
 
-4. **NEW, opened by phase 1's measurement — `TextToSpeech`, `SpeechRecognition`
-   and `Audio` carry ~261 of the 1067.** §2.6 documents what they are. They were
-   excluded from §5.1 on the strength of a measurement that asked the wrong
-   question. Widening again is a scope decision, not something to absorb quietly,
-   so it is raised rather than assumed.
+4. **`TextToSpeech`, `SpeechRecognition` and `Audio` — decided 2026-09-08: give
+   them their own phase (now phase 8).** They were excluded from §5.1 on the
+   strength of a measurement that asked the wrong question (§2.6). Including them
+   is what lets the ratchet actually reach its floor of 49 rather than stalling
+   around 310, so the library ships v1 configured one way rather than two.
+   `AudioHyperparameterOptions` was added to phase 1 as the seventh family base
+   (`944a1fd72`): 22 models, 192 tunable parameters, dominated by signal settings
+   rather than network shape — `sampleRate` alone appears in 21 of the 22.
 
 Phase 1 landed 2026-09-08 as `9f7fe07b6`: six family bases, the ratchet at 1067,
 and the behavioural assertion skipped until phase 2.
