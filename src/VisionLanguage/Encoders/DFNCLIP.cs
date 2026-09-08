@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -70,6 +72,12 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Fang et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, ReferenceBatchSize = 16384,
+                WarmupSteps = 2000,
+                Source = "Fang et al. 2023, Sec. 4: the final data filtering networks train for 5.12B "
+                        + "samples at a batch size of 16,384 with 2,000 steps of warmup. The optimizer "
+                        + "is left unspecified and no rate is declared because the paper states neither "
+                        + "in its training description.")]
 public partial class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly DFNCLIPOptions _options;
@@ -143,17 +151,18 @@ public partial class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         // the moments stabilize.
         _optimizer =
             optimizer
-            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                this,
-                new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                {
-                    InitialLearningRate = 5e-4,
-                    Beta1 = 0.9,
-                    Beta2 = 0.98,
-                    Epsilon = 1e-6,
-                    WeightDecay = 0.2,
-                }
-            );
+            ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                    this,
+                    new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                    {
+                        InitialLearningRate = 5e-4,
+                        Beta1 = 0.9,
+                        Beta2 = 0.98,
+                        Epsilon = 1e-6,
+                        WeightDecay = 0.2,
+                    }
+                ));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;

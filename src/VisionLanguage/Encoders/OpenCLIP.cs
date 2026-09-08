@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -88,6 +90,16 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Cherti et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.98, WeightDecay = 0.2,
+                MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Provenance = RecipeProvenance.PerDataset,
+                Source = "Cherti et al. 2023, Sec. 3: AdamW with a weight decay of 0.2, betas (0.9, "
+                        + "0.98) and a cosine schedule with warmup, otherwise following the original "
+                        + "CLIP training procedure. No learning rate is declared because the paper tunes "
+                        + "it per scale point in its Appendix Table 18 rather than stating one; the "
+                        + "sweep over {0.1, 0.01, 0.001} elsewhere is its linear-probe evaluation, not "
+                        + "this training.")]
 public partial class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     #region Fields
@@ -166,13 +178,14 @@ public partial class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisio
         _options = options ?? new OpenCLIPOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                }));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;
