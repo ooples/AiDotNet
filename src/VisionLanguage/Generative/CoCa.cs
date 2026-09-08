@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -61,6 +63,14 @@ namespace AiDotNet.VisionLanguage.Generative;
     Year = 2022,
     Authors = "Yu et al."
 )]
+[PaperOptimizer(OptimizerKind.Adafactor, LearningRate = 8e-4, Beta1 = 0.9, Beta2 = 0.999,
+                WeightDecay = 0.01, WarmupFraction = 0.02, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.LinearWarmup,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
+                Source = "Yu et al. 2022, Sec. 4: the Adafactor optimizer with beta1 0.9, beta2 0.999 "
+                        + "and a decoupled weight decay ratio of 0.01, warming the learning rate over "
+                        + "the first 2 percent of training steps to a peak of 8e-4 and decaying it "
+                        + "linearly afterwards.")]
 public partial class CoCa<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly CoCaOptions _options;
@@ -104,7 +114,9 @@ public partial class CoCa<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
     {
         _options = options ?? new CoCaOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

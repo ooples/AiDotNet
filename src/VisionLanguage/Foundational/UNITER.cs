@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -55,6 +57,11 @@ namespace AiDotNet.VisionLanguage.Foundational;
     Year = 2020,
     Authors = "Chen et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 3e-4, WeightDecay = 0.01,
+                Source = "Chen et al. 2020, Sec. 4: the AdamW optimizer with a learning rate of 3e-4 "
+                        + "and a weight decay of 0.01. The batch of 10240 input units elsewhere belongs "
+                        + "to VQA fine-tuning rather than pre-training, so no reference batch size is "
+                        + "declared.")]
 public partial class UNITER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
     private readonly UNITEROptions _options;
@@ -108,32 +115,33 @@ public partial class UNITER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusi
         _options = options ?? new UNITEROptions();
         _options.Validate();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                // The official UNITER recipe uses AdamW with transformer-scale
-                // learning rates, beta2=0.98, epsilon=1e-6, weight decay, and
-                // global-norm clipping. Previously this configured optimizer was
-                // never passed to TrainWithTape, which silently substituted the
-                // framework's generic Adam at 1e-3.
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                Beta1 = 0.9,
-                Beta2 = 0.98,
-                Epsilon = 1e-6,
-                EnableGradientClipping = true,
-                MaxGradientNorm = _options.MaxGradientNorm,
-                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
-                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(
-                    baseLearningRate: _options.LearningRate,
-                    warmupSteps: _options.WarmupSteps,
-                    totalSteps: _options.TotalTrainingSteps,
-                    warmupInitLr: _options.WarmupInitialLearningRate
-                        ?? _options.LearningRate / System.Math.Max(1, _options.WarmupSteps),
-                    decayMode: AiDotNet.LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Linear,
-                    endLr: _options.EndLearningRate),
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    // The official UNITER recipe uses AdamW with transformer-scale
+                    // learning rates, beta2=0.98, epsilon=1e-6, weight decay, and
+                    // global-norm clipping. Previously this configured optimizer was
+                    // never passed to TrainWithTape, which silently substituted the
+                    // framework's generic Adam at 1e-3.
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                    Beta1 = 0.9,
+                    Beta2 = 0.98,
+                    Epsilon = 1e-6,
+                    EnableGradientClipping = true,
+                    MaxGradientNorm = _options.MaxGradientNorm,
+                    SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+                    LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(
+                        baseLearningRate: _options.LearningRate,
+                        warmupSteps: _options.WarmupSteps,
+                        totalSteps: _options.TotalTrainingSteps,
+                        warmupInitLr: _options.WarmupInitialLearningRate
+                            ?? _options.LearningRate / System.Math.Max(1, _options.WarmupSteps),
+                        decayMode: AiDotNet.LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Linear,
+                        endLr: _options.EndLearningRate),
+                }));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.FusionDim;
