@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -55,6 +57,10 @@ namespace AiDotNet.VisionLanguage.Generative;
     Year = 2024,
     Authors = "Laurencon et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-4,
+                Source = "Laurencon et al. 2024, Sec. 4: a learning rate of 1e-4 over around 2 epochs "
+                        + "of the training data. The optimizer is left unspecified because the paper "
+                        + "does not name one in its training description.")]
 public partial class IDEFICS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly IDEFICS2Options _options;
@@ -102,7 +108,9 @@ public partial class IDEFICS2<T> : VisionLanguageModelBase<T>, IGenerativeVision
         _options = options ?? new IDEFICS2Options();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
