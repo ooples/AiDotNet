@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -87,6 +88,11 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     "https://arxiv.org/abs/2310.09656",
     Year = 2023,
     Authors = "Hengrui Zhang, Jiani Zhang, Balasubramaniam Srinivasan, Zhengyuan Shen, Xiao Qin, Christos Faloutsos, Huzefa Rangwala, George Karypis")]
+[PaperOptimizer(OptimizerKind.Adam,
+                Source = "Zhang et al. 2024, Sec. 5: all methods are optimized with the Adam optimizer. "
+                        + "The batch size of 32 the paper mentions is described as a limit imposed on "
+                        + "the Adult dataset rather than a stated training batch, and no learning rate "
+                        + "is given, so neither is declared.")]
 public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, ISyntheticTabularGenerator<T>
 {
     private readonly TabSynOptions<T> _options;
@@ -177,7 +183,9 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     {
         _options = options ?? new TabSynOptions<T>();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
