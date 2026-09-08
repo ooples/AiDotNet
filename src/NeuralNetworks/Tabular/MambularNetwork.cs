@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -56,6 +58,14 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2408.06291",
     Year = 2024,
     Authors = "Thielmann, A., Kruse, R., Samiee, S., & Kleyko, D.")]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-4, WeightDecay = 1e-6,
+                ReferenceBatchSize = 128, DecayRate = 0.1,
+                Schedule = LearningRateSchedulerType.ReduceOnPlateau,
+                Source = "Thielmann et al. 2024, Sec. 4: all neural models share a starting learning "
+                        + "rate of 1e-04, a weight decay of 1e-06, learning rate decay with a factor of "
+                        + "0.1 at a patience of 10 epochs against the validation loss, and a universal "
+                        + "batch size of 128. The optimizer is left unspecified because the paper names "
+                        + "none.")]
 public partial class MambularNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly MambularOptions<T> _options;

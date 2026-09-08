@@ -113,7 +113,9 @@ public partial class TabDPTNetwork<T> : TabularNeuralNetworkBase<T>
         // model reached its floor the optimizer kept taking full-size steps and oscillated there:
         // 50 iterations landed at 7.43e-05 while 200 landed at 1.83e-04, i.e. more training made it
         // mildly worse rather than settling. A decaying rate lets it settle instead.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = 1e-4,

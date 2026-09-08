@@ -1,4 +1,6 @@
-﻿using AiDotNet.Attributes;
+﻿using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
@@ -60,6 +62,10 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/1810.11921",
     Year = 2019,
     Authors = "Song, W., Shi, C., Xiao, Z., Duan, Z., Xu, Y., Zhang, M., & Tang, J.")]
+[PaperOptimizer(OptimizerKind.Adam,
+                Source = "Song et al. 2019, Sec. 4: Adam is used to optimize all deep neural "
+                        + "network-based models, AutoInt among them. No rate, batch or schedule is "
+                        + "stated.")]
 public partial class AutoIntNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private AutoIntOptions<T> _options;
@@ -116,7 +122,9 @@ public partial class AutoIntNetwork<T> : TabularNeuralNetworkBase<T>
         _options = options ?? new AutoIntOptions<T>();
         // Reuse the same resolved instance that was passed to base(...)
         _lossFunction = LossFunction;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }
