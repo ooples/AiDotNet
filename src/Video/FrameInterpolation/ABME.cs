@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -57,6 +58,11 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2108.06815",
     Year = 2021,
     Authors = "Junheum Park, Chul Lee, Chang-Su Kim")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, DecayRate = 0.5,
+                StepSize = 40000, Schedule = LearningRateSchedulerType.Step,
+                Source = "Park et al. 2021, Sec. 4: the Adam optimizer with a learning rate of 1e-4 "
+                        + "until 0.1M iterations, halved after every 0.04M iterations thereafter. The "
+                        + "paper states this same rate at all three of its training stages.")]
 public partial class ABME<T> : FrameInterpolationBase<T>
 {
     #region Fields
@@ -92,7 +98,9 @@ public partial class ABME<T> : FrameInterpolationBase<T>
     {
         _options = options ?? new ABMEOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         SupportsArbitraryTimestep = true;
         InitializeLayers();
     }
