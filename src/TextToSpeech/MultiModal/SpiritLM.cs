@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -42,6 +44,13 @@ namespace AiDotNet.TextToSpeech.MultiModal;
     Year = 2024,
     Authors = "Nguyen et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 3e-5,
+                Schedule = LearningRateSchedulerType.Constant,
+                Source = "Nguyen et al. 2024, Sec. 3: continued pre-training of the 7B LLaMA 2 model at "
+                        + "a constant final learning rate of 3.0e-5 with a sequence length of 4k. No "
+                        + "reference batch size is declared because the paper gives it as 4 per GPU "
+                        + "without stating the GPU count. The optimizer is left unspecified because the "
+                        + "paper names none.")]
 public partial class SpiritLM<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly SpiritLMOptions _options;
@@ -83,14 +92,15 @@ public partial class SpiritLM<T> : TtsModelBase<T>, ICodecTts<T>
     {
         _options = options ?? new SpiritLMOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                UseAdaptiveLearningRate = false,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                    UseAdaptiveLearningRate = false,
+                }));
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
