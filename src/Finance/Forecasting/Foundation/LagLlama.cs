@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -90,6 +91,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Lag-Llama: Towards Foundation Models for Probabilistic Time Series Forecasting", "https://arxiv.org/abs/2310.08278", Year = 2024, Authors = "Kashif Rasul, Arjun Ashok, Andrew Robert Williams, Arian Khorasani, George Adamopoulos, Rishika Bhatt, Sun Peng, Christof Henkel, Marine Chaput, Yuriy Ganin, Xuan Shi, Leo Siemens")]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-4, ReferenceBatchSize = 256,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Rasul et al. 2023, Sec. 5: pre-training uses a batch size of 256 and a "
+                        + "learning rate of 1e-4. The optimizer is left unspecified because the paper "
+                        + "does not name one in its training description.")]
 public partial class LagLlama<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -272,7 +278,9 @@ public partial class LagLlama<T> : ForecastingModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         OnnxModelPath = onnxModelPath;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _contextLength = options.ContextLength;
@@ -319,7 +327,9 @@ public partial class LagLlama<T> : ForecastingModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _contextLength = options.ContextLength;
