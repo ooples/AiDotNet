@@ -1977,6 +1977,24 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// </remarks>
     AiModelResult<T, TInput, TOutput> Build(TInput features);
 
+    /// <summary>
+    /// Wraps an already-trained model in a result, without training it.
+    /// </summary>
+    /// <returns>A result over the configured model, with the same prediction surface a built one has.</returns>
+    /// <remarks>
+    /// <para>
+    /// The terminal for a model that arrives ready to use — weights loaded from disk, a model another
+    /// algorithm returned, one built from parameters you already have. <see cref="Build(TInput, TOutput)"/>
+    /// trains, which for an adapted or loaded model destroys the thing that made it worth having, and
+    /// <c>AiModelResult</c>'s constructors are internal, so before this there was no way in at all.
+    /// </para>
+    /// <para>
+    /// Inference-time configuration still applies; training-time configuration does not, because there
+    /// is no training.
+    /// </para>
+    /// </remarks>
+    AiModelResult<T, TInput, TOutput> BuildForInference();
+
     // ============================================================================
     // Training Infrastructure Configuration Methods
     // ============================================================================
