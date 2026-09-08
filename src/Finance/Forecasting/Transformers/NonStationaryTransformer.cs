@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -70,6 +71,9 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Non-stationary Transformers: Exploring the Stationarity in Time Series Forecasting", "https://arxiv.org/abs/2205.14415", Year = 2022, Authors = "Yong Liu, Haixu Wu, Jianmin Wang, Mingsheng Long")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, ReferenceBatchSize = 32,
+                Source = "Liu et al. 2022, Sec. 4: each model is trained by ADAM using an L2 loss with "
+                        + "an initial learning rate of 1e-4 and a batch size of 32.")]
 public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -373,7 +377,9 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
         _useDeStationaryAttention = opts.UseDeStationaryAttention;
         _dropout = opts.Dropout;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         LastLoss = NumOps.Zero;
     }
@@ -422,7 +428,9 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
         _useDeStationaryAttention = opts.UseDeStationaryAttention;
         _dropout = opts.Dropout;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         LastLoss = NumOps.Zero;
 

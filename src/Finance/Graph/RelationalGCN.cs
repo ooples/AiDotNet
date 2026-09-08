@@ -1,4 +1,5 @@
-﻿using System;
+﻿using AiDotNet.LearningRateSchedulers;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -89,6 +90,9 @@ namespace AiDotNet.Finance.Graph;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Modeling Relational Data with Graph Convolutional Networks", "https://arxiv.org/abs/1703.06103", Year = 2018, Authors = "Michael Schlichtkrull, Thomas N. Kipf, Peter Bloem, Rianne van den Berg, Ivan Titov, Max Welling")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.01,
+                Source = "Schlichtkrull et al. 2018, Sec. 4: trained with Adam for 50 epochs using a "
+                        + "learning rate of 0.01.")]
 public partial class RelationalGCN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -283,7 +287,9 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         _options = options ?? new RelationalGCNOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
         _forecastHorizon = _options.ForecastHorizon;
@@ -334,7 +340,9 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         _options = options ?? new RelationalGCNOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
         _forecastHorizon = _options.ForecastHorizon;
