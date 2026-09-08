@@ -103,7 +103,8 @@ public class ScheduleFreeAdamWTests
 
         for (int i = 0; i < parameters.Length; i++)
         {
-            Assert.True(double.IsFinite(parameters[i]), $"parameter {i} became {parameters[i]}");
+            Assert.True(!double.IsNaN(parameters[i]) && !double.IsInfinity(parameters[i]),
+                $"parameter {i} became {parameters[i]}");
         }
     }
 

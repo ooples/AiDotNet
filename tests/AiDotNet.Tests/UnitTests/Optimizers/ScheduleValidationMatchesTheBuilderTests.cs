@@ -27,6 +27,9 @@ namespace AiDotNet.Tests.UnitTests.Optimizers;
 /// </remarks>
 public class ScheduleValidationMatchesTheBuilderTests
 {
+    private static LearningRateSchedulerType[] GetSchedulerTypes()
+        => (LearningRateSchedulerType[])Enum.GetValues(typeof(LearningRateSchedulerType));
+
     /// <summary>A recipe fully specified for the given schedule, so only support is being tested.</summary>
     private static PaperOptimizerAttribute FullySpecified(LearningRateSchedulerType schedule)
         => new(OptimizerKind.Adam)
@@ -47,7 +50,7 @@ public class ScheduleValidationMatchesTheBuilderTests
     {
         var inconsistent = new List<string>();
 
-        foreach (LearningRateSchedulerType schedule in Enum.GetValues<LearningRateSchedulerType>())
+        foreach (LearningRateSchedulerType schedule in GetSchedulerTypes())
         {
             var recipe = FullySpecified(schedule);
 
@@ -103,7 +106,7 @@ public class ScheduleValidationMatchesTheBuilderTests
     {
         // The other half of the contract: silently accepting an unmappable schedule would let a
         // model declare one and train at a constant rate with nothing saying so.
-        var unmappable = Enum.GetValues<LearningRateSchedulerType>()
+        var unmappable = GetSchedulerTypes()
             .Where(schedule => !HasBuilderArm(schedule))
             .ToList();
 
