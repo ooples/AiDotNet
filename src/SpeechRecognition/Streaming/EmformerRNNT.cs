@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -41,6 +43,10 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Emformer: Efficient Memory Transformer Based Acoustic Model for Low Latency Streaming Speech Recognition", "https://arxiv.org/abs/2010.10759", Year = 2021, Authors = "Shi et al.")]
+[PaperOptimizer(OptimizerKind.Adam,
+                Source = "Shi et al. 2021, Sec. 4: all hybrid models are trained with the Adam "
+                        + "optimizer over 180 epochs. The paper states no learning rate, batch size or "
+                        + "schedule, so none is declared.")]
 public partial class EmformerRNNT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly EmformerRNNTOptions _options; public override ModelOptions GetOptions() => _options;
@@ -50,7 +56,9 @@ public partial class EmformerRNNT<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
     public bool SupportsWordTimestamps => false;
 
     public EmformerRNNT(NeuralNetworkArchitecture<T> architecture, string modelPath, EmformerRNNTOptions? options = null) : base(architecture) { _options = options ?? new EmformerRNNTOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public EmformerRNNT(NeuralNetworkArchitecture<T> architecture, EmformerRNNTOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new EmformerRNNTOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public EmformerRNNT(NeuralNetworkArchitecture<T> architecture, EmformerRNNTOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new EmformerRNNTOptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using Emformer's memory-augmented streaming architecture.

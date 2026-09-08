@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -41,6 +43,10 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FastEmit: Low-latency Streaming ASR with Sequence-level Emission Regularization", "https://arxiv.org/abs/2010.11148", Year = 2021, Authors = "Yu et al.")]
+[PaperOptimizer(OptimizerKind.Adam,
+                Source = "Yu et al. 2021, Sec. 4: training uses the Adam optimizer, with 80-channel "
+                        + "filterbank features and SpecAugment for data augmentation. The paper states "
+                        + "no learning rate, batch size or schedule, so none is declared.")]
 public partial class FastEmit<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly FastEmitOptions _options; public override ModelOptions GetOptions() => _options;
@@ -50,7 +56,9 @@ public partial class FastEmit<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<
     public bool SupportsWordTimestamps => false;
 
     public FastEmit(NeuralNetworkArchitecture<T> architecture, string modelPath, FastEmitOptions? options = null) : base(architecture) { _options = options ?? new FastEmitOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public FastEmit(NeuralNetworkArchitecture<T> architecture, FastEmitOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new FastEmitOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public FastEmit(NeuralNetworkArchitecture<T> architecture, FastEmitOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new FastEmitOptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using FastEmit's emission-regularized RNN-T decoder.
