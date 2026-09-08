@@ -16,7 +16,8 @@
 [CmdletBinding()]
 param(
     [string] $ValidationWorkflow = '.github/workflows/sonarcloud.yml',
-    [string] $MapWorkflow = '.github/workflows/test-impact-map.yml'
+    [string] $MapWorkflow = '.github/workflows/test-impact-map.yml',
+    [string] $CertifiedMapResolver = 'tools/TestImpact/Resolve-CertifiedShardMap.ps1'
 )
 
 Set-StrictMode -Version Latest
@@ -102,6 +103,7 @@ function Get-ContinuedShellCommand {
 
 $validation = Get-Content -LiteralPath $ValidationWorkflow -Raw
 $map = Get-Content -LiteralPath $MapWorkflow -Raw
+$certifiedMapResolverText = Get-Content -LiteralPath $CertifiedMapResolver -Raw
 
 # Every job in this list consumes meaningful runner time. Dependency-based incidental skipping is
 # not enough: a dependency can be removed during a refactor while the job remains runnable. Each
@@ -182,23 +184,25 @@ Assert-Contract ($gate -match '(?s)if \[ "\$REUSED_VALIDATION" = "true" \].*?pro
 # authorization boundary now; no second switch may silently restore the full matrix.
 Assert-Contract (-not $validation.Contains('TEST_IMPACT_MODE')) `
     'TEST_IMPACT_MODE shadow/enforce switching is still present'
-Assert-Contract ($validation.Contains('certified-shard-map')) `
+Assert-Contract ($certifiedMapResolverText.Contains('--name certified-shard-map')) `
     'PR selection does not consume a certified map artifact'
 Assert-Contract ($validation.Contains('candidate-shard-map')) `
     'coverage audit runs do not consume an explicit candidate map artifact'
-Assert-Contract ($validation -match '(?s)if \[ "\$FORCE_COVERAGE" = ''true'' \].*?--name candidate-shard-map.*?else.*?--name certified-shard-map') `
+Assert-Contract (
+    $validation -match '(?s)if \[ "\$FORCE_COVERAGE" = ''true'' \].*?--name candidate-shard-map.*?else' -and
+    $certifiedMapResolverText.Contains('--name certified-shard-map')) `
     'candidate and certified artifacts are not separated at the execution boundary'
 
 # A later map audit is also a revocation boundary. If it fails or withholds certification after a
 # miss, selection must fail closed instead of scanning backward until an older certificate happens
 # to download successfully.
 $mapDownload = Get-StepBlock -JobBlock $selectorJob -Step 'Download the shard map'
-Assert-Contract ($mapDownload -match '(?s)--branch master\s+--status completed\s+--limit 1\s+--json databaseId,conclusion') `
-    'PR selection does not treat the newest completed map workflow as the certification barrier'
-Assert-Contract (-not $mapDownload.Contains('for candidate in $candidates')) `
-    'PR selection can scan backward and reactivate an older invalidated certificate'
-Assert-Contract ($mapDownload.Contains('refusing to fall back to an older map')) `
-    'missing or failed newest-map certification does not announce its fail-closed behavior'
+Assert-Contract ($mapDownload.Contains('./tools/TestImpact/Resolve-CertifiedShardMap.ps1')) `
+    'PR selection bypasses the executable certified-map resolver'
+Assert-Contract ($mapDownload.Contains('-ResultFile map-resolution.json')) `
+    'PR selection does not consume the resolver decision explicitly'
+Assert-Contract ($validation.Contains('./tools/TestImpact/Resolve-CertifiedShardMap.ps1 -SelfTest')) `
+    'the certified-map revocation policy is not executed against its adversarial fixtures'
 
 # The map builder publishes a new candidate, but only the previous candidate that was exercised by
 # a complete coverage run may become certified. Reusing one artifact name for both states recreates

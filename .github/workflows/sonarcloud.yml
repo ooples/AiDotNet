@@ -678,7 +678,7 @@ jobs:
           # Normal PRs may consume only an audited/certified map. The forced full-coverage run is
           # different: it consumes the exact candidate named by its dispatch input so that the next
           # map invocation can audit that candidate against the complete outcome set.
-          rm -rf map map-probe
+          rm -rf map map-resolution.json
           run_id=''
           kind=''
           if [ "$FORCE_COVERAGE" = 'true' ]; then
@@ -701,29 +701,20 @@ jobs:
                 ;;
             esac
           else
-            # The newest completed map workflow is a revocation barrier. Never scan backward for
-            # an older certificate: a newer audit may have observed a selection miss, failed its
-            # integrity checks, or intentionally withheld certification. Reusing an older artifact
-            # in any of those states would silently reactivate a map invalidated by newer evidence.
-            if ! latest=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow test-impact-map.yml \
-                 --branch master --status completed --limit 1 --json databaseId,conclusion 2>/dev/null); then
-              latest='[]'
-              echo '::warning::could not query the latest completed map workflow; selection will fail closed'
-            fi
-            candidate=$(printf '%s' "$latest" | jq -r '.[0].databaseId // empty')
-            latest_conclusion=$(printf '%s' "$latest" | jq -r '.[0].conclusion // empty')
-            if [ -n "$candidate" ] && [ "$latest_conclusion" = 'success' ]; then
-              if gh run download "$candidate" --repo "$GITHUB_REPOSITORY" \
-                   --name certified-shard-map --dir map-probe >/dev/null 2>&1; then
-                mv map-probe map
+            # The executable resolver makes the newest completed map workflow a revocation barrier.
+            # Its adversarial fixtures record every download attempt and prove that a newer failed
+            # or certificate-withholding run can never fall back to an older certificate.
+            if pwsh -NoProfile -File ./tools/TestImpact/Resolve-CertifiedShardMap.ps1 \
+                 -Repository "$GITHUB_REPOSITORY" -OutDirectory map \
+                 -ResultFile map-resolution.json; then
+              candidate=$(jq -r 'if .found then (.runId | tostring) else empty end' map-resolution.json)
+              if [ -n "$candidate" ]; then
                 run_id="$candidate"
                 kind='certified'
-              else
-                echo "::warning::latest completed map run $candidate has no usable certificate; refusing to fall back to an older map"
-                rm -rf map-probe
               fi
-            elif [ -n "$candidate" ]; then
-              echo "::warning::latest completed map run $candidate concluded '$latest_conclusion'; refusing to fall back to an older map"
+            else
+              echo '::warning::certified map resolver failed; selection will fail closed'
+              rm -rf map
             fi
           fi
 
@@ -760,6 +751,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Measure-SelectionMiss self-test failed' }
           ./tools/TestImpact/Test-CertifiedShardMap.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'Test-CertifiedShardMap self-test failed' }
+          ./tools/TestImpact/Resolve-CertifiedShardMap.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Resolve-CertifiedShardMap self-test failed' }
           ./tools/TestImpact/Test-CiImpactWorkflow.ps1
           if ($LASTEXITCODE -ne 0) { throw 'CI impact workflow contract failed' }
           ./tools/TestImpact/Test-TestImpactEndToEnd.ps1
