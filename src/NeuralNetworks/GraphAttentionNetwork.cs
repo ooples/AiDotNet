@@ -1,3 +1,4 @@
+using AiDotNet.Optimizers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -69,6 +70,13 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Graph Attention Networks", "https://arxiv.org/abs/1710.10903", Year = 2018, Authors = "Petar Velickovic, Guillem Cucurull, Arantxa Casanova, Adriana Romero, Pietro Lio, Yoshua Bengio")]
+[PaperOptimizer(OptimizerKind.Adam, WeightDecay = 0.0005,
+                Provenance = RecipeProvenance.PerDataset,
+                Source = "Velickovic et al. 2018, Sec. 3.3: the Adam optimizer with L2 regularization "
+                        + "of 0.0005 on Cora and Citeseer and 0.001 on Pubmed. No single learning rate "
+                        + "is declared because the paper sets it per dataset -- 0.01 for Pubmed and a "
+                        + "different value for the others -- which is what the per-dataset provenance "
+                        + "records.")]
 public partial class GraphAttentionNetwork<T> : GraphModelLayoutBase<T>
 {
     private readonly GraphAttentionNetworkOptions _options;
@@ -193,7 +201,8 @@ public partial class GraphAttentionNetwork<T> : GraphModelLayoutBase<T>
             LearningRateScheduler = learningRateScheduler,
             SchedulerStepMode = SchedulerStepMode.StepPerBatch,
         };
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOpts);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOpts));
 
         InitializeLayers();
     }
