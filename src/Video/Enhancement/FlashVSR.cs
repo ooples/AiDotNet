@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -54,6 +55,9 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2510.12747",
     Year = 2025,
     Authors = "Junhao Zhuang, Shi Guo, Xin Cai, Xiaohui Li, Yihao Liu, Chun Yuan, Tianfan Xue")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-5, WeightDecay = 0.01,
+                Source = "FlashVSR: the AdamW optimizer with a learning rate of 1e-5 and a weight decay "
+                        + "of 0.01.")]
 public partial class FlashVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -110,7 +114,9 @@ public partial class FlashVSR<T> : VideoSuperResolutionBase<T>
     {
         _options = options ?? new FlashVSROptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         ScaleFactor = _options.ScaleFactor;
         NumFrames = _options.NumInputFrames;
         InitializeLayers();

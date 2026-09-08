@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -58,6 +59,12 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2305.00163",
     Year = 2024,
     Authors = "Kai Xu, Ziwei Yu, Xin Wang, Michael Bi Mi, Angela Yao")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, ReferenceBatchSize = 8,
+                MinLearningRate = 1e-7,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Xu et al. 2023, Sec. 4.1: the Adam optimizer over 100,000 iterations at a "
+                        + "batch size of 8, with the learning rate starting at 2e-4 and decaying by "
+                        + "cosine to 1e-7 towards the end of training.")]
 public partial class IART<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -91,12 +98,13 @@ public partial class IART<T> : VideoSuperResolutionBase<T>
     {
         _options = options ?? new IARTOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate
+                }));
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }
