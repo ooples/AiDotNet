@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
@@ -41,6 +42,12 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MP-SENet: A Speech Enhancement Model with Parallel Denoising of Magnitude and Phase Spectra", "https://doi.org/10.48550/arXiv.2305.13686", Year = 2023, Authors = "Ye-Xin Lu, Yang Ai, Zhen-Hua Ling")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 0.0005, DecayRate = 0.5,
+                StepSize = 30, Schedule = LearningRateSchedulerType.Step,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Lu et al. 2023, Sec. 4: all models trained with the AdamW optimizer for 100 "
+                        + "epochs, with the learning rate set initially to 0.0005 and halved every 30 "
+                        + "epochs.")]
 public partial class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     /// <inheritdoc />
@@ -89,7 +96,9 @@ public partial class MPSENet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     {
         _options = options ?? new MPSENetOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         int nFft = NextPowerOfTwo(_options.FFTSize);
         _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,

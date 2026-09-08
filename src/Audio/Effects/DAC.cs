@@ -54,6 +54,10 @@ namespace AiDotNet.Audio.Effects;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("High-Fidelity Audio Compression with Improved RVQGAN", "https://doi.org/10.48550/arXiv.2306.06546", Year = 2024, Authors = "Rithesh Kumar, Prem Seetharaman, Alejandro Luebs, Ishaan Kumar, Kundan Kumar")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, Beta1 = 0.8, Beta2 = 0.9,
+                Source = "Kumar et al. 2023, Sec. 4: the AdamW optimizer with a learning rate of 1e-4, "
+                        + "beta1 0.8 and beta2 0.9, used for both the generator and the discriminator, "
+                        + "so the single recipe covers both.")]
 public partial class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
 {
     /// <inheritdoc />
@@ -113,22 +117,23 @@ public partial class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
         // Official DAC 44.1 kHz training recipe:
         // AdamW(lr=1e-4, betas=[0.8, 0.99]), ExponentialLR(gamma=0.999996)
         // after every generator update, and generator gradient clipping at 1e3.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                Beta1 = 0.8,
-                Beta2 = 0.99,
-                Epsilon = 1e-8,
-                WeightDecay = 0.01,
-                EnableGradientClipping = true,
-                MaxGradientNorm = 1e3,
-                LearningRateScheduler = new ExponentialLRScheduler(
-                    _options.LearningRate,
-                    gamma: 0.999996),
-                SchedulerStepMode = SchedulerStepMode.StepPerBatch
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    Beta1 = 0.8,
+                    Beta2 = 0.99,
+                    Epsilon = 1e-8,
+                    WeightDecay = 0.01,
+                    EnableGradientClipping = true,
+                    MaxGradientNorm = 1e3,
+                    LearningRateScheduler = new ExponentialLRScheduler(
+                        _options.LearningRate,
+                        gamma: 0.999996),
+                    SchedulerStepMode = SchedulerStepMode.StepPerBatch
+                }));
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }
