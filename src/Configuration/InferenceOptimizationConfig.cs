@@ -330,7 +330,7 @@ public class InferenceOptimizationConfig
     /// <summary>
     /// Validates the configuration and throws if any values are invalid.
     /// </summary>
-    /// <exception cref="ArgumentException">Thrown when configuration values are invalid.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when configuration values are invalid.</exception>
     /// <remarks>
     /// <para><b>For Beginners:</b> Call this method to ensure your configuration is valid before use.
     ///
