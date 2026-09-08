@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -61,6 +62,9 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("MG-TSD: Multi-Granularity Time Series Diffusion Models with Guided Learning Process", "https://arxiv.org/abs/2403.05751", Year = 2024, Authors = "Xinyao Fan, Yueying Wu, Chang Xu, Yuhao Huang, Weiqing Liu, Jiang Bian")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-5, ReferenceBatchSize = 128,
+                Source = "Fan et al. 2024, Sec. 4: the Adam optimizer with a fixed learning rate of "
+                        + "1e-5 over 30 epochs, at a batch size of 128 on the Solar dataset.")]
 public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
@@ -137,7 +141,9 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
         if (!File.Exists(onnxModelPath)) throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
         options = ResolveOptions(architecture, options); _options = options; Options = _options;
         _useNativeMode = false; OnnxModelPath = onnxModelPath; OnnxSession = new InferenceSession(onnxModelPath);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         CopyOptionsToFields(options);
     }
 

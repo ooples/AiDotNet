@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -62,6 +63,11 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("TEST: Text Prototype Aligned Embedding for Time Series", "https://arxiv.org/abs/2308.08241")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001, Beta1 = 0.9, Beta2 = 0.999,
+                Provenance = RecipeProvenance.Stated,
+                Source = "Sun et al. 2023, Sec. 4: Adam with a learning rate of 0.001 and decay rates "
+                        + "of (0.9, 0.999). The paper notes explicitly that no hyperparameter "
+                        + "optimization was performed on the encoder hyperparameters.")]
 public partial class TEST<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
@@ -140,7 +146,9 @@ public partial class TEST<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
@@ -164,7 +172,9 @@ public partial class TEST<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);

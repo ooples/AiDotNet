@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -63,6 +64,14 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ModelComplexity(ModelComplexity.High)]
 [ResearchPaper("Kronos: A Foundation Model for the Language of Financial Markets", "https://arxiv.org/abs/2508.02739")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-4, ReferenceBatchSize = 256,
+                MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Shi et al. 2025, Sec. 4: all models are trained with a batch size of 256 and "
+                        + "a learning rate of 5e-4, under a cosine learning rate schedule with a linear "
+                        + "warm-up phase. The paper writes Adam in one place and AdamW with the "
+                        + "Loshchilov and Hutter 2017 citation in another; the citation settles it as "
+                        + "AdamW. The warm-up length is not stated, so none is declared.")]
 public partial class Kronos<T> : TimeSeriesFoundationModelBase<T>
 {
     #region Fields
@@ -149,7 +158,9 @@ public partial class Kronos<T> : TimeSeriesFoundationModelBase<T>
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
@@ -173,7 +184,9 @@ public partial class Kronos<T> : TimeSeriesFoundationModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
