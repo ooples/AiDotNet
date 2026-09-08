@@ -76,6 +76,29 @@ public class WarmupNeverStartsAtZeroTests
     }
 
     [Fact]
+    public void AWarmupComposedInFrontOfAnotherScheduleAlsoStartsAbleToMove()
+    {
+        // The two tests above use wav2vec 2.0, which declares LinearWarmup -- a schedule that ramps
+        // on its own, so the factory hands it back untouched and never composes anything. That left
+        // the OTHER path unguarded: when a paper warms up in front of a schedule that does not ramp
+        // (cosine, here), the factory wraps the two in sequence, and that wrapper was building its
+        // ramp with the default initial rate of zero. Every model declaring "warmup then cosine"
+        // therefore spent its first step multiplying the update by exactly zero, which showed up as
+        // bit-identical parameters after training rather than as a slow start.
+        var model = new Data2Vec2<double>(
+            new NeuralNetworkArchitecture<double>(inputFeatures: 1, outputSize: 32));
+
+        var built = PaperOptimizerFactory.CreateFor<double, Tensor<double>, Tensor<double>>(model);
+        var scheduler = SchedulerOf(built);
+
+        Assert.NotNull(scheduler);
+        Assert.True(scheduler.GetLearningRateAtStep(0) > 0,
+            "a warmup composed in front of another schedule must also move on its first step");
+        Assert.True(scheduler.GetLearningRateAtStep(0) < scheduler.GetLearningRateAtStep(4),
+            "and it must still be a ramp rather than a flat rate");
+    }
+
+    [Fact]
     public void ARunWithNoRoomToDecayHoldsThePeakAndSaysSo()
     {
         // A decay needs a horizon. Without one, decaySteps goes negative and every post-warmup step
