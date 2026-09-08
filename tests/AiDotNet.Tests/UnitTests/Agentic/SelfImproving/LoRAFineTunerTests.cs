@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.NeuralNetworks.Options;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -86,8 +87,7 @@ namespace AiDotNetTests.UnitTests.Agentic.SelfImproving
             {
                 var arch = new NeuralNetworkArchitecture<double>(
                     InputType.OneDimensional, NeuralNetworkTaskType.TextGeneration, inputSize: vocab, outputSize: vocab);
-                var model = new MambaLanguageModel<double>(
-                    arch, vocabSize: vocab, modelDimension: 16, numLayers: 1, stateDimension: 4, maxSeqLength: seqLen);
+                var model = new MambaLanguageModel<double>(arch, new MambaOptions { VocabSize = vocab, ModelDimension = 16, NumLayers = 1, StateDimension = 4, MaxSequenceLength = seqLen });
 
                 // A small, repetitive dataset so the tiny model has a clear pattern to fit.
                 var dataset = new FineTuningDataset(new[]

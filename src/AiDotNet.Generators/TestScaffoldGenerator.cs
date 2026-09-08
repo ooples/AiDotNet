@@ -5081,8 +5081,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 64), " +
-                    "vocabSize: 64, modelDimension: 32, numLayers: 2, numHeads: 4, maxSeqLength: 16)";
+                    "inputSize: 4, outputSize: 64), new AiDotNet.NeuralNetworks.Options.EagleOptions { VocabSize = 64, ModelDimension = 32, NumLayers = 2, NumHeads = 4, MaxSequenceLength = 16 })";
             }
             else if (model.ClassName == "FinchLanguageModel" && model.TypeParameterCount == 1)
             {
@@ -5633,8 +5632,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 128, outputSize: 4), " +
-                    "vocabSize: 64, modelDimension: 32, numLayers: 1, numHeads: 4, maxSeqLength: 128, " +
-                    "options: new AiDotNet.NeuralNetworks.Options.XLSTMOptions { LearningRate = 3e-4 })";
+                    "new AiDotNet.NeuralNetworks.Options.XLSTMOptions { VocabSize = 64, " +
+                    "ModelDimension = 32, NumLayers = 1, NumHeads = 4, MaxSequenceLength = 128, " +
+                    "LearningRate = 3e-4 })";
             }
             else if (model.ClassName == "XTTSv2Clone" && model.TypeParameterCount == 1)
             {
@@ -6546,8 +6546,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 32, outputSize: 128), vocabSize: 128, modelDimension: 32, " +
-                    "numLayers: 2, stateDimension: 16, numHeads: 4, maxSeqLength: 32)";
+                    "inputSize: 32, outputSize: 128), new AiDotNet.NeuralNetworks.Options.Mamba2Options { VocabSize = 128, ModelDimension = 32, NumLayers = 2, StateDimension = 16, NumHeads = 4, MaxSequenceLength = 32 })";
             }
             else if (model.ClassName == "XLSTMLanguageModel" && model.TypeParameterCount == 1)
             {
@@ -6563,8 +6562,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 16, outputSize: 64), vocabSize: 64, modelDimension: 32, " +
-                    "numLayers: 2, numHeads: 4, maxSeqLength: 16)";
+                    "inputSize: 16, outputSize: 64), new AiDotNet.NeuralNetworks.Options.XLSTMOptions { VocabSize = 64, ModelDimension = 32, NumLayers = 2, NumHeads = 4, MaxSequenceLength = 16 })";
             }
             else if (model.ClassName == "BloombergGPT" && model.TypeParameterCount == 1)
             {
@@ -6966,8 +6964,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 32, outputSize: 128), vocabSize: 128, modelDimension: 32, " +
-                    "numLayers: 1, stateDimension: 8, expandFactor: 2, maxSeqLength: 32)";
+                    "inputSize: 32, outputSize: 128), new AiDotNet.NeuralNetworks.Options.FalconMambaOptions { VocabSize = 128, ModelDimension = 32, NumLayers = 1, StateDimension = 8, ExpandFactor = 2, MaxSequenceLength = 32 })";
             }
             else if ((model.ClassName is "HawkLanguageModel" or "GLALanguageModel" or "GatedDeltaNetLanguageModel")
                      && model.TypeParameterCount == 1)
@@ -6995,8 +6992,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 128, outputSize: 128), vocabSize: 128, modelDimension: 32, " +
-                    "numLayers: 2, stateDimension: 16, attentionInterval: 2, maxSeqLength: 128)";
+                    "inputSize: 128, outputSize: 128), new AiDotNet.NeuralNetworks.Options.ZambaOptions { VocabSize = 128, ModelDimension = 32, NumLayers = 2, StateDimension = 16, AttentionInterval = 2, MaxSequenceLength = 128 })";
             }
             else if (model.ClassName == "Zamba2LanguageModel" && model.TypeParameterCount == 1)
             {
@@ -7006,8 +7002,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 128, outputSize: 128), vocabSize: 128, modelDimension: 32, " +
-                    "numLayers: 2, stateDimension: 16, numHeads: 4, attentionInterval: 2, maxSeqLength: 128)";
+                    "inputSize: 128, outputSize: 128), new AiDotNet.NeuralNetworks.Options.Zamba2Options { VocabSize = 128, ModelDimension = 32, NumLayers = 2, StateDimension = 16, NumHeads = 4, AttentionInterval = 2, MaxSequenceLength = 128 })";
             }
             else if (model.ClassName == "ChronosBolt" && model.TypeParameterCount == 1)
             {
@@ -9312,9 +9307,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 8, outputSize: 16), " +
-                    "vocabSize: 16, modelDimension: 32, numLayers: 2, stateDimension: 8, " +
-                    "attentionInterval: 2, maxSeqLength: 8)";
+                    "inputSize: 8, outputSize: 16), new AiDotNet.NeuralNetworks.Options.JambaOptions { VocabSize = 16, ModelDimension = 32, NumLayers = 2, StateDimension = 8, AttentionInterval = 2, MaxSequenceLength = 8 })";
             }
             else if (IsValleCodecLMModel(model.ClassName) && model.TypeParameterCount == 1
                      && model.FullyQualifiedName.StartsWith("AiDotNet.TextToSpeech.", System.StringComparison.Ordinal))
