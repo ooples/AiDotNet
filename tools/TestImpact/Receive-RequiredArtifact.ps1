@@ -217,7 +217,7 @@ try {
 
         Write-Host "Downloading required artifact $ArtifactId directly (attempt $attempt/$MaxAttempts)."
         $statusText = @(& $curl.Source `
-            --silent --show-error --location --fail-with-body `
+            --silent --show-error --location --proto-redir '=https' --fail-with-body `
             --connect-timeout 30 --max-time 300 `
             --output $archivePath --dump-header $headersPath --write-out '%{http_code}' `
             --header 'Accept: application/vnd.github+json' `
