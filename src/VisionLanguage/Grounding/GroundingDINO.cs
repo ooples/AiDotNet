@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -58,6 +60,12 @@ namespace AiDotNet.VisionLanguage.Grounding;
     Year = 2024,
     Authors = "Liu et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, WeightDecay = 1e-4,
+                MaxGradientNorm = 0.1,
+                Source = "Liu et al. 2023, hyperparameter table: AdamW with a learning rate of 1e-4, a "
+                        + "weight decay of 0.0001 and a clip max norm of 0.1. The 1e-5 rates the table "
+                        + "also lists apply to the image and text backbones separately, which one "
+                        + "optimizer over all parameters cannot express.")]
 public partial class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
 {
     private readonly GroundingDINOOptions _options;
@@ -101,7 +109,9 @@ public partial class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroun
     {
         _options = options ?? new GroundingDINOOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
