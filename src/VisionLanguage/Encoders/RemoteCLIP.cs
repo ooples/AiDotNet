@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -53,6 +55,13 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2023,
     Authors = "Liu et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, ReferenceBatchSize = 256, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Liu et al. 2023, Sec. 4.1: cosine annealing at a batch size of 256 for the "
+                        + "ResNet-50 and ViT-Base-32 backbones. No learning rate is declared because the "
+                        + "paper gives one per backbone -- 7e-5, 4e-5 and 1e-4 for ResNet-50, "
+                        + "ViT-Base-32 and ViT-Large-14 -- and no optimizer is declared because the only "
+                        + "one named is the SGD used for its logistic-regression evaluation.")]
 public partial class RemoteCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private readonly RemoteCLIPOptions _options;
@@ -109,13 +118,14 @@ public partial class RemoteCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVis
         _options = options ?? new RemoteCLIPOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                }));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;

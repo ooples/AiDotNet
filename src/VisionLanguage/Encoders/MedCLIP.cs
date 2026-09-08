@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
@@ -58,6 +59,13 @@ namespace AiDotNet.VisionLanguage.Encoders;
     Year = 2022,
     Authors = "Wang et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 5e-5, WeightDecay = 1e-4,
+                ReferenceBatchSize = 100, WarmupFraction = 0.1,
+                Source = "Wang et al. 2022, Sec. 4.1: a learning rate of 5e-5, batch size 100, weight "
+                        + "decay 1e-4, 10 epochs and a learning rate warmup ratio of 0.1. The optimizer "
+                        + "is left unspecified because the paper never names one -- the only optimizer "
+                        + "it mentions is the SGD used for its logistic-regression evaluation, which is "
+                        + "not how the model itself is trained.")]
 public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageModel<T>
 {
     private const int MedClipExtrasFormatVersion = 1;
@@ -123,17 +131,18 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         // instead of silently falling back to AdamW's generic 1e-3 / 1e-2 defaults.
         _optimizer =
             optimizer
-            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                this,
-                new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                {
-                    InitialLearningRate = _options.LearningRate,
-                    Beta1 = 0.9,
-                    Beta2 = 0.999,
-                    Epsilon = 1e-8,
-                    WeightDecay = _options.WeightDecay,
-                }
-            );
+            ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                    this,
+                    new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                    {
+                        InitialLearningRate = _options.LearningRate,
+                        Beta1 = 0.9,
+                        Beta2 = 0.999,
+                        Epsilon = 1e-8,
+                        WeightDecay = _options.WeightDecay,
+                    }
+                ));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.ProjectionDim;
