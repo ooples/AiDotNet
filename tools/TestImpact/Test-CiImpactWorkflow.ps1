@@ -17,7 +17,8 @@
 param(
     [string] $ValidationWorkflow = '.github/workflows/sonarcloud.yml',
     [string] $MapWorkflow = '.github/workflows/test-impact-map.yml',
-    [string] $CertifiedMapResolver = 'tools/TestImpact/Resolve-CertifiedShardMap.ps1'
+    [string] $CertifiedMapResolver = 'tools/TestImpact/Resolve-CertifiedShardMap.ps1',
+    [string] $RequiredArtifactReceiver = 'tools/TestImpact/Receive-RequiredArtifact.ps1'
 )
 
 Set-StrictMode -Version Latest
@@ -104,6 +105,7 @@ function Get-ContinuedShellCommand {
 $validation = Get-Content -LiteralPath $ValidationWorkflow -Raw
 $map = Get-Content -LiteralPath $MapWorkflow -Raw
 $certifiedMapResolverText = Get-Content -LiteralPath $CertifiedMapResolver -Raw
+$requiredArtifactReceiverText = Get-Content -LiteralPath $RequiredArtifactReceiver -Raw
 
 # Every job in this list consumes meaningful runner time. Dependency-based incidental skipping is
 # not enough: a dependency can be removed during a refactor while the job remains runnable. Each
@@ -157,6 +159,75 @@ Assert-Contract ([bool] $selfTestStep) `
     'select-shards no longer runs the impact tooling self-tests'
 Assert-Contract (-not $selfTestStep.Contains('continue-on-error: true')) `
     'checked-in impact tooling can fail its self-tests while CI remains green'
+Assert-Contract ($selfTestStep.Contains('./tools/TestImpact/Receive-RequiredArtifact.ps1 -SelfTest')) `
+    'the required-artifact transport policy is not executed against its self-tests'
+
+# A 100+ shard fan-out must not resolve the same build artifact by name in every job. That path calls
+# ListArtifacts concurrently and GitHub responds with a secondary-rate-limit 403. The build publishes
+# the immutable ID and digest once; both consumer matrices use the tested direct receiver, retain hard
+# failure on exhaustion, and suppress output uploads when their prerequisite never arrived.
+$buildJob = Get-JobBlock -WorkflowText $validation -Job 'build'
+$buildHeader = Get-JobHeader -JobBlock $buildJob
+$buildUpload = Get-StepBlock -JobBlock $buildJob -Step 'Upload build artifacts'
+Assert-Contract ($buildHeader.Contains('artifact_id: ${{ steps.upload-build-artifact.outputs.artifact-id }}')) `
+    'build does not expose the immutable artifact ID to its consumers'
+Assert-Contract ($buildHeader.Contains('artifact_digest: ${{ steps.upload-build-artifact.outputs.artifact-digest }}')) `
+    'build does not expose the upload digest to its consumers'
+Assert-Contract ($buildUpload.Contains('id: upload-build-artifact')) `
+    'the build artifact upload has no stable step identity for its outputs'
+
+Assert-Contract ($requiredArtifactReceiverText.Contains('enum ArtifactRequestDisposition')) `
+    'artifact retry state is represented by strings instead of a closed type'
+Assert-Contract ($requiredArtifactReceiverText.Contains('actions/artifacts/$ArtifactId/zip')) `
+    'required artifact transport does not use the immutable-ID archive endpoint'
+Assert-Contract (-not $requiredArtifactReceiverText.Contains('ArtifactService/ListArtifacts')) `
+    'required artifact transport still performs the rate-limited artifact-list lookup'
+Assert-Contract ($requiredArtifactReceiverText.Contains('Test-ArtifactDigest')) `
+    'direct artifact transport does not validate the upload digest before extraction'
+Assert-Contract ($requiredArtifactReceiverText.Contains('secondary rate limit')) `
+    'artifact transport does not distinguish transient throttling from a permission denial'
+Assert-Contract ($requiredArtifactReceiverText.Contains('Start-Sleep -Seconds $delay')) `
+    'artifact transport retries immediately instead of applying its tested backoff policy'
+Assert-Contract ($requiredArtifactReceiverText.Contains('$PSNativeCommandUseErrorActionPreference = $false')) `
+    'native-command error handling can bypass the typed artifact retry policy'
+
+$artifactConsumers = @('test-net10-sharded', 'model-shape-conformance-windows')
+foreach ($job in $artifactConsumers) {
+    $consumer = Get-JobBlock -WorkflowText $validation -Job $job
+    $header = Get-JobHeader -JobBlock $consumer
+    $download = Get-StepBlock -JobBlock $consumer -Step 'Download required build artifact'
+    Assert-Contract ([bool] $download) `
+        "artifact consumer '$job' does not use the required-artifact transport"
+    Assert-Contract ($download.Contains('./tools/TestImpact/Receive-RequiredArtifact.ps1')) `
+        "artifact consumer '$job' bypasses the tested receiver"
+    Assert-Contract ($download.Contains("-ArtifactId '`${{ needs.build.outputs.artifact_id }}'")) `
+        "artifact consumer '$job' does not bind the immutable build artifact ID"
+    Assert-Contract ($download.Contains("-ExpectedDigest '`${{ needs.build.outputs.artifact_digest }}'")) `
+        "artifact consumer '$job' does not bind the build artifact digest"
+    Assert-Contract (-not $download.Contains('continue-on-error: true')) `
+        "artifact consumer '$job' can pass without its required build output"
+    Assert-Contract ($download.Contains('timeout-minutes: 25')) `
+        "artifact consumer '$job' does not reserve the bounded retry and extraction budget"
+    Assert-Contract (-not $consumer.Contains('Retry build artifact download')) `
+        "artifact consumer '$job' retains the immediate retry that caused repeated 403 responses"
+    Assert-Contract ($header -match '(?m)^      actions: read\s*$') `
+        "artifact consumer '$job' lacks actions:read for the archive endpoint"
+}
+
+$testConsumer = Get-JobBlock -WorkflowText $validation -Job 'test-net10-sharded'
+foreach ($stepName in @(
+    'Upload test-impact digest',
+    'Upload coverage + test results',
+    'Upload crash evidence',
+    'Upload compact test diagnostics')) {
+    $upload = Get-StepBlock -JobBlock $testConsumer -Step $stepName
+    Assert-Contract ($upload.Contains("if: always() && steps.download-build-artifacts.outcome == 'success'")) `
+        "'$stepName' can amplify an artifact-service failure after the required download failed"
+}
+$shapeConsumer = Get-JobBlock -WorkflowText $validation -Job 'model-shape-conformance-windows'
+$shapeUpload = Get-StepBlock -JobBlock $shapeConsumer -Step 'Upload window report'
+Assert-Contract ($shapeUpload.Contains("if: always() && steps.download-build-artifacts.outcome == 'success'")) `
+    'shape-conformance can upload after its required build artifact was unavailable'
 
 $promotion = Get-JobBlock -WorkflowText $validation -Job 'promote-ci-test-analysis'
 Assert-Contract ($promotion.Contains("needs.validation-source.outputs.reuse == 'true'")) `
