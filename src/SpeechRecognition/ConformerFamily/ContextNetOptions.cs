@@ -119,7 +119,7 @@ public class ContextNetOptions : ModelOptions
     private static string[] GetDefaultVocabulary() => new[] { "<blank>", "<pad>", "<s>", "</s>", "<unk>", "|", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "'", " " };
 
     /// <summary>Validates the configuration.</summary>
-    /// <exception cref="ArgumentException">The vocabulary and its declared size disagree.</exception>
+    /// <exception cref="InvalidOperationException">The vocabulary and its declared size disagree.</exception>
     /// <remarks>
     /// A size that does not match the token list is not recoverable at decode time: the output layer
     /// emits ids the vocabulary cannot name, and the only options left are to drop them silently or to

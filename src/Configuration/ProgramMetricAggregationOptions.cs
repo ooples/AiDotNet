@@ -105,7 +105,7 @@ public sealed class ProgramMetricAggregationOptions
 
     /// <summary>Rejects a configuration that could not produce a defensible score.</summary>
     /// <exception cref="ArgumentOutOfRangeException"><see cref="Strategy"/> is undefined, or a numeric setting is not finite or is negative.</exception>
-    /// <exception cref="ArgumentException">
+    /// <exception cref="InvalidOperationException">
     /// A required setting is missing for the chosen strategy: an empty combined-score key, no positive weight, or a
     /// weighted metric with no reference value under the Chebyshev strategy.
     /// </exception>

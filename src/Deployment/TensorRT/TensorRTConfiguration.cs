@@ -185,7 +185,7 @@ public class TensorRTConfiguration
     /// <summary>
     /// Validates the configuration and throws exceptions for invalid settings.
     /// </summary>
-    /// <exception cref="ArgumentException">Thrown when INT8 is enabled without calibration data</exception>
+    /// <exception cref="InvalidOperationException">Thrown when INT8 is enabled without calibration data</exception>
     /// <exception cref="FileNotFoundException">Thrown when calibration data path is specified but file doesn't exist</exception>
     public void Validate()
     {
