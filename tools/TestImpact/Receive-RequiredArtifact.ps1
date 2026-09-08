@@ -138,6 +138,14 @@ function Get-SmallResponseBody {
     return [string] (Get-Content -LiteralPath $Path -Raw)
 }
 
+function Get-CurlApplicationPath {
+    # Ubuntu exposes the same executable through /usr/bin and /bin. Property enumeration on the
+    # unbounded Get-Command result joins both paths into one invalid invocation target.
+    $command = Get-Command curl -CommandType Application -ErrorAction Stop |
+        Select-Object -First 1
+    return [string] $command.Source
+}
+
 if ($SelfTest) {
     $secondary = '{"message":"You have exceeded a secondary rate limit. Please wait."}'
     Assert-True ((Get-ArtifactRequestDisposition 22 403 $secondary) -eq
@@ -172,6 +180,12 @@ if ($SelfTest) {
     Assert-True ((Get-RetryDelaySeconds -FailedAttempt 1 -WorkflowRunId 100 -MatrixJobIndex 7 `
         -RetryAfterSeconds 180) -ge 180) 'Retry-After was shortened'
 
+    $curlApplicationPath = Get-CurlApplicationPath
+    Assert-True (-not [string]::IsNullOrWhiteSpace($curlApplicationPath)) `
+        'curl application resolution returned no executable path'
+    Assert-True (Test-Path -LiteralPath $curlApplicationPath -PathType Leaf) `
+        'curl application resolution did not return one executable'
+
     $digestFixture = Join-Path ([IO.Path]::GetTempPath()) `
         ("aidotnet-artifact-digest-" + [guid]::NewGuid().ToString('N'))
     try {
@@ -197,7 +211,7 @@ if ([string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
     throw 'GITHUB_TOKEN is required to download a workflow artifact by ID'
 }
 
-$curl = Get-Command curl -CommandType Application -ErrorAction Stop
+$curlApplicationPath = Get-CurlApplicationPath
 $destinationPath = [IO.Path]::GetFullPath($Destination)
 [IO.Directory]::CreateDirectory($destinationPath) | Out-Null
 
@@ -216,7 +230,7 @@ try {
         }
 
         Write-Host "Downloading required artifact $ArtifactId directly (attempt $attempt/$MaxAttempts)."
-        $statusText = @(& $curl.Source `
+        $statusText = @(& $curlApplicationPath `
             --silent --show-error --location --proto-redir '=https' --fail-with-body `
             --connect-timeout 30 --max-time 300 `
             --output $archivePath --dump-header $headersPath --write-out '%{http_code}' `
