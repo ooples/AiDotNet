@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -48,6 +50,10 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2021,
     Authors = "Yan et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-9,
+                Source = "Yan et al. 2021, Sec. 3: the Adam optimizer with beta1 0.9, beta2 0.98 and "
+                        + "epsilon 1e-9. The paper states no learning rate in its training description, "
+                        + "so none is declared.")]
 public partial class AdaSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     private readonly AdaSpeech2Options _options;
@@ -91,7 +97,9 @@ public partial class AdaSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
     {
         _options = options ?? new AdaSpeech2Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
