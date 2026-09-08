@@ -17,12 +17,13 @@ var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>()
                   .ConfigureModel(model);
 ```
 
-In `src/NeuralNetworks` that surface does not work. The `Options` object is
+In `src/NeuralNetworks`, `src/Video` and `src/Document` that surface does not
+work. The `Options` object is
 accepted, stored, and returned by `GetOptions()`, but **no value is ever read
 from it**. Every tunable value lives instead in a defaulted constructor
 parameter that has no `Options` equivalent.
 
-This design makes `Options` load-bearing for the 90 affected models, adds a
+This design makes `Options` load-bearing across those three areas, adds a
 compiler-checked ratchet so the two surfaces cannot drift apart again, and adds
 paper-fidelity tests for the default values — which measurement shows are
 currently placeholders, not paper values.
@@ -88,7 +89,8 @@ Across all 1,622 `*Options.cs` files under `src/`:
 | Document | 30 | 3 | 0 | 27 |
 
 Five of the eight largest areas have **zero** inert Options classes. Of the 200
-fully-inert classes in the entire repository, 99 are in `src/NeuralNetworks`.
+fully-inert classes in the entire repository, 169 are in the three areas this
+spec covers: `NeuralNetworks` (99), `Video` (43) and `Document` (27).
 
 **This is the load-bearing finding: the target design is not new work to invent.
 It is already implemented, at scale, in five areas of this repository. #2090 is
@@ -119,6 +121,21 @@ factories, `VisionLanguage`, `Audio`, `SpeechRecognition`) and placeholder
 defaults (the `NeuralNetworks` sequence models). Paper verification is therefore
 **not** a redundant audit of values that are already right — it has real defects
 to find, and it is in scope for this work.
+
+### 2.5 `Video` and `Document` have the identical defect
+
+Scanned with the same rules, recursing into subdirectories because models there
+are not flat files:
+
+| Area | Types with a public ctor | Models with >=1 tunable param | Tunable params | Covered by Options |
+| --- | ---: | ---: | ---: | ---: |
+| `src/Video` | 108 | 44 | 134 | **0** |
+| `src/Document` | 29 | 29 | 205 | **2** |
+
+`src/Document` is the worst-affected area in the repository by density: **every
+one** of its 29 model types carries tunable constructor parameters, averaging
+seven each, and only 2 of 205 have an Options property. `TrOCR` and `Donut`
+carry 11 apiece.
 
 ---
 
@@ -180,7 +197,11 @@ independent evidence that the Options-driven route is the intended direction.
 
 ### 5.1 Scope
 
-Of the 470 tunable parameters:
+Across the three areas: 470 parameters in `NeuralNetworks`, 134 in `Video`,
+205 in `Document` — **809 total, of which 3 have an Options property, leaving
+806 missing**. 806 is the figure the ratchet counts.
+
+Of the 470 in `NeuralNetworks`:
 
 | Group | Models | Params | Disposition |
 | --- | ---: | ---: | --- |
@@ -191,7 +212,24 @@ Of the 470 tunable parameters:
 | **Embedding & retrieval** (BGE, ColBERT, SGPT, SPLADE, SimCSE, Instructor, Matryoshka, FastText, GloVe, Word2Vec, TransformerEmbedding) | 11 | 77 | In scope → `EmbeddingModelOptions` |
 | **GAN family** | 10 | 41 | In scope → `GanOptions` |
 | **Long tail** (graph nets, classic CNN/RNN, autoencoders, RBM/DBM, spiking, mesh/voxel, …) | 40 | 97 | In scope; sub-clustered in phase 5 |
-| **Total in scope** | **90** | **421** | |
+| **Total in scope, `NeuralNetworks`** | **90** | **420** | |
+
+`src/Video` (44 models, 134 params) and `src/Document` (29 models, 205 params)
+are in scope in full — neither contains architecture types or compiled-model
+hosts, so nothing is excluded. Their family bases are drawn from the bases the
+models already share (`DocumentNeuralNetworkBase<T>` and the `Video`
+equivalents), rather than from new groupings:
+
+| Area | Models | Params | Family base |
+| --- | ---: | ---: | --- |
+| `src/Document` | 29 | 205 | `DocumentModelOptions` under the existing `DocumentNeuralNetworkBase<T>` hierarchy |
+| `src/Video` | 44 | 134 | `VideoModelOptions`, sub-split by task (segmentation, generation, super-resolution, tracking) |
+
+**Grand total in scope: 163 models, 757 parameters.**
+
+Arithmetic: 806 missing, less the 49 out-of-scope (48 architecture types plus
+one compiled-model host), leaves 757. Within `NeuralNetworks` the five groups
+sum to 98 + 107 + 77 + 41 + 97 = 420, which is 469 missing less the same 49.
 
 The long tail is 40 models averaging 2.4 parameters each. It is the largest
 model count and the smallest per-model effort, but it is also where §9.3 (family
@@ -200,8 +238,9 @@ sequenced last.
 
 ### 5.2 Family base classes
 
-Four new base classes under `src/NeuralNetworks/Options/`, each declaring the
-shared knobs once:
+Six new base classes, each declaring the shared knobs once. Four live under
+`src/NeuralNetworks/Options/`; the `Video` and `Document` bases are colocated
+with their areas, matching how those areas already organise Options:
 
 - `SequenceModelOptions : NeuralNetworkOptions` — `VocabSize`, `ModelDimension`,
   `NumLayers`, `NumHeads`, `StateDimension`, `MaxSeqLength`, `ExpandFactor`,
@@ -244,14 +283,10 @@ public BGE(NeuralNetworkArchitecture<T> architecture, BGEOptions? options = null
 The body reads `_options.NumLayers` and passes it to the `LayerHelper` factory,
 in place of today's `_numLayers` field.
 
-**Deviation flagged for your decision.** When you chose this option it was
-described as keeping the long parameter lists as forwarding overloads. Your
-reply — "moving all constructor parameters to that model options class" — reads
-as removal, and removal is what makes the ratchet in §7 meaningful: a forwarding
-overload keeps the second surface alive, which is the thing being fixed. AiDotNet
-has not shipped v1, so there is no compatibility obligation. **If you want the
-overloads retained for a release, say so and §5.3 changes to keep them marked
-`[Obsolete]`.**
+**Decided 2026-09-08: remove them, with no `[Obsolete]` forwarding overloads.**
+A forwarding overload would keep alive exactly the second surface this work
+exists to eliminate, and the ratchet in §7 could never reach zero while one
+remained. AiDotNet has not shipped v1, so there is no compatibility obligation.
 
 `CreateNewInstance()` implementations that currently re-pass the scalar fields
 (e.g. `Zamba2LanguageModel.cs:192`) are rewritten to pass `_options`.
@@ -273,8 +308,13 @@ the leaf constructor** (the RT2 pattern), for three reasons:
    constant.
 
 Infrastructure config (`TelemetryConfig`, `ProfilingConfig`, `AutoMLOptions`)
-keeps the nullable pattern unchanged. **This is a deliberate deviation from a
-standing rule and needs your explicit acceptance.**
+keeps the nullable pattern unchanged.
+
+**Decided 2026-09-08: adopt the RT2 pattern for model hyperparameters.**
+`CLAUDE.md` has been amended (2026-09-08) to scope its nullable +
+`GetEffectiveX()` rule to infrastructure configuration and to add a "Model
+Hyperparameter Options" section carrying this pattern, so the two conventions are
+written down rather than left as an undocumented split.
 
 ### 5.5 Conflict between `Layers` and topology knobs
 
@@ -322,9 +362,26 @@ before v1 rather than after.
 in-scope model that have no correspondingly-named property on that model's
 `Options` type.
 
-- **Baseline today: 470. Out-of-scope floor: 49. In-scope target: 0.**
+**What counts as a model:** any concrete type transitively assignable to
+`NeuralNetworkBase<T>`. This matters — most models do not name that base
+directly. `BGE` derives from `TransformerEmbeddingNetwork<T>`,
+`MambaLanguageModel` from `TokenLanguageModelLayoutBase<T>`, `TrOCR` from
+`DocumentNeuralNetworkBase<T>`; a repo-wide search for `: NeuralNetworkBase<`
+under `src/NeuralNetworks` finds only 3 files. Reflection walks the base chain
+and gets this right; no file-path or naming heuristic does.
+
+- **Baseline: 806 missing across the three areas** (809 tunable parameters, 3
+  already covered). **Out-of-scope floor: 49. In-scope target: 0**, i.e. the
+  ratchet ends at 49 and every unit of the 757 in-scope is accounted for by a
+  phase in §8.
 - Implemented as a reflection test over `AiDotNet.dll`, so it needs no
   documentation to exist and cannot be defeated by #2088's doc deletions.
+- **The figures above come from a file-based scanner and are a proxy.** It keys
+  off file names and top-level directories, so it counts some non-model types in
+  `Video` and misses models that share a file. Phase 1's reflection test
+  establishes the authoritative baseline, and if that number differs from 806 the
+  reflection number wins and this section is corrected rather than the test being
+  tuned to match.
 - Stored as a single integer in
   `tests/AiDotNet.Tests/IntegrationTests/Configuration/OptionsSurfaceRatchet.txt`,
   alongside the existing `SourceGeneratorCoverageTests` convention. The test
@@ -337,7 +394,7 @@ baseline scan and must be excluded by the test, not by the scanner's accident):
 - the `options` parameter itself
 - parameters whose type is an interface or delegate (optimizer, loss function,
   tokenizer) — collaborators, not configuration
-- the four architecture types and two compiled-model hosts of §5.1
+- the five architecture types and two compiled-model hosts of §5.1
 - `modelIdentity`, and any parameter typed `string?` defaulting to `null` that
   names an artifact path rather than a hyperparameter
 
@@ -355,21 +412,28 @@ Each phase is independently mergeable and leaves the build green.
 
 | Phase | Content | Ratchet |
 | --- | --- | --- |
-| 1 | Four family base classes; ratchet test with baseline 470; the §7 behavioural assertion marked `Skip` until phase 2 | 470 |
-| 2 | Sequence / language models (18) — properties, defaults, constructor rewrite, `CreateNewInstance` | 470 → 372 |
-| 3 | Vision-language / multimodal (11) | 372 → 265 |
-| 4 | Embedding & retrieval (11) and GAN (10) | 265 → 147 |
-| 5 | Long tail (40); every in-scope model now reads its Options | 147 → 49 |
-| 6 | `docs/model-paper-defaults.tsv`, `[PaperDefaults]`, fidelity test, correction of the §2.4 placeholder values | 49 |
+| 1 | Six family base classes; ratchet test establishing the authoritative baseline; the §7 behavioural assertion marked `Skip` until phase 2 | 806 |
+| 2 | `NeuralNetworks` — sequence / language models (18 models, 98 params) | 806 → 708 |
+| 3 | `NeuralNetworks` — vision-language / multimodal (11 models, 107 params) | 708 → 601 |
+| 4 | `NeuralNetworks` — embedding & retrieval (11, 77) and GAN (10, 41) | 601 → 483 |
+| 5 | `NeuralNetworks` — long tail (40 models, 97 params) | 483 → 386 |
+| 6 | `src/Document` (29 models, 203 missing) | 386 → 183 |
+| 7 | `src/Video` (44 models, 134 params) | 183 → 49 |
+| 8 | `docs/model-paper-defaults.tsv`, `[PaperDefaults]`, fidelity test, correction of the §2.4 placeholder values | 49 |
 
 The floor of 49 is the out-of-scope architecture types and compiled-model hosts
 of §5.1, which the ratchet excludes from its in-scope count but which are listed
 here so the arithmetic is checkable.
 
-Phase 6 is the only phase that changes numerical behaviour. Splitting it out
+`Document` precedes `Video` because it is the denser defect (every one of its 29
+models is affected, averaging seven parameters each) and because its models
+already share `DocumentNeuralNetworkBase<T>`, so its family base is read off the
+existing hierarchy rather than inferred.
+
+Phase 8 is the only phase that changes numerical behaviour. Splitting it out
 keeps the mechanical rewiring reviewable separately from the value changes.
-Phases 2-5 are each large enough to exceed the 100-file PR limit for the bigger
-groups; each will be split by family, not by arbitrary file count.
+Several phases exceed the 100-file PR limit; each will be split by family, not by
+arbitrary file count.
 
 ---
 
@@ -390,9 +454,13 @@ groups; each will be split by family, not by arbitrary file count.
    hierarchy that exists today. If two models share a parameter name with
    different meanings, the shared property is wrong. Phase 2 must verify each
    model's usage before hoisting, not trust the name.
-4. **`Video` (43 inert) and `Document` (27 inert)** have the same defect and are
-   not in this spec's scope. They should get their own issue rather than be
-   silently absorbed here.
+4. **Scope size.** Widening to `Video` and `Document` (decided 2026-09-08) takes
+   this to 163 models and 757 parameters across three areas. That is a large
+   change to land before v1, and it is the risk most likely to force a
+   re-scoping. The phasing in §8 is ordered so each area is independently
+   shippable: if time runs short, `NeuralNetworks` alone still closes the
+   user-facing defect, and the ratchet baseline simply stops descending rather
+   than the work being left half-migrated.
 5. **Unverified:** I have not yet confirmed that every in-scope model's layer
    stack actually derives from the parameters being moved. If some model ignores
    its own constructor parameter today, moving it to Options preserves a
@@ -416,10 +484,16 @@ Recorded so the spec can be reviewed against what was agreed:
 - An empty Options class can be legitimately correct (74 of 117 models have no
   tunable constructor parameters at all and need none)
 
-## 11. Decisions still needed from you
+## 11. Decisions resolved 2026-09-08
 
-1. §5.3 — remove the long constructor parameter lists, or keep them as
-   `[Obsolete]` forwarding overloads for one release?
-2. §5.4 — accept the deviation from CLAUDE.md's nullable + `GetEffectiveX()`
-   rule for model hyperparameters?
-3. §9.4 — file a separate issue for `Video` and `Document`, or widen this one?
+1. **§5.3 — remove the long constructor parameter lists**, with no `[Obsolete]`
+   forwarding overloads. Pre-v1, and a surviving overload would keep the ratchet
+   off zero permanently.
+2. **§5.4 — adopt the RT2 pattern** (non-nullable property on the family base,
+   paper default in the leaf constructor) for model hyperparameters. `CLAUDE.md`
+   has been amended accordingly.
+3. **§9.4 — widen #2090 to cover `Video` and `Document`** rather than filing a
+   follow-up issue. One sweep, one ratchet, one consistent result; the cost is
+   163 models and 757 in-scope parameters, tracked as the primary risk in §9.4.
+
+No open questions remain. Implementation begins at phase 1 on approval.
