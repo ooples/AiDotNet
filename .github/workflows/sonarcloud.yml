@@ -2295,7 +2295,12 @@ jobs:
   sonarcloud:
     name: SonarCloud Analysis
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Sonar compiler instrumentation makes this repository-wide build materially slower than the
+    # ordinary artifact build. Runs 34168592804 and 34183645757 both reached the old 45-minute
+    # ceiling while Build (Release) was still active, then spent GitHub's shutdown grace period
+    # before being reported as cancelled at 55 minutes. Keep the memory-safe -m:2 build below and
+    # give successful analysis enough headroom; this is a maximum, not a fixed runner duration.
+    timeout-minutes: 90
     permissions:
       actions: read
       contents: read
