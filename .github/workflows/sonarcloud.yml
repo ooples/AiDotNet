@@ -340,7 +340,7 @@ jobs:
     timeout-minutes: 75
     # CodeQL remains mandatory even for non-runtime changes because the active Main ruleset
     # requires a CodeQL result for the candidate commit. This is one job, not a model/test matrix.
-    if: "${{ fromJSON(needs.validation-source.outputs.execute_expensive) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ always() && !cancelled() && fromJSON(needs.validation-source.outputs.execute_expensive) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     permissions:
       contents: read
       security-events: write

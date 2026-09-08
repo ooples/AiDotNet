@@ -151,9 +151,12 @@ foreach ($job in $expensiveJobs) {
 # The active repository ruleset requires a CodeQL result for the candidate commit, even when no
 # runtime files changed. Keep it as one mandatory job while suppressing every model/test matrix.
 $codeqlJob = Get-JobBlock -WorkflowText $validation -Job 'codeql'
-Assert-Contract (-not (Get-JobHeader -JobBlock $codeqlJob).Contains(
+$codeqlHeader = Get-JobHeader -JobBlock $codeqlJob
+Assert-Contract (-not $codeqlHeader.Contains(
         'fromJSON(needs.select-shards.outputs.requires_validation')) `
     'CodeQL can be skipped even though the Main ruleset requires its result'
+Assert-Contract ($codeqlHeader.Contains('always()') -and $codeqlHeader.Contains('!cancelled()')) `
+    'CodeQL cannot publish its required result after a selector failure'
 
 $resolver = Get-JobBlock -WorkflowText $validation -Job 'validation-source'
 Assert-Contract ($resolver.Contains('steps.resolve.outputs.execute_expensive || steps.defaults.outputs.execute_expensive')) `
