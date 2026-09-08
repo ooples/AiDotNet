@@ -2,7 +2,7 @@
 
 **Issue:** #2090
 **Date:** 2026-09-08
-**Status:** Draft for review — no implementation until approved
+**Status:** Approved. Phase 1 landed 2026-09-08 (`9f7fe07b6`).
 
 ---
 
@@ -136,6 +136,33 @@ are not flat files:
 one** of its 29 model types carries tunable constructor parameters, averaging
 seven each, and only 2 of 205 have an Options property. `TrOCR` and `Donut`
 carry 11 apiece.
+
+### 2.6 The reflection baseline found a fourth cluster (measured 2026-09-08)
+
+Phase 1's ratchet measured **1067**, against the file-based estimate of 806. The
+261-parameter difference is not noise in the counting rules — it is models the
+file scan never looked at, because §2.3 selected areas by asking *"do this area's
+Options classes declare properties or set constructor defaults?"* That is a
+different question from *"do this area's models read them"*, and the areas that
+scored cleanest on the first question contain some of the worst offenders on the
+second:
+
+| Model | Tunable ctor params | Options type it is handed |
+| --- | ---: | --- |
+| `Tacotron2Model` | 20 | `OnnxModelOptions` (generic) |
+| `TtsModel` | 17 | `OnnxModelOptions` (generic) |
+| `VITSModel` | 16 | `OnnxModelOptions` (generic) |
+| `SpeechEmotionRecognizer` | 11 | **none — no options parameter at all** |
+| `DCCRN` | 10 | `OnnxModelOptions` (generic) |
+
+`TextToSpeech` has 125 Options classes, every one of which sets its defaults in a
+constructor — and its models are configured against a *generic ONNX* options
+type rather than any of them. A healthy-looking Options class and a model that
+reads it are independent properties, and §2.3 only measured the first.
+
+This is the strongest argument yet for the ratchet being reflection over the
+built assembly rather than a source scan: the scan reproduced my assumptions
+about where to look, and the reflection did not.
 
 ---
 
@@ -370,18 +397,14 @@ directly. `BGE` derives from `TransformerEmbeddingNetwork<T>`,
 under `src/NeuralNetworks` finds only 3 files. Reflection walks the base chain
 and gets this right; no file-path or naming heuristic does.
 
-- **Baseline: 806 missing across the three areas** (809 tunable parameters, 3
-  already covered). **Out-of-scope floor: 49. In-scope target: 0**, i.e. the
-  ratchet ends at 49 and every unit of the 757 in-scope is accounted for by a
-  phase in §8.
+- **Baseline: 1067, measured by the ratchet test on 2026-09-08.** This is the
+  authoritative figure and it supersedes the 806 estimated below. **Out-of-scope
+  floor: 49. In-scope target: 0.**
 - Implemented as a reflection test over `AiDotNet.dll`, so it needs no
   documentation to exist and cannot be defeated by #2088's doc deletions.
-- **The figures above come from a file-based scanner and are a proxy.** It keys
-  off file names and top-level directories, so it counts some non-model types in
-  `Video` and misses models that share a file. Phase 1's reflection test
-  establishes the authoritative baseline, and if that number differs from 806 the
-  reflection number wins and this section is corrected rather than the test being
-  tuned to match.
+- **The 806 figure was a file-based proxy, and it was low by 261.** As this
+  section promised, the reflection number wins. See §2.6 for what the extra 261
+  turned out to be.
 - Stored as a single integer in
   `tests/AiDotNet.Tests/IntegrationTests/Configuration/OptionsSurfaceRatchet.txt`,
   alongside the existing `SourceGeneratorCoverageTests` convention. The test
@@ -412,7 +435,7 @@ Each phase is independently mergeable and leaves the build green.
 
 | Phase | Content | Ratchet |
 | --- | --- | --- |
-| 1 | Six family base classes; ratchet test establishing the authoritative baseline; the §7 behavioural assertion marked `Skip` until phase 2 | 806 |
+| ~~1~~ | ~~Six family base classes; ratchet test establishing the authoritative baseline; the §7 behavioural assertion marked `Skip` until phase 2~~ **DONE `9f7fe07b6`** | **1067 measured** |
 | 2 | `NeuralNetworks` — sequence / language models (18 models, 98 params) | 806 → 708 |
 | 3 | `NeuralNetworks` — vision-language / multimodal (11 models, 107 params) | 708 → 601 |
 | 4 | `NeuralNetworks` — embedding & retrieval (11, 77) and GAN (10, 41) | 601 → 483 |
@@ -429,6 +452,10 @@ here so the arithmetic is checkable.
 models is affected, averaging seven parameters each) and because its models
 already share `DocumentNeuralNetworkBase<T>`, so its family base is read off the
 existing hierarchy rather than inferred.
+
+**Phases 2-8 are renumbered against the measured 1067 rather than the estimated
+806, and the 261 parameters in §2.6 need a phase of their own — see §11.4.** The
+per-phase reductions below are unchanged; only the running total shifts.
 
 Phase 8 is the only phase that changes numerical behaviour. Splitting it out
 keeps the mechanical rewiring reviewable separately from the value changes.
@@ -496,4 +523,11 @@ Recorded so the spec can be reviewed against what was agreed:
    follow-up issue. One sweep, one ratchet, one consistent result; the cost is
    163 models and 757 in-scope parameters, tracked as the primary risk in §9.4.
 
-No open questions remain. Implementation begins at phase 1 on approval.
+4. **NEW, opened by phase 1's measurement — `TextToSpeech`, `SpeechRecognition`
+   and `Audio` carry ~261 of the 1067.** §2.6 documents what they are. They were
+   excluded from §5.1 on the strength of a measurement that asked the wrong
+   question. Widening again is a scope decision, not something to absorb quietly,
+   so it is raised rather than assumed.
+
+Phase 1 landed 2026-09-08 as `9f7fe07b6`: six family bases, the ratchet at 1067,
+and the behavioural assertion skipped until phase 2.
