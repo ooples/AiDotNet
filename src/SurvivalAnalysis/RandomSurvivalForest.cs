@@ -353,7 +353,11 @@ public partial class RandomSurvivalForest<T> : SurvivalModelBase<T>
     public override Matrix<T> PredictSurvivalProbability(Matrix<T> x, Vector<T> times)
     {
         EnsureFitted();
-        return PredictSurvivalProbabilityInternal(x, times);
+
+        // Accepts either the covariates alone or the [event | covariates] design matrix Train takes.
+        // The trees split on training-covariate indices, so an extra leading column shifts every
+        // split onto the wrong feature. Predict and PredictHazardRatio both route through here.
+        return PredictSurvivalProbabilityInternal(ExtractCovariates(x), times);
     }
 
     private Matrix<T> PredictSurvivalProbabilityInternal(Matrix<T> x, Vector<T> times)

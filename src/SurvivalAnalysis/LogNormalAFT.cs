@@ -305,6 +305,9 @@ public partial class LogNormalAFT<T> : SurvivalModelBase<T>
     {
         EnsureFitted();
 
+        // Accepts either the covariates alone or the [event | covariates] design matrix Train takes.
+        x = ExtractCovariates(x);
+
         int numSubjects = x.Rows;
         var result = new Matrix<T>(numSubjects, times.Length);
         double sigma = NumOps.ToDouble(Scale);
@@ -336,6 +339,9 @@ public partial class LogNormalAFT<T> : SurvivalModelBase<T>
     public override Vector<T> PredictHazardRatio(Matrix<T> x)
     {
         EnsureFitted();
+
+        // Accepts either the covariates alone or the [event | covariates] design matrix Train takes.
+        x = ExtractCovariates(x);
 
         var coefficients = Coefficients ?? throw new InvalidOperationException("Model has not been fitted: Coefficients is null.");
         var result = new Vector<T>(x.Rows);
@@ -381,6 +387,9 @@ public partial class LogNormalAFT<T> : SurvivalModelBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         EnsureFitted();
+
+        // Accepts either the covariates alone or the [event | covariates] design matrix Train takes.
+        input = ExtractCovariates(input);
 
         var result = new Vector<T>(input.Rows);
 

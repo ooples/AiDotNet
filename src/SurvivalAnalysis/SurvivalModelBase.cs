@@ -447,6 +447,64 @@ public abstract partial class SurvivalModelBase<T> : ISurvivalModel<T>, IModelSh
     public abstract Vector<T> GetBaselineSurvival(Vector<T> times);
 
     /// <summary>
+    /// Reconciles a predict-time feature matrix with the <c>[event | covariates]</c> layout that
+    /// <see cref="Train(Matrix{T}, Vector{T})"/> consumes.
+    /// </summary>
+    /// <param name="input">Either the covariates alone, or the same design matrix that was trained on.</param>
+    /// <returns>The covariate columns, with the event indicator dropped if it was present.</returns>
+    /// <remarks>
+    /// <para>
+    /// A model fit through <c>Train</c> drops column 0 (the event indicator) before learning, so it
+    /// holds <see cref="NumFeatures"/> coefficients rather than <c>input.Columns</c> of them. Handing
+    /// the same matrix straight back to <c>Predict</c> would then run the coefficient loop one column
+    /// past its end — an <see cref="ArgumentOutOfRangeException"/> from inside the numeric code, which
+    /// says nothing about the actual mistake. This mirrors
+    /// <c>CausalModelBase.ExtractCovariates</c>, which reconciles the identical
+    /// <c>[treatment | covariates]</c> layout.
+    /// </para>
+    /// <para>
+    /// A matrix that already has <see cref="NumFeatures"/> columns is returned unchanged, so the
+    /// covariate-only path — <c>FitSurvival(x, times, events)</c>, or
+    /// <c>AiModelBuilder.Build(features, times, events)</c>, where the event indicator was never folded
+    /// into X — keeps working. The two widths differ by exactly one, so which one was passed is never
+    /// ambiguous.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="input"/> has neither <see cref="NumFeatures"/> nor <c>NumFeatures + 1</c> columns.
+    /// </exception>
+    protected Matrix<T> ExtractCovariates(Matrix<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+
+        if (input.Columns == NumFeatures)
+        {
+            return input;
+        }
+
+        if (input.Columns == NumFeatures + 1)
+        {
+            int n = input.Rows;
+            var covariates = new Matrix<T>(n, NumFeatures);
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = 0; j < NumFeatures; j++)
+                {
+                    covariates[i, j] = input[i, j + 1];
+                }
+            }
+
+            return covariates;
+        }
+
+        throw new ArgumentException(
+            $"Predict input has {input.Columns} columns but the model was fit with {NumFeatures} " +
+            $"covariates; expected {NumFeatures} (covariates only) or {NumFeatures + 1} " +
+            "([event | covariates], matching Train).",
+            nameof(input));
+    }
+
+    /// <summary>
     /// Standard prediction - returns hazard ratios or survival at median time.
     /// </summary>
     public abstract Vector<T> Predict(Matrix<T> input);

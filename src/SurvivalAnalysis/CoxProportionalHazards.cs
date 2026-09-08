@@ -421,6 +421,9 @@ public partial class CoxProportionalHazards<T> : SurvivalModelBase<T>
     {
         EnsureFitted();
 
+        // Accepts either the covariates alone or the [event | covariates] design matrix Train takes.
+        x = ExtractCovariates(x);
+
         var result = new Vector<T>(x.Rows);
 
         for (int i = 0; i < x.Rows; i++)

@@ -249,4 +249,76 @@ public class SurvivalCensoringTests
 
         Assert.Throws<ArgumentException>(() => Build().Train(wrongShape, Times()));
     }
+
+    /// <summary>
+    /// <c>Train(X, y)</c> then <c>Predict(X)</c> with the same X — the first thing anyone does.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Splitting the event indicator out of X leaves Train fitting on one fewer column than it was
+    /// handed, so a model that took <c>Predict</c>'s width at face value ran its coefficient loop one
+    /// column past the end (<c>CoxProportionalHazards</c>: an <c>ArgumentOutOfRangeException</c> from
+    /// inside the numeric code) or read the indicator as the first covariate and every covariate one
+    /// place to the left (the AFT models: a wrong answer, silently). Predict now reconciles both
+    /// widths, as <c>CausalModelBase</c> already did for <c>[treatment | covariates]</c>.
+    /// </para>
+    /// <para>
+    /// The other tests in this file all predict with <see cref="Covariates"/>, which is why none of
+    /// them caught it.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData("KaplanMeierEstimator")]
+    [InlineData("NelsonAalenEstimator")]
+    [InlineData("CoxProportionalHazards")]
+    [InlineData("WeibullAFT")]
+    [InlineData("LogNormalAFT")]
+    [InlineData("RandomSurvivalForest")]
+    public void PredictingWithTheMatrixItWasTrainedOn_AgreesWithPredictingOnTheCovariates(string model)
+    {
+        SurvivalModelBase<double> Build() => model switch
+        {
+            "KaplanMeierEstimator" => new KaplanMeierEstimator<double>(),
+            "NelsonAalenEstimator" => new NelsonAalenEstimator<double>(),
+            "CoxProportionalHazards" => new CoxProportionalHazards<double>(),
+            "WeibullAFT" => new WeibullAFT<double>(),
+            "LogNormalAFT" => new LogNormalAFT<double>(),
+            "RandomSurvivalForest" => new RandomSurvivalForest<double>(),
+            _ => throw new ArgumentOutOfRangeException(nameof(model))
+        };
+
+        var design = Design(Events());
+
+        var fitted = Build();
+        fitted.Train(design, Times());
+
+        // Neither call may throw, and the design matrix must not be read as an extra covariate.
+        var fromDesignMatrix = fitted.Predict(design);
+        var fromCovariates = fitted.Predict(Covariates());
+
+        Assert.Equal(Subjects, fromDesignMatrix.Length);
+        Assert.Equal(fromCovariates.Length, fromDesignMatrix.Length);
+        for (int i = 0; i < fromCovariates.Length; i++)
+        {
+            Assert.Equal(fromCovariates[i], fromDesignMatrix[i], 10);
+            Assert.False(double.IsNaN(fromDesignMatrix[i]), $"prediction[{i}] is NaN.");
+        }
+    }
+
+    /// <summary>
+    /// A width that is neither the covariates nor the design matrix is a real mistake, and saying so
+    /// beats indexing off the end of the coefficients.
+    /// </summary>
+    [Fact]
+    public void AWidthThatIsNeitherLayout_SaysWhatWasExpected()
+    {
+        var fitted = new CoxProportionalHazards<double>();
+        fitted.Train(Design(Events()), Times());
+
+        var ex = Assert.Throws<ArgumentException>(
+            () => fitted.Predict(new Matrix<double>(Subjects, 5)));
+
+        Assert.Contains("was fit with 1 covariates", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("expected 1", ex.Message, StringComparison.Ordinal);
+    }
 }
