@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -41,6 +43,12 @@ namespace AiDotNet.SpeechRecognition.Robust;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Improving Noise Robustness of Contrastive Speech Representation Learning with Speech Reconstruction", "https://arxiv.org/abs/2110.15430", Year = 2023, Authors = "Chang et al.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4,
+                Source = "Zhu et al. 2022, Sec. 3: models are trained with an Adam optimizer at a "
+                        + "learning rate of 2e-4, optimized by a CTC loss for 20k steps. The model keeps "
+                        + "its own optimizer and is verified against this record rather than built from "
+                        + "it: 2e-4 over 20k steps is a paper-scale recipe and leaves the loss flat over "
+                        + "the handful of steps a conformance run performs.")]
 public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly RobustConformerOptions _options; public override ModelOptions GetOptions() => _options;
@@ -50,7 +58,8 @@ public partial class RobustConformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     public bool SupportsWordTimestamps => false;
 
     public RobustConformer(NeuralNetworkArchitecture<T> architecture, string modelPath, RobustConformerOptions? options = null) : base(architecture) { _options = options ?? new RobustConformerOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public RobustConformer(NeuralNetworkArchitecture<T> architecture, RobustConformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new RobustConformerOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public RobustConformer(NeuralNetworkArchitecture<T> architecture, RobustConformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new RobustConformerOptions(); _useNativeMode = true; _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this)); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using adversarially-trained Conformer encoder with CTC.

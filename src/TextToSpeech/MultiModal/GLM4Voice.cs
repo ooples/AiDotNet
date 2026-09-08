@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -42,6 +44,11 @@ namespace AiDotNet.TextToSpeech.MultiModal;
     Year = 2024,
     Authors = "Zeng et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.95,
+                Source = "Zeng et al. 2024, Sec. 3: the AdamW optimizer with beta1 0.9 and beta2 0.95. "
+                        + "The 1e-5 at batch 4096 over 2 epochs in the same section fine-tunes the "
+                        + "speech tokenizer from whisper-large-v3, not this model, so no rate or batch "
+                        + "is declared.")]
 public partial class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts<T>
 {
     private readonly GLM4VoiceOptions _options;
@@ -83,7 +90,9 @@ public partial class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts
     {
         _options = options ?? new GLM4VoiceOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -44,6 +46,12 @@ namespace AiDotNet.SpeechRecognition.Robust;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Learning Audio-Visual Speech Representation by Masked Multimodal Cluster Prediction", "https://arxiv.org/abs/2201.02184", Year = 2022, Authors = "Shi et al.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.002, WarmupFraction = 0.08,
+                MinLearningRate = 0, Schedule = LearningRateSchedulerType.LinearWarmup,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
+                Source = "Shi et al. 2022, Sec. 4: the model is trained with Adam, warming the learning "
+                        + "rate up over the first 8 percent of updates to a peak of 0.002 and then "
+                        + "decaying it linearly.")]
 public partial class AVHuBERT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly AVHuBERTOptions _options; public override ModelOptions GetOptions() => _options;
@@ -53,7 +61,9 @@ public partial class AVHuBERT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<
     public bool SupportsWordTimestamps => false;
 
     public AVHuBERT(NeuralNetworkArchitecture<T> architecture, string modelPath, AVHuBERTOptions? options = null) : base(architecture) { _options = options ?? new AVHuBERTOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public AVHuBERT(NeuralNetworkArchitecture<T> architecture, AVHuBERTOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new AVHuBERTOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public AVHuBERT(NeuralNetworkArchitecture<T> architecture, AVHuBERTOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new AVHuBERTOptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using AV-HuBERT's multimodal pre-trained encoder with CTC.
