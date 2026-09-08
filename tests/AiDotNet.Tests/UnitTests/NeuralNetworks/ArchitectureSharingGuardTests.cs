@@ -161,19 +161,27 @@ public class ArchitectureSharingGuardTests
                     start.Wait();
                     try
                     {
-                        return new NeuralNetwork<double>(architecture) is not null;
+                        // Return the model itself so the winning owner remains strongly reachable
+                        // until every competing claim and the assertion have completed. Returning
+                        // only bool let GC collect the weakly-held winner mid-race, after which a
+                        // later claimant was correctly allowed to take an otherwise orphaned graph.
+                        return new NeuralNetwork<double>(architecture);
                     }
                     catch (InvalidOperationException)
                     {
-                        return false;
+                        return null;
                     }
                 }))
                 .ToArray();
 
             start.Set();
-            bool[] results = await Task.WhenAll(attempts);
+            NeuralNetwork<double>?[] results = await Task.WhenAll(attempts);
 
-            Assert.Equal(1, results.Count(succeeded => succeeded));
+            Assert.Equal(1, results.Count(model => model is not null));
+            foreach (var model in results)
+            {
+                model?.Dispose();
+            }
         }
     }
 

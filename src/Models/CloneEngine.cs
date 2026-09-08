@@ -514,19 +514,13 @@ public static class CloneEngine
         // constructor argument makes the reconstructed parent share those owned objects before its
         // parameter state is even restored. Let the blueprint produce an independent structural
         // copy; parameter tensors remain the responsibility of the parent's copy-on-write path.
+        // A failed configuration clone is not permission to return the mutable source object: the
+        // constructor consumes that reference before any later copy-on-write preflight can reject
+        // it. In particular, returning an owned NeuralNetworkArchitecture here either aliases its
+        // layers or trips its second-owner guard. Preserve the failure at this value boundary.
         if (value is IConfigurationCloneable configuration)
         {
-            try
-            {
-                return configuration.CloneConfiguration();
-            }
-            catch (Exception)
-            {
-                // Preserve the established fallback for a consumer-defined configuration that
-                // cannot be reconstructed. The parent's copy-on-write identity check will reject
-                // unsafe sharing and route to the eager serialization clone instead.
-                return value;
-            }
+            return configuration.CloneConfiguration();
         }
 
         // Noise schedulers are mutable model components even though they are not IFullModel and do
