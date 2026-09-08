@@ -99,7 +99,7 @@ esac
 exit "${PIPESTATUS[0]}"
 '@
     [IO.File]::WriteAllText($jqPath, $jqStub, [Text.UTF8Encoding]::new($false))
-    & $bash -lc "chmod +x '$($ghPath.Replace('\', '/'))' '$($jqPath.Replace('\', '/'))'"
+    & $bash -lc "chmod +x '$($ghPath.Replace('\', '/'))' '$($jqPath.Replace('\', '/'))' '$($resolverScript.Replace('\', '/'))'"
     if ($LASTEXITCODE -ne 0) { throw 'Could not make the command fixtures executable.' }
 
     function New-ProofZip {
