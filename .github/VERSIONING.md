@@ -236,6 +236,7 @@ Permissions are scoped by job:
 
 The workflow verifies that NuGet packages contain these target frameworks:
 - `net471` (.NET Framework 4.7.1)
+- `net8.0` (.NET 8)
 - `net10.0` (.NET 10)
 
 ## Best Practices
@@ -280,7 +281,7 @@ Look for `feat:`, `fix:`, etc. prefixes.
 
 **Solution:** Check `AiDotNet.csproj` has:
 ```xml
-<TargetFrameworks>net10.0;net471</TargetFrameworks>
+<TargetFrameworks>net10.0;net8.0;net471</TargetFrameworks>
 ```
 
 ## Manual Version Override (Emergency)

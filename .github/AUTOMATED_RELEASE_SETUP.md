@@ -27,7 +27,7 @@ Create a trusted-publishing policy at [nuget.org](https://www.nuget.org/account/
 | Workflow file | `release-please.yml` |
 | Environment | Leave blank |
 
-Enter only the workflow filename, not `.github/workflows/release-please.yml`. The policy is case-sensitive and must authorize every package published by this workflow. `NuGet/login` exchanges the job's GitHub OIDC identity for a short-lived API key; no long-lived NuGet API key is stored in GitHub.
+Enter only the workflow filename, not `.github/workflows/release-please.yml`. NuGet matches the owner, repository, workflow file, and environment values case-insensitively. The policy must authorize every package published by this workflow. `NuGet/login` exchanges the job's GitHub OIDC identity for a short-lived API key; no long-lived NuGet API key is stored in GitHub.
 
 Publishing fails closed if the policy does not match or NuGet does not issue a temporary key. See [NuGet trusted publishing](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing).
 
@@ -86,7 +86,7 @@ The workflow analyzes commit messages since the last git tag:
 2. **build-release**
    - Checks out the immutable release tag
    - Builds, signs, packs, and verifies all NuGet packages without OIDC permission
-   - Uploads the verified packages as an immutable, one-day workflow artifact
+   - Uploads the verified packages as an immutable, 30-day workflow artifact so a failed publish job can be retried without rebuilding packages
 
 3. **publish**
    - Downloads the exact artifact ID produced by `build-release`
@@ -227,9 +227,9 @@ After installation, verify the workflow is working:
 **Solutions**:
 - Verify `src/AiDotNet.csproj` has:
   ```xml
-  <TargetFrameworks>net10.0;net471</TargetFrameworks>
+  <TargetFrameworks>net10.0;net8.0;net471</TargetFrameworks>
   ```
-- Ensure project builds successfully for both targets locally:
+- Ensure project builds successfully for all targets locally:
   ```bash
   dotnet build src/AiDotNet.csproj -c Release
   ```

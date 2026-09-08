@@ -166,7 +166,7 @@ jobs:
           [ -f "$main" ] || { echo "Error: core package $main not found"; exit 1; }
 
           files=$(unzip -Z1 "$main")
-          for tfm in net471 net10.0; do
+          for tfm in net471 net8.0 net10.0; do
             echo "$files" | grep -qE "^lib/${tfm}/.+[.]dll$" || { echo "Error: Missing ${tfm} lib in $main"; exit 1; }
             echo "Found ${tfm} in $(basename "$main")"
           done
@@ -198,7 +198,7 @@ jobs:
           name: release-packages-${{ needs.release-please.outputs.tag_name }}
           path: out/*.nupkg
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 30
           compression-level: 0
 
   publish:
