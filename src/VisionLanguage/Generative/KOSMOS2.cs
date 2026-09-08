@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -55,6 +57,13 @@ namespace AiDotNet.VisionLanguage.Generative;
     Year = 2023,
     Authors = "Peng et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-4, Beta1 = 0.9, Beta2 = 0.98,
+                WarmupSteps = 375, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.LinearWarmup,
+                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
+                Source = "Peng et al. 2023, Sec. 3: the AdamW optimizer with betas (0.9, 0.98), the "
+                        + "learning rate increasing to 2e-4 over the first 375 warm-up steps and then "
+                        + "decaying linearly to zero.")]
 public partial class KOSMOS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly KOSMOS2Options _options;
@@ -101,7 +110,9 @@ public partial class KOSMOS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
         _options = options ?? new KOSMOS2Options();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

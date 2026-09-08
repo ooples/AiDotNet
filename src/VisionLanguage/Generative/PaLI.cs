@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -61,6 +63,15 @@ namespace AiDotNet.VisionLanguage.Generative;
     Year = 2023,
     Authors = "Chen et al."
 )]
+[PaperOptimizer(OptimizerKind.Adafactor, WarmupSteps = 1000,
+                Schedule = LearningRateSchedulerType.Noam,
+                Source = "Chen et al. 2023, Sec. 3: the Adafactor optimizer with a 1k-step linear "
+                        + "warmup followed by inverse square-root decay, declared here as Noam. The "
+                        + "paper states no peak learning rate in its training description, so none is "
+                        + "declared. The model keeps its own optimizer and is verified against this "
+                        + "record rather than built from it: with no peak stated, building from the "
+                        + "recipe would apply this warmup and inverse-square-root decay on top of the "
+                        + "library default rate.")]
 public partial class PaLI<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
     private readonly PaLIOptions _options;
@@ -104,7 +115,8 @@ public partial class PaLI<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
     {
         _options = options ?? new PaLIOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
