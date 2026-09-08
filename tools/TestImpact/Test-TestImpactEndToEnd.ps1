@@ -181,9 +181,37 @@ try {
             -not (Test-Path -LiteralPath missed-failure-certified/certification.json)) `
             'the end-to-end chain certified a map after selection skipped a failing shard'
 
+        # Return to the certified map's exact tree so this diff is precisely the three-file #2118
+        # counterexample, not accidentally mixed with the covered source edit used above.
+        Invoke-Git checkout --quiet --detach $baseSha
         New-Item -ItemType Directory -Path .github/workflows -Force | Out-Null
-        'name: changed-ci' | Set-Content -LiteralPath .github/workflows/fixture.yml -Encoding utf8
-        Invoke-Git add .github/workflows/fixture.yml
+        'release setup' | Set-Content -LiteralPath .github/AUTOMATED_RELEASE_SETUP.md -Encoding utf8
+        'versioning' | Set-Content -LiteralPath .github/VERSIONING.md -Encoding utf8
+        'name: release-please' | Set-Content -LiteralPath .github/workflows/release-please.yml -Encoding utf8
+        Invoke-Git add .github/AUTOMATED_RELEASE_SETUP.md .github/VERSIONING.md `
+            .github/workflows/release-please.yml
+        Invoke-Git commit --quiet -m non-runtime-change
+        & $selector -ClassifyOnly -BaseSha $baseSha -OutFile non-runtime-classification.json
+        Assert-True ($LASTEXITCODE -eq 0) 'the map-independent #2118 classifier failed'
+        $nonRuntimeClassification = Get-Content non-runtime-classification.json -Raw | ConvertFrom-Json
+        Assert-True (-not [bool] $nonRuntimeClassification.requiresValidation) `
+            'the map-independent #2118 classifier required runtime validation'
+        Assert-True (@($nonRuntimeClassification.changedPaths).Count -eq 3) `
+            'the map-independent #2118 classifier did not inspect exactly three paths'
+        & $selector -MapFile certified/shard-map.json `
+            -ExpectedShards @('Alpha', 'Beta', 'Always') -OutFile non-runtime-selection.json
+        Assert-True ($LASTEXITCODE -eq 0) 'the exact #2118 path set made the selector fail'
+        $nonRuntime = Get-Content non-runtime-selection.json -Raw | ConvertFrom-Json
+        Assert-True (-not [bool] $nonRuntime.escalate) 'the exact #2118 path set escalated'
+        Assert-True (-not [bool] $nonRuntime.requiresValidation) `
+            'the exact #2118 path set did not suppress runtime validation'
+        Assert-True (@($nonRuntime.shards).Count -eq 0) `
+            'the exact #2118 path set selected model/test shards'
+
+        # A real validation-control-plane edit mixed into the same otherwise non-runtime change set
+        # must reverse that decision and fail closed to full validation.
+        'name: changed-main-ci' | Set-Content -LiteralPath .github/workflows/sonarcloud.yml -Encoding utf8
+        Invoke-Git add .github/workflows/sonarcloud.yml
         Invoke-Git commit --quiet -m infrastructure-change
         $expectedEscalationOutput = @(& $selector -MapFile certified/shard-map.json `
             -ExpectedShards @('Alpha', 'Beta', 'Always') -OutFile infrastructure-selection.json 6>&1)
@@ -193,7 +221,29 @@ try {
         }
         Assert-True ($expectedEscalationExit -eq 0) 'an infrastructure edit made the selector fail'
         $infrastructure = Get-Content infrastructure-selection.json -Raw | ConvertFrom-Json
-        Assert-True ([bool] $infrastructure.escalate) 'a workflow edit did not fail closed to the full matrix'
+        Assert-True ([bool] $infrastructure.escalate) `
+            'the main validation workflow did not fail closed to the full matrix'
+        Assert-True ([bool] $infrastructure.requiresValidation) `
+            'the main validation workflow did not require runtime validation'
+
+        & $selector -ClassifyOnly -BaseSha 'ffffffffffffffffffffffffffffffffffffffff' `
+            -OutFile invalid-base-classification.json
+        $invalidBase = Get-Content invalid-base-classification.json -Raw | ConvertFrom-Json
+        Assert-True ([bool] $invalidBase.requiresValidation) `
+            'an unresolvable PR base authorized the non-runtime path'
+
+        # --no-renames is a safety boundary: source renamed to a Markdown destination must expose
+        # both paths, not classify from only the apparently harmless destination suffix.
+        Invoke-Git checkout --quiet --detach $baseSha
+        New-Item -ItemType Directory -Path docs -Force | Out-Null
+        Invoke-Git mv src/Feature.cs docs/Feature.md
+        Invoke-Git commit --quiet -m source-to-markdown-rename
+        & $selector -ClassifyOnly -BaseSha $baseSha -OutFile rename-classification.json
+        $renameClassification = Get-Content rename-classification.json -Raw | ConvertFrom-Json
+        Assert-True ([bool] $renameClassification.requiresValidation) `
+            'a source-to-Markdown rename incorrectly suppressed runtime validation'
+        Assert-True (@($renameClassification.changedPaths).Count -eq 2) `
+            'source-to-Markdown rename classification did not expose both sides'
 
         $badCertificate = Get-Content certified/certification.json -Raw | ConvertFrom-Json
         $badCertificate.missCount = 1
@@ -236,5 +286,5 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'Test-impact end-to-end proof passed: certified covered edit selected 2/3; CI edit escalated.'
+Write-Host 'Test-impact end-to-end proof passed: covered edit selected 2/3; #2118 selected none; CI control edit escalated.'
 exit 0
