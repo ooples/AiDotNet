@@ -223,10 +223,27 @@ Assert-Contract ($map.Contains("candidate_ready: `${{ steps.source.outputs.found
     'map workflow does not expose whether this invocation produced a candidate'
 Assert-Contract ($map.Contains("if: steps.audit.outputs.certified == 'true'")) `
     'certified artifact upload is not gated by the audit decision'
-Assert-Contract ($map.Contains("(Join-Path `$auditTools 'New-ShardMapCertificate.ps1')")) `
+$mapBuildJob = Get-JobBlock -WorkflowText $map -Job 'build-map'
+$auditStep = Get-StepBlock -JobBlock $mapBuildJob -Step 'Audit selection against the source run'
+$auditRead = '$a = Get-Content audit.json -Raw | ConvertFrom-Json'
+$certificateInvocation = "& (Join-Path `$auditTools 'New-ShardMapCertificate.ps1')"
+$auditReadIndex = $auditStep.IndexOf($auditRead, [StringComparison]::Ordinal)
+$certificateIndex = $auditStep.IndexOf($certificateInvocation, [StringComparison]::Ordinal)
+Assert-Contract ($certificateIndex -ge 0) `
     'the workflow does not execute the tested certification policy'
-Assert-Contract (-not ($map -match '\$a\.Failed -gt 0')) `
-    'map certification still depends on a naturally occurring shard failure'
+Assert-Contract ($auditReadIndex -ge 0 -and $certificateIndex -gt $auditReadIndex) `
+    'the workflow invokes certification before loading the audited result'
+Assert-Contract ($auditStep -match "(?m)^          $([Regex]::Escape($certificateInvocation))") `
+    'the certificate invocation is nested under a conditional instead of running at audit scope'
+if ($auditReadIndex -ge 0 -and $certificateIndex -gt $auditReadIndex) {
+    $beforeCertificate = $auditStep.Substring(
+        $auditReadIndex + $auditRead.Length,
+        $certificateIndex - ($auditReadIndex + $auditRead.Length))
+    Assert-Contract (-not ($beforeCertificate -match '(?m)^\s*(?:if|elseif|switch|foreach|while|do|return|exit)\b')) `
+        'control flow between audit loading and certification can bypass certificate generation'
+    Assert-Contract (-not $beforeCertificate.Contains('$a.Failed')) `
+        'certificate generation is gated on the observed shard failure count'
+}
 Assert-Contract ($map -match "if \[ '.*needs\.build-map\.result.*' = 'success' \] && \[ '.*candidate_ready.*' = 'true' \]") `
     'coverage dispatch can cite the current map run when no candidate was produced'
 

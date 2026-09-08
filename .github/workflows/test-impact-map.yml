@@ -379,13 +379,6 @@ jobs:
           $auditExit = $LASTEXITCODE
 
           $a = Get-Content audit.json -Raw | ConvertFrom-Json
-          $verdict = if ($a.Escalated) { 'would have escalated - nothing skipped' }
-                     elseif ($a.MissCount -gt 0) { "**$($a.MissCount) MISSED**: $($a.Missed -join ', ')" }
-                     elseif ($a.Failed -eq 0) { 'complete clean matrix; zero observed misses' }
-                     else { 'no misses' }
-          "### Selection audit`n`n- map in effect: ${{ steps.source.outputs.map_run_id }}`n- would run $($a.WouldRun)/$($a.TotalShards), skip $($a.WouldSkip)`n- $($a.Failed) shard(s) failed`n- $verdict" |
-            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-
           # The shipping policy is executable outside YAML. It validates the exact map universe,
           # source outcomes and audit counts before producing either file in the certified pair.
           & (Join-Path $auditTools 'New-ShardMapCertificate.ps1') `
@@ -398,6 +391,13 @@ jobs:
           $certified = Test-Path -LiteralPath certified-map/certification.json
           "certified=$($certified.ToString().ToLowerInvariant())" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+          $verdict = if ($a.Escalated) { 'would have escalated - nothing skipped' }
+                     elseif ($a.MissCount -gt 0) { "**$($a.MissCount) MISSED**: $($a.Missed -join ', ')" }
+                     elseif ($a.Failed -eq 0) { 'complete clean matrix; zero observed misses' }
+                     else { 'no misses' }
+          "### Selection audit`n`n- map in effect: ${{ steps.source.outputs.map_run_id }}`n- would run $($a.WouldRun)/$($a.TotalShards), skip $($a.WouldSkip)`n- $($a.Failed) shard(s) failed`n- $verdict" |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
           # Not certifying is the whole ballgame: the PR selector accepts only certified-shard-map,
           # so with no certificate every pull request runs the complete matrix. This step still exits
