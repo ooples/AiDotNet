@@ -133,4 +133,22 @@ public class ScheduleFreeAdamWTests
             $"the first step moved {firstMove} and a post-warmup step moved {afterWarmup}; the ramp "
             + "is not taking effect");
     }
+
+    [Fact]
+    public void NonZeroWeightDecayShrinksAZeroGradientFastIterate()
+    {
+        var optimizer = Create(o =>
+        {
+            o.InitialLearningRate = 0.1;
+            o.Interpolation = 0.9;
+            o.WeightDecay = 0.5;
+        });
+
+        var updated = optimizer.UpdateParameters(
+            new Vector<double>(new[] { 2.0, -2.0 }),
+            new Vector<double>(new[] { 0.0, 0.0 }));
+
+        Assert.Equal(1.9, updated[0], precision: 10);
+        Assert.Equal(-1.9, updated[1], precision: 10);
+    }
 }
