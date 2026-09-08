@@ -1,4 +1,5 @@
-﻿using System;
+﻿using AiDotNet.LearningRateSchedulers;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -82,6 +83,9 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("HiPPO: Recurrent Memory with Optimal Polynomial Projections", "https://arxiv.org/abs/2008.07669", Year = 2020, Authors = "Albert Gu, Tri Dao, Stefano Ermon, Atri Rudra, Christopher Re")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001, ReferenceBatchSize = 100,
+                Source = "Gu et al. 2020, Training Details: all methods use the Adam optimizer with the "
+                        + "learning rate frozen to 0.001, trained for 50 epochs at a batch size of 100.")]
 public partial class Hippo<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -234,7 +238,9 @@ public partial class Hippo<T> : ForecastingModelBase<T>
         _options = options ?? new HippoOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         SetBaseTrainOptimizer(_optimizer);
 
         _contextLength = _options.ContextLength;
@@ -282,7 +288,9 @@ public partial class Hippo<T> : ForecastingModelBase<T>
         _options = options ?? new HippoOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         SetBaseTrainOptimizer(_optimizer);
 
         _contextLength = _options.ContextLength;

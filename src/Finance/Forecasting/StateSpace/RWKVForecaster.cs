@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -66,6 +67,11 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("RWKV: Reinventing RNNs for the Transformer Era", "https://arxiv.org/abs/2305.13048", Year = 2023, Authors = "Bo Peng, Eric Alcaide, Quentin Anthony, Alon Albalak, Samuel Arcadinho")]
+[PaperOptimizer(OptimizerKind.Adam, MinLearningRate = 1e-5,
+                Source = "Peng et al. 2023, Table 3: the standard Adam optimizer, with an end learning "
+                        + "rate of 1e-5 for every model size up to 3B. No initial rate is declared "
+                        + "because the table sets it per size -- 0.0006 at 169M down to 0.0001 at 14B -- "
+                        + "along with a per-size warmup length.")]
 public partial class RWKVForecaster<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -210,17 +216,18 @@ public partial class RWKVForecaster<T> : ForecastingModelBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(
         RWKVForecastingOptions<T> options)
     {
-        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = options.LearningRate,
-                Beta1 = options.AdamBeta1,
-                Beta2 = options.AdamBeta2,
-                Epsilon = options.AdamEpsilon,
-                UseAdaptiveBetas = false,
-                UseAMSGrad = false
-            });
+        return PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = options.LearningRate,
+                    Beta1 = options.AdamBeta1,
+                    Beta2 = options.AdamBeta2,
+                    Epsilon = options.AdamEpsilon,
+                    UseAdaptiveBetas = false,
+                    UseAMSGrad = false
+                }));
     }
 
     #endregion
