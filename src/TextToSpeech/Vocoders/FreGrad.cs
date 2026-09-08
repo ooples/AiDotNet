@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,10 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2022,
     Authors = "Shin et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.0002, Beta1 = 0.9, Beta2 = 0.999,
+                ReferenceBatchSize = 16,
+                Source = "Nguyen et al. 2024, Sec. 4: the Adam optimizer with beta1 0.9, beta2 0.999, a "
+                        + "fixed learning rate of 0.0002 and a batch size of 16.")]
 public partial class FreGrad<T> : VocoderBase<T>
 {
     private readonly FreGradOptions _options;
@@ -80,7 +86,9 @@ public partial class FreGrad<T> : VocoderBase<T>
     {
         _options = options ?? new FreGradOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
