@@ -61,6 +61,19 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     private readonly ReplayBuffer<T> ReplayBuffer;
     private readonly NeuralNetworkArchitecture<T> _architecture;
 
+    /// <summary>
+    /// Current exploration rate, decayed toward <c>EpsilonEnd</c> as training proceeds.
+    /// </summary>
+    /// <remarks>
+    /// Held as state because an exploration SCHEDULE is state. Reading <c>EpsilonStart</c> directly on every
+    /// action — which is what this did — pins the behaviour policy at its initial value forever: with the
+    /// default 1.0 the agent acts uniformly at random for an entire run and its learning curve is noise.
+    /// </remarks>
+    private double _epsilon;
+
+    /// <summary>Training updates applied, so the target sync can be a schedule rather than a coin flip.</summary>
+    private int _trainSteps;
+
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
@@ -109,6 +122,7 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
         _qNetwork = new NeuralNetwork<T>(architecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         _targetNetwork = new NeuralNetwork<T>(architecture.CloneForModelConstruction(), lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
+        _epsilon = options.EpsilonStart;
         UpdateTargetNetwork();
     }
 
@@ -124,7 +138,7 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     /// </remarks>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        if (training && RandomHelper.CreateSecureRandom().NextDouble() < TradingOptions.EpsilonStart)
+        if (training && RandomHelper.CreateSecureRandom().NextDouble() < _epsilon)
         {
             var action = new Vector<T>(TradingOptions.ActionSize);
             int randomAction = RandomHelper.CreateSecureRandom().Next(TradingOptions.ActionSize);
@@ -224,12 +238,35 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
         var expected = new Tensor<T>([n, actionCount], expectedData);
         _qNetwork.Train(states, expected);
 
-        if (RandomHelper.CreateSecureRandom().Next(TradingOptions.TargetUpdateFrequency) == 0)
+        // A SCHEDULE, NOT A COIN FLIP. This drew Next(TargetUpdateFrequency) == 0 on every update, so with the
+        // default frequency of 1000 and a few hundred updates per run the target network synced roughly 0.6
+        // times PER RUN, at random moments. Deterministic counting makes "every N updates" mean what it says,
+        // and makes two runs with the same seed comparable.
+        _trainSteps++;
+        if (_trainSteps % Math.Max(1, TradingOptions.TargetUpdateFrequency) == 0)
         {
             UpdateTargetNetwork();
         }
 
+        // Decay toward the floor, matching DoubleDQNAgent's schedule so the two agents anneal identically.
+        _epsilon = Math.Max(TradingOptions.EpsilonEnd, _epsilon * TradingOptions.EpsilonDecay);
+
         return NumOps.Zero;
+    }
+
+    /// <summary>
+    /// Adds the current exploration rate to the reported metrics.
+    /// </summary>
+    /// <remarks>
+    /// Without this there is no way to tell an agent that annealed from one that never explored: both report
+    /// the same rewards, and the difference lives only in a private field. Matches DoubleDQNAgent, which
+    /// already publishes "Epsilon".
+    /// </remarks>
+    public override Dictionary<string, T> GetTradingMetrics()
+    {
+        var metrics = base.GetTradingMetrics();
+        metrics["Epsilon"] = NumOps.FromDouble(_epsilon);
+        return metrics;
     }
 
     /// <summary>
