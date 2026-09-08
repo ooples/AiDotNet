@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -64,6 +65,12 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2407.02315",
     Year = 2024,
     Authors = "Guozhen Zhang, Chunxu Liu, Yuhan Zhu, Limin Wang")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-4, Beta1 = 0.9, Beta2 = 0.999,
+                WeightDecay = 1e-4, WarmupSteps = 2000, MinLearningRate = 2e-5,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Zhang et al. 2024, Sec. 4.1: AdamW with beta1 0.9, beta2 0.999 and a weight "
+                        + "decay of 1e-4, warming up over 2,000 steps to 2e-4 and then cosine annealing "
+                        + "over 300 epochs down to 2e-5.")]
 public partial class VFIMamba<T> : FrameInterpolationBase<T>
 {
     private readonly VFIMambaOptions _options;
@@ -109,11 +116,12 @@ public partial class VFIMamba<T> : FrameInterpolationBase<T>
     {
         _options = options ?? new VFIMambaOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate
+                }));
         SupportsArbitraryTimestep = true;
         InitializeLayers();
     }
