@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -65,6 +67,14 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Jiang et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 1e-3, ReferenceBatchSize = 256,
+                WarmupFraction = 0.03, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Jiang et al. 2024, Sec. 3.1: the multimodal projector is pre-trained on LLaVA "
+                        + "pre-train data at a learning rate of 1e-3 and a batch size of 256, with a "
+                        + "warmup ratio of 0.03 and a cosine learning rate scheduler. The optimizer is "
+                        + "left unspecified because the paper names none.")]
 public partial class Mantis<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MantisOptions _options;
@@ -110,7 +120,8 @@ public partial class Mantis<T> : VisionLanguageModelBase<T>, IInstructionTunedVL
         _options = options ?? new MantisOptions();
         _options.ValidateVisualSizing();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
