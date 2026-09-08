@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Validates that a shard map carries a failure-bearing, zero-miss audit certificate from its run.
+    Validates that a shard map carries a complete, zero-miss audit certificate from its run.
 #>
 [CmdletBinding(DefaultParameterSetName = 'Validate')]
 param(
@@ -15,32 +15,32 @@ $ErrorActionPreference = 'Stop'
 
 function ConvertTo-RequiredInteger {
     param([object] $Value, [string] $Name, [long] $Minimum = 0)
-    $parsed = 0L
-    if ($null -eq $Value -or -not [long]::TryParse(
-        [string] $Value,
-        [Globalization.NumberStyles]::Integer,
-        [Globalization.CultureInfo]::InvariantCulture,
-        [ref] $parsed)) {
-        throw "$Name must be an integer"
-    }
-    if ($parsed -lt $Minimum) { throw "$Name must be at least $Minimum" }
-    return $parsed
+    $isInteger = $Value -is [byte] -or $Value -is [sbyte] -or
+        $Value -is [int16] -or $Value -is [uint16] -or
+        $Value -is [int32] -or $Value -is [uint32] -or
+        $Value -is [int64] -or $Value -is [uint64]
+    if (-not $isInteger) { throw "$Name must be a JSON integer" }
+    $number = [long] $Value
+    if ($number -lt $Minimum) { throw "$Name must be at least $Minimum" }
+    return $number
 }
 
 function Assert-CertifiedShardMap {
     param([object] $Map, [object] $Certificate, [long] $ExpectedCertificationRunId)
 
-    foreach ($name in 'schemaVersion', 'sha') {
+    foreach ($name in 'schemaVersion', 'sha', 'knownShards', 'alwaysRun') {
         if (-not $Map.PSObject.Properties[$name]) { throw "map is missing $name" }
     }
     foreach ($name in 'schemaVersion', 'candidateMapRunId', 'candidateMapSha',
         'auditSourceRunId', 'auditSourceSha', 'certificationRunId', 'escalated',
-        'wouldRun', 'wouldSkip', 'failedShards', 'missCount') {
+        'auditedShards', 'wouldRun', 'wouldSkip', 'failedShards', 'missCount') {
         if (-not $Certificate.PSObject.Properties[$name]) { throw "certificate is missing $name" }
     }
 
+    $mapSchema = ConvertTo-RequiredInteger -Value $Map.schemaVersion -Name 'map schemaVersion' -Minimum 1
+    if ($mapSchema -ne 1) { throw "unsupported map schema $mapSchema" }
     $schema = ConvertTo-RequiredInteger -Value $Certificate.schemaVersion -Name 'certificate schemaVersion' -Minimum 1
-    if ($schema -ne 1) { throw "unsupported certification schema $schema" }
+    if ($schema -ne 2) { throw "unsupported certification schema $schema" }
     $actualRun = ConvertTo-RequiredInteger -Value $Certificate.certificationRunId -Name 'certificationRunId' -Minimum 1
     if ($actualRun -ne $ExpectedCertificationRunId) {
         throw "certificate belongs to run $actualRun, not artifact run $ExpectedCertificationRunId"
@@ -51,9 +51,34 @@ function Assert-CertifiedShardMap {
     if ($misses -ne 0) { throw "certificate records $misses selection miss(es)" }
     if ($Certificate.escalated -isnot [bool]) { throw 'escalated must be a JSON boolean' }
     if ([bool] $Certificate.escalated) { throw 'certificate records an escalated plan, not reduction' }
-    [void] (ConvertTo-RequiredInteger -Value $Certificate.wouldRun -Name 'wouldRun' -Minimum 1)
-    [void] (ConvertTo-RequiredInteger -Value $Certificate.wouldSkip -Name 'wouldSkip' -Minimum 1)
-    [void] (ConvertTo-RequiredInteger -Value $Certificate.failedShards -Name 'failedShards' -Minimum 1)
+    $audited = ConvertTo-RequiredInteger -Value $Certificate.auditedShards -Name 'auditedShards' -Minimum 2
+    if ($Map.knownShards -isnot [array] -or $Map.alwaysRun -isnot [array]) {
+        throw 'map knownShards and alwaysRun must be arrays'
+    }
+    $mapShards = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($nameValue in @($Map.knownShards) + @($Map.alwaysRun)) {
+        $name = [string] $nameValue
+        if ([string]::IsNullOrWhiteSpace($name)) { throw 'map contains an empty shard name' }
+        if (-not $mapShards.Add($name)) { throw "map contains duplicate or overlapping shard '$name'" }
+    }
+    $mapShardCount = @($Map.knownShards).Count + @($Map.alwaysRun).Count
+    if ($audited -ne $mapShardCount) {
+        throw "auditedShards ($audited) does not cover the map shard universe ($mapShardCount)"
+    }
+    $wouldRun = ConvertTo-RequiredInteger -Value $Certificate.wouldRun -Name 'wouldRun' -Minimum 1
+    $wouldSkip = ConvertTo-RequiredInteger -Value $Certificate.wouldSkip -Name 'wouldSkip' -Minimum 1
+    if ($wouldRun + $wouldSkip -ne $audited) {
+        throw "wouldRun ($wouldRun) plus wouldSkip ($wouldSkip) must equal auditedShards ($audited)"
+    }
+    # A clean complete matrix is valid evidence. Requiring a naturally occurring failure made
+    # certification depend on CI being red, so a healthy repository could never enable selection.
+    # The miss detector's adversarial tests prove that a skipped failure is rejected; this field
+    # records what the real full-matrix audit observed and must be a non-negative integer.
+    $failed = ConvertTo-RequiredInteger -Value $Certificate.failedShards -Name 'failedShards'
+    if ($failed -gt $audited) { throw "failedShards ($failed) exceeds auditedShards ($audited)" }
+    if ($failed -gt $wouldRun) {
+        throw "failedShards ($failed) exceeds wouldRun ($wouldRun) despite a zero-miss certificate"
+    }
 
     $mapSha = [string] $Map.sha
     $candidateSha = [string] $Certificate.candidateMapSha
@@ -79,18 +104,24 @@ if ($SelfTest) {
     }
 
     $sha = '0123456789abcdef0123456789abcdef01234567'
-    $map = [pscustomobject]@{ schemaVersion = 1; sha = $sha }
-    $certificate = [pscustomobject]@{
+    $map = [pscustomobject]@{
         schemaVersion = 1
+        sha = $sha
+        knownShards = @('Alpha', 'Beta')
+        alwaysRun = @('Always')
+    }
+    $certificate = [pscustomobject]@{
+        schemaVersion = 2
         candidateMapRunId = 10
         candidateMapSha = $sha
         auditSourceRunId = 11
         auditSourceSha = '89abcdef0123456789abcdef0123456789abcdef'
         certificationRunId = 12
         escalated = $false
+        auditedShards = 3
         wouldRun = 2
         wouldSkip = 1
-        failedShards = 1
+        failedShards = 0
         missCount = 0
     }
     try {
@@ -106,6 +137,9 @@ if ($SelfTest) {
     $bad = $certificate.PSObject.Copy(); $bad.certificationRunId = 99
     Assert-Rejection { Assert-CertifiedShardMap $map $bad 12 } `
         'a certificate from another run was accepted' 'certificate belongs to run'
+    $bad = $certificate.PSObject.Copy(); $bad.certificationRunId = '12'
+    Assert-Rejection { Assert-CertifiedShardMap $map $bad 12 } `
+        'a string certification run id was accepted' 'must be a JSON integer'
     $bad = $certificate.PSObject.Copy(); $bad.candidateMapSha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
     Assert-Rejection { Assert-CertifiedShardMap $map $bad 12 } `
         'a certificate for another map was accepted' 'different source commits'
@@ -118,9 +152,31 @@ if ($SelfTest) {
     $bad = $certificate.PSObject.Copy(); $bad.wouldSkip = 0
     Assert-Rejection { Assert-CertifiedShardMap $map $bad 12 } `
         'a plan that skipped nothing was accepted as reduction proof' 'wouldSkip must be at least 1'
-    $bad = $certificate.PSObject.Copy(); $bad.failedShards = 0
+    $bad = $certificate.PSObject.Copy(); $bad.auditedShards = 4
     Assert-Rejection { Assert-CertifiedShardMap $map $bad 12 } `
-        'a certificate without a failure opportunity was accepted' 'failedShards must be at least 1'
+        'a certificate that did not audit the full map universe was accepted' 'does not cover the map shard universe'
+    $bad = $certificate.PSObject.Copy(); $bad.wouldRun = 1
+    Assert-Rejection { Assert-CertifiedShardMap $map $bad 12 } `
+        'a certificate whose selection did not partition the audited matrix was accepted' 'must equal auditedShards'
+    $bad = $certificate.PSObject.Copy(); $bad.failedShards = -1
+    Assert-Rejection { Assert-CertifiedShardMap $map $bad 12 } `
+        'a certificate with a negative failure count was accepted' 'failedShards must be at least 0'
+    $withObservedFailure = $certificate.PSObject.Copy(); $withObservedFailure.failedShards = 1
+    try {
+        Assert-CertifiedShardMap -Map $map -Certificate $withObservedFailure -ExpectedCertificationRunId 12
+    }
+    catch {
+        [void] $failures.Add("a valid certificate with an observed failure was rejected: $($_.Exception.Message)")
+    }
+    $bad = $certificate.PSObject.Copy(); $bad.failedShards = 4
+    Assert-Rejection { Assert-CertifiedShardMap $map $bad 12 } `
+        'a certificate with more failures than audited shards was accepted' 'exceeds auditedShards'
+    $bad = $certificate.PSObject.Copy(); $bad.failedShards = 3
+    Assert-Rejection { Assert-CertifiedShardMap $map $bad 12 } `
+        'a zero-miss certificate with more failures than selected shards was accepted' 'exceeds wouldRun'
+    $badMap = $map.PSObject.Copy(); $badMap.schemaVersion = 2
+    Assert-Rejection { Assert-CertifiedShardMap $badMap $certificate 12 } `
+        'a map with an unsupported schema was accepted' 'unsupported map schema'
     $badMap = $map.PSObject.Copy(); $badMap.sha = $sha.ToUpperInvariant()
     $bad = $certificate.PSObject.Copy(); $bad.candidateMapSha = $badMap.sha
     Assert-Rejection { Assert-CertifiedShardMap $badMap $bad 12 } `
