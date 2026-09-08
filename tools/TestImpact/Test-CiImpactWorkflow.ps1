@@ -189,6 +189,17 @@ Assert-Contract ($validation.Contains('candidate-shard-map')) `
 Assert-Contract ($validation -match '(?s)if \[ "\$FORCE_COVERAGE" = ''true'' \].*?--name candidate-shard-map.*?else.*?--name certified-shard-map') `
     'candidate and certified artifacts are not separated at the execution boundary'
 
+# A later map audit is also a revocation boundary. If it fails or withholds certification after a
+# miss, selection must fail closed instead of scanning backward until an older certificate happens
+# to download successfully.
+$mapDownload = Get-StepBlock -JobBlock $selectorJob -Step 'Download the shard map'
+Assert-Contract ($mapDownload -match '(?s)--branch master\s+--status completed\s+--limit 1\s+--json databaseId,conclusion') `
+    'PR selection does not treat the newest completed map workflow as the certification barrier'
+Assert-Contract (-not $mapDownload.Contains('for candidate in $candidates')) `
+    'PR selection can scan backward and reactivate an older invalidated certificate'
+Assert-Contract ($mapDownload.Contains('refusing to fall back to an older map')) `
+    'missing or failed newest-map certification does not announce its fail-closed behavior'
+
 # The map builder publishes a new candidate, but only the previous candidate that was exercised by
 # a complete coverage run may become certified. Reusing one artifact name for both states recreates
 # the original unproven-rollout bug.

@@ -701,19 +701,30 @@ jobs:
                 ;;
             esac
           else
-            candidates=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow test-impact-map.yml \
-              --branch master --status success --limit 20 --json databaseId \
-              --jq '.[].databaseId' 2>/dev/null || true)
-            for candidate in $candidates; do
-              rm -rf map-probe
+            # The newest completed map workflow is a revocation barrier. Never scan backward for
+            # an older certificate: a newer audit may have observed a selection miss, failed its
+            # integrity checks, or intentionally withheld certification. Reusing an older artifact
+            # in any of those states would silently reactivate a map invalidated by newer evidence.
+            if ! latest=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow test-impact-map.yml \
+                 --branch master --status completed --limit 1 --json databaseId,conclusion 2>/dev/null); then
+              latest='[]'
+              echo '::warning::could not query the latest completed map workflow; selection will fail closed'
+            fi
+            candidate=$(printf '%s' "$latest" | jq -r '.[0].databaseId // empty')
+            latest_conclusion=$(printf '%s' "$latest" | jq -r '.[0].conclusion // empty')
+            if [ -n "$candidate" ] && [ "$latest_conclusion" = 'success' ]; then
               if gh run download "$candidate" --repo "$GITHUB_REPOSITORY" \
                    --name certified-shard-map --dir map-probe >/dev/null 2>&1; then
                 mv map-probe map
                 run_id="$candidate"
                 kind='certified'
-                break
+              else
+                echo "::warning::latest completed map run $candidate has no usable certificate; refusing to fall back to an older map"
+                rm -rf map-probe
               fi
-            done
+            elif [ -n "$candidate" ]; then
+              echo "::warning::latest completed map run $candidate concluded '$latest_conclusion'; refusing to fall back to an older map"
+            fi
           fi
 
           if [ -z "$run_id" ]; then
