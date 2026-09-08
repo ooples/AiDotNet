@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -58,6 +60,11 @@ namespace AiDotNet.VisionLanguage.Editing;
     Year = 2024,
     Authors = "Huang et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-4, WeightDecay = 0,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Huang et al. 2023, Sec. 4.1: the first stage of training uses AdamW with a "
+                        + "learning rate of 2e-4 and a weight decay of 0. The zero weight decay is the "
+                        + "paper value rather than an omission.")]
 public partial class SmartEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
 {
     private readonly SmartEditOptions _options;
@@ -101,7 +108,9 @@ public partial class SmartEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM
     {
         _options = options ?? new SmartEditOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;

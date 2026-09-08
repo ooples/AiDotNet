@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -57,6 +59,12 @@ namespace AiDotNet.VisionLanguage.Editing;
     Year = 2024,
     Authors = "Sheynin et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-5, ReferenceBatchSize = 512,
+                WarmupSteps = 2000, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Sheynin et al. 2023, Sec. 4: the Adam optimizer at a learning rate of 2e-5 "
+                        + "with a cosine decay schedule and a linear warmup of 2,000 iterations, at a "
+                        + "batch size of 512.")]
 public partial class EmuEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T>
 {
     private readonly EmuEditOptions _options;
@@ -100,7 +108,9 @@ public partial class EmuEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T
     {
         _options = options ?? new EmuEditOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
