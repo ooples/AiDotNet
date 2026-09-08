@@ -158,6 +158,15 @@ Assert-Contract (-not $codeqlHeader.Contains(
 Assert-Contract ($codeqlHeader.Contains('always()') -and $codeqlHeader.Contains('!cancelled()')) `
     'CodeQL cannot publish its required result after a selector failure'
 
+foreach ($job in @(
+    'test-regression-analysis', 'sonarcloud', 'ci-test-analysis',
+    'promote-ci-test-analysis', 'ci-gate', 'certify-validation'
+)) {
+    $header = Get-JobHeader -JobBlock (Get-JobBlock -WorkflowText $validation -Job $job)
+    Assert-Contract ($header.Contains('always()') -and $header.Contains('!cancelled()')) `
+        "job '$job' can keep an explicitly canceled run alive"
+}
+
 $resolver = Get-JobBlock -WorkflowText $validation -Job 'validation-source'
 Assert-Contract ($resolver.Contains('steps.resolve.outputs.execute_expensive || steps.defaults.outputs.execute_expensive')) `
     'validation-source does not publish execute_expensive'

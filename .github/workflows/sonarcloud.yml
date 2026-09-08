@@ -2113,7 +2113,7 @@ jobs:
     name: Test regression analysis
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: "${{ always() && fromJSON(needs.validation-source.outputs.execute_expensive) && fromJSON(needs.select-shards.outputs.requires_validation) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ always() && !cancelled() && fromJSON(needs.validation-source.outputs.execute_expensive) && fromJSON(needs.select-shards.outputs.requires_validation) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
       - build
       - test-net10-sharded
@@ -2379,7 +2379,7 @@ jobs:
     #
     # The required check remains a lightweight successful job for non-runtime changes. Runtime
     # analysis still requires the build; every expensive step below consumes the same typed flag.
-    if: "${{ always() && fromJSON(needs.validation-source.outputs.execute_expensive) && (!fromJSON(needs.select-shards.outputs.requires_validation || 'true') || needs.build.result == 'success') && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ always() && !cancelled() && fromJSON(needs.validation-source.outputs.execute_expensive) && (!fromJSON(needs.select-shards.outputs.requires_validation || 'true') || needs.build.result == 'success') && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
       - build
       - test-net10-sharded
@@ -2588,7 +2588,7 @@ jobs:
     name: Test analysis (aggregate)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    if: "${{ always() && fromJSON(needs.validation-source.outputs.execute_expensive) && fromJSON(needs.select-shards.outputs.requires_validation) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ always() && !cancelled() && fromJSON(needs.validation-source.outputs.execute_expensive) && fromJSON(needs.select-shards.outputs.requires_validation) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
       - test-net10-sharded
       - validation-source
@@ -2720,7 +2720,7 @@ jobs:
     name: Publish certified test baseline
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: "${{ always() && github.event_name == 'push' && needs.validation-source.outputs.reuse == 'true' && fromJSON(needs.validation-source.outputs.reused_requires_validation) }}"
+    if: "${{ always() && !cancelled() && github.event_name == 'push' && needs.validation-source.outputs.reuse == 'true' && fromJSON(needs.validation-source.outputs.reused_requires_validation) }}"
     needs:
       - validation-source
     permissions:
@@ -2795,7 +2795,7 @@ jobs:
     name: CI Gate
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: "${{ always() && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ always() && !cancelled() && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
       - validation-source
       - codeql
@@ -2921,7 +2921,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: [ci-gate, select-shards]
-    if: "${{ always() && needs.ci-gate.result == 'success' && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}"
+    if: "${{ always() && !cancelled() && needs.ci-gate.result == 'success' && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}"
     permissions:
       contents: read
 
