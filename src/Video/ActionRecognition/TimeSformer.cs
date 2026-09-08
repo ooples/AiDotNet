@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -78,6 +80,13 @@ namespace AiDotNet.Video.ActionRecognition;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Classes,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+[PaperOptimizer(OptimizerKind.SgdMomentum, LearningRate = 0.005, WeightDecay = 1e-4,
+                Momentum = 0.9, ReferenceBatchSize = 16, DecayRate = 0.1,
+                Milestones = [11, 14], Schedule = LearningRateSchedulerType.MultiStep,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Bertasius et al. 2021, Sec. 4: synchronized SGD with a momentum of 0.9, a "
+                        + "weight decay of 0.0001 and a batch size of 16, trained for 15 epochs from an "
+                        + "initial learning rate of 0.005 that is divided by 10 at epochs 11 and 14.")]
 public partial class TimeSformer<T> : NeuralNetworkBase<T>
 {
     private readonly TimeSformerOptions _options;
@@ -216,7 +225,8 @@ public partial class TimeSformer<T> : NeuralNetworkBase<T>
         _attentionType = attentionType;
 
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
 
         InitializeLayers();
     }

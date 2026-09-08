@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -55,6 +56,12 @@ namespace AiDotNet.Video.Denoising;
     "https://arxiv.org/abs/2011.15045",
     Year = 2021,
     Authors = "Dev Yashpal Sheth, Sreyas Mohan, Joshua L. Vincent, Ramon Manzorro, Peter A. Crozier, Mitesh M. Khapra, Eero P. Simoncelli, Carlos Fernandez-Granda")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, DecayRate = 0.5,
+                Milestones = [20, 25, 30],
+                Schedule = LearningRateSchedulerType.MultiStep,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Sheth et al. 2021, Optimization Details: Adam from a starting learning rate "
+                        + "of 1e-4, halved at epochs 20, 25 and 30 over a total of 40 epochs.")]
 public partial class UDVD<T> : VideoDenoisingBase<T>
 {
     private readonly UDVDOptions _options;
@@ -99,12 +106,13 @@ public partial class UDVD<T> : VideoDenoisingBase<T>
         // The paper/released training recipe uses Adam at 1e-4. Merely storing an optimizer is not
         // sufficient: Train must also pass this instance into TrainWithTape (see below), otherwise
         // the base trainer silently falls back to its generic optimizer and UDVD diverges.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-            });
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                }));
         IsBlindDenoising = true;
         InitializeLayers();
     }
