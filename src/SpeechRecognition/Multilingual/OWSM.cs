@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -41,6 +43,13 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("OWSM v3.1: Better and Faster Open Whisper-Style Speech Models based on E-Branchformer", "https://arxiv.org/abs/2401.16658", Year = 2024, Authors = "Peng et al.")]
+[PaperOptimizer(OptimizerKind.Unspecified, WarmupSteps = 60000,
+                Schedule = LearningRateSchedulerType.LinearWarmup,
+                Source = "Peng et al. 2024, Sec. 3: the learning rate is linearly increased to a very "
+                        + "small value, around 5e-5, over the first 30K steps and then linearly "
+                        + "increased to the peak over another 30K -- a two-stage warmup totalling 60K "
+                        + "steps. The peak itself is never stated, and the paper names no optimizer, so "
+                        + "neither is declared and the model keeps its own optimizer.")]
 public partial class OWSM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     /// <inheritdoc />
@@ -60,7 +69,8 @@ public partial class OWSM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public bool SupportsWordTimestamps => false;
 
     public OWSM(NeuralNetworkArchitecture<T> architecture, string modelPath, OWSMOptions? options = null) : base(architecture) { _options = options ?? new OWSMOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "tr", "it", "nl" }; InitializeLayers(); }
-    public OWSM(NeuralNetworkArchitecture<T> architecture, OWSMOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new OWSMOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "tr", "it", "nl" }; InitializeLayers(); }
+    public OWSM(NeuralNetworkArchitecture<T> architecture, OWSMOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new OWSMOptions(); _useNativeMode = true; _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this)); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en", "zh", "de", "es", "fr", "ja", "ko", "pt", "ru", "ar", "hi", "tr", "it", "nl" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using OWSM's open-source Whisper-style encoder-decoder.

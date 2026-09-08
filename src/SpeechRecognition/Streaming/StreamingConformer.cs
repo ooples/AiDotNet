@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -41,6 +43,13 @@ namespace AiDotNet.SpeechRecognition.Streaming;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Conformer: Convolution-augmented Transformer for End-to-End Speech Recognition", "https://arxiv.org/abs/2005.08100", Year = 2020, Authors = "Gulati et al.")]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, WarmupSteps = 10000,
+                Schedule = LearningRateSchedulerType.Noam,
+                Source = "Gulati et al. 2020, Sec. 3: the Adam optimizer with beta1 0.9 and beta2 0.98 "
+                        + "under the transformer learning rate schedule, with 10k warm-up steps and a "
+                        + "peak learning rate of 0.05 over the square root of the model dimension. That "
+                        + "peak is exactly the Noam form, whose rate this library derives from the model "
+                        + "dimension, so the schedule is declared rather than a fixed rate.")]
 public partial class StreamingConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly StreamingConformerOptions _options; public override ModelOptions GetOptions() => _options;
@@ -50,7 +59,9 @@ public partial class StreamingConformer<T> : AudioNeuralNetworkBase<T>, ISpeechR
     public bool SupportsWordTimestamps => false;
 
     public StreamingConformer(NeuralNetworkArchitecture<T> architecture, string modelPath, StreamingConformerOptions? options = null) : base(architecture) { _options = options ?? new StreamingConformerOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public StreamingConformer(NeuralNetworkArchitecture<T> architecture, StreamingConformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new StreamingConformerOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public StreamingConformer(NeuralNetworkArchitecture<T> architecture, StreamingConformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new StreamingConformerOptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using chunk-based Conformer with limited lookahead.

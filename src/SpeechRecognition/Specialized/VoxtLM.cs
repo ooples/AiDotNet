@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
 using AiDotNet.Helpers;
@@ -43,6 +45,10 @@ namespace AiDotNet.SpeechRecognition.Specialized;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("VoxtLM: Unified Decoder-Only Models for Consolidating Speech Recognition/Synthesis and Speech/Text Continuation", "https://arxiv.org/abs/2309.07937", Year = 2024, Authors = "Maiti et al.")]
+[PaperOptimizer(OptimizerKind.Adam,
+                Source = "Maiti et al. 2024, Sec. 4: the Adam optimizer with a warmup learning rate "
+                        + "schedule. The paper states neither a peak rate nor a warmup length, so "
+                        + "neither is declared.")]
 public partial class VoxtLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     /// <inheritdoc />
@@ -64,7 +70,8 @@ public partial class VoxtLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public bool SupportsWordTimestamps => false;
 
     public VoxtLM(NeuralNetworkArchitecture<T> architecture, string modelPath, VoxtLMOptions? options = null) : base(architecture) { _options = options ?? new VoxtLMOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public VoxtLM(NeuralNetworkArchitecture<T> architecture, VoxtLMOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new VoxtLMOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate, EnableGradientClipping = true, MaxGradientNorm = 1.0 }); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public VoxtLM(NeuralNetworkArchitecture<T> architecture, VoxtLMOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new VoxtLMOptions(); _useNativeMode = true; _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate, EnableGradientClipping = true, MaxGradientNorm = 1.0 })); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using VoxtLM's unified decoder-only architecture.
