@@ -145,8 +145,8 @@ try {
         -Tests skipped -Verdict false -RequiresValidation false -Sonar failure -ExpectedExit 1
     Invoke-GateCase -Name non_runtime_selector_failure -Reuse false -Promotion skipped -CodeQL skipped `
         -Tests skipped -Verdict false -RequiresValidation false -Select failure -ExpectedExit 1
-    Invoke-GateCase -Name missing_runtime_decision_fails_closed -Reuse false -Promotion skipped -CodeQL failure `
-        -Tests success -Verdict true -RequiresValidation '' -ExpectedExit 1
+    Invoke-GateCase -Name missing_runtime_decision_fails_closed -Reuse false -Promotion skipped -CodeQL success `
+        -Tests skipped -Verdict false -RequiresValidation '' -ExpectedExit 1
     Invoke-GateCase -Name source_failure_blocks_reuse -Source failure -Reuse true `
         -Promotion success -CodeQL skipped -Tests skipped -Verdict false -ExpectedExit 1
     Invoke-GateCase -Name source_failure_blocks_full -Source failure -Reuse false `
