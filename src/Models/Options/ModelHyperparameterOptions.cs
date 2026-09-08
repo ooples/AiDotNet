@@ -38,12 +38,26 @@ public abstract class ModelHyperparameterOptions : NeuralNetworkOptions
     public double MaxGradNorm { get; set; } = 1.0;
 
     /// <summary>
+    /// The constructor parameter name reported when validation fails.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every model takes its configuration as a parameter called <c>options</c>, so an invalid
+    /// value always reached the model that way. Naming it keeps the exception actionable and
+    /// keeps the contract these constructors already had before their scalar parameters moved
+    /// here.
+    /// </para>
+    /// </remarks>
+    protected const string OptionsParameterName = "options";
+
+    /// <summary>
     /// Throws when a required dimension has been left unset.
     /// </summary>
     /// <param name="value">The value to check.</param>
     /// <param name="propertyName">The name of the property being checked.</param>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when <paramref name="value"/> is zero or negative.
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="value"/> is zero or negative. Reported against the
+    /// <c>options</c> parameter, because that is how an invalid value reaches a model.
     /// </exception>
     /// <remarks>
     /// <para>
@@ -56,10 +70,11 @@ public abstract class ModelHyperparameterOptions : NeuralNetworkOptions
     {
         if (value <= 0)
         {
-            throw new InvalidOperationException(
+            throw new ArgumentException(
                 $"{GetType().Name}.{propertyName} is {value}, but it must be greater than zero. "
                     + $"Set it explicitly, or ensure {GetType().Name}'s parameterless constructor "
-                    + "assigns its model's published default.");
+                    + "assigns its model's published default.",
+                OptionsParameterName);
         }
     }
 
@@ -68,17 +83,18 @@ public abstract class ModelHyperparameterOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="value">The value to check.</param>
     /// <param name="propertyName">The name of the property being checked.</param>
-    /// <exception cref="InvalidOperationException">
+    /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="value"/> is not a finite number greater than zero.
     /// </exception>
     protected void Require(double value, string propertyName)
     {
         if (double.IsNaN(value) || double.IsInfinity(value) || value <= 0.0)
         {
-            throw new InvalidOperationException(
+            throw new ArgumentException(
                 $"{GetType().Name}.{propertyName} is {value.ToString(System.Globalization.CultureInfo.InvariantCulture)}, "
                     + "but it must be a finite number greater than zero. Set it explicitly, or ensure "
-                    + $"{GetType().Name}'s parameterless constructor assigns its model's published default.");
+                    + $"{GetType().Name}'s parameterless constructor assigns its model's published default.",
+                OptionsParameterName);
         }
     }
 }

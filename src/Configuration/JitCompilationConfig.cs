@@ -173,7 +173,7 @@ public sealed class JitCompilationConfig
     /// <summary>
     /// Validates the config and throws if settings are inconsistent.
     /// </summary>
-    /// <exception cref="InvalidOperationException">Thrown when values are out of range.</exception>
+    /// <exception cref="ArgumentException">Thrown when values are out of range.</exception>
     public void Validate()
     {
         // NaN passes both `< 0` and `>= 1` comparisons (NaN is unordered with

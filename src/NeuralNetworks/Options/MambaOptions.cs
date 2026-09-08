@@ -42,7 +42,7 @@ public class MambaOptions : SequenceModelOptions
     /// <summary>
     /// Throws if a value this model requires has been left unset or is not positive.
     /// </summary>
-    /// <exception cref="InvalidOperationException">
+    /// <exception cref="ArgumentException">
     /// Thrown when a required dimension is zero or negative.
     /// </exception>
     public void Validate()

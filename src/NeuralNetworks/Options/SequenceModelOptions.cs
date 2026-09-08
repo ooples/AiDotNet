@@ -128,7 +128,7 @@ public abstract class SequenceModelOptions : ModelHyperparameterOptions
     /// </summary>
     /// <param name="requiresHeads">Whether this model uses attention heads.</param>
     /// <param name="requiresState">Whether this model uses a recurrent state dimension.</param>
-    /// <exception cref="InvalidOperationException">
+    /// <exception cref="ArgumentException">
     /// Thrown when a required dimension is zero or negative, which means the derived options
     /// class did not assign its paper defaults.
     /// </exception>
