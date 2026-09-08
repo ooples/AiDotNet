@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -71,6 +72,13 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("ETSformer: Exponential Smoothing Transformers for Time-series Forecasting", "https://arxiv.org/abs/2202.01381", Year = 2022, Authors = "Gerald Woo, Chenghao Liu, Doyen Sahoo, Akshat Kumar, Steven Hoi")]
+[PaperOptimizer(OptimizerKind.Unspecified, WarmupFraction = 0.2, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Woo et al. 2022, Sec. 5: the learning rate is scheduled with linear warmup "
+                        + "over 3 epochs and cosine annealing thereafter, for a total of 15 training "
+                        + "epochs on all datasets -- a warmup fraction of one fifth. The peak rate "
+                        + "appears only as a row label in the hyperparameter table with no extractable "
+                        + "value, and the paper names no optimizer, so neither is declared.")]
 public partial class ETSformer<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -252,7 +260,8 @@ public partial class ETSformer<T> : ForecastingModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         OnnxModelPath = onnxModelPath;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _sequenceLength = options.SequenceLength;
@@ -296,7 +305,8 @@ public partial class ETSformer<T> : ForecastingModelBase<T>
         OnnxSession = null;
         OnnxModelPath = null;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _sequenceLength = options.SequenceLength;
