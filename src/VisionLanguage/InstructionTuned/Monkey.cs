@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -65,6 +67,12 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
     Year = 2024,
     Authors = "Li et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-5, ReferenceBatchSize = 1024,
+                WarmupSteps = 100, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Li et al. 2024, Sec. 4: the AdamW optimizer with a learning rate of 1e-5 "
+                        + "under a cosine learning rate schedule, a warmup period of 100 steps and a "
+                        + "batch size of 1024.")]
 public partial class Monkey<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly MonkeyOptions _options;
@@ -109,7 +117,9 @@ public partial class Monkey<T> : VisionLanguageModelBase<T>, IInstructionTunedVL
         _options = options ?? new MonkeyOptions();
         _options.ValidateVisualSizing();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
