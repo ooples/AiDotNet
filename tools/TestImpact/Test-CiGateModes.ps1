@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Executes the checked-in CI Gate Bash body in full-validation and exact-reuse modes.
+    Executes the checked-in CI Gate Bash body in full-validation, non-runtime, and exact-reuse modes.
 #>
 [CmdletBinding()]
 param([string] $Workflow = '.github/workflows/sonarcloud.yml')
@@ -66,6 +66,10 @@ try {
             [string] $CodeQL,
             [string] $Tests,
             [string] $Verdict,
+            [string] $RequiresValidation = 'true',
+            [string] $ReusedRequiresValidation = 'true',
+            [string] $Select = 'success',
+            [string] $Sonar = 'success',
             [int] $ExpectedExit
         )
 
@@ -74,7 +78,7 @@ try {
             'SELECT_RESULT', 'TESTS_RESULT', 'PARAMETER_SWEEP_RESULT', 'MODEL_SHAPE_RESULT',
             'REGRESSION_ANALYSIS_RESULT', 'VERDICT_ENFORCED', 'AGGREGATE_ANALYSIS_RESULT',
             'SIZE_CHECK_RESULT', 'PROMOTION_RESULT', 'SONAR_RESULT', 'REUSED_VALIDATION',
-            'GITHUB_STEP_SUMMARY'
+            'REQUIRES_VALIDATION', 'REUSED_REQUIRES_VALIDATION', 'GITHUB_STEP_SUMMARY'
         )
         $savedEnvironment = @{}
         foreach ($variableName in $environmentNames) {
@@ -88,7 +92,7 @@ try {
             $env:BUILD_RESULT = 'success'
             $env:BUILD_COMPAT_RESULT = 'success'
             $env:CODEQL_RESULT = $CodeQL
-            $env:SELECT_RESULT = 'success'
+            $env:SELECT_RESULT = $Select
             $env:TESTS_RESULT = $Tests
             $env:PARAMETER_SWEEP_RESULT = 'success'
             $env:MODEL_SHAPE_RESULT = 'success'
@@ -97,8 +101,10 @@ try {
             $env:AGGREGATE_ANALYSIS_RESULT = 'success'
             $env:SIZE_CHECK_RESULT = 'success'
             $env:PROMOTION_RESULT = $Promotion
-            $env:SONAR_RESULT = 'success'
+            $env:SONAR_RESULT = $Sonar
             $env:REUSED_VALIDATION = $Reuse
+            $env:REQUIRES_VALIDATION = $RequiresValidation
+            $env:REUSED_REQUIRES_VALIDATION = $ReusedRequiresValidation
             $env:GITHUB_STEP_SUMMARY = Join-Path $fixture "$Name-summary.md"
 
             & $bash $script 2>&1 | Out-Null
@@ -121,6 +127,8 @@ try {
         -Tests skipped -Verdict false -ExpectedExit 0
     Invoke-GateCase -Name reuse_missing_promotion -Reuse true -Promotion skipped -CodeQL skipped `
         -Tests skipped -Verdict false -ExpectedExit 1
+    Invoke-GateCase -Name reuse_non_runtime_success -Reuse true -ReusedRequiresValidation false `
+        -Promotion skipped -CodeQL skipped -Tests skipped -Verdict false -ExpectedExit 0
     Invoke-GateCase -Name full_success -Reuse false -Promotion skipped -CodeQL success `
         -Tests success -Verdict true -ExpectedExit 0
     Invoke-GateCase -Name full_codeql_failure -Reuse false -Promotion skipped -CodeQL failure `
@@ -129,6 +137,16 @@ try {
         -Tests failure -Verdict true -ExpectedExit 0
     Invoke-GateCase -Name full_unenforced_test_failure -Reuse false -Promotion skipped -CodeQL success `
         -Tests failure -Verdict false -ExpectedExit 1
+    Invoke-GateCase -Name non_runtime_success -Reuse false -Promotion skipped -CodeQL success `
+        -Tests skipped -Verdict false -RequiresValidation false -ExpectedExit 0
+    Invoke-GateCase -Name non_runtime_codeql_failure -Reuse false -Promotion skipped -CodeQL failure `
+        -Tests skipped -Verdict false -RequiresValidation false -ExpectedExit 1
+    Invoke-GateCase -Name non_runtime_sonar_failure -Reuse false -Promotion skipped -CodeQL success `
+        -Tests skipped -Verdict false -RequiresValidation false -Sonar failure -ExpectedExit 1
+    Invoke-GateCase -Name non_runtime_selector_failure -Reuse false -Promotion skipped -CodeQL skipped `
+        -Tests skipped -Verdict false -RequiresValidation false -Select failure -ExpectedExit 1
+    Invoke-GateCase -Name missing_runtime_decision_fails_closed -Reuse false -Promotion skipped -CodeQL failure `
+        -Tests success -Verdict true -RequiresValidation '' -ExpectedExit 1
     Invoke-GateCase -Name source_failure_blocks_reuse -Source failure -Reuse true `
         -Promotion success -CodeQL skipped -Tests skipped -Verdict false -ExpectedExit 1
     Invoke-GateCase -Name source_failure_blocks_full -Source failure -Reuse false `
@@ -159,5 +177,5 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'CI Gate mode proof passed (reuse/full/default success and failure controls).'
+Write-Host 'CI Gate mode proof passed (reuse/full/non-runtime/default success and failure controls).'
 exit 0
