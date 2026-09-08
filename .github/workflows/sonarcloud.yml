@@ -391,7 +391,8 @@ jobs:
     needs: validation-source
     outputs:
       artifact_id: ${{ steps.upload-build-artifact.outputs.artifact-id }}
-      artifact_digest: ${{ steps.upload-build-artifact.outputs.artifact-digest }}
+      # upload-artifact emits bare hexadecimal; normalize once at the producer boundary.
+      artifact_digest: ${{ format('sha256:{0}', steps.upload-build-artifact.outputs.artifact-digest) }}
     timeout-minutes: 45
     permissions:
       contents: read

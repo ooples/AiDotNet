@@ -171,8 +171,8 @@ $buildHeader = Get-JobHeader -JobBlock $buildJob
 $buildUpload = Get-StepBlock -JobBlock $buildJob -Step 'Upload build artifacts'
 Assert-Contract ($buildHeader.Contains('artifact_id: ${{ steps.upload-build-artifact.outputs.artifact-id }}')) `
     'build does not expose the immutable artifact ID to its consumers'
-Assert-Contract ($buildHeader.Contains('artifact_digest: ${{ steps.upload-build-artifact.outputs.artifact-digest }}')) `
-    'build does not expose the upload digest to its consumers'
+Assert-Contract ($buildHeader.Contains("artifact_digest: `${{ format('sha256:{0}', steps.upload-build-artifact.outputs.artifact-digest) }}")) `
+    'build does not expose the upload digest in the receiver''s canonical SHA-256 form'
 Assert-Contract ($buildUpload.Contains('id: upload-build-artifact')) `
     'the build artifact upload has no stable step identity for its outputs'
 
