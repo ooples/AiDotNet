@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -60,6 +62,11 @@ namespace AiDotNet.VisionLanguage.Medical;
     Year = 2023,
     Authors = "Moor et al."
 )]
+[PaperOptimizer(OptimizerKind.Adam8Bit, GradientAccumulationSteps = 50,
+                Source = "Moor et al. 2023, Sec. 3: the 8-bit AdamW optimizer with 50 gradient "
+                        + "accumulation steps, pre-training for 2700 steps from the OpenFlamingo "
+                        + "checkpoint. The paper states no learning rate, and its batch figures are "
+                        + "per-device, so neither is declared.")]
 public partial class MedFlamingo<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
 {
     private readonly MedFlamingoOptions _options;
@@ -103,7 +110,9 @@ public partial class MedFlamingo<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
     {
         _options = options ?? new MedFlamingoOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
