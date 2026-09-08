@@ -88,14 +88,19 @@ function Get-SelectionMiss {
     foreach ($s in $wouldSkip) { [void] $skip.Add([string] $s) }
     $missed = @($Failed | Where-Object { $skip.Contains([string] $_) } | Sort-Object -Unique)
 
+    $wouldRunShards = @($WouldRun)
+    if ($Escalated) { $wouldRunShards = @($AllShards) }
+
     return [pscustomobject]@{
-        Escalated  = $Escalated
-        TotalShards = $AllShards.Count
-        WouldRun   = $(if ($Escalated) { $AllShards.Count } else { @($WouldRun).Count })
-        WouldSkip  = $wouldSkip.Count
-        Failed     = @($Failed).Count
-        Missed     = $missed
-        MissCount  = $missed.Count
+        Escalated      = $Escalated
+        TotalShards    = $AllShards.Count
+        WouldRun       = $wouldRunShards.Count
+        WouldSkip      = $wouldSkip.Count
+        WouldRunShards = $wouldRunShards
+        WouldSkipShards = $wouldSkip
+        Failed         = @($Failed).Count
+        Missed         = $missed
+        MissCount      = $missed.Count
     }
 }
 
@@ -112,6 +117,8 @@ if ($SelfTest) {
     $r = Get-SelectionMiss -AllShards $all -WouldRun @('A', 'B') -Failed @('C') -Escalated $false
     Assert-True ($r.MissCount -eq 1) 'a failure in a skipped shard must be reported as a miss'
     Assert-True ($r.Missed -contains 'C') 'the missed shard must be named'
+    Assert-True (($r.WouldRunShards -join ',') -eq 'A,B') 'selected shard identities were not preserved'
+    Assert-True (($r.WouldSkipShards -join ',') -eq 'C,D') 'skipped shard identities were not preserved'
 
     # 2. A failure in a shard selection would have RUN is not a miss. Without this the audit could
     #    report every failure as a miss and still pass check 1, which would make it useless.
@@ -127,6 +134,7 @@ if ($SelfTest) {
     Assert-True ($r.MissCount -eq 0) 'an escalated run cannot miss'
     Assert-True ($r.WouldSkip -eq 0) 'an escalated run skips nothing'
     Assert-True ($r.WouldRun -eq 4) 'an escalated run runs everything'
+    Assert-True (($r.WouldRunShards -join ',') -eq 'A,B,C,D') 'an escalated run did not record the full selected universe'
 
     # 5. A green run misses nothing regardless of how much it skipped.
     $r = Get-SelectionMiss -AllShards $all -WouldRun @('A') -Failed @() -Escalated $false
@@ -189,7 +197,7 @@ if ($result.MissCount -gt 0) {
     Write-Host "::error::selection would have SKIPPED $($result.MissCount) shard(s) that failed:"
     foreach ($m in $result.Missed) { Write-Host "  MISSED: $m" }
 } elseif ($result.Failed -eq 0) {
-    Write-Host 'audit: no failure opportunity in this full run; selection volume was measured but miss safety was not exercised'
+    Write-Host 'audit: complete clean matrix; zero observed selection misses'
 } else {
     Write-Host 'audit: no misses'
 }
