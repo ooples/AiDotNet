@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -57,6 +58,12 @@ namespace AiDotNet.Video.FrameInterpolation;
     "https://arxiv.org/abs/2205.14620",
     Year = 2022,
     Authors = "Lingtong Kong, Boyuan Jiang, Donghao Luo, Wenqing Chu, Xiaoming Huang, Ying Tai, Chengjie Wang, Jie Yang")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, ReferenceBatchSize = 24,
+                MinLearningRate = 1e-5,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Kong et al. 2022, Sec. 4: optimized by AdamW for 300 epochs at a total batch "
+                        + "size of 24, the learning rate initially 1e-4 and decaying to 1e-5 on a cosine "
+                        + "attenuation schedule.")]
 public partial class IFRNet<T> : FrameInterpolationBase<T>
 {
     #region Fields
@@ -90,7 +97,9 @@ public partial class IFRNet<T> : FrameInterpolationBase<T>
     {
         _options = options ?? new IFRNetOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         SupportsArbitraryTimestep = true;
         InitializeLayers();
     }
