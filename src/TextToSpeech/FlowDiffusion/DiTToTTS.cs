@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
@@ -35,12 +37,21 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("DiTTo-TTS: Diffusion Transformers for Scalable Text-to-Speech without Domain-Specific Factors", "https://arxiv.org/abs/2406.11427", Year = 2024, Authors = "Lee et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, Beta1 = 0.9, Beta2 = 0.999,
+                WeightDecay = 0, WarmupSteps = 1000, MinLearningRate = 0,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Lee et al. 2024, Sec. 4: the AdamW optimizer with a learning rate of 1e-4, "
+                        + "betas (0.9, 0.999) and a weight decay of 0.0, under a cosine learning rate "
+                        + "scheduler with a warmup of 1K steps. The zero weight decay is the paper value "
+                        + "rather than an omission.")]
 public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly DiTToTTSOptions _options; public override ModelOptions GetOptions() => _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public DiTToTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, DiTToTTSOptions? options = null) : base(architecture) { _options = options ?? new DiTToTTSOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); InitializeLayers(); }
-    public DiTToTTS(NeuralNetworkArchitecture<T> architecture, DiTToTTSOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new DiTToTTSOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; InitializeLayers(); }
+    public DiTToTTS(NeuralNetworkArchitecture<T> architecture, DiTToTTSOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new DiTToTTSOptions(); _useNativeMode = true; _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; InitializeLayers(); }
     int ITtsModel<T>.SampleRate => _options.SampleRate; public int MaxTextLength => _options.MaxTextLength; public new int HiddenDim => _options.HiddenDim; public int NumFlowSteps => _options.NumFlowSteps;
     /// <summary>
     /// Synthesizes speech from text.
