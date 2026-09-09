@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -870,7 +870,7 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
                 { "IntermediateLatentSize", _intermediateLatentSize },
                 { "StyleMixingEnabled", _enableStyleMixing }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
@@ -733,7 +733,7 @@ public partial class DeepBeliefNetwork<T> : VectorModelLayoutBase<T>
                 { "LearningRate", Convert.ToDouble(_learningRate) },
                 { "BatchSize", _batchSize }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 }

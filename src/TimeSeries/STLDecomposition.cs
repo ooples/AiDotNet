@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -1021,7 +1021,7 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
                 { "SeasonalStrength", Convert.ToDouble(CalculateSeasonalStrength()) },
                 { "TrendStrength", Convert.ToDouble(CalculateTrendStrength()) }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
 
         return metadata;

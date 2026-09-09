@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -502,7 +502,7 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
         return new ModelMetadata<T>
         {
             AdditionalInfo = additionalInfo,
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

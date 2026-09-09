@@ -1061,7 +1061,7 @@ public partial class MAModel<T> : TimeSeriesModelBase<T>
                 // Add specific coefficient values for inspection
                 { "MACoefficients", _maCoefficients.Select(c => Convert.ToDouble(c)).ToArray() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
 
         return metadata;

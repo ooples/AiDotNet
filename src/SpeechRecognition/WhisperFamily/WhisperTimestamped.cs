@@ -136,7 +136,7 @@ public partial class WhisperTimestamped<T> : AudioNeuralNetworkBase<T>, ISpeechR
             FeatureCount = _options.NumMels,
             Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers,
             AdditionalInfo = additionalInfo,
-            ModelData = SerializeForMetadata(),
+            ModelDataProvider = () => SerializeForMetadata(),
         };
     }
 

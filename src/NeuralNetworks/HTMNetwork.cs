@@ -664,7 +664,7 @@ public partial class HTMNetwork<T> : VectorModelLayoutBase<T>
                 { "LayerCount", Layers.Count },
                 { "TotalParameters", GetParameterCount() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -2237,7 +2237,7 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
                 { "TotalParameters", ParameterCount },
                 { "LayerCount", Layers.Count }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

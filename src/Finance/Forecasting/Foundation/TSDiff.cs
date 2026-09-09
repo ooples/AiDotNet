@@ -256,7 +256,7 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object> { { "NetworkType", "TSDiff" }, { "SequenceLength", _sequenceLength }, { "ForecastHorizon", _forecastHorizon }, { "HiddenDimension", _hiddenDimension }, { "NumDiffusionSteps", _numDiffusionSteps }, { "GuidanceScale", _guidanceScale }, { "UseNativeMode", _useNativeMode } },
-        ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
+        ModelDataProvider = () => _useNativeMode ? this.Serialize() : Array.Empty<byte>()
     };
 
 

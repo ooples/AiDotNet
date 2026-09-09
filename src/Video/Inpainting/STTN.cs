@@ -198,7 +198,7 @@ public partial class STTN<T> : VideoInpaintingBase<T>
                 { "NumHeads", _options.NumHeads },
                 { "NumScales", _options.NumScales }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -198,7 +198,7 @@ public partial class FuseFormer<T> : VideoInpaintingBase<T>
                 { "NumHeads", _options.NumHeads },
                 { "PatchSize", _options.PatchSize }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

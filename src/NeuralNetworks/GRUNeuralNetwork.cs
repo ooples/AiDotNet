@@ -332,7 +332,7 @@ public partial class GRUNeuralNetwork<T> : SequenceModelLayoutBase<T>
                 { "InputSize", Architecture.InputSize },
                 { "OutputSize", Architecture.OutputSize },
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

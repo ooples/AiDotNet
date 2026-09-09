@@ -1404,7 +1404,7 @@ public partial class NeRF<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>,
             // throws LicenseRequiredException on the very first facade Build,
             // even when the caller has no intention of saving the model.
             // Matches Transformer.GetModelMetadata. Fixes #1826.
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

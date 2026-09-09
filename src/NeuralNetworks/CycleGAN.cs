@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -868,7 +868,7 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
                 { "CycleConsistencyLambda", NumOps.ToDouble(_cycleConsistencyLambda) },
                 { "IdentityLambda", NumOps.ToDouble(_identityLambda) }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

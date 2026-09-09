@@ -303,7 +303,7 @@ public partial class YOLOv8Seg<T> : Common.InstanceSegmentationBase<T>
             { "UseNativeMode", _useNativeMode },
             { "NumLayers", Layers.Count }
         },
-        ModelData = SerializeForMetadata()
+        ModelDataProvider = () => SerializeForMetadata()
     };
 
     // Dispose is inherited from SegmentationModelBase, which already disposes the ONNX session.

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -1646,7 +1646,7 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
                 { "LayerCount", Layers.Count },
                 { "ParameterCount", ParameterCount }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

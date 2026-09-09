@@ -483,7 +483,7 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
                 { "model_size", _modelSize },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = SafeSerialize()
+            ModelDataProvider = () => SafeSerialize()
         };
     }
 

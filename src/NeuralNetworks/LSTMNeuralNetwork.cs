@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -1800,7 +1800,7 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
                 { "InputSize", Architecture.InputSize },
                 { "OutputSize", Architecture.OutputSize }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

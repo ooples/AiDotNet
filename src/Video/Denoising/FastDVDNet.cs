@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -442,7 +442,7 @@ public partial class FastDVDNet<T> : VideoDenoisingBase<T>
             { "ModelName", "FastDVDNet" }, { "NumFeatures", _numFeatures },
             { "NumInputFrames", _numInputFrames }
         },
-        ModelData = _useNativeMode ? this.Serialize() : []
+        ModelDataProvider = () => _useNativeMode ? this.Serialize() : []
     };
 
 

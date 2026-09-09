@@ -575,7 +575,7 @@ public partial class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutB
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

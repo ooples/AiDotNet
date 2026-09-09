@@ -930,7 +930,7 @@ public partial class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
                 { "Epochs", _epochs },
                 { "LearningRate", Convert.ToDouble(_learningRate) }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

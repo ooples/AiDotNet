@@ -526,7 +526,7 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
                 { "MaxIterations", arOptions.MaxIterations },
                 { "Tolerance", arOptions.Tolerance }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
         return metadata;
     }

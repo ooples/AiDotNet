@@ -192,7 +192,7 @@ public partial class VFIMamba<T> : FrameInterpolationBase<T>
                 { "NumStages", _options.NumStages },
                 { "Complexity", _options.NumMambaBlocks * _options.NumStages }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

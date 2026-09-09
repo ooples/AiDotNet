@@ -679,7 +679,7 @@ public partial class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
                 { "image_size", ImageSize },
                 { "use_native_mode", _useNativeMode }
             },
-            ModelData = SafeSerializeMaterializedModel()
+            ModelDataProvider = () => SafeSerializeMaterializedModel()
         };
     }
 
