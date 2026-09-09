@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -55,6 +56,11 @@ namespace AiDotNet.Finance.Portfolio;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("A Deep Reinforcement Learning Framework for the Financial Portfolio Management Problem", "https://arxiv.org/abs/1706.10059")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 3e-5, WeightDecay = 1e-8,
+                ReferenceBatchSize = 50,
+                Source = "Jiang et al. 2017, hyperparameter table: the step size of the Adam "
+                        + "optimization is 3e-5, the mini-batch size during training is 50, and the L2 "
+                        + "regularization coefficient applied to network training is 1e-8.")]
 public partial class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
 {
     #region Shared Fields
@@ -99,7 +105,9 @@ public partial class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
 
         _allowShortSelling = options.AllowShortSelling;
         _maxWeight = options.MaxWeight;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }
@@ -126,7 +134,9 @@ public partial class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
 
         _allowShortSelling = options.AllowShortSelling;
         _maxWeight = options.MaxWeight;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }

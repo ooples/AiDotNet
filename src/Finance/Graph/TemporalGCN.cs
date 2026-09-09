@@ -1,4 +1,5 @@
-﻿using System;
+﻿using AiDotNet.LearningRateSchedulers;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -88,6 +89,9 @@ namespace AiDotNet.Finance.Graph;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("T-GCN: A Temporal Graph Convolutional Network for Traffic Prediction", "https://arxiv.org/abs/1811.05320", Year = 2020, Authors = "Ling Zhao, Yujiao Song, Chao Zhang, Yu Liu, Pu Wang, Tao Lin, Min Deng, Haifeng Li")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001, ReferenceBatchSize = 64,
+                Source = "Zhao et al. 2020, Sec. 4: the T-GCN model is trained using the Adam "
+                        + "optimizer, with the learning rate set to 0.001 and the batch size to 64.")]
 public partial class TemporalGCN<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -250,7 +254,9 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
         _options = options ?? new TemporalGCNOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
         _forecastHorizon = _options.ForecastHorizon;
@@ -296,7 +302,9 @@ public partial class TemporalGCN<T> : ForecastingModelBase<T>
         _options = options ?? new TemporalGCNOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
         _forecastHorizon = _options.ForecastHorizon;
