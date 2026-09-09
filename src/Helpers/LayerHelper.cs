@@ -26986,6 +26986,16 @@ public static partial class LayerHelper<T>
         int editingFfnDim = editingDim * 4;
 
         // === Vision Encoder ===
+        //
+        // Input projection FIRST. Without it this stack went straight from the raw input into
+        // attention sized at visionDim, so it silently required a sequence already embedded at
+        // visionDim - while EmuEdit, MGIE and SmartEdit all declare ImageSize in their options and
+        // are constructed with an image architecture. Any image input was rejected outright:
+        // "MultiHeadAttentionLayer was constructed with embeddingDimension=1024 but
+        // input.Shape[^1]=128". Every other default stack here opens with the same projection
+        // (CreateDefaultMatchaTTSLayers starts with FullyConnectedLayer(textEncoderDim)); this one
+        // was missing it, which is why no fixture could drive these three models.
+        yield return new DenseLayer<T>(visionDim, identityActivation);
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
