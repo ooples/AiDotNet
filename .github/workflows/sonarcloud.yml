@@ -804,6 +804,19 @@ jobs:
             exit 1
           }
 
+          function Read-RequiredJsonBoolean {
+            param(
+              [Parameter(Mandatory)] [object] $Object,
+              [Parameter(Mandatory)] [string] $PropertyName
+            )
+
+            $property = $Object.PSObject.Properties[$PropertyName]
+            if ($null -eq $property -or $property.Value -isnot [bool]) {
+              throw "selector output property '$PropertyName' must be a JSON boolean"
+            }
+            return [bool] $property.Value
+          }
+
           # `name` is the key selection and the map both index on, and the regression analyzer keys
           # on its slug. Duplicates already escalate through the count check further down, but with
           # a message about missing shards that points nowhere near the real cause.
@@ -862,7 +875,8 @@ jobs:
                   -BaseSha $env:PR_BASE_SHA -OutFile path-classification.json
               if ($LASTEXITCODE -ne 0) { throw "path classifier exited $LASTEXITCODE" }
               $pathResult = Get-Content path-classification.json -Raw | ConvertFrom-Json
-              $pathRequiresValidation = [bool] $pathResult.requiresValidation
+              $pathRequiresValidation = Read-RequiredJsonBoolean `
+                  -Object $pathResult -PropertyName 'requiresValidation'
             }
             catch {
               Write-Host "::warning::path classification unavailable ($($_.Exception.Message)) - runtime validation remains required"
@@ -876,14 +890,35 @@ jobs:
             elseif ($mapCertified) {
               # No base ref: coverage selection diffs from the map's own commit, which is the only
               # reference whose line numbers the map's ranges are expressed in.
-              & ./tools/TestImpact/Select-Shards.ps1 `
-                  -MapFile map/shard-map.json `
-                  -ExpectedShards @($all.name) `
-                  -OutFile selection.json
-              $result = Get-Content selection.json -Raw | ConvertFrom-Json
-              $escalate = [bool] $result.escalate
-              $requiresValidation = [bool] $result.requiresValidation
-              $selected = @($result.shards)
+              try {
+                & ./tools/TestImpact/Select-Shards.ps1 `
+                    -MapFile map/shard-map.json `
+                    -ExpectedShards @($all.name) `
+                    -OutFile selection.json
+                if ($LASTEXITCODE -ne 0) { throw "shard selector exited $LASTEXITCODE" }
+                $result = Get-Content selection.json -Raw | ConvertFrom-Json
+                $selectionEscalated = Read-RequiredJsonBoolean `
+                    -Object $result -PropertyName 'escalate'
+                $selectionRequiresValidation = Read-RequiredJsonBoolean `
+                    -Object $result -PropertyName 'requiresValidation'
+                if (-not $selectionRequiresValidation) {
+                  throw 'shard selector contradicted the exact-path runtime decision'
+                }
+                $shardsProperty = $result.PSObject.Properties['shards']
+                if ($null -eq $shardsProperty -or $shardsProperty.Value -isnot [System.Array] -or
+                    @($shardsProperty.Value | Where-Object { $_ -isnot [string] }).Count -gt 0) {
+                  throw "selector output property 'shards' must be a JSON string array"
+                }
+                $escalate = $selectionEscalated
+                $requiresValidation = $true
+                $selected = @($shardsProperty.Value)
+              }
+              catch {
+                Write-Host "::warning::shard selection output unavailable or invalid ($($_.Exception.Message)) - running the full matrix"
+                $escalate = $true
+                $requiresValidation = $true
+                $selected = @()
+              }
             }
             else {
               Write-Host '::warning::no certified shard map - running the full matrix'
