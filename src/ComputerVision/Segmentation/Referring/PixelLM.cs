@@ -82,7 +82,12 @@ public partial class PixelLM<T> : Common.ReferringSegmentationBase<T>
     /// overrides the base's plain-AdamW default rather than accepting it.
     /// </remarks>
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
-        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+        // The base's own default routes through PaperOptimizerFactory; this override would
+        // bypass it, so the paper recipe is consulted here before falling back to the
+        // options-driven optimizer, which is then checked against the declaration.
+        => PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
@@ -96,7 +101,7 @@ public partial class PixelLM<T> : Common.ReferringSegmentationBase<T>
                 UseAMSGrad = false,
                 EnableGradientClipping = false,
                 MaxGradientNorm = 0.0,
-            });
+            }));
     #endregion
 
     #region Constructors
