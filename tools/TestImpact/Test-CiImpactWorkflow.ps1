@@ -16,7 +16,9 @@
 [CmdletBinding()]
 param(
     [string] $ValidationWorkflow = '.github/workflows/sonarcloud.yml',
-    [string] $MapWorkflow = '.github/workflows/test-impact-map.yml'
+    [string] $MapWorkflow = '.github/workflows/test-impact-map.yml',
+    [string] $CertifiedMapResolver = 'tools/TestImpact/Resolve-CertifiedShardMap.ps1',
+    [string] $RequiredArtifactReceiver = 'tools/TestImpact/Receive-RequiredArtifact.ps1'
 )
 
 Set-StrictMode -Version Latest
@@ -102,6 +104,8 @@ function Get-ContinuedShellCommand {
 
 $validation = Get-Content -LiteralPath $ValidationWorkflow -Raw
 $map = Get-Content -LiteralPath $MapWorkflow -Raw
+$certifiedMapResolverText = Get-Content -LiteralPath $CertifiedMapResolver -Raw
+$requiredArtifactReceiverText = Get-Content -LiteralPath $RequiredArtifactReceiver -Raw
 
 # Every job in this list consumes meaningful runner time. Dependency-based incidental skipping is
 # not enough: a dependency can be removed during a refactor while the job remains runnable. Each
@@ -155,6 +159,77 @@ Assert-Contract ([bool] $selfTestStep) `
     'select-shards no longer runs the impact tooling self-tests'
 Assert-Contract (-not $selfTestStep.Contains('continue-on-error: true')) `
     'checked-in impact tooling can fail its self-tests while CI remains green'
+Assert-Contract ($selfTestStep.Contains('./tools/TestImpact/Receive-RequiredArtifact.ps1 -SelfTest')) `
+    'the required-artifact transport policy is not executed against its self-tests'
+
+# A 100+ shard fan-out must not resolve the same build artifact by name in every job. That path calls
+# ListArtifacts concurrently and GitHub responds with a secondary-rate-limit 403. The build publishes
+# the immutable ID and digest once; both consumer matrices use the tested direct receiver, retain hard
+# failure on exhaustion, and suppress output uploads when their prerequisite never arrived.
+$buildJob = Get-JobBlock -WorkflowText $validation -Job 'build'
+$buildHeader = Get-JobHeader -JobBlock $buildJob
+$buildUpload = Get-StepBlock -JobBlock $buildJob -Step 'Upload build artifacts'
+Assert-Contract ($buildHeader.Contains('artifact_id: ${{ steps.upload-build-artifact.outputs.artifact-id }}')) `
+    'build does not expose the immutable artifact ID to its consumers'
+Assert-Contract ($buildHeader.Contains("artifact_digest: `${{ format('sha256:{0}', steps.upload-build-artifact.outputs.artifact-digest) }}")) `
+    'build does not expose the upload digest in the receiver''s canonical SHA-256 form'
+Assert-Contract ($buildUpload.Contains('id: upload-build-artifact')) `
+    'the build artifact upload has no stable step identity for its outputs'
+
+Assert-Contract ($requiredArtifactReceiverText.Contains('enum ArtifactRequestDisposition')) `
+    'artifact retry state is represented by strings instead of a closed type'
+Assert-Contract ($requiredArtifactReceiverText.Contains('actions/artifacts/$ArtifactId/zip')) `
+    'required artifact transport does not use the immutable-ID archive endpoint'
+Assert-Contract ($requiredArtifactReceiverText.Contains("--proto-redir '=https'")) `
+    'required artifact transport permits a redirect to downgrade from HTTPS'
+Assert-Contract (-not $requiredArtifactReceiverText.Contains('ArtifactService/ListArtifacts')) `
+    'required artifact transport still performs the rate-limited artifact-list lookup'
+Assert-Contract ($requiredArtifactReceiverText.Contains('Test-ArtifactDigest')) `
+    'direct artifact transport does not validate the upload digest before extraction'
+Assert-Contract ($requiredArtifactReceiverText.Contains('secondary rate limit')) `
+    'artifact transport does not distinguish transient throttling from a permission denial'
+Assert-Contract ($requiredArtifactReceiverText.Contains('Start-Sleep -Seconds $delay')) `
+    'artifact transport retries immediately instead of applying its tested backoff policy'
+Assert-Contract ($requiredArtifactReceiverText.Contains('$PSNativeCommandUseErrorActionPreference = $false')) `
+    'native-command error handling can bypass the typed artifact retry policy'
+
+$artifactConsumers = @('test-net10-sharded', 'model-shape-conformance-windows')
+foreach ($job in $artifactConsumers) {
+    $consumer = Get-JobBlock -WorkflowText $validation -Job $job
+    $header = Get-JobHeader -JobBlock $consumer
+    $download = Get-StepBlock -JobBlock $consumer -Step 'Download required build artifact'
+    Assert-Contract ([bool] $download) `
+        "artifact consumer '$job' does not use the required-artifact transport"
+    Assert-Contract ($download.Contains('./tools/TestImpact/Receive-RequiredArtifact.ps1')) `
+        "artifact consumer '$job' bypasses the tested receiver"
+    Assert-Contract ($download.Contains("-ArtifactId '`${{ needs.build.outputs.artifact_id }}'")) `
+        "artifact consumer '$job' does not bind the immutable build artifact ID"
+    Assert-Contract ($download.Contains("-ExpectedDigest '`${{ needs.build.outputs.artifact_digest }}'")) `
+        "artifact consumer '$job' does not bind the build artifact digest"
+    Assert-Contract (-not $download.Contains('continue-on-error: true')) `
+        "artifact consumer '$job' can pass without its required build output"
+    Assert-Contract ($download.Contains('timeout-minutes: 25')) `
+        "artifact consumer '$job' does not reserve the bounded retry and extraction budget"
+    Assert-Contract (-not $consumer.Contains('Retry build artifact download')) `
+        "artifact consumer '$job' retains the immediate retry that caused repeated 403 responses"
+    Assert-Contract ($header -match '(?m)^      actions: read\s*$') `
+        "artifact consumer '$job' lacks actions:read for the archive endpoint"
+}
+
+$testConsumer = Get-JobBlock -WorkflowText $validation -Job 'test-net10-sharded'
+foreach ($stepName in @(
+    'Upload test-impact digest',
+    'Upload coverage + test results',
+    'Upload crash evidence',
+    'Upload compact test diagnostics')) {
+    $upload = Get-StepBlock -JobBlock $testConsumer -Step $stepName
+    Assert-Contract ($upload.Contains("if: always() && steps.download-build-artifacts.outcome == 'success'")) `
+        "'$stepName' can amplify an artifact-service failure after the required download failed"
+}
+$shapeConsumer = Get-JobBlock -WorkflowText $validation -Job 'model-shape-conformance-windows'
+$shapeUpload = Get-StepBlock -JobBlock $shapeConsumer -Step 'Upload window report'
+Assert-Contract ($shapeUpload.Contains("if: always() && steps.download-build-artifacts.outcome == 'success'")) `
+    'shape-conformance can upload after its required build artifact was unavailable'
 
 $promotion = Get-JobBlock -WorkflowText $validation -Job 'promote-ci-test-analysis'
 Assert-Contract ($promotion.Contains("needs.validation-source.outputs.reuse == 'true'")) `
@@ -182,12 +257,25 @@ Assert-Contract ($gate -match '(?s)if \[ "\$REUSED_VALIDATION" = "true" \].*?pro
 # authorization boundary now; no second switch may silently restore the full matrix.
 Assert-Contract (-not $validation.Contains('TEST_IMPACT_MODE')) `
     'TEST_IMPACT_MODE shadow/enforce switching is still present'
-Assert-Contract ($validation.Contains('certified-shard-map')) `
+Assert-Contract ($certifiedMapResolverText.Contains('--name certified-shard-map')) `
     'PR selection does not consume a certified map artifact'
 Assert-Contract ($validation.Contains('candidate-shard-map')) `
     'coverage audit runs do not consume an explicit candidate map artifact'
-Assert-Contract ($validation -match '(?s)if \[ "\$FORCE_COVERAGE" = ''true'' \].*?--name candidate-shard-map.*?else.*?--name certified-shard-map') `
+Assert-Contract (
+    $validation -match '(?s)if \[ "\$FORCE_COVERAGE" = ''true'' \].*?--name candidate-shard-map.*?else' -and
+    $certifiedMapResolverText.Contains('--name certified-shard-map')) `
     'candidate and certified artifacts are not separated at the execution boundary'
+
+# A later map audit is also a revocation boundary. If it fails or withholds certification after a
+# miss, selection must fail closed instead of scanning backward until an older certificate happens
+# to download successfully.
+$mapDownload = Get-StepBlock -JobBlock $selectorJob -Step 'Download the shard map'
+Assert-Contract ($mapDownload.Contains('./tools/TestImpact/Resolve-CertifiedShardMap.ps1')) `
+    'PR selection bypasses the executable certified-map resolver'
+Assert-Contract ($mapDownload.Contains('-ResultFile map-resolution.json')) `
+    'PR selection does not consume the resolver decision explicitly'
+Assert-Contract ($validation.Contains('./tools/TestImpact/Resolve-CertifiedShardMap.ps1 -SelfTest')) `
+    'the certified-map revocation policy is not executed against its adversarial fixtures'
 
 # The map builder publishes a new candidate, but only the previous candidate that was exercised by
 # a complete coverage run may become certified. Reusing one artifact name for both states recreates
@@ -198,14 +286,37 @@ Assert-Contract ($map.Contains('name: certified-shard-map')) `
     'map workflow does not publish certified-shard-map'
 Assert-Contract ($map.Contains('certification.json')) `
     'certified map artifact has no provenance record'
+Assert-Contract ($map.Contains('./tools/TestImpact/Measure-SelectionMiss.ps1 -SelfTest')) `
+    'map certification can run without first proving that skipped failures are detected'
+Assert-Contract ($map.Contains('./tools/TestImpact/New-ShardMapCertificate.ps1 -SelfTest')) `
+    'the shipping certification policy is not tested before use'
 Assert-Contract ($map.Contains('found=false')) `
     'automatic no-source bootstrap is still represented as a workflow failure'
 Assert-Contract ($map.Contains("candidate_ready: `${{ steps.source.outputs.found }}")) `
     'map workflow does not expose whether this invocation produced a candidate'
 Assert-Contract ($map.Contains("if: steps.audit.outputs.certified == 'true'")) `
     'certified artifact upload is not gated by the audit decision'
-Assert-Contract ($map -match '(?s)if \(\$auditExit -eq 0.*?\$a\.WouldSkip -gt 0.*?\$a\.Failed -gt 0\)') `
-    'map certification does not require a real failing-shard opportunity as well as reduction'
+$mapBuildJob = Get-JobBlock -WorkflowText $map -Job 'build-map'
+$auditStep = Get-StepBlock -JobBlock $mapBuildJob -Step 'Audit selection against the source run'
+$auditRead = '$a = Get-Content audit.json -Raw | ConvertFrom-Json'
+$certificateInvocation = "& (Join-Path `$auditTools 'New-ShardMapCertificate.ps1')"
+$auditReadIndex = $auditStep.IndexOf($auditRead, [StringComparison]::Ordinal)
+$certificateIndex = $auditStep.IndexOf($certificateInvocation, [StringComparison]::Ordinal)
+Assert-Contract ($certificateIndex -ge 0) `
+    'the workflow does not execute the tested certification policy'
+Assert-Contract ($auditReadIndex -ge 0 -and $certificateIndex -gt $auditReadIndex) `
+    'the workflow invokes certification before loading the audited result'
+Assert-Contract ($auditStep -match "(?m)^          $([Regex]::Escape($certificateInvocation))") `
+    'the certificate invocation is nested under a conditional instead of running at audit scope'
+if ($auditReadIndex -ge 0 -and $certificateIndex -gt $auditReadIndex) {
+    $beforeCertificate = $auditStep.Substring(
+        $auditReadIndex + $auditRead.Length,
+        $certificateIndex - ($auditReadIndex + $auditRead.Length))
+    Assert-Contract (-not ($beforeCertificate -match '(?m)^\s*(?:if|elseif|switch|foreach|while|do|return|exit)\b')) `
+        'control flow between audit loading and certification can bypass certificate generation'
+    Assert-Contract (-not $beforeCertificate.Contains('$a.Failed')) `
+        'certificate generation is gated on the observed shard failure count'
+}
 Assert-Contract ($map -match "if \[ '.*needs\.build-map\.result.*' = 'success' \] && \[ '.*candidate_ready.*' = 'true' \]") `
     'coverage dispatch can cite the current map run when no candidate was produced'
 
