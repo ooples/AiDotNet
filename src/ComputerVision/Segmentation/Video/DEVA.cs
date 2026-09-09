@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -58,6 +59,17 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Tracking Anything with Decoupled Video Segmentation", "https://arxiv.org/abs/2309.03903", Year = 2023, Authors = "Cheng et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-5,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Cheng et al. 2023, Sec. 4: the AdamW optimizer, with a learning rate of 2e-5 "
+                        + "for 80,000 iterations during pre-training. The Adam appearing elsewhere in "
+                        + "the paper is the author Hartwig Adam in a reference. Routing is handled by "
+                        + "SegmentationModelBase.CreateDefaultOptimizer, which consults "
+                        + "PaperOptimizerFactory itself, so no call is inserted here.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-5,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Cheng et al. 2023, Sec. 4: main training uses a learning rate of 1e-5 for "
+                        + "150,000 iterations.")]
 public partial class DEVA<T> : Common.VideoSegmentationBase<T>
 {
     private readonly DEVAOptions _options;

@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -56,6 +57,16 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("PixelLM: Pixel Reasoning with Large Multimodal Model", "https://arxiv.org/abs/2312.02228", Year = 2024, Authors = "Ren et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 3e-4, Beta1 = 0.9, Beta2 = 0.95,
+                WeightDecay = 0, WarmupSteps = 100,
+                Source = "Ren et al. 2024, config table: AdamW with a base learning rate of 3.0e-4, a "
+                        + "weight decay of 0, optimizer momentum beta1 0.9 and beta2 0.95, and 100 "
+                        + "warmup iterations. The stated batch size of 16 is not declared as a reference "
+                        + "batch size: the table gives a base learning rate, and pairing a base rate "
+                        + "with a batch size would apply the linear scaling rule to a figure that has "
+                        + "already been scaled. Routing is handled by "
+                        + "SegmentationModelBase.CreateDefaultOptimizer, which consults "
+                        + "PaperOptimizerFactory itself, so no call is inserted here.")]
 public partial class PixelLM<T> : Common.ReferringSegmentationBase<T>
 {
     private readonly PixelLMOptions _options;
