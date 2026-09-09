@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tests.ModelFamilyTests.Base;
@@ -28,12 +29,7 @@ public sealed class RecurrentGemmaTrainingRegressionTests
             taskType: NeuralNetworkTaskType.TextGeneration,
             inputSize: 2,
             outputSize: 8);
-        using var model = new RecurrentGemmaLanguageModel<float>(
-            architecture,
-            vocabSize: 8,
-            modelDimension: 4,
-            numLayers: 1,
-            maxSeqLength: 2);
+        using var model = new RecurrentGemmaLanguageModel<float>(architecture, new RecurrentGemmaOptions { VocabSize = 8, ModelDimension = 4, NumLayers = 1, MaxSequenceLength = 2 });
 
         var input = new Tensor<float>([1, 2]);
         input[0] = 1;
@@ -101,13 +97,11 @@ public sealed class RecurrentGemmaTrainingRegressionTests
         protected override int[] OutputShape => [4];
 
         protected override INeuralNetworkModel<float> CreateNetwork() =>
-            new RecurrentGemmaLanguageModel<float>(
-                new NeuralNetworkArchitecture<float>(
+            new RecurrentGemmaLanguageModel<float>(new NeuralNetworkArchitecture<float>(
                     inputType: InputType.OneDimensional,
                     taskType: NeuralNetworkTaskType.TextGeneration,
                     inputSize: 128,
-                    outputSize: 4),
-                vocabSize: 4096);
+                    outputSize: 4), new RecurrentGemmaOptions { VocabSize = 4096 });
 
         public (RecurrentGemmaLanguageModel<float> Model, Tensor<float> Input, Tensor<float> Target)
             CreateTrainingCase()

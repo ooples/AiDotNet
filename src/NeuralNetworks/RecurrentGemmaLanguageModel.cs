@@ -64,12 +64,8 @@ public partial class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBa
 
     public RecurrentGemmaLanguageModel(
         NeuralNetworkArchitecture<T> architecture,
-        int vocabSize = 256000,
-        int modelDimension = 256,
-        int numLayers = 4,
-        int maxSeqLength = 512,
-        ILossFunction<T>? lossFunction = null,
         RecurrentGemmaOptions? options = null,
+        ILossFunction<T>? lossFunction = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture,
             // The recurrent Gemma LM head emits raw logits. Use the paper-faithful
@@ -78,11 +74,12 @@ public partial class RecurrentGemmaLanguageModel<T> : TokenLanguageModelLayoutBa
             lossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new RecurrentGemmaOptions();
+        _options.Validate();
         Options = _options;
-        _vocabSize = vocabSize;
-        _modelDimension = modelDimension;
-        _numLayers = numLayers;
-        _maxSeqLength = maxSeqLength;
+        _vocabSize = _options.VocabSize;
+        _modelDimension = _options.ModelDimension;
+        _numLayers = _options.NumLayers;
+        _maxSeqLength = _options.MaxSequenceLength;
         _optimizer = optimizer ?? CreateDefaultOptimizer();
         InitializeLayers();
     }

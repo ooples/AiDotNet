@@ -5091,9 +5091,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 64), " +
-                    "vocabSize: 64, modelDimension: 32, numLayers: 2, numHeads: 4, maxSeqLength: 16, " +
-                    "learningRate: 1e-5)";
+                    "inputSize: 4, outputSize: 64), new AiDotNet.NeuralNetworks.Options.FinchOptions { VocabSize = 64, ModelDimension = 32, NumLayers = 2, NumHeads = 4, MaxSequenceLength = 16, LearningRate = 1e-5 })";
             }
             else if (model.ClassName == "FlamingoNeuralNetwork" && model.TypeParameterCount == 1)
             {
@@ -6521,8 +6519,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, inputSize: 32, outputSize: 128), " +
-                    "vocabSize: 128, modelDimension: 32, numLayers: 1, maxSeqLength: 32, " +
-                    $"options: new AiDotNet.NeuralNetworks.Options.{recurrentOptionsType} {{ RecurrenceDimension = 40 }})";
+                    $"new AiDotNet.NeuralNetworks.Options.{recurrentOptionsType} {{ VocabSize = 128, " +
+                    "ModelDimension = 32, NumLayers = 1, MaxSequenceLength = 32, " +
+                    // NOT an interpolated segment, so a single brace is a single brace.
+                    "RecurrenceDimension = 40 })";
             }
             else if (model.ClassName == "DocGCN" && model.TypeParameterCount == 1)
             {
@@ -6976,12 +6976,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Pin generated-test initialization because these recurrent gates otherwise draw
                 // from the process-shared RNG and the exact trajectory depends on sibling test order.
                 pinInitSeed = true;
-                string headArgument = model.ClassName == "HawkLanguageModel" ? string.Empty : "numHeads: 4, ";
+                // Hawk is purely recurrent and declares no head count; the other two do.
+                string headArgument = model.ClassName == "HawkLanguageModel" ? string.Empty : "NumHeads = 4, ";
+                string recurrentOptionsType = model.ClassName.Replace("LanguageModel", "Options");
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 32, outputSize: 128), vocabSize: 128, modelDimension: 32, " +
-                    $"numLayers: 1, {headArgument}maxSeqLength: 32)";
+                    "inputSize: 32, outputSize: 128), " +
+                    $"new AiDotNet.NeuralNetworks.Options.{recurrentOptionsType} {{ VocabSize = 128, " +
+                    $"ModelDimension = 32, NumLayers = 1, {headArgument}MaxSequenceLength = 32 }})";
             }
             else if (model.ClassName == "ZambaLanguageModel" && model.TypeParameterCount == 1)
             {
@@ -11423,11 +11426,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // embedding -> RG-LRU -> normalization -> logits topology at one 32-wide recurrent
                 // block and a 256-token smoke vocabulary; Griffin/Hawk remain at the earlier vocab-
                 // only cap because their full-width fixtures already fit the gate.
+                const string optionsNamespace = "AiDotNet.NeuralNetworks.Options.";
                 string scaleArgs = model.ClassName switch
                 {
                     "RecurrentGemmaLanguageModel" =>
-                        ", vocabSize: 256, modelDimension: 32, numLayers: 1, maxSeqLength: 128",
-                    "GriffinLanguageModel" or "HawkLanguageModel" => ", vocabSize: 4096",
+                        ", new " + optionsNamespace + "RecurrentGemmaOptions { VocabSize = 256, "
+                            + "ModelDimension = 32, NumLayers = 1, MaxSequenceLength = 128 }",
+                    "GriffinLanguageModel" => ", new " + optionsNamespace + "GriffinOptions { VocabSize = 4096 }",
+                    "HawkLanguageModel" => ", new " + optionsNamespace + "HawkOptions { VocabSize = 4096 }",
                     _ => ""
                 };
 
