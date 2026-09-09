@@ -27,7 +27,7 @@ public class ModelCoverageBaselineTests
     /// that were covered no longer are: establish why before editing this constant, because the
     /// point of the gate is that the number cannot quietly fall.
     /// </summary>
-    private const int BaselineTestedCount = 1482;
+    private const int BaselineTestedCount = 1485;
 
     /// <summary>
     /// Total annotated models at the same measurement. Only a floor: the census grows as models are

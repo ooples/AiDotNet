@@ -3844,7 +3844,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             return TestFamily.GaussianProcess;
 
         // Priority 2: TimeSeriesModel
-        if (model.Categories.Contains(CategoryTimeSeriesModel))
+        //
+        // Guarded the same way as the Diffusion and neural-network routes below: the TimeSeries
+        // fixture needs Matrix input and Vector output, so handing it a Tensor-based model assigns
+        // a family that model can never satisfy. The GARCH family (Garch11Model, EGarchModel,
+        // GjrGarchModel) derives from ClassicalVolatilityModelBase, which is
+        // IFullModel<T, Tensor<T>, ...>, and declares [ModelCategory(TimeSeriesModel)] - accurate
+        // documentation that says nothing about the I/O shape a fixture has to build.
+        //
+        // A Tensor-based time-series model falls through to the families below, where a
+        // Tensor-shaped one may fit. This cannot remove coverage: emitting a fixture already
+        // required IsCompatibleWithFamily, which is this same Matrix/Vector condition.
+        if (model.Categories.Contains(CategoryTimeSeriesModel)
+            && model.UsesMatrixInput && model.UsesVectorOutput)
             return TestFamily.TimeSeries;
 
         // Priority 2a: 3D Diffusion (most specific diffusion subtype)
