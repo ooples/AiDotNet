@@ -78,15 +78,11 @@ public partial class DCGAN<T> : GenerativeAdversarialNetwork<T>
     /// <param name="options">Optional DCGAN options.</param>
     public DCGAN(
         NeuralNetworkArchitecture<T> architecture,
-        int latentSize = 100,
-        int generatorFeatureMaps = 64,
-        int discriminatorFeatureMaps = 64,
         DCGANOptions? options = null)
-        : this(latentSize,
+        : this((options?.LatentSize ?? 100),
                architecture.InputDepth > 0 ? architecture.InputDepth : 3,
                architecture.InputHeight > 0 ? architecture.InputHeight : 64,
                architecture.InputWidth > 0 ? architecture.InputWidth : 64,
-               generatorFeatureMaps, discriminatorFeatureMaps,
                lossFunction: null, options: options)
     {
     }
@@ -126,13 +122,11 @@ public partial class DCGAN<T> : GenerativeAdversarialNetwork<T>
         int imageChannels,
         int imageHeight,
         int imageWidth,
-        int generatorFeatureMaps = 64,
-        int discriminatorFeatureMaps = 64,
-        ILossFunction<T>? lossFunction = null,
-        DCGANOptions? options = null)
+        DCGANOptions? options = null,
+        ILossFunction<T>? lossFunction = null)
         : base(
-            CreateDCGANGeneratorArchitecture(latentSize, imageChannels, imageHeight, imageWidth, generatorFeatureMaps),
-            CreateDCGANDiscriminatorArchitecture(imageChannels, imageHeight, imageWidth, discriminatorFeatureMaps),
+            CreateDCGANGeneratorArchitecture(latentSize, imageChannels, imageHeight, imageWidth, (options?.GeneratorChannels ?? 64)),
+            CreateDCGANDiscriminatorArchitecture(imageChannels, imageHeight, imageWidth, (options?.DiscriminatorChannels ?? 64)),
             InputType.ThreeDimensional,
             generatorOptimizer: null,
             discriminatorOptimizer: null,
@@ -159,6 +153,7 @@ public partial class DCGAN<T> : GenerativeAdversarialNetwork<T>
             defaultDiscriminatorOptimizerOptions: CreateAdamOptimizerOptions(0.0002, 0.5))
     {
         _options = options ?? new DCGANOptions();
+        _options.Validate();
         Options = _options;
         // Remember construction params so CreateNewInstance can rebuild a
         // fresh DCGAN with identical architecture rather than going through
@@ -171,8 +166,8 @@ public partial class DCGAN<T> : GenerativeAdversarialNetwork<T>
         _imageChannels = imageChannels;
         _imageHeight = imageHeight;
         _imageWidth = imageWidth;
-        _generatorFeatureMaps = generatorFeatureMaps;
-        _discriminatorFeatureMaps = discriminatorFeatureMaps;
+        _generatorFeatureMaps = _options.GeneratorChannels;
+        _discriminatorFeatureMaps = _options.DiscriminatorChannels;
 
         // DCGAN paper Adam (Radford et al. 2016 §4: lr=2e-4, β1=0.5) on the optimizer the
         // networks ACTUALLY train through — NeuralNetworkBase.GetOrCreateBaseOptimizer,

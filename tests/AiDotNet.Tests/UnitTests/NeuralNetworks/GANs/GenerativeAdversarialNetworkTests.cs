@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
@@ -164,13 +165,7 @@ public class GenerativeAdversarialNetworkTests
     public async Task DCGAN_Constructor_WithCustomFeatureMaps_InitializesCorrectly()
     {
         // Arrange & Act
-        var dcgan = new DCGAN<double>(
-            latentSize: 128,
-            imageChannels: 1,
-            imageHeight: 32,
-            imageWidth: 32,
-            generatorFeatureMaps: 128,
-            discriminatorFeatureMaps: 128);
+        var dcgan = new DCGAN<double>(latentSize: 128, imageChannels: 1, imageHeight: 32, imageWidth: 32, options: new DCGANOptions { GeneratorChannels = 128, DiscriminatorChannels = 128 });
 
         // Assert
         Assert.NotNull(dcgan);
@@ -343,11 +338,7 @@ public class GenerativeAdversarialNetworkTests
         var discArch = CreateThreeDimensionalDiscriminatorArchitecture();
 
         // Act
-        var pix2pix = new Pix2Pix<double>(
-            generatorArchitecture: genArch,
-            discriminatorArchitecture: discArch,
-            inputType: InputType.ThreeDimensional,
-            l1Lambda: 50.0);
+        var pix2pix = new Pix2Pix<double>(generatorArchitecture: genArch, discriminatorArchitecture: discArch, inputType: InputType.ThreeDimensional, options: new Pix2PixOptions { L1Lambda = 50.0 });
 
         // Assert
         Assert.NotNull(pix2pix);
@@ -383,10 +374,13 @@ public class GenerativeAdversarialNetworkTests
         var sagan = new SAGAN<double>(
             generatorArchitecture: genArch,
             discriminatorArchitecture: discArch,
-            latentSize: 128,
-            imageChannels: 3,
-            imageHeight: 32,
-            imageWidth: 32);
+            options: new SAGANOptions
+            {
+                LatentSize = 128,
+                ImageChannels = 3,
+                ImageHeight = 32,
+                ImageWidth = 32,
+            });
 
         // Assert
         Assert.NotNull(sagan);
@@ -403,14 +397,7 @@ public class GenerativeAdversarialNetworkTests
         var discArch = CreateThreeDimensionalDiscriminatorArchitecture();
 
         // Act
-        var sagan = new SAGAN<double>(
-            generatorArchitecture: genArch,
-            discriminatorArchitecture: discArch,
-            latentSize: 128,
-            imageChannels: 3,
-            imageHeight: 32,
-            imageWidth: 32,
-            numClasses: 10);
+        var sagan = new SAGAN<double>(generatorArchitecture: genArch, discriminatorArchitecture: discArch, options: new SAGANOptions { LatentSize = 128, ImageChannels = 3, ImageHeight = 32, ImageWidth = 32, NumClasses = 10 });
 
         // Assert
         Assert.NotNull(sagan);
@@ -423,7 +410,7 @@ public class GenerativeAdversarialNetworkTests
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
         var discArch = CreateThreeDimensionalDiscriminatorArchitecture();
-        var sagan = new SAGAN<double>(genArch, discArch, 128, 3, 32, 32);
+        var sagan = new SAGAN<double>(genArch, discArch, new SAGANOptions { LatentSize = 128, ImageChannels = 3, ImageHeight = 32, ImageWidth = 32 });
 
         // Act
         var metadata = sagan.GetModelMetadata();
@@ -463,11 +450,7 @@ public class GenerativeAdversarialNetworkTests
         var criticArch = CreateThreeDimensionalDiscriminatorArchitecture();
 
         // Act
-        var wgan = new WGAN<double>(
-            generatorArchitecture: genArch,
-            criticArchitecture: criticArch,
-            inputType: InputType.ThreeDimensional,
-            weightClipValue: 0.02);
+        var wgan = new WGAN<double>(generatorArchitecture: genArch, criticArchitecture: criticArch, inputType: InputType.ThreeDimensional, options: new WGANOptions { WeightClipValue = 0.02 });
 
         // Assert
         Assert.NotNull(wgan);
@@ -536,11 +519,7 @@ public class GenerativeAdversarialNetworkTests
         var criticArch = CreateThreeDimensionalDiscriminatorArchitecture();
 
         // Act
-        var wgangp = new WGANGP<double>(
-            generatorArchitecture: genArch,
-            criticArchitecture: criticArch,
-            inputType: InputType.ThreeDimensional,
-            gradientPenaltyCoefficient: 15.0);
+        var wgangp = new WGANGP<double>(generatorArchitecture: genArch, criticArchitecture: criticArch, inputType: InputType.ThreeDimensional, options: new WGANGPOptions { GradientPenaltyCoefficient = 15.0 });
 
         // Assert
         Assert.NotNull(wgangp);
@@ -716,14 +695,7 @@ public class GenerativeAdversarialNetworkTests
         var discBArch = CreateThreeDimensionalDiscriminatorArchitecture();
 
         // Act
-        var cyclegan = new CycleGAN<double>(
-            generatorAtoB: genAtoBArch,
-            generatorBtoA: genBtoAArch,
-            discriminatorA: discAArch,
-            discriminatorB: discBArch,
-            inputType: InputType.ThreeDimensional,
-            cycleConsistencyLambda: 15.0,
-            identityLambda: 7.5);
+        var cyclegan = new CycleGAN<double>(generatorAtoB: genAtoBArch, generatorBtoA: genBtoAArch, discriminatorA: discAArch, discriminatorB: discBArch, inputType: InputType.ThreeDimensional, options: new CycleGANOptions { CycleConsistencyLambda = 15.0, IdentityLambda = 7.5 });
 
         // Assert
         Assert.NotNull(cyclegan);
@@ -871,12 +843,15 @@ public class GenerativeAdversarialNetworkTests
         var biggan = new BigGAN<double>(
             generatorArchitecture: genArch,
             discriminatorArchitecture: discArch,
-            latentSize: 128,
-            numClasses: 100,
-            imageChannels: 3,
-            imageHeight: 32,
-            imageWidth: 32,
-            inputType: InputType.OneDimensional);
+            options: new BigGANOptions
+            {
+                LatentSize = 128,
+                NumClasses = 100,
+                ImageChannels = 3,
+                ImageHeight = 32,
+                ImageWidth = 32,
+                InputType = InputType.OneDimensional,
+            });
 
         // Assert
         Assert.NotNull(biggan);
@@ -890,7 +865,7 @@ public class GenerativeAdversarialNetworkTests
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
         var discArch = CreateThreeDimensionalDiscriminatorArchitecture();
-        var biggan = new BigGAN<double>(genArch, discArch, 128, 100, 128, 3, 32, 32, inputType: InputType.OneDimensional);
+        var biggan = new BigGAN<double>(genArch, discArch, new BigGANOptions { LatentSize = 128, NumClasses = 100, ClassEmbeddingDim = 128, ImageChannels = 3, ImageHeight = 32, ImageWidth = 32, InputType = InputType.OneDimensional });
 
         // Act
         var metadata = biggan.GetModelMetadata();
@@ -914,9 +889,7 @@ public class GenerativeAdversarialNetworkTests
         var proggan = new ProgressiveGAN<double>(
             generatorArchitecture: genArch,
             discriminatorArchitecture: discArch,
-            latentSize: 512,
-            imageChannels: 3,
-            inputType: InputType.ThreeDimensional);
+            options: new ProgressiveGANOptions { LatentSize = 512, ImageChannels = 3, InputType = InputType.ThreeDimensional });
 
         // Assert
         Assert.NotNull(proggan);
@@ -930,7 +903,7 @@ public class GenerativeAdversarialNetworkTests
         // Arrange
         var genArch = CreateThreeDimensionalGeneratorArchitecture();
         var discArch = CreateThreeDimensionalDiscriminatorArchitecture();
-        var proggan = new ProgressiveGAN<double>(genArch, discArch, 512, 3, inputType: InputType.ThreeDimensional);
+        var proggan = new ProgressiveGAN<double>(genArch, discArch, new ProgressiveGANOptions { LatentSize = 512, ImageChannels = 3, InputType = InputType.ThreeDimensional });
 
         // Act
         var metadata = proggan.GetModelMetadata();

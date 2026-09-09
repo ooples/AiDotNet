@@ -70,7 +70,11 @@ public abstract class GanOptions : ModelHyperparameterOptions
     /// GANs are unusually sensitive to this; 0.0002 with the Adam optimizer is the value most
     /// GAN papers settled on.</para>
     /// </remarks>
-    public double InitialLearningRate { get; set; }
+    /// <value>
+    /// Defaults to 0.0002, the Adam learning rate the DCGAN paper settled on and which most
+    /// later GAN papers inherited.
+    /// </value>
+    public double InitialLearningRate { get; set; } = 0.0002;
 
     /// <summary>
     /// Throws if a dimension every GAN requires has been left unset.
@@ -81,8 +85,10 @@ public abstract class GanOptions : ModelHyperparameterOptions
     /// </exception>
     protected void ValidateCore()
     {
-        Require(LatentSize, nameof(LatentSize));
+        // Only the channel count is universal. LatentSize stays a REQUIRED constructor
+        // argument on several of these models (DCGAN, BigGAN, SAGAN, ProgressiveGAN build their
+        // generator architecture from it before an instance exists), so it is legitimately unset
+        // on those options objects; and InitialLearningRate carries a default above.
         Require(ImageChannels, nameof(ImageChannels));
-        Require(InitialLearningRate, nameof(InitialLearningRate));
     }
 }

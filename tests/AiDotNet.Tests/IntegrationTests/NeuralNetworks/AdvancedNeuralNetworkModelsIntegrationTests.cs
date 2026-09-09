@@ -1709,8 +1709,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             imageChannels: 1,
             imageHeight: 8,
             imageWidth: 8,
-            generatorFeatureMaps: 8,
-            discriminatorFeatureMaps: 8);
+            options: new DCGANOptions { GeneratorChannels = 8, DiscriminatorChannels = 8 });
 
         // Per Radford et al. 2015 §3, DCGAN's generator input is the latent
         // noise vector of size `latentSize`. The generator's first Dense layer
@@ -1738,8 +1737,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             imageChannels: 1,
             imageHeight: 8,
             imageWidth: 8,
-            generatorFeatureMaps: 8,
-            discriminatorFeatureMaps: 8);
+            options: new DCGANOptions { GeneratorChannels = 8, DiscriminatorChannels = 8 });
 
         // Act
         var generatorParams = dcgan.Generator.GetParameterCount();
@@ -2394,14 +2392,17 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         var biggan = new BigGAN<float>(
             generatorArchitecture,
             discriminatorArchitecture,
-            latentSize: 16,
-            numClasses: 10,
-            classEmbeddingDim: 8,
-            imageChannels: 1,
-            imageHeight: 8,
-            imageWidth: 8,
-            generatorChannels: 8,
-            discriminatorChannels: 8);
+            options: new BigGANOptions
+            {
+                LatentSize = 16,
+                NumClasses = 10,
+                ClassEmbeddingDim = 8,
+                ImageChannels = 1,
+                ImageHeight = 8,
+                ImageWidth = 8,
+                GeneratorChannels = 8,
+                DiscriminatorChannels = 8,
+            });
 
         // BigGAN expects 2D latent code [batch, latent_size]
         var noiseInput = CreateRandomTensor([1, 16]);
@@ -2443,12 +2444,15 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         var biggan = new BigGAN<float>(
             generatorArchitecture,
             discriminatorArchitecture,
-            latentSize: 16,
-            numClasses: 10,
-            classEmbeddingDim: 8,
-            imageChannels: 1,
-            imageHeight: 8,
-            imageWidth: 8);
+            options: new BigGANOptions
+            {
+                LatentSize = 16,
+                NumClasses = 10,
+                ClassEmbeddingDim = 8,
+                ImageChannels = 1,
+                ImageHeight = 8,
+                ImageWidth = 8,
+            });
 
         // Act
         int parameterCount = (int)biggan.ParameterCount;
@@ -2660,10 +2664,13 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         var progressiveGan = new ProgressiveGAN<float>(
             generatorArchitecture,
             discriminatorArchitecture,
-            latentSize: 16,
-            imageChannels: 1,
-            maxResolutionLevel: 2, // 16x16 max
-            baseFeatureMaps: 8);
+            options: new ProgressiveGANOptions
+            {
+                LatentSize = 16,
+                ImageChannels = 1,
+                MaxResolutionLevel = 2, // 16x16 max
+                GeneratorChannels = 8,
+            });
 
         var noiseInput = CreateRandomTensor([16]);
 
@@ -2702,10 +2709,13 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         var progressiveGan = new ProgressiveGAN<float>(
             generatorArchitecture,
             discriminatorArchitecture,
-            latentSize: 16,
-            imageChannels: 1,
-            maxResolutionLevel: 2,
-            baseFeatureMaps: 8);
+            options: new ProgressiveGANOptions
+            {
+                LatentSize = 16,
+                ImageChannels = 1,
+                MaxResolutionLevel = 2,
+                GeneratorChannels = 8,
+            });
 
         // Act
         int parameterCount = (int)progressiveGan.ParameterCount;
@@ -2741,12 +2751,15 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         var sagan = new SAGAN<float>(
             generatorArchitecture,
             discriminatorArchitecture,
-            latentSize: 16,
-            imageChannels: 1,
-            imageHeight: 8,
-            imageWidth: 8,
-            generatorChannels: 8,
-            discriminatorChannels: 8);
+            options: new SAGANOptions
+            {
+                LatentSize = 16,
+                ImageChannels = 1,
+                ImageHeight = 8,
+                ImageWidth = 8,
+                GeneratorChannels = 8,
+                DiscriminatorChannels = 8,
+            });
 
         var noiseInput = CreateRandomTensor([16]);
 
@@ -2787,10 +2800,13 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         var sagan = new SAGAN<float>(
             generatorArchitecture,
             discriminatorArchitecture,
-            latentSize: 16,
-            imageChannels: 1,
-            imageHeight: 8,
-            imageWidth: 8);
+            options: new SAGANOptions
+            {
+                LatentSize = 16,
+                ImageChannels = 1,
+                ImageHeight = 8,
+                ImageWidth = 8,
+            });
 
         // Act
         int parameterCount = (int)sagan.ParameterCount;
