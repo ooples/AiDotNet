@@ -195,6 +195,8 @@ Assert-Contract (-not $selfTestStep.Contains('continue-on-error: true')) `
     'checked-in impact tooling can fail its self-tests while CI remains green'
 Assert-Contract ($selfTestStep.Contains('./tools/TestImpact/Receive-RequiredArtifact.ps1 -SelfTest')) `
     'the required-artifact transport policy is not executed against its self-tests'
+Assert-Contract ($selfTestStep.Contains('./tools/TestImpact/Invoke-GitHubApiWithRetry.ps1 -SelfTest')) `
+    'the aggregate GitHub API retry policy is not executed against its self-tests'
 Assert-Contract ($selfTestStep.Contains('./tools/TestImpact/Test-ValidationReuseModes.ps1')) `
     'the post-merge certificate modes are not exercised by primary CI'
 $selectStep = Get-StepBlock -JobBlock $selectorJob -Step 'Select'
@@ -264,6 +266,27 @@ Assert-Contract ($requiredArtifactReceiverText.Contains('Start-Sleep -Seconds $d
     'artifact transport retries immediately instead of applying its tested backoff policy'
 Assert-Contract ($requiredArtifactReceiverText.Contains('$PSNativeCommandUseErrorActionPreference = $false')) `
     'native-command error handling can bypass the typed artifact retry policy'
+
+$githubApiRetryPath = Join-Path $PSScriptRoot 'Invoke-GitHubApiWithRetry.ps1'
+$githubApiRetryText = Get-Content -LiteralPath $githubApiRetryPath -Raw
+Assert-Contract ($githubApiRetryText.Contains('enum GitHubApiRequestDisposition')) `
+    'GitHub API retry state is represented by strings instead of a closed type'
+Assert-Contract ($githubApiRetryText.Contains('Get-GitHubApiRequestDisposition')) `
+    'GitHub API requests do not distinguish transient and permanent failures'
+Assert-Contract ($githubApiRetryText.Contains('Start-Sleep -Seconds $delay')) `
+    'GitHub API transient failures retry immediately instead of applying bounded backoff'
+
+$analysisJob = Get-JobBlock -WorkflowText $validation -Job 'ci-test-analysis'
+$collectStateStep = Get-StepBlock -JobBlock $analysisJob `
+    -Step 'Collect shard states and latest merged baseline'
+Assert-Contract ($collectStateStep.Contains('. ./tools/TestImpact/Invoke-GitHubApiWithRetry.ps1')) `
+    'aggregate test analysis does not load the tested GitHub API retry policy'
+Assert-Contract (-not $collectStateStep.Contains('Invoke-RestMethod')) `
+    'aggregate test analysis bypasses retry policy for a REST read'
+Assert-Contract (-not $collectStateStep.Contains('Invoke-WebRequest')) `
+    'aggregate test analysis bypasses retry policy for an artifact download'
+Assert-Contract (([Regex]::Matches($collectStateStep, 'Invoke-GitHubApiWithRetry')).Count -eq 5) `
+    'not every aggregate GitHub API read is routed through retry policy'
 
 $artifactConsumers = @('test-net10-sharded', 'model-shape-conformance-windows')
 foreach ($job in $artifactConsumers) {

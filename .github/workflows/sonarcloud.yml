@@ -785,6 +785,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Resolve-CertifiedShardMap self-test failed' }
           ./tools/TestImpact/Receive-RequiredArtifact.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'Receive-RequiredArtifact self-test failed' }
+          ./tools/TestImpact/Invoke-GitHubApiWithRetry.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub API retry self-test failed' }
           ./tools/TestImpact/Test-CiImpactWorkflow.ps1
           if ($LASTEXITCODE -ne 0) { throw 'CI impact workflow contract failed' }
           ./tools/TestImpact/Test-TestImpactEndToEnd.ps1
@@ -2734,6 +2736,7 @@ jobs:
           CURRENT_PR: ${{ github.event.pull_request.number || '0' }}
         run: |
           $ErrorActionPreference = 'Stop'
+          . ./tools/TestImpact/Invoke-GitHubApiWithRetry.ps1
           $headers = @{
             Authorization = "Bearer $env:GH_TOKEN"
             Accept = 'application/vnd.github+json'
@@ -2745,7 +2748,7 @@ jobs:
           $jobs = @()
           $page = 1
           do {
-            $response = Invoke-RestMethod -Headers $headers -Uri `
+            $response = Invoke-GitHubApiWithRetry -Headers $headers -Uri `
               "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID/jobs?per_page=100&page=$page"
             $jobs += @($response.jobs)
             $page++
@@ -2754,7 +2757,7 @@ jobs:
 
           $baselinePath = '.github/ci-test-baseline.json'
           $baselineSource = 'checked-in seed'
-          $pulls = Invoke-RestMethod -Headers $headers -Uri `
+          $pulls = Invoke-GitHubApiWithRetry -Headers $headers -Uri `
             "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/pulls?state=closed&base=$env:BASE_REF&sort=updated&direction=desc&per_page=100"
           $merged = @($pulls | Where-Object {
             $_.merged_at -and [string]$_.number -ne $env:CURRENT_PR
@@ -2769,7 +2772,7 @@ jobs:
             foreach ($candidateSha in $candidateShas) {
               $artifactName = "ci-test-analysis-$candidateSha"
               $encodedName = [Uri]::EscapeDataString($artifactName)
-              $artifactResponse = Invoke-RestMethod -Headers $headers -Uri `
+              $artifactResponse = Invoke-GitHubApiWithRetry -Headers $headers -Uri `
                 "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/actions/artifacts?name=$encodedName&per_page=100"
               $artifact = @($artifactResponse.artifacts | Where-Object { -not $_.expired } |
                 Sort-Object { [DateTime]$_.created_at } -Descending | Select-Object -First 1)
@@ -2778,7 +2781,8 @@ jobs:
               $downloadDirectory = "baseline-download-$candidateSha"
               $archivePath = "baseline-$candidateSha.zip"
               New-Item -ItemType Directory -Path $downloadDirectory -Force | Out-Null
-              Invoke-WebRequest -Headers $headers -Uri $artifact[0].archive_download_url -OutFile $archivePath
+              Invoke-GitHubApiWithRetry -Headers $headers `
+                -Uri $artifact[0].archive_download_url -OutFile $archivePath | Out-Null
               Expand-Archive -LiteralPath $archivePath -DestinationPath $downloadDirectory -Force
               $downloaded = Get-ChildItem $downloadDirectory -Recurse -Filter ci-test-analysis.json |
                 Select-Object -First 1
