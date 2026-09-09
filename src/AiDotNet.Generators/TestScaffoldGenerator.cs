@@ -2145,14 +2145,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private const int TaskGeneration = 2;
     private const int TaskClustering = 8;
 
+    // The message deliberately does NOT name a cause. It used to assert "(missing category/task
+    // metadata)", which is wrong for the overwhelming majority: of the 338 models this fires on,
+    // 325 carry a specific ADNGEN001 reason instead - 224 inherit an excluded compositional base,
+    // 55 have no supported constructor, and 46 resolve to a family whose fixture needs an interface
+    // they do not implement. Most of them do have [ModelCategory] and [ModelTask]. Naming the wrong
+    // cause on every line is worse than naming none, because it sends the reader to fix something
+    // that is not broken.
     private static readonly DiagnosticDescriptor UntestedModel = new(
         id: "AIDN040",
         title: "Model has no test coverage",
-        messageFormat: "Model '{0}' has no corresponding test class and could not be auto-generated (missing category/task metadata)",
+        messageFormat: "Model '{0}' has no corresponding test class and no fixture was generated for it. See this model's ADNGEN001 diagnostic for the specific reason; if it has none, it is missing [ModelCategory]/[ModelTask] metadata.",
         category: "AiDotNet.TestCoverage",
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        description: "Model has no test coverage and lacks sufficient metadata for auto-generation. Add [ModelCategory] and [ModelTask] attributes, or create a manual test class.");
+        description: "Model has no model-family test coverage. The reason a fixture could not be generated is reported separately as ADNGEN001 (excluded base class, unsupported constructor shape, or a family fixture whose required interface the model does not implement). Only when no ADNGEN001 is present is the cause missing [ModelCategory]/[ModelTask] metadata.");
 
     private static readonly DiagnosticDescriptor CoverageSummary = new(
         id: "AIDN041",
