@@ -222,6 +222,17 @@ Assert-Contract ($selectorText.Contains('enum ChangedPathImpact')) `
     'changed-path control flow is not represented by a closed enum'
 Assert-Contract ($selectorText.Contains('diff --no-renames --name-only')) `
     'path classification can hide the source side of a rename'
+Assert-Contract ($selectorHeader.Contains(
+        'coverage_run_without_instrumentation: ${{ steps.select.outputs.coverage_run_without_instrumentation }}')) `
+    'select-shards does not publish the known always-run coverage disposition'
+Assert-Contract ($selectStep.Contains('-NoCoverageShards $nn')) `
+    'coverage splitting is not restricted to the workflow''s explicit heavy/timing boundary'
+Assert-Contract ($selectStep.Contains('$runWithoutInstrumentation = @($coverageSplit.runWithoutCoverage)')) `
+    'the selector drops the RunWithoutCoverage disposition before matrix execution'
+Assert-Contract ($selectStep.Contains('runWithoutInstrumentationShardNames = @($runWithoutInstrumentation)')) `
+    'coverage provenance does not record which shards deliberately ran without instrumentation'
+Assert-Contract ($selectStep.Contains('coverage_run_without_instrumentation=$(ConvertTo-Json')) `
+    'the typed coverage decision is not transported to the shard jobs'
 
 # A 100+ shard fan-out must not resolve the same build artifact by name in every job. That path calls
 # ListArtifacts concurrently and GitHub responds with a secondary-rate-limit 403. The build publishes
@@ -278,6 +289,82 @@ foreach ($job in $artifactConsumers) {
 }
 
 $testConsumer = Get-JobBlock -WorkflowText $validation -Job 'test-net10-sharded'
+Assert-Contract ($testConsumer.Contains('enum CoverageDisposition')) `
+    'coverage execution state is represented by string comparisons instead of a closed enum'
+Assert-Contract ($testConsumer.Contains(
+        'COVERAGE_RUN_WITHOUT_INSTRUMENTATION: ${{ needs.select-shards.outputs.coverage_run_without_instrumentation }}')) `
+    'shard jobs do not consume the selected RunWithoutCoverage set'
+Assert-Contract ($testConsumer.Contains(
+        '$coverageDisposition = [CoverageDisposition]::RunWithoutCoverage')) `
+    'shard execution cannot select the explicit RunWithoutCoverage state'
+Assert-Contract ($testConsumer.Contains(
+        '$coverageDisposition -eq [CoverageDisposition]::Instrument')) `
+    'forced coverage is not authorized exclusively by the Instrument state'
+Assert-Contract ($testConsumer.Contains(
+        'coverage disposition for ''$shardName'' is both Carried and RunWithoutCoverage')) `
+    'overlapping coverage dispositions do not fail closed'
+Assert-Contract ($testConsumer.Contains(
+        'coverage disposition ''$coverageDisposition'' is invalid for coverage-producing shard ''$shardName''')) `
+    'non-instrumented coverage dispositions are not bounded to heavy/timing shards'
+
+# Parse the exact embedded pwsh program after replacing GitHub's expression tokens. Text searches
+# prove the wiring is present; the language parser proves a later YAML edit cannot leave that
+# critical disposition code syntactically dead while the contract still sees its strings.
+$testRunStep = Get-StepBlock -JobBlock $testConsumer -Step 'Run tests (sharded) with coverage'
+Assert-Contract ([bool] $testRunStep) `
+    'the sharded test execution step is absent'
+$testStepLines = [Regex]::Split($testRunStep, '\r?\n')
+$testRunLine = [Array]::IndexOf($testStepLines, '        run: |')
+Assert-Contract ($testRunLine -ge 0) `
+    'the sharded test step has no literal PowerShell run block to validate'
+if ($testRunLine -ge 0) {
+    $testRunBody = [System.Collections.Generic.List[string]]::new()
+    for ($i = $testRunLine + 1; $i -lt $testStepLines.Count; $i++) {
+        $line = $testStepLines[$i]
+        if ($line -and -not $line.StartsWith('          ', [StringComparison]::Ordinal)) { break }
+        [void] $testRunBody.Add($(if ($line.Length -ge 10) { $line.Substring(10) } else { '' }))
+    }
+    $testRunScript = $testRunBody -join "`n"
+    $testRunScript = [Regex]::Replace($testRunScript, '\$\{\{[^\r\n]*?\}\}', 'placeholder')
+    $parseTokens = $null
+    $parseErrors = $null
+    [void] [System.Management.Automation.Language.Parser]::ParseInput(
+        $testRunScript, [ref] $parseTokens, [ref] $parseErrors)
+    $parseErrorMessages = @($parseErrors | ForEach-Object { $_.Message }) -join '; '
+    Assert-Contract (@($parseErrors).Count -eq 0) `
+        "the embedded sharded-test PowerShell has syntax errors: $parseErrorMessages"
+
+    # Execute the exact checked-in decision block for the failure that motivated this state. This
+    # is intentionally extracted from the workflow rather than restating its algorithm in the
+    # test: Integration D must be recognized as heavy, consume the selected disposition, and leave
+    # XPlat instrumentation disabled. The dotnet invocation begins immediately after the slice.
+    $decisionStart = $testRunScript.IndexOf('$heavyShards = @(', [StringComparison]::Ordinal)
+    $decisionEnd = $testRunScript.IndexOf('$dotnetArgs = @(', [StringComparison]::Ordinal)
+    Assert-Contract ($decisionStart -ge 0 -and $decisionEnd -gt $decisionStart) `
+        'the executable coverage-decision block could not be isolated from the workflow'
+    if ($decisionStart -ge 0 -and $decisionEnd -gt $decisionStart) {
+        $decisionBody = $testRunScript.Substring($decisionStart, $decisionEnd - $decisionStart)
+        $decisionBody = $decisionBody.Replace("'placeholder' -eq 'true'", "'true' -eq 'true'")
+        $decisionProof = @"
+`$shardName = 'Integration D'
+`$env:COVERAGE_CARRIED = '[]'
+`$env:COVERAGE_RUN_WITHOUT_INSTRUMENTATION = '["Integration D"]'
+$decisionBody
+[pscustomobject]@{
+    Heavy = `$heavyShard
+    CollectCoverage = `$collectCoverage
+    Disposition = [string] `$coverageDisposition
+}
+"@
+        $decisionResult = @(& ([scriptblock]::Create($decisionProof))) | Select-Object -Last 1
+        Assert-Contract ([bool] $decisionResult.Heavy) `
+            'the production workflow no longer recognizes Integration D as a heavy shard'
+        Assert-Contract (-not [bool] $decisionResult.CollectCoverage) `
+            'RunWithoutCoverage still adds instrumentation to Integration D'
+        Assert-Contract ($decisionResult.Disposition -ceq 'RunWithoutCoverage') `
+            'Integration D did not consume the typed RunWithoutCoverage disposition'
+    }
+}
 foreach ($stepName in @(
     'Upload test-impact digest',
     'Upload coverage + test results',

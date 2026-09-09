@@ -685,6 +685,10 @@ jobs:
       # run. The test job does not force instrumentation on them; the carried-digest artifact
       # below supplies their map entries instead.
       coverage_carried: ${{ steps.select.outputs.coverage_carried }}
+      # Known heavy/timing shards that a complete prior map run already classified as always-run.
+      # Their full correctness suites still execute, but repeating the instrumentation that already
+      # exceeded the runner envelope cannot produce a digest and is therefore suppressed.
+      coverage_run_without_instrumentation: ${{ steps.select.outputs.coverage_run_without_instrumentation }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -986,20 +990,26 @@ jobs:
           "### Shard selection`n`n$summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
           $carried = @()
+          $runWithoutInstrumentation = @()
           if ('${{ inputs.collect_coverage_everywhere }}' -eq 'true') {
             # INCREMENTAL INSTRUMENTATION. A shard whose covered files are byte-identical between
             # the previous map's commit and this one has line ranges that still mean what they
             # said, so its digest is carried forward instead of re-measured - instrumentation
             # costs 3.21x on heavy shards, and most nights most of them are untouched.
             #
-            # Only shards that collect no coverage naturally (heavy + timing) are carriable:
+            # Only shards that collect no coverage naturally (heavy + timing) are carriable or
+            # eligible for RunWithoutCoverage:
             # every other shard produces a fresh digest in any successful run, and New-ShardMap
-            # aborts the whole map on a duplicate digest, by design. That list lives in the test
-            # job's run step in THIS file; it is parsed out of the workflow source below so there
-            # is no second copy to drift. Both drift directions are safe: a missed name simply is
-            # not carried (that shard degrades to always-run), and a stale extra name produces a
-            # duplicate digest that aborts the map build LOUDLY while the previous map stays in
-            # effect.
+            # aborts the whole map on a duplicate digest, by design. A member in the previous
+            # map's alwaysRun set has already completed a mapping attempt without producing a
+            # digest. Retrying the same instrumentation on a memory-bound shard only repeats the
+            # runner shutdown; its correctness run remains mandatory and it remains always-run.
+            #
+            # The eligibility list lives in the test job's run step in THIS file; it is parsed out
+            # of the workflow source below so there is no second copy to drift. Both drift
+            # directions are safe: a missed name degrades to Instrument, and a stale extra name
+            # can only suppress instrumentation when the certified candidate also names the shard
+            # as always-run. It can never make the correctness job skippable.
             # Matched on the TRIMMED line being exactly the definition, never Contains: these
             # marker strings also appear inside THIS parser's own source a few lines up, and a
             # Contains match latched onto itself, then collected every quoted string for the ~450
@@ -1044,24 +1054,30 @@ jobs:
                     -PreviousMap map/shard-map.json `
                     -ChangedFiles $changedFiles `
                     -AllShards @($all.name) `
-                    -CarryOnly $nn `
+                    -NoCoverageShards $nn `
                     -CarryForwardDirectory carried-digests `
                     -OutFile covsplit.json
                 if ($LASTEXITCODE -ne 0) { throw "Select-CoverageShards exited $LASTEXITCODE" }
-                $carried = @((Get-Content covsplit.json -Raw | ConvertFrom-Json).carried)
+                $coverageSplit = Get-Content covsplit.json -Raw | ConvertFrom-Json
+                if ([int] $coverageSplit.schemaVersion -ne 1) {
+                  throw "unsupported coverage split schemaVersion '$($coverageSplit.schemaVersion)'"
+                }
+                $carried = @($coverageSplit.carried)
+                $runWithoutInstrumentation = @($coverageSplit.runWithoutCoverage)
               }
               catch {
                 # Instrumenting everything is always sound - it is exactly the pre-incremental
                 # behaviour - so any doubt lands there rather than on a stale carry.
                 Write-Host "::warning::incremental carry unavailable ($($_.Exception.Message)) - instrumenting every shard"
                 $carried = @()
+                $runWithoutInstrumentation = @()
                 Remove-Item -Recurse -Force carried-digests -ErrorAction SilentlyContinue
               }
             }
             else {
               Write-Host 'no usable previous map or no-coverage list - instrumenting every shard'
             }
-            "### Incremental instrumentation`n`ncarrying $($carried.Count) shard(s) forward; instrumenting the rest." |
+            "### Incremental instrumentation`n`ncarrying $($carried.Count) shard(s) forward; running $($runWithoutInstrumentation.Count) known always-run shard(s) without instrumentation; instrumenting the rest." |
               Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
             # Record only the map that was actually downloaded and validated by the preceding
@@ -1076,9 +1092,12 @@ jobs:
               mapRunId = $mapRunId
               shardNames = @($all.name)
               carriedShardNames = @($carried)
+              runWithoutInstrumentationShardNames = @($runWithoutInstrumentation)
             } | ConvertTo-Json -Depth 5 | Set-Content coverage-source.json -Encoding utf8
           }
           "coverage_carried=$(ConvertTo-Json -InputObject @($carried) -Depth 3 -Compress)" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "coverage_run_without_instrumentation=$(ConvertTo-Json -InputObject @($runWithoutInstrumentation) -Depth 3 -Compress)" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       # Named to match the harvest's `impact-digest-*` download pattern, so the map build picks
@@ -1206,6 +1225,7 @@ jobs:
           # Via env rather than inline interpolation: the carried list is a JSON array of shard
           # names, and names contain characters PowerShell would parse inside a quoted literal.
           COVERAGE_CARRIED: ${{ needs.select-shards.outputs.coverage_carried }}
+          COVERAGE_RUN_WITHOUT_INSTRUMENTATION: ${{ needs.select-shards.outputs.coverage_run_without_instrumentation }}
           # Dedicated enterprise CI license key (save-capable — lifts the persistence op cap under capability
           # gating — with effectively-unlimited activations for ephemeral runners). ModuleInitializer swaps
           # this online AIDN-* key for the deterministic synthetic OFFLINE license so the persistence-heavy
@@ -1360,32 +1380,85 @@ jobs:
           $serializeShard = $heavyShard
           # Heavy and timing shards normally skip coverage - the first for memory, the second
           # because instrumentation distorts the ratios under test. That is right for PR
-          # validation; the dedicated map-feeding run overrides it under a lower parallelism cap.
+          # validation. A dedicated map run instruments them only until it has positive evidence
+          # that a shard cannot produce a digest safely; a previous-map alwaysRun classification
+          # is that evidence, and keeps the complete correctness run mandatory without repeating
+          # the instrumentation failure.
           #
           # The memory ceiling belongs to the PR matrix, not to a nightly job, so a dispatch can
           # ask for coverage everywhere. That run feeds the map; it is not meant to gate a PR.
           # A shard whose digest select-shards carried forward is not re-instrumented: its map
           # entry comes from the carried artifact, and instrumenting it anyway would only spend
           # the 3.21x overhead re-measuring what is byte-identical. Any parse failure of the
-          # carried list degrades to instrumenting everything, which is the pre-incremental
-          # behaviour and always sound.
+          # carried or run-without-instrumentation list degrades to Instrument, which is the
+          # pre-incremental behaviour and is selection-safe.
+          enum CoverageDisposition {
+            Instrument
+            Carried
+            RunWithoutCoverage
+          }
+
           $carriedSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+          $runWithoutInstrumentationSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
           try {
             $rawCarried = $env:COVERAGE_CARRIED
             if ($rawCarried) {
               foreach ($c in @($rawCarried | ConvertFrom-Json)) { [void] $carriedSet.Add([string] $c) }
             }
           }
-          catch { Write-Host "::warning::carried-shard list unreadable - instrumenting this shard" }
+          catch {
+            $carriedSet.Clear()
+            Write-Host "::warning::carried-shard list unreadable - instrumenting this shard"
+          }
 
-          $forceCoverage = '${{ github.event.inputs.collect_coverage_everywhere }}' -eq 'true' -and
-                           -not $carriedSet.Contains($shardName)
-          $collectCoverage = $forceCoverage -or -not ($heavyShard -or $measuresTiming)
-          if ($forceCoverage -and ($heavyShard -or $measuresTiming)) {
+          try {
+            $rawRunWithoutInstrumentation = $env:COVERAGE_RUN_WITHOUT_INSTRUMENTATION
+            if ($rawRunWithoutInstrumentation) {
+              foreach ($c in @($rawRunWithoutInstrumentation | ConvertFrom-Json)) {
+                [void] $runWithoutInstrumentationSet.Add([string] $c)
+              }
+            }
+          }
+          catch {
+            $runWithoutInstrumentationSet.Clear()
+            Write-Host "::warning::run-without-instrumentation list unreadable - instrumenting this shard"
+          }
+
+          if ($carriedSet.Contains($shardName) -and $runWithoutInstrumentationSet.Contains($shardName)) {
+            throw "coverage disposition for '$shardName' is both Carried and RunWithoutCoverage"
+          }
+
+          $coverageDisposition = [CoverageDisposition]::Instrument
+          if ('${{ github.event.inputs.collect_coverage_everywhere }}' -eq 'true') {
+            if ($carriedSet.Contains($shardName)) {
+              $coverageDisposition = [CoverageDisposition]::Carried
+            }
+            elseif ($runWithoutInstrumentationSet.Contains($shardName)) {
+              $coverageDisposition = [CoverageDisposition]::RunWithoutCoverage
+            }
+          }
+
+          if ($coverageDisposition -ne [CoverageDisposition]::Instrument -and
+              -not ($heavyShard -or $measuresTiming)) {
+            throw "coverage disposition '$coverageDisposition' is invalid for coverage-producing shard '$shardName'"
+          }
+
+          $forcedCoverageRun = '${{ github.event.inputs.collect_coverage_everywhere }}' -eq 'true'
+          $collectCoverage = if ($forcedCoverageRun) {
+            $coverageDisposition -eq [CoverageDisposition]::Instrument
+          } else {
+            -not ($heavyShard -or $measuresTiming)
+          }
+
+          if ($forcedCoverageRun -and $coverageDisposition -eq [CoverageDisposition]::Instrument -and
+              ($heavyShard -or $measuresTiming)) {
             Write-Host 'collect_coverage_everywhere: coverage forced on for this shard to feed the test-impact map'
           }
-          elseif ($carriedSet.Contains($shardName) -and ($heavyShard -or $measuresTiming)) {
+          elseif ($coverageDisposition -eq [CoverageDisposition]::Carried) {
             Write-Host 'coverage carried forward from the previous map - not instrumenting this shard'
+          }
+          elseif ($coverageDisposition -eq [CoverageDisposition]::RunWithoutCoverage) {
+            Write-Host 'previous map classified this memory/timing-bound shard as always-run - executing correctness tests without instrumentation'
           }
           Write-Host "Running shard '$shardName' (serialized: $serializeShard; coverage: $collectCoverage)"
 

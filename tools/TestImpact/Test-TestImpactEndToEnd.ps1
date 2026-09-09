@@ -9,6 +9,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $selector = Join-Path $PSScriptRoot 'Select-Shards.ps1'
+$coverageSelector = Join-Path $PSScriptRoot 'Select-CoverageShards.ps1'
 $missMeasurer = Join-Path $PSScriptRoot 'Measure-SelectionMiss.ps1'
 $certificateWriter = Join-Path $PSScriptRoot 'New-ShardMapCertificate.ps1'
 $certificateValidator = Join-Path $PSScriptRoot 'Test-CertifiedShardMap.ps1'
@@ -75,6 +76,7 @@ try {
         $map = [ordered]@{
             schemaVersion = 1
             sha = $baseSha
+            generatedUtc = '2026-09-09T00:00:00Z'
             knownShards = @('Alpha', 'Beta')
             alwaysRun = @('Always')
             files = [ordered]@{
@@ -85,6 +87,56 @@ try {
             }
         }
         $map | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath shard-map.json -Encoding utf8
+
+        # Exercise the production coverage splitter against a generated repository/map fixture,
+        # not a hand-edited workflow result. The map deliberately has one mapped no-coverage
+        # shard, one natural producer, and one previous always-run shard so all three typed states
+        # must appear in a single output partition.
+        & $coverageSelector -PreviousMap shard-map.json -ChangedFiles @() `
+            -AllShards @('Alpha', 'Beta', 'Always') -NoCoverageShards @('Alpha', 'Always') `
+            -CarryForwardDirectory carried-fixture -OutFile coverage-split.json
+        Assert-True ($LASTEXITCODE -eq 0) 'the generated coverage split fixture failed'
+        $coverageSplit = Get-Content coverage-split.json -Raw | ConvertFrom-Json
+        Assert-True ([int] $coverageSplit.schemaVersion -eq 1) `
+            'the coverage split omitted its transport schema'
+        Assert-True ((@($coverageSplit.instrument) -join ',') -eq 'Beta') `
+            'the natural coverage producer did not receive Instrument'
+        Assert-True ((@($coverageSplit.carried) -join ',') -eq 'Alpha') `
+            'the byte-identical no-coverage shard did not receive Carried'
+        Assert-True ((@($coverageSplit.runWithoutCoverage) -join ',') -eq 'Always') `
+            'the previous always-run no-coverage shard did not receive RunWithoutCoverage'
+        Assert-True (Test-Path -LiteralPath carried-fixture/Alpha.digest.json) `
+            'the Carried disposition did not reconstruct its digest'
+        Assert-True (-not (Test-Path -LiteralPath carried-fixture/Always.digest.json)) `
+            'RunWithoutCoverage incorrectly synthesized a digest that the shard never produced'
+
+        # Without a previous map there is no evidence authorizing either non-instrumented state.
+        # The bootstrap remains fail-closed even for a shard whose NAME resembles the fixture's
+        # always-run member.
+        & $coverageSelector -PreviousMap absent-map.json -ChangedFiles @() `
+            -AllShards @('Alpha', 'Beta', 'Always') -NoCoverageShards @('Alpha', 'Always') `
+            -OutFile bootstrap-coverage-split.json
+        $bootstrapSplit = Get-Content bootstrap-coverage-split.json -Raw | ConvertFrom-Json
+        Assert-True (@($bootstrapSplit.instrument).Count -eq 3 -and
+            @($bootstrapSplit.carried).Count -eq 0 -and
+            @($bootstrapSplit.runWithoutCoverage).Count -eq 0) `
+            'coverage bootstrap did not fail closed to Instrument for every shard'
+
+        # A tests/** change invalidates a mapped carry because test code is absent from coverage
+        # digests. It still cannot authorize retrying known-unsafe instrumentation: that shard
+        # remains always-run and its complete correctness suite will execute without coverage.
+        & $coverageSelector -PreviousMap shard-map.json `
+            -ChangedFiles @('tests/AiDotNet.Tests/NewCoverageEdge.cs') `
+            -AllShards @('Alpha', 'Beta', 'Always') -NoCoverageShards @('Alpha', 'Always') `
+            -OutFile dirty-coverage-split.json
+        $dirtyCoverageSplit = Get-Content dirty-coverage-split.json -Raw | ConvertFrom-Json
+        Assert-True (@($dirtyCoverageSplit.instrument).Count -eq 2 -and
+            $dirtyCoverageSplit.instrument -contains 'Alpha' -and
+            $dirtyCoverageSplit.instrument -contains 'Beta') `
+            'test-code invalidation did not re-instrument every coverage-capable shard'
+        Assert-True ((@($dirtyCoverageSplit.runWithoutCoverage) -join ',') -eq 'Always') `
+            'test-code invalidation retried instrumentation already known to exceed the runner envelope'
+
         @(
             [ordered]@{ shard = 'Alpha'; outcome = 'success' },
             [ordered]@{ shard = 'Beta'; outcome = 'success' },
