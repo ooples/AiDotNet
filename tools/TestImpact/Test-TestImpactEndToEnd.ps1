@@ -9,6 +9,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $selector = Join-Path $PSScriptRoot 'Select-Shards.ps1'
+$missMeasurer = Join-Path $PSScriptRoot 'Measure-SelectionMiss.ps1'
+$certificateWriter = Join-Path $PSScriptRoot 'New-ShardMapCertificate.ps1'
 $certificateValidator = Join-Path $PSScriptRoot 'Test-CertifiedShardMap.ps1'
 $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $fixture = Join-Path $tempRoot ("aidotnet-impact-e2e-" + [guid]::NewGuid().ToString('N'))
@@ -37,7 +39,7 @@ function Assert-CertificateRejected {
 
     $message = $null
     try {
-        & $certificateValidator -MapFile shard-map.json -CertificateFile $CertificateFile `
+        & $certificateValidator -MapFile certified/shard-map.json -CertificateFile $CertificateFile `
             -CertificationRunId 102
     }
     catch { $message = [string] $_.Exception.Message }
@@ -83,23 +85,35 @@ try {
             }
         }
         $map | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath shard-map.json -Encoding utf8
+        @(
+            [ordered]@{ shard = 'Alpha'; outcome = 'success' },
+            [ordered]@{ shard = 'Beta'; outcome = 'success' },
+            [ordered]@{ shard = 'Always'; outcome = 'success' }
+        ) | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath outcomes.json -Encoding utf8
         [ordered]@{
-            schemaVersion = 1
-            candidateMapRunId = 100
-            candidateMapSha = $baseSha
-            auditSourceRunId = 101
-            auditSourceSha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-            certificationRunId = 102
-            escalated = $false
-            wouldRun = 2
-            wouldSkip = 1
-            failedShards = 1
-            missCount = 0
-        } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath certification.json -Encoding utf8
+            Escalated = $false
+            TotalShards = 3
+            WouldRun = 2
+            WouldSkip = 1
+            WouldRunShards = @('Alpha', 'Always')
+            WouldSkipShards = @('Beta')
+            Failed = 0
+            Missed = @()
+            MissCount = 0
+        } | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath audit.json -Encoding utf8
+
+        & $certificateWriter -MapFile shard-map.json -AuditFile audit.json -OutcomesFile outcomes.json `
+            -CandidateMapRunId 100 -AuditSourceRunId 101 `
+            -AuditSourceSha 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' `
+            -CertificationRunId 102 -OutDirectory certified
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath certified/certification.json)) {
+            throw 'the real certification policy did not produce a certificate for the clean complete audit'
+        }
 
         $global:LASTEXITCODE = 97
         try {
-            & $certificateValidator -MapFile shard-map.json -CertificateFile certification.json `
+            & $certificateValidator -MapFile certified/shard-map.json `
+                -CertificateFile certified/certification.json `
                 -CertificationRunId 102
             if ($LASTEXITCODE -ne 0) {
                 throw "validator returned exit code $LASTEXITCODE"
@@ -113,7 +127,7 @@ try {
             Set-Content -LiteralPath src/Feature.cs -Encoding utf8
         Invoke-Git add src/Feature.cs
         Invoke-Git commit --quiet -m narrow-change
-        & $selector -MapFile shard-map.json -ExpectedShards @('Alpha', 'Beta', 'Always') `
+        & $selector -MapFile certified/shard-map.json -ExpectedShards @('Alpha', 'Beta', 'Always') `
             -OutFile selection.json
         $selection = Get-Content selection.json -Raw | ConvertFrom-Json
         Assert-True (-not [bool] $selection.escalate) 'a covered one-line edit escalated'
@@ -122,28 +136,78 @@ try {
         Assert-True ($selection.shards -contains 'Always') 'the always-run shard was omitted'
         Assert-True (-not ($selection.shards -contains 'Beta')) 'an unaffected shard was selected'
 
+        # Prove the real selector -> miss measurement -> certificate chain in both directions. A
+        # failure in Alpha was selected and therefore remains certifiable; the same failure in Beta
+        # was skipped and must make Measure-SelectionMiss fail and suppress certificate creation.
+        @(
+            [ordered]@{ shard = 'Alpha'; outcome = 'failure' },
+            [ordered]@{ shard = 'Beta'; outcome = 'success' },
+            [ordered]@{ shard = 'Always'; outcome = 'success' }
+        ) | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath selected-failure-outcomes.json -Encoding utf8
+        & $missMeasurer -SelectorPath $selector -MapFile certified/shard-map.json `
+            -OutcomesFile selected-failure-outcomes.json -OutFile selected-failure-audit.json
+        Assert-True ($LASTEXITCODE -eq 0) 'a selected shard failure was incorrectly reported as a miss'
+        & $certificateWriter -MapFile certified/shard-map.json -AuditFile selected-failure-audit.json `
+            -OutcomesFile selected-failure-outcomes.json -CandidateMapRunId 100 `
+            -AuditSourceRunId 101 -AuditSourceSha 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' `
+            -CertificationRunId 103 -OutDirectory selected-failure-certified
+        Assert-True ($LASTEXITCODE -eq 0 -and
+            (Test-Path -LiteralPath selected-failure-certified/certification.json)) `
+            'the end-to-end chain rejected a complete audit whose only failure was selected'
+        & $certificateValidator -MapFile selected-failure-certified/shard-map.json `
+            -CertificateFile selected-failure-certified/certification.json `
+            -CertificationRunId 103
+        Assert-True ($LASTEXITCODE -eq 0) `
+            'the validator rejected a generated certificate with a selected failure'
+
+        @(
+            [ordered]@{ shard = 'Alpha'; outcome = 'success' },
+            [ordered]@{ shard = 'Beta'; outcome = 'failure' },
+            [ordered]@{ shard = 'Always'; outcome = 'success' }
+        ) | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath missed-failure-outcomes.json -Encoding utf8
+        $expectedMissOutput = @(& $missMeasurer -SelectorPath $selector `
+            -MapFile certified/shard-map.json -OutcomesFile missed-failure-outcomes.json `
+            -OutFile missed-failure-audit.json 6>&1)
+        $expectedMissExit = $LASTEXITCODE
+        foreach ($line in $expectedMissOutput) {
+            Write-Host (('[expected miss] ' + [string] $line) -replace '::error::', '')
+        }
+        Assert-True ($expectedMissExit -eq 1) 'a skipped shard failure did not fail the miss audit'
+        & $certificateWriter -MapFile certified/shard-map.json -AuditFile missed-failure-audit.json `
+            -OutcomesFile missed-failure-outcomes.json -CandidateMapRunId 100 `
+            -AuditSourceRunId 101 -AuditSourceSha 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' `
+            -CertificationRunId 104 -OutDirectory missed-failure-certified
+        Assert-True ($LASTEXITCODE -eq 0 -and
+            -not (Test-Path -LiteralPath missed-failure-certified/certification.json)) `
+            'the end-to-end chain certified a map after selection skipped a failing shard'
+
         New-Item -ItemType Directory -Path .github/workflows -Force | Out-Null
         'name: changed-ci' | Set-Content -LiteralPath .github/workflows/fixture.yml -Encoding utf8
         Invoke-Git add .github/workflows/fixture.yml
         Invoke-Git commit --quiet -m infrastructure-change
-        & $selector -MapFile shard-map.json -ExpectedShards @('Alpha', 'Beta', 'Always') `
-            -OutFile infrastructure-selection.json
+        $expectedEscalationOutput = @(& $selector -MapFile certified/shard-map.json `
+            -ExpectedShards @('Alpha', 'Beta', 'Always') -OutFile infrastructure-selection.json 6>&1)
+        $expectedEscalationExit = $LASTEXITCODE
+        foreach ($line in $expectedEscalationOutput) {
+            Write-Host (('[expected escalation] ' + [string] $line) -replace '::warning::', '')
+        }
+        Assert-True ($expectedEscalationExit -eq 0) 'an infrastructure edit made the selector fail'
         $infrastructure = Get-Content infrastructure-selection.json -Raw | ConvertFrom-Json
         Assert-True ([bool] $infrastructure.escalate) 'a workflow edit did not fail closed to the full matrix'
 
-        $badCertificate = Get-Content certification.json -Raw | ConvertFrom-Json
+        $badCertificate = Get-Content certified/certification.json -Raw | ConvertFrom-Json
         $badCertificate.missCount = 1
         $badCertificate | ConvertTo-Json -Depth 5 | Set-Content bad-certification.json -Encoding utf8
         Assert-CertificateRejected -CertificateFile bad-certification.json `
             -ExpectedPattern 'selection miss' `
             -What 'a certificate recording a selection miss was accepted'
 
-        $badCertificate = Get-Content certification.json -Raw | ConvertFrom-Json
-        $badCertificate.failedShards = 0
-        $badCertificate | ConvertTo-Json -Depth 5 | Set-Content no-failure-certification.json -Encoding utf8
-        Assert-CertificateRejected -CertificateFile no-failure-certification.json `
-            -ExpectedPattern 'failedShards must be at least 1' `
-            -What 'a certificate without a failure opportunity was accepted'
+        $badCertificate = Get-Content certified/certification.json -Raw | ConvertFrom-Json
+        $badCertificate.failedShards = -1
+        $badCertificate | ConvertTo-Json -Depth 5 | Set-Content negative-failure-certification.json -Encoding utf8
+        Assert-CertificateRejected -CertificateFile negative-failure-certification.json `
+            -ExpectedPattern 'failedShards must be at least 0' `
+            -What 'a certificate with a negative failure count was accepted'
     }
     finally {
         Pop-Location
