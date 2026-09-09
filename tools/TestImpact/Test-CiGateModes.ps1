@@ -1,175 +1,90 @@
 <#
 .SYNOPSIS
-    Executes the checked-in CI Gate Bash body in full-validation, non-runtime, and exact-reuse modes.
+    Executes the typed validation and complete gate in every reuse mode.
 #>
 [CmdletBinding()]
-param([string] $Workflow = '.github/workflows/sonarcloud.yml')
+param([string] $Gate = (Join-Path $PSScriptRoot 'Assert-CiGate.ps1'))
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$lines = Get-Content -LiteralPath $Workflow
-$nameLine = ($lines | Select-String -SimpleMatch '- name: Evaluate required jobs' |
-    Select-Object -First 1).LineNumber
-if (-not $nameLine) { throw 'Evaluate required jobs step is absent.' }
-
-$runLine = 0
-$indent = 0
-$stepIndent = $lines[$nameLine - 1].Length - $lines[$nameLine - 1].TrimStart().Length
-for ($i = $nameLine; $i -le $lines.Count; $i++) {
-    $current = $lines[$i - 1]
-    $currentIndent = $current.Length - $current.TrimStart().Length
-    if ($i -gt $nameLine -and $current.Trim() -and $currentIndent -le $stepIndent) {
-        break
-    }
-    if ($current -match '^(\s*)run:\s*\|') {
-        $runLine = $i
-        $indent = $Matches[1].Length
-        break
-    }
-}
-if (-not $runLine) { throw 'CI Gate run block is absent.' }
-
-$body = [System.Collections.Generic.List[string]]::new()
-for ($i = $runLine + 1; $i -le $lines.Count; $i++) {
-    $line = $lines[$i - 1]
-    $lineIndent = $line.Length - $line.TrimStart().Length
-    if ($line.Trim() -and $lineIndent -le $indent) { break }
-    [void] $body.Add($(if ($line.Length -ge $indent + 2) { $line.Substring($indent + 2) } else { '' }))
-}
-
-$bash = if ($IsWindows) {
-    $candidate = Join-Path $env:ProgramFiles 'Git\bin\bash.exe'
-    if (-not (Test-Path -LiteralPath $candidate)) { throw 'Git Bash is required for this proof on Windows.' }
-    $candidate
-}
-else {
-    (Get-Command bash -ErrorAction Stop).Source
-}
-
-$tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
-$fixture = Join-Path $tempRoot ("aidotnet-ci-gate-" + [guid]::NewGuid().ToString('N'))
 $failures = [System.Collections.Generic.List[string]]::new()
-$fixtureFailure = $null
 
-try {
-    New-Item -ItemType Directory -Path $fixture -Force | Out-Null
-    $script = Join-Path $fixture 'gate.sh'
-    [IO.File]::WriteAllText($script, ($body -join "`n"), [Text.UTF8Encoding]::new($false))
+function Invoke-GateCase {
+    param(
+        [string] $Name,
+        [string] $Stage = 'Complete',
+        [string] $ReuseScope = 'None',
+        [string] $RequiresValidation = 'true',
+        [string] $Source = 'success',
+        [string] $Select = 'success',
+        [string] $Build = 'success',
+        [string] $BuildCompat = 'success',
+        [string] $Tests = 'success',
+        [string] $ParameterSweep = 'success',
+        [string] $ModelShape = 'success',
+        [string] $Regression = 'success',
+        [string] $Verdict = 'true',
+        [string] $Aggregate = 'success',
+        [string] $SizeCheck = 'success',
+        [string] $Promotion = 'skipped',
+        [string] $CodeQL = 'success',
+        [string] $Sonar = 'success',
+        [string] $ValidationGate = 'success',
+        [int] $ExpectedExit
+    )
 
-    function Invoke-GateCase {
-        param(
-            [string] $Name,
-            [string] $Source = 'success',
-            [string] $Reuse,
-            [string] $Promotion,
-            [string] $CodeQL,
-            [string] $Tests,
-            [string] $Verdict,
-            [string] $RequiresValidation = 'true',
-            [string] $ReusedRequiresValidation = 'true',
-            [string] $Select = 'success',
-            [string] $Sonar = 'success',
-            [int] $ExpectedExit
-        )
-
-        $environmentNames = @(
-            'SOURCE_RESULT', 'BUILD_RESULT', 'BUILD_COMPAT_RESULT', 'CODEQL_RESULT',
-            'SELECT_RESULT', 'TESTS_RESULT', 'PARAMETER_SWEEP_RESULT', 'MODEL_SHAPE_RESULT',
-            'REGRESSION_ANALYSIS_RESULT', 'VERDICT_ENFORCED', 'AGGREGATE_ANALYSIS_RESULT',
-            'SIZE_CHECK_RESULT', 'PROMOTION_RESULT', 'SONAR_RESULT', 'REUSED_VALIDATION',
-            'REQUIRES_VALIDATION', 'REUSED_REQUIRES_VALIDATION', 'GITHUB_STEP_SUMMARY'
-        )
-        $savedEnvironment = @{}
-        foreach ($variableName in $environmentNames) {
-            $savedEnvironment[$variableName] = [Environment]::GetEnvironmentVariable(
-                $variableName,
-                [EnvironmentVariableTarget]::Process)
-        }
-
-        try {
-            $env:SOURCE_RESULT = $Source
-            $env:BUILD_RESULT = 'success'
-            $env:BUILD_COMPAT_RESULT = 'success'
-            $env:CODEQL_RESULT = $CodeQL
-            $env:SELECT_RESULT = $Select
-            $env:TESTS_RESULT = $Tests
-            $env:PARAMETER_SWEEP_RESULT = 'success'
-            $env:MODEL_SHAPE_RESULT = 'success'
-            $env:REGRESSION_ANALYSIS_RESULT = 'success'
-            $env:VERDICT_ENFORCED = $Verdict
-            $env:AGGREGATE_ANALYSIS_RESULT = 'success'
-            $env:SIZE_CHECK_RESULT = 'success'
-            $env:PROMOTION_RESULT = $Promotion
-            $env:SONAR_RESULT = $Sonar
-            $env:REUSED_VALIDATION = $Reuse
-            $env:REQUIRES_VALIDATION = $RequiresValidation
-            $env:REUSED_REQUIRES_VALIDATION = $ReusedRequiresValidation
-            $env:GITHUB_STEP_SUMMARY = Join-Path $fixture "$Name-summary.md"
-
-            & $bash $script 2>&1 | Out-Null
-            $actualExit = $LASTEXITCODE
-            if ($actualExit -ne $ExpectedExit) {
-                [void] $failures.Add("$Name expected exit $ExpectedExit, got $actualExit")
-            }
-        }
-        finally {
-            foreach ($variableName in $environmentNames) {
-                [Environment]::SetEnvironmentVariable(
-                    $variableName,
-                    $savedEnvironment[$variableName],
-                    [EnvironmentVariableTarget]::Process)
-            }
-        }
-    }
-
-    Invoke-GateCase -Name reuse_success -Reuse true -Promotion success -CodeQL skipped `
-        -Tests skipped -Verdict false -ExpectedExit 0
-    Invoke-GateCase -Name reuse_missing_promotion -Reuse true -Promotion skipped -CodeQL skipped `
-        -Tests skipped -Verdict false -ExpectedExit 1
-    Invoke-GateCase -Name reuse_non_runtime_success -Reuse true -ReusedRequiresValidation false `
-        -Promotion skipped -CodeQL skipped -Tests skipped -Verdict false -ExpectedExit 0
-    Invoke-GateCase -Name full_success -Reuse false -Promotion skipped -CodeQL success `
-        -Tests success -Verdict true -ExpectedExit 0
-    Invoke-GateCase -Name full_codeql_failure -Reuse false -Promotion skipped -CodeQL failure `
-        -Tests success -Verdict true -ExpectedExit 1
-    Invoke-GateCase -Name full_known_test_failure -Reuse false -Promotion skipped -CodeQL success `
-        -Tests failure -Verdict true -ExpectedExit 0
-    Invoke-GateCase -Name full_unenforced_test_failure -Reuse false -Promotion skipped -CodeQL success `
-        -Tests failure -Verdict false -ExpectedExit 1
-    Invoke-GateCase -Name non_runtime_success -Reuse false -Promotion skipped -CodeQL success `
-        -Tests skipped -Verdict false -RequiresValidation false -ExpectedExit 0
-    Invoke-GateCase -Name non_runtime_codeql_failure -Reuse false -Promotion skipped -CodeQL failure `
-        -Tests skipped -Verdict false -RequiresValidation false -ExpectedExit 1
-    Invoke-GateCase -Name non_runtime_sonar_failure -Reuse false -Promotion skipped -CodeQL success `
-        -Tests skipped -Verdict false -RequiresValidation false -Sonar failure -ExpectedExit 1
-    Invoke-GateCase -Name non_runtime_selector_failure -Reuse false -Promotion skipped -CodeQL skipped `
-        -Tests skipped -Verdict false -RequiresValidation false -Select failure -ExpectedExit 1
-    Invoke-GateCase -Name missing_runtime_decision_fails_closed -Reuse false -Promotion skipped -CodeQL success `
-        -Tests skipped -Verdict false -RequiresValidation '' -ExpectedExit 1
-    Invoke-GateCase -Name source_failure_blocks_reuse -Source failure -Reuse true `
-        -Promotion success -CodeQL skipped -Tests skipped -Verdict false -ExpectedExit 1
-    Invoke-GateCase -Name source_failure_blocks_full -Source failure -Reuse false `
-        -Promotion skipped -CodeQL success -Tests success -Verdict true -ExpectedExit 1
-    Invoke-GateCase -Name empty_reuse_takes_full_path -Reuse '' -Promotion skipped -CodeQL failure `
-        -Tests success -Verdict true -ExpectedExit 1
-}
-catch {
-    $fixtureFailure = $_
-    throw
-}
-finally {
-    $resolvedFixture = [IO.Path]::GetFullPath($fixture)
-    if ($resolvedFixture.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) -and
-        (Split-Path -Leaf $resolvedFixture).StartsWith('aidotnet-ci-gate-', [StringComparison]::Ordinal)) {
-        Remove-Item -LiteralPath $resolvedFixture -Recurse -Force -ErrorAction SilentlyContinue
-    }
-    else {
-        $message = "refusing to remove unexpected fixture path '$resolvedFixture'"
-        if ($null -ne $fixtureFailure) { Write-Warning "$message; preserving the original failure" }
-        else { throw $message }
+    & $Gate -Stage $Stage -ReuseScope $ReuseScope -SourceResult $Source `
+        -RequiresValidation $RequiresValidation -SelectResult $Select `
+        -BuildResult $Build -BuildCompatResult $BuildCompat -TestsResult $Tests `
+        -ParameterSweepResult $ParameterSweep -ModelShapeResult $ModelShape `
+        -RegressionAnalysisResult $Regression -VerdictEnforced $Verdict `
+        -AggregateAnalysisResult $Aggregate -SizeCheckResult $SizeCheck `
+        -PromotionResult $Promotion -CodeQLResult $CodeQL -SonarResult $Sonar `
+        -ValidationGateResult $ValidationGate *> $null
+    if ($LASTEXITCODE -ne $ExpectedExit) {
+        [void] $failures.Add("$Name expected exit $ExpectedExit, got $LASTEXITCODE")
     }
 }
+
+# Validation evidence is independent of quality jobs.
+Invoke-GateCase -Name validation_runtime_success -Stage Validation -ExpectedExit 0
+Invoke-GateCase -Name validation_ignores_quality_failure -Stage Validation `
+    -CodeQL failure -Sonar failure -ExpectedExit 0
+Invoke-GateCase -Name validation_known_test_failure -Stage Validation `
+    -Tests failure -Verdict true -ExpectedExit 0
+Invoke-GateCase -Name validation_unenforced_test_failure -Stage Validation `
+    -Tests failure -Verdict false -ExpectedExit 1
+Invoke-GateCase -Name validation_build_failure -Stage Validation -Build failure -ExpectedExit 1
+Invoke-GateCase -Name validation_non_runtime -Stage Validation -RequiresValidation false `
+    -Build skipped -BuildCompat skipped -Tests skipped -ParameterSweep skipped -ModelShape skipped `
+    -Regression skipped -Aggregate skipped -SizeCheck skipped -Verdict false -ExpectedExit 0
+
+# No reuse requires both current validation and current quality.
+Invoke-GateCase -Name complete_current_success -ExpectedExit 0
+Invoke-GateCase -Name complete_current_validation_failure -ValidationGate failure -ExpectedExit 1
+Invoke-GateCase -Name complete_current_codeql_failure -CodeQL failure -ExpectedExit 1
+Invoke-GateCase -Name complete_current_sonar_failure -Sonar failure -ExpectedExit 1
+
+# Validation-only reuse skips the matrix but still requires quality and runtime promotion.
+Invoke-GateCase -Name partial_reuse_success -ReuseScope Validation -Promotion success `
+    -ValidationGate skipped -ExpectedExit 0
+Invoke-GateCase -Name partial_reuse_quality_failure -ReuseScope Validation -Promotion success `
+    -ValidationGate skipped -Sonar failure -ExpectedExit 1
+Invoke-GateCase -Name partial_reuse_missing_promotion -ReuseScope Validation -Promotion skipped `
+    -ValidationGate skipped -ExpectedExit 1
+Invoke-GateCase -Name partial_non_runtime_reuse -ReuseScope Validation -RequiresValidation false `
+    -Promotion skipped -ValidationGate skipped -ExpectedExit 0
+
+# Complete reuse needs no repeated quality job, but runtime data still has to be promoted.
+Invoke-GateCase -Name complete_reuse_success -ReuseScope Complete -Promotion success `
+    -CodeQL skipped -Sonar skipped -ValidationGate skipped -ExpectedExit 0
+Invoke-GateCase -Name complete_reuse_missing_promotion -ReuseScope Complete -Promotion skipped `
+    -CodeQL skipped -Sonar skipped -ValidationGate skipped -ExpectedExit 1
+Invoke-GateCase -Name complete_non_runtime_reuse -ReuseScope Complete -RequiresValidation false `
+    -Promotion skipped -CodeQL skipped -Sonar skipped -ValidationGate skipped -ExpectedExit 0
+Invoke-GateCase -Name source_failure_always_blocks -ReuseScope Complete -Source failure `
+    -Promotion success -CodeQL skipped -Sonar skipped -ValidationGate skipped -ExpectedExit 1
 
 if ($failures.Count -gt 0) {
     Write-Host 'CI Gate mode proof FAILED:'
@@ -177,5 +92,5 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 
-Write-Host 'CI Gate mode proof passed (reuse/full/non-runtime/default success and failure controls).'
+Write-Host 'CI Gate mode proof passed (validation/current/partial/complete and fail-closed controls).'
 exit 0
