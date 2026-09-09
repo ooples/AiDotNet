@@ -275,6 +275,22 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     }
 
     /// <summary>
+    /// Publishes the current exploration rate alongside the trading metrics.
+    /// </summary>
+    /// <remarks>
+    /// The <see cref="Epsilon"/> property already exposes this to anything holding the concrete agent. A
+    /// consumer that collects metrics generically - a bake-off harness recording one row per agent, which is
+    /// how this defect was found - only sees the dictionary, and there an agent that annealed and one that
+    /// never explored are indistinguishable. DoubleDQNAgent already publishes "Epsilon"; this matches it.
+    /// </remarks>
+    public override Dictionary<string, T> GetTradingMetrics()
+    {
+        var metrics = base.GetTradingMetrics();
+        metrics["Epsilon"] = NumOps.FromDouble(_epsilon);
+        return metrics;
+    }
+
+    /// <summary>
     /// Executes UpdateTargetNetwork for the FinancialDQNAgent.
     /// </summary>
     /// <remarks>

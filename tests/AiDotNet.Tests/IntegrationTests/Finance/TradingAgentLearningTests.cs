@@ -95,6 +95,57 @@ public class TradingAgentLearningTests
     }
 
     [Fact]
+    public void Dqn_epsilon_decay_of_one_holds_the_rate_instead_of_annealing()
+    {
+        // EpsilonDecay = 1.0 is a legitimate configuration meaning "hold the exploration rate". It must not be
+        // mistaken for "no schedule configured" and annealed anyway - a fixed-epsilon run is how you isolate
+        // whether exploration or learning is the thing that changed.
+        var options = new FinancialDQNAgentOptions<double>
+        {
+            StateSize = StateSize,
+            ActionSize = ActionSize,
+            EpsilonStart = 0.3,
+            EpsilonEnd = 0.01,
+            EpsilonDecay = 1.0,
+            BatchSize = 4,
+            TargetUpdateFrequency = 10,
+        };
+
+        using var agent = new FinancialDQNAgent<double>(Actor(), options);
+        TrainSteps(agent, 20);
+
+        Assert.Equal(0.3, agent.Epsilon, 9);
+    }
+
+    [Fact]
+    public void Dqn_publishes_the_exploration_rate_in_its_trading_metrics()
+    {
+        // The Epsilon property serves anything holding the concrete agent. A harness that collects metrics
+        // GENERICALLY - one row per agent, which is how this defect was found downstream - sees only the
+        // dictionary, and there an agent that annealed and one that never explored look identical.
+        var options = new FinancialDQNAgentOptions<double>
+        {
+            StateSize = StateSize,
+            ActionSize = ActionSize,
+            EpsilonStart = 0.8,
+            EpsilonEnd = 0.02,
+            EpsilonDecay = 0.5,
+            BatchSize = 4,
+            TargetUpdateFrequency = 10,
+        };
+
+        // Enough steps to fill the replay buffer and apply real updates: below BatchSize nothing trains, so
+        // nothing decays, and the assertion below would be vacuous rather than wrong.
+        using var agent = new FinancialDQNAgent<double>(Actor(), options);
+        TrainSteps(agent, 20);
+
+        var metrics = agent.GetTradingMetrics();
+        Assert.True(metrics.ContainsKey("Epsilon"), "the agent does not publish its exploration rate");
+        Assert.Equal(agent.Epsilon, Convert.ToDouble(metrics["Epsilon"]), 9);
+        Assert.True(agent.Epsilon < 0.8, "epsilon did not decay, so the published value proves nothing");
+    }
+
+    [Fact]
     public void Dqn_epsilon_is_monotonically_non_increasing()
     {
         var options = new FinancialDQNAgentOptions<double>
