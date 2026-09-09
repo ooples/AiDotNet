@@ -166,13 +166,12 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         string languageModelPath,
         ITokenizer tokenizer,
         LLaVAOptions? options = null,
-        LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.LLaMA,
-        string visionEncoderType = "clip-vit-l",
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LLaVAOptions();
+        _options.Validate();
         _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(visionEncoderPath))
@@ -187,8 +186,8 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         _useNativeMode = false;
         _visionEncoderPath = visionEncoderPath;
         _languageModelPath = languageModelPath;
-        _languageModelBackbone = languageModelBackbone;
-        _visionEncoderType = visionEncoderType.ToLowerInvariant();
+        _languageModelBackbone = _options.LanguageModelBackbone;
+        _visionEncoderType = _options.VisionEncoderType.ToLowerInvariant();
         _embeddingDimension = _options.EmbeddingDimension;
         _maxSequenceLength = _options.MaxSequenceLength;
         _imageSize = _options.ImageSize;
@@ -239,14 +238,13 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
     public LLaVANeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         LLaVAOptions? options = null,
-        LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.LLaMA,
-        string visionEncoderType = "clip-vit-l",
         ITokenizer? tokenizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LLaVAOptions();
+        _options.Validate();
         _options.Validate();
         Options = _options;
         _useNativeMode = true;
@@ -260,12 +258,12 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         _numHeads = _options.NumHeads;
         _patchSize = _options.PatchSize;
         _vocabularySize = _options.VocabSize;
-        _languageModelBackbone = languageModelBackbone;
-        _visionEncoderType = visionEncoderType.ToLowerInvariant();
+        _languageModelBackbone = _options.LanguageModelBackbone;
+        _visionEncoderType = _options.VisionEncoderType.ToLowerInvariant();
         _numVisualTokens = (_options.ImageSize / _options.PatchSize) * (_options.ImageSize / _options.PatchSize);
 
         // Use factory to create appropriate tokenizer for the backbone, or use provided tokenizer
-        _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(languageModelBackbone);
+        _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(_options.LanguageModelBackbone);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
 

@@ -38,6 +38,7 @@ public class VideoCLIPOptions : VisionLanguageModelOptions
         NumTemporalLayers = 4;
         NumTextLayers = 12;
         NumHeads = 12;
+        TemporalAggregation = TemporalAggregationType.TemporalTransformer;
     }
 
 
@@ -81,4 +82,9 @@ public class VideoCLIPOptions : VisionLanguageModelOptions
     {
         ValidateCore();
     }
+
+    /// <summary>
+    /// Gets or sets the temporal aggregation.
+    /// </summary>
+    public TemporalAggregationType TemporalAggregation { get; set; }
 }

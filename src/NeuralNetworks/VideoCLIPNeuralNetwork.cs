@@ -165,12 +165,12 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         string textEncoderPath,
         ITokenizer tokenizer,
         VideoCLIPOptions? options = null,
-        TemporalAggregationType temporalAggregation = TemporalAggregationType.TemporalTransformer,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CosineSimilarityLoss<T>(), 1.0)
     {
         _options = options ?? new VideoCLIPOptions();
+        _options.Validate();
         _options.Validate();
         Options = _options;
 
@@ -188,7 +188,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         _textEncoderPath = textEncoderPath;
         _numFrames = _options.NumFrames;
         _frameRate = _options.FrameRate;
-        _temporalAggregation = temporalAggregation;
+        _temporalAggregation = _options.TemporalAggregation;
         _embeddingDimension = _options.EmbeddingDimension;
         _maxSequenceLength = _options.MaxSequenceLength;
         _imageSize = _options.ImageSize;
@@ -230,13 +230,13 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     public VideoCLIPNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         VideoCLIPOptions? options = null,
-        TemporalAggregationType temporalAggregation = TemporalAggregationType.TemporalTransformer,
         ITokenizer? tokenizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CosineSimilarityLoss<T>(), 1.0)
     {
         _options = options ?? new VideoCLIPOptions();
+        _options.Validate();
         _options.Validate();
         Options = _options;
 
@@ -254,7 +254,7 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         _vocabularySize = _options.VocabSize;
         _numFrames = _options.NumFrames;
         _frameRate = _options.FrameRate;
-        _temporalAggregation = temporalAggregation;
+        _temporalAggregation = _options.TemporalAggregation;
 
         _tokenizer = tokenizer ?? Tokenization.ClipTokenizerFactory.CreateSimple();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);

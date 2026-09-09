@@ -34,6 +34,8 @@ public class LLaVAOptions : VisionLanguageModelOptions
         NumVisionLayers = 24;
         NumLmLayers = 32;
         NumHeads = 16;
+        LanguageModelBackbone = LanguageModelBackbone.LLaMA;
+        VisionEncoderType = "clip-vit-l";
     }
 
 
@@ -52,4 +54,14 @@ public class LLaVAOptions : VisionLanguageModelOptions
     {
         ValidateCore();
     }
+
+    /// <summary>
+    /// Gets or sets the language model backbone.
+    /// </summary>
+    public LanguageModelBackbone LanguageModelBackbone { get; set; }
+
+    /// <summary>
+    /// Gets or sets the vision encoder type.
+    /// </summary>
+    public string VisionEncoderType { get; set; }
 }

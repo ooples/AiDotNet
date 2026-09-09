@@ -171,6 +171,7 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
     {
         _options = options ?? new FlamingoOptions();
         _options.Validate();
+        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(visionEncoderPath))
             throw new ArgumentException("Vision encoder path cannot be null or empty.", nameof(visionEncoderPath));
@@ -237,13 +238,13 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
     public FlamingoNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
         FlamingoOptions? options = null,
-        LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.Chinchilla,
         ITokenizer? tokenizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new FlamingoOptions();
+        _options.Validate();
         _options.Validate();
         // Validated here, at the public entry point, rather than where it is first used. ConvertToTensor
         // divides by the channel count, and InitializeNativeLayers sizes the patch embedding from it, so
@@ -269,12 +270,12 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         _numHeads = _options.NumHeads;
         _patchSize = 14;
         _vocabularySize = _options.VocabSize;
-        _languageModelBackbone = languageModelBackbone;
+        _languageModelBackbone = _options.LanguageModelBackbone;
         _numPerceiverLayers = _options.NumPerceiverLayers;
         _learningRate = _options.LearningRate;
 
         // Use factory to create appropriate tokenizer for the backbone, or use provided tokenizer
-        _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(languageModelBackbone);
+        _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(_options.LanguageModelBackbone);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>

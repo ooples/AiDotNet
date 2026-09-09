@@ -29,6 +29,16 @@ public class AudioVisualEventLocalizationOptions : VisionLanguageModelOptions
         NumEncoderLayers = 6;
         AudioEmbeddingFullyConnectedWidth = VGGishAudioEmbedding<double>.PaperFullyConnectedWidth;
         AudioEmbeddingSize = VGGishAudioEmbedding<double>.PaperEmbeddingSize;
+        EmbeddingDimension = 512; // DEFAULT_EMBEDDING_DIM
+        TemporalResolution = 0.1; // DEFAULT_TEMPORAL_RESOLUTION
+        NumEncoderLayers = 6;
+        AudioEmbeddingFullyConnectedWidth = VGGishAudioEmbedding<double>.PaperFullyConnectedWidth;
+        AudioEmbeddingSize = VGGishAudioEmbedding<double>.PaperEmbeddingSize;
+        EmbeddingDimension = 512; // DEFAULT_EMBEDDING_DIM
+        TemporalResolution = 0.1; // DEFAULT_TEMPORAL_RESOLUTION
+        NumEncoderLayers = 6;
+        AudioEmbeddingFullyConnectedWidth = VGGishAudioEmbedding<double>.PaperFullyConnectedWidth;
+        AudioEmbeddingSize = VGGishAudioEmbedding<double>.PaperEmbeddingSize;
     }
 
     /// <summary>
