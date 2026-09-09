@@ -123,11 +123,16 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         : base(architecture: architecture)
     {
         _options = options ?? new CLAPModelOptions();
-        _options.Validate();
         if (string.IsNullOrWhiteSpace(audioEncoderPath))
             throw new ArgumentException("Audio encoder path is required for ONNX mode.", nameof(audioEncoderPath));
         if (!File.Exists(audioEncoderPath))
             throw new FileNotFoundException($"Audio encoder ONNX model not found: {audioEncoderPath}", audioEncoderPath);
+
+        // Validated after the audio-encoder path check so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options. It must still
+        // precede the text-encoder check below, which reads _options.TextEncoderPath and so
+        // needs the options to be valid first.
+        _options.Validate();
 
         SampleRate = _options.SampleRate;
         _useNativeMode = false;

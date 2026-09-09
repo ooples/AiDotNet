@@ -139,7 +139,6 @@ public partial class FlowFormer<T> : OpticalFlowBase<T>
         : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new FlowFormerOptions();
-        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
@@ -149,9 +148,13 @@ public partial class FlowFormer<T> : OpticalFlowBase<T>
 
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
-        _embedDim = 256;
-        _numLayers = 6;
-        _numIterations = 12;
+        // Validated after the path check so a missing model file reports itself as
+        // FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _embedDim = _options.EmbedDim;
+        _numLayers = _options.NumLayers;
+        _numIterations = _options.NumIterations;
         _imageHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 448;
         _imageWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
         _lossFunction = new MeanSquaredErrorLoss<T>();

@@ -356,7 +356,6 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
                1.0)
     {
         _options = options ?? new Blip2Options();
-        _options.Validate();
         Options = _options;
 
         // Validate ONNX model paths
@@ -473,7 +472,6 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
                1.0)
     {
         _options = options ?? new Blip2Options();
-        _options.Validate();
         _options.Validate();
         if (_options.ImageSize % _options.PatchSize != 0)
             throw new ArgumentException(

@@ -170,7 +170,6 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new FlamingoOptions();
-        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(visionEncoderPath))
             throw new ArgumentException("Vision encoder path cannot be null or empty.", nameof(visionEncoderPath));
@@ -247,7 +246,6 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new FlamingoOptions();
-        _options.Validate();
         _options.Validate();
         // Validated here, at the public entry point, rather than where it is first used. ConvertToTensor
         // divides by the channel count, and InitializeNativeLayers sizes the patch embedding from it, so

@@ -170,7 +170,6 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         : base(architecture, lossFunction ?? new CosineSimilarityLoss<T>(), 1.0)
     {
         _options = options ?? new VideoCLIPOptions();
-        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(videoEncoderPath))
@@ -239,7 +238,6 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         : base(architecture, lossFunction ?? new CosineSimilarityLoss<T>(), 1.0)
     {
         _options = options ?? new VideoCLIPOptions();
-        _options.Validate();
         _options.Validate();
         Options = _options;
 
