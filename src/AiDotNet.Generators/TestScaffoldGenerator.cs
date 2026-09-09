@@ -3007,7 +3007,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 context.ReportDiagnostic(Diagnostic.Create(
                     UntestedModel,
                     Location.None,
-                    model.ClassName));
+                    // Fully qualified, matching ADNGEN001. The simple name is ambiguous:
+                    // thirteen model names are shared by two classes in different
+                    // namespaces (Document.LayoutAware.LayoutLMv3 is covered while
+                    // VisionLanguage.Document.LayoutLMv3 is not), so a bare 'LayoutLMv3'
+                    // cannot be matched against its ADNGEN001 line or checked by hand.
+                    model.FullyQualifiedName));
             }
 
             // Emit AIDN041 summary
@@ -17285,7 +17290,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("    {");
         foreach (var model in testedModels)
         {
-            sb.AppendLine($"        \"{EscapeString(model.ClassName)}\",");
+            sb.AppendLine($"        \"{EscapeString(model.FullyQualifiedName)}\",");
         }
         sb.AppendLine("    };");
         sb.AppendLine();
@@ -17295,7 +17300,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("    {");
         foreach (var model in untestedModels)
         {
-            sb.AppendLine($"        \"{EscapeString(model.ClassName)}\",");
+            sb.AppendLine($"        \"{EscapeString(model.FullyQualifiedName)}\",");
         }
         sb.AppendLine("    };");
 
