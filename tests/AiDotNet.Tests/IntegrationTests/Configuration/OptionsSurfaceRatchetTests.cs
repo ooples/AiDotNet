@@ -60,6 +60,25 @@ public class OptionsSurfaceRatchetTests
     private const int Baseline = 741;
 
     /// <summary>
+    /// Number of tunable defaulted constructor parameters still declared by an in-scope model,
+    /// giving NO credit for a matching options property.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="Baseline"/> counts a parameter as covered once the options class has a
+    /// property of the same name. That is satisfiable without touching the constructor, so a
+    /// model can score as migrated while still taking every parameter it always did —
+    /// <c>UnifiedMultimodalNetwork</c> did exactly that for the whole of phase 3, and it was
+    /// caught by reading the file rather than by this test.
+    /// </para>
+    /// <para>
+    /// This count admits no such credit, so it can only fall when a constructor actually stops
+    /// taking the parameter. Where the two disagree, this one is the truth.
+    /// </para>
+    /// </remarks>
+    private const int ConstructorBaseline = 963;
+
+    /// <summary>
     /// How far the measured count may sit below <see cref="Baseline"/> before the test insists
     /// the baseline be lowered. Keeps ordinary refactoring from being blocked by an
     /// off-by-a-couple drift while still forcing real progress to be recorded.
@@ -151,6 +170,71 @@ public class OptionsSurfaceRatchetTests
         // Not an assertion about the contents — this exists so the numbers are visible in the
         // test output when a migration lands, without having to run the scanner by hand.
         Assert.True(byType.Count >= 0);
+    }
+
+    [Fact]
+    public void ModelConstructorsDoNotDeclareTunableParameters_DoesNotRegress()
+    {
+        var remaining = MeasureRemaining();
+        int count = remaining.Count;
+
+        Assert.True(
+            count <= ConstructorBaseline,
+            BuildFailureMessage(
+                $"Tunable constructor parameters grew from {ConstructorBaseline} to {count}.",
+                "A model constructor gained a tunable defaulted parameter, or one that was "
+                    + "supposed to move to Options is still declared. Unlike the count above, "
+                    + "this one cannot be satisfied by adding a property.",
+                remaining));
+
+        Assert.True(
+            count >= ConstructorBaseline - Slack,
+            BuildFailureMessage(
+                $"Tunable constructor parameters fell from {ConstructorBaseline} to {count}. "
+                    + $"Lower the ConstructorBaseline constant in {nameof(OptionsSurfaceRatchetTests)} to {count}.",
+                "The baseline only descends deliberately, so progress is recorded in the diff.",
+                remaining));
+    }
+
+    /// <summary>
+    /// Every tunable defaulted constructor parameter on an in-scope model, with no allowance
+    /// for a matching options property.
+    /// </summary>
+    private static List<Gap> MeasureRemaining()
+    {
+        var remaining = new List<Gap>();
+
+        foreach (var model in GetModelTypes())
+        {
+            Type? optionsType = null;
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (var ctor in model.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
+            {
+                foreach (var parameter in ctor.GetParameters())
+                {
+                    var parameterType = Nullable.GetUnderlyingType(parameter.ParameterType)
+                        ?? parameter.ParameterType;
+
+                    if (IsOptionsType(parameterType)) { optionsType ??= parameterType; continue; }
+                    if (!parameter.HasDefaultValue || parameter.Name == null) continue;
+                    if (ExcludedParameterNames.Contains(parameter.Name)) continue;
+                    if (!IsTunable(parameterType)) continue;
+                    if (!seen.Add(parameter.Name)) continue;
+
+                    remaining.Add(new Gap
+                    {
+                        TypeName = StripArity(model.Name),
+                        ParameterName = parameter.Name,
+                        OptionsTypeName = optionsType == null
+                            ? "(no options parameter)"
+                            : StripArity(optionsType.Name),
+                    });
+                }
+            }
+        }
+
+        return remaining;
     }
 
     private sealed class Gap
