@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -60,6 +62,10 @@ namespace AiDotNet.VisionLanguage.ThreeD;
     Year = 2024,
     Authors = "Qi et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, WeightDecay = 0.05,
+                ReferenceBatchSize = 32,
+                Source = "Qi et al. 2024, Sec. 4: an initial learning rate of 1e-4, a weight decay of "
+                        + "0.05, a batch size of 32 and the AdamW optimizer.")]
 public partial class GPT4Point<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {
     private readonly GPT4PointOptions _options;
@@ -103,7 +109,9 @@ public partial class GPT4Point<T> : VisionLanguageModelBase<T>, IThreeDVisionLan
     {
         _options = options ?? new GPT4PointOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
