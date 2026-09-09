@@ -2896,6 +2896,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     continue;
                 }
 
+                // Checked BEFORE resolving a family: an excluded base means no fixture whatever
+                // the family, so it is the more specific reason. With this after the family check,
+                // 30 compositional models that also resolve to no family reported the vaguer "no
+                // test family could be resolved" instead - losing the actionable half of the
+                // message. Skip test generation entirely for compositional/wrapper patterns
+                // (meta-learning, distributed, etc.) that cannot be auto-constructed.
+                if (model.InheritsFromExcludedBase)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        UngeneratableModelDescriptor, Location.None, model.FullyQualifiedName,
+                        "it inherits from a base excluded from generation (compositional or wrapper "
+                        + "pattern that cannot be auto-constructed)"));
+                    continue;
+                }
+
                 var family = ResolveTestBaseClass(model);
                 if (family is null)
                 {
@@ -2934,17 +2949,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Use constructor call if the model has a zero-arg constructor and is type-compatible.
                 // For models with architecture-only constructors, emit a default architecture.
                 // Otherwise, emit a throw so the test compiles but fails at runtime with a clear message.
-                // Skip test generation entirely for compositional/wrapper patterns
-                // that can't be auto-constructed (meta-learning, distributed, etc.)
-                if (model.InheritsFromExcludedBase)
-                {
-                    context.ReportDiagnostic(Diagnostic.Create(
-                        UngeneratableModelDescriptor, Location.None, model.FullyQualifiedName,
-                        "it inherits from a base excluded from generation (compositional or wrapper "
-                        + "pattern that cannot be auto-constructed)"));
-                    continue;
-                }
-
                 bool canConstruct = (model.HasParameterlessConstructor
                                     || model.HasArchitectureOnlyConstructor
                                     || model.HasVectorOnlyConstructor) &&
@@ -4068,8 +4072,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         // === TIER 5: Fallbacks ===
 
-        // Priority 18: Neural network (by interface or Tensor input)
-        if (model.ImplementsNeuralNetworkModel || model.UsesTensorInput)
+        // Priority 18: Neural network (by interface)
+        //
+        // Tensor input is NOT evidence of being a neural network, and using it as such routed
+        // models into a family they can never satisfy. IsCompatibleWithFamily(NeuralNetwork) is
+        // exactly ImplementsNeuralNetworkModel, so a type that reached this line only through the
+        // old `|| model.UsesTensorInput` clause was, by construction, incompatible with the family
+        // it had just been assigned - an unsatisfiable ADNGEN001 that no change to the model could
+        // clear. ConstantQTransform is the clearest case: a signal transform declaring
+        // [ModelCategory(SignalProcessing)] and Tensor input, reported as a NeuralNetwork-family
+        // failure.
+        //
+        // This cannot remove coverage from any model that has it: emitting a fixture already
+        // required IsCompatibleWithFamily, hence the interface, hence the first condition here.
+        // Models that genuinely declare [ModelCategory(NeuralNetwork)] still route at priority 20
+        // and keep the more informative "requires an interface this type does not implement"
+        // message, because for them the family IS right and the interface is what is missing.
+        if (model.ImplementsNeuralNetworkModel)
             return TestFamily.NeuralNetwork;
 
         // Priority 19: Matrix input fallback → Regression
