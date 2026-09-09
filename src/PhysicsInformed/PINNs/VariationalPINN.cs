@@ -535,7 +535,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                     { "TestFunctions", _numTestFunctions },
                     { "ParameterCount", GetParameterCount() }
                 },
-                ModelData = Serialize()
+                ModelDataProvider = () => Serialize()
             };
         }
 
