@@ -202,8 +202,16 @@ Assert-Contract ($selectStep.Contains('-ClassifyOnly')) `
     'non-runtime classification still depends on a coverage map being available'
 Assert-Contract ($selectStep.Contains('-BaseSha $env:PR_BASE_SHA')) `
     'non-runtime classification does not use the exact PR base-to-head path set'
-Assert-Contract ($selectStep.Contains('$requiresValidation = [bool] $result.requiresValidation')) `
-    'the selector does not consume the path classifier boolean'
+Assert-Contract ($selectStep.Contains('$pathRequiresValidation = Read-RequiredJsonBoolean')) `
+    'the selector does not validate and consume the path classifier boolean'
+Assert-Contract ($selectStep.Contains('$selectionEscalated = Read-RequiredJsonBoolean')) `
+    'the selector does not validate the map escalation decision'
+Assert-Contract ($selectStep.Contains('$selectionRequiresValidation = Read-RequiredJsonBoolean')) `
+    'the selector does not validate the map runtime-validation decision'
+Assert-Contract ($selectStep.Contains("throw 'shard selector contradicted the exact-path runtime decision'")) `
+    'the map selector can suppress validation after the exact-path classifier required it'
+Assert-Contract ($selectStep.Contains("selector output property 'shards' must be a JSON string array")) `
+    'the selector does not validate the selected shard payload type'
 Assert-Contract ($selectStep.Contains('requires_validation=$($requiresValidation.ToString().ToLowerInvariant())')) `
     'the selector does not emit the runtime-validation decision as a JSON boolean'
 Assert-Contract ($selectStep.Contains('if ($requiresValidation -and $matrixShards.Count -eq 0)')) `
