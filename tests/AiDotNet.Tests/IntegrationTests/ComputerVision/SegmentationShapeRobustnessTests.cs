@@ -201,7 +201,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void EoMT_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new EoMT<float>(Arch(), numClasses: 5, modelSize: EoMTModelSize.Small);
+        var model = new EoMT<float>(Arch(), options: new EoMTOptions { NumClasses = 5, ModelSize = EoMTModelSize.Small });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);

@@ -248,7 +248,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task EoMT_MultiStepTrain_DoesNotThrow()
     {
-        var model = new EoMT<float>(Arch(), numClasses: 5, modelSize: EoMTModelSize.Small);
+        var model = new EoMT<float>(Arch(), options: new EoMTOptions { NumClasses = 5, ModelSize = EoMTModelSize.Small });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 

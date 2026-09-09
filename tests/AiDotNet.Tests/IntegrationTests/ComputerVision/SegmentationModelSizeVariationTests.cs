@@ -424,7 +424,7 @@ public class SegmentationModelSizeVariationTests : IDisposable
     [InlineData(EoMTModelSize.Large)]
     public void EoMT_AllModelSizes_ConstructAndPredict(EoMTModelSize size)
     {
-        var model = new EoMT<float>(Arch(), numClasses: 5, modelSize: size);
+        var model = new EoMT<float>(Arch(), options: new EoMTOptions { NumClasses = 5, ModelSize = size });
         Assert.True(model.ParameterCount > 0);
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.True(output.Length > 0);

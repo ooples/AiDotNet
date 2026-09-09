@@ -274,14 +274,14 @@ public class FoundationSegmentationIntegrationTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task EoMT_Construction_Succeeds()
     {
-        var model = new EoMT<float>(Arch(), modelSize: EoMTModelSize.Base);
+        var model = new EoMT<float>(Arch(), options: new EoMTOptions { ModelSize = EoMTModelSize.Base });
         Assert.NotNull(model);
     }
 
     [Fact(Timeout = 120000)]
     public async Task EoMT_Predict_ReturnsOutput()
     {
-        var model = new EoMT<float>(Arch(), modelSize: EoMTModelSize.Base);
+        var model = new EoMT<float>(Arch(), options: new EoMTOptions { ModelSize = EoMTModelSize.Base });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
