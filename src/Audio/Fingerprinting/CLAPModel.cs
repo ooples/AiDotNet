@@ -119,11 +119,11 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     public CLAPModel(
         NeuralNetworkArchitecture<T> architecture,
         string audioEncoderPath,
-        string? textEncoderPath = null,
         CLAPModelOptions? options = null)
-        : base(architecture)
+        : base(architecture: architecture)
     {
         _options = options ?? new CLAPModelOptions();
+        _options.Validate();
         if (string.IsNullOrWhiteSpace(audioEncoderPath))
             throw new ArgumentException("Audio encoder path is required for ONNX mode.", nameof(audioEncoderPath));
         if (!File.Exists(audioEncoderPath))
@@ -132,13 +132,13 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         SampleRate = _options.SampleRate;
         _useNativeMode = false;
         _audioEncoderPath = audioEncoderPath;
-        _textEncoderPath = textEncoderPath;
+        _textEncoderPath = _options.TextEncoderPath;
         OnnxEncoder = new OnnxModel<T>(audioEncoderPath);
         // Fail fast when a text-encoder path is provided but invalid — the
         // earlier "try-and-skip" path silently dropped a mistyped path and
         // only surfaced as a NotSupportedException deep inside EncodeText().
         // Pattern-matches into a non-null local for net471 nullable-flow.
-        if (textEncoderPath is { Length: > 0 } pathLocal
+        if (_options.TextEncoderPath is { Length: > 0 } pathLocal
             && !string.IsNullOrWhiteSpace(pathLocal))
         {
             if (!File.Exists(pathLocal))
@@ -160,9 +160,10 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     public CLAPModel(
         NeuralNetworkArchitecture<T> architecture,
         CLAPModelOptions? options = null)
-        : base(architecture)
+        : base(architecture: architecture)
     {
         _options = options ?? new CLAPModelOptions();
+        _options.Validate();
         SampleRate = _options.SampleRate;
         _useNativeMode = true;
 

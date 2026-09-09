@@ -275,23 +275,21 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     public DCCRN(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        int sampleRate = 16000,
-        int fftSize = 512,
-        int hopSize = 256,
-        OnnxModelOptions? onnxOptions = null,
-        DCCRNOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        DCCRNOptions? options = null,
+        OnnxModelOptions? onnxOptions = null)
+        : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new DCCRNOptions();
+        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"Model file not found: {modelPath}");
 
-        SampleRate = sampleRate;
-        _fftSize = fftSize;
-        _hopSize = hopSize;
+        SampleRate = _options.SampleRate;
+        _fftSize = _options.FftSize;
+        _hopSize = _options.HopSize;
         _numStages = 6;
         _baseChannels = 32;
         _lstmHiddenDim = 256;
@@ -343,49 +341,30 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// </remarks>
     public DCCRN(
         NeuralNetworkArchitecture<T> architecture,
-        int sampleRate = 16000,
-        int numStages = 6,
-        int baseChannels = 32,
-        int lstmHiddenDim = 256,
-        int numLstmLayers = 2,
-        int fftSize = 512,
-        int hopSize = 256,
-        bool useComplexMask = true,
-        int kernelSize = 5,
-        int stride = 2,
+        DCCRNOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        DCCRNOptions? options = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new DCCRNOptions();
+        _options.Validate();
         Options = _options;
         // Validate parameters
-        if (sampleRate <= 0)
-            throw new ArgumentOutOfRangeException(nameof(sampleRate), "Sample rate must be positive.");
-        if (numStages <= 0)
-            throw new ArgumentOutOfRangeException(nameof(numStages), "Number of stages must be positive.");
-        if (baseChannels <= 0)
-            throw new ArgumentOutOfRangeException(nameof(baseChannels), "Base channels must be positive.");
-        if (lstmHiddenDim <= 0)
-            throw new ArgumentOutOfRangeException(nameof(lstmHiddenDim), "LSTM hidden dimension must be positive.");
-        if (numLstmLayers <= 0)
-            throw new ArgumentOutOfRangeException(nameof(numLstmLayers), "Number of LSTM layers must be positive.");
-        if (fftSize <= 0 || (fftSize & (fftSize - 1)) != 0)
-            throw new ArgumentOutOfRangeException(nameof(fftSize), "FFT size must be a positive power of 2.");
-        if (hopSize <= 0 || hopSize > fftSize)
-            throw new ArgumentOutOfRangeException(nameof(hopSize), "Hop size must be positive and not exceed FFT size.");
+        if (_options.FftSize <= 0 || (_options.FftSize & (_options.FftSize - 1)) != 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.FftSize), "FFT size must be a positive power of 2.");
+        if (_options.HopSize <= 0 || _options.HopSize > _options.FftSize)
+            throw new ArgumentOutOfRangeException(nameof(_options.HopSize), "Hop size must be positive and not exceed FFT size.");
 
-        SampleRate = sampleRate;
-        _numStages = numStages;
-        _baseChannels = baseChannels;
-        _lstmHiddenDim = lstmHiddenDim;
-        _numLstmLayers = numLstmLayers;
-        _fftSize = fftSize;
-        _hopSize = hopSize;
-        _useComplexMask = useComplexMask;
-        _kernelSize = kernelSize;
-        _stride = stride;
+        SampleRate = _options.SampleRate;
+        _numStages = _options.NumStages;
+        _baseChannels = _options.BaseChannels;
+        _lstmHiddenDim = _options.LstmHiddenDim;
+        _numLstmLayers = _options.NumLstmLayers;
+        _fftSize = _options.FftSize;
+        _hopSize = _options.HopSize;
+        _useComplexMask = _options.UseComplexMask;
+        _kernelSize = _options.KernelSize;
+        _stride = _options.Stride;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 

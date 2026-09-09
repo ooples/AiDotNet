@@ -275,43 +275,32 @@ public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     public TtsModel(
         NeuralNetworkArchitecture<T> architecture,
         string acousticModelPath,
-        string? vocoderModelPath = null,
-        int sampleRate = 22050,
-        int numMels = 80,
-        double speakingRate = 1.0,
-        double pitchShift = 0.0,
-        double energy = 1.0,
-        int? speakerId = null,
-        string? language = null,
-        bool useGriffinLimFallback = true,
-        int griffinLimIterations = 60,
-        int fftSize = 1024,
-        int hopLength = 256,
-        OnnxModelOptions? onnxOptions = null,
-        TtsOptions? options = null)
-        : base(architecture)
+        TtsOptions? options = null,
+        OnnxModelOptions? onnxOptions = null)
+        : base(architecture: architecture)
     {
         _options = options ?? new TtsOptions();
+        _options.Validate();
         Options = _options;
         if (acousticModelPath is null)
             throw new ArgumentNullException(nameof(acousticModelPath));
 
         _useNativeMode = false;
         _acousticModelPath = acousticModelPath;
-        _vocoderModelPath = vocoderModelPath;
+        _vocoderModelPath = _options.VocoderModelPath;
 
         // Store parameters
-        SampleRate = sampleRate;
-        NumMels = numMels;
-        _speakingRate = speakingRate;
-        _pitchShift = pitchShift;
-        _energy = energy;
-        _speakerId = speakerId;
-        _language = language;
-        _useGriffinLimFallback = useGriffinLimFallback;
-        _griffinLimIterations = griffinLimIterations;
-        _fftSize = fftSize;
-        _hopLength = hopLength;
+        SampleRate = _options.SampleRate;
+        NumMels = _options.NumMels;
+        _speakingRate = _options.SpeakingRate;
+        _pitchShift = _options.PitchShift;
+        _energy = _options.Energy;
+        _speakerId = _options.SpeakerId;
+        _language = _options.Language;
+        _useGriffinLimFallback = _options.UseGriffinLimFallback;
+        _griffinLimIterations = _options.GriffinLimIterations;
+        _fftSize = _options.FftSize;
+        _hopLength = _options.HopLength;
         _hiddenDim = 256;
         _numHeads = 4;
         _numEncoderLayers = 4;
@@ -331,9 +320,9 @@ public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             acousticModel = new OnnxModel<T>(acousticModelPath, onnxOptions ?? new OnnxModelOptions());
 
             // Load vocoder if path provided
-            if (vocoderModelPath is not null && vocoderModelPath.Length > 0)
+            if (_options.VocoderModelPath is not null && _options.VocoderModelPath.Length > 0)
             {
-                vocoder = new OnnxModel<T>(vocoderModelPath, onnxOptions ?? new OnnxModelOptions());
+                vocoder = new OnnxModel<T>(_options.VocoderModelPath, onnxOptions ?? new OnnxModelOptions());
             }
 
             // Assign to fields only after both succeed
@@ -352,12 +341,12 @@ public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             throw;
         }
 
-        if (useGriffinLimFallback || _vocoder is null)
+        if (_options.UseGriffinLimFallback || _vocoder is null)
         {
             _griffinLim = new GriffinLim<T>(
-                nFft: fftSize,
-                hopLength: hopLength,
-                iterations: griffinLimIterations);
+                nFft: _options.FftSize,
+                hopLength: _options.HopLength,
+                iterations: _options.GriffinLimIterations);
         }
 
         // Initialize available voices
@@ -411,58 +400,44 @@ public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// </remarks>
     public TtsModel(
         NeuralNetworkArchitecture<T> architecture,
-        int sampleRate = 22050,
-        int numMels = 80,
-        double speakingRate = 1.0,
-        double pitchShift = 0.0,
-        double energy = 1.0,
-        int? speakerId = null,
-        string? language = null,
-        int hiddenDim = 256,
-        int numHeads = 4,
-        int numEncoderLayers = 4,
-        int numDecoderLayers = 4,
-        int maxPhonemeLength = 256,
-        int fftSize = 1024,
-        int hopLength = 256,
-        int griffinLimIterations = 60,
+        TtsOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        TtsOptions? options = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new TtsOptions();
+        _options.Validate();
         Options = _options;
         _useNativeMode = true;
         _acousticModelPath = null;
         _vocoderModelPath = null;
 
         // Store parameters
-        SampleRate = sampleRate;
-        NumMels = numMels;
-        _speakingRate = speakingRate;
-        _pitchShift = pitchShift;
-        _energy = energy;
-        _speakerId = speakerId;
-        _language = language;
+        SampleRate = _options.SampleRate;
+        NumMels = _options.NumMels;
+        _speakingRate = _options.SpeakingRate;
+        _pitchShift = _options.PitchShift;
+        _energy = _options.Energy;
+        _speakerId = _options.SpeakerId;
+        _language = _options.Language;
         _useGriffinLimFallback = true;
-        _griffinLimIterations = griffinLimIterations;
-        _fftSize = fftSize;
-        _hopLength = hopLength;
-        _hiddenDim = hiddenDim;
-        _numHeads = numHeads;
-        _numEncoderLayers = numEncoderLayers;
-        _numDecoderLayers = numDecoderLayers;
-        _maxPhonemeLength = maxPhonemeLength;
+        _griffinLimIterations = _options.GriffinLimIterations;
+        _fftSize = _options.FftSize;
+        _hopLength = _options.HopLength;
+        _hiddenDim = _options.HiddenDim;
+        _numHeads = _options.NumHeads;
+        _numEncoderLayers = _options.NumEncoderLayers;
+        _numDecoderLayers = _options.NumDecoderLayers;
+        _maxPhonemeLength = _options.MaxPhonemeLength;
 
         // Initialize preprocessor
         _preprocessor = new TtsPreprocessor();
 
         // Create Griffin-Lim for audio generation from mel
         _griffinLim = new GriffinLim<T>(
-            nFft: fftSize,
-            hopLength: hopLength,
-            iterations: griffinLimIterations);
+            nFft: _options.FftSize,
+            hopLength: _options.HopLength,
+            iterations: _options.GriffinLimIterations);
 
         // Initialize optimizer and loss function
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();

@@ -261,41 +261,31 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
     public NeuralNoiseReducer(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        int sampleRate = 16000,
-        int fftSize = 512,
-        int hopSize = 256,
-        int numChannels = 1,
-        double enhancementStrength = 0.8,
         NeuralNoiseReducerOptions? options = null)
-        : base(architecture, new MeanAbsoluteErrorLoss<T>())
+        : base(architecture: architecture, new MeanAbsoluteErrorLoss<T>())
     {
         _options = options ?? new NeuralNoiseReducerOptions();
+        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
-        if (enhancementStrength < 0.0 || enhancementStrength > 1.0)
-            throw new ArgumentOutOfRangeException(nameof(enhancementStrength), "Enhancement strength must be between 0.0 and 1.0.");
-        if (sampleRate <= 0)
-            throw new ArgumentOutOfRangeException(nameof(sampleRate), "Sample rate must be positive.");
-        if (fftSize <= 0)
-            throw new ArgumentOutOfRangeException(nameof(fftSize), "FFT size must be positive.");
-        if (hopSize <= 0 || hopSize > fftSize)
-            throw new ArgumentOutOfRangeException(nameof(hopSize), "Hop size must be positive and not exceed FFT size.");
-        if (numChannels <= 0)
-            throw new ArgumentOutOfRangeException(nameof(numChannels), "Number of channels must be positive.");
+        if (_options.EnhancementStrength < 0.0 || _options.EnhancementStrength > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(_options.EnhancementStrength), "Enhancement strength must be between 0.0 and 1.0.");
+        if (_options.HopSize <= 0 || _options.HopSize > _options.FftSize)
+            throw new ArgumentOutOfRangeException(nameof(_options.HopSize), "Hop size must be positive and not exceed FFT size.");
 
         _useNativeMode = false;
         _modelPath = modelPath;
         _lossFunction = new MeanAbsoluteErrorLoss<T>();
 
-        SampleRate = sampleRate;
-        NumChannels = numChannels;
-        _fftSize = fftSize;
-        _hopSize = hopSize;
+        SampleRate = _options.SampleRate;
+        NumChannels = _options.NumChannels;
+        _fftSize = _options.FftSize;
+        _hopSize = _options.HopSize;
         _numStages = 4;
         _baseFilters = 32;
         _bottleneckDim = 256;
-        EnhancementStrength = enhancementStrength;
+        EnhancementStrength = _options.EnhancementStrength;
 
         // Load ONNX model
         OnnxModel = new OnnxModel<T>(modelPath);
@@ -323,50 +313,31 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
     /// </remarks>
     public NeuralNoiseReducer(
         NeuralNetworkArchitecture<T> architecture,
-        int sampleRate = 16000,
-        int fftSize = 512,
-        int hopSize = 256,
-        int numChannels = 1,
-        int numStages = 4,
-        int baseFilters = 32,
-        int bottleneckDim = 256,
-        double enhancementStrength = 0.8,
-        ILossFunction<T>? lossFunction = null,
-        NeuralNoiseReducerOptions? options = null)
-        : base(architecture, lossFunction ?? new MeanAbsoluteErrorLoss<T>())
+        NeuralNoiseReducerOptions? options = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new MeanAbsoluteErrorLoss<T>())
     {
         _options = options ?? new NeuralNoiseReducerOptions();
+        _options.Validate();
         Options = _options;
         // Validate parameters
-        if (enhancementStrength < 0.0 || enhancementStrength > 1.0)
-            throw new ArgumentOutOfRangeException(nameof(enhancementStrength), "Enhancement strength must be between 0.0 and 1.0.");
-        if (sampleRate <= 0)
-            throw new ArgumentOutOfRangeException(nameof(sampleRate), "Sample rate must be positive.");
-        if (fftSize <= 0)
-            throw new ArgumentOutOfRangeException(nameof(fftSize), "FFT size must be positive.");
-        if (hopSize <= 0 || hopSize > fftSize)
-            throw new ArgumentOutOfRangeException(nameof(hopSize), "Hop size must be positive and not exceed FFT size.");
-        if (numChannels <= 0)
-            throw new ArgumentOutOfRangeException(nameof(numChannels), "Number of channels must be positive.");
-        if (numStages <= 0)
-            throw new ArgumentOutOfRangeException(nameof(numStages), "Number of stages must be positive.");
-        if (baseFilters <= 0)
-            throw new ArgumentOutOfRangeException(nameof(baseFilters), "Base filters must be positive.");
-        if (bottleneckDim <= 0)
-            throw new ArgumentOutOfRangeException(nameof(bottleneckDim), "Bottleneck dimension must be positive.");
+        if (_options.EnhancementStrength < 0.0 || _options.EnhancementStrength > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(_options.EnhancementStrength), "Enhancement strength must be between 0.0 and 1.0.");
+        if (_options.HopSize <= 0 || _options.HopSize > _options.FftSize)
+            throw new ArgumentOutOfRangeException(nameof(_options.HopSize), "Hop size must be positive and not exceed FFT size.");
 
         _useNativeMode = true;
         _modelPath = null;
         _lossFunction = lossFunction ?? new MeanAbsoluteErrorLoss<T>();
 
-        SampleRate = sampleRate;
-        NumChannels = numChannels;
-        _fftSize = fftSize;
-        _hopSize = hopSize;
-        _numStages = numStages;
-        _baseFilters = baseFilters;
-        _bottleneckDim = bottleneckDim;
-        EnhancementStrength = enhancementStrength;
+        SampleRate = _options.SampleRate;
+        NumChannels = _options.NumChannels;
+        _fftSize = _options.FftSize;
+        _hopSize = _options.HopSize;
+        _numStages = _options.NumStages;
+        _baseFilters = _options.BaseFilters;
+        _bottleneckDim = _options.BottleneckDim;
+        EnhancementStrength = _options.EnhancementStrength;
 
         InitializeLayers();
         InitializeStreamingBuffers();

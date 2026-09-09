@@ -307,19 +307,12 @@ public partial class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     public VITSModel(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        string? speakerEncoderPath = null,
-        int sampleRate = 22050,
-        int numMels = 80,
-        double speakingRate = 1.0,
-        double noiseScale = 0.667,
-        double lengthScale = 1.0,
-        int fftSize = 1024,
-        int hopLength = 256,
-        OnnxModelOptions? onnxOptions = null,
-        VITSModelOptions? options = null)
-        : base(architecture)
+        VITSModelOptions? options = null,
+        OnnxModelOptions? onnxOptions = null)
+        : base(architecture: architecture)
     {
         _options = options ?? new VITSModelOptions();
+        _options.Validate();
         Options = _options;
         if (architecture is null)
             throw new ArgumentNullException(nameof(architecture));
@@ -328,16 +321,16 @@ public partial class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
         _useNativeMode = false;
         _modelPath = modelPath;
-        _speakerEncoderPath = speakerEncoderPath;
+        _speakerEncoderPath = _options.SpeakerEncoderPath;
 
         // Store parameters
-        SampleRate = sampleRate;
-        NumMels = numMels;
-        _speakingRate = speakingRate;
-        _noiseScale = noiseScale;
-        _lengthScale = lengthScale;
-        _fftSize = fftSize;
-        _hopLength = hopLength;
+        SampleRate = _options.SampleRate;
+        NumMels = _options.NumMels;
+        _speakingRate = _options.SpeakingRate;
+        _noiseScale = _options.NoiseScale;
+        _lengthScale = _options.LengthScale;
+        _fftSize = _options.FftSize;
+        _hopLength = _options.HopLength;
 
         // Default architecture parameters
         _hiddenDim = 192;
@@ -355,10 +348,10 @@ public partial class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
         // Initialize mel spectrogram for speaker encoding
         _melSpectrogram = new MelSpectrogram<T>(
-            sampleRate: sampleRate,
-            nMels: numMels,
-            nFft: fftSize,
-            hopLength: hopLength);
+            sampleRate: _options.SampleRate,
+            nMels: _options.NumMels,
+            nFft: _options.FftSize,
+            hopLength: _options.HopLength);
 
         MelSpec = _melSpectrogram;
 
@@ -366,9 +359,9 @@ public partial class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         var onnxOpts = onnxOptions ?? new OnnxModelOptions();
         OnnxModel = new OnnxModel<T>(modelPath, onnxOpts);
 
-        if (speakerEncoderPath is not null && speakerEncoderPath.Length > 0)
+        if (_options.SpeakerEncoderPath is not null && _options.SpeakerEncoderPath.Length > 0)
         {
-            _speakerEncoder = new OnnxModel<T>(speakerEncoderPath, onnxOpts);
+            _speakerEncoder = new OnnxModel<T>(_options.SpeakerEncoderPath, onnxOpts);
         }
 
         // Initialize available voices
@@ -424,28 +417,14 @@ public partial class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// </remarks>
     public VITSModel(
         NeuralNetworkArchitecture<T> architecture,
-        int sampleRate = 22050,
-        int numMels = 80,
-        double speakingRate = 1.0,
-        double noiseScale = 0.667,
-        double lengthScale = 1.0,
-        int hiddenDim = 192,
-        int numHeads = 2,
-        int numEncoderLayers = 6,
-        int numFlowLayers = 4,
-        int speakerEmbeddingDim = 256,
-        int numSpeakers = 1,
-        int maxPhonemeLength = 256,
-        int phonemeVocabSize = 128,
+        VITSModelOptions? options = null,
         int[]? upsampleRates = null,
-        int fftSize = 1024,
-        int hopLength = 256,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        VITSModelOptions? options = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new VITSModelOptions();
+        _options.Validate();
         Options = _options;
         if (architecture is null)
             throw new ArgumentNullException(nameof(architecture));
@@ -453,38 +432,38 @@ public partial class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         _useNativeMode = true;
 
         // Store parameters
-        SampleRate = sampleRate;
-        NumMels = numMels;
-        _speakingRate = speakingRate;
-        _noiseScale = noiseScale;
-        _lengthScale = lengthScale;
-        _hiddenDim = hiddenDim;
-        _numHeads = numHeads;
-        _numEncoderLayers = numEncoderLayers;
-        _numFlowLayers = numFlowLayers;
-        _speakerEmbeddingDim = speakerEmbeddingDim;
-        _numSpeakers = numSpeakers;
-        _maxPhonemeLength = maxPhonemeLength;
-        Guard.Positive(phonemeVocabSize);
-        _phonemeVocabSize = phonemeVocabSize;
+        SampleRate = _options.SampleRate;
+        NumMels = _options.NumMels;
+        _speakingRate = _options.SpeakingRate;
+        _noiseScale = _options.NoiseScale;
+        _lengthScale = _options.LengthScale;
+        _hiddenDim = _options.HiddenDim;
+        _numHeads = _options.NumHeads;
+        _numEncoderLayers = _options.NumEncoderLayers;
+        _numFlowLayers = _options.NumFlowLayers;
+        _speakerEmbeddingDim = _options.SpeakerEmbeddingDim;
+        _numSpeakers = _options.NumSpeakers;
+        _maxPhonemeLength = _options.MaxPhonemeLength;
+        Guard.Positive(_options.PhonemeVocabSize);
+        _phonemeVocabSize = _options.PhonemeVocabSize;
         var rates = (upsampleRates ?? DefaultUpsampleRates).ToArray();
         if (rates.Length == 0)
             throw new ArgumentException("Upsample rates must not be empty.", nameof(upsampleRates));
         if (rates.Any(r => r <= 0))
             throw new ArgumentException("All upsample rates must be positive.", nameof(upsampleRates));
         _upsampleRates = rates;
-        _fftSize = fftSize;
-        _hopLength = hopLength;
+        _fftSize = _options.FftSize;
+        _hopLength = _options.HopLength;
 
         // Initialize preprocessor
         _preprocessor = new TtsPreprocessor();
 
         // Initialize mel spectrogram
         _melSpectrogram = new MelSpectrogram<T>(
-            sampleRate: sampleRate,
-            nMels: numMels,
-            nFft: fftSize,
-            hopLength: hopLength);
+            sampleRate: _options.SampleRate,
+            nMels: _options.NumMels,
+            nFft: _options.FftSize,
+            hopLength: _options.HopLength);
 
         MelSpec = _melSpectrogram;
 

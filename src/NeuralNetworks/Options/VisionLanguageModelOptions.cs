@@ -106,9 +106,12 @@ public abstract class VisionLanguageModelOptions : ModelHyperparameterOptions
     /// </exception>
     protected void ValidateCore()
     {
+        // Only the embedding width and channel count are universal here. The two AudioVisual
+        // networks pair audio with video and have no text sequence length and no square image
+        // size, so requiring those threw at construction while compiling perfectly — the same
+        // mistake that cost 30 failing tests in the GAN family, 11 in Document and 6 in Video.
+        // A model that needs a value calls Require in its own Validate().
         Require(EmbeddingDimension, nameof(EmbeddingDimension));
-        Require(MaxSequenceLength, nameof(MaxSequenceLength));
-        Require(ImageSize, nameof(ImageSize));
         Require(Channels, nameof(Channels));
     }
 }

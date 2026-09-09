@@ -1,3 +1,5 @@
+using AiDotNet.Audio.Fingerprinting;
+
 namespace AiDotNet.Models.Options;
 
 /// <summary>
@@ -21,7 +23,10 @@ namespace AiDotNet.Models.Options;
 public class CLAPModelOptions : AudioNeuralNetworkOptions
 {
     /// <summary>Initializes a new instance with CLAP HTSAT+RoBERTa defaults.</summary>
-    public CLAPModelOptions() { }
+    public CLAPModelOptions()
+    {
+        TextEncoderPath = null;
+    }
 
     /// <summary>
     /// Initializes a new instance by copying every property from
@@ -53,6 +58,7 @@ public class CLAPModelOptions : AudioNeuralNetworkOptions
         ProjectionDim = other.ProjectionDim;
         InitialTemperature = other.InitialTemperature;
         DropoutRate = other.DropoutRate;
+        TextEncoderPath = other.TextEncoderPath;
     }
 
     // ── Mel-spectrogram front-end (Wu 2023 §3.1: 64-mel, 1024-sample window,
@@ -189,4 +195,20 @@ public class CLAPModelOptions : AudioNeuralNetworkOptions
     /// fraction of activations during training to discourage overfitting.
     /// 0.1 is the CLAP paper default.</para></remarks>
     public double DropoutRate { get; init; } = 0.1;
+
+    /// <summary>
+    /// Gets or sets the text encoder path.
+    /// </summary>
+    public string? TextEncoderPath { get; set; }
+
+    /// <summary>
+    /// Throws if a value this model requires has been left unset or is not positive.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when a required dimension is zero or negative.
+    /// </exception>
+    public void Validate()
+    {
+        ValidateCore();
+    }
 }

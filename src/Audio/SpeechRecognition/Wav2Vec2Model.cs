@@ -255,15 +255,13 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     public Wav2Vec2Model(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        string? language = "en",
-        int sampleRate = 16000,
-        int maxAudioLengthSeconds = 30,
+        Wav2Vec2ModelOptions? options = null,
         string[]? vocabulary = null,
-        OnnxModelOptions? onnxOptions = null,
-        Wav2Vec2ModelOptions? options = null)
-        : base(architecture)
+        OnnxModelOptions? onnxOptions = null)
+        : base(architecture: architecture)
     {
         _options = options ?? new Wav2Vec2ModelOptions();
+        _options.Validate();
         Options = _options;
         if (architecture is null)
             throw new ArgumentNullException(nameof(architecture));
@@ -272,11 +270,11 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
 
         _useNativeMode = false;
         _modelPath = modelPath;
-        _language = language;
-        _maxAudioLengthSeconds = maxAudioLengthSeconds;
+        _language = _options.Language;
+        _maxAudioLengthSeconds = _options.MaxAudioLengthSeconds;
 
         // Set audio properties
-        SampleRate = sampleRate;
+        SampleRate = _options.SampleRate;
         NumMels = 0; // Wav2Vec2 doesn't use mel spectrograms
 
         // Model dimensions (standard Wav2Vec2 Base)
@@ -294,7 +292,7 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         OnnxModel = new OnnxModel<T>(modelPath, onnxOpts);
 
         // Initialize supported languages
-        SupportedLanguages = new[] { language ?? "en" };
+        SupportedLanguages = new[] { _options.Language ?? "en" };
 
         // Wav2Vec2 + CTC is the standard ASR training stack (Baevski et al.
         // 2020 §3.2): CTC handles the variable-length output-vs-input
@@ -349,34 +347,28 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     /// </remarks>
     public Wav2Vec2Model(
         NeuralNetworkArchitecture<T> architecture,
-        string? language = "en",
-        int sampleRate = 16000,
-        int maxAudioLengthSeconds = 30,
-        int hiddenDim = 768,
-        int numTransformerLayers = 12,
-        int numHeads = 12,
-        int ffDim = 3072,
+        Wav2Vec2ModelOptions? options = null,
         string[]? vocabulary = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        Wav2Vec2ModelOptions? options = null)
-        : base(architecture)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture)
     {
         _options = options ?? new Wav2Vec2ModelOptions();
+        _options.Validate();
         Options = _options;
         if (architecture is null)
             throw new ArgumentNullException(nameof(architecture));
 
         _useNativeMode = true;
-        _language = language;
-        _maxAudioLengthSeconds = maxAudioLengthSeconds;
-        _hiddenDim = hiddenDim;
-        _numTransformerLayers = numTransformerLayers;
-        _numHeads = numHeads;
-        _ffDim = ffDim;
+        _language = _options.Language;
+        _maxAudioLengthSeconds = _options.MaxAudioLengthSeconds;
+        _hiddenDim = _options.HiddenDim;
+        _numTransformerLayers = _options.NumTransformerLayers;
+        _numHeads = _options.NumHeads;
+        _ffDim = _options.FfDim;
 
         // Set audio properties
-        SampleRate = sampleRate;
+        SampleRate = _options.SampleRate;
         NumMels = 0; // Wav2Vec2 doesn't use mel spectrograms
 
         // Initialize vocabulary
@@ -384,7 +376,7 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         _vocabSize = _vocabulary.Length;
 
         // Initialize supported languages
-        SupportedLanguages = new[] { language ?? "en" };
+        SupportedLanguages = new[] { _options.Language ?? "en" };
 
         // Initialize training components — CTC for ASR (see ONNX ctor for
         // rationale). Wav2Vec2's variable-length frame-vs-character alignment

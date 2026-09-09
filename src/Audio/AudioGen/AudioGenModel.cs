@@ -351,22 +351,14 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         string languageModelPath,
         string audioDecoderPath,
         ITokenizer tokenizer,
-        AudioGenModelSize modelSize = AudioGenModelSize.Medium,
-        int sampleRate = 32000,
-        double durationSeconds = 5.0,
-        double maxDurationSeconds = 30.0,
-        double temperature = 1.0,
-        int topK = 250,
-        double topP = 0.0,
-        double guidanceScale = 3.0,
-        int channels = 1,
+        AudioGenOptions? options = null,
         int? seed = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        AudioGenOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new AudioGenOptions();
+        _options.Validate();
         Options = _options;
         // Validate ONNX model paths
         if (string.IsNullOrWhiteSpace(textEncoderPath))
@@ -383,47 +375,39 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
             throw new FileNotFoundException($"Audio decoder model not found: {audioDecoderPath}");
 
         // Validate generation parameters
-        if (temperature <= 0)
-            throw new ArgumentOutOfRangeException(nameof(temperature), "Temperature must be positive.");
-        if (topK < 0)
-            throw new ArgumentOutOfRangeException(nameof(topK), "TopK must be non-negative.");
-        if (topP < 0 || topP > 1.0)
-            throw new ArgumentOutOfRangeException(nameof(topP), "TopP must be in range [0, 1].");
-        if (guidanceScale < 1.0)
-            throw new ArgumentOutOfRangeException(nameof(guidanceScale), "GuidanceScale must be >= 1.0.");
-        if (channels < 1)
-            throw new ArgumentOutOfRangeException(nameof(channels), "Channels must be at least 1.");
-        if (sampleRate <= 0)
-            throw new ArgumentOutOfRangeException(nameof(sampleRate), "SampleRate must be positive.");
-        if (durationSeconds <= 0)
-            throw new ArgumentOutOfRangeException(nameof(durationSeconds), "DurationSeconds must be positive.");
-        if (maxDurationSeconds <= 0)
-            throw new ArgumentOutOfRangeException(nameof(maxDurationSeconds), "MaxDurationSeconds must be positive.");
-        if (durationSeconds > maxDurationSeconds)
-            throw new ArgumentOutOfRangeException(nameof(durationSeconds), "DurationSeconds cannot exceed MaxDurationSeconds.");
+        if (_options.TopK < 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.TopK), "TopK must be non-negative.");
+        if (_options.TopP < 0 || _options.TopP > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(_options.TopP), "TopP must be in range [0, 1].");
+        if (_options.GuidanceScale < 1.0)
+            throw new ArgumentOutOfRangeException(nameof(_options.GuidanceScale), "GuidanceScale must be >= 1.0.");
+        if (_options.Channels < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.Channels), "Channels must be at least 1.");
+        if (_options.DurationSeconds > _options.MaxDurationSeconds)
+            throw new ArgumentOutOfRangeException(nameof(_options.DurationSeconds), "DurationSeconds cannot exceed MaxDurationSeconds.");
 
         _useNativeMode = false;
         _textEncoderPath = textEncoderPath;
         _languageModelPath = languageModelPath;
         _audioDecoderPath = audioDecoderPath;
-        _modelSize = modelSize;
-        _sampleRate = sampleRate;
-        _durationSeconds = durationSeconds;
-        _maxDurationSeconds = maxDurationSeconds;
-        _temperature = temperature;
-        _topK = topK;
-        _topP = topP;
-        _guidanceScale = guidanceScale;
-        _channels = channels;
+        _modelSize = _options.ModelSize;
+        _sampleRate = _options.SampleRate;
+        _durationSeconds = _options.DurationSeconds;
+        _maxDurationSeconds = _options.MaxDurationSeconds;
+        _temperature = _options.Temperature;
+        _topK = _options.TopK;
+        _topP = _options.TopP;
+        _guidanceScale = _options.GuidanceScale;
+        _channels = _options.Channels;
 
         // Set model dimensions based on size
-        (_textHiddenDim, _lmHiddenDim, _numLmLayers, _numHeads) = GetModelDimensions(modelSize);
+        (_textHiddenDim, _lmHiddenDim, _numLmLayers, _numHeads) = GetModelDimensions(_options.ModelSize);
         _numCodebooks = 4;  // EnCodec standard
         _codebookSize = 1024;  // EnCodec standard
         _maxTextLength = 256;
 
         // Set audio base class properties
-        SampleRate = sampleRate;
+        SampleRate = _options.SampleRate;
 
         OnnxModel<T>? textEncoder = null;
         OnnxModel<T>? languageModel = null;
@@ -502,80 +486,51 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     /// </remarks>
     public AudioGenModel(
         NeuralNetworkArchitecture<T> architecture,
-        AudioGenModelSize modelSize = AudioGenModelSize.Medium,
-        int sampleRate = 32000,
-        double durationSeconds = 5.0,
-        double maxDurationSeconds = 30.0,
-        double temperature = 1.0,
-        int topK = 250,
-        double topP = 0.0,
-        double guidanceScale = 3.0,
-        int channels = 1,
-        int textHiddenDim = 0,
-        int lmHiddenDim = 0,
-        int numLmLayers = 0,
-        int numHeads = 0,
-        int numCodebooks = 4,
-        int codebookSize = 1024,
-        int maxTextLength = 256,
+        AudioGenOptions? options = null,
         int? seed = null,
         ITokenizer? tokenizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        AudioGenOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new AudioGenOptions();
+        _options.Validate();
         Options = _options;
         // Validate parameters
-        if (temperature <= 0)
-            throw new ArgumentOutOfRangeException(nameof(temperature), "Temperature must be positive.");
-        if (topK < 0)
-            throw new ArgumentOutOfRangeException(nameof(topK), "TopK must be non-negative.");
-        if (topP < 0 || topP > 1.0)
-            throw new ArgumentOutOfRangeException(nameof(topP), "TopP must be in range [0, 1].");
-        if (guidanceScale < 1.0)
-            throw new ArgumentOutOfRangeException(nameof(guidanceScale), "GuidanceScale must be >= 1.0.");
-        if (channels < 1)
-            throw new ArgumentOutOfRangeException(nameof(channels), "Channels must be at least 1.");
-        if (sampleRate <= 0)
-            throw new ArgumentOutOfRangeException(nameof(sampleRate), "SampleRate must be positive.");
-        if (durationSeconds <= 0)
-            throw new ArgumentOutOfRangeException(nameof(durationSeconds), "DurationSeconds must be positive.");
-        if (maxDurationSeconds <= 0)
-            throw new ArgumentOutOfRangeException(nameof(maxDurationSeconds), "MaxDurationSeconds must be positive.");
-        if (durationSeconds > maxDurationSeconds)
-            throw new ArgumentOutOfRangeException(nameof(durationSeconds), "DurationSeconds cannot exceed MaxDurationSeconds.");
-        if (numCodebooks <= 0)
-            throw new ArgumentOutOfRangeException(nameof(numCodebooks), "NumCodebooks must be positive.");
-        if (codebookSize <= 0)
-            throw new ArgumentOutOfRangeException(nameof(codebookSize), "CodebookSize must be positive.");
-        if (maxTextLength <= 0)
-            throw new ArgumentOutOfRangeException(nameof(maxTextLength), "MaxTextLength must be positive.");
+        if (_options.TopK < 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.TopK), "TopK must be non-negative.");
+        if (_options.TopP < 0 || _options.TopP > 1.0)
+            throw new ArgumentOutOfRangeException(nameof(_options.TopP), "TopP must be in range [0, 1].");
+        if (_options.GuidanceScale < 1.0)
+            throw new ArgumentOutOfRangeException(nameof(_options.GuidanceScale), "GuidanceScale must be >= 1.0.");
+        if (_options.Channels < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.Channels), "Channels must be at least 1.");
+        if (_options.DurationSeconds > _options.MaxDurationSeconds)
+            throw new ArgumentOutOfRangeException(nameof(_options.DurationSeconds), "DurationSeconds cannot exceed MaxDurationSeconds.");
 
         _useNativeMode = true;
-        _modelSize = modelSize;
-        _sampleRate = sampleRate;
-        _durationSeconds = durationSeconds;
-        _maxDurationSeconds = maxDurationSeconds;
-        _temperature = temperature;
-        _topK = topK;
-        _topP = topP;
-        _guidanceScale = guidanceScale;
-        _channels = channels;
+        _modelSize = _options.ModelSize;
+        _sampleRate = _options.SampleRate;
+        _durationSeconds = _options.DurationSeconds;
+        _maxDurationSeconds = _options.MaxDurationSeconds;
+        _temperature = _options.Temperature;
+        _topK = _options.TopK;
+        _topP = _options.TopP;
+        _guidanceScale = _options.GuidanceScale;
+        _channels = _options.Channels;
 
         // Get default dimensions from model size, override with explicit values if provided
-        var (defaultTextDim, defaultLmDim, defaultLayers, defaultHeads) = GetModelDimensions(modelSize);
-        _textHiddenDim = textHiddenDim > 0 ? textHiddenDim : defaultTextDim;
-        _lmHiddenDim = lmHiddenDim > 0 ? lmHiddenDim : defaultLmDim;
-        _numLmLayers = numLmLayers > 0 ? numLmLayers : defaultLayers;
-        _numHeads = numHeads > 0 ? numHeads : defaultHeads;
-        _numCodebooks = numCodebooks;
-        _codebookSize = codebookSize;
-        _maxTextLength = maxTextLength;
+        var (defaultTextDim, defaultLmDim, defaultLayers, defaultHeads) = GetModelDimensions(_options.ModelSize);
+        _textHiddenDim = _options.TextHiddenDim > 0 ? _options.TextHiddenDim : defaultTextDim;
+        _lmHiddenDim = _options.LmHiddenDim > 0 ? _options.LmHiddenDim : defaultLmDim;
+        _numLmLayers = _options.NumLmLayers > 0 ? _options.NumLmLayers : defaultLayers;
+        _numHeads = _options.NumHeads > 0 ? _options.NumHeads : defaultHeads;
+        _numCodebooks = _options.NumCodebooks;
+        _codebookSize = _options.CodebookSize;
+        _maxTextLength = _options.MaxTextLength;
 
         // Set audio base class properties
-        SampleRate = sampleRate;
+        SampleRate = _options.SampleRate;
 
         // Use T5-style tokenizer as default for AudioGen text encoder
         _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);

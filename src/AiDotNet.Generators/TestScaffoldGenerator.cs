@@ -4563,8 +4563,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceClassification, " +
                     "inputSize: 32000, outputSize: 32), " +
-                    "modelSize: AiDotNet.Audio.Whisper.WhisperModelSize.Tiny, " +
-                    "maxAudioLengthSeconds: 2, maxTokens: 16)";
+                    "options: new AiDotNet.Audio.Whisper.WhisperOptions { ModelSize = AiDotNet.Audio.Whisper.WhisperModelSize.Tiny, MaxAudioLengthSeconds = 2, MaxTokens = 16 }" + ")";
             }
             else if (model.ClassName == "MedSAM2" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.ComputerVision.Segmentation.Medical.", System.StringComparison.Ordinal))
@@ -4896,8 +4895,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "numStages: 2, baseChannels: 4, lstmHiddenDim: 16, numLstmLayers: 1, " +
-                    "fftSize: 64, hopSize: 32, useComplexMask: true, kernelSize: 3, stride: 2)";
+                    "options: new AiDotNet.Models.Options.DCCRNOptions { NumStages = 2, BaseChannels = 4, LstmHiddenDim = 16, NumLstmLayers = 1, FftSize = 64, HopSize = 32, UseComplexMask = true, KernelSize = 3, Stride = 2 }" + ")";
             }
             else if (model.ClassName == "NaturalSpeech" && model.TypeParameterCount == 1)
             {
@@ -6160,10 +6158,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "modelSize: AiDotNet.Audio.AudioGen.AudioGenModelSize.Medium, " +
-                    "sampleRate: 8000, durationSeconds: 0.1, maxDurationSeconds: 0.1, " +
-                    "textHiddenDim: 32, lmHiddenDim: 32, numLmLayers: 2, numHeads: 2, " +
-                    "numCodebooks: 1, codebookSize: 4, maxTextLength: 8, seed: 42)";
+                    "options: new AiDotNet.Audio.AudioGen.AudioGenOptions { ModelSize = AiDotNet.Audio.AudioGen.AudioGenModelSize.Medium, SampleRate = 8000, DurationSeconds = 0.1, MaxDurationSeconds = 0.1, TextHiddenDim = 32, LmHiddenDim = 32, NumLmLayers = 2, NumHeads = 2, NumCodebooks = 1, CodebookSize = 4, MaxTextLength = 8 }" + ", seed: 42)";
             }
             else if (model.ClassName == "AssemblyAIUniversal2" && model.TypeParameterCount == 1)
             {
@@ -9003,7 +8998,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "hiddenDim: 64, numTransformerLayers: 2, numHeads: 4, ffDim: 128)";
+                    "options: new AiDotNet.Models.Options.Wav2Vec2ModelOptions { HiddenDim = 64, NumTransformerLayers = 2, NumHeads = 4, FfDim = 128 }" + ")";
             }
             else if ((model.ClassName is "Wav2Vec2" or "HuBERT" or "WavLM") && model.TypeParameterCount == 1)
             {
@@ -9491,10 +9486,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 8, outputSize: 640), " +
-                    "vocabSize: 1024, embeddingDim: 32, encoderDim: 32, decoderDim: 32, " +
-                    "attentionDim: 16, attentionFilters: 8, prenetDim: 16, postnetEmbeddingDim: 32, " +
-                    "numEncoderConvLayers: 1, numPostnetConvLayers: 1, numMelsPerFrame: 2, " +
-                    "maxDecoderSteps: 4, stopThreshold: 1.0)";
+                    "options: new AiDotNet.Models.Options.Tacotron2ModelOptions { VocabSize = 1024, EmbeddingDim = 32, EncoderDim = 32, DecoderDim = 32, AttentionDim = 16, AttentionFilters = 8, PrenetDim = 16, PostnetEmbeddingDim = 32, NumEncoderConvLayers = 1, NumPostnetConvLayers = 1, NumMelsPerFrame = 2, MaxDecoderSteps = 4, StopThreshold = 1.0 }" + ")";
             }
             else if (model.ClassName == "XMem" && model.TypeParameterCount == 1)
             {
@@ -10873,7 +10865,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "layers: new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<double>>(" +
                     "AiDotNet.Helpers.LayerHelper<double>.CreateDefaultWhisperLayers(" +
                     "modelDim: 32, numEncoderLayers: 1, numDecoderLayers: 1, numHeads: 4, " +
-                    "ffDim: 64, numMels: 80, maxFrames: 100, maxTokens: 4, " +
+                    "ffDim: 64, " +
+                    "options: new AiDotNet.Audio.Whisper.WhisperOptions { NumMels = 80 }" + ", maxFrames: 100, maxTokens: 4, " +
                     "vocabSize: 51865, dropoutRate: 0.0))), " +
                     "modelSize: AiDotNet.Audio.Whisper.WhisperModelSize.Tiny, " +
                     "maxAudioLengthSeconds: 1, maxTokens: 4)";
