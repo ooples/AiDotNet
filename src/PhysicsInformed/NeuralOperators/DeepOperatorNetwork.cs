@@ -841,7 +841,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                     { "TrunkModel", _trunkNet.GetType().Name },
                     { "ParameterCount", GetParameterCount() }
                 },
-                ModelData = Serialize()
+                ModelDataProvider = () => Serialize()
             };
         }
 

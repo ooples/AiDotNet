@@ -536,7 +536,7 @@ public partial class TCN<T> : ForecastingModelBase<T>
                 { "UseNativeMode", _useNativeMode },
                 { "ParameterCount", GetParameterCount() }
             },
-            ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
+            ModelDataProvider = () => _useNativeMode ? this.Serialize() : Array.Empty<byte>()
         };
     }
 
