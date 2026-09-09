@@ -5,12 +5,19 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <summary>
 /// Configuration options for the GLALanguageModel.
 /// </summary>
-public class GLAOptions : NeuralNetworkOptions
+public class GLAOptions : SequenceModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
     /// </summary>
-    public GLAOptions() { }
+    public GLAOptions()
+    {
+        VocabSize = 50277;
+        ModelDimension = 256;
+        NumLayers = 4;
+        NumHeads = 8;
+        MaxSequenceLength = 512;
+    }
 
     /// <summary>
     /// Initializes a new instance by copying every property from another instance.
@@ -34,6 +41,11 @@ public class GLAOptions : NeuralNetworkOptions
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
         LearningRate = other.LearningRate;
+        VocabSize = other.VocabSize;
+        ModelDimension = other.ModelDimension;
+        NumLayers = other.NumLayers;
+        NumHeads = other.NumHeads;
+        MaxSequenceLength = other.MaxSequenceLength;
     }
 
     /// <summary>
@@ -51,4 +63,15 @@ public class GLAOptions : NeuralNetworkOptions
     /// value the paper's authors used, so training here starts from the same recipe they published.</para>
     /// </remarks>
     public double LearningRate { get; set; } = 3e-4;
+
+    /// <summary>
+    /// Throws if a value this model requires has been left unset or is not positive.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when a required dimension is zero or negative.
+    /// </exception>
+    public void Validate()
+    {
+        ValidateCore(requiresHeads: true, requiresState: false);
+    }
 }

@@ -5,10 +5,18 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <summary>
 /// Configuration options for the FinchLanguageModel.
 /// </summary>
-public class FinchOptions : NeuralNetworkOptions
+public class FinchOptions : SequenceModelOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
-    public FinchOptions() { }
+    public FinchOptions()
+    {
+        VocabSize = 65536;
+        ModelDimension = 256;
+        NumLayers = 4;
+        NumHeads = 8;
+        MaxSequenceLength = 512;
+        LearningRate = 0.001;
+    }
 
     /// <summary>Initializes a new instance by copying every property from another instance.</summary>
     /// <param name="other">The instance to copy from.</param>
@@ -26,6 +34,11 @@ public class FinchOptions : NeuralNetworkOptions
         WeightDecay = other.WeightDecay;
         EnableGradientClipping = other.EnableGradientClipping;
         MaxGradientNorm = other.MaxGradientNorm;
+        VocabSize = other.VocabSize;
+        ModelDimension = other.ModelDimension;
+        NumLayers = other.NumLayers;
+        NumHeads = other.NumHeads;
+        MaxSequenceLength = other.MaxSequenceLength;
     }
 
     /// <summary>Gets or sets the maximum (peak) learning rate.</summary>
@@ -88,4 +101,15 @@ public class FinchOptions : NeuralNetworkOptions
     /// <summary>Gets or sets the maximum gradient norm. See <see cref="EnableGradientClipping"/>.</summary>
     /// <value>Defaults to 1.0. NOT a paper value -- see the remark on the property above.</value>
     public double MaxGradientNorm { get; set; } = 1.0;
+
+    /// <summary>
+    /// Throws if a value this model requires has been left unset or is not positive.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when a required dimension is zero or negative.
+    /// </exception>
+    public void Validate()
+    {
+        ValidateCore(requiresHeads: true, requiresState: false);
+    }
 }
