@@ -5106,10 +5106,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4) { RandomSeed = 1337 }, " +
-                    "embeddingDimension: 64, maxSequenceLength: 16, imageSize: 32, channels: 3, " +
-                    "numPerceiverTokens: 4, maxImagesInContext: 1, visionHiddenDim: 64, lmHiddenDim: 64, " +
-                    "numVisionLayers: 1, numLmLayers: 1, numHeads: 2, vocabularySize: 64, " +
-                    "numPerceiverLayers: 1, learningRate: 1e-5)";
+                    "options: new AiDotNet.NeuralNetworks.Options.FlamingoOptions { EmbeddingDimension = 64, " +
+                    "MaxSequenceLength = 16, ImageSize = 32, Channels = 3, NumPerceiverTokens = 4, " +
+                    "MaxImagesInContext = 1, VisionHiddenDim = 64, LmHiddenDim = 64, " +
+                    "NumVisionLayers = 1, NumLmLayers = 1, NumHeads = 2, VocabSize = 64, " +
+                    "NumPerceiverLayers = 1, LearningRate = 1e-5 })";
             }
             else if (model.ClassName == "FinMA" && model.TypeParameterCount == 1)
             {
@@ -7156,10 +7157,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "imageSize: 32, channels: 3, patchSize: 8, vocabularySize: 64, " +
-                    "maxSequenceLength: 8, embeddingDimension: 4, hiddenDim: 32, " +
-                    "numEncoderLayers: 1, numHeads: 4, audioSampleRate: 16000, " +
-                    "audioMaxDuration: 1, imuTimesteps: 8, numVideoFrames: 2)";
+                    "options: new AiDotNet.NeuralNetworks.Options.ImageBindOptions { ImageSize = 32, Channels = 3, " +
+                    "PatchSize = 8, VocabSize = 64, MaxSequenceLength = 8, EmbeddingDimension = 4, " +
+                    "HiddenDim = 32, NumEncoderLayers = 1, NumHeads = 4, AudioSampleRate = 16000, " +
+                    "AudioMaxDuration = 1, ImuTimesteps = 8, NumVideoFrames = 2 })";
             }
             else if (model.ClassName == "NemotronSpeech" && model.TypeParameterCount == 1)
             {
@@ -9193,9 +9194,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 4), " +
-                    "imageSize: 112, channels: 3, patchSize: 14, vocabularySize: 32, " +
-                    "maxSequenceLength: 16, embeddingDimension: 32, visionHiddenDim: 32, " +
-                    "numVisionLayers: 2, numLmLayers: 2, numHeads: 4)";
+                    "options: new AiDotNet.NeuralNetworks.Options.LLaVAOptions { ImageSize = 112, Channels = 3, " +
+                    "PatchSize = 14, VocabSize = 32, MaxSequenceLength = 16, " +
+                    "EmbeddingDimension = 32, VisionHiddenDim = 32, NumVisionLayers = 2, " +
+                    "NumLmLayers = 2, NumHeads = 4 })";
             }
             else if (model.ClassName == "VideoLLaVA" && model.TypeParameterCount == 1)
             {

@@ -174,8 +174,8 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
         ILossFunction<T>? lossFunction = null,
         int? seed = null,
         AudioVisualEventLocalizationOptions? options = null,
-        int audioEmbeddingFullyConnectedWidth = VGGishAudioEmbedding<T>.PaperFullyConnectedWidth,
-        int audioEmbeddingSize = VGGishAudioEmbedding<T>.PaperEmbeddingSize)
+        int audioEmbeddingFullyConnectedWidth = VGGishAudioEmbedding<double>.PaperFullyConnectedWidth,
+        int audioEmbeddingSize = VGGishAudioEmbedding<double>.PaperEmbeddingSize)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new AudioVisualEventLocalizationOptions();
@@ -444,7 +444,7 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
 
         int frames = mel.Shape[mel.Shape.Length - 2];
         int mels = mel.Shape[mel.Shape.Length - 1];
-        int patchFrames = VGGishAudioEmbedding<T>.PaperPatchFrames;
+        int patchFrames = VGGishAudioEmbedding<double>.PaperPatchFrames;
         int segments = Math.Max(1, frames / patchFrames);
 
         var melSpan = mel.Data.Span;

@@ -164,17 +164,13 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         string visionEncoderPath,
         string languageModelPath,
         ITokenizer tokenizer,
-        int embeddingDimension = 768,
-        int maxSequenceLength = 2048,
-        int imageSize = 224,
-        int numPerceiverTokens = 64,
-        int maxImagesInContext = 5,
+        FlamingoOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        FlamingoOptions? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new FlamingoOptions();
+        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(visionEncoderPath))
             throw new ArgumentException("Vision encoder path cannot be null or empty.", nameof(visionEncoderPath));
@@ -188,11 +184,11 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         _useNativeMode = false;
         _visionEncoderPath = visionEncoderPath;
         _languageModelPath = languageModelPath;
-        _embeddingDimension = embeddingDimension;
-        _maxSequenceLength = maxSequenceLength;
-        _imageSize = imageSize;
-        _numPerceiverTokens = numPerceiverTokens;
-        _maxImagesInContext = maxImagesInContext;
+        _embeddingDimension = _options.EmbeddingDimension;
+        _maxSequenceLength = _options.MaxSequenceLength;
+        _imageSize = _options.ImageSize;
+        _numPerceiverTokens = _options.NumPerceiverTokens;
+        _maxImagesInContext = _options.MaxImagesInContext;
         _visionHiddenDim = 1024;
         _lmHiddenDim = 2048;
         _numVisionLayers = 24;
@@ -240,55 +236,42 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
     /// </summary>
     public FlamingoNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
-        int embeddingDimension = 768,
-        int maxSequenceLength = 2048,
-        int imageSize = 224,
-        int channels = 3,
-        int numPerceiverTokens = 64,
-        int maxImagesInContext = 5,
-        int visionHiddenDim = 1024,
-        int lmHiddenDim = 2048,
-        int numVisionLayers = 24,
-        int numLmLayers = 32,
-        int numHeads = 16,
-        int vocabularySize = 32000,
+        FlamingoOptions? options = null,
         LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.Chinchilla,
-        int numPerceiverLayers = 6,
         ITokenizer? tokenizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        FlamingoOptions? options = null,
-        double learningRate = 1e-3)
+        ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
+        _options = options ?? new FlamingoOptions();
+        _options.Validate();
         // Validated here, at the public entry point, rather than where it is first used. ConvertToTensor
         // divides by the channel count, and InitializeNativeLayers sizes the patch embedding from it, so
         // a zero or negative value surfaces as a DivideByZeroException or an invalid tensor shape from
         // somewhere well downstream of the argument that caused it.
-        if (channels <= 0)
+        if (_options.Channels <= 0)
         {
             throw new ArgumentOutOfRangeException(
-                nameof(channels), channels, "The channel count must be positive.");
+                nameof(_options.Channels), _options.Channels, "The channel count must be positive.");
         }
 
-        _options = options ?? new FlamingoOptions();
         Options = _options;
         _useNativeMode = true;
-        _embeddingDimension = embeddingDimension;
-        _maxSequenceLength = maxSequenceLength;
-        _imageSize = imageSize;
-        _numPerceiverTokens = numPerceiverTokens;
-        _maxImagesInContext = maxImagesInContext;
-        _visionHiddenDim = visionHiddenDim;
-        _lmHiddenDim = lmHiddenDim;
-        _numVisionLayers = numVisionLayers;
-        _numLmLayers = numLmLayers;
-        _numHeads = numHeads;
+        _embeddingDimension = _options.EmbeddingDimension;
+        _maxSequenceLength = _options.MaxSequenceLength;
+        _imageSize = _options.ImageSize;
+        _numPerceiverTokens = _options.NumPerceiverTokens;
+        _maxImagesInContext = _options.MaxImagesInContext;
+        _visionHiddenDim = _options.VisionHiddenDim;
+        _lmHiddenDim = _options.LmHiddenDim;
+        _numVisionLayers = _options.NumVisionLayers;
+        _numLmLayers = _options.NumLmLayers;
+        _numHeads = _options.NumHeads;
         _patchSize = 14;
-        _vocabularySize = vocabularySize;
+        _vocabularySize = _options.VocabSize;
         _languageModelBackbone = languageModelBackbone;
-        _numPerceiverLayers = numPerceiverLayers;
-        _learningRate = learningRate;
+        _numPerceiverLayers = _options.NumPerceiverLayers;
+        _learningRate = _options.LearningRate;
 
         // Use factory to create appropriate tokenizer for the backbone, or use provided tokenizer
         _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(languageModelBackbone);
@@ -296,13 +279,13 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
             this,
             new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = learningRate,
+                InitialLearningRate = _options.LearningRate,
                 MaxGradientNorm = 1.0
             });
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
 
-        _channels = channels;
-        InitializeNativeLayers(channels);
+        _channels = _options.Channels;
+        InitializeNativeLayers(_options.Channels);
     }
 
     /// <inheritdoc/>

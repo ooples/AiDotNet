@@ -165,17 +165,15 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         string visionEncoderPath,
         string languageModelPath,
         ITokenizer tokenizer,
+        LLaVAOptions? options = null,
         LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.LLaMA,
         string visionEncoderType = "clip-vit-l",
-        int embeddingDimension = 4096,
-        int maxSequenceLength = 2048,
-        int imageSize = 336,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        LLaVAOptions? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LLaVAOptions();
+        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(visionEncoderPath))
             throw new ArgumentException("Vision encoder path cannot be null or empty.", nameof(visionEncoderPath));
@@ -191,13 +189,13 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         _languageModelPath = languageModelPath;
         _languageModelBackbone = languageModelBackbone;
         _visionEncoderType = visionEncoderType.ToLowerInvariant();
-        _embeddingDimension = embeddingDimension;
-        _maxSequenceLength = maxSequenceLength;
-        _imageSize = imageSize;
+        _embeddingDimension = _options.EmbeddingDimension;
+        _maxSequenceLength = _options.MaxSequenceLength;
+        _imageSize = _options.ImageSize;
         _patchSize = 14;
-        _numVisualTokens = (imageSize / _patchSize) * (imageSize / _patchSize);
+        _numVisualTokens = (_options.ImageSize / _patchSize) * (_options.ImageSize / _patchSize);
         _visionHiddenDim = 1024;
-        _lmHiddenDim = embeddingDimension;
+        _lmHiddenDim = _options.EmbeddingDimension;
         _numVisionLayers = 24;
         _numLmLayers = 32;
         _numHeads = 16;
@@ -240,47 +238,38 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
     /// </remarks>
     public LLaVANeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
-        int imageSize = 336,
-        int channels = 3,
-        int patchSize = 14,
-        int vocabularySize = 32000,
-        int maxSequenceLength = 2048,
-        int embeddingDimension = 4096,
-        int visionHiddenDim = 1024,
-        int numVisionLayers = 24,
-        int numLmLayers = 32,
-        int numHeads = 16,
+        LLaVAOptions? options = null,
         LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.LLaMA,
         string visionEncoderType = "clip-vit-l",
         ITokenizer? tokenizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        LLaVAOptions? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LLaVAOptions();
+        _options.Validate();
         Options = _options;
         _useNativeMode = true;
-        _embeddingDimension = embeddingDimension;
-        _maxSequenceLength = maxSequenceLength;
-        _imageSize = imageSize;
-        _visionHiddenDim = visionHiddenDim;
-        _lmHiddenDim = embeddingDimension;
-        _numVisionLayers = numVisionLayers;
-        _numLmLayers = numLmLayers;
-        _numHeads = numHeads;
-        _patchSize = patchSize;
-        _vocabularySize = vocabularySize;
+        _embeddingDimension = _options.EmbeddingDimension;
+        _maxSequenceLength = _options.MaxSequenceLength;
+        _imageSize = _options.ImageSize;
+        _visionHiddenDim = _options.VisionHiddenDim;
+        _lmHiddenDim = _options.EmbeddingDimension;
+        _numVisionLayers = _options.NumVisionLayers;
+        _numLmLayers = _options.NumLmLayers;
+        _numHeads = _options.NumHeads;
+        _patchSize = _options.PatchSize;
+        _vocabularySize = _options.VocabSize;
         _languageModelBackbone = languageModelBackbone;
         _visionEncoderType = visionEncoderType.ToLowerInvariant();
-        _numVisualTokens = (imageSize / patchSize) * (imageSize / patchSize);
+        _numVisualTokens = (_options.ImageSize / _options.PatchSize) * (_options.ImageSize / _options.PatchSize);
 
         // Use factory to create appropriate tokenizer for the backbone, or use provided tokenizer
         _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(languageModelBackbone);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
 
-        InitializeNativeLayers(channels);
+        InitializeNativeLayers(_options.Channels);
     }
 
     #endregion
