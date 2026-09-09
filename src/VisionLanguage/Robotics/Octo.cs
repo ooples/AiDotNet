@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -59,6 +61,15 @@ namespace AiDotNet.VisionLanguage.Robotics;
     Year = 2024,
     Authors = "Ghosh et al."
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 3e-4, WeightDecay = 0.1,
+                ReferenceBatchSize = 2048, WarmupSteps = 2000, MaxGradientNorm = 1.0,
+                Schedule = LearningRateSchedulerType.Noam,
+                Source = "Octo Model Team 2024, Table IV: AdamW with a learning rate of 3e-4, 2000 "
+                        + "warmup steps, a reciprocal square-root scheduler, a weight decay of 0.1, a "
+                        + "gradient clip threshold of 1 and a batch size of 2048. The reciprocal "
+                        + "square-root decay is declared as the Noam schedule, which is that same "
+                        + "inverse-square-root shape with a linear warmup. The factory call is already "
+                        + "present at the construction site; only the declaration was missing.")]
 public partial class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
     private readonly OctoOptions _options;

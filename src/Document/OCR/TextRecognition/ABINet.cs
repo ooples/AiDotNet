@@ -55,6 +55,13 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Read Like Humans: Autonomous, Bidirectional and Iterative Language Modeling for Scene Text Recognition", "https://doi.org/10.48550/arXiv.2103.06495", Year = 2021, Authors = "Shancheng Fang, Hongtao Xie, Yuxin Wang, Zhendong Mao, Yongdong Zhang")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, MinLearningRate = 1e-5,
+                DecayRate = 0.1, Milestones = [6],
+                Schedule = LearningRateSchedulerType.MultiStep,
+                Source = "Fang et al. 2021, Sec. 4: Adam with an initial learning rate of 1e-4, decayed "
+                        + "to 1e-5 after 6 epochs. That single drop by a factor of ten is declared as a "
+                        + "one-milestone step schedule. The factory call is already present at the "
+                        + "construction site; only the declaration was missing.")]
 public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     private readonly ABINetOptions _options;

@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -59,6 +61,12 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2410.18164",
     Year = 2024,
     Authors = "Junwei Ma, Valentin Thomas, Rasa Hosseinzadeh, Hamidreza Kamkari, Alex Lacoste, Keyvan Golestan, Guangwei Yu, Maksims Volkovs, Anthony L. Caterini")]
+[PaperOptimizer(OptimizerKind.ScheduleFreeAdamW, LearningRate = 5e-4, WeightDecay = 0.05,
+                Source = "Ma et al. 2024, Sec. 4: the Schedule Free optimizer of Defazio et al. with "
+                        + "AdamW, set by default to a learning rate of 5e-4 and a weight decay of 5e-2. "
+                        + "The paper reports it outperforming a cosine scheduler, so no separate "
+                        + "schedule is declared -- the optimizer subsumes it. The factory call is "
+                        + "already present at the construction site; only the declaration was missing.")]
 public partial class TabDPTNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly TabDPTOptions<T> _options;
