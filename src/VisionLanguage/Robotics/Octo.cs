@@ -106,7 +106,9 @@ public partial class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction
         // — the AdamW rate Octo (Octo Model Team 2024) and VLA transformers train at — but the optimizer
         // previously ignored it and used AdamW's built-in default (~1e-3), which overshoots and DIVERGES
         // on the smaller-scale configurations (MoreData_ShouldNotDegrade: 200-iter loss > 50-iter loss).
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
             this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
