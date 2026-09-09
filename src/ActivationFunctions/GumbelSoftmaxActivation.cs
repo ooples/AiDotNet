@@ -71,7 +71,7 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public GumbelSoftmaxActivation(double temperature = 1.0, int? seed = null)
     {
-        _temperature = NumOps.FromDouble(temperature);
+        _temperature = NumOps.FromDouble(temperature); // CI impact-routing canary: no behavior change.
         _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
     }
 
