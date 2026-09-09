@@ -123,6 +123,34 @@ try {
             [void] $failures.Add("the valid end-to-end certificate was rejected: $($_.Exception.Message)")
         }
 
+        # The generated repository is still at the map's exact commit. Normal PR selection must
+        # treat an unexpectedly empty diff as unsafe, while the nightly audit must be able to test
+        # that exact tree without pretending it changed. This is the bootstrap case that previously
+        # escalated forever and made production certification impossible.
+        & $selector -MapFile certified/shard-map.json -ExpectedShards @('Alpha', 'Beta', 'Always') `
+            -OutFile unchanged-pr-selection.json
+        $unchangedPr = Get-Content unchanged-pr-selection.json -Raw | ConvertFrom-Json
+        Assert-True ([bool] $unchangedPr.escalate) `
+            'ordinary selection did not fail closed for an unexpectedly empty diff'
+
+        & $missMeasurer -SelectorPath $selector -MapFile certified/shard-map.json `
+            -OutcomesFile outcomes.json -OutFile unchanged-audit.json
+        Assert-True ($LASTEXITCODE -eq 0) 'the identical-tree selection audit failed'
+        $unchangedAudit = Get-Content unchanged-audit.json -Raw | ConvertFrom-Json
+        Assert-True (-not [bool] $unchangedAudit.Escalated) `
+            'the identical-tree selection audit escalated instead of exercising reduction'
+        Assert-True (($unchangedAudit.WouldRunShards -join ',') -eq 'Always') `
+            'the identical-tree audit did not select exactly the always-run shard'
+        Assert-True (($unchangedAudit.WouldSkipShards -join ',') -eq 'Alpha,Beta') `
+            'the identical-tree audit did not record the expected skipped shards'
+
+        & $certificateWriter -MapFile certified/shard-map.json -AuditFile unchanged-audit.json `
+            -OutcomesFile outcomes.json -CandidateMapRunId 100 -AuditSourceRunId 101 `
+            -AuditSourceSha $baseSha -CertificationRunId 105 -OutDirectory unchanged-certified
+        Assert-True ($LASTEXITCODE -eq 0 -and
+            (Test-Path -LiteralPath unchanged-certified/certification.json)) `
+            'the policy did not certify the clean identical-tree audit'
+
         @('one', 'alpha after', 'three', 'beta unchanged', 'five') |
             Set-Content -LiteralPath src/Feature.cs -Encoding utf8
         Invoke-Git add src/Feature.cs

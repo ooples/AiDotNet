@@ -198,6 +198,8 @@ Assert-Contract ($selfTestStep.Contains('./tools/TestImpact/Receive-RequiredArti
 Assert-Contract ($selfTestStep.Contains('./tools/TestImpact/Test-ValidationReuseModes.ps1')) `
     'the post-merge certificate modes are not exercised by primary CI'
 $selectStep = Get-StepBlock -JobBlock $selectorJob -Step 'Select'
+Assert-Contract (-not $selectStep.Contains('-AuditUnchangedMap')) `
+    'ordinary PR selection was given the audit-only unchanged-map capability'
 Assert-Contract ($selectStep.Contains('-ClassifyOnly')) `
     'non-runtime classification still depends on a coverage map being available'
 Assert-Contract ($selectStep.Contains('-BaseSha $env:PR_BASE_SHA')) `

@@ -13,6 +13,11 @@
 .PARAMETER ExpectedShards
     The complete current shard manifest. A map for a different shard universe is never trusted.
 
+.PARAMETER AuditUnchangedMap
+    Allows the nightly selection-miss audit to evaluate an unchanged map tree by selecting only
+    always-run shards. Ordinary PR selection must not pass this switch: an unexpectedly empty PR
+    diff remains a fail-closed full-matrix decision.
+
 .PARAMETER SelfTest
     Runs the built-in adversarial checks and exits.
 #>
@@ -20,6 +25,7 @@
 param(
     [Parameter(Mandatory, ParameterSetName = 'Select')] [string] $MapFile,
     [Parameter(Mandatory, ParameterSetName = 'Select')] [string[]] $ExpectedShards,
+    [Parameter(ParameterSetName = 'Select')] [switch] $AuditUnchangedMap,
     [Parameter(ParameterSetName = 'Select')]
     [Parameter(ParameterSetName = 'Classify')] [string] $OutFile,
     [Parameter(Mandatory, ParameterSetName = 'Classify')] [switch] $ClassifyOnly,
@@ -299,7 +305,8 @@ function Get-ChangedRanges {
 function Select-ImpactedShards {
     param(
         [Parameter(Mandatory)] $Map,
-        [Parameter(Mandatory)] [hashtable] $Changed
+        [Parameter(Mandatory)] [hashtable] $Changed,
+        [switch] $AuditUnchangedMap
     )
 
     $selected = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -323,11 +330,26 @@ function Select-ImpactedShards {
     }
 
     if ($Changed.Count -eq 0) {
+        if ($AuditUnchangedMap) {
+            foreach ($shard in @($Map.alwaysRun)) { [void] $selected.Add([string] $shard) }
+            # Certificate policy requires both a nonempty selected set and a nonempty skipped set.
+            # With no always-run shards, an unchanged audit is vacuous and must wait for a real
+            # mapped change rather than certifying that selection was exercised when it was not.
+            if ($selected.Count -gt 0) {
+                return [pscustomobject]@{
+                    Escalate           = $false
+                    RequiresValidation = $true
+                    Reasons            = @('map and audited tree are unchanged')
+                    Shards             = @($selected | Sort-Object)
+                }
+            }
+        }
+
         return [pscustomobject]@{
-            Escalate          = $true
+            Escalate            = $true
             RequiresValidation = $true
-            Reasons           = @('changed path set was empty')
-            Shards            = @()
+            Reasons             = @('changed path set was empty')
+            Shards              = @()
         }
     }
 
@@ -487,6 +509,18 @@ if ($SelfTest) {
     $r = Select-ImpactedShards -Map $map -Changed @{}
     Assert-True $r.Escalate 'an empty changed path set must fail closed'
     Assert-True $r.RequiresValidation 'an empty changed path set must require validation'
+
+    $r = Select-ImpactedShards -Map $map -Changed @{} -AuditUnchangedMap
+    Assert-True (-not $r.Escalate) 'an unchanged map audit must exercise reduced selection'
+    Assert-True $r.RequiresValidation 'an unchanged map audit must still represent runtime validation'
+    Assert-True (($r.Shards -join ',') -eq 'HeavyNoCoverage') `
+        'an unchanged map audit must select exactly the always-run shards'
+
+    $fullyMapped = $map | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+    $fullyMapped.alwaysRun = @()
+    $r = Select-ImpactedShards -Map $fullyMapped -Changed @{} -AuditUnchangedMap
+    Assert-True $r.Escalate `
+        'a vacuous unchanged audit with no always-run shards must not authorize certification'
 
     foreach ($edge in @(10, 20)) {
         $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Covered.cs' = @($edge, $edge) }
@@ -687,7 +721,8 @@ if ($LASTEXITCODE -ne 0) {
 try {
     $changed = Get-ChangedRanges -MapSha $mapSha
     Write-Host "changed files: $($changed.Count)"
-    $selection = Select-ImpactedShards -Map $map -Changed $changed
+    $selection = Select-ImpactedShards -Map $map -Changed $changed `
+        -AuditUnchangedMap:$AuditUnchangedMap
 
     if ($selection.Escalate) {
         Write-Host '::warning::selection escalated to the full matrix'
