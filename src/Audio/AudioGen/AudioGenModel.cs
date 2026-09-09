@@ -358,7 +358,6 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new AudioGenOptions();
-        _options.Validate();
         Options = _options;
         // Validate ONNX model paths
         if (string.IsNullOrWhiteSpace(textEncoderPath))
@@ -375,6 +374,10 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
             throw new FileNotFoundException($"Audio decoder model not found: {audioDecoderPath}");
 
         // Validate generation parameters
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         if (_options.TopK < 0)
             throw new ArgumentOutOfRangeException(nameof(_options.TopK), "TopK must be non-negative.");
         if (_options.TopP < 0 || _options.TopP > 1.0)

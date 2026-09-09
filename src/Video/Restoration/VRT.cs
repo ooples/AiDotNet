@@ -257,7 +257,6 @@ public partial class VRT<T> : VideoSuperResolutionBase<T>
             new CharbonnierLoss<T>(options?.CharbonnierEpsilon ?? 1e-3))
     {
         _options = options ?? new VRTOptions();
-        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
@@ -270,6 +269,10 @@ public partial class VRT<T> : VideoSuperResolutionBase<T>
         _numFrames = 6;
         NumFrames = 6;
         _numBlocks = 8;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         _scaleFactor = _options.ScaleFactor;
         ScaleFactor = _options.ScaleFactor;
         _inputHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 64;

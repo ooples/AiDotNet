@@ -171,7 +171,6 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     {
         _options = options ?? new VideoCLIPOptions();
         _options.Validate();
-        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(videoEncoderPath))
@@ -186,6 +185,10 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         _useNativeMode = false;
         _videoEncoderPath = videoEncoderPath;
         _textEncoderPath = textEncoderPath;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         _numFrames = _options.NumFrames;
         _frameRate = _options.FrameRate;
         _temporalAggregation = _options.TemporalAggregation;

@@ -264,7 +264,6 @@ public partial class InternVideo2<T> : NeuralNetworkBase<T>
         : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new InternVideo2Options();
-        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
@@ -273,6 +272,10 @@ public partial class InternVideo2<T> : NeuralNetworkBase<T>
 
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         _embedDim = _options.EmbedDim;
         _numHeads = 12;
         _numEncoderLayers = 12;

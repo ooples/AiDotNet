@@ -278,12 +278,15 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
         : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new DeepFilterNetOptions();
-        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"Model file not found: {modelPath}");
+
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
 
         SampleRate = _options.SampleRate;
         _fftSize = _options.FftSize;

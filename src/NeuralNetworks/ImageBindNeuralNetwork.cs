@@ -188,7 +188,6 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new ImageBindOptions();
-        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(imageEncoderPath))
             throw new ArgumentException("Image encoder path cannot be null or empty.", nameof(imageEncoderPath));
@@ -207,6 +206,10 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         _imageEncoderPath = imageEncoderPath;
         _textEncoderPath = textEncoderPath;
         _audioEncoderPath = audioEncoderPath;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         _embeddingDimension = _options.EmbeddingDimension;
         _maxSequenceLength = _options.MaxSequenceLength;
         _imageSize = _options.ImageSize;

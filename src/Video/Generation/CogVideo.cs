@@ -320,7 +320,6 @@ public partial class CogVideo<T> : NeuralNetworkBase<T>
         : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new CogVideoOptions();
-        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
@@ -332,6 +331,10 @@ public partial class CogVideo<T> : NeuralNetworkBase<T>
         _onnxModelPath = onnxModelPath;
         _embedDim = 1024;
         _numLayers = 24;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         _numFrames = _options.NumFrames;
         _numTimesteps = _options.NumTimesteps;
         _latentHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 32;

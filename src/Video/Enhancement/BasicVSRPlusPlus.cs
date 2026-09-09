@@ -345,7 +345,6 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         : base(architecture: architecture, new CharbonnierLoss<T>())
     {
         _options = options ?? new BasicVSRPlusPlusOptions();
-        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
@@ -355,6 +354,10 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
 
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         _scaleFactor = _options.ScaleFactor;
         ScaleFactor = _options.ScaleFactor;
         _numFeatures = _options.NumFeatures;

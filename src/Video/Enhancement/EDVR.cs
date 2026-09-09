@@ -143,7 +143,6 @@ public partial class EDVR<T> : VideoSuperResolutionBase<T>
         : base(architecture: architecture, new CharbonnierLoss<T>())
     {
         _options = options ?? new EDVROptions();
-        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
@@ -156,6 +155,10 @@ public partial class EDVR<T> : VideoSuperResolutionBase<T>
         _numFeatures = 64;
         _numFrames = 5;
         _numBlocks = 5;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         _scaleFactor = _options.ScaleFactor;
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 256;
         _lossFunction = new CharbonnierLoss<T>();

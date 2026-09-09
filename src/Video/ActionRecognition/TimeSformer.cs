@@ -229,7 +229,6 @@ public partial class TimeSformer<T> : NeuralNetworkBase<T>
         : base(architecture: architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new TimeSformerOptions();
-        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
@@ -239,6 +238,10 @@ public partial class TimeSformer<T> : NeuralNetworkBase<T>
 
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         _embedDim = _options.EmbedDim;
         _numHeads = 12;
         _numLayers = 12;

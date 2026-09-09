@@ -255,13 +255,16 @@ public partial class SlowFast<T> : NeuralNetworkBase<T>
         : base(architecture: architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SlowFastOptions();
-        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
             throw new FileNotFoundException($"SlowFast ONNX model not found: {onnxModelPath}");
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         if (_options.NumClasses < 1)
             throw new ArgumentOutOfRangeException(nameof(_options.NumClasses), "Number of classes must be at least 1.");
         if (_options.SlowFrames < 1)

@@ -200,7 +200,6 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new DonutOptions();
-        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(encoderPath))
@@ -221,6 +220,10 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         // Swin-B defaults from Donut paper
         _depths = depths ?? [2, 2, 14, 2];
         _numHeads = numHeads ?? [4, 8, 16, 32];
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         _embedDim = _options.EmbedDim;
         _windowSize = _options.WindowSize;
         _patchSize = _options.PatchSize;

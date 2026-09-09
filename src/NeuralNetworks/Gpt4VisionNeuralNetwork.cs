@@ -183,7 +183,6 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
         : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new Gpt4VisionOptions();
-        _options.Validate();
         Options = _options;
         // Validate ONNX model paths
         if (string.IsNullOrWhiteSpace(visionEncoderPath))
@@ -200,6 +199,10 @@ public partial class Gpt4VisionNeuralNetwork<T> : MultimodalModelLayoutBase<T>, 
         _languageModelPath = languageModelPath;
         Guard.NotNull(tokenizer);
         _tokenizer = tokenizer;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         _embeddingDimension = _options.EmbeddingDimension;
         _visionEmbeddingDim = _options.VisionEmbeddingDim;
         _maxSequenceLength = _options.MaxSequenceLength;

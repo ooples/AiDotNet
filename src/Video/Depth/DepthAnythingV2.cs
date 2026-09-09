@@ -51,7 +51,8 @@ namespace AiDotNet.Video.Depth;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 1);
-/// var model = new DepthAnythingV2&lt;double&gt;(architecture, modelSize: ModelSize.Large);
+/// var options = new DepthAnythingV2Options(DepthAnythingV2ModelSize.Large);
+/// var model = new DepthAnythingV2&lt;double&gt;(architecture, options: options);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]
@@ -76,29 +77,13 @@ public partial class DepthAnythingV2<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
-    #region Enums
-
-    /// <summary>
-    /// Model size variants for Depth Anything V2.
-    /// </summary>
-    public enum ModelSize
-    {
-        /// <summary>Small model (faster, less accurate)</summary>
-        Small,
-        /// <summary>Base model (balanced)</summary>
-        Base,
-        /// <summary>Large model (slower, more accurate)</summary>
-        Large
-    }
-
-    #endregion
 
     #region Fields
 
     private int _height;
     private int _width;
     private int _channels;
-    private ModelSize _modelSize;
+    private DepthAnythingV2ModelSize _modelSize;
     private int _numFeatures;
     private int _patchSize;
     private int _numEncoderBlocks;
@@ -134,7 +119,7 @@ public partial class DepthAnythingV2<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the model size variant.
     /// </summary>
-    internal ModelSize Size => _modelSize;
+    internal DepthAnythingV2ModelSize Size => _modelSize;
 
     /// <summary>
     /// Gets whether using native mode (trainable) or ONNX mode (inference only).
@@ -173,8 +158,7 @@ public partial class DepthAnythingV2<T> : NeuralNetworkBase<T>
     public DepthAnythingV2(
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        ModelSize modelSize = ModelSize.Base,
+        ILossFunction<T>? lossFunction = null,
         DepthAnythingV2Options? options = null)
         : base(architecture, lossFunction ?? new ScaleInvariantDepthLoss<T>())
     {
@@ -184,27 +168,15 @@ public partial class DepthAnythingV2<T> : NeuralNetworkBase<T>
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _modelSize = modelSize;
-        _patchSize = 16;
+        _modelSize = _options.ModelSize;
+        _patchSize = _options.PatchSize;
         _useNativeMode = true;
         _onnxModelPath = null;
         _optimizer = optimizer;
 
-        _numFeatures = _options.NumFeatures ?? (modelSize switch
-        {
-            ModelSize.Small => 384,
-            ModelSize.Base => 768,
-            ModelSize.Large => 1024,
-            _ => 768
-        });
+        _numFeatures = _options.NumFeatures;
 
-        _numEncoderBlocks = _options.NumEncoderBlocks ?? (modelSize switch
-        {
-            ModelSize.Small => 12,
-            ModelSize.Base => 12,
-            ModelSize.Large => 24,
-            _ => 12
-        });
+        _numEncoderBlocks = _options.NumEncoderBlocks;
 
         ValidateConfigurableDimensions();
 
@@ -225,8 +197,7 @@ public partial class DepthAnythingV2<T> : NeuralNetworkBase<T>
     /// </remarks>
     public DepthAnythingV2(
         NeuralNetworkArchitecture<T> architecture,
-        string onnxModelPath,
-        ModelSize modelSize = ModelSize.Base,
+        string onnxModelPath,
         DepthAnythingV2Options? options = null)
         : base(architecture, new ScaleInvariantDepthLoss<T>())
     {
@@ -241,27 +212,15 @@ public partial class DepthAnythingV2<T> : NeuralNetworkBase<T>
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _modelSize = modelSize;
-        _patchSize = 16;
+        _modelSize = _options.ModelSize;
+        _patchSize = _options.PatchSize;
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
         _optimizer = null;
 
-        _numFeatures = _options.NumFeatures ?? (modelSize switch
-        {
-            ModelSize.Small => 384,
-            ModelSize.Base => 768,
-            ModelSize.Large => 1024,
-            _ => 768
-        });
+        _numFeatures = _options.NumFeatures;
 
-        _numEncoderBlocks = _options.NumEncoderBlocks ?? (modelSize switch
-        {
-            ModelSize.Small => 12,
-            ModelSize.Base => 12,
-            ModelSize.Large => 24,
-            _ => 12
-        });
+        _numEncoderBlocks = _options.NumEncoderBlocks;
 
         ValidateConfigurableDimensions();
 

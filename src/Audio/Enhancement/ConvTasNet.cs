@@ -173,7 +173,6 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         : base(architecture: architecture)
     {
         _options = options ?? new ConvTasNetOptions();
-        _options.Validate();
         Options = _options;
         _numOps = MathHelper.GetNumericOperations<T>();
 
@@ -186,6 +185,10 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         {
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         }
+
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
 
         SampleRate = _options.SampleRate;
         _encoderDim = _options.EncoderDim;

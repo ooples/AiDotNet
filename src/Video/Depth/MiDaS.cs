@@ -155,7 +155,6 @@ public partial class MiDaS<T> : NeuralNetworkBase<T>
         : base(architecture: architecture, new ScaleInvariantDepthLoss<T>())
     {
         _options = options ?? new MiDaSOptions();
-        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
@@ -168,6 +167,10 @@ public partial class MiDaS<T> : NeuralNetworkBase<T>
         _embedDim = 768;
         _numLayers = 12;
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 384;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         _variant = _options.Variant;
         _lossFunction = new ScaleInvariantDepthLoss<T>();
 

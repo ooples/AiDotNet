@@ -339,7 +339,6 @@ public partial class SAM2<T> : NeuralNetworkBase<T>
         : base(architecture: architecture, new BinaryCrossEntropyLoss<T>())
     {
         _options = options ?? new SAM2Options();
-        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
@@ -349,6 +348,10 @@ public partial class SAM2<T> : NeuralNetworkBase<T>
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         _modelSize = _options.ModelSize;
         _memoryBankSize = _options.MemoryBankSize;
         _useNativeMode = false;

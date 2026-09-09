@@ -477,12 +477,15 @@ public partial class RealESRGAN<T> : VideoSuperResolutionBase<T>
         : base(architecture: architecture, new MeanAbsoluteErrorLoss<T>())
     {
         _options = options ?? new RealESRGANOptions();
-        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
             throw new FileNotFoundException($"Real-ESRGAN ONNX model not found: {onnxModelPath}");
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         if (_options.ScaleFactor < 1)
             throw new ArgumentOutOfRangeException(nameof(_options.ScaleFactor), _options.ScaleFactor, "Scale factor must be at least 1.");
 

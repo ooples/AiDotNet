@@ -252,7 +252,6 @@ public partial class AnimateDiff<T> : NeuralNetworkBase<T>
         : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new AnimateDiffOptions();
-        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
@@ -264,6 +263,10 @@ public partial class AnimateDiff<T> : NeuralNetworkBase<T>
         _onnxModelPath = onnxModelPath;
         _inputChannels = 320;
         _numLayers = 8;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         _numFrames = _options.NumFrames;
         _featureHeight = architecture.InputHeight > 0 ? architecture.InputHeight : 64;
         _featureWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 64;

@@ -267,7 +267,6 @@ public partial class Cutie<T> : NeuralNetworkBase<T>
         : base(architecture: architecture, new BinaryCrossEntropyLoss<T>())
     {
         _options = options ?? new CutieOptions();
-        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
@@ -280,6 +279,10 @@ public partial class Cutie<T> : NeuralNetworkBase<T>
         _inputWidth = architecture.InputWidth > 0 ? architecture.InputWidth : 854;
         _inputChannels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numFeatures = 256;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         _memorySize = _options.MemorySize;
         _memoryBank = [];
         _lossFunction = new BinaryCrossEntropyLoss<T>();

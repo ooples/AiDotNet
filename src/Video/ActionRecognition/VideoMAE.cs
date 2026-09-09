@@ -214,7 +214,6 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
         : base(architecture: architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new VideoMAEOptions();
-        _options.Validate();
         Options = _options;
 
         if (string.IsNullOrWhiteSpace(onnxModelPath))
@@ -225,6 +224,10 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 224;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         _numClasses = _options.NumClasses;
         _numFrames = _options.NumFrames;
         _numFeatures = 768;

@@ -144,7 +144,6 @@ public partial class ByteTrack<T> : NeuralNetworkBase<T>
         : base(architecture: architecture, new FocalLoss<T>())
     {
         _options = options ?? new ByteTrackOptions();
-        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentException("ONNX model path cannot be null or empty.", nameof(onnxModelPath));
@@ -154,6 +153,10 @@ public partial class ByteTrack<T> : NeuralNetworkBase<T>
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
         _numFeatures = 256;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         _numClasses = _options.NumClasses;
         _highThreshold = 0.6;
         _lowThreshold = 0.1;

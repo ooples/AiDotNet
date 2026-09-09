@@ -357,7 +357,6 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
     {
         _options = options ?? new Blip2Options();
         _options.Validate();
-        _options.Validate();
         Options = _options;
 
         // Validate ONNX model paths
@@ -378,6 +377,10 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         _visionEncoderPath = visionEncoderPath;
         _qformerPath = qformerPath;
         _languageModelPath = languageModelPath;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         _languageModelBackbone = _options.LanguageModelBackbone;
         _embeddingDimension = _options.EmbeddingDimension;
         _maxSequenceLength = _options.MaxSequenceLength;

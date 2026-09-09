@@ -172,7 +172,6 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
     {
         _options = options ?? new LLaVAOptions();
         _options.Validate();
-        _options.Validate();
         Options = _options;
         if (string.IsNullOrWhiteSpace(visionEncoderPath))
             throw new ArgumentException("Vision encoder path cannot be null or empty.", nameof(visionEncoderPath));
@@ -186,6 +185,10 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         _useNativeMode = false;
         _visionEncoderPath = visionEncoderPath;
         _languageModelPath = languageModelPath;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
         _languageModelBackbone = _options.LanguageModelBackbone;
         _visionEncoderType = _options.VisionEncoderType.ToLowerInvariant();
         _embeddingDimension = _options.EmbeddingDimension;
