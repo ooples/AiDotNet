@@ -234,7 +234,12 @@ public partial class EmuEdit<T> : VisionLanguageModelBase<T>, IImageEditingVLM<T
     private void ComputeEncoderDecoderBoundary()
     {
         int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 2;
+        // 2 leading layers, not 1: the shared editing stack now opens with an input
+        // projection (DenseLayer) before its LayerNormalization, matching every other
+        // default stack and ComputeProprietaryAPIEncoderBoundary, which has always used 2
+        // for exactly that layout. Without this the boundary is off by one and the encoder
+        // and decoder halves are split in the wrong place.
+        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 2;
     }
 
     private Tensor<T> TokenizeText(string text)
