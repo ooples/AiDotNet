@@ -206,3 +206,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload "${{ needs.release-please.outputs.tag_name }}" out/*.nupkg --clobber
+
+# CI routing live-proof fixture.

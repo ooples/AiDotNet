@@ -323,3 +323,5 @@ After installation, you get:
 5. Monitor first few releases to ensure everything works correctly
 
 Happy releasing! 🚀
+
+<!-- CI routing live-proof fixture. -->
