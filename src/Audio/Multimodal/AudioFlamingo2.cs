@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -45,6 +46,10 @@ namespace AiDotNet.Audio.Multimodal;
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Audio Flamingo: A Novel Audio Language Model with Few-Shot Learning and Dialogue Abilities", "https://doi.org/10.48550/arXiv.2402.01831", Year = 2024, Authors = "Zhifeng Kong, Arushi Goel, Rohan Badlani, Wei Ping, Rafael Valle, Bryan Catanzaro")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, WeightDecay = 0.1,
+                ReferenceBatchSize = 384, Phase = TrainingPhase.PreTraining,
+                Source = "Kong et al. 2024, Sec. 4: pre-training uses a batch size of 384 with the "
+                        + "AdamW optimizer at a learning rate of 1e-4 and a weight decay of 0.1.")]
 public partial class AudioFlamingo2<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
 {
     /// <inheritdoc />
@@ -104,7 +109,9 @@ public partial class AudioFlamingo2<T> : AudioNeuralNetworkBase<T>, IAudioLangua
     {
         _options = options ?? new AudioFlamingo2Options();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.LLaMA);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -54,6 +55,14 @@ namespace AiDotNet.ProgramSynthesis.Engines;
     "https://arxiv.org/abs/2009.08366",
     Year = 2021,
     Authors = "Daya Guo, Shuo Ren, Shuai Lu, Zhangyin Feng, Duyu Tang, Shujie Liu, Long Zhou, Nan Duan, Alexey Svyatkovskiy, Shengyu Fu, Michele Tufano, Shao Kun Deng, Colin Clement, Dawn Drain, Neel Sundaresan, Jian Yin, Daxin Jiang, Ming Zhou")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, ReferenceBatchSize = 1024,
+                Phase = TrainingPhase.PreTraining,
+                Source = "Guo et al. 2021, Sec. 4: the Adam optimizer updates model parameters with a "
+                        + "batch size of 1,024 and a 2e-4 learning rate.")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-5, ReferenceBatchSize = 32,
+                Phase = TrainingPhase.FineTuning,
+                Source = "Guo et al. 2021, Sec. 4: in the fine-tuning step the learning rate is 2e-5 "
+                        + "and the batch size 32.")]
 public class GraphCodeBERT<T> : CodeModelBase<T>
 {
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
@@ -122,7 +131,9 @@ public class GraphCodeBERT<T> : CodeModelBase<T>
         // GraphCodeBERT Appendix A uses Adam with a 2e-4 learning rate for
         // pre-training. Callers retain complete control by supplying any
         // IGradientBasedOptimizer through this constructor.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
