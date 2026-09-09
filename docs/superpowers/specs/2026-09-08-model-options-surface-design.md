@@ -101,15 +101,25 @@ the job of bringing one area up to the house standard.**
 This contradicts an earlier conclusion of mine and is stated plainly because it
 changes the scope of the work.
 
-Among the 17 language models:
+**Corrected 2026-09-08.** The figures first published here were measured on the
+branch `feature/cpu-offload-optimizer-fsdp`, not on master, and were wrong. On
+master:
 
-- **all 17** default `modelDimension = 256`
-- **all 17** default `maxSeqLength = 512`
-- **13 of 17** default `numLayers = 4`
+| | count |
+| --- | ---: |
+| Language models defaulting `modelDimension = 256` | **13 of 17** |
+| …carrying genuine paper-scale values | **4 of 17** |
 
-Seventeen different papers cannot agree on `d_model = 256`. Mamba-130M is
-768 × 24; RWKV-4 "Raven" is far larger; Griffin and RecurrentGemma are larger
-still. These are demo-sized values shared by copy.
+The four that are already right: `Zamba` (3712 × 76, 4096 context), `Zamba2`
+(3584 × 81, 4096), `Griffin` and `Hawk` (2048 × 24, 2048). Thirteen models
+sharing `256 × 4 × 512` across thirteen different papers is still the tell — no
+two of those papers specify the same width — but it is thirteen, not seventeen,
+and the correction matters because it changes how much of phase 9 is repair
+versus confirmation.
+
+The lesson is recorded rather than quietly fixed: **a measurement is scoped to
+the tree it was taken on.** Every figure in this document was re-taken against
+master before phase 1.
 
 For contrast, where the value came from a real source it is visibly correct:
 
@@ -449,8 +459,8 @@ Each phase is independently mergeable and leaves the build green.
 
 | Phase | Content | Ratchet |
 | --- | --- | --- |
-| ~~1~~ | ~~Six family base classes; ratchet test establishing the authoritative baseline; the §7 behavioural assertion marked `Skip` until phase 2~~ **DONE `9f7fe07b6`** | **1067 measured** |
-| 2 | `NeuralNetworks` — sequence / language models (18 models, 98 params) | 806 → 708 |
+| ~~1~~ | ~~Seven family base classes; ratchet test establishing the authoritative baseline~~ **DONE `9f7fe07b6`, `944a1fd72`** | **1067 measured** |
+| ~~2~~ | ~~`NeuralNetworks` — sequence / language models (17 models, 90 params)~~ **DONE `671836a34`** | **1067 → 977** |
 | 3 | `NeuralNetworks` — vision-language / multimodal (11 models, 107 params) | 708 → 601 |
 | 4 | `NeuralNetworks` — embedding & retrieval (11, 77) and GAN (10, 41) | 601 → 483 |
 | 5 | `NeuralNetworks` — long tail (40 models, 97 params) | 483 → 386 |
