@@ -148,6 +148,9 @@ jobs:
             echo 'execute_quality=true'
           } >> "$GITHUB_OUTPUT"
 
+      - name: Checkout validation reuse policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
       - name: Resolve exact-tree PR run
         id: resolve
         continue-on-error: true

@@ -189,6 +189,15 @@ Assert-Contract ($resolver.Contains('steps.resolve.outputs.reuse_scope || steps.
 $resolveStep = Get-StepBlock -JobBlock $resolver -Step 'Resolve exact-tree PR run'
 Assert-Contract ([bool] $resolveStep) `
     'the exact-tree resolver step is absent'
+$resolverCheckoutStep = Get-StepBlock -JobBlock $resolver -Step 'Checkout validation reuse policy'
+Assert-Contract ([bool] $resolverCheckoutStep) `
+    'validation-source invokes a repository script without checking out the tested tree'
+Assert-Contract ($resolverCheckoutStep.Contains('uses: actions/checkout@')) `
+    'validation-source checkout step does not use actions/checkout'
+Assert-Contract ([bool] $resolverCheckoutStep -and [bool] $resolveStep -and
+    $resolver.IndexOf($resolverCheckoutStep, [StringComparison]::Ordinal) -lt
+    $resolver.IndexOf($resolveStep, [StringComparison]::Ordinal)) `
+    'validation-source invokes the exact-tree resolver before checking out its script'
 Assert-Contract ($resolveStep.Contains('continue-on-error: true')) `
     'an unexpected resolver failure blocks dependents instead of retaining fail-closed defaults'
 Assert-Contract ($resolveStep.Contains('./tools/TestImpact/Resolve-CiValidationReuse.ps1')) `
