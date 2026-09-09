@@ -74,6 +74,20 @@ public class VisionMambaOptions : SequenceModelOptions
     /// </exception>
     public void Validate()
     {
-        ValidateCore(requiresHeads: false, requiresState: true);
+        // Vision Mamba scans a sequence of image patches, not tokens: it has no vocabulary, and
+        // its sequence length follows from ImageHeight, ImageWidth and PatchSize.
+        ValidateCore(
+            requiresHeads: false,
+            requiresState: true,
+            requiresVocabulary: false,
+            requiresSequenceLength: false);
+
+        // The vision-specific dimensions this model reads. The family base cannot require these,
+        // because the token-sequence members of the family have no image to describe.
+        Require(ImageHeight, nameof(ImageHeight));
+        Require(ImageWidth, nameof(ImageWidth));
+        Require(PatchSize, nameof(PatchSize));
+        Require(Channels, nameof(Channels));
+        Require(NumClasses, nameof(NumClasses));
     }
 }

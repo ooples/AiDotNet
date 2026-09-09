@@ -52,6 +52,10 @@ public class PICKOptions : DocumentNeuralNetworkOptions
     /// </exception>
     public void Validate()
     {
+        // This model renders the page as an image, so it needs a size. The family base
+        // cannot require this: 15 of the 29 document models work from text and layout
+        // coordinates and have no image at all.
+        Require(ImageSize, nameof(ImageSize));
         ValidateCore();
     }
 }

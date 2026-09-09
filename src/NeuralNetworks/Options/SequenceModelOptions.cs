@@ -128,6 +128,15 @@ public abstract class SequenceModelOptions : ModelHyperparameterOptions
     /// </summary>
     /// <param name="requiresHeads">Whether this model uses attention heads.</param>
     /// <param name="requiresState">Whether this model uses a recurrent state dimension.</param>
+    /// <param name="requiresVocabulary">
+    /// Whether this model's sequence is made of tokens drawn from a vocabulary. False for the
+    /// vision members of this family, whose sequence is made of image patches.
+    /// </param>
+    /// <param name="requiresSequenceLength">
+    /// Whether this model has a configured maximum sequence length. False when the length is
+    /// derived from the input rather than declared — a patch sequence, for instance, is as long
+    /// as the image size and patch size make it.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// Thrown when a required dimension is zero or negative, which means the derived options
     /// class did not assign its paper defaults.
@@ -137,13 +146,24 @@ public abstract class SequenceModelOptions : ModelHyperparameterOptions
     /// Fails loudly rather than silently constructing a zero-width model. A dimension of
     /// zero produces layers that appear to build and then misbehave far from the cause.
     /// </para>
+    /// <para>
+    /// <b>A base may only require what every member of the family has.</b> Only
+    /// <see cref="ModelDimension"/> and <see cref="NumLayers"/> are common to every sequence
+    /// model; everything else is asked for by the leaves that actually use it. Requiring more
+    /// than that here makes a model throw at its own published defaults, with the user having
+    /// configured nothing.
+    /// </para>
     /// </remarks>
-    protected void ValidateCore(bool requiresHeads, bool requiresState)
+    protected void ValidateCore(
+        bool requiresHeads,
+        bool requiresState,
+        bool requiresVocabulary = true,
+        bool requiresSequenceLength = true)
     {
-        Require(VocabSize, nameof(VocabSize));
         Require(ModelDimension, nameof(ModelDimension));
         Require(NumLayers, nameof(NumLayers));
-        Require(MaxSequenceLength, nameof(MaxSequenceLength));
+        if (requiresVocabulary) Require(VocabSize, nameof(VocabSize));
+        if (requiresSequenceLength) Require(MaxSequenceLength, nameof(MaxSequenceLength));
         if (requiresHeads) Require(NumHeads, nameof(NumHeads));
         if (requiresState) Require(StateDimension, nameof(StateDimension));
     }
