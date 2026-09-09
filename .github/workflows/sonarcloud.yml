@@ -2076,8 +2076,6 @@ jobs:
       - test-net10-sharded
       - validation-source
       - select-shards
-    env:
-      EFFECTIVE_REQUIRES_VALIDATION: ${{ (needs.validation-source.outputs.reuse == 'true' && needs.validation-source.outputs.reused_requires_validation) || needs.select-shards.outputs.requires_validation || 'true' }}
     permissions:
       actions: read
       contents: read
@@ -2344,6 +2342,8 @@ jobs:
       - test-net10-sharded
       - validation-source
       - select-shards
+    env:
+      EFFECTIVE_REQUIRES_VALIDATION: ${{ (needs.validation-source.outputs.reuse == 'true' && needs.validation-source.outputs.reused_requires_validation) || needs.select-shards.outputs.requires_validation || 'true' }}
 
     steps:
       - name: Report non-runtime validation
