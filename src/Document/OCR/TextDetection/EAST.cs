@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -53,6 +54,12 @@ namespace AiDotNet.Document.OCR.TextDetection;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("EAST: An Efficient and Accurate Scene Text Detector", "https://doi.org/10.48550/arXiv.1704.03155", Year = 2017, Authors = "Xinyu Zhou, Cong Yao, He Wen, Yuzhi Wang, Shuchang Zhou, Weiran He, Jiajun Liang")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.001, ReferenceBatchSize = 24,
+                MinLearningRate = 1e-5, DecayRate = 0.1, StepSize = 27300,
+                Schedule = LearningRateSchedulerType.Step,
+                Source = "Zhou et al. 2017, Sec. 3.5: the network is trained end-to-end with Adam on "
+                        + "512x512 crops forming a minibatch of size 24. The learning rate starts from "
+                        + "1e-3, decays to one-tenth every 27300 minibatches, and stops at 1e-5.")]
 public partial class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 {
     private readonly EASTOptions _options;
@@ -132,7 +139,9 @@ public partial class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         _backboneChannels = backboneChannels;
         _featureChannels = featureChannels;
         _geometryType = geometryType;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = imageSize;
 
@@ -171,7 +180,9 @@ public partial class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         _backboneChannels = backboneChannels;
         _featureChannels = featureChannels;
         _geometryType = geometryType;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = imageSize;
 

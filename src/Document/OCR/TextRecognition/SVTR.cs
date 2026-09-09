@@ -1,4 +1,5 @@
-﻿using AiDotNet.Attributes;
+﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Attributes;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
@@ -54,6 +55,22 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SVTR: Scene Text Recognition with a Single Visual Model", "https://doi.org/10.48550/arXiv.2205.00159", Year = 2022, Authors = "Yongkun Du, Zhineng Chen, Caiyan Jia, Xiaoting Yin, Tianlun Zheng, Chenxia Li, Yuning Du, Yu-Gang Jiang")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-4, WeightDecay = 0.05,
+                ReferenceBatchSize = 2048,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Du et al. 2022, Sec. 3.2: AdamW with a weight decay of 0.05, under a cosine "
+                        + "learning rate scheduler across all 21 epochs. For English models the initial "
+                        + "learning rate is 5e-4 x batchsize/2048, which is the linear scaling rule, so "
+                        + "2048 is declared as the reference batch size the rate belongs to. The Chinese "
+                        + "models instead use 3e-4 x batchsize/512 with a 5-epoch warmup, which is "
+                        + "declared separately.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 3e-4, WeightDecay = 0.05,
+                ReferenceBatchSize = 512,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Variant = "Chinese",
+                Source = "Du et al. 2022, Sec. 3.2: for Chinese models the initial learning rate is "
+                        + "3e-4 x batchsize/512, under the same AdamW optimizer, weight decay and cosine "
+                        + "scheduler.")]
 public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 {
     private const int NetworkDataVersion = 2;
@@ -163,7 +180,9 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         _numHeads = _options.StageHeads.Max();
         _imageHeight = _options.InputHeight;
         _charset = charset ?? GetDefaultCharset();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = _options.InputWidth;
         base.MaxSequenceLength = _options.OutputCharacterPositions;
@@ -206,7 +225,9 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         _numHeads = _options.StageHeads.Max();
         _imageHeight = _options.InputHeight;
         _charset = charset ?? GetDefaultCharset();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         ImageSize = _options.InputWidth;
         base.MaxSequenceLength = _options.OutputCharacterPositions;
