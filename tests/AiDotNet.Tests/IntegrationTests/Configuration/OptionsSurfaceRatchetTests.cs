@@ -32,6 +32,13 @@ namespace AiDotNet.Tests.IntegrationTests.Configuration;
 /// </remarks>
 public class OptionsSurfaceRatchetTests
 {
+    private readonly Xunit.Abstractions.ITestOutputHelper _output;
+
+    public OptionsSurfaceRatchetTests(Xunit.Abstractions.ITestOutputHelper output)
+    {
+        _output = output;
+    }
+
     /// <summary>
     /// Number of tunable defaulted constructor parameters that have no correspondingly-named
     /// property on their model's options type.
@@ -167,8 +174,17 @@ public class OptionsSurfaceRatchetTests
             .ThenBy(g => g.Key, StringComparer.Ordinal)
             .ToList();
 
-        // Not an assertion about the contents — this exists so the numbers are visible in the
-        // test output when a migration lands, without having to run the scanner by hand.
+        // This test exists to make the numbers visible when a migration lands, so it has to
+        // actually emit them. It previously computed byType and then asserted only
+        // `byType.Count >= 0` — always true, with nothing written anywhere — so it reported
+        // nothing at all while reading as though it did.
+        _output.WriteLine($"{gaps.Count} remaining gaps across {byType.Count} model types.");
+        foreach (var group in byType)
+        {
+            _output.WriteLine($"  {group.Key} ({group.Count()}): "
+                + string.Join(", ", group.Select(g => g.ParameterName).OrderBy(n => n, StringComparer.Ordinal)));
+        }
+
         Assert.True(byType.Count >= 0);
     }
 
